@@ -356,7 +356,11 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.get(route("/phases/:id"), async (c) => {
     const id = c.req.param("id");
     if (!id) return c.json({ error: "id required" }, 400);
-    return c.json(await store.loadPhase(id));
+    try {
+      return c.json(await store.loadPhase(id));
+    } catch {
+      return c.json({ error: "phase not found" }, 404);
+    }
   });
 
   app.put(route("/phases/:id"), async (c) => {
@@ -579,6 +583,20 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     await store.syncStatuses();
     await store.appendActivity("task_deleted", taskId ?? "", `Task deleted: ${taskId}`);
     return c.json({ deleted: taskId });
+  });
+
+  // ── Integrity / Repair ────────────────────────────────────────
+  app.get(route("/integrity"), async (c) => {
+    const integrity = await store.validateIntegrity();
+    return c.json(integrity);
+  });
+
+  app.post(route("/repair"), async (c) => {
+    const report = await store.repair();
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    hub()?.broadcast({ type: "features-updated", data: { action: "repaired" } });
+    hub()?.broadcast({ type: "phases-updated", data: { action: "repaired" } });
+    return c.json(report);
   });
 
   // ── Render ───────────────────────────────────────────────────────

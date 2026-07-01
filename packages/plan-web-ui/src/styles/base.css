@@ -85,6 +85,7 @@ a { color: inherit; text-decoration: none; }
 .status-canceled { background: color-mix(in srgb, var(--color-status-canceled) 12%, transparent); color: var(--color-status-canceled); }
 .status-rejected { background: color-mix(in srgb, var(--color-status-rejected) 12%, transparent); color: var(--color-status-rejected); }
 .status-deferred { background: color-mix(in srgb, var(--color-status-deferred) 12%, transparent); color: var(--color-status-deferred); }
+.status-waiting { background: color-mix(in srgb, var(--color-status-waiting) 12%, transparent); color: var(--color-status-waiting); }
 
 .entity-badge {
   display: inline-flex;

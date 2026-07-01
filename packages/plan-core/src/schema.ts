@@ -103,11 +103,11 @@ export const ProjectSchema = z.object({
   acceptedDecisions: z.array(AcceptedDecisionSchema).default([]),
 });
 
-export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred"]);
-export const TaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred"]);
-export const PhaseStatusSchema = z.enum(["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred"]);
-export const RequirementStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred"]);
-export const FeatureStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred"]);
+export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const TaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const PhaseStatusSchema = z.enum(["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const RequirementStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const FeatureStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
 
 export const SubtaskSchema = z.object({
   id: z.string().min(1),

@@ -1528,7 +1528,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // Update only changed fields
         if (title?.trim()) phase.title = title.trim();
         if (statusInput?.trim()) {
-          const valid = ["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled"];
+          const valid = ["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
           if (!valid.includes(statusInput.trim())) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
@@ -1698,7 +1698,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (title?.trim()) task.title = title.trim();
         const now = nowISO();
         if (statusInput?.trim()) {
-          const valid = ["planned", "in-progress", "done", "blocked", "canceled"];
+          const valid = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
           if (!valid.includes(statusInput.trim())) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
@@ -1934,6 +1934,22 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerCommand("planner-handoff-write", { description: "Write .planner/HANDOFF.md directly from planner data", handler: async (_a, ctx) => handlePlanner("handoff write", ctx) });
   pi.registerCommand("planner-handoff-clear", { description: "Delete .planner/HANDOFF.md", handler: async (_a, ctx) => handlePlanner("handoff clear", ctx) });
   pi.registerCommand("planner-web", { description: "Web server: planner-web start|stop [port]", handler: async (args, ctx) => handlePlanner("web " + args, ctx) });
+  pi.registerCommand("planner-repair", {
+    description: "Repair dangling feature→phase references and report integrity (duplicate/dangling phase ids). Safe to run anytime.",
+    handler: async (_args, ctx) => {
+      try {
+        const st = ensureStore(ctx);
+        if (!(await st.exists())) { ctx.ui.notify("No .planner/ found.", "warning"); return; }
+        const report = await st.repair();
+        const m = report.migrated;
+        const dup = report.integrity.duplicatePhaseIds.length;
+        const dang = report.integrity.danglingPhaseIds.length;
+        ctx.ui.notify(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}. Integrity: ${dup} duplicate, ${dang} dangling.`, "info");
+      } catch (e) {
+        ctx.ui.notify(`Repair failed: ${e instanceof Error ? e.message : String(e)}`, "error");
+      }
+    },
+  });
 
   pi.registerCommand("planner-load", {
     description: "Re-enable the planner extension for this project after 'n/never' was chosen. Clears the never flags (enable + web), enables for this session, and starts the web UI.",
@@ -2259,6 +2275,27 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const files = await st.writeGenerated();
       return { content: [{ type: "text", text: `Regenerated ${files.length} files` }], details: { files } };
+    },
+  });
+
+  pi.registerTool({
+    name: "plan_repair",
+    label: "Plan Repair",
+    description: "Repair dangling feature→phase references and report plan integrity (duplicate phase ids, dangling phase refs). Safe to run anytime; run if the planner reports ENOENT/phase not found or after manual edits to .planner/.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const report = await st.repair();
+      const m = report.migrated;
+      const lines = [
+        `Repair complete.`,
+        `Migration: renamed=${m.renamed}, repaired=${m.repaired} refs, inferred=${m.inferred}.`,
+        `Integrity: duplicatePhaseIds=${report.integrity.duplicatePhaseIds.length}, danglingPhaseIds=${report.integrity.danglingPhaseIds.length}.`,
+      ];
+      if (report.integrity.danglingPhaseIds.length) lines.push("Dangling: " + report.integrity.danglingPhaseIds.join(", "));
+      if (report.integrity.duplicatePhaseIds.length) lines.push("Duplicates: " + report.integrity.duplicatePhaseIds.join(", "));
+      return { content: [{ type: "text", text: lines.join("\n") }], details: report };
     },
   });
 

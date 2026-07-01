@@ -591,6 +591,17 @@ export class PlanStore {
     return { renamed, repaired, inferred };
   }
 
+  /** Repair dangling references and report integrity. One-shot maintenance op. */
+  async repair(): Promise<{
+    migrated: { renamed: number; repaired: number; inferred: number };
+    integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };
+  }> {
+    const migrated = await this.migratePhaseIds();
+    const integrity = await this.validateIntegrity();
+    await this.writeGenerated();
+    return { migrated, integrity };
+  }
+
   /** Validate plan integrity: globally unique phase ids and resolvable feature.phaseIds. */
   async validateIntegrity(): Promise<{ duplicatePhaseIds: string[]; danglingPhaseIds: string[] }> {
     const phases = await this.loadAllPhases();
@@ -617,6 +628,7 @@ export class PlanStore {
     const allRejectedOrCanceled = taskStatuses.every((status) => status === "rejected" || status === "canceled");
     const anyBlocked = taskStatuses.some((status) => status === "blocked");
     const anyInProgress = taskStatuses.some((status) => status === "in-progress");
+    const anyWaiting = taskStatuses.some((status) => status === "waiting");
     const anyDeferred = taskStatuses.some((status) => status === "deferred");
     const anyPlanned = taskStatuses.some((status) => status === "planned");
     const anyDone = taskStatuses.some((status) => status === "done");
@@ -624,6 +636,7 @@ export class PlanStore {
     if (allRejectedOrCanceled) return "rejected";
     if (anyBlocked) return "blocked";
     if (anyInProgress) return "in-progress";
+    if (anyWaiting) return "waiting";
     if (anyDeferred) return "deferred";
     if (anyPlanned) return "planned";
     if (anyDone) return "done";
@@ -638,6 +651,7 @@ export class PlanStore {
     const allRejectedOrCanceled = phaseStatuses.every((status) => status === "rejected" || status === "canceled");
     const anyBlocked = phaseStatuses.some((status) => status === "blocked");
     const anyActive = phaseStatuses.some((status) => status === "discovery" || status === "in-progress");
+    const anyWaiting = phaseStatuses.some((status) => status === "waiting");
     const anyDeferred = phaseStatuses.some((status) => status === "deferred");
     const anyPlannedLike = phaseStatuses.some((status) => status === "draft" || status === "planned");
     const anyDone = phaseStatuses.every((status) => status === "done");
@@ -645,6 +659,7 @@ export class PlanStore {
     if (allRejectedOrCanceled) return "rejected";
     if (anyBlocked) return "blocked";
     if (anyActive) return "in-progress";
+    if (anyWaiting) return "waiting";
     if (anyDeferred) return "deferred";
     if (anyPlannedLike) return "planned";
     if (anyDone) return "done";

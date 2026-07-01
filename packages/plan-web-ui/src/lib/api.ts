@@ -193,3 +193,16 @@ export async function getHandoff(): Promise<HandoffDocument> {
 export async function deleteHandoff(): Promise<{ deleted: boolean }> {
   return request("/handoff", { method: "DELETE" });
 }
+
+export interface RepairReport {
+  migrated: { renamed: number; repaired: number; inferred: number };
+  integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };
+}
+
+export async function repairPlan(): Promise<RepairReport> {
+  return request("/repair", { method: "POST" });
+}
+
+export async function getIntegrity(): Promise<RepairReport["integrity"]> {
+  return request("/integrity");
+}

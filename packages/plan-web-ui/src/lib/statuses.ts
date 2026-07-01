@@ -8,6 +8,7 @@ export const featureStatuses: Array<{ value: FeatureStatus; label: string }> = [
   { value: "canceled", label: "Canceled" },
   { value: "rejected", label: "Rejected" },
   { value: "deferred", label: "Deferred" },
+  { value: "waiting", label: "Waiting" },
 ];
 
 export const phaseStatuses: Array<{ value: PhaseStatus; label: string }> = [
@@ -20,6 +21,7 @@ export const phaseStatuses: Array<{ value: PhaseStatus; label: string }> = [
   { value: "canceled", label: "Canceled" },
   { value: "rejected", label: "Rejected" },
   { value: "deferred", label: "Deferred" },
+  { value: "waiting", label: "Waiting" },
 ];
 
 export const taskStatuses: Array<{ value: TaskStatus; label: string }> = [
@@ -30,4 +32,5 @@ export const taskStatuses: Array<{ value: TaskStatus; label: string }> = [
   { value: "canceled", label: "Canceled" },
   { value: "rejected", label: "Rejected" },
   { value: "deferred", label: "Deferred" },
+  { value: "waiting", label: "Waiting" },
 ];

@@ -6,7 +6,8 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { StatusBadge } from "../../components/ui/status-badge";
-import type { ActiveTaskSummary } from "../../lib/api";
+import type { ActiveTaskSummary, RepairReport } from "../../lib/api";
+import { repairPlan, getIntegrity } from "../../lib/api";
 import { featureStatuses, phaseStatuses, taskStatuses } from "../../lib/statuses";
 import { useShortcut } from "../../lib/shortcuts";
 import type { AcceptedDecision, Feature, FeatureStatus, Phase, PhaseStatus, Project, Task, TaskStatus } from "../../lib/types";
@@ -107,11 +108,28 @@ function readStoredArray<T extends string>(key: string, fallback: T[], allowed: 
     if (!stored) return fallback;
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed)) return fallback;
+    // Schema signature: if the set of known statuses has changed since the
+    // filters were last saved (e.g. new statuses like deferred/rejected were
+    // introduced), the saved selection is stale — reset to the full default so
+    // the new statuses are visible instead of being filtered out.
+    const schemaKey = `${key}-schema`;
+    const currentSchema = allowed.slice().sort().join(",");
+    const savedSchema = window.localStorage.getItem(schemaKey);
+    if (savedSchema !== currentSchema) {
+      window.localStorage.setItem(schemaKey, currentSchema);
+      return fallback;
+    }
     const valid = parsed.filter((entry): entry is T => typeof entry === "string" && allowed.includes(entry as T));
     return valid.length > 0 ? valid : fallback;
   } catch {
     return fallback;
   }
+}
+
+function writeStoredArray<T extends string>(key: string, values: T[], allowed: readonly T[]): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(values));
+  window.localStorage.setItem(`${key}-schema`, allowed.slice().sort().join(","));
 }
 
 function readStoredBoolean(key: string, fallback: boolean): boolean {
@@ -287,6 +305,8 @@ export function DashboardRoute() {
   const [hideDone, setHideDone] = useState(() => readStoredBoolean(hideDoneStorageKey, false));
   const [hidePlanned, setHidePlanned] = useState(() => readStoredBoolean(hidePlannedStorageKey, false));
   const [onlyActiveBranches, setOnlyActiveBranches] = useState(() => readStoredBoolean(onlyActiveBranchesStorageKey, false));
+  const [repairing, setRepairing] = useState(false);
+  const [repairMsg, setRepairMsg] = useState<string | null>(null);
   const [recentFeatureIds, setRecentFeatureIds] = useState<string[]>([]);
   const [recentPhaseIds, setRecentPhaseIds] = useState<string[]>([]);
   const [recentTaskIds, setRecentTaskIds] = useState<string[]>([]);
@@ -314,17 +334,17 @@ export function DashboardRoute() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(featureStatusFiltersStorageKey, JSON.stringify(featureStatusFilters));
+    writeStoredArray(featureStatusFiltersStorageKey, featureStatusFilters, allFeatureStatusValues);
   }, [featureStatusFilters]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(phaseStatusFiltersStorageKey, JSON.stringify(phaseStatusFilters));
+    writeStoredArray(phaseStatusFiltersStorageKey, phaseStatusFilters, allPhaseStatusValues);
   }, [phaseStatusFilters]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(taskStatusFiltersStorageKey, JSON.stringify(taskStatusFilters));
+    writeStoredArray(taskStatusFiltersStorageKey, taskStatusFilters, allTaskStatusValues);
   }, [taskStatusFilters]);
 
   useEffect(() => {
@@ -699,6 +719,29 @@ export function DashboardRoute() {
             >
               Reset filters
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={repairing}
+              onClick={async () => {
+                setRepairing(true);
+                setRepairMsg(null);
+                try {
+                  const report = await repairPlan();
+                  const m = report.migrated;
+                  const dup = report.integrity.duplicatePhaseIds.length;
+                  const dang = report.integrity.danglingPhaseIds.length;
+                  setRepairMsg(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}. Integrity: ${dup} duplicate, ${dang} dangling.`);
+                } catch (e) {
+                  setRepairMsg(`Repair failed: ${e instanceof Error ? e.message : String(e)}`);
+                } finally {
+                  setRepairing(false);
+                }
+              }}
+            >
+              {repairing ? "Repairing…" : "Repair plan"}
+            </Button>
+            {repairMsg ? <span className="text-xs text-[var(--text-muted)]">{repairMsg}</span> : null}
           </div>
 
           <div className="grid gap-3 lg:grid-cols-3">
