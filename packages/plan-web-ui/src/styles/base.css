@@ -1,0 +1,147 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { min-height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--text);
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(50% 55% at 0% 0%, var(--bg-gradient-a) 0%, transparent 70%),
+    radial-gradient(42% 48% at 100% 0%, var(--bg-gradient-b) 0%, transparent 64%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+button, input, select, textarea { font: inherit; }
+a { color: inherit; text-decoration: none; }
+
+.page-shell {
+  min-height: 100vh;
+}
+
+.page-container {
+  width: min(100% - 3rem, var(--container-width));
+  margin-inline: auto;
+}
+
+.surface-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  backdrop-filter: blur(var(--surface-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(140%);
+  box-shadow: var(--shadow-panel);
+}
+
+.surface-card {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  box-shadow: var(--shadow-card);
+}
+
+.field-control {
+  width: 100%;
+  min-height: 48px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text);
+  padding: 0.75rem 0.95rem;
+  outline: none;
+}
+
+.field-control:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.field-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.status-draft { background: color-mix(in srgb, var(--color-status-draft) 14%, transparent); color: var(--color-status-draft); }
+.status-discovery { background: color-mix(in srgb, var(--color-status-discovery) 14%, transparent); color: var(--color-status-discovery); }
+.status-planned { background: color-mix(in srgb, var(--color-status-planned) 14%, transparent); color: var(--color-status-planned); }
+.status-in-progress { background: color-mix(in srgb, var(--color-status-in-progress) 16%, transparent); color: var(--color-status-in-progress); }
+.status-done { background: color-mix(in srgb, var(--color-status-done) 16%, transparent); color: var(--color-status-done); }
+.status-blocked { background: color-mix(in srgb, var(--color-status-blocked) 15%, transparent); color: var(--color-status-blocked); }
+.status-canceled { background: color-mix(in srgb, var(--color-status-canceled) 12%, transparent); color: var(--color-status-canceled); }
+.status-rejected { background: color-mix(in srgb, var(--color-status-rejected) 12%, transparent); color: var(--color-status-rejected); }
+.status-deferred { background: color-mix(in srgb, var(--color-status-deferred) 12%, transparent); color: var(--color-status-deferred); }
+
+.entity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.entity-badge--feature {
+  color: var(--color-entity-feature);
+  background: color-mix(in srgb, var(--color-entity-feature) 14%, transparent);
+}
+
+.entity-badge--phase {
+  color: var(--color-entity-phase);
+  background: color-mix(in srgb, var(--color-entity-phase) 14%, transparent);
+}
+
+.entity-badge--task {
+  color: var(--color-entity-task);
+  background: color-mix(in srgb, var(--color-entity-task) 14%, transparent);
+}
+
+.entity-link--feature {
+  color: var(--color-entity-feature);
+}
+
+.entity-link--phase {
+  color: var(--color-entity-phase);
+}
+
+.entity-link--task {
+  color: var(--color-entity-task);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+button:disabled,
+select:disabled,
+input:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }

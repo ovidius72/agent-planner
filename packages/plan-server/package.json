@@ -1,0 +1,25 @@
+{
+  "name": "@agent-plan/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./serve": "./dist/serve.js"
+  },
+  "dependencies": {
+    "@agent-plan/core": "workspace:*",
+    "hono": "^4.7.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.14.0",
+    "@types/ws": "^8.18.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  }
+}

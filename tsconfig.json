@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "packages/plan-core" },
+    { "path": "packages/plan-server" },
+    { "path": "packages/plan-web" },
+    { "path": "packages/plan-web-ui" },
+    { "path": "packages/pi-adapter" }
+  ]
+}
