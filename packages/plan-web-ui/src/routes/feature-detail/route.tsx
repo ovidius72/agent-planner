@@ -84,7 +84,7 @@ export function FeatureDetailRoute() {
             <StatusBadge status={feature.status} />
           </div>
           <p className="mt-2 text-sm text-[var(--text-muted)]">{feature.id}</p>
-          {feature.description ? <FormattedText text={feature.description} className="mt-3 max-w-4xl" /> : null}
+          {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
         </div>
 
         <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/delete`} onSubmit={(event) => {

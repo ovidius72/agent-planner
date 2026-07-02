@@ -186,7 +186,7 @@ export function PhaseDetailRoute() {
         {phase.description ? (
           <div>
             <span className="font-semibold text-[var(--text)]">Description:</span>
-            <FormattedText text={phase.description} className="mt-2" />
+            <FormattedText text={phase.description} className="plan-description mt-2" />
           </div>
         ) : null}
         {phaseDecisions.length > 0 ? (

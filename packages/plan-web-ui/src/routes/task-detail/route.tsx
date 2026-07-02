@@ -109,7 +109,7 @@ export function TaskDetailRoute() {
           <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>
         </div>
 
-        {task.description ? <FormattedText text={task.description} /> : null}
+        {task.description ? <FormattedText text={task.description} className="plan-description" /> : null}
         {task.notes ? (
           <details className="group mt-4">
             <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
