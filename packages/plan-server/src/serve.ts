@@ -4,7 +4,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { PlanStore, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -111,6 +111,17 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   const route = (path: string) => `${apiPrefix}${path}`;
 
   const app = new Hono();
+
+  // Global error handler: never let an unhandled exception (e.g. a missing
+  // phase file -> PlanStoreError/ENOENT) bubble up to the host process console
+  // (the agent session). Convert it to a clean HTTP response instead.
+  app.onError((err, c) => {
+    const isStoreRead = err instanceof PlanStoreError || /ENOENT|read failed/i.test(err.message);
+    if (isStoreRead) {
+      return c.json({ error: "not found", message: err.message }, 404);
+    }
+    return c.json({ error: "internal", message: err instanceof Error ? err.message : String(err) }, 500);
+  });
 
   app.use("*", cors({ origin: "*", allowHeaders: ["Content-Type"] }));
 
@@ -367,7 +378,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const id = c.req.param("id");
     const body = await c.req.json<Phase>();
     if (body.id !== id) return c.json({ error: "id mismatch" }, 400);
-    const existingPhase = await store.loadPhase(id);
+    const existingPhase = await store.loadPhase(id).catch(() => null);
+    if (!existingPhase) return c.json({ error: "phase not found" }, 404);
     if (entersGovernedState(existingPhase.status, body.status) && !phaseGovernanceReady(body)) {
       return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
     }
@@ -387,7 +399,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.delete(route("/phases/:id"), async (c) => {
     const id = c.req.param("id");
     if (!id) return c.json({ error: "id required" }, 400);
-    const existing = await store.loadPhase(id);
+    const existing = await store.loadPhase(id).catch(() => null);
+    if (!existing) return c.json({ error: "phase not found" }, 404);
     await store.deletePhase(id);
     if (existing.featureId) {
       await store.updateFeatures((features) => {
@@ -411,7 +424,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title required" }, 400);
 
-    const phase = await store.loadPhase(phaseId);
+    const phase = await store.loadPhase(phaseId).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
     if (requiresGovernance(body.status) && phase.featureId) {
       const features = await store.loadFeatures();
       const feature = features.features.find((entry) => entry.id === phase.featureId);
@@ -501,7 +515,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const body = await c.req.json<{ phaseId: string } & Partial<Task>>();
     if (!body.phaseId) return c.json({ error: "phaseId required" }, 400);
 
-    const phase = await store.loadPhase(body.phaseId);
+    const phase = await store.loadPhase(body.phaseId).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
     const existing = phase.tasks.find((t) => t.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
 
