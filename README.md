@@ -104,7 +104,7 @@ Then configure Claude Code once at user scope:
 agent-plan setup claude-code --user
 ```
 
-This does two things:
+This does three things:
 
 1. registers the Agent Plan MCP server in Claude Code user scope;
 2. writes the Claude Code slash command router:
@@ -113,7 +113,13 @@ This does two things:
 ~/.claude/commands/planner.md
 ```
 
-After this, `/planner ...` is available from Claude Code projects.
+3. installs a Claude Code `PreToolUse` task guard hook in:
+
+```text
+~/.claude/settings.json
+```
+
+After this, `/planner ...` is available from Claude Code projects and implementation tools are guarded when a project has an active `.planner/`.
 
 ### 2. Initialize a project only when needed
 
@@ -249,7 +255,10 @@ This creates or updates:
 ```text
 .mcp.json
 .claude/commands/planner.md
+.claude/settings.json
 ```
+
+The settings file contains a Claude Code `PreToolUse` hook for `Bash|Edit|Write`.
 
 Example `.mcp.json`:
 
@@ -423,6 +432,18 @@ After completed work:
 
 Phase and feature statuses are derived from child task/phase state. Agents should not directly mutate parent status unless there is a specific reason.
 
+### Claude Code task guard
+
+`agent-plan setup claude-code` installs a Claude Code `PreToolUse` hook for `Bash|Edit|Write`.
+
+The hook allows tool calls when:
+
+- `.planner/` does not exist;
+- the planner has no tasks yet;
+- at least one task is already `in-progress`.
+
+It denies tool calls when `.planner/` exists, tasks exist, and no task is `in-progress`. The denial message tells Claude Code which task to start with `/planner task start <id>`.
+
 ---
 
 ## Repository structure
@@ -499,6 +520,18 @@ Project scope:
 ```
 
 Then restart Claude Code in the project.
+
+### Bash/Edit/Write is blocked in Claude Code
+
+This is expected if `.planner/` exists, tasks exist, and no task is `in-progress`.
+
+Run:
+
+```text
+/planner task start <task-id>
+```
+
+Then retry the implementation action.
 
 ### MCP tools are not available in Claude Code
 

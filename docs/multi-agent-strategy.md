@@ -201,10 +201,11 @@ Each MCP tool handler is a thin wrapper around `PlanStore` methods or shared pla
 ## 7. Per-host lifecycle shims
 
 ### Claude Code
-- **Tools**: MCP server in project `.mcp.json` `mcpServers`.
-- **Guardrail**: `PreToolUse` hook blocks `bash`/`edit`/`write` when a planner exists, tasks exist, and no task is `in-progress` (same rule as the current `pi-adapter` `tool_call` guard).
-- **Startup**: `SessionStart` hook emits the resume summary.
-- **Gating**: handled via the hook (prompt on first run) or a one-time `AGENTS.md` instruction.
+- **Tools**: MCP server in project `.mcp.json` `mcpServers`, or user-scope MCP via `claude mcp add`.
+- **Slash command**: `agent-plan setup claude-code` writes `.claude/commands/planner.md` (project) or `~/.claude/commands/planner.md` (user) as a `/planner ...` router to MCP tools.
+- **Guardrail**: setup installs a `PreToolUse` hook for `Bash|Edit|Write`; it blocks implementation tools when a planner exists, tasks exist, and no task is `in-progress`.
+- **Startup**: `SessionStart` resume summary remains future work.
+- **Gating**: explicit project initialization via `/planner init`; setup does not create `.planner/`.
 
 ### Codex
 - **Tools**: MCP server in Codex MCP config.
@@ -248,7 +249,7 @@ Each MCP tool handler is a thin wrapper around `PlanStore` methods or shared pla
 - **Effort**: ~1–2 days after command/action handlers are aligned.
 
 ### Phase 2 — Per-host lifecycle/governance
-- Claude Code: `PreToolUse` + `SessionStart` hooks.
+- Claude Code: `PreToolUse` task guard is implemented by setup; `SessionStart` resume summary remains to be designed.
 - Codex: `AGENTS.md` template.
 - Hermes/OpenClaude: toolset config templates.
 - **Effort**: ~1 day per host.

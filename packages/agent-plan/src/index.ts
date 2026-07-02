@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { PlanStore } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
@@ -29,6 +29,7 @@ function usage(): string {
     "  mcp                         Start the stdio MCP server.",
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
+    "  guard pre-tool-use          Claude Code hook: block implementation tools unless a task is in-progress.",
     "",
     "Options:",
     "  --yes, -y                   Accept defaults / initialize when needed.",
@@ -53,7 +54,11 @@ function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
   return { positional, flags };
 }
 
-function plannerRoot(cwd = process.cwd()): string {
+function projectCwd(): string {
+  return process.env.CLAUDE_PROJECT_DIR || process.cwd();
+}
+
+function plannerRoot(cwd = projectCwd()): string {
   return join(cwd, ".planner");
 }
 
@@ -97,8 +102,12 @@ async function readJsonFile(path: string): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
+function localCliPath(): string {
+  return resolve(process.argv[1] ?? "packages/agent-plan/dist/index.js");
+}
+
 function localCliArgs(): string[] {
-  return [resolve(process.argv[1] ?? "packages/agent-plan/dist/index.js"), "mcp"];
+  return [localCliPath(), "mcp"];
 }
 
 function defaultMcpConfig(flags: CliFlags): Record<string, unknown> {
@@ -187,6 +196,58 @@ function mcpCommandParts(flags: CliFlags): { command: string; args: string[] } {
   };
 }
 
+function guardHookCommand(flags: CliFlags): { command: string; args: string[] } {
+  if (flags.local) return { command: "node", args: [localCliPath(), "guard", "pre-tool-use"] };
+  return { command: "npx", args: ["agent-plan", "guard", "pre-tool-use"] };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isAgentPlanGuardHook(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const command = String(value.command ?? "");
+  const args = Array.isArray(value.args) ? value.args.map(String) : [];
+  return args.includes("guard") && args.includes("pre-tool-use") && (command === "npx" || command === "node" || command === "agent-plan");
+}
+
+async function writeClaudeTaskGuard(scope: "project" | "user", flags: CliFlags): Promise<string> {
+  const settingsPath = scope === "user"
+    ? join(homedir(), ".claude", "settings.json")
+    : join(process.cwd(), ".claude", "settings.json");
+  await mkdir(dirname(settingsPath), { recursive: true });
+
+  const settings = await readJsonFile(settingsPath);
+  const hooksRoot = isRecord(settings.hooks) ? { ...settings.hooks } : {};
+  const preToolUse = Array.isArray(hooksRoot.PreToolUse) ? [...hooksRoot.PreToolUse] : [];
+  const { command, args } = guardHookCommand(flags);
+
+  const cleaned = preToolUse.map((group) => {
+    if (!isRecord(group)) return group;
+    const hooks = Array.isArray(group.hooks) ? group.hooks.filter((hook) => !isAgentPlanGuardHook(hook)) : group.hooks;
+    return { ...group, hooks };
+  }).filter((group) => !(isRecord(group) && Array.isArray(group.hooks) && group.hooks.length === 0));
+
+  cleaned.push({
+    matcher: "Bash|Edit|Write",
+    hooks: [
+      {
+        type: "command",
+        command,
+        args,
+        timeout: 10,
+        statusMessage: "Checking Agent Plan task status",
+      },
+    ],
+  });
+
+  hooksRoot.PreToolUse = cleaned;
+  settings.hooks = hooksRoot;
+  await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
+  return settingsPath;
+}
+
 function setupClaudeCodeUser(flags: CliFlags): void {
   const { command, args } = mcpCommandParts(flags);
   if (flags.force) {
@@ -221,19 +282,72 @@ async function setupClaudeCode(flags: CliFlags): Promise<void> {
   if (flags.user) {
     setupClaudeCodeUser(flags);
     const commandPath = await writeClaudePlannerCommand("user");
+    const hookPath = await writeClaudeTaskGuard("user", flags);
     console.log(`Configured Claude Code user-scope slash command in ${commandPath}`);
+    console.log(`Configured Claude Code user-scope task guard hook in ${hookPath}`);
     console.log(flags.local ? "Mode: local built CLI" : "Mode: agent-plan mcp");
     return;
   }
 
   const settingsPath = await setupClaudeCodeProject(flags);
   const commandPath = await writeClaudePlannerCommand("project");
+  const hookPath = await writeClaudeTaskGuard("project", flags);
   console.log(`Configured Claude Code project MCP server in ${settingsPath}`);
   console.log(`Configured Claude Code project slash command in ${commandPath}`);
+  console.log(`Configured Claude Code project task guard hook in ${hookPath}`);
   if (!existsSync(plannerRoot())) {
     console.log("Note: .planner/ is not initialized yet. In Claude Code, run `/planner init` when you want to enable planning for this project.");
   }
   console.log(flags.local ? "Mode: local built CLI" : "Mode: npx agent-plan mcp");
+}
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+  }
+  return Buffer.concat(chunks).toString("utf-8");
+}
+
+async function guardPreToolUse(): Promise<void> {
+  const raw = await readStdin();
+  let event: Record<string, unknown> = {};
+  try {
+    event = raw.trim() ? JSON.parse(raw) as Record<string, unknown> : {};
+  } catch {
+    return;
+  }
+
+  const toolName = String(event.tool_name ?? event.toolName ?? "");
+  if (!["Bash", "Edit", "Write"].includes(toolName)) return;
+
+  const root = plannerRoot();
+  const st = new PlanStore(root);
+  if (!(await st.exists().catch(() => false))) return;
+
+  let plan;
+  try {
+    plan = await st.loadAll();
+  } catch {
+    return;
+  }
+
+  const allTasks = plan.phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
+  if (allTasks.length === 0) return;
+  if (allTasks.some(({ task }) => task.status === "in-progress")) return;
+
+  const focus = allTasks.find(({ task }) => !["done", "canceled", "rejected"].includes(task.status));
+  const reason = focus
+    ? `Agent Plan guard: no task is in-progress. Before using ${toolName}, run /planner task start ${focus.task.id} (${focus.task.title}) so feature/phase/task status stays correct.`
+    : `Agent Plan guard: this planner has tasks, but no task is in-progress. Start or reopen a task before using ${toolName}.`;
+
+  console.log(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: reason,
+    },
+  }));
 }
 
 async function main(): Promise<void> {
@@ -247,6 +361,11 @@ async function main(): Promise<void> {
 
   if (command === "mcp") {
     await startStdioServer();
+    return;
+  }
+
+  if (command === "guard" && subcommand === "pre-tool-use") {
+    await guardPreToolUse();
     return;
   }
 

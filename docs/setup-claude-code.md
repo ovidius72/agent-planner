@@ -17,7 +17,8 @@ This command:
 
 1. registers the `agent-plan` MCP server in Claude Code user scope;
 2. creates or updates `~/.claude/commands/planner.md`;
-3. makes `/planner ...` available in Claude Code projects.
+3. creates or updates `~/.claude/settings.json` with a `PreToolUse` task guard hook;
+4. makes `/planner ...` available in Claude Code projects.
 
 It does **not** initialize `.planner/` in any project. Project initialization is explicit and happens later with:
 
@@ -76,6 +77,8 @@ The generated `.mcp.json` is:
 
 Project setup also does **not** initialize `.planner/`. Use `/planner init` when needed.
 
+Project setup also creates `.claude/settings.json` with a `PreToolUse` guard hook for `Bash|Edit|Write`. When `.planner/` exists and tasks exist, the hook blocks implementation tools unless at least one task is `in-progress`.
+
 ## Local development setup
 
 When testing from this repository before publishing the npm package:
@@ -109,6 +112,19 @@ The setup creates a `planner.md` command file. This gives Claude Code:
 ```
 
 The slash command is a prompt router: it tells Claude Code which `planner-*` MCP tool to call.
+
+## Task guard hook
+
+The setup installs a Claude Code `PreToolUse` hook that checks `Bash|Edit|Write` calls.
+
+Behavior:
+
+- if `.planner/` does not exist, allow;
+- if the planner has no tasks, allow;
+- if at least one task is `in-progress`, allow;
+- otherwise deny the tool call and tell Claude to run `/planner task start <id>` first.
+
+This mirrors the Pi guardrail and keeps phase/feature rollups accurate.
 
 ## Other commands
 

@@ -90,7 +90,7 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] `planner-task-discuss` può inizializzare descrizione e checklist del task
 
 ### In corso
-- [ ] **[P0-1] Agenti dimenticano di cambiare gli stati delle task** all'inizio (`in-progress`) e alla fine (`done`). Prioritario. Vedi `BACKLOG.md`.
+- [ ] Runtime validation post-restart / Claude Code hook validation. Vedi `BACKLOG.md`.
 - [ ] Memoria progetto / handoff automatico / porte web per progetto (handoff fatto — vedi `BACKLOG.md`)
 - [ ] Rivedere generazione markdown con dati reali
 
@@ -107,6 +107,8 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Completato router `/planner` Claude con `init`, `load`, `reload`, `disable`, `web status|start|stop`; rigenerato in `~/projects/tests` e `pnpm check` passa.
 - [x] Scritto `README.md` completo in inglese con installazione, setup Claude Code user/project, init esplicito `.planner/`, MCP tools, Pi usage, CLI, troubleshooting e principi di design.
 - [x] Allineato `agent-plan setup claude-code`: non inizializza più `.planner/`; aggiunto setup user-scope `--user`; project setup genera solo `.mcp.json` e `.claude/commands/planner.md`.
+- [x] Implementato P0-1 task lifecycle guard: Pi blocca `bash/edit/write` senza task `in-progress`; Claude Code setup installa hook `PreToolUse` per `Bash|Edit|Write`; backlog aggiornato a implementato/pending runtime validation.
+- [x] Aggiunto al `BACKLOG.md` il piano deferred per integrazione Zed: MCP context server, setup CLI, usage docs, profilo agent, skill/extension opzionale e limiti del task guard.
 
 ### Fatto — planner discuss / decision persistence / dashboard
 - [x] Checklist task: checkbox persistenti, sempre visibili, collegati al task, senza redirect alla route `/toggle`

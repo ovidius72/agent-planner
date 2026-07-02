@@ -15,23 +15,32 @@ phase/feature status from tasks automatically, but if the leaf task status is ne
 updated the whole tree stays stale. This breaks the Work Tree, the header active tasks,
 the resume focus, and the latest-completed-tasks view.
 
-**Why it happens:** Today status updates are a "soft" expectation in the system prompt.
-There is no enforcement and no convenient entry point. The agent has to remember to call
+**Why it happened:** Status updates were originally a "soft" expectation in the system prompt.
+There was no enforcement and no convenient entry point. The agent had to remember to call
 `task_update` with `status=in-progress` / `status=done` on its own.
 
-**Fix direction (pick / combine):**
-1. Add explicit, obvious commands/tools:
-   - `/planner task start <id>` → sets `in-progress` (and checks phase/feature governance)
-   - `/planner task complete <id>` → sets `done` (and checks checklist completion)
-   - equivalent tools `task_start` / `task_complete`
-2. Enforce in the pre-flight protocol: before doing implementation work on a task, the
-   agent MUST have marked that task `in-progress` (gate the work, not just remind).
-3. Strengthen the system-prompt injection so the current in-progress task is shown and
-   the agent is told "when you finish this, call task_complete".
-4. Surface a TUI/web warning when a task has `startedAt` set but no status change for a
-   long time (stale in-progress).
+**Implemented:**
+1. Explicit lifecycle commands/tools:
+   - Pi: `/planner task start <id>` and `/planner task complete <id>`.
+   - MCP/Claude Code: `planner-task-start` and `planner-task-complete`.
+   - Direct `task_update` to `in-progress`/`done` is blocked in Pi; use lifecycle tools instead.
+2. Pi hard guard:
+   - `tool_call` blocks `bash`/`edit`/`write` when `.planner/` exists, tasks exist, and no task is `in-progress`.
+3. Claude Code hard guard:
+   - `agent-plan setup claude-code` installs a `PreToolUse` hook for `Bash|Edit|Write`.
+   - The hook blocks implementation tools when `.planner/` exists, tasks exist, and no task is `in-progress`.
+4. Prompt/router reinforcement:
+   - Pi context injection shows current focus and tells the agent to call task start/complete.
+   - Claude Code `/planner` router maps task lifecycle commands to MCP tools.
+5. Lifecycle timestamps:
+   - `startedAt` and `completedAt` are maintained by lifecycle tools.
 
-**Status:** Not started. **Blocks:** reliable resume, accurate dashboard.
+**Remaining validation:**
+- Runtime validation in a fresh Pi session.
+- Runtime validation in Claude Code that the installed hook blocks `Bash|Edit|Write` until `/planner task start <id>` is called.
+- Optional future enhancement: surface a TUI/web warning for stale in-progress tasks.
+
+**Status:** Implemented; pending runtime validation. **No longer blocks:** basic reliable resume / dashboard status correctness once hooks are installed.
 
 ---
 
@@ -99,6 +108,79 @@ needs an explicit editor for `project.description`.
 ### [P3-5] Roadmap Fase 7 — multi-harness
 `CLAUDE.md` / `CODEX.md` adapter docs + public JSON schema for `.planner/`.
 **Status:** Not started (Fase 6 gates partly done).
+
+### [P3-6] Zed editor integration
+Integrate Agent Plan with Zed later. Zed supports MCP context servers, so the first integration should be MCP-first and avoid initializing `.planner/` during setup.
+
+**Option A — MCP context server only (recommended first step):**
+- Add `agent-plan setup zed`.
+- Update Zed user settings, normally `~/.config/zed/settings.json`.
+- Merge conservatively into existing JSON:
+  ```json
+  {
+    "context_servers": {
+      "agent-plan": {
+        "command": "agent-plan",
+        "args": ["mcp"],
+        "env": {}
+      }
+    }
+  }
+  ```
+- Support local development mode:
+  ```json
+  {
+    "context_servers": {
+      "agent-plan": {
+        "command": "node",
+        "args": [
+          "/Users/antonio/projects/agent-plan/packages/agent-plan/dist/index.js",
+          "mcp"
+        ],
+        "env": {}
+      }
+    }
+  }
+  ```
+- Proposed CLI flags:
+  - `agent-plan setup zed`
+  - `agent-plan setup zed --local`
+  - `agent-plan setup zed --settings /path/to/settings.json`
+  - maybe `--force` to replace existing `context_servers.agent-plan`.
+- Setup must not create `.planner/`. Project initialization remains explicit through `agent-plan init` or an MCP `planner-init` call from the Zed Agent Panel.
+
+**Option B — Zed Agent usage instructions:**
+- Document prompts such as:
+  - “Use `planner-init` to initialize Agent Plan in this project.”
+  - “Use Agent Plan to show the current project plan.”
+  - “Start task `<id>` with Agent Plan before editing.”
+- Mention that Zed models may need explicit references to the `agent-plan` MCP server/tool names.
+
+**Option C — Zed Agent profile:**
+- Optionally generate a profile that enables Agent Plan MCP tools and keeps built-in editing/terminal tools under normal confirmation.
+- Investigate Zed `agent.profiles` and `agent.tool_permissions.default` to see if a safer Agent Plan profile is useful.
+
+**Option D — Slash-command-like UX via Zed Skills / extension:**
+- Later, explore a Zed Skill or Zed extension to provide a `/planner`-like workflow.
+- Possible deliverables:
+  - packaged MCP server config,
+  - prompt/skill named `planner`,
+  - user-facing usage docs inside Zed.
+- Do not implement this before the simpler MCP setup is validated.
+
+**Option E — Task guard / enforcement:**
+- Unlike Claude Code, Zed does not currently provide an obvious equivalent to Claude `PreToolUse` hooks for hard-blocking `terminal`/`edit_file` when no task is `in-progress`.
+- Phase 1 should rely on MCP tools, documentation, prompts, and maybe agent profile/tool permissions.
+- Hard enforcement would require deeper Zed extension support or another Zed-specific mechanism discovered later.
+
+**Acceptance criteria for first Zed phase:**
+- `agent-plan setup zed` safely updates existing Zed settings without destroying unrelated config.
+- Zed Agent Panel shows the `agent-plan` MCP server active.
+- Zed can call `planner-show` and `planner-task-start` from the MCP server.
+- Setup does not create `.planner/`.
+- README/docs include Zed setup and current guard limitations.
+
+**Status:** Deferred. Do later.
 
 ---
 
