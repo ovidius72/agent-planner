@@ -17,7 +17,7 @@ import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, Feature
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { mkdir, readFile, writeFile, rm, rename } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,6 @@ import type { ServeHandle, UiConfig, ShortcutConfigSpec } from "@agent-plan/serv
 
 const PI_CONFIG_DIR_NAME = ".pi";
 const PLAN_DIR_NAME = ".planner";
-const LEGACY_PLAN_DIR_NAME = ".plan";
 
 let capturedPi: ExtensionAPI | null = null;
 
@@ -80,7 +79,43 @@ let startupResumePromptPending = false;
 let startupResumeSummaryPending = false;
 let plannerHeavyInitDone = false; // runs migrate/heal/refreshResume once per session, not every turn
 let startupResumeSummaryText = "";
-const healedStatusRoots = new Set<string>();// ─── Helpers ────────────────────────────────────────────────────────────
+const healedStatusRoots = new Set<string>();
+
+const PLANNER_COMMAND_COMPLETIONS = [
+  { value: "init", label: "init", description: "Initialize planner in this project" },
+  { value: "show", label: "show", description: "Show planner overview" },
+  { value: "repair", label: "repair", description: "Repair planner integrity" },
+  { value: "project discuss", label: "project discuss", description: "Run project discovery" },
+  { value: "project language", label: "project language", description: "Set persistent language preferences" },
+  { value: "feature list", label: "feature list", description: "List features" },
+  { value: "feature add", label: "feature add", description: "Create a feature" },
+  { value: "feature show", label: "feature show", description: "Show a feature" },
+  { value: "feature update", label: "feature update", description: "Update a feature" },
+  { value: "feature delete", label: "feature delete", description: "Delete a feature" },
+  { value: "phase add", label: "phase add", description: "Add a phase" },
+  { value: "phase show", label: "phase show", description: "Show a phase" },
+  { value: "phase discuss", label: "phase discuss", description: "Discuss a phase" },
+  { value: "phase update", label: "phase update", description: "Update a phase" },
+  { value: "phase delete", label: "phase delete", description: "Delete a phase" },
+  { value: "task add", label: "task add", description: "Add a task" },
+  { value: "task show", label: "task show", description: "Show a task" },
+  { value: "task discuss", label: "task discuss", description: "Discuss a task" },
+  { value: "task update", label: "task update", description: "Update a task" },
+  { value: "task delete", label: "task delete", description: "Delete a task" },
+  { value: "task start", label: "task start", description: "Mark a task in-progress" },
+  { value: "task complete", label: "task complete", description: "Mark a task done" },
+  { value: "handoff prepare", label: "handoff prepare", description: "Tell the agent to create/update the handoff" },
+  { value: "handoff show", label: "handoff show", description: "Show the current handoff" },
+  { value: "handoff write", label: "handoff write", description: "Write handoff directly from planner data" },
+  { value: "handoff clear", label: "handoff clear", description: "Delete the current handoff" },
+  { value: "web start", label: "web start", description: "Start the web UI" },
+  { value: "web stop", label: "web stop", description: "Stop the web UI" },
+  { value: "web status", label: "web status", description: "Show web UI status" },
+  { value: "load", label: "load", description: "Re-enable planner and start web UI" },
+  { value: "disable", label: "disable", description: "Reset planner preferences and disable for this session" },
+];
+
+// ─── Helpers ────────────────────────────────────────────────────────────
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -98,10 +133,6 @@ function planRootForCwd(cwd: string): string {
   return join(cwd, PLAN_DIR_NAME);
 }
 
-function legacyPlanRootForCwd(cwd: string): string {
-  return join(cwd, LEGACY_PLAN_DIR_NAME);
-}
-
 function rootHasPlan(root: string): boolean {
   return existsSync(manifestPathFor(root));
 }
@@ -109,24 +140,7 @@ function rootHasPlan(root: string): boolean {
 function resolvePlanRoot(cwd: string): string {
   const plannerRoot = planRootForCwd(cwd);
   if (rootHasPlan(plannerRoot)) return plannerRoot;
-  const legacyRoot = legacyPlanRootForCwd(cwd);
-  if (rootHasPlan(legacyRoot)) return legacyRoot;
   return plannerRoot;
-}
-
-async function maybeMigrateLegacyPlanDir(cwd: string): Promise<{ root: string; migrated: boolean }> {
-  const plannerRoot = planRootForCwd(cwd);
-  const legacyRoot = legacyPlanRootForCwd(cwd);
-
-  if (rootHasPlan(plannerRoot)) return { root: plannerRoot, migrated: false };
-  if (!rootHasPlan(legacyRoot)) return { root: plannerRoot, migrated: false };
-
-  if (existsSync(plannerRoot)) {
-    return { root: legacyRoot, migrated: false };
-  }
-
-  await rename(legacyRoot, plannerRoot);
-  return { root: plannerRoot, migrated: true };
 }
 
 function ensureStore(ctx: ExtensionContext): PlanStore {
@@ -247,7 +261,7 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
     ?? (currentTask
       ? (currentTask.status === "in-progress"
         ? `riprendere il task ${currentTask.id} — ${currentTask.title}`
-        : `avviare il task ${currentTask.id} — ${currentTask.title} con planner-task-start prima di toccare il codice`)
+        : `avviare il task ${currentTask.id} — ${currentTask.title} con /planner task start prima di toccare il codice`)
       : currentPhase
         ? `riprendere la fase ${currentPhase.id} — ${currentPhase.title}`
         : "rivedere il piano e scegliere il prossimo task concreto");
@@ -367,13 +381,13 @@ async function buildHandoffMarkdown(
           ]
         : currentTask
           ? [
-              `Start task ${currentTask.id} — ${currentTask.title} with planner-task-start (or task_start) before doing implementation work.`,
+              `Start task ${currentTask.id} — ${currentTask.title} with /planner task start (or task_start) before doing implementation work.`,
               `Then continue work in phase ${currentPhase?.id ?? currentTask.phaseId}.`,
             ]
           : currentPhase && currentPhase.status !== "done"
             ? [
                 `Review phase ${currentPhase.id} — ${currentPhase.title}.`,
-                "Pick the next actionable task in that phase and start it with planner-task-start before editing code.",
+                "Pick the next actionable task in that phase and start it with /planner task start before editing code.",
               ]
             : plan.phases.find((phase) => phase.status === "planned" || phase.status === "draft" || phase.status === "discovery")
               ? [
@@ -394,7 +408,7 @@ async function buildHandoffMarkdown(
           : "1. Open the planner dashboard and inspect the latest feature/phase state.",
       "2. Read `.planner/HANDOFF.md` and compare it with the latest planner data.",
       currentTask && currentTask.status !== "in-progress"
-        ? `3. Before implementation work, run planner-task-start ${currentTask.id} (or call task_start).`
+        ? `3. Before implementation work, run /planner task start ${currentTask.id} (or call task_start).`
         : "3. Confirm whether the current task is already in-progress before doing implementation work.",
       `4. Continue with the next activity: ${inferredNextSteps[0] ?? "choose the next concrete task"}`,
     ].join("\n");
@@ -649,7 +663,6 @@ async function maybeStartWeb(ctx: ExtensionContext): Promise<void> {
 async function startServer(ctx: ExtensionContext, requestedPort?: number): Promise<void> {
   plannerSessionEnabled = true;
   if (server) return;
-  await maybeMigrateLegacyPlanDir(ctx.cwd).catch(() => {});
   const port = await pickProjectPort(ctx, requestedPort);
   try {
     server = await serve({
@@ -717,13 +730,42 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   // ── Restore on session start/reload ─────────────────────────────────
   pi.on("session_start", async (_event, ctx) => {
     try {
+    ctx.ui.addAutocompleteProvider((current) => ({
+      triggerCharacters: ["/", " "],
+      async getSuggestions(lines, cursorLine, cursorCol, options) {
+        const line = lines[cursorLine] ?? "";
+        const beforeCursor = line.slice(0, cursorCol);
+        const match = beforeCursor.match(/(?:^|\s)(\/planner)(?:\s+(.*))?$/);
+        if (!match) {
+          return current.getSuggestions(lines, cursorLine, cursorCol, options);
+        }
+
+        const argPrefix = match[2];
+        const prefix = argPrefix === undefined ? match[1]! : argPrefix;
+        const normalized = (argPrefix ?? "").trimStart().toLowerCase();
+        const items = PLANNER_COMMAND_COMPLETIONS
+          .filter((item) => !normalized || item.value.startsWith(normalized))
+          .map((item) => ({
+            ...item,
+            value: argPrefix === undefined ? `/planner ${item.value}` : item.value,
+          }));
+
+        return {
+          prefix,
+          items: items.length > 0 ? items : PLANNER_COMMAND_COMPLETIONS,
+        };
+      },
+      applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
+        return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
+      },
+      shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
+        return current.shouldTriggerFileCompletion?.(lines, cursorLine, cursorCol) ?? true;
+      },
+    }));
+
     resetState();
     autoHandoffTriggered = false;
     previousContextPercent = 0;
-    const migration = await maybeMigrateLegacyPlanDir(ctx.cwd).catch(() => ({ root: resolvePlanRoot(ctx.cwd), migrated: false }));
-    if (migration.migrated) {
-      ctx.ui.notify("Migrated legacy .plan/ directory to .planner/.", "info");
-    }
     const st = ensureStore(ctx);
 
     // Read any persisted web port (for reuse), but do NOT auto-start here.
@@ -757,11 +799,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           } else if (/^(y|yes|s|si|sì)$/i.test(normalized)) {
             enablePlanner = true; // this session only
           } else {
-            // 'n' → persist as 'never' so it won't ask again; planner-load re-enables.
+            // 'n' → persist as 'never' so it won't ask again; /planner load re-enables.
             enablePlanner = false;
             if (project) { project.plannerNeverAsk = true; project.plannerAutoEnable = false; await st.saveProject(project); }
             try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
-            ctx.ui.notify("Planner disabled for this project. Use 'planner-load' to re-enable manually.", "info");
+            ctx.ui.notify("Planner disabled for this project. Use '/planner load' to re-enable manually.", "info");
           }
         } catch {
           enablePlanner = false;
@@ -915,8 +957,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (guard.inProgressTaskIds.length > 0) return;
 
     const focusHint = guard.focusTaskId
-      ? ` Start the task first with task_start (recommended: ${guard.focusTaskId} — ${guard.focusTaskTitle}) or use planner-task-start ${guard.focusTaskId}.`
-      : " Start the relevant task first with task_start or planner-task-start before doing implementation work.";
+      ? ` Start the task first with task_start (recommended: ${guard.focusTaskId} — ${guard.focusTaskTitle}) or use /planner task start ${guard.focusTaskId}.`
+      : " Start the relevant task first with task_start or /planner task start before doing implementation work.";
 
     return {
       block: true,
@@ -937,19 +979,54 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     const [a, b, ...rest] = parts;
     const subArgs = rest.join(" ");
 
-    const SUB_HELP = "Available: init, show, project, feature, phase, task, discuss, handoff, web\n" +
-      "Try: planner-project-discuss  |  planner-phase-add <title>  |  planner-handoff-prepare\n" +
-      "Handoff commands: planner-handoff-prepare | planner-handoff-show | planner-handoff-write | planner-handoff-clear";
+    const PLANNER_MENU_ACTIONS = [
+      "init",
+      "show",
+      "repair",
+      "project discuss",
+      "project language",
+      "feature list",
+      "feature add",
+      "feature show",
+      "feature update",
+      "feature delete",
+      "phase add",
+      "phase show",
+      "phase discuss",
+      "phase update",
+      "phase delete",
+      "task add",
+      "task show",
+      "task discuss",
+      "task update",
+      "task delete",
+      "task start",
+      "task complete",
+      "handoff prepare",
+      "handoff show",
+      "handoff write",
+      "handoff clear",
+      "web start",
+      "web stop",
+      "web status",
+      "load",
+      "disable",
+    ];
+
+    const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, load, disable\n" +
+      "Try: /planner <TAB>  |  /planner feature list  |  /planner task start\n" +
+      "Handoff actions: /planner handoff prepare | show | write | clear";
 
     if (!a) {
-      ctx.ui.notify(SUB_HELP, "info");
+      const action = await ctx.ui.select("Planner action", PLANNER_MENU_ACTIONS);
+      if (!action) {
+        ctx.ui.notify(SUB_HELP, "info");
+        return;
+      }
+      await runPlanner(action, ctx);
       return;
     }
 
-    const migration = await maybeMigrateLegacyPlanDir(ctx.cwd).catch(() => ({ root: resolvePlanRoot(ctx.cwd), migrated: false }));
-    if (migration.migrated) {
-      ctx.ui.notify("Migrated legacy .plan/ directory to .planner/.", "info");
-    }
     const st = ensureStore(ctx);
 
     // ── init ──
@@ -1303,7 +1380,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // ═══════════════════════════════════════════════════════════════
     if (a === "feature") {
       if (!b) {
-        ctx.ui.notify("feature actions: show [id]  |  list", "info");
+        ctx.ui.notify("feature actions: list  |  add [name]  |  show [id|name]  |  update [id|name]  |  delete [id|name]", "info");
         return;
       }
       if (b === "list") {
@@ -1312,12 +1389,55 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify("No features", "info");
           return;
         }
-        ctx.ui.notify(features.map((feature) => `${statusIcon(feature.status)} ${feature.name} (${feature.id})`).join("\n"), "info");
+        const phases = await st.loadAllPhases();
+        ctx.ui.notify(features.map((feature) => {
+          const featurePhases = phases.filter((phase) => phase.featureId === feature.id);
+          const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
+          return `${statusIcon(feature.status)} ${feature.name} (${feature.id}) — ${featurePhases.length} phases, ${taskCount} tasks`;
+        }).join("\n"), "info");
+        return;
+      }
+      if (b === "add") {
+        const nameInput = subArgs.trim() || await ctx.ui.input("Feature name");
+        if (!nameInput?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
+        const description = await ctx.ui.editor("Feature description (optional)", "");
+        const statusInput = await ctx.ui.input("Status [planned] (planned|in-progress|done|blocked|canceled|rejected|deferred|waiting)");
+        const validStatuses = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
+        const status = statusInput?.trim() || "planned";
+        if (!validStatuses.includes(status)) {
+          ctx.ui.notify(`Invalid status. Use: ${validStatuses.join(", ")}`, "error");
+          return;
+        }
+        const now = nowISO();
+        const feature: Feature = {
+          id: createFeatureId(),
+          name: nameInput.trim(),
+          description: description?.trim() ?? "",
+          status: status as Feature["status"],
+          discussedAt: "",
+          contextReady: false,
+          contextReadyReason: "",
+          startDate: status === "in-progress" ? new Date().toISOString().slice(0, 10) : "",
+          endDate: status === "done" ? new Date().toISOString().slice(0, 10) : "",
+          workDone: "",
+          workRemaining: "",
+          acceptedDecisions: [],
+          phaseIds: [],
+          dependsOn: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        await st.updateFeatures((doc) => {
+          doc.features.push(feature);
+          return doc;
+        });
+        await st.writeGenerated();
+        ctx.ui.notify(`Feature created: ${feature.id} — ${feature.name}`, "info");
         return;
       }
       if (b === "show") {
         const features = (await st.loadFeatures()).features;
-        let feature: Feature | null = subArgs.trim() ? features.find((entry) => entry.id === subArgs.trim()) ?? null : null;
+        let feature: Feature | null = subArgs.trim() ? findFeatureByRef(features, subArgs.trim()) : null;
         if (!feature) {
           feature = await pickFeature();
           if (!feature) { ctx.ui.notify("No features available", "warning"); return; }
@@ -1338,7 +1458,89 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ].filter(Boolean).join("\n"), "info");
         return;
       }
-      ctx.ui.notify(`Unknown feature action "${b}". Try: show, list`, "warning");
+      if (b === "update") {
+        const featuresDoc = await st.loadFeatures();
+        let feature = subArgs.trim() ? findFeatureByRef(featuresDoc.features, subArgs.trim()) : null;
+        if (!feature) {
+          feature = await pickFeature();
+          if (!feature) { ctx.ui.notify("No features available", "warning"); return; }
+        }
+        const title = await ctx.ui.input(`Name [${feature.name}]`);
+        const statusInput = await ctx.ui.input(`Status [${feature.status}] (planned|in-progress|done|blocked|canceled|rejected|deferred|waiting)`);
+        const description = await ctx.ui.editor("Description [leave unchanged by submitting current text]", feature.description || "");
+        const workDone = await ctx.ui.editor("Work done [leave unchanged by submitting current text]", feature.workDone || "");
+        const workRemaining = await ctx.ui.editor("Work remaining [leave unchanged by submitting current text]", feature.workRemaining || "");
+        const startDate = await ctx.ui.input(`Start date YYYY-MM-DD [${feature.startDate || ""}]`);
+        const endDate = await ctx.ui.input(`End date YYYY-MM-DD [${feature.endDate || ""}]`);
+        const validStatuses = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
+        if (statusInput?.trim() && !validStatuses.includes(statusInput.trim())) {
+          ctx.ui.notify(`Invalid status. Use: ${validStatuses.join(", ")}`, "error");
+          return;
+        }
+        const featureId = feature.id;
+        const updatedDoc = await st.updateFeatures((doc) => {
+          const target = doc.features.find((entry) => entry.id === featureId);
+          if (!target) return doc;
+          if (title?.trim()) target.name = title.trim();
+          if (statusInput?.trim()) {
+            const nextStatus = statusInput.trim() as Feature["status"];
+            if (nextStatus === "in-progress" && !target.startDate) target.startDate = new Date().toISOString().slice(0, 10);
+            if (nextStatus === "done" && !target.endDate) target.endDate = new Date().toISOString().slice(0, 10);
+            target.status = nextStatus;
+          }
+          if (description !== undefined) target.description = description.trim();
+          if (workDone !== undefined) target.workDone = workDone.trim();
+          if (workRemaining !== undefined) target.workRemaining = workRemaining.trim();
+          if (startDate !== undefined) target.startDate = startDate.trim();
+          if (endDate !== undefined) target.endDate = endDate.trim();
+          target.updatedAt = nowISO();
+          return doc;
+        });
+        feature = updatedDoc.features.find((entry) => entry.id === featureId) ?? feature;
+        await st.writeGenerated();
+        ctx.ui.notify(`Feature updated: ${feature.id} — ${feature.name} (${feature.status})`, "info");
+        return;
+      }
+      if (b === "delete") {
+        const features = (await st.loadFeatures()).features;
+        let feature = subArgs.trim() ? findFeatureByRef(features, subArgs.trim()) : null;
+        if (!feature) {
+          feature = await pickFeature();
+          if (!feature) { ctx.ui.notify("No features available", "warning"); return; }
+        }
+        const phases = (await st.loadAllPhases()).filter((phase) => phase.featureId === feature!.id);
+        const cascade = phases.length > 0
+          ? await ctx.ui.confirm(`Delete ${phases.length} phase(s) inside "${feature.name}" too? If no, phases remain but are unlinked.`, "Delete phases too")
+          : false;
+        const confirm = await ctx.ui.input(`Confirm delete "${feature.name}" (${feature.id})? Type yes:`);
+        if (confirm?.trim() !== "yes") {
+          ctx.ui.notify("Aborted", "warning");
+          return;
+        }
+        const featureId = feature.id;
+        await st.updateFeatures((doc) => {
+          doc.features = doc.features.filter((entry) => entry.id !== featureId);
+          return doc;
+        });
+        let affectedPhases = 0;
+        if (cascade) {
+          for (const phase of phases) {
+            await st.deletePhase(phase.id);
+            affectedPhases += 1;
+          }
+        } else {
+          for (const phase of phases) {
+            phase.featureId = undefined;
+            phase.updatedAt = nowISO();
+            await st.savePhase(phase);
+            affectedPhases += 1;
+          }
+        }
+        await st.writeGenerated();
+        ctx.ui.notify(`Feature deleted: ${featureId}${phases.length > 0 ? cascade ? `; deleted ${affectedPhases} phase(s)` : `; unlinked ${affectedPhases} phase(s)` : ""}`, "info");
+        return;
+      }
+      ctx.ui.notify(`Unknown feature action "${b}". Try: list, add, show, update, delete`, "warning");
       return;
     }
 
@@ -1841,7 +2043,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ctx.ui.notify("Deleted .planner/HANDOFF.md", "info");
         return;
       }
-      ctx.ui.notify("handoff actions: prepare | show | write | clear\nFlat commands: planner-handoff-prepare | planner-handoff-show | planner-handoff-write | planner-handoff-clear", "info");
+      ctx.ui.notify("handoff actions: prepare | show | write | clear\nUse: /planner handoff prepare | show | write | clear", "info");
       return;
     }
 
@@ -1871,145 +2073,69 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       return;
     }
 
+    // ── maintenance/session actions ──
+    if (a === "repair") {
+      const report = await st.repair();
+      const m = report.migrated;
+      const dup = report.integrity.duplicatePhaseIds.length;
+      const dang = report.integrity.danglingPhaseIds.length;
+      ctx.ui.notify(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}. Integrity: ${dup} duplicate, ${dang} dangling.`, "info");
+      return;
+    }
+
+    if (a === "load") {
+      const project = await st.loadProject().catch(() => null);
+      if (project) {
+        let changed = false;
+        if (project.plannerNeverAsk) { project.plannerNeverAsk = false; changed = true; }
+        if (project.plannerNeverStartWeb) { project.plannerNeverStartWeb = false; changed = true; }
+        if (changed) {
+          await st.saveProject(project);
+          ctx.ui.notify("Cleared 'never' flags. Planner enabled for this session.", "info");
+        }
+      }
+      plannerSessionEnabled = true;
+      if (!server) {
+        ctx.ui.notify("Starting web server …", "info");
+        await startServer(ctx);
+      }
+      ctx.ui.notify(`Planner loaded. Web UI: ${server?.url ?? "(not started)"}`, "info");
+      return;
+    }
+
+    if (a === "disable") {
+      const project = await st.loadProject().catch(() => null);
+      if (project) {
+        project.plannerAutoEnable = false;
+        project.plannerNeverAsk = false;
+        project.plannerAutoStartWeb = false;
+        project.plannerNeverStartWeb = false;
+        await st.saveProject(project);
+      }
+      plannerSessionEnabled = false;
+      await stopServer().catch(() => {});
+      try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
+      ctx.ui.notify("Planner preferences reset to 'ask'. Disabled for this session. Next restart will prompt again.", "info");
+      return;
+    }
+
     ctx.ui.notify(`Unknown "${a}". ${SUB_HELP}`, "warning");
   }
 
   // ── Single /planner command (hierarchical with spaces) ──────────
   pi.registerCommand("planner", {
-    description: "Commands: init, show, project, feature, phase, task, discuss, handoff, web. Try /planner project discuss",
+    description: "Grouped planner command. Use /planner <TAB> for subcommands or /planner to open the menu.",
     getArgumentCompletions: (prefix) => {
-      const topLevel = [
-        { value: "init", label: "init", description: "Initialize planner in this project" },
-        { value: "show", label: "show", description: "Show planner overview" },
-        { value: "project discuss", label: "project discuss", description: "Run project discovery" },
-        { value: "project language", label: "project language", description: "Set persistent language preferences" },
-        { value: "feature show", label: "feature show", description: "Show a feature" },
-        { value: "phase add", label: "phase add", description: "Add a phase" },
-        { value: "phase show", label: "phase show", description: "Show a phase" },
-        { value: "phase discuss", label: "phase discuss", description: "Discuss a phase" },
-        { value: "phase delete", label: "phase delete", description: "Delete a phase" },
-        { value: "phase update", label: "phase update", description: "Update a phase" },
-        { value: "task add", label: "task add", description: "Add a task" },
-        { value: "task show", label: "task show", description: "Show a task" },
-        { value: "task discuss", label: "task discuss", description: "Discuss a task" },
-        { value: "task delete", label: "task delete", description: "Delete a task" },
-        { value: "task update", label: "task update", description: "Update a task" },
-        { value: "task start", label: "task start", description: "Mark a task in-progress" },
-        { value: "task complete", label: "task complete", description: "Mark a task done" },
-        { value: "handoff prepare", label: "handoff prepare", description: "Tell the agent to create/update the handoff" },
-        { value: "handoff show", label: "handoff show", description: "Show the current handoff" },
-        { value: "handoff write", label: "handoff write", description: "Write handoff directly from planner data" },
-        { value: "handoff clear", label: "handoff clear", description: "Delete the current handoff" },
-        { value: "web start", label: "web start", description: "Start the web UI" },
-        { value: "web stop", label: "web stop", description: "Stop the web UI" },
-        { value: "web status", label: "web status", description: "Show web UI status" },
-      ];
       const normalized = prefix.trim().toLowerCase();
-      const filtered = topLevel.filter((item) => item.value.startsWith(normalized));
-      return filtered.length > 0 ? filtered : topLevel;
+      const filtered = PLANNER_COMMAND_COMPLETIONS.filter((item) => item.value.startsWith(normalized));
+      return filtered.length > 0 ? filtered : PLANNER_COMMAND_COMPLETIONS;
     },
     handler: async (args, ctx) => handlePlanner(args, ctx),
   });
 
-  // ── Tab-completable flat commands ────────────────────────────────
-  pi.registerCommand("planner-init", { description: "Initialize .planner/ with title + short description, then start project discuss", handler: async (_a, ctx) => handlePlanner("init", ctx) });
-  pi.registerCommand("planner-show", { description: "Show plan overview", handler: async (_a, ctx) => handlePlanner("show", ctx) });
-  pi.registerCommand("planner-project-discuss", { description: "Bootstrap or re-discuss the current project", handler: async (_a, ctx) => handlePlanner("project discuss", ctx) });
-  pi.registerCommand("planner-project-language", { description: "Set persistent language preferences for plan content and chat", handler: async (_a, ctx) => handlePlanner("project language", ctx) });
-  pi.registerCommand("planner-feature-show", { description: "Show a feature (interactive or by id)", handler: async (args, ctx) => handlePlanner("feature show " + args, ctx) });
-  pi.registerCommand("planner-phase-add", { description: "Add a phase: planner-phase-add <title>", handler: async (args, ctx) => handlePlanner("phase add " + args, ctx) });
-  pi.registerCommand("planner-phase-show", { description: "Show a phase (interactive or by id)", handler: async (args, ctx) => handlePlanner("phase show " + args, ctx) });
-  pi.registerCommand("planner-phase-discuss", { description: "Discuss a phase (interactive, by id, or by name)", handler: async (args, ctx) => handlePlanner("phase discuss " + args, ctx) });
-  pi.registerCommand("planner-phase-delete", { description: "Delete a phase (interactive)", handler: async (_a, ctx) => handlePlanner("phase delete", ctx) });
-  pi.registerCommand("planner-phase-update", { description: "Update a phase (interactive)", handler: async (_a, ctx) => handlePlanner("phase update", ctx) });
-  pi.registerCommand("planner-task-add", { description: "Add a task (interactive pick)", handler: async (_a, ctx) => handlePlanner("task add", ctx) });
-  pi.registerCommand("planner-task-show", { description: "Show a task (interactive or by id)", handler: async (args, ctx) => handlePlanner("task show " + args, ctx) });
-  pi.registerCommand("planner-task-discuss", { description: "Discuss a task (interactive, by id, or by name)", handler: async (args, ctx) => handlePlanner("task discuss " + args, ctx) });
-  pi.registerCommand("planner-task-delete", { description: "Delete a task (interactive)", handler: async (_a, ctx) => handlePlanner("task delete", ctx) });
-  pi.registerCommand("planner-task-update", { description: "Update a task (interactive)", handler: async (_a, ctx) => handlePlanner("task update", ctx) });
-  pi.registerCommand("planner-task-start", { description: "Set a task to in-progress (by id or interactive)", handler: async (args, ctx) => handlePlanner("task start " + args, ctx) });
-  pi.registerCommand("planner-task-complete", { description: "Mark a task as done (by id or interactive)", handler: async (args, ctx) => handlePlanner("task complete " + args, ctx) });
-  pi.registerCommand("planner-discuss", { description: "Legacy alias for phase discuss", handler: async (args, ctx) => handlePlanner("discuss " + args, ctx) });
-  pi.registerCommand("planner-handoff", { description: "Prepare/show/write/clear .planner/HANDOFF.md", handler: async (args, ctx) => handlePlanner("handoff " + args, ctx) });
-  pi.registerCommand("planner-handoff-prepare", { description: "Tell the agent to create/update the canonical .planner/HANDOFF.md", handler: async (_a, ctx) => handlePlanner("handoff prepare", ctx) });
-  pi.registerCommand("planner-handoff-show", { description: "Show the current .planner/HANDOFF.md", handler: async (_a, ctx) => handlePlanner("handoff show", ctx) });
-  pi.registerCommand("planner-handoff-write", { description: "Write .planner/HANDOFF.md directly from planner data", handler: async (_a, ctx) => handlePlanner("handoff write", ctx) });
-  pi.registerCommand("planner-handoff-clear", { description: "Delete .planner/HANDOFF.md", handler: async (_a, ctx) => handlePlanner("handoff clear", ctx) });
-  pi.registerCommand("planner-web", { description: "Web server: planner-web start|stop [port]", handler: async (args, ctx) => handlePlanner("web " + args, ctx) });
-  pi.registerCommand("planner-repair", {
-    description: "Repair dangling feature→phase references and report integrity (duplicate/dangling phase ids). Safe to run anytime.",
-    handler: async (_args, ctx) => {
-      try {
-        const st = ensureStore(ctx);
-        if (!(await st.exists())) { ctx.ui.notify("No .planner/ found.", "warning"); return; }
-        const report = await st.repair();
-        const m = report.migrated;
-        const dup = report.integrity.duplicatePhaseIds.length;
-        const dang = report.integrity.danglingPhaseIds.length;
-        ctx.ui.notify(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}. Integrity: ${dup} duplicate, ${dang} dangling.`, "info");
-      } catch (e) {
-        ctx.ui.notify(`Repair failed: ${e instanceof Error ? e.message : String(e)}`, "error");
-      }
-    },
-  });
-
-  pi.registerCommand("planner-load", {
-    description: "Re-enable the planner extension for this project after 'n/never' was chosen. Clears the never flags (enable + web), enables for this session, and starts the web UI.",
-    handler: async (_args, ctx) => {
-      try {
-        const st = ensureStore(ctx);
-        if (await st.exists().catch(() => false)) {
-          const project = await st.loadProject().catch(() => null);
-          if (project) {
-            let changed = false;
-            if (project.plannerNeverAsk) { project.plannerNeverAsk = false; changed = true; }
-            if (project.plannerNeverStartWeb) { project.plannerNeverStartWeb = false; changed = true; }
-            if (changed) {
-              await st.saveProject(project);
-              ctx.ui.notify("Cleared 'never' flags. Planner enabled for this session.", "info");
-            }
-          }
-        }
-        plannerSessionEnabled = true;
-        if (!server) {
-          ctx.ui.notify("Starting web server …", "info");
-          await startServer(ctx);
-        }
-        ctx.ui.notify(`Planner loaded. Web UI: ${server?.url ?? "(not started)"}`, "info");
-      } catch (e) {
-        ctx.ui.notify(`planner-load failed: ${e instanceof Error ? e.message : String(e)}`, "error");
-      }
-    },
-  });
-
-  pi.registerCommand("planner-disable", {
-    description: "Reset all persisted planner preferences (enable + web) back to 'ask' for this project, disable for this session, and stop the web UI. Next session start will prompt again.",
-    handler: async (_args, ctx) => {
-      try {
-        const st = ensureStore(ctx);
-        if (await st.exists().catch(() => false)) {
-          const project = await st.loadProject().catch(() => null);
-          if (project) {
-            project.plannerAutoEnable = false;
-            project.plannerNeverAsk = false;
-            project.plannerAutoStartWeb = false;
-            project.plannerNeverStartWeb = false;
-            await st.saveProject(project);
-          }
-        }
-        plannerSessionEnabled = false;
-        await stopServer().catch(() => {});
-        try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
-        ctx.ui.notify("Planner preferences reset to 'ask'. Disabled for this session. Next restart will prompt again.", "info");
-      } catch (e) {
-        ctx.ui.notify(`planner-disable failed: ${e instanceof Error ? e.message : String(e)}`, "error");
-      }
-    },
-  });
-
   // ── Custom Tools (non-interactive, usable by the LLM agent) ──────
   //
-  // Flat commands (planner-*) are interactive (pickers, inputs) and meant
+  // The grouped /planner command is interactive (pickers, inputs) and meant
   // for humans in the TUI. The agent (LLM) can only call tools, so the full
   // CRUD surface is exposed here as tools that operate directly on the store.
 
@@ -2020,7 +2146,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   }
 
   async function requirePlan(ctx: ExtensionContext): Promise<PlanStore | null> {
-    await maybeMigrateLegacyPlanDir(ctx.cwd).catch(() => {});
     const st = loadStore(ctx);
     if (!(await st.exists())) return null;
     await maybeHealStatuses(st);
@@ -2073,7 +2198,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       requirements: Type.Optional(Type.Array(Type.String(), { description: "Initial top-level requirements to seed requirements.json" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      await maybeMigrateLegacyPlanDir(ctx.cwd).catch(() => {});
       const st = loadStore(ctx);
       if (await st.exists()) {
         return { content: [{ type: "text", text: ".planner/ already exists" }], details: {} };
@@ -3107,34 +3231,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phaseLines || "  _none_",
         active ? `Active: ${active}` : "",
         "",
-        "Exact flat command names (tab-completable / autosuggest):",
-        "- planner-init",
-        "- planner-show",
-        "- planner-project-discuss",
-        "- planner-project-language",
-        "- planner-feature-show [id]",
-        "- planner-phase-add <title>",
-        "- planner-phase-show [id]",
-        "- planner-phase-discuss [id|name]",
-        "- planner-phase-delete",
-        "- planner-phase-update",
-        "- planner-task-add",
-        "- planner-task-show [id]",
-        "- planner-task-discuss [id|name]",
-        "- planner-task-delete",
-        "- planner-task-update",
-        "- planner-task-start [id]",
-        "- planner-task-complete [id]",
-        "- planner-handoff-prepare",
-        "- planner-handoff-show",
-        "- planner-handoff-write",
-        "- planner-handoff-clear",
-        "- planner-handoff <prepare|show|write|clear>",
-        "- planner-discuss (legacy alias)",
-        "- planner-web start|stop [port]",
-        "- planner-load (re-enable planner after 'n/never')",
-        "- planner-disable (reset preferences to 'ask', disable for session)",
-        "Hierarchical forms also exist via the planner command: planner project discuss, planner phase add <title>, etc.",
+        "Primary command UX:",
+        "- Use `/planner <TAB>` for grouped subcommand suggestions.",
+        "- Use `/planner` with no args to open the navigable planner menu.",
+        "- Feature commands: planner feature list|add|show|update|delete.",
+        "- Phase commands: planner phase add|show|discuss|update|delete.",
+        "- Task commands: planner task add|show|discuss|update|delete|start|complete.",
+        "- Handoff commands: planner handoff prepare|show|write|clear.",
+        "- Web/session commands: planner web start|stop|status, planner load, planner disable, planner repair.",
+        "Legacy flat aliases may also exist for backward compatibility, but prefer grouped `/planner ...` forms.",
         "Planner discuss mode is Agent Plan only: ignore GSD workflows/skills/commands unless the user explicitly asks for GSD.",
         `Language preferences: plan content=${project.contentLanguage || "(not set)"}; chat=${project.chatLanguage || "(not set)"}.`,
         "If these language preferences are already set, follow them automatically and do NOT ask again in later sessions.",

@@ -5,6 +5,8 @@
     { "path": "packages/plan-core" },
     { "path": "packages/plan-server" },
     { "path": "packages/plan-web-ui" },
-    { "path": "packages/pi-adapter" }
+    { "path": "packages/pi-adapter" },
+    { "path": "packages/plan-mcp" },
+    { "path": "packages/agent-plan" }
   ]
 }

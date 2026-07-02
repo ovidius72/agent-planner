@@ -8,7 +8,9 @@
 
 agent-plan is currently bound to Pi via `pi-adapter`. The good news: **~90% of the value is already portable** (`plan-core`, `plan-server`, `plan-web-ui` have zero Pi dependencies). The only Pi-specific coupling lives in `pi-adapter`.
 
-The four target agents (**Claude Code, Codex, OpenClaude, Hermes**) all support **MCP (Model Context Protocol)** as the shared standard for exposing external tools. The recommended path is therefore not to write four separate adapters, but to expose agent-plan's tools behind **a single MCP server** and point each client at it.
+The broader target agents (**Claude Code, Codex, OpenClaude, Hermes**) all support **MCP (Model Context Protocol)** as the shared standard for exposing external tools. The recommended long-term path is therefore not to write four separate adapters, but to expose agent-plan's tools behind **a single MCP server** and point each client at it.
+
+However, the first implementation phase is intentionally narrower: **Claude Code only**. This lets us validate naming, lifecycle hooks, and MCP ergonomics before committing to other hosts.
 
 - **MCP** = portable tool/data integrations across hosts and vendors.
 - **Agent-specific hooks** = deep, host-native lifecycle behavior (gating, guardrails, startup summaries).
@@ -19,7 +21,7 @@ We use MCP for the tool surface, and a thin per-host shim for the lifecycle beha
 
 | Agent | Tool extension | Lifecycle extension | Config location |
 |---|---|---|---|
-| **Claude Code** | MCP servers | Hooks: `PreToolUse`, `PostToolUse`, `SessionStart`, etc. | `~/.claude/settings.json`, project `.claude/settings.json` |
+| **Claude Code** | MCP servers | Hooks: `PreToolUse`, `PostToolUse`, `SessionStart`, etc. | project `.mcp.json` for MCP servers; settings/hooks in Claude config |
 | **Codex (OpenAI)** | MCP servers | `AGENTS.md` instructions (no native hooks) | MCP config + `AGENTS.md` |
 | **OpenClaude** | MCP + web tools | Agent/workflow config | project README / config |
 | **Hermes** | MCP + configurable toolsets (`"web,terminal,skills"`) | CLI/TUI toolset config | `hermes` CLI config |
@@ -78,17 +80,106 @@ Three layers:
 | `ctx.ui.notify` / `ctx.ui.input` | **yes (Pi)** | MCP text output + tool prompts |
 | Language preferences persistence | no | yes (in `project.json`) |
 
-## 5. MCP server design (`packages/plan-mcp`)
+## 5. Claude Code Phase 1 plan
 
-### Tool surface (maps 1:1 to existing adapter tools)
-- `plan_render`
-- `project_get` / `project_set` / `project_set_language_preferences`
-- `feature_create` / `feature_update` / `feature_list`
-- `phase_create` / `phase_update` / `phase_discuss`
-- `task_create` / `task_update` / `task_start` / `task_complete`
-- `handoff_prepare` / `handoff_show` / `handoff_write` / `handoff_clear`
+Before implementing MCP, clean up the Pi command UX and define the public action names.
 
-Each tool handler is a thin wrapper around `PlanStore` methods (the same ones `pi-adapter` calls today). No business logic duplication: the MCP server depends on `plan-core` directly.
+### Decisions
+
+- First non-Pi target: **Claude Code only**.
+- Public action namespace: **`planner-*`**, because the extension/product is `planner`, not `plan`.
+- Pi human UX should not expose ~30 top-level flat slash commands by default.
+- Pi should prefer one grouped command:
+  - `/planner <TAB>` → hierarchical subcommand suggestions.
+  - `/planner` + Enter → navigable command menu, similar in spirit to `/settings`.
+- Claude Code MCP can expose atomic public tools named `planner-*`.
+- Requirements stay internal for now; they are seed/project data, not public command UX.
+- Features are first-class public entities and must be exposed: hierarchy is **features → phases → tasks**.
+
+### Pi command grouping target
+
+Primary human command:
+
+- `/planner`
+
+Hierarchical subcommands under `/planner`:
+
+- `init`
+- `show`
+- `repair`
+- `project discuss`
+- `project language`
+- `feature list`
+- `feature add`
+- `feature show`
+- `feature update`
+- `feature delete`
+- `phase add`
+- `phase show`
+- `phase discuss`
+- `phase update`
+- `phase delete`
+- `task add`
+- `task show`
+- `task discuss`
+- `task update`
+- `task delete`
+- `task start`
+- `task complete`
+- `handoff prepare`
+- `handoff show`
+- `handoff write`
+- `handoff clear`
+- `web start`
+- `web stop`
+- `web status`
+- `load`
+- `disable`
+
+Flat `planner-*` slash commands are not registered in Pi to avoid global autosuggest noise. The intended Pi UX is grouped under `/planner`. Claude Code MCP may still expose atomic `planner-*` tool names because MCP tools are a separate, agent-facing surface.
+
+### MCP public action surface for Claude Code
+
+MCP tool names should match the canonical public action names, using hyphenated `planner-*` names:
+
+- `planner-init`
+- `planner-show`
+- `planner-repair`
+- `planner-project-discuss`
+- `planner-project-language`
+- `planner-feature-list`
+- `planner-feature-add`
+- `planner-feature-show`
+- `planner-feature-update`
+- `planner-feature-delete`
+- `planner-phase-add`
+- `planner-phase-show`
+- `planner-phase-discuss`
+- `planner-phase-update`
+- `planner-phase-delete`
+- `planner-task-add`
+- `planner-task-show`
+- `planner-task-discuss`
+- `planner-task-update`
+- `planner-task-delete`
+- `planner-task-start`
+- `planner-task-complete`
+- `planner-handoff-prepare`
+- `planner-handoff-show`
+- `planner-handoff-write`
+- `planner-handoff-clear`
+- `planner-web`
+- `planner-load`
+- `planner-disable`
+
+Not exposed in Claude Code Phase 1:
+
+- `planner-requirement-*`
+- legacy internal names such as `plan_render`, `task_start`, `feature_create`, `plan_write_handoff`
+
+## 6. MCP server design (`packages/plan-mcp`)
+
+Each MCP tool handler is a thin wrapper around `PlanStore` methods or shared planner action handlers. No business logic duplication: the MCP server depends on `plan-core` directly.
 
 ### Transport
 - **stdio** (default): for local CLI agents (Claude Code, Codex, OpenClaude, Hermes).
@@ -100,16 +191,17 @@ Each tool handler is a thin wrapper around `PlanStore` methods (the same ones `p
 - Handler signature: receives params, returns `{ content: [{ type: "text", text }] }`.
 
 ### Packaging
-- `npx agent-plan` launches the stdio MCP server.
+- `npx agent-plan mcp` launches the stdio MCP server.
+- `npx agent-plan setup claude-code` creates/updates project-local `.mcp.json` with the MCP server config and `.claude/commands/planner.md` with a `/planner` slash-command router.
 - Each agent registers it in its own config:
-  - Claude Code: `.claude/settings.json` → `mcpServers`.
+  - Claude Code: project `.mcp.json` → `mcpServers`.
   - Codex: MCP config.
   - Hermes/OpenClaude: toolset config.
 
-## 6. Per-host lifecycle shims
+## 7. Per-host lifecycle shims
 
 ### Claude Code
-- **Tools**: MCP server in `.claude/settings.json` `mcpServers`.
+- **Tools**: MCP server in project `.mcp.json` `mcpServers`.
 - **Guardrail**: `PreToolUse` hook blocks `bash`/`edit`/`write` when a planner exists, tasks exist, and no task is `in-progress` (same rule as the current `pi-adapter` `tool_call` guard).
 - **Startup**: `SessionStart` hook emits the resume summary.
 - **Gating**: handled via the hook (prompt on first run) or a one-time `AGENTS.md` instruction.
@@ -132,15 +224,28 @@ Each tool handler is a thin wrapper around `PlanStore` methods (the same ones `p
 - Keeps only: two-step gating, startup/resume summary injection, `tool_call` guardrail, `ctx.ui.notify`.
 - Removes direct `PlanStore` calls (they move into `plan-mcp` handlers).
 
-## 7. Migration plan (phased)
+## 8. Migration plan (phased)
 
-### Phase 1 — MCP server (highest ROI)
+### Phase 0 — Pi command grouping and naming alignment
+- Make `/planner` the primary human UX.
+- Improve `/planner <TAB>` hierarchical completions.
+- Add `/planner` + Enter interactive menu.
+- Add missing feature subcommands under `/planner feature`: list/add/update/delete.
+- Keep requirements internal.
+- Remove existing flat `planner-*` commands from global slash command registration.
+- **Result**: Pi UX is clean before MCP mirrors the public action model.
+
+### Phase 1 — Claude Code MCP server
 - Create `packages/plan-mcp`.
-- Register existing tools as MCP tools (handlers wrap `PlanStore`).
+- Register canonical `planner-*` MCP tools listed above.
 - Transport: stdio.
-- Test with **Claude Code** (most mature MCP client).
-- **Result**: agent-plan works on Claude Code, Codex, OpenClaude, Hermes (tool level).
-- **Effort**: ~1–2 days (tools already exist; it's a wrapper).
+- Test with **Claude Code**.
+- Add `agent-plan` CLI with `mcp`, `init`, and `setup claude-code`.
+- Generate Claude Code slash command `.claude/commands/planner.md` so users can type `/planner ...` and route to MCP tools.
+- Document setup in `docs/setup-claude-code.md`.
+- Current caveat: `planner-web` is exposed as a guidance/no-op tool in MCP stdio; web server lifecycle remains handled by Pi or plan-server CLI.
+- **Result**: agent-plan works on Claude Code at tool level.
+- **Effort**: ~1–2 days after command/action handlers are aligned.
 
 ### Phase 2 — Per-host lifecycle/governance
 - Claude Code: `PreToolUse` + `SessionStart` hooks.
@@ -159,13 +264,13 @@ Each tool handler is a thin wrapper around `PlanStore` methods (the same ones `p
 - Per-host setup docs (`docs/setup-claude-code.md`, `docs/setup-codex.md`, ...).
 - **Effort**: ~0.5 day.
 
-## 8. Risks & open questions
+## 9. Risks & open questions
 
 - **Governance enforcement varies by host**: Claude Code hooks can *enforce*; Codex/OpenClaude/Hermes rely on *advisory* instructions. Decide whether hard enforcement is required or advisory is acceptable for non-Pi hosts.
 - **UI access from non-Pi hosts**: the Web UI is already independent (HTTP server). Non-Pi agents can open it in a browser; live updates work via the existing `writeNotifyHook` + HTTP `/internal/notify` fallback.
 - **Gating UX**: Pi's two-step prompt (enable → start web) is Pi-specific. For other hosts, decide whether gating is needed at all or whether the MCP server simply runs on demand.
 - **Transport choice**: stdio is simplest for CLI agents; SSE/HTTP would let one server serve both Web UI and MCP. Decide whether to unify or keep two transports.
 
-## 9. Recommendation
+## 10. Recommendation
 
-Start with **Phase 1** (MCP server) immediately — it's the highest-leverage step and unblocks all four target agents at once. Defer the per-host lifecycle shims until the MCP tool surface is validated against at least one non-Pi client (Claude Code).
+Start with **Phase 0**: clean up Pi command grouping and naming first. Then implement **Phase 1** for **Claude Code only** using canonical `planner-*` MCP tool names. Defer Codex, OpenClaude, and Hermes until the Claude Code path is validated.
