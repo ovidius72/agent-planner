@@ -810,7 +810,7 @@ export function DashboardRoute() {
               const featureExpanded = expandedFeatureIds.includes(feature.id);
               const featureRecentlyChanged = recentFeatureIds.includes(feature.id);
               return (
-                <div key={feature.id} className={`surface-card px-4 py-3 transition-colors ${hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${featureRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
+                <div key={feature.id} className={`surface-card px-4 py-3 transition-colors ${hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${featureRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
                   <div className={`flex items-start justify-between gap-3 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${featureRecentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}>
                     <div className="flex min-w-0 items-start gap-2 font-mono text-sm font-semibold">
                       <button
@@ -847,7 +847,7 @@ export function DashboardRoute() {
                         const phaseExpanded = expandedPhaseIds.includes(phase.id);
                         const phaseRecentlyChanged = recentPhaseIds.includes(phase.id);
                         return (
-                          <div key={phase.id} className={`grid gap-2 transition-colors ${phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)] px-2 py-2" : ""}`}>
+                          <div key={phase.id} className={`grid gap-2 transition-colors ${phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)] px-2 py-2" : ""}`}>
                             <div className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${phaseRecentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}>
                               <div className="flex min-w-0 items-start gap-2 font-mono text-sm">
                                 <button
@@ -884,7 +884,7 @@ export function DashboardRoute() {
                                     const taskPrefix = taskIndex === allTasks.length - 1 ? "└─" : "├─";
                                     const taskRecentlyChanged = recentTaskIds.includes(task.id);
                                     return (
-                                      <div key={task.id} className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 font-mono text-sm transition-colors hover:bg-[var(--accent-soft)] ${task.status === "in-progress" ? "bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_8%,transparent)]" : ""} ${taskRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
+                                      <div key={task.id} className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 font-mono text-sm transition-colors hover:bg-[var(--accent-soft)] ${task.status === "in-progress" ? "bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_8%,transparent)]" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${task.status === "done" ? "text-[var(--text-muted)]" : ""} ${taskRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
                                         <Link
                                           to={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}`}
                                           className="min-w-0 text-[var(--text-muted)] transition hover:text-[var(--accent)]"
