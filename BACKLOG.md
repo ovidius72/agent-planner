@@ -81,6 +81,10 @@ Still open from original checklist. Requirements CRUD is in the server but no UI
 No end-user documentation yet.
 **Status:** Not started.
 
+### [P2-5] Web UI: Route restoration after modal close
+When opening an edit modal (e.g. for a task), the route changes. When the modal is closed (via cancel or save), the app does not return to the previous route/state, leaving the user on a potentially empty or mismatched page.
+**Status:** Not started.
+
 ---
 
 ## P3 — Tech debt / quality

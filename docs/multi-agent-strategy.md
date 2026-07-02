@@ -74,7 +74,7 @@ Three layers:
 | Status rollup (`syncTaskStatusRollup`) | no | yes (in core) |
 | Live WebSocket UI | no | yes (plan-server) |
 | Atomic persistence + busy signaling | no | yes (plan-core + plan-server) |
-| Gating "Enable planner? (y/n/always)" | **yes (Pi)** | rewritten per-host |
+| Gating "Enable planner? (y/n/(a)lways)" | **yes (Pi)** | rewritten per-host |
 | Startup/resume summary injection | **yes (Pi)** | rewritten per-host |
 | `tool_call` guardrail (block `bash`/`edit` when no task is `in-progress`) | **yes (Pi)** | Claude: `PreToolUse` hook; others: `AGENTS.md` rules |
 | `ctx.ui.notify` / `ctx.ui.input` | **yes (Pi)** | MCP text output + tool prompts |

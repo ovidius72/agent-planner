@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -111,6 +111,8 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "web start", label: "web start", description: "Start the web UI" },
   { value: "web stop", label: "web stop", description: "Stop the web UI" },
   { value: "web status", label: "web status", description: "Show web UI status" },
+  { value: "export", label: "export", description: "Export plan summary as Markdown" },
+  { value: "export-full", label: "export-full", description: "Export full detailed plan as Markdown" },
   { value: "load", label: "load", description: "Re-enable planner and start web UI" },
   { value: "disable", label: "disable", description: "Reset planner preferences and disable for this session" },
 ];
@@ -790,7 +792,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         enablePlanner = false; // 'never' persisted — no prompt, no activation
       } else {
         try {
-          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y/n/always)");
+          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y/n/(a)lways)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["always", "a", "sempre"].includes(normalized)) {
             enablePlanner = true;
@@ -837,7 +839,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startWeb = false; // 'never' persisted
       } else if (server === null) {
         try {
-          const ans = await ctx.ui.input("Start the planner web UI? (y/n/always)");
+          const ans = await ctx.ui.input("Start the planner web UI? (y/n/(a)lways)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["always", "a", "sempre"].includes(normalized)) {
             startWeb = true;
@@ -1009,12 +1011,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       "web start",
       "web stop",
       "web status",
+      "export",
+      "export-full",
       "load",
       "disable",
     ];
 
-    const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, load, disable\n" +
-      "Try: /planner <TAB>  |  /planner feature list  |  /planner task start\n" +
+    const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, export, export-full, load, disable\n" +
+      "Try: /planner <TAB>  |  /planner feature list  |  /planner task start  |  /planner export-full\n" +
       "Handoff actions: /planner handoff prepare | show | write | clear";
 
     if (!a) {
@@ -2080,6 +2084,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const dup = report.integrity.duplicatePhaseIds.length;
       const dang = report.integrity.danglingPhaseIds.length;
       ctx.ui.notify(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}. Integrity: ${dup} duplicate, ${dang} dangling.`, "info");
+      return;
+    }
+
+    // ── export ──
+    if (a === "export" || a === "export-full") {
+      const isFull = a === "export-full" || subArgs.includes("--full");
+      try {
+        const plan = await st.loadAll();
+        const markdown = new ExportService().exportToMarkdown(plan, isFull);
+        const filePath = join(st.root, "EXPORT.md");
+        await writeFile(filePath, markdown, "utf-8");
+        ctx.ui.notify(`Export generated: ${filePath}\n\n${markdown.slice(0, 500)}${markdown.length > 500 ? "..." : ""}`, "info");
+      } catch (e) {
+        ctx.ui.notify(`Export failed: ${e instanceof Error ? e.message : String(e)}`, "error");
+      }
       return;
     }
 
@@ -3238,7 +3257,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- Phase commands: planner phase add|show|discuss|update|delete.",
         "- Task commands: planner task add|show|discuss|update|delete|start|complete.",
         "- Handoff commands: planner handoff prepare|show|write|clear.",
-        "- Web/session commands: planner web start|stop|status, planner load, planner disable, planner repair.",
+        "- Web/session commands: planner web start|stop|status, planner export|export-full, planner load, planner disable, planner repair.",
         "Legacy flat aliases may also exist for backward compatibility, but prefer grouped `/planner ...` forms.",
         "Planner discuss mode is Agent Plan only: ignore GSD workflows/skills/commands unless the user explicitly asks for GSD.",
         `Language preferences: plan content=${project.contentLanguage || "(not set)"}; chat=${project.chatLanguage || "(not set)"}.`,

@@ -194,6 +194,15 @@ export async function deleteHandoff(): Promise<{ deleted: boolean }> {
   return request("/handoff", { method: "DELETE" });
 }
 
+export interface ExportReport {
+  markdown: string;
+  filePath: string;
+}
+
+export async function exportPlan(full = false): Promise<ExportReport> {
+  return request(`/export?full=${full ? "true" : "false"}`);
+}
+
 export interface RepairReport {
   migrated: { renamed: number; repaired: number; inferred: number };
   integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };

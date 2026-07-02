@@ -109,6 +109,9 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Allineato `agent-plan setup claude-code`: non inizializza più `.planner/`; aggiunto setup user-scope `--user`; project setup genera solo `.mcp.json` e `.claude/commands/planner.md`.
 - [x] Implementato P0-1 task lifecycle guard: Pi blocca `bash/edit/write` senza task `in-progress`; Claude Code setup installa hook `PreToolUse` per `Bash|Edit|Write`; backlog aggiornato a implementato/pending runtime validation.
 - [x] Aggiunto al `BACKLOG.md` il piano deferred per integrazione Zed: MCP context server, setup CLI, usage docs, profilo agent, skill/extension opzionale e limiti del task guard.
+- [x] Sistemato e validato `/planner export` e `/planner export-full`: Pi ora esporta direttamente senza HTTP/503, MCP non usa più `require` ESM, Markdown export è più robusto, `pnpm build`, `pnpm check`, `git diff --check`, CLI export e smoke MCP passano.
+- [x] Abbreviati i prompt Pi `y/n/always` in `y/n/(a)lways`; l'alias `a` era già supportato.
+- [x] Completata export UX: `export`/`export-full` compaiono nel menu Pi `/planner`, Web UI ha dropdown `Export` con download Summary/Full.
 
 ### Fatto — planner discuss / decision persistence / dashboard
 - [x] Checklist task: checkbox persistenti, sempre visibili, collegati al task, senza redirect alla route `/toggle`

@@ -1,6 +1,7 @@
-import { Check, Copy, FileText, Home, Layers, Moon, Sun } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, FileText, Home, Layers, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { exportPlan } from "../../lib/api";
 import { useTheme } from "../../lib/theme";
 import type { LiveStatus } from "./app-shell";
 
@@ -36,11 +37,35 @@ export function TopNav({
 }) {
   const { theme, toggleTheme } = useTheme();
   const [copied, setCopied] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState<"summary" | "full" | null>(null);
   const navItems = [
     { to: "/", label: "Dashboard", icon: Home },
     { to: "/features", label: "Features", icon: Layers },
     ...(handoffExists ? [{ to: "/handoff", label: "Handoff", icon: FileText }] : []),
   ];
+
+  async function downloadExport(full: boolean) {
+    const mode = full ? "full" : "summary";
+    setExporting(mode);
+    try {
+      const report = await exportPlan(full);
+      const blob = new Blob([report.markdown], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = full ? "EXPORT-full.md" : report.filePath || "EXPORT.md";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportOpen(false);
+    } catch (error) {
+      window.alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setExporting(null);
+    }
+  }
 
   return (
     <div className="border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-xl">
@@ -101,6 +126,47 @@ export function TopNav({
               </NavLink>
             ))}
           </nav>
+
+          <div className="relative">
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={exportOpen}
+              onClick={() => setExportOpen((open) => !open)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)]"
+            >
+              <Download className="h-4 w-4" />
+              Export
+              <ChevronDown className={`h-4 w-4 transition-transform ${exportOpen ? "rotate-180" : ""}`} />
+            </button>
+            {exportOpen ? (
+              <div
+                role="menu"
+                className="absolute right-0 z-50 mt-2 min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={exporting !== null}
+                  onClick={() => void downloadExport(false)}
+                  className="flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--accent-soft)] disabled:cursor-wait disabled:opacity-60"
+                >
+                  Summary
+                  {exporting === "summary" ? <span className="text-xs text-[var(--text-muted)]">…</span> : null}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={exporting !== null}
+                  onClick={() => void downloadExport(true)}
+                  className="flex w-full items-center justify-between rounded-[10px] px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--accent-soft)] disabled:cursor-wait disabled:opacity-60"
+                >
+                  Full
+                  {exporting === "full" ? <span className="text-xs text-[var(--text-muted)]">…</span> : null}
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           <button
             type="button"
