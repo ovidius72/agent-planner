@@ -1,10 +1,11 @@
 import { watch, existsSync, readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -149,6 +150,18 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   });
 
   // ── Project ──────────────────────────────────────────────────────
+  app.get(route("/export"), async (c) => {
+    const full = c.req.query("full") === "true";
+    const exportService = new ExportService();
+    const plan = await store.loadAll();
+    const markdown = exportService.exportToMarkdown(plan, full);
+
+    // Save to disk
+    await writeFile(join(store.root, "EXPORT.md"), markdown, "utf-8");
+
+    return c.json({ markdown, filePath: "EXPORT.md" });
+  });
+
   app.get(route("/project"), async (c) => {
     const project = await store.loadProject();
     return c.json({

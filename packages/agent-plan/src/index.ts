@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { PlanStore } from "@agent-plan/core";
+import { PlanStore, ExportService } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
 import { basename, dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -14,6 +14,7 @@ interface CliFlags {
   force: boolean;
   local: boolean;
   user: boolean;
+  full: boolean;
 }
 
 function usage(): string {
@@ -24,6 +25,7 @@ function usage(): string {
     "  agent-plan mcp",
     "  agent-plan init [project name] [--yes]",
     "  agent-plan setup claude-code [--user|--project] [--force] [--local]",
+    "  agent-plan export [--full]",
     "",
     "Commands:",
     "  mcp                         Start the stdio MCP server.",
@@ -41,7 +43,7 @@ function usage(): string {
 }
 
 function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
-  const flags: CliFlags = { yes: false, force: false, local: false, user: false };
+  const flags: CliFlags = { yes: false, force: false, local: false, user: false, full: false };
   const positional: string[] = [];
   for (const arg of args) {
     if (arg === "--yes" || arg === "-y") flags.yes = true;
@@ -49,6 +51,7 @@ function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
     else if (arg === "--local") flags.local = true;
     else if (arg === "--user") flags.user = true;
     else if (arg === "--project") flags.user = false;
+    else if (arg === "--full") flags.full = true;
     else positional.push(arg);
   }
   return { positional, flags };
@@ -126,7 +129,7 @@ function defaultMcpConfig(flags: CliFlags): Record<string, unknown> {
 function plannerCommandTemplate(): string {
   return `---
 description: Route Agent Plan planner commands to MCP tools
-argument-hint: "init | show | reload | web status | feature list | feature add <name> | phase add <title> | task start <id> | task complete <id> | handoff prepare"
+argument-hint: "init | show | export | export-full | reload | web status | feature list | feature add <name> | phase add <title> | task start <id> | task complete <id> | handoff prepare"
 ---
 
 You are handling the Agent Plan slash command for this project.
@@ -147,6 +150,8 @@ Route common commands as follows:
 - \`load\` → call \`planner-load\`
 - \`disable\` → call \`planner-disable\`
 - \`repair\` → call \`planner-repair\`
+- \`export\` → call \`planner-export\` with \`full=false\`
+- \`export --full\`, \`export full\`, or \`export-full\` → call \`planner-export\` with \`full=true\`
 - \`web\`, \`web status\`, \`web start\`, \`web stop\` → call \`planner-web\` with action \`status\`, \`start\`, or \`stop\`; default to \`status\`
 - \`project discuss\` → call \`planner-project-discuss\` after asking for any missing project fields
 - \`project language\` → call \`planner-project-language\`
@@ -366,6 +371,26 @@ async function main(): Promise<void> {
 
   if (command === "guard" && subcommand === "pre-tool-use") {
     await guardPreToolUse();
+    return;
+  }
+
+  if (command === "export") {
+    const isFull = flags.full || positional.includes("--full");
+    const root = plannerRoot();
+    const st = new PlanStore(root);
+    if (!(await st.exists())) {
+      console.error("No .planner/ found. Run agent-plan init first.");
+      process.exit(1);
+    }
+    const plan = await st.loadAll();
+    const exportService = new ExportService();
+    const markdown = exportService.exportToMarkdown(plan, isFull);
+
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(join(root, "EXPORT.md"), markdown, "utf-8");
+
+    console.log(markdown);
+    console.log(`\nExport saved to ${join(root, "EXPORT.md")}`);
     return;
   }
 

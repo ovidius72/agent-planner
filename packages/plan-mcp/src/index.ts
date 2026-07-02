@@ -4,7 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { PlanStore } from "@agent-plan/core";
+import { PlanStore, ExportService } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task } from "@agent-plan/core/schema";
 
@@ -82,6 +82,23 @@ async function writeAndSummarize(st: PlanStore, message: string, structuredConte
 const server = new McpServer({
   name: "agent-plan-planner",
   version: "0.1.0",
+});
+
+server.registerTool("planner-export", {
+  description: "Export the project plan as a Markdown report. Supports a concise summary or full hierarchical detail.",
+  inputSchema: {
+    full: z.boolean().optional().describe("If true, include full detail for every feature, phase, and task. Defaults to false (summary only)."),
+  },
+}, async ({ full = false }) => {
+  const st = await requireStore();
+  const plan = await st.loadAll();
+  const exportService = new ExportService();
+  const markdown = exportService.exportToMarkdown(plan, full);
+
+  const fs = await import("node:fs/promises");
+  await fs.writeFile(join(st.root, "EXPORT.md"), markdown, "utf-8");
+
+  return text(`Project export generated. Summary results:\n\n${markdown.slice(0, 1000)}${markdown.length > 1000 ? "... (full report in .planner/EXPORT.md)" : ""}`, { markdown });
 });
 
 server.registerTool("planner-init", {
