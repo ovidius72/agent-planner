@@ -528,14 +528,9 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       }
     }
 
-    // Validation: Cannot set to done if checklist is incomplete
-    if (body.status === "done") {
-      const allChecked = existing.checklist.length > 0 && existing.checklist.every((item) => item.checked);
-      if (!allChecked) {
-        return c.json({ error: "Cannot mark task as done: checklist is incomplete or empty" }, 400);
-      }
-    }
-
+    // NOTE: checklist completeness is advisory for the AI agent (enforced via
+    // prompt rules), not a hard API gate. The web UI is for the human
+    // supervisor, who may close a task regardless of checklist state.
     const now = nowISO();
     const updated: Task = {
       ...existing,
