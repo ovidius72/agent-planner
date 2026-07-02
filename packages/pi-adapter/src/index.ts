@@ -78,6 +78,7 @@ let autoHandoffTriggered = false;
 let plannerSessionEnabled = false;
 let startupResumePromptPending = false;
 let startupResumeSummaryPending = false;
+let plannerHeavyInitDone = false; // runs migrate/heal/refreshResume once per session, not every turn
 let startupResumeSummaryText = "";
 const healedStatusRoots = new Set<string>();// ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -143,6 +144,7 @@ function resetState(): void {
   startupResumePromptPending = false;
   startupResumeSummaryPending = false;
   startupResumeSummaryText = "";
+  plannerHeavyInitDone = false;
 }
 
 async function maybeHealStatuses(st: PlanStore): Promise<void> {
@@ -2983,13 +2985,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (!(await st.exists())) return;
 
     try {
-      await migrateToUuids(st);
-      await ensureProjectLanguagePreferences(st).catch(() => null);
-      await maybeHealStatuses(st);
+      // Heavy one-time-per-session init: migration, language prefs, status
+      // healing, and a fresh resume. These write/scan the whole plan and would
+      // add seconds of latency on every turn if run unconditionally.
+      if (!plannerHeavyInitDone) {
+        await migrateToUuids(st);
+        await ensureProjectLanguagePreferences(st).catch(() => null);
+        await maybeHealStatuses(st);
+        await st.refreshResume();
+        plannerHeavyInitDone = true;
+      }
       const plan = await st.loadAll();
       const project = plan.project;
       const profile = await st.loadCodebaseProfile();
-      const resume = await st.refreshResume();
+      const resume = await st.loadResume().catch(() => null) ?? await st.refreshResume();
       const activity = await st.loadActivityLog();
       const recentActivity = activity.entries.slice(-8).reverse();
       const handoff = await st.loadHandoff();
