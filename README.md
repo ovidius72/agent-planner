@@ -763,3 +763,164 @@ Do not rename or migrate `.plan/` into `.planner/` unless you intentionally know
 - Pi, Claude Code, and future agents are adapters over the same planning model.
 - Installation should be global/user-level when possible; project initialization should remain explicit.
 - Public naming uses `planner-*` for MCP tools and `/planner ...` for human command UX.
+
+---
+
+## Build and publish
+
+This repository is a pnpm workspace.
+
+### Repository layout
+
+```text
+packages/
+  plan-core/       @agent-plan/core     (public) schemas, persistence, ordering, rollups, rendering
+  plan-mcp/        @agent-plan/mcp      (public) MCP stdio server
+  plan-server/     @agent-plan/server   (public) local HTTP/WebSocket server
+  agent-plan/      agent-plan           (public) CLI: init, mcp, setup, export, guard
+  pi-adapter/      @agent-plan/pi-adapter (private) Pi extension
+  plan-web-ui/     @agent-plan/web-ui     (private) Vite dashboard app
+```
+
+Only `@agent-plan/core`, `@agent-plan/mcp`, `@agent-plan/server` and `agent-plan` are published to npm. `pi-adapter` and `web-ui` are private (see [Why some packages are private](#why-some-packages-are-private) below).
+
+### Prerequisites
+
+- Node.js (tested on Node 22+)
+- pnpm
+- For publishing only: an npm account that owns the `@agent-plan` scope, with `npm login` performed (or `NPM_TOKEN` configured)
+
+### First-time setup (development)
+
+From the repository root:
+
+```bash
+pnpm install
+```
+
+This links the workspace packages (`workspace:*`) so the adapter, server and CLI import the local `dist/` of `plan-core`, `plan-server`, etc.
+
+### Build
+
+Build everything (TypeScript + web UI bundle):
+
+```bash
+pnpm build
+```
+Type-check only (no emit):
+
+```bash
+pnpm check
+```
+
+Clean build artifacts:
+
+```bash
+pnpm clean
+```
+
+Build a single package:
+
+```bash
+pnpm --filter @agent-plan/core build
+pnpm --filter @agent-plan/mcp build
+pnpm --filter agent-plan build
+```
+
+### Development servers
+
+Run the web dashboard (Vite dev server):
+
+```bash
+pnpm dev:web
+```
+
+Run the local planner server (HTTP + WebSocket), reading `.planner/` from the current project:
+
+```bash
+pnpm dev:server
+```
+
+### Release validation
+
+Before any publish, validate the whole workspace:
+
+```bash
+pnpm release:validate
+```
+
+`release:validate` is the CI-equivalent gate and runs `pnpm build` followed by `pnpm check`.
+
+### Inspect the published tarballs
+
+Before publishing, inspect what would actually be packaged:
+
+```bash
+pnpm release:pack-dry-run
+```
+
+Important: use `pnpm pack` (or `pnpm release:pack-dry-run`), **not** `npm pack`.
+
+`pnpm pack`/`pnpm publish` rewrite `workspace:*` dependency ranges to the real
+published versions inside the tarball. `npm pack` leaves `workspace:*` verbatim,
+which makes the resulting tarball uninstallable.
+
+The expected tarball contents for each public package are:
+
+- `dist/**/*.js`, `dist/**/*.d.ts`, `dist/**/*.d.ts.map`
+- `README.md`
+- `LICENSE`
+- `package.json`
+
+`src/`, `tsconfig.json`, and `dist/.tsbuildinfo` must NOT appear in the tarball.
+
+### Publish to npm
+
+From the repository root:
+
+```bash
+pnpm release:publish
+```
+
+This publishes the public packages in dependency order:
+
+1. `@agent-plan/core`
+2. `@agent-plan/mcp`
+3. `@agent-plan/server`
+4. `agent-plan`
+
+Each step runs `pnpm publish --access public`, so `workspace:*` ranges are
+rewritten to the resolved versions before upload.
+
+Do **not** run `npm publish` manually per package: it would publish stale
+`workspace:*` ranges that npm cannot install.
+
+### Versioning
+
+All public packages currently share version `0.1.0`. To release a new version,
+bump the `version` field in each public `package.json`, commit, tag if desired,
+then run `pnpm release:publish`.
+
+### Install the published CLI
+
+After publishing, end users install once:
+
+```bash
+npm install -g agent-plan
+```
+
+Then configure an agent harness, e.g. for Claude Code at user scope:
+
+```bash
+agent-plan setup claude-code --user
+```
+
+Project initialization stays explicit and is done later inside a project with
+`/planner init` or `agent-plan init`.
+
+### Why some packages are private
+
+- `@agent-plan/pi-adapter` resolves the dashboard assets via a path relative to the monorepo (`../../plan-web-ui/dist`). Outside this repository that path does not exist, so the package would be broken on npm. Publishing it requires decoupling it from the local layout first (e.g. bundling the web UI or resolving it via `import.meta.url`).
+- `@agent-plan/web-ui` is a Vite application shipped as a build artifact served by `plan-server`, not a standalone npm library.
+
+These can be published later once the coupling is removed; they are intentionally `private: true` for now.
