@@ -58,6 +58,8 @@ plan-web-ui → React dashboard                    (portable)
 
 Three layers:
 1. **Portable core** (already exists): `plan-core` + `plan-server` + `plan-web-ui`.
+
+The core now also carries explicit persistent ordering metadata (`feature.number`, `phase.number`, `task.number`) so every adapter can show the same planning sequence (`F001`, `P001`, `T001`, ...) instead of inventing host-specific ordering.
 2. **MCP server** (new): `packages/plan-mcp` registers each planner tool via `server.registerTool(name, config, handler)`. Transport: stdio (local CLI agents) + optional SSE/HTTP.
 3. **Thin per-host shims**:
    - **Pi**: `pi-adapter` becomes a thin wrapper that starts the MCP server in-process and adds only Pi-unique behavior (gating, startup summary, guardrail, `ctx.ui.notify`).
@@ -76,7 +78,7 @@ Three layers:
 | Atomic persistence + busy signaling | no | yes (plan-core + plan-server) |
 | Gating "Enable planner? (y/n/(a)lways)" | **yes (Pi)** | rewritten per-host |
 | Startup/resume summary injection | **yes (Pi)** | rewritten per-host |
-| `tool_call` guardrail (block `bash`/`edit` when no task is `in-progress`) | **yes (Pi)** | Claude: `PreToolUse` hook; others: `AGENTS.md` rules |
+| `tool_call` guardrail (block `edit`/`write` when no task is `in-progress`; `bash` stays free) | **yes (Pi)** | Claude: `PreToolUse` hook; others: `AGENTS.md` rules |
 | `ctx.ui.notify` / `ctx.ui.input` | **yes (Pi)** | MCP text output + tool prompts |
 | Language preferences persistence | no | yes (in `project.json`) |
 
@@ -168,6 +170,9 @@ MCP tool names should match the canonical public action names, using hyphenated 
 - `planner-handoff-show`
 - `planner-handoff-write`
 - `planner-handoff-clear`
+- `planner-export`
+- `planner-authorize-bypass`
+- `planner-clear-bypass`
 - `planner-web`
 - `planner-load`
 - `planner-disable`
@@ -203,8 +208,9 @@ Each MCP tool handler is a thin wrapper around `PlanStore` methods or shared pla
 ### Claude Code
 - **Tools**: MCP server in project `.mcp.json` `mcpServers`, or user-scope MCP via `claude mcp add`.
 - **Slash command**: `agent-plan setup claude-code` writes `.claude/commands/planner.md` (project) or `~/.claude/commands/planner.md` (user) as a `/planner ...` router to MCP tools.
-- **Guardrail**: setup installs a `PreToolUse` hook for `Bash|Edit|Write`; it blocks implementation tools when a planner exists, tasks exist, and no task is `in-progress`.
-- **Startup**: `SessionStart` resume summary remains future work.
+- **Guardrail**: setup installs a `PreToolUse` hook for `Edit|Write`; it blocks write tools when a planner exists, tasks exist, and no task is `in-progress`.
+- **Bypass**: the guard reads a shared `guardBypassUntil` value from `resume.json`, so the user can explicitly authorize a temporary bypass and all adapters respect it.
+- **Startup**: `SessionStart` resume summary remains future work. In Pi, the startup summary now shows the dashboard URL when active and treats handoff targets as hints to validate when nothing is in progress.
 - **Gating**: explicit project initialization via `/planner init`; setup does not create `.planner/`.
 
 ### Codex

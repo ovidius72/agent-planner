@@ -101,6 +101,26 @@ server.registerTool("planner-export", {
   return text(`Project export generated. Summary results:\n\n${markdown.slice(0, 1000)}${markdown.length > 1000 ? "... (full report in .planner/EXPORT.md)" : ""}`, { markdown });
 });
 
+server.registerTool("planner-authorize-bypass", {
+  description: "Authorize a temporary guard bypass (default 15 minutes) so edit/write tools can proceed even when no task is in-progress. Use ONLY after the user explicitly authorizes proceeding without a task. Harness-agnostic: stored in resume.json so all adapters (Pi, Claude Code, Codex, ...) respect it.",
+  inputSchema: {
+    durationMinutes: z.number().optional().describe("Bypass window in minutes. Default 15."),
+  },
+}, async ({ durationMinutes }) => {
+  const st = await requireStore();
+  const mins = durationMinutes ?? 15;
+  const until = await st.authorizeGuardBypass(mins);
+  return text(`Guard bypass authorized until ${until}. edit/write is allowed without a task in-progress for ${mins} minutes.`, { until });
+});
+
+server.registerTool("planner-clear-bypass", {
+  description: "Revoke any active guard bypass so edit/write again requires a task in-progress.",
+}, async () => {
+  const st = await requireStore();
+  await st.clearGuardBypass();
+  return text("Guard bypass revoked.", { cleared: true });
+});
+
 server.registerTool("planner-init", {
   description: "Initialize .planner/ in the current project.",
   inputSchema: {
@@ -208,8 +228,10 @@ server.registerTool("planner-feature-add", {
   const st = await requireStore();
   const timestamp = nowISO();
   const effectiveStatus = status ?? "planned";
+  const existingFeatures = (await st.loadFeatures()).features;
   const feature: Feature = {
     id: createFeatureId(),
+    number: existingFeatures.length + 1,
     name: name.trim(),
     description: description?.trim() ?? "",
     status: effectiveStatus,
@@ -461,6 +483,7 @@ server.registerTool("planner-task-add", {
   const task: Task = {
     id: taskId,
     phaseId: found.id,
+    number: found.tasks.length + 1,
     shortName: normalizeSlug(title).slice(0, 30),
     title: title.trim(),
     status: "planned",

@@ -27,32 +27,6 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] POST /phases accetta featureId e aggiorna automaticamente phaseIds della feature
 - [x] WebSocket: nuovo evento `features-updated`
 
-### Fatto — plan-web-v2 (da zero)
-- [x] Nuovo package: `packages/plan-web-v2/`
-- [x] Struttura: pages/, components/ui/, components/layout/, components/charts/, components/features/, components/phases/
-- [x] Tipi: Feature, Phase, Task, Project in `types.ts`
-- [x] API client: `api.ts` con tutti gli endpoint
-- [x] TanStack Query hooks: `hooks/use-queries.ts`
-- [x] WebSocket live sync: `ws.ts`
-- [x] Componenti UI: Card, Button, Badge, Modal, Input/Textarea/Select
-- [x] Layout: AppShell (centrato, m-auto, max-w-[1120px]), NavBar (sticky, link Dashboard/Features)
-- [x] Tema: light/dark con CSS variables + data-theme + localStorage
-- [x] Dashboard: stat cards, phase distribution bar chart, ClickUp-style feature list
-- [x] Features page: lista completa con stato modificabile direttamente dalla riga
-- [x] Feature detail: metadati, stats, work log, phases CRUD
-- [x] PhaseCard: edit inline + delete
-- [x] HashRouter con route: /, /features, /features/:id
-- [x] TailwindCSS v4 (@tailwindcss/vite), design tokens puliti
-- [x] Build: `pnpm --filter @agent-plan/web-v2 build` passa (tsc + vite)
-- [x] WebSocket hook per sync real-time
-- [x] Dashboard con statistiche e grafici (overview project + fasi/task)
-- [x] React Router (HashRouter) per navigazione
-- [x] Phase detail page con form di edit (tutti i campi)
-- [x] Task detail page con form di edit
-- [x] Form di creazione fase/task
-- [x] Tema light/dark con look glass/blur + icone moderne
-- [x] CSS dedicato (`index.css` + Tailwind v4)
-
 ### Fatto — pi-adapter
 - [x] Comandi `planner` gerarchici (`/planner init|show|phase|task|discuss|web`)
 - [x] Comandi flat tab-completable (`/planner-phase-add`, `/planner-task-add`, ecc.)
@@ -80,6 +54,8 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Aggiunta rotta `/project/edit` per modificare la descrizione del progetto
 - [x] Renderer markdown aggiornato per includere la descrizione progetto
 
+> Nota: il package originario `plan-web-v2` è stato rimosso e sostituito da `plan-web-ui`.
+
 ### Fatto — bootstrap/discuss planner
 - [x] `planner-init` ora raccoglie titolo + short description
 - [x] `planner-init` avvia automaticamente il bootstrap `project discuss`
@@ -90,7 +66,7 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] `planner-task-discuss` può inizializzare descrizione e checklist del task
 
 ### In corso
-- [ ] Runtime validation post-restart / Claude Code hook validation. Vedi `BACKLOG.md`.
+- [ ] Runtime validation post-restart / Claude Code hook validation del nuovo modello `Edit|Write + bypass`. Vedi `BACKLOG.md`.
 - [ ] Memoria progetto / handoff automatico / porte web per progetto (handoff fatto — vedi `BACKLOG.md`)
 - [ ] Rivedere generazione markdown con dati reali
 
@@ -107,11 +83,15 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Completato router `/planner` Claude con `init`, `load`, `reload`, `disable`, `web status|start|stop`; rigenerato in `~/projects/tests` e `pnpm check` passa.
 - [x] Scritto `README.md` completo in inglese con installazione, setup Claude Code user/project, init esplicito `.planner/`, MCP tools, Pi usage, CLI, troubleshooting e principi di design.
 - [x] Allineato `agent-plan setup claude-code`: non inizializza più `.planner/`; aggiunto setup user-scope `--user`; project setup genera solo `.mcp.json` e `.claude/commands/planner.md`.
-- [x] Implementato P0-1 task lifecycle guard: Pi blocca `bash/edit/write` senza task `in-progress`; Claude Code setup installa hook `PreToolUse` per `Bash|Edit|Write`; backlog aggiornato a implementato/pending runtime validation.
+- [x] Implementato P0-1 task lifecycle guard: lifecycle tools `task_start`/`task_complete`, blocco `task_update` verso `in-progress`/`done`, e backlog aggiornato a implementato/pending runtime validation.
+- [x] Rifinito il guard harness-agnostic: Pi e Claude Code bloccano solo `edit/write` (bash resta libero), con bypass temporaneo condiviso via `resume.json` (`guardBypassUntil`) e comandi/tool dedicati (`/planner bypass`, `planner-authorize-bypass`, ecc.).
+- [x] Migliorata ergonomia Pi: prompt auto-enable/web abbreviati a `y/n/a/e`, startup resume summary con URL dashboard web, cache del context block tra turni e cleanup async degli orphan `.bak`/`*.tmp.*`.
+- [x] Validazione locale del batch: `pnpm build`, `pnpm check`, `git diff --check`, smoke MCP `listTools` = 32, smoke guard Claude (`Edit` deny senza task, `Bash` allow, bypass allow) OK.
 - [x] Aggiunto al `BACKLOG.md` il piano deferred per integrazione Zed: MCP context server, setup CLI, usage docs, profilo agent, skill/extension opzionale e limiti del task guard.
 - [x] Sistemato e validato `/planner export` e `/planner export-full`: Pi ora esporta direttamente senza HTTP/503, MCP non usa più `require` ESM, Markdown export è più robusto, `pnpm build`, `pnpm check`, `git diff --check`, CLI export e smoke MCP passano.
 - [x] Abbreviati i prompt Pi `y/n/always` in `y/n/(a)lways`; l'alias `a` era già supportato.
 - [x] Completata export UX: `export`/`export-full` compaiono nel menu Pi `/planner`, Web UI ha dropdown `Export` con download Summary/Full.
+- [x] Pulizia inconsistenze docs: README allineato (30 tool MCP, CLI export, `/planner export`); BACKLOG P2-4 riframato (README esiste, va mantenuto in sync); CHECKLIST rimossa la sezione morta `plan-web-v2`; autocomplete subcommand Pi segnato come completato.
 
 ### Fatto — planner discuss / decision persistence / dashboard
 - [x] Checklist task: checkbox persistenti, sempre visibili, collegati al task, senza redirect alla route `/toggle`
@@ -124,9 +104,12 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Ridotta la confusione con GSD nei flussi planner discuss tramite regole/prompt espliciti
 
 ### Prossimi passi
-- [ ] Web UI: pagina requirements
-- [ ] README + guida d'uso
-- [ ] Investigare autocomplete subcommand in Pi (se supportato)
+- [ ] Web UI: pagina requirements (vedi `BACKLOG.md` P2-3)
+- [ ] Manutenere README + guida d'uso in sync (vedi `BACKLOG.md` P2-4)
+- [x] Introdotta numerazione progressiva persistente `001/002/...` per feature/fase/task e usato quell'ordine in WorkTree + resume.
+- [x] Corretto startup resume: link dashboard esplicitato nel protocollo/summary; handoff e resume target trattati come suggerimenti da validare, non come focus corrente implicito.
+- [x] README/docs riallineati alle ultime feature: guard+bypass, housekeeping `.planner/.gitignore`, numerazione persistente `F001/P001/T001`, Work Tree order, runtime notes, semantics corrette di handoff/resume.
+- [x] Autocomplete subcommand in Pi (completato)
 
 ### Note operative
 - La checklist va tenuta viva e aggiornata con stati, blocchi e completamenti.

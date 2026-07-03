@@ -1,5 +1,21 @@
-import type { AcceptedDecision, Feature, Phase, PlanWorkspace, Requirement } from "./schema.js";
+import type { AcceptedDecision, Feature, Phase, PlanWorkspace, Requirement, Task } from "./schema.js";
 import { bullet, statusBadge, statusIcon, renderAcceptedDecisions } from "./render-utils.js";
+
+function seq(value: number | undefined): string {
+  return String(value && value > 0 ? value : 0).padStart(3, "0");
+}
+
+function featureLabel(feature: Feature): string {
+  return `F${seq(feature.number)} — ${feature.name}`;
+}
+
+function phaseLabel(phase: Phase): string {
+  return `P${seq(phase.number)} — ${phase.title}`;
+}
+
+function taskLabel(task: Task): string {
+  return `T${seq(task.number)} — ${task.title}`;
+}
 
 export class PlanRenderer {
   renderPlan(plan: PlanWorkspace): string {
@@ -101,7 +117,7 @@ export class PlanRenderer {
       lines.push("## Features");
       lines.push("");
       for (const feature of features.features) {
-        lines.push(`### ${statusIcon(feature.status)} ${feature.id} — ${feature.name}`);
+        lines.push(`### ${statusIcon(feature.status)} ${feature.id} — ${featureLabel(feature)}`);
         if (feature.description) lines.push("", feature.description);
         lines.push("");
         lines.push(`Status: ${statusBadge(feature.status)}`);
@@ -111,7 +127,7 @@ export class PlanRenderer {
           lines.push("**Phases:**");
           for (const fp of featurePhases) {
             const doneTasks = fp.tasks.filter((t) => t.status === "done").length;
-            lines.push(`- ${statusIcon(fp.status)} **${fp.id}** ${fp.title} (${doneTasks}/${fp.tasks.length} tasks)`);
+            lines.push(`- ${statusIcon(fp.status)} **${fp.id}** ${phaseLabel(fp)} (${doneTasks}/${fp.tasks.length} tasks)`);
           }
         }
         if (feature.workDone) lines.push("", `**Work done:** ${feature.workDone}`);
@@ -178,12 +194,12 @@ export class PlanRenderer {
   }
 
   private renderPhaseHeading(phase: Phase): string {
-    return `${phase.id} — ${phase.title}`;
+    return `${phase.id} — ${phaseLabel(phase)}`;
   }
 
   private renderPhaseBlock(phase: Phase): string {
     const lines: string[] = [];
-    lines.push(`### ${statusIcon(phase.status)} ${phase.id} — ${phase.title}`);
+    lines.push(`### ${statusIcon(phase.status)} ${phase.id} — ${phaseLabel(phase)}`);
     if (phase.summary) {
       lines.push("");
       lines.push(phase.summary);
@@ -275,7 +291,7 @@ export class PlanRenderer {
       lines.push("");
     } else {
       for (const task of phase.tasks) {
-        lines.push(`### ${statusIcon(task.status)} ${task.id} — ${task.title}`);
+        lines.push(`### ${statusIcon(task.status)} ${task.id} — ${taskLabel(task)}`);
         lines.push("");
         lines.push(`Status: ${statusBadge(task.status)}`);
         if (task.description) {

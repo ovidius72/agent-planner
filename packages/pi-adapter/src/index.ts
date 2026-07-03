@@ -64,6 +64,7 @@ setWriteBusyHook((busy) => { planBusy = busy; });
 // (feature_create/task_create/...) rather than HTTP routes, without relying
 // solely on the filesystem watcher (which can miss atomic renames).
 setWriteNotifyHook(() => {
+  contextBlockDirty = true; // invalidate cached context so next turn rebuilds
   try {
     if (server?.hub) {
       server.hub.broadcast({ type: "plan-rendered", data: {} });
@@ -79,6 +80,10 @@ let startupResumePromptPending = false;
 let startupResumeSummaryPending = false;
 let plannerHeavyInitDone = false; // runs migrate/heal/refreshResume once per session, not every turn
 let startupResumeSummaryText = "";
+let contextBlockCache = ""; // cached before_agent_start context; rebuilt only when plan changes
+let contextBlockDirty = true; // build on first turn; invalidated by write notify hook
+let editedThisTurn = false; // tracks edit/write activity for the task_complete reminder
+let taskCompleteReminderSaidThisTurn = false;
 const healedStatusRoots = new Set<string>();
 
 const PLANNER_COMMAND_COMPLETIONS = [
@@ -113,6 +118,8 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "web status", label: "web status", description: "Show web UI status" },
   { value: "export", label: "export", description: "Export plan summary as Markdown" },
   { value: "export-full", label: "export-full", description: "Export full detailed plan as Markdown" },
+  { value: "bypass", label: "bypass", description: "Authorize edit/write without a task in-progress (15 min)" },
+  { value: "clear-bypass", label: "clear-bypass", description: "Revoke the guard bypass" },
   { value: "load", label: "load", description: "Re-enable planner and start web UI" },
   { value: "disable", label: "disable", description: "Reset planner preferences and disable for this session" },
 ];
@@ -161,6 +168,10 @@ function resetState(): void {
   startupResumeSummaryPending = false;
   startupResumeSummaryText = "";
   plannerHeavyInitDone = false;
+  contextBlockCache = "";
+  contextBlockDirty = true;
+  editedThisTurn = false;
+  taskCompleteReminderSaidThisTurn = false;
 }
 
 async function maybeHealStatuses(st: PlanStore): Promise<void> {
@@ -227,6 +238,22 @@ async function getPlannerExecutionGuard(st: PlanStore): Promise<{
   };
 }
 
+function formatSequence(value: number | undefined): string {
+  return String(value && value > 0 ? value : 0).padStart(3, "0");
+}
+
+function featureLabel(feature: Feature): string {
+  return `F${formatSequence(feature.number)} — ${feature.name}`;
+}
+
+function phaseLabel(phase: Phase): string {
+  return `P${formatSequence(phase.number)} — ${phase.title}`;
+}
+
+function taskLabel(task: Task): string {
+  return `T${formatSequence(task.number)} — ${task.title}`;
+}
+
 async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
   const [plan, resume, handoff] = await Promise.all([
     st.loadAll(),
@@ -234,21 +261,23 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
     st.loadHandoff(),
   ]);
 
-  const allTasks = plan.phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
-  const currentPhase = plan.phases.find((phase) => phase.id === resume.currentPhaseId)
-    ?? plan.phases.find((phase) => phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id)))
-    ?? plan.phases.find((phase) => phase.status === "in-progress")
-    ?? allTasks.find(({ task }) => task.status !== "done" && task.status !== "canceled")?.phase
-    ?? plan.phases[0]
-    ?? null;
-  const currentTask = currentPhase?.tasks.find((task) => resume.inProgressTaskIds.includes(task.id))
-    ?? currentPhase?.tasks.find((task) => task.status === "in-progress")
-    ?? [...(currentPhase?.tasks ?? [])].find((task) => task.status !== "done" && task.status !== "canceled")
-    ?? null;
-  const currentFeature = currentPhase?.featureId
-    ? plan.features.features.find((feature) => feature.id === currentPhase.featureId) ?? null
-    : null;
-
+  const phaseById = new Map(plan.phases.map((phase) => [phase.id, phase]));
+  const orderedPhases = [
+    ...plan.features.features.flatMap((feature) => {
+      const linked = feature.phaseIds.map((id) => phaseById.get(id)).filter((phase): phase is Phase => Boolean(phase));
+      const linkedIds = new Set(linked.map((phase) => phase.id));
+      const inferred = plan.phases
+        .filter((phase) => phase.featureId === feature.id && !linkedIds.has(phase.id))
+        .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt));
+      return [...linked, ...inferred];
+    }),
+    ...plan.phases
+      .filter((phase) => !phase.featureId)
+      .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+  ];
+  const allTasks = orderedPhases.flatMap((phase) => [...phase.tasks]
+    .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
+    .map((task) => ({ phase, task })));
   const totalFeatures = plan.features.features.length;
   const doneFeatures = plan.features.features.filter((feature) => feature.status === "done").length;
   const activeFeatures = plan.features.features.filter((feature) => feature.status === "in-progress").length;
@@ -258,44 +287,74 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
   const totalTasks = allTasks.length;
   const doneTasks = allTasks.filter(({ task }) => task.status === "done").length;
   const activeTasks = allTasks.filter(({ task }) => task.status === "in-progress").length;
+  const hasActiveWork = activeFeatures > 0 || activePhases > 0 || activeTasks > 0;
 
-  const nextActivity = resume.nextSteps[0]
-    ?? (currentTask
-      ? (currentTask.status === "in-progress"
-        ? `riprendere il task ${currentTask.id} — ${currentTask.title}`
-        : `avviare il task ${currentTask.id} — ${currentTask.title} con /planner task start prima di toccare il codice`)
-      : currentPhase
-        ? `riprendere la fase ${currentPhase.id} — ${currentPhase.title}`
-        : "rivedere il piano e scegliere il prossimo task concreto");
+  const currentPhase = hasActiveWork
+    ? orderedPhases.find((phase) => phase.id === resume.currentPhaseId && (phase.status === "in-progress" || phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id))))
+      ?? orderedPhases.find((phase) => phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id)))
+      ?? orderedPhases.find((phase) => phase.status === "in-progress")
+      ?? null
+    : null;
+  const currentTask = hasActiveWork
+    ? ([...(currentPhase?.tasks ?? [])]
+      .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
+      .find((task) => resume.inProgressTaskIds.includes(task.id))
+      ?? [...(currentPhase?.tasks ?? [])]
+        .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
+        .find((task) => task.status === "in-progress")
+      ?? allTasks.find(({ task }) => task.status === "in-progress")?.task
+      ?? null)
+    : null;
+  const currentFeature = hasActiveWork
+    ? (currentPhase?.featureId
+      ? plan.features.features.find((feature) => feature.id === currentPhase.featureId) ?? null
+      : plan.features.features.find((feature) => feature.status === "in-progress") ?? null)
+    : null;
+
+  const nextActivity = hasActiveWork
+    ? (resume.nextSteps[0]
+      ?? (currentTask
+        ? `riprendere il task ${currentTask.id} — ${taskLabel(currentTask)}`
+        : currentPhase
+          ? `riprendere la fase ${currentPhase.id} — ${phaseLabel(currentPhase)}`
+          : "riprendere il lavoro attivo corrente"))
+    : (handoff?.updatedAt
+      ? "leggere l'handoff e verificare ordine, dipendenze e stato reale del piano prima di scegliere il prossimo task"
+      : "rivedere il piano e scegliere il prossimo task concreto");
 
   const chatLanguage = (plan.project.chatLanguage || "").toLowerCase();
   const italian = chatLanguage.includes("ital");
+  const webUrl = server?.url ?? "";
 
   if (italian || !chatLanguage) {
     return [
       "### Summary di ripresa planner",
       `- Progresso: ${doneFeatures}/${totalFeatures} feature completate (${activeFeatures} attive), ${donePhases}/${totalPhases} fasi completate (${activePhases} attive), ${doneTasks}/${totalTasks} task completati (${activeTasks} attivi).`,
-      currentFeature ? `- Focus feature: ${currentFeature.id} — ${currentFeature.name} (${currentFeature.status}).` : "- Focus feature: nessuna feature attiva chiara.",
-      currentPhase ? `- Focus fase: ${currentPhase.id} — ${currentPhase.title} (${currentPhase.status}).` : "- Focus fase: nessuna fase attiva chiara.",
-      currentTask ? `- Focus task: ${currentTask.id} — ${currentTask.title} (${currentTask.status}).` : "- Focus task: nessun task attivo in questo momento.",
+      currentFeature ? `- Focus feature: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Focus feature: nessuna feature attiva chiara.",
+      currentPhase ? `- Focus fase: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Focus fase: nessuna fase attiva chiara.",
+      currentTask ? `- Focus task: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Focus task: nessun task attivo in questo momento.",
       handoff?.updatedAt ? `- Handoff letto da .planner/HANDOFF.md (aggiornato ${handoff.updatedAt}).` : "- Nessun handoff strutturato disponibile.",
+      !hasActiveWork && handoff?.updatedAt ? "- Nota: l'handoff è un suggerimento della sessione precedente; con 0 task/fasi attivi va validato contro stato e dipendenze correnti prima di riprendere un task specifico." : "",
+      webUrl ? `- Dashboard web: ${webUrl}` : "- Dashboard web: non attiva in questa sessione.",
       `- Prossima attività consigliata: ${nextActivity}.`,
       "",
       "Vuoi che riprendiamo da qui?",
-    ].join("\n");
+    ].filter(Boolean).join("\n");
   }
 
   return [
     "### Planner resume summary",
     `- Progress: ${doneFeatures}/${totalFeatures} features done (${activeFeatures} active), ${donePhases}/${totalPhases} phases done (${activePhases} active), ${doneTasks}/${totalTasks} tasks done (${activeTasks} active).`,
-    currentFeature ? `- Feature focus: ${currentFeature.id} — ${currentFeature.name} (${currentFeature.status}).` : "- Feature focus: no clear active feature.",
-    currentPhase ? `- Phase focus: ${currentPhase.id} — ${currentPhase.title} (${currentPhase.status}).` : "- Phase focus: no clear active phase.",
-    currentTask ? `- Task focus: ${currentTask.id} — ${currentTask.title} (${currentTask.status}).` : "- Task focus: no active task right now.",
+    currentFeature ? `- Feature focus: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Feature focus: no clear active feature.",
+    currentPhase ? `- Phase focus: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Phase focus: no clear active phase.",
+    currentTask ? `- Task focus: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Task focus: no active task right now.",
     handoff?.updatedAt ? `- Handoff loaded from .planner/HANDOFF.md (updated ${handoff.updatedAt}).` : "- No structured handoff found.",
+    !hasActiveWork && handoff?.updatedAt ? "- Note: the handoff is only a previous-session hint; with 0 active tasks/phases it must be validated against current planner state and dependencies before resuming a specific task." : "",
+    webUrl ? `- Web dashboard: ${webUrl}` : "- Web dashboard: not active in this session.",
     `- Recommended next activity: ${nextActivity}.`,
     "",
     "Do you want to resume from here?",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 async function buildHandoffMarkdown(
@@ -792,20 +851,24 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         enablePlanner = false; // 'never' persisted — no prompt, no activation
       } else {
         try {
-          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y/n/(a)lways)");
+          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y/n/a/e)");
           const normalized = ans?.trim().toLowerCase() ?? "";
-          if (["always", "a", "sempre"].includes(normalized)) {
+          if (["a", "always", "sempre"].includes(normalized)) {
             enablePlanner = true;
             if (project) { project.plannerAutoEnable = true; project.plannerNeverAsk = false; await st.saveProject(project); }
             ctx.ui.notify("Saved: planner will auto-enable for this project.", "info");
-          } else if (/^(y|yes|s|si|sì)$/i.test(normalized)) {
-            enablePlanner = true; // this session only
-          } else {
-            // 'n' → persist as 'never' so it won't ask again; /planner load re-enables.
+          } else if (["e", "never", "mai"].includes(normalized)) {
             enablePlanner = false;
             if (project) { project.plannerNeverAsk = true; project.plannerAutoEnable = false; await st.saveProject(project); }
             try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
-            ctx.ui.notify("Planner disabled for this project. Use '/planner load' to re-enable manually.", "info");
+            ctx.ui.notify("Saved: planner will not ask again for this project. Use '/planner load' to re-enable manually.", "info");
+          } else if (/^(y|yes|s|si|sì)$/i.test(normalized)) {
+            enablePlanner = true; // this session only
+          } else {
+            // 'n' / 'no' / empty — this session only, NOT persisted
+            enablePlanner = false;
+            try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
+            ctx.ui.notify("Planner disabled for this session. Use '/planner load' to enable manually.", "info");
           }
         } catch {
           enablePlanner = false;
@@ -830,6 +893,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       try { await migrateToUuids(st); } catch (e) {
         ctx.ui.notify(`Migration failed: ${e instanceof Error ? e.message : String(e)}`, "error");
       }
+      await st.ensureStructureOrdering().catch(() => {});
 
       // Decide whether to start the web UI based on persisted prefs or prompt.
       let startWeb = false;
@@ -839,16 +903,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startWeb = false; // 'never' persisted
       } else if (server === null) {
         try {
-          const ans = await ctx.ui.input("Start the planner web UI? (y/n/(a)lways)");
+          const ans = await ctx.ui.input("Start the planner web UI? (y/n/a/e)");
           const normalized = ans?.trim().toLowerCase() ?? "";
-          if (["always", "a", "sempre"].includes(normalized)) {
+          if (["a", "always", "sempre"].includes(normalized)) {
             startWeb = true;
             if (project) { project.plannerAutoStartWeb = true; project.plannerNeverStartWeb = false; await st.saveProject(project); }
+          } else if (["e", "never", "mai"].includes(normalized)) {
+            startWeb = false;
+            if (project) { project.plannerNeverStartWeb = true; project.plannerAutoStartWeb = false; await st.saveProject(project); }
           } else if (/^(y|yes|s|si|sì)$/i.test(normalized)) {
             startWeb = true;
           } else {
-            startWeb = false;
-            if (project) { project.plannerNeverStartWeb = true; project.plannerAutoStartWeb = false; await st.saveProject(project); }
+            startWeb = false; // 'n' / 'no' / empty — this session only
           }
         } catch {
           startWeb = false;
@@ -865,6 +931,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       ctx.ui.notify(`Planner attivato. Dashboard: ${url}\nSto analizzando lo stato del progetto e preparando il summary di ripresa…`, "info");
       await ensureProjectLanguagePreferences(st).catch(() => null);
       await maybeHealStatuses(st).catch(() => {});
+      // Background cleanup of orphan .bak/.tmp.* files (non-blocking)
+      st.cleanupOrphanBackups().catch(() => {});
       const handoff = await st.loadHandoff().catch(() => null);
       if (handoff?.content) {
         ctx.ui.notify(`Handoff detected at .planner/HANDOFF.md (updated ${handoff.updatedAt}). It will be loaded automatically when the agent starts.`, "info");
@@ -948,24 +1016,55 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
     }
 
-    if (!["bash", "edit", "write"].includes(event.toolName)) return;
+    // Guard only the code-writing tools (edit/write). bash stays free so that
+    // git pull, build, test, ls, etc. always work. The block is not a dead
+    // wall: the agent can ask the user to authorize a one-time bypass via
+    // /planner bypass (or the authorize tool), after which edit/write proceeds
+    // even with no task in-progress.
+    if (event.toolName !== "edit" && event.toolName !== "write") return;
 
     const st = loadStore(ctx);
     if (!(await st.exists().catch(() => false))) return;
     await maybeHealStatuses(st).catch(() => {});
 
     const guard = await getPlannerExecutionGuard(st).catch(() => null);
-    if (!guard || guard.totalTasks === 0) return;
-    if (guard.inProgressTaskIds.length > 0) return;
+    if (!guard || guard.totalTasks === 0) return; // nothing to enforce yet
+    if (guard.inProgressTaskIds.length > 0) return; // a task is open → allow
+    if (await st.isGuardBypassed().catch(() => false)) return; // user authorized → allow
 
     const focusHint = guard.focusTaskId
-      ? ` Start the task first with task_start (recommended: ${guard.focusTaskId} — ${guard.focusTaskTitle}) or use /planner task start ${guard.focusTaskId}.`
-      : " Start the relevant task first with task_start or /planner task start before doing implementation work.";
-
+      ? ` Start the task first with task_start (recommended: ${guard.focusTaskId} — ${guard.focusTaskTitle}) or /planner task start ${guard.focusTaskId}.`
+      : " Start the relevant task first with task_start or /planner task start.";
     return {
       block: true,
-      reason: `Planner guard: no task is currently in-progress. Before using ${event.toolName}, you must start a task so phase/feature status stays correctly derived from tasks.${focusHint}`,
+      reason: `Planner guard: no task is currently in-progress, so ${event.toolName} is blocked. Before writing code, either start a task${focusHint} OR ask the user to authorize a one-time bypass (they can run /planner bypass, or you can call the authorize-bypass tool). After authorization, ${event.toolName} will be allowed for a short window.`,
     };
+  });
+
+  // Reset per-turn flags at the start of each turn.
+  pi.on("turn_start", async () => {
+    editedThisTurn = false;
+    taskCompleteReminderSaidThisTurn = false;
+  });
+
+  // After edit/write succeeds, track activity and (once per turn, when a task
+  // is in-progress) remind the agent to complete the task when the work is done.
+  pi.on("tool_result", async (event, ctx) => {
+    if (!plannerSessionEnabled) return;
+    if (event.toolName !== "edit" && event.toolName !== "write") return;
+    editedThisTurn = true;
+    if (taskCompleteReminderSaidThisTurn) return;
+    try {
+      const st = loadStore(ctx);
+      if (!(await st.exists().catch(() => false))) return;
+      const guard = await getPlannerExecutionGuard(st).catch(() => null);
+      if (guard && guard.inProgressTaskIds.length > 0) {
+        taskCompleteReminderSaidThisTurn = true;
+        return {
+          content: [{ type: "text", text: "Reminder: when this implementation work is finished, call task_complete (or /planner task complete) so the task status moves to done and phase/feature rollups stay correct." }],
+        };
+      }
+    } catch {}
   });
 
   // ── Commands ───────────────────────────────────────────────────────
@@ -1013,11 +1112,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       "web status",
       "export",
       "export-full",
+      "bypass",
+      "clear-bypass",
       "load",
       "disable",
     ];
 
-    const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, export, export-full, load, disable\n" +
+    const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, disable\n" +
       "Try: /planner <TAB>  |  /planner feature list  |  /planner task start  |  /planner export-full\n" +
       "Handoff actions: /planner handoff prepare | show | write | clear";
 
@@ -1413,8 +1514,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return;
         }
         const now = nowISO();
+        const featureNumber = (await st.loadFeatures()).features.length + 1;
         const feature: Feature = {
           id: createFeatureId(),
+          number: featureNumber,
           name: nameInput.trim(),
           description: description?.trim() ?? "",
           status: status as Feature["status"],
@@ -1779,7 +1882,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const taskId = createTaskId();
         const now = nowISO();
         const task: Task = {
-          id: taskId, phaseId: phase.id, shortName,
+          id: taskId, phaseId: phase.id, number: taskNum, shortName,
           title: title.trim(), status: "planned",
           description: "",
           notes: "",
@@ -2098,6 +2201,23 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ctx.ui.notify(`Export generated: ${filePath}\n\n${markdown.slice(0, 500)}${markdown.length > 500 ? "..." : ""}`, "info");
       } catch (e) {
         ctx.ui.notify(`Export failed: ${e instanceof Error ? e.message : String(e)}`, "error");
+      }
+      return;
+    }
+
+    // ── bypass / clear-bypass ──
+    if (a === "bypass" || a === "clear-bypass") {
+      try {
+        if (a === "bypass") {
+          const mins = parseInt(subArgs.trim(), 10);
+          const until = await st.authorizeGuardBypass(Number.isFinite(mins) && mins > 0 ? mins : 15);
+          ctx.ui.notify(`Guard bypass authorized until ${until}. edit/write will work without a task in-progress for that window.`, "info");
+        } else {
+          await st.clearGuardBypass();
+          ctx.ui.notify("Guard bypass revoked. edit/write now requires a task in-progress again.", "info");
+        }
+      } catch (e) {
+        ctx.ui.notify(`Bypass action failed: ${e instanceof Error ? e.message : String(e)}`, "error");
       }
       return;
     }
@@ -2492,6 +2612,35 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     },
   });
 
+  pi.registerTool({
+    name: "plan_authorize_bypass",
+    label: "Plan Authorize Guard Bypass",
+    description: "Authorize a temporary guard bypass (default 15 minutes) so edit/write tools can proceed even when no task is in-progress. Use this ONLY after the user explicitly authorizes proceeding without a task. Harness-agnostic: stored in resume.json so all adapters respect it.",
+    parameters: Type.Object({
+      durationMinutes: Type.Optional(Type.Number({ description: "Bypass window in minutes. Default 15." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const mins = params.durationMinutes ?? 15;
+      const until = await st.authorizeGuardBypass(mins);
+      return { content: [{ type: "text", text: `Guard bypass authorized until ${until}. edit/write is allowed without a task in-progress for ${mins} minutes.` }], details: { until } };
+    },
+  });
+
+  pi.registerTool({
+    name: "plan_clear_bypass",
+    label: "Plan Clear Guard Bypass",
+    description: "Revoke any active guard bypass so edit/write again requires a task in-progress.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      await st.clearGuardBypass();
+      return { content: [{ type: "text", text: "Guard bypass revoked." }], details: { cleared: true } };
+    },
+  });
+
   // ── features ────────────────────────────────────────────────────────
 
   pi.registerTool({
@@ -2544,8 +2693,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const now = nowISO();
       const status = (params.status as Feature["status"] | undefined) ?? "planned";
+      const currentFeatures = (await st.loadFeatures()).features;
       const feature: Feature = {
         id: createFeatureId(),
+        number: currentFeatures.length + 1,
         name: params.name,
         description: params.description ?? "",
         status,
@@ -2932,8 +3083,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const taskId = createTaskId();
       const now = nowISO();
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
+      const existingPhase = await st.loadPhase(params.phaseId);
       const task: Task = {
-        id: taskId, phaseId: params.phaseId, shortName,
+        id: taskId, phaseId: params.phaseId, number: existingPhase.tasks.length + 1, shortName,
         title: params.title,
         status: initialStatus,
         description: params.description ?? "",
@@ -3138,6 +3290,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.refreshResume();
         plannerHeavyInitDone = true;
       }
+
+      // Fast path: on steady turns (no plan changes since last build) reuse
+      // the cached context block and skip all the per-turn I/O + string build.
+      // The cache is invalidated by the write-notify hook whenever the plan
+      // is mutated, and on first turn (contextBlockDirty starts true).
+      if (!contextBlockDirty && contextBlockCache) {
+        return {
+          systemPrompt: `${event.systemPrompt}\n\n---\n${contextBlockCache}`,
+        };
+      }
+
       const plan = await st.loadAll();
       const project = plan.project;
       const profile = await st.loadCodebaseProfile();
@@ -3146,10 +3309,22 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const recentActivity = activity.entries.slice(-8).reverse();
       const handoff = await st.loadHandoff();
 
-      const phaseLines = plan.phases
-        .map((p) => `- ${statusIcon(p.status)} \`${p.id}\` — ${p.title} (${p.status})`)
+      const phaseById = new Map(plan.phases.map((phase) => [phase.id, phase]));
+      const orderedPhases = [
+        ...plan.features.features.flatMap((feature) => {
+          const linked = feature.phaseIds.map((id) => phaseById.get(id)).filter((phase): phase is Phase => Boolean(phase));
+          const linkedIds = new Set(linked.map((phase) => phase.id));
+          const inferred = plan.phases.filter((phase) => phase.featureId === feature.id && !linkedIds.has(phase.id))
+            .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt));
+          return [...linked, ...inferred];
+        }),
+        ...plan.phases.filter((phase) => !phase.featureId)
+          .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+      ];
+      const phaseLines = orderedPhases
+        .map((p) => `- ${statusIcon(p.status)} \`${p.id}\` — ${phaseLabel(p)} (${p.status})`)
         .join("\n");
-      const active = plan.phases
+      const active = orderedPhases
         .filter((p) => p.status === "in-progress")
         .map((p) => `\`${p.id}\``)
         .join(", ");
@@ -3157,20 +3332,37 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const activeFeaturesCount = plan.features.features.filter((f) => f.status === "in-progress").length;
       const donePhasesCount = plan.phases.filter((p) => p.status === "done").length;
       const activePhasesCount = plan.phases.filter((p) => p.status === "in-progress" || p.status === "discovery").length;
-      const totalTasksCount = plan.phases.reduce((total, phase) => total + phase.tasks.length, 0);
-      const doneTasksCount = plan.phases.reduce((total, phase) => total + phase.tasks.filter((task) => task.status === "done").length, 0);
-      const currentPhase = plan.phases.find((phase) => phase.id === resume.currentPhaseId)
-        ?? plan.phases.find((phase) => phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id)))
-        ?? plan.phases.find((phase) => phase.status === "in-progress")
-        ?? null;
-      const currentTask = currentPhase?.tasks.find((task) => resume.inProgressTaskIds.includes(task.id))
-        ?? currentPhase?.tasks.find((task) => task.status === "in-progress")
-        ?? null;
-      const currentFeature = currentPhase?.featureId
-        ? plan.features.features.find((feature) => feature.id === currentPhase.featureId) ?? null
+      const totalTasksCount = orderedPhases.reduce((total, phase) => total + phase.tasks.length, 0);
+      const doneTasksCount = orderedPhases.reduce((total, phase) => total + phase.tasks.filter((task) => task.status === "done").length, 0);
+      const activeTasksCount = orderedPhases.reduce((total, phase) => total + phase.tasks.filter((task) => task.status === "in-progress").length, 0);
+      const hasActiveWork = activeFeaturesCount > 0 || activePhasesCount > 0 || activeTasksCount > 0;
+      const currentPhase = hasActiveWork
+        ? orderedPhases.find((phase) => phase.id === resume.currentPhaseId && (phase.status === "in-progress" || phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id))))
+          ?? orderedPhases.find((phase) => phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id)))
+          ?? orderedPhases.find((phase) => phase.status === "in-progress")
+          ?? null
         : null;
-      const nextActivity = resume.nextSteps[0]
-        ?? (currentTask ? `Resume task ${currentTask.id} — ${currentTask.title}` : currentPhase ? `Resume phase ${currentPhase.id} — ${currentPhase.title}` : "Review the current plan and choose the next task");
+      const currentTask = hasActiveWork
+        ? ([...(currentPhase?.tasks ?? [])]
+          .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
+          .find((task) => resume.inProgressTaskIds.includes(task.id))
+          ?? [...(currentPhase?.tasks ?? [])]
+            .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
+            .find((task) => task.status === "in-progress")
+          ?? null)
+        : null;
+      const currentFeature = hasActiveWork && currentPhase?.featureId
+        ? plan.features.features.find((feature) => feature.id === currentPhase.featureId) ?? null
+        : hasActiveWork
+          ? plan.features.features.find((feature) => feature.status === "in-progress") ?? null
+          : null;
+      const nextActivity = hasActiveWork
+        ? (resume.nextSteps[0]
+          ?? (currentTask ? `Resume task ${currentTask.id} — ${taskLabel(currentTask)}` : currentPhase ? `Resume phase ${currentPhase.id} — ${phaseLabel(currentPhase)}` : "Resume the active work stream"))
+        : (handoff?.updatedAt
+          ? "Read the handoff, then validate current plan ordering and dependencies before picking the next task."
+          : "Review the current plan and choose the next task.");
+      const webUrl = server?.url ?? "";
 
       const openQuestions = plan.phases
         .flatMap((p: Phase) => p.openQuestions.map((q: string) => `[${p.id}] ${q}`))
@@ -3201,15 +3393,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- You are resuming a planner-backed project session.",
         "- FIRST give the user a concise summary of progress so far.",
         `- Mention progress counts: ${doneFeaturesCount}/${plan.features.features.length} features done, ${activeFeaturesCount} active; ${donePhasesCount}/${plan.phases.length} phases done, ${activePhasesCount} active; ${doneTasksCount}/${totalTasksCount} tasks done.`,
-        currentFeature ? `- Mention current feature: ${currentFeature.id} — ${currentFeature.name} (${currentFeature.status}).` : "- Mention that no current feature is active.",
-        currentPhase ? `- Mention current phase: ${currentPhase.id} — ${currentPhase.title} (${currentPhase.status}).` : "- Mention that no current phase is active.",
-        currentTask ? `- Mention current task: ${currentTask.id} — ${currentTask.title} (${currentTask.status}).` : "- Mention that no current task is active.",
+        currentFeature ? `- Mention current feature ONLY because it is actually active: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Mention that no current feature is active.",
+        currentPhase ? `- Mention current phase ONLY because it is actually active: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Mention that no current phase is active.",
+        currentTask ? `- Mention current task ONLY because it is actually active: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Mention that no current task is active.",
+        !hasActiveWork ? "- If a handoff exists, describe it only as a previous-session hint to validate against current planner state, ordering, and dependencies. Do NOT present it as the current focus." : "",
+        webUrl ? `- Mention the active web dashboard URL: ${webUrl}` : "- Explicitly say whether the web dashboard is active in this session.",
         `- Mention the next suggested activity: ${nextActivity}`,
         "- THEN ask the user explicitly whether they want to resume that activity now.",
         "- Do NOT assume yes. Wait for the user's answer before continuing implementation work.",
         "- If the user says yes and no task is currently in-progress, your NEXT action must be task_start before any bash/edit/write.",
-      ].join("\n") : "";
+      ].filter(Boolean).join("\n") : "";
 
+      // Build/refresh the context block (slow path: cache miss).
       const contextBlock = [
         `[Plan Context — ${project.name}]`,
         `Goal: ${project.goal || "(not set)"}`,
@@ -3274,21 +3469,24 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- AFTER you finish implementation work on ANY task, you MUST call task_complete to set it to done. This sets completedAt.",
         "- Phase and feature statuses are DERIVED from task statuses. They are not the primary source of truth.",
         "- Therefore, if not strictly necessary, do NOT change phase.status or feature.status directly. Move the task statuses instead and let rollup derive the parent statuses.",
-        "- The extension now hard-blocks bash/edit/write when no task is in-progress. If you see that block, call task_start first.",
+        "- The extension blocks edit/write when no task is in-progress (bash stays free so git pull/build/test work). If you hit that block, either call task_start, OR ask the user to authorize a one-time bypass (they can run /planner bypass, or you can call plan_authorize_bypass) and then retry.",
         "- If you forget these task status calls, the derived rollup breaks: phase/feature can stay stale, the dashboard shows wrong active work, and resume focus is wrong.",
         "- Before your final answer after implementation work, either call task_complete if the task is finished, or explicitly tell the user the task remains in-progress.",
         "- Use task_complete with force=true only if you have a good reason to skip the checklist check.",
         "- To reopen a completed task, use task_update.",
-        handoff?.content ? "Handoff detected at `.planner/HANDOFF.md`. Read it and use it as the canonical resume guide for this turn." : "",
+        handoff?.content ? "Handoff detected at `.planner/HANDOFF.md`. Read it as previous-session context, but validate it against the current planner state, ordering, and dependencies before treating any target as the next task." : "",
+        handoff?.content ? "If planner state shows no task/phase in-progress, do NOT present the handoff target as the current focus; present it only as a candidate to validate." : "",
         handoff?.content ? "When the handoff has been fully consumed and work is safely resumed, delete `.planner/HANDOFF.md` using the dedicated handoff delete command/tool." : "",
         handoff?.content ? handoff.content : "",
         startupResumeProtocol,
-        "Plan tools available: project_set_language_preferences, plan_init, project_update, requirement_list, requirement_create, requirement_update, requirement_delete, plan_get, feature_list, feature_get, feature_create, feature_update, feature_delete, phase_list, phase_get, phase_create, phase_update, phase_delete, task_list, task_get, task_create, task_update, task_delete, task_start, task_complete, plan_render, plan_get_handoff, plan_write_handoff, plan_delete_handoff",
+        "Plan tools available: project_set_language_preferences, plan_init, project_update, requirement_list, requirement_create, requirement_update, requirement_delete, plan_get, feature_list, feature_get, feature_create, feature_update, feature_delete, phase_list, phase_get, phase_create, phase_update, phase_delete, task_list, task_get, task_create, task_update, task_delete, task_start, task_complete, plan_render, plan_get_handoff, plan_write_handoff, plan_delete_handoff, plan_authorize_bypass, plan_clear_bypass",
       ].filter(Boolean).join("\n");
+        contextBlockCache = contextBlock;
+        contextBlockDirty = false;
 
       startupResumePromptPending = false;
       return {
-        systemPrompt: `${event.systemPrompt}\n\n---\n${contextBlock}`,
+        systemPrompt: `${event.systemPrompt}\n\n---\n${contextBlockCache}`,
       };
     } catch {
       return;

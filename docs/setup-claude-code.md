@@ -77,7 +77,7 @@ The generated `.mcp.json` is:
 
 Project setup also does **not** initialize `.planner/`. Use `/planner init` when needed.
 
-Project setup also creates `.claude/settings.json` with a `PreToolUse` guard hook for `Bash|Edit|Write`. When `.planner/` exists and tasks exist, the hook blocks implementation tools unless at least one task is `in-progress`.
+Project setup also creates `.claude/settings.json` with a `PreToolUse` guard hook for `Edit|Write`. When `.planner/` exists and tasks exist, the hook blocks write tools unless at least one task is `in-progress`, or a temporary bypass has been authorized.
 
 ## Local development setup
 
@@ -108,6 +108,8 @@ The setup creates a `planner.md` command file. This gives Claude Code:
 /planner feature add Auth flow
 /planner task start <id>
 /planner task complete <id>
+/planner bypass
+/planner clear-bypass
 /planner handoff prepare
 ```
 
@@ -115,16 +117,19 @@ The slash command is a prompt router: it tells Claude Code which `planner-*` MCP
 
 ## Task guard hook
 
-The setup installs a Claude Code `PreToolUse` hook that checks `Bash|Edit|Write` calls.
+The setup installs a Claude Code `PreToolUse` hook that checks `Edit|Write` calls.
 
 Behavior:
 
 - if `.planner/` does not exist, allow;
 - if the planner has no tasks, allow;
 - if at least one task is `in-progress`, allow;
-- otherwise deny the tool call and tell Claude to run `/planner task start <id>` first.
+- if a temporary bypass is active in `resume.json`, allow;
+- otherwise deny the tool call and tell Claude to either run `/planner task start <id>` first, or ask the user to authorize a one-time bypass.
 
-This mirrors the Pi guardrail and keeps phase/feature rollups accurate.
+This mirrors the Pi guardrail, keeps phase/feature rollups accurate, and still leaves bash free for `git pull`, build and test commands.
+
+Note that Agent Plan also persists explicit planning order (`feature.number`, `phase.number`, `task.number`). Claude Code therefore sees the same stable `F001` / `P001` / `T001` ordering as Pi and the web dashboard.
 
 ## Other commands
 
@@ -146,6 +151,8 @@ Claude Code sees atomic `planner-*` MCP tools, for example:
 - `planner-phase-add`
 - `planner-task-start`
 - `planner-task-complete`
+- `planner-authorize-bypass`
+- `planner-clear-bypass`
 - `planner-handoff-prepare`
 - `planner-handoff-write`
 
