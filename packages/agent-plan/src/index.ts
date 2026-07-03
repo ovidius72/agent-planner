@@ -31,7 +31,7 @@ function usage(): string {
     "  mcp                         Start the stdio MCP server.",
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
-    "  guard pre-tool-use          Claude Code hook: block implementation tools unless a task is in-progress.",
+    "  guard pre-tool-use          Claude Code hook: block Edit/Write unless a task is in-progress or a bypass is authorized (bash stays free).",
     "",
     "Options:",
     "  --yes, -y                   Accept defaults / initialize when needed.",
@@ -150,6 +150,8 @@ Route common commands as follows:
 - \`load\` → call \`planner-load\`
 - \`disable\` → call \`planner-disable\`
 - \`repair\` → call \`planner-repair\`
+- \`bypass\` → call \`planner-authorize-bypass\` (default 15 min); only when the user authorizes proceeding without a task
+- \`clear-bypass\` → call \`planner-clear-bypass\`
 - \`export\` → call \`planner-export\` with \`full=false\`
 - \`export --full\`, \`export full\`, or \`export-full\` → call \`planner-export\` with \`full=true\`
 - \`web\`, \`web status\`, \`web start\`, \`web stop\` → call \`planner-web\` with action \`status\`, \`start\`, or \`stop\`; default to \`status\`
@@ -235,7 +237,7 @@ async function writeClaudeTaskGuard(scope: "project" | "user", flags: CliFlags):
   }).filter((group) => !(isRecord(group) && Array.isArray(group.hooks) && group.hooks.length === 0));
 
   cleaned.push({
-    matcher: "Bash|Edit|Write",
+    matcher: "Edit|Write",
     hooks: [
       {
         type: "command",
@@ -324,7 +326,9 @@ async function guardPreToolUse(): Promise<void> {
   }
 
   const toolName = String(event.tool_name ?? event.toolName ?? "");
-  if (!["Bash", "Edit", "Write"].includes(toolName)) return;
+  // Guard only the code-writing tools (Edit/Write). Bash stays free so that
+  // git pull, build, test, ls, etc. always work. This mirrors the Pi adapter.
+  if (toolName !== "Edit" && toolName !== "Write") return;
 
   const root = plannerRoot();
   const st = new PlanStore(root);
@@ -338,13 +342,15 @@ async function guardPreToolUse(): Promise<void> {
   }
 
   const allTasks = plan.phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
-  if (allTasks.length === 0) return;
-  if (allTasks.some(({ task }) => task.status === "in-progress")) return;
+  if (allTasks.length === 0) return; // nothing to enforce yet
+  if (allTasks.some(({ task }) => task.status === "in-progress")) return; // a task is open → allow
+  if (await st.isGuardBypassed().catch(() => false)) return; // user authorized → allow
 
   const focus = allTasks.find(({ task }) => !["done", "canceled", "rejected"].includes(task.status));
-  const reason = focus
-    ? `Agent Plan guard: no task is in-progress. Before using ${toolName}, run /planner task start ${focus.task.id} (${focus.task.title}) so feature/phase/task status stays correct.`
-    : `Agent Plan guard: this planner has tasks, but no task is in-progress. Start or reopen a task before using ${toolName}.`;
+  const startHint = focus
+    ? ` Start a task with /planner task start ${focus.task.id} (${focus.task.title}), OR`
+    : " Start a task with /planner task start, OR";
+  const reason = `Agent Plan guard: no task is in-progress, so ${toolName} is blocked.${startHint} ask the user to authorize a one-time bypass (they can run /planner bypass, or you can call planner-authorize-bypass). After authorization, ${toolName} will be allowed for a short window.`;
 
   console.log(JSON.stringify({
     hookSpecificOutput: {

@@ -23,9 +23,8 @@ function countDoneTasks(phases: Phase[]) {
   );
 }
 
-function extractFeatureOrder(featureId: string): number {
-  const match = featureId.match(/^feature-(\d{3})-/);
-  return match ? Number.parseInt(match[1] ?? "0", 10) : Number.MAX_SAFE_INTEGER;
+function formatSequence(value: number | undefined): string {
+  return String(value && value > 0 ? value : 0).padStart(3, "0");
 }
 
 function buildWorkTree(features: Feature[], phases: Phase[]) {
@@ -48,7 +47,7 @@ function buildWorkTree(features: Feature[], phases: Phase[]) {
       );
 
       const allPhases = featurePhases.map((phase) => {
-        const allTasks = [...phase.tasks].sort((left, right) => left.title.localeCompare(right.title));
+        const allTasks = [...phase.tasks].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt) || left.title.localeCompare(right.title));
         const hasActiveTask = allTasks.some((task) => task.status === "in-progress");
         return {
           phase,
@@ -74,11 +73,7 @@ function buildWorkTree(features: Feature[], phases: Phase[]) {
         isActive: hasActiveBranch,
       };
     })
-    .sort((left, right) => {
-      const orderDiff = extractFeatureOrder(left.feature.id) - extractFeatureOrder(right.feature.id);
-      if (orderDiff !== 0) return orderDiff;
-      return left.feature.name.localeCompare(right.feature.name);
-    });
+    .sort((left, right) => left.feature.number - right.feature.number || left.feature.name.localeCompare(right.feature.name));
 }
 
 function toggleStatus<T extends string>(values: T[], value: T, all: readonly T[]) {
@@ -830,7 +825,7 @@ export function DashboardRoute() {
                             className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
                           />
                         ) : null}
-                        <span className="truncate">{feature.name}</span>
+                        <span className="truncate">F{formatSequence(feature.number)} — {feature.name}</span>
                       </Link>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -867,7 +862,7 @@ export function DashboardRoute() {
                                       className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
                                     />
                                   ) : null}
-                                  <span className="truncate">{phase.title}</span>
+                                  <span className="truncate">P{formatSequence(phase.number)} — {phase.title}</span>
                                 </Link>
                               </div>
                               <div className="flex shrink-0 items-center gap-2">
@@ -897,7 +892,7 @@ export function DashboardRoute() {
                                                 className="inline-block h-2 w-2 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
                                               />
                                             ) : null}
-                                            <span className="entity-link--task underline-offset-4 hover:underline">{task.title}</span>
+                                            <span className="entity-link--task underline-offset-4 hover:underline">T{formatSequence(task.number)} — {task.title}</span>
                                           </span>
                                         </Link>
                                         <div className="flex shrink-0 items-center gap-2">
@@ -939,7 +934,7 @@ export function DashboardRoute() {
                           className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
                         />
                       ) : null}
-                      <span className="truncate">{task.title}</span>
+                      <span className="truncate">T{formatSequence(task.number)} — {task.title}</span>
                     </span>
                     <StatusBadge status={task.status} />
                   </div>
@@ -971,10 +966,10 @@ export function DashboardRoute() {
               className="surface-card grid gap-1 px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="entity-link--task truncate text-sm font-semibold underline-offset-4 hover:underline">{task.title}</span>
+                <span className="entity-link--task truncate text-sm font-semibold underline-offset-4 hover:underline">T{formatSequence(task.number)} — {task.title}</span>
                 <StatusBadge status={task.status} />
               </div>
-              <div className="text-xs text-[var(--text-muted)]">{featureName} · {phase.title}</div>
+              <div className="text-xs text-[var(--text-muted)]">F{formatSequence(features.find((entry) => entry.id === phase.featureId)?.number)} {featureName} · P{formatSequence(phase.number)} {phase.title}</div>
               <div className="text-[11px] text-[var(--text-subtle)]">Completed {formatDateTime(completedAt)}</div>
             </Link>
           )) : (

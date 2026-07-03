@@ -45,6 +45,7 @@ export const ResumeFocusSchema = z.object({
   blockers: z.array(z.string().min(1)).default([]),
   notes: z.string().default(""),
   lastSessionSummary: z.string().default(""),
+  guardBypassUntil: z.string().default(""),
 });
 
 export const ActivityEntrySchema = z.object({
@@ -129,6 +130,7 @@ const ChecklistInputSchema = z.union([z.string().min(1), ChecklistItemSchema]);
 export const TaskSchema = z.object({
   id: z.string(),
   phaseId: z.string(),
+  number: z.number().int().nonnegative().default(0),
   shortName: SlugSchema,
   title: z.string().min(1),
   status: TaskStatusSchema,
@@ -182,6 +184,7 @@ export const PhaseSchema = z.object({
 
 export const FeatureSchema = z.object({
   id: z.string(),
+  number: z.number().int().nonnegative().default(0),
   name: z.string().min(1),
   description: z.string().default(""),
   status: FeatureStatusSchema,

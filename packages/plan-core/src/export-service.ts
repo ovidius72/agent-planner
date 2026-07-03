@@ -13,6 +13,22 @@ function taskProgress(tasks: Task[]): string {
   return `${doneCount(tasks)} / ${tasks.length}`;
 }
 
+function seq(value: number | undefined): string {
+  return String(value && value > 0 ? value : 0).padStart(3, "0");
+}
+
+function featureLabel(feature: Feature): string {
+  return `F${seq(feature.number)} — ${feature.name}`;
+}
+
+function phaseLabel(phase: Phase): string {
+  return `P${seq(phase.number)} — ${phase.title}`;
+}
+
+function taskLabel(task: Task): string {
+  return `T${seq(task.number)} — ${task.title}`;
+}
+
 export class ExportService {
   exportToMarkdown(plan: PlanWorkspace, full = false): string {
     const { project, features, phases } = plan;
@@ -37,7 +53,7 @@ export class ExportService {
     for (const feature of features.features) {
       const featurePhases = this.phasesForFeature(feature, phases);
       const featureTasks = featurePhases.flatMap((phase) => phase.tasks);
-      lines.push(`| ${escapeTableCell(feature.name)} | ${doneCount(featurePhases)} / ${featurePhases.length} | ${taskProgress(featureTasks)} | ${statusBadge(feature.status)} |`);
+      lines.push(`| ${escapeTableCell(featureLabel(feature))} | ${doneCount(featurePhases)} / ${featurePhases.length} | ${taskProgress(featureTasks)} | ${statusBadge(feature.status)} |`);
     }
     lines.push("");
 
@@ -61,7 +77,7 @@ export class ExportService {
     lines.push("");
 
     for (const feature of features.features) {
-      lines.push(`## Dettaglio Feature: ${escapeTableCell(feature.name)} (${statusBadge(feature.status)})`);
+      lines.push(`## Dettaglio Feature: ${escapeTableCell(featureLabel(feature))} (${statusBadge(feature.status)})`);
       lines.push("");
 
       const featurePhases = this.phasesForFeature(feature, phases);
@@ -73,9 +89,9 @@ export class ExportService {
       }
 
       for (const phase of featurePhases) {
-        lines.push(`| ${statusIcon(phase.status)} **Fase** | **${escapeTableCell(phase.title)}** | ${statusBadge(phase.status)} | ${taskProgress(phase.tasks)} Task |`);
+        lines.push(`| ${statusIcon(phase.status)} **Fase** | **${escapeTableCell(phaseLabel(phase))}** | ${statusBadge(phase.status)} | ${taskProgress(phase.tasks)} Task |`);
         for (const task of phase.tasks) {
-          lines.push(`| └─ Task | ${escapeTableCell(task.title)} | ${statusBadge(task.status)} | |`);
+          lines.push(`| └─ Task | ${escapeTableCell(taskLabel(task))} | ${statusBadge(task.status)} | |`);
         }
       }
       lines.push("");
@@ -89,9 +105,9 @@ export class ExportService {
       lines.push("| Livello | Elemento | Stato | Info/Progresso |");
       lines.push("| :--- | :--- | :---: | :--- |");
       for (const phase of orphanPhases) {
-        lines.push(`| ${statusIcon(phase.status)} **Fase** | **${escapeTableCell(phase.title)}** | ${statusBadge(phase.status)} | ${taskProgress(phase.tasks)} Task |`);
+        lines.push(`| ${statusIcon(phase.status)} **Fase** | **${escapeTableCell(phaseLabel(phase))}** | ${statusBadge(phase.status)} | ${taskProgress(phase.tasks)} Task |`);
         for (const task of phase.tasks) {
-          lines.push(`| └─ Task | ${escapeTableCell(task.title)} | ${statusBadge(task.status)} | |`);
+          lines.push(`| └─ Task | ${escapeTableCell(taskLabel(task))} | ${statusBadge(task.status)} | |`);
         }
       }
       lines.push("");

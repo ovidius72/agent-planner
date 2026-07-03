@@ -13,6 +13,7 @@ export interface AcceptedDecision {
 
 export interface Feature {
   id: string;
+  number: number;
   name: string;
   description: string;
   status: FeatureStatus;
@@ -48,6 +49,7 @@ export interface ChecklistItem {
 export interface Task {
   id: string;
   phaseId: string;
+  number: number;
   shortName: string;
   title: string;
   status: TaskStatus;

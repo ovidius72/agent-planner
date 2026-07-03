@@ -24,23 +24,30 @@ There was no enforcement and no convenient entry point. The agent had to remembe
    - Pi: `/planner task start <id>` and `/planner task complete <id>`.
    - MCP/Claude Code: `planner-task-start` and `planner-task-complete`.
    - Direct `task_update` to `in-progress`/`done` is blocked in Pi; use lifecycle tools instead.
-2. Pi hard guard:
-   - `tool_call` blocks `bash`/`edit`/`write` when `.planner/` exists, tasks exist, and no task is `in-progress`.
-3. Claude Code hard guard:
-   - `agent-plan setup claude-code` installs a `PreToolUse` hook for `Bash|Edit|Write`.
-   - The hook blocks implementation tools when `.planner/` exists, tasks exist, and no task is `in-progress`.
-4. Prompt/router reinforcement:
+2. Pi write guard:
+   - `tool_call` blocks `edit`/`write` when `.planner/` exists, tasks exist, and no task is `in-progress`.
+   - `bash` stays free so `git pull`, build, test and inspection commands still work.
+3. Claude Code write guard:
+   - `agent-plan setup claude-code` installs a `PreToolUse` hook for `Edit|Write`.
+   - The hook blocks write tools when `.planner/` exists, tasks exist, and no task is `in-progress`.
+4. Temporary bypass, shared across harnesses:
+   - `resume.json` now stores `guardBypassUntil`.
+   - Pi exposes `/planner bypass`, `/planner clear-bypass`, `plan_authorize_bypass`, `plan_clear_bypass`.
+   - MCP exposes `planner-authorize-bypass` and `planner-clear-bypass`.
+   - The guard respects the bypass window, so the user can explicitly authorize work without opening a task.
+5. Prompt/router reinforcement:
    - Pi context injection shows current focus and tells the agent to call task start/complete.
-   - Claude Code `/planner` router maps task lifecycle commands to MCP tools.
-5. Lifecycle timestamps:
+   - Pi appends a tool-result reminder to call `task_complete` after edit/write work when a task is active.
+   - Claude Code `/planner` router maps task lifecycle commands and bypass commands to MCP tools.
+6. Lifecycle timestamps:
    - `startedAt` and `completedAt` are maintained by lifecycle tools.
 
 **Remaining validation:**
 - Runtime validation in a fresh Pi session.
-- Runtime validation in Claude Code that the installed hook blocks `Bash|Edit|Write` until `/planner task start <id>` is called.
+- Runtime validation in Claude Code that the installed hook blocks `Edit|Write` until `/planner task start <id>` is called, unless bypass is authorized.
 - Optional future enhancement: surface a TUI/web warning for stale in-progress tasks.
 
-**Status:** Implemented; pending runtime validation. **No longer blocks:** basic reliable resume / dashboard status correctness once hooks are installed.
+**Status:** Implemented; pending runtime validation. **No longer blocks:** basic reliable resume / dashboard status correctness once hooks are installed. The remaining work is validation, not design.
 
 ---
 
@@ -77,9 +84,10 @@ Add `/planner phase cleanup-orphans` (with confirmation) and/or a server endpoin
 Still open from original checklist. Requirements CRUD is in the server but no UI page.
 **Status:** Not started.
 
-### [P2-4] README + usage guide
-No end-user documentation yet.
-**Status:** Not started.
+### [P2-4] README + usage guide maintenance
+`README.md` now exists and covers install, setup, CLI, MCP tools, Pi usage and troubleshooting.
+It must be kept in sync when new commands/tools are added (e.g. tool count, CLI commands, slash command list).
+**Status:** Ongoing (README exists; keep it in sync).
 
 ### [P2-5] Web UI: Route restoration after modal close
 When opening an edit modal (e.g. for a task), the route changes. When the modal is closed (via cancel or save), the app does not return to the previous route/state, leaving the user on a potentially empty or mismatched page.

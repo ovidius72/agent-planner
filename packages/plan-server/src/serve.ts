@@ -19,12 +19,7 @@ function nowISO(): string {
 }
 
 function nextTaskNumber(phase: Phase): number {
-  const numbers = phase.tasks
-    .map((task) => {
-      const match = task.id.match(/-task-(\d{3})-/);
-      return match ? Number.parseInt(match[1]!, 10) : 0;
-    })
-    .filter((n) => Number.isFinite(n));
+  const numbers = phase.tasks.map((task) => task.number || 0).filter((n) => Number.isFinite(n));
   return (numbers.length > 0 ? Math.max(...numbers) : 0) + 1;
 }
 
@@ -223,6 +218,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const now = nowISO();
     const feature: Feature = {
       id: createFeatureId(),
+      number,
       name,
       description: body.description ?? "",
       status: "planned",
@@ -453,6 +449,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const task: Task = {
       id: createTaskId(),
       phaseId: phase.id,
+      number: taskNumber,
       shortName,
       title,
       status: initialStatus,
@@ -494,7 +491,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         if (!phaseToFeature.has(phaseId)) phaseToFeature.set(phaseId, feature.id);
       }
     }
-    const activeTasksMap = new Map<string, { id: string; title: string; phaseId: string; featureId: string; status: string }>();
+    const activeTasksMap = new Map<string, { id: string; number: number; title: string; phaseId: string; featureId: string; status: string }>();
     for (const phase of phases) {
       for (const task of phase.tasks) {
         if (task.status === "in-progress") {
@@ -502,6 +499,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
           if (!featureId) continue; // Skip tasks without a valid feature link to avoid 404s
           activeTasksMap.set(task.id, {
             id: task.id,
+            number: task.number,
             title: task.title,
             phaseId: phase.id,
             featureId,

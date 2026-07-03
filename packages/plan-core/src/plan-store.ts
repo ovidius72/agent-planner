@@ -10,6 +10,7 @@ import {
   type Manifest,
   PhaseSchema,
   type Phase,
+  type Task,
   type PlanWorkspace,
   PlanWorkspaceSchema,
   type Project,
@@ -229,6 +230,123 @@ export class PlanStore {
     }
   }
 
+  private normalizeTasks(tasks: Task[]): { tasks: Task[]; changed: boolean } {
+    let changed = false;
+    const normalized = tasks.map((task, index) => {
+      const nextNumber = index + 1;
+      if (task.number !== nextNumber) changed = true;
+      return { ...task, number: nextNumber };
+    });
+    return { tasks: normalized, changed };
+  }
+
+  private normalizeFeaturesDocument(doc: FeaturesDocument): { doc: FeaturesDocument; changed: boolean } {
+    let changed = false;
+    const normalized = doc.features.map((feature, index) => {
+      const nextNumber = index + 1;
+      if (feature.number !== nextNumber) changed = true;
+      return { ...feature, number: nextNumber };
+    });
+    return { doc: { features: normalized }, changed };
+  }
+
+  private normalizePhaseDocument(phase: Phase): { phase: Phase; changed: boolean } {
+    const { tasks, changed } = this.normalizeTasks(phase.tasks);
+    const nextTaskIds = tasks.map((task) => task.id);
+    const taskIdsChanged = nextTaskIds.length !== phase.taskIds.length || nextTaskIds.some((id, index) => id !== phase.taskIds[index]);
+    return {
+      phase: {
+        ...phase,
+        tasks,
+        taskIds: nextTaskIds,
+      },
+      changed: changed || taskIdsChanged,
+    };
+  }
+
+  private normalizeStructureSnapshot(featuresDoc: FeaturesDocument, phases: Phase[]): { features: FeaturesDocument; phases: Phase[]; changed: boolean } {
+    let changed = false;
+    const phaseById = new Map(phases.map((phase) => [phase.id, phase]));
+    const phasesByFeature = new Map<string, Phase[]>();
+    const orphanPhases: Phase[] = [];
+
+    for (const phase of phases) {
+      if (phase.featureId) {
+        const bucket = phasesByFeature.get(phase.featureId) ?? [];
+        bucket.push(phase);
+        phasesByFeature.set(phase.featureId, bucket);
+      } else {
+        orphanPhases.push(phase);
+      }
+    }
+
+    const normalizedFeatures = featuresDoc.features.map((feature, featureIndex) => {
+      const nextFeatureNumber = featureIndex + 1;
+      if (feature.number !== nextFeatureNumber) changed = true;
+
+      const linked = feature.phaseIds.map((id) => phaseById.get(id)).filter((phase): phase is Phase => Boolean(phase));
+      const linkedIds = new Set(linked.map((phase) => phase.id));
+      const inferred = (phasesByFeature.get(feature.id) ?? []).filter((phase) => !linkedIds.has(phase.id));
+      const orderedPhases = [...linked, ...inferred];
+      const normalizedPhaseIds = orderedPhases.map((phase) => phase.id);
+      if (normalizedPhaseIds.length !== feature.phaseIds.length || normalizedPhaseIds.some((id, index) => id !== feature.phaseIds[index])) {
+        changed = true;
+      }
+
+      orderedPhases.forEach((phase, index) => {
+        const nextPhaseNumber = index + 1;
+        if (phase.number !== nextPhaseNumber) {
+          phase.number = nextPhaseNumber;
+          changed = true;
+        }
+        const normalizedPhase = this.normalizePhaseDocument(phase);
+        if (normalizedPhase.changed) {
+          phase.tasks = normalizedPhase.phase.tasks;
+          phase.taskIds = normalizedPhase.phase.taskIds;
+          changed = true;
+        }
+      });
+
+      return {
+        ...feature,
+        number: nextFeatureNumber,
+        phaseIds: normalizedPhaseIds,
+      };
+    });
+
+    orphanPhases.forEach((phase, index) => {
+      const nextPhaseNumber = index + 1;
+      if (phase.number !== nextPhaseNumber) {
+        phase.number = nextPhaseNumber;
+        changed = true;
+      }
+      const normalizedPhase = this.normalizePhaseDocument(phase);
+      if (normalizedPhase.changed) {
+        phase.tasks = normalizedPhase.phase.tasks;
+        phase.taskIds = normalizedPhase.phase.taskIds;
+        changed = true;
+      }
+    });
+
+    return {
+      features: { features: normalizedFeatures },
+      phases,
+      changed,
+    };
+  }
+
+  async ensureStructureOrdering(): Promise<{ changed: boolean }> {
+    const featuresDoc = await readJson(this.featuresPath(), FeaturesDocumentSchema).catch(() => ({ features: [] }));
+    const phases = await this.loadAllPhases();
+    const normalized = this.normalizeStructureSnapshot(featuresDoc, phases);
+    if (!normalized.changed) return { changed: false };
+    await this.saveFeatures(normalized.features);
+    for (const phase of normalized.phases) {
+      await this.savePhase(phase);
+    }
+    return { changed: true };
+  }
+
   // ── Path helpers ─────────────────────────────────────────────────────
 
   private manifestPath(): string {
@@ -321,6 +439,7 @@ export class PlanStore {
       blockers: [],
       notes: "Project initialized. Awaiting discovery.",
       lastSessionSummary: "",
+      guardBypassUntil: "",
     });
     await this.writeGenerated();
 
@@ -340,6 +459,19 @@ export class PlanStore {
       "- `schema/plan.schema.json` — JSON Schema for tooling",
     ].join("\n");
     await writeFile(join(this.root, "README.md"), readme, "utf-8");
+
+    // Write a .gitignore inside .planner/ so transient backup/tmp files are
+    // not tracked by the host project's git. Git respects nested .gitignore.
+    await writeFile(
+      join(this.root, ".gitignore"),
+      [
+        "# Agent Plan transient files — do not track",
+        "*.bak",
+        "*.tmp.*",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
   }
 
   async exists(): Promise<boolean> {
@@ -364,12 +496,14 @@ export class PlanStore {
 
 
   async loadPhase(phaseId: string): Promise<Phase> {
-    return readJson(this.phasePath(phaseId), PhaseSchema);
+    const phase = await readJson(this.phasePath(phaseId), PhaseSchema);
+    return this.normalizePhaseDocument(phase).phase;
   }
 
   async loadFeatures(): Promise<FeaturesDocument> {
     try {
-      return await readJson(this.featuresPath(), FeaturesDocumentSchema);
+      const features = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+      return this.normalizeFeaturesDocument(features).doc;
     } catch {
       return { features: [] };
     }
@@ -401,6 +535,48 @@ export class PlanStore {
     const parsed = ResumeFocusSchema.parse(resume);
     await atomicWriteJson(this.resumePath(), parsed);
     await this.touchManifest();
+  }
+
+  /**
+   * Authorize a temporary guard bypass so edit/write tools may proceed even
+   * when no task is in-progress. Harness-agnostic: stored in resume.json so
+   * every adapter (Pi, Claude Code, Codex, ...) reads the same source.
+   * Time-scoped; auto-expires after `durationMinutes` (default 15).
+   */
+  async authorizeGuardBypass(durationMinutes = 15): Promise<string> {
+    const resume = await this.loadResume() ?? {
+      updatedAt: nowISO(),
+      currentPhaseId: "",
+      inProgressTaskIds: [],
+      nextSteps: [],
+      blockers: [],
+      notes: "",
+      lastSessionSummary: "",
+      guardBypassUntil: "",
+    };
+    const until = new Date(Date.now() + durationMinutes * 60_000).toISOString();
+    resume.guardBypassUntil = until;
+    resume.updatedAt = nowISO();
+    await this.saveResume(resume);
+    return until;
+  }
+
+  /** Clear any active guard bypass. */
+  async clearGuardBypass(): Promise<void> {
+    const resume = await this.loadResume();
+    if (!resume || !resume.guardBypassUntil) return;
+    resume.guardBypassUntil = "";
+    resume.updatedAt = nowISO();
+    await this.saveResume(resume);
+  }
+
+  /** True when a guard bypass is currently active (not expired). */
+  async isGuardBypassed(): Promise<boolean> {
+    const resume = await this.loadResume();
+    if (!resume?.guardBypassUntil) return false;
+    const until = Date.parse(resume.guardBypassUntil);
+    if (!Number.isFinite(until)) return false;
+    return until > Date.now();
   }
 
   async loadActivityLog(): Promise<ActivityLog> {
@@ -478,6 +654,7 @@ export class PlanStore {
       blockers: blockedTasks.map((t) => `${t.id}: ${t.title}`),
       notes: notes ?? existing?.notes ?? "",
       lastSessionSummary: lastSessionSummary ?? existing?.lastSessionSummary ?? "",
+      guardBypassUntil: existing?.guardBypassUntil ?? "",
     };
     await this.saveResume(resume);
     return resume;
@@ -508,7 +685,13 @@ export class PlanStore {
         // skip corrupted files
       }
     }
-    return results;
+    return results.sort((left, right) => {
+      const leftFeature = left.featureId ?? "~orphan";
+      const rightFeature = right.featureId ?? "~orphan";
+      if (leftFeature !== rightFeature) return leftFeature.localeCompare(rightFeature);
+      if (left.number !== right.number) return left.number - right.number;
+      return left.createdAt.localeCompare(right.createdAt);
+    });
   }
 
   async loadAll(): Promise<PlanWorkspace> {
@@ -589,6 +772,38 @@ export class PlanStore {
     if (dirty) await this.saveFeatures(features);
 
     return { renamed, repaired, inferred };
+  }
+
+  /**
+   * Remove orphan backup/temp files from .planner/:
+   *  - `*.json.bak` whose main `.json` no longer exists (e.g. deleted phases)
+   *  - `*.tmp.*` leftover from interrupted atomic writes
+   * Harness-agnostic; safe to run in background at startup.
+   */
+  async cleanupOrphanBackups(): Promise<{ removed: number }> {
+    let removed = 0;
+    try {
+      const { readdir, unlink, stat } = await import("node:fs/promises");
+      const phasesDir = this.phasesDir();
+      const dirs = [this.root, phasesDir];
+      for (const dir of dirs) {
+        let entries: string[] = [];
+        try { entries = await readdir(dir); } catch { continue; }
+        for (const name of entries) {
+          const isBak = name.endsWith(".json.bak");
+          const isTmp = name.includes(".tmp.");
+          if (!isBak && !isTmp) continue;
+          const full = join(dir, name);
+          if (isBak) {
+            // Orphan = the main json file no longer exists
+            const mainPath = full.slice(0, -".bak".length);
+            try { await stat(mainPath); continue; } catch { /* main gone → orphan */ }
+          }
+          try { await unlink(full); removed += 1; } catch { /* ignore */ }
+        }
+      }
+    } catch { /* best-effort */ }
+    return { removed };
   }
 
   /** Repair dangling references and report integrity. One-shot maintenance op. */
@@ -718,7 +933,7 @@ export class PlanStore {
   }
 
   async updateFeatures(updater: (f: FeaturesDocument) => FeaturesDocument): Promise<FeaturesDocument> {
-    return atomicUpdateJson(this.featuresPath(), FeaturesDocumentSchema, updater);
+    return atomicUpdateJson(this.featuresPath(), FeaturesDocumentSchema, (current) => this.normalizeFeaturesDocument(updater(current)).doc);
   }
 
   async updateRequirements(updater: (r: RequirementsDocument) => RequirementsDocument): Promise<RequirementsDocument> {
@@ -733,7 +948,7 @@ export class PlanStore {
   }
 
   async saveFeatures(features: FeaturesDocument): Promise<void> {
-    const parsed = FeaturesDocumentSchema.parse(features);
+    const parsed = FeaturesDocumentSchema.parse(this.normalizeFeaturesDocument(features).doc);
     await atomicWriteJson(this.featuresPath(), parsed);
     await this.touchManifest();
     await this.maybeAutoSync();
@@ -746,7 +961,7 @@ export class PlanStore {
   }
 
     async savePhase(phase: Phase): Promise<void> {
-    const parsed = PhaseSchema.parse(phase);
+    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(phase).phase);
     await mkdir(this.phasesDir(), { recursive: true });
     await atomicWriteJson(this.phasePath(parsed.id), parsed);
     await this.touchManifest();
@@ -757,7 +972,7 @@ export class PlanStore {
    *  task_create / phase_update calls on the SAME phaseId so batch operations
    *  don't lose tasks (last-write-wins race condition). */
   async updatePhase(phaseId: string, updater: (phase: Phase) => Phase): Promise<Phase> {
-    return atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, updater);
+    return atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (phase) => this.normalizePhaseDocument(updater(phase)).phase);
   }
 
   async deletePhase(phaseId: string): Promise<void> {

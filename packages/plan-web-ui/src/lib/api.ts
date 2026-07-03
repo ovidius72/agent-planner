@@ -8,6 +8,7 @@ const BUSY_MAX_RETRIES = 40;
 function normalizeTask(task: Task): Task {
   return {
     ...task,
+    number: task.number ?? 0,
     decisions: task.decisions ?? [],
     acceptedDecisions: task.acceptedDecisions ?? [],
     checklist: task.checklist ?? [],
@@ -40,6 +41,7 @@ function normalizePhase(phase: Phase): Phase {
 function normalizeFeature(feature: Feature): Feature {
   return {
     ...feature,
+    number: feature.number ?? 0,
     discussedAt: feature.discussedAt ?? "",
     contextReady: feature.contextReady ?? false,
     contextReadyReason: feature.contextReadyReason ?? "",
@@ -107,6 +109,7 @@ export interface UiConfig {
 
 export interface ActiveTaskSummary {
   id: string;
+  number: number;
   title: string;
   phaseId: string;
   featureId: string;

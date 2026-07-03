@@ -185,6 +185,7 @@ Current Phase 1 tools include:
 - `planner-load`
 - `planner-disable`
 - `planner-web`
+- `planner-export`
 
 ### Project
 
@@ -224,7 +225,18 @@ Current Phase 1 tools include:
 - `planner-handoff-write`
 - `planner-handoff-clear`
 
+### Export
+
+- `planner-export` (with optional `full` boolean for detailed hierarchical output)
+
+### Guard bypass
+
+- `planner-authorize-bypass` (temporary bypass so Edit/Write work without a task in-progress)
+- `planner-clear-bypass`
+
 Requirements are intentionally not exposed as `planner-requirement-*` in Phase 1.
+
+The current Phase 1 count is **32** public `planner-*` tools.
 
 ---
 
@@ -258,7 +270,7 @@ This creates or updates:
 .claude/settings.json
 ```
 
-The settings file contains a Claude Code `PreToolUse` hook for `Bash|Edit|Write`.
+The settings file contains a Claude Code `PreToolUse` hook for `Edit|Write` and the shared guard-bypass flow.
 
 Example `.mcp.json`:
 
@@ -306,6 +318,7 @@ The CLI package is `agent-plan`.
 agent-plan help
 agent-plan mcp
 agent-plan init
+agent-plan export [--full]
 agent-plan setup claude-code --user
 agent-plan setup claude-code --project
 ```
@@ -326,6 +339,24 @@ agent-plan init
 ```
 
 This is equivalent in intent to running `/planner init` from an agent UI.
+
+### `agent-plan export`
+
+Generates a Markdown export of the plan and writes it to `.planner/EXPORT.md`.
+
+```bash
+agent-plan export          # summary report
+agent-plan export --full   # full hierarchical detail (features → phases → tasks)
+```
+
+In Pi and Claude Code the same report is available via:
+
+```text
+/planner export
+/planner export-full
+```
+
+The web UI also exposes an `Export` dropdown with `Summary` and `Full` options that download the generated Markdown file.
 
 ### `agent-plan setup claude-code`
 
@@ -355,15 +386,65 @@ Examples:
 ```text
 /planner init
 /planner show
+/planner load
+/planner disable
 /planner feature list
 /planner feature add
 /planner phase add
 /planner phase discuss
 /planner task start
 /planner task complete
+/planner bypass
+/planner clear-bypass
 /planner handoff prepare
+/planner export
+/planner export-full
 /planner web start
+/planner web status
 ```
+
+### Pi session prompts and startup resume
+
+When Pi detects an existing planner in the project, it can ask whether to enable the planner extension and whether to start the web UI.
+
+Prompt keys are intentionally short:
+
+- `y` = yes for this session
+- `n` = no for this session
+- `a` = always for this project
+- `e` = never ask again for this project
+
+Why this exists:
+
+- Pi sessions should be quick to resume;
+- repeated setup prompts are noisy in established projects;
+- project-level preferences should persist without forcing planning into unrelated repos.
+
+When the planner web server is active, the startup resume summary includes the dashboard URL.
+
+If no feature/phase/task is actually `in-progress`, the resume summary must not invent a current focus from the handoff. In that case, the handoff is treated as a **previous-session hint to validate** against the current plan state, ordering, and dependencies.
+
+### Stable planning order and visible numbering
+
+Agent Plan now persists explicit planning order for:
+
+- features → `feature.number`
+- phases → `phase.number`
+- tasks → `task.number`
+
+This order is displayed as stable human-friendly labels:
+
+- `F001`, `F002`, ...
+- `P001`, `P002`, ...
+- `T001`, `T002`, ...
+
+Why this exists:
+
+- UUIDs are stable but hard to reason about visually;
+- resume, handoff, export, and Work Tree must agree on the same ordering;
+- teams need a clear sense of sequence and priority, not just identity.
+
+For older projects, the numbering is normalized automatically from the current planner structure and persisted back into `.planner/`.
 
 Older flat slash commands such as `planner-task-start` were removed from Pi's global command registration to avoid autocomplete noise. Pi users should use the grouped `/planner ...` form.
 
@@ -384,6 +465,27 @@ The web UI visualizes:
 - handoff state.
 
 In MCP Phase 1, `planner-web` is exposed as a guidance/no-op tool. Full web lifecycle management from Claude Code is not finalized yet; use Pi or the server CLI for now.
+
+### Planner housekeeping
+
+Agent Plan now creates a project-local ignore file at:
+
+```text
+.planner/.gitignore
+```
+
+It ignores transient planner artifacts such as:
+
+- `*.bak`
+- `*.tmp.*`
+
+Why this exists:
+
+- `PlanStore` uses atomic writes and backup files for safety;
+- backup/temp artifacts should not pollute `git status`;
+- planner recovery should stay safe without requiring manual cleanup.
+
+At Pi session start, orphan `.bak` and `*.tmp.*` files are also cleaned up asynchronously in the background. This is automatic; there is no manual command to run.
 
 ---
 
@@ -432,17 +534,84 @@ After completed work:
 
 Phase and feature statuses are derived from child task/phase state. Agents should not directly mutate parent status unless there is a specific reason.
 
+Why this matters:
+
+- the dashboard header and Work Tree use active task state;
+- feature/phase rollups are derived from child tasks;
+- resume focus and handoff quality depend on correct task lifecycle transitions;
+- if an agent edits code without moving a task to `in-progress`/`done`, the whole planner tree becomes stale.
+
+For this reason, Agent Plan provides dedicated lifecycle tools and blocks the wrong path:
+
+- use `task_start` / `planner-task-start` / `/planner task start` to begin work;
+- use `task_complete` / `planner-task-complete` / `/planner task complete` to finish work;
+- do **not** use `task_update` to move a task directly to `in-progress` or `done`.
+
+### Write guard and temporary bypass
+
+Agent Plan enforces task discipline only where it matters most: **write operations**.
+
+The guard exists because agents often need to inspect the repo, run tests, or pull changes before opening a task. Blocking all shell access was too restrictive. The current model therefore:
+
+- keeps `bash` free for `git pull`, build, test, search, and inspection;
+- blocks only `edit` / `write` when a planner exists, tasks exist, and no task is `in-progress`;
+- allows an explicit **temporary bypass** when the user authorizes proceeding without opening a task.
+
+Recommended workflow:
+
+1. Start the task normally:
+
+```text
+/planner task start <task-id>
+```
+
+2. If the user explicitly wants work without opening a task, authorize a temporary bypass:
+
+```text
+/planner bypass
+```
+
+3. Do the edit/write work.
+
+4. Revoke the bypass when you want normal discipline back:
+
+```text
+/planner clear-bypass
+```
+
+The same flow is available through low-level tools:
+
+- Pi/runtime tools: `plan_authorize_bypass`, `plan_clear_bypass`
+- Claude/MCP tools: `planner-authorize-bypass`, `planner-clear-bypass`
+
+The bypass is stored in `.planner/resume.json` as `guardBypassUntil`, so it is shared across harnesses and auto-expires.
+
 ### Claude Code task guard
 
-`agent-plan setup claude-code` installs a Claude Code `PreToolUse` hook for `Bash|Edit|Write`.
+`agent-plan setup claude-code` installs a Claude Code `PreToolUse` hook for `Edit|Write` (bash is intentionally not guarded, so `git pull`, build and test always work).
 
-The hook allows tool calls when:
+The hook **blocks Edit/Write when no task is in-progress**, unless the user has authorized a temporary bypass. The block is not a dead wall: the agent can start a task with `/planner task start`, OR the user can authorize a one-time bypass so Edit/Write proceeds without a task.
 
-- `.planner/` does not exist;
-- the planner has no tasks yet;
-- at least one task is already `in-progress`.
+Authorize a bypass:
 
-It denies tool calls when `.planner/` exists, tasks exist, and no task is `in-progress`. The denial message tells Claude Code which task to start with `/planner task start <id>`.
+```text
+/planner bypass
+```
+
+or via MCP:
+
+```text
+planner-authorize-bypass  (default 15 minutes)
+```
+
+Revoke:
+
+```text
+/planner clear-bypass
+planner-clear-bypass
+```
+
+The bypass is harness-agnostic (stored in `resume.json`), so Pi, Claude Code, Codex and other adapters all respect it.
 
 ---
 
@@ -497,7 +666,16 @@ Smoke test MCP tools locally:
 node packages/agent-plan/dist/index.js mcp
 ```
 
-For automated MCP smoke testing, use the MCP SDK client to call `listTools`; the expected Phase 1 count is currently 29 public `planner-*` tools.
+For automated MCP smoke testing, use the MCP SDK client to call `listTools`; the expected Phase 1 count is currently 32 public `planner-*` tools.
+
+### Runtime implementation notes
+
+These behaviors are mainly relevant to contributors extending the adapters:
+
+- Pi caches its injected planner context block between turns and rebuilds it only on the first turn or after planner writes. This reduces repeated I/O and large prompt regeneration on steady turns.
+- Pi appends a reminder after successful `edit`/`write` work when a task is active, nudging the agent to call `task_complete` when implementation is truly finished.
+- The write guard is intentionally harness-agnostic: the shared source of truth is `.planner/resume.json`, not a Pi-only in-memory flag.
+- The startup resume summary must mention the dashboard URL when the web UI is active, and must treat handoff targets as hints rather than current focus when nothing is actually in progress.
 
 ---
 
