@@ -67,6 +67,7 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 
 ### In corso
 - [ ] Runtime validation post-restart / Claude Code hook validation del nuovo modello `Edit|Write + bypass`. Vedi `BACKLOG.md`.
+- [x] Preparato il monorepo al publish npm: package pubblici/privati coerenti, metadata, `files`, `publishConfig.access`, script di release, LICENSE/README package-level e validazione con `pack --dry-run`.
 - [ ] Memoria progetto / handoff automatico / porte web per progetto (handoff fatto — vedi `BACKLOG.md`)
 - [ ] Rivedere generazione markdown con dati reali
 

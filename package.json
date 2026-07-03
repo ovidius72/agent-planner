@@ -1,7 +1,18 @@
 {
   "name": "agent-plan-platform",
-  "private": true,
   "version": "0.1.0",
+  "private": false,
+  "description": "Harness-agnostic core for Agent Plan: schemas, persistence, ordering, status rollups, and markdown rendering.",
+  "keywords": [
+    "agents",
+    "ai",
+    "planner",
+    "web ui planner"
+  ],
+  "homepage": "https://github.com/agent-plan/agent-plan-platform",
+  "bugs": "https://github.com/agent-plan/agent-plan-platform/issues",
+  "license": "MIT",
+  "repository": "https://github.com/agent-plan/agent-plan-platform",
   "type": "module",
   "scripts": {
     "check": "tsc -b",
@@ -9,7 +20,10 @@
     "clean": "tsc -b --clean",
     "build:web-ui": "pnpm --filter @agent-plan/web-ui build",
     "dev:web": "pnpm --filter @agent-plan/web-ui dev",
-    "dev:server": "node packages/plan-server/dist/cli.js"
+    "dev:server": "node packages/plan-server/dist/cli.js",
+    "release:validate": "pnpm build && pnpm check",
+    "release:pack-dry-run": "for p in packages/plan-core packages/plan-mcp packages/plan-server packages/agent-plan; do echo '=== ' $p; (cd \"$p\" && npm pack --dry-run); echo; done",
+    "release:publish": "pnpm --filter @agent-plan/core publish --access public && pnpm --filter @agent-plan/mcp publish --access public && pnpm --filter @agent-plan/server publish --access public && pnpm --filter agent-plan publish --access public"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
