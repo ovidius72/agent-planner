@@ -763,3 +763,111 @@ Do not rename or migrate `.plan/` into `.planner/` unless you intentionally know
 - Pi, Claude Code, and future agents are adapters over the same planning model.
 - Installation should be global/user-level when possible; project initialization should remain explicit.
 - Public naming uses `planner-*` for MCP tools and `/planner ...` for human command UX.
+
+---
+
+## Build and publish
+
+This repository is a pnpm workspace. Only some packages are published to npm.
+
+### Packages
+
+**Published (public npm)**:
+
+- `@agent-plan/core` — schemas, persistence, ordering, status rollups, rendering
+- `@agent-plan/mcp` — MCP stdio server
+- `@agent-plan/server` — local HTTP/WebSocket server
+- `agent-plan` — CLI (`init`, `mcp`, `setup claude-code`, `export`, `guard pre-tool-use`)
+
+**Private (not published)**:
+
+- `@agent-plan/pi-adapter` — Pi extension; depends on the local monorepo layout (web UI path), so it is not a standalone npm package yet
+- `@agent-plan/web-ui` — Vite application, served as a build artifact, not a standalone npm package
+
+### Prerequisites
+
+- Node.js and pnpm installed
+- `npm login` performed (or `NPM_TOKEN` configured) on the account that owns the `@agent-plan` scope
+
+### Build and validate
+
+From the repository root:
+
+```bash
+pnpm install
+pnpm release:validate
+```
+
+`release:validate` runs the full build and the TypeScript check:
+
+```bash
+pnpm build
+pnpm check
+```
+
+### Inspect the published tarballs
+
+Before publishing, inspect what would actually be packaged:
+
+```bash
+pnpm release:pack-dry-run
+```
+
+Important: use `pnpm pack` (or `pnpm release:pack-dry-run`), **not** `npm pack`.
+
+`pnpm pack`/`pnpm publish` rewrite `workspace:*` dependency ranges to the real
+published versions inside the tarball. `npm pack` leaves `workspace:*` verbatim,
+which makes the resulting tarball uninstallable.
+
+The expected tarball contents for each public package are:
+
+- `dist/**/*.js`, `dist/**/*.d.ts`, `dist/**/*.d.ts.map`
+- `README.md`
+- `LICENSE`
+- `package.json`
+
+`src/`, `tsconfig.json`, and `dist/.tsbuildinfo` must NOT appear in the tarball.
+
+### Publish to npm
+
+From the repository root:
+
+```bash
+pnpm release:publish
+```
+
+This publishes the public packages in dependency order:
+
+1. `@agent-plan/core`
+2. `@agent-plan/mcp`
+3. `@agent-plan/server`
+4. `agent-plan`
+
+Each step runs `pnpm publish --access public`, so `workspace:*` ranges are
+rewritten to the resolved versions before upload.
+
+Do **not** run `npm publish` manually per package: it would publish stale
+`workspace:*` ranges that npm cannot install.
+
+### Versioning
+
+All public packages currently share version `0.1.0`. To release a new version,
+bump the `version` field in each public `package.json`, commit, tag if desired,
+then run `pnpm release:publish`.
+
+### Install the published CLI
+
+After publishing, end users install once:
+
+```bash
+npm install -g agent-plan
+```
+
+Then configure an agent harness, e.g. for Claude Code at user scope:
+
+```bash
+agent-plan setup claude-code --user
+```
+
+Project initialization stays explicit and is done later inside a project with
+`/planner init` or `agent-plan init`.

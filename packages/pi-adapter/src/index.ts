@@ -851,7 +851,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         enablePlanner = false; // 'never' persisted — no prompt, no activation
       } else {
         try {
-          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y/n/a/e)");
+          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y)es / (n)o / (a)lways / n(e)ver)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["a", "always", "sempre"].includes(normalized)) {
             enablePlanner = true;
@@ -903,7 +903,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startWeb = false; // 'never' persisted
       } else if (server === null) {
         try {
-          const ans = await ctx.ui.input("Start the planner web UI? (y/n/a/e)");
+          const ans = await ctx.ui.input("Start the planner web UI? (y)es / (n)o / (a)lways / n(e)ver)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["a", "always", "sempre"].includes(normalized)) {
             startWeb = true;
