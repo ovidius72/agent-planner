@@ -121,8 +121,12 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
 }
 
 export async function migrateToUuids(store: PlanStore): Promise<void> {
-  const workspace = await store.loadAll();
-  const { features, requirements, phases } = workspace;
+  // Run as a batch so internal saveFeatures/savePhase calls do not
+  // re-trigger syncStatuses (O(N^2) on large planners). Idempotent: if there
+  // is nothing to migrate, no writes happen at all.
+  await store.runBatchForMigration(async () => {
+    const workspace = await store.loadAll();
+    const { features, requirements, phases } = workspace;
 
   const featureIdMap = new Map<string, string>();
   const phaseIdMap = new Map<string, string>();
@@ -185,6 +189,7 @@ export async function migrateToUuids(store: PlanStore): Promise<void> {
     await store.savePhase(p);
   }
   await store.writeGenerated();
+  });
 }
 
 async function readJson<T>(path: string, schema: { parse(v: unknown): T }): Promise<T> {
@@ -210,6 +215,13 @@ export class PlanStore {
   public readonly root: string;
   private autoSync = false;
   private syncGuard = false;
+  // While true, maybeAutoSync() is a no-op. Used by batch operations
+  // (migrateToUuids, ensureStructureOrdering, syncStatuses, repair) so that
+  // their internal savePhase/saveFeatures calls do NOT re-trigger a full
+  // syncStatuses on every write. Without this, a batch over N phases becomes
+  // O(N^2) atomic writes (each save -> syncStatuses -> N saves), which hangs
+  // Pi on planners with hundreds of phases.
+  private batchInProgress = false;
 
   constructor(root: string) {
     this.root = root;
@@ -220,8 +232,27 @@ export class PlanStore {
    *  mutations keep phase/feature statuses derived from task statuses. */
   enableAutoSync(value: boolean): void { this.autoSync = value; }
 
+  /** Run a batch operation with autoSync suspended. Internal saves inside the
+   *  batch will NOT re-trigger syncStatuses (which would be O(N^2) on large
+   *  planners). The caller is responsible for triggering any needed final
+   *  sync explicitly. */
+  private async runAsBatch<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = this.batchInProgress;
+    this.batchInProgress = true;
+    try {
+      return await fn();
+    } finally {
+      this.batchInProgress = prev;
+    }
+  }
+
+  /** Public batch wrapper used by the module-level migrateToUuids helper. */
+  async runBatchForMigration<T>(fn: () => Promise<T>): Promise<T> {
+    return this.runAsBatch(fn);
+  }
+
   private async maybeAutoSync(): Promise<void> {
-    if (!this.autoSync || this.syncGuard) return;
+    if (!this.autoSync || this.syncGuard || this.batchInProgress) return;
     try {
       this.syncGuard = true;
       await this.syncStatuses();
@@ -336,15 +367,17 @@ export class PlanStore {
   }
 
   async ensureStructureOrdering(): Promise<{ changed: boolean }> {
-    const featuresDoc = await readJson(this.featuresPath(), FeaturesDocumentSchema).catch(() => ({ features: [] }));
-    const phases = await this.loadAllPhases();
-    const normalized = this.normalizeStructureSnapshot(featuresDoc, phases);
-    if (!normalized.changed) return { changed: false };
-    await this.saveFeatures(normalized.features);
-    for (const phase of normalized.phases) {
-      await this.savePhase(phase);
-    }
-    return { changed: true };
+    return this.runAsBatch(async () => {
+      const featuresDoc = await readJson(this.featuresPath(), FeaturesDocumentSchema).catch(() => ({ features: [] }));
+      const phases = await this.loadAllPhases();
+      const normalized = this.normalizeStructureSnapshot(featuresDoc, phases);
+      if (!normalized.changed) return { changed: false };
+      await this.saveFeatures(normalized.features);
+      for (const phase of normalized.phases) {
+        await this.savePhase(phase);
+      }
+      return { changed: true };
+    });
   }
 
   // ── Path helpers ─────────────────────────────────────────────────────
@@ -811,10 +844,12 @@ export class PlanStore {
     migrated: { renamed: number; repaired: number; inferred: number };
     integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };
   }> {
-    const migrated = await this.migratePhaseIds();
-    const integrity = await this.validateIntegrity();
-    await this.writeGenerated();
-    return { migrated, integrity };
+    return this.runAsBatch(async () => {
+      const migrated = await this.migratePhaseIds();
+      const integrity = await this.validateIntegrity();
+      await this.writeGenerated();
+      return { migrated, integrity };
+    });
   }
 
   /** Validate plan integrity: globally unique phase ids and resolvable feature.phaseIds. */
@@ -882,28 +917,32 @@ export class PlanStore {
   }
 
   async syncStatuses(): Promise<void> {
-    await this.migratePhaseIds();
-    const workspace = await this.loadAll();
-    const { phases, features } = workspace;
+    // Run as a batch so the internal saveFeatures + N savePhase calls do not
+    // re-trigger syncStatuses on every write (O(N^2) on large planners).
+    await this.runAsBatch(async () => {
+      await this.migratePhaseIds();
+      const workspace = await this.loadAll();
+      const { phases, features } = workspace;
 
-    // 1. Update Phase statuses based on tasks
-    for (const phase of phases) {
-      phase.status = this.derivePhaseStatus(phase);
-    }
+      // 1. Update Phase statuses based on tasks
+      for (const phase of phases) {
+        phase.status = this.derivePhaseStatus(phase);
+      }
 
-    // 2. Update Feature statuses based on phases
-    for (const feature of features.features) {
-      feature.status = this.deriveFeatureStatus(feature.id, feature.status, phases);
-    }
+      // 2. Update Feature statuses based on phases
+      for (const feature of features.features) {
+        feature.status = this.deriveFeatureStatus(feature.id, feature.status, phases);
+      }
 
-    // 3. Save everything
-    await this.saveFeatures(features);
-    for (const phase of phases) {
-      await this.savePhase(phase);
-    }
+      // 3. Save everything
+      await this.saveFeatures(features);
+      for (const phase of phases) {
+        await this.savePhase(phase);
+      }
 
-    // 4. Refresh resume focus so a subentrating agent sees current state
-    await this.refreshResume();
+      // 4. Refresh resume focus so a subentrating agent sees current state
+      await this.refreshResume();
+    });
   }
 
   /** Optimized rollup: syncs only the affected phase and its parent feature.

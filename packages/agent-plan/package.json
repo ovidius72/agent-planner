@@ -1,7 +1,9 @@
 {
   "name": "agent-plan",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "description": "CLI for Agent Plan: project initialization, Claude Code setup, export, and MCP server startup.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +13,31 @@
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ovidius72/agent-planner.git"
+  },
+  "homepage": "https://github.com/ovidius72/agent-planner#readme",
+  "bugs": {
+    "url": "https://github.com/ovidius72/agent-planner/issues"
+  },
+  "keywords": [
+    "planner",
+    "mcp",
+    "claude-code",
+    "ai-agent",
+    "project-planning"
+  ],
   "dependencies": {
     "@agent-plan/core": "workspace:*",
     "@agent-plan/mcp": "workspace:*"

@@ -53,12 +53,6 @@ my-project/
 
 JSON files are the source of truth. Markdown files under `.planner/generated/` are generated views for humans and agents.
 
-### `.plan/` is never used
-
-Agent Plan only owns `.planner/`.
-
-It does not fall back to `.plan/`, migrate `.plan/`, or treat `.plan/` as a planner root. If `.plan/` exists, it is ignored during scanning so data from other tools is not accidentally imported into Agent Plan.
-
 ### Hierarchy
 
 The public planning hierarchy is:
@@ -72,21 +66,6 @@ Requirements currently exist as internal/project seed data and are not exposed a
 ### Harness-agnostic core
 
 The core planning model lives outside Pi, Claude Code, or any other harness. Adapters should call shared planning logic rather than owning business rules.
-
----
-
-## Installation model
-
-There are two separate actions:
-
-1. **Install Agent Plan for an agent/harness**.
-2. **Initialize `.planner/` inside a specific project when you want planning there**.
-
-These are intentionally separate.
-
-Installing Agent Plan into Claude Code should not create `.planner/` in every repository. A project is initialized only when the user explicitly runs `/planner init` or `agent-plan init` inside that project.
-
----
 
 ## Recommended Claude Code setup
 
@@ -113,7 +92,7 @@ This does three things:
 ~/.claude/commands/planner.md
 ```
 
-3. installs a Claude Code `PreToolUse` task guard hook in:
+1. installs a Claude Code `PreToolUse` task guard hook in:
 
 ```text
 ~/.claude/settings.json
@@ -565,15 +544,15 @@ Recommended workflow:
 /planner task start <task-id>
 ```
 
-2. If the user explicitly wants work without opening a task, authorize a temporary bypass:
+1. If the user explicitly wants work without opening a task, authorize a temporary bypass:
 
 ```text
 /planner bypass
 ```
 
-3. Do the edit/write work.
+1. Do the edit/write work.
 
-4. Revoke the bypass when you want normal discipline back:
+2. Revoke the bypass when you want normal discipline back:
 
 ```text
 /planner clear-bypass
@@ -730,28 +709,6 @@ If needed, re-run:
 ```bash
 agent-plan setup claude-code --user --force
 ```
-
-### `.planner/` does not exist
-
-That is expected until a project is initialized.
-
-Run:
-
-```text
-/planner init
-```
-
-or:
-
-```bash
-agent-plan init
-```
-
-### `.plan/` exists
-
-Agent Plan ignores `.plan/`. It is not an Agent Plan directory.
-
-Do not rename or migrate `.plan/` into `.planner/` unless you intentionally know what you are doing outside Agent Plan.
 
 ---
 
