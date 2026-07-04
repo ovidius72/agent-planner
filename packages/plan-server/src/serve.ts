@@ -1,6 +1,7 @@
 import { watch, existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { networkInterfaces } from "node:os";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
@@ -21,6 +22,37 @@ function nowISO(): string {
 function nextTaskNumber(phase: Phase): number {
   const numbers = phase.tasks.map((task) => task.number || 0).filter((n) => Number.isFinite(n));
   return (numbers.length > 0 ? Math.max(...numbers) : 0) + 1;
+}
+
+function isPrivateIpv4(address: string): boolean {
+  return /^10\./.test(address) || /^192\.168\./.test(address) || /^172\.(1[6-9]|2\d|3[01])\./.test(address);
+}
+
+function detectLanIp(): string | undefined {
+  const nets = networkInterfaces();
+  let fallback: string | undefined;
+  for (const entries of Object.values(nets)) {
+    for (const entry of entries ?? []) {
+      if (entry.family !== "IPv4" || entry.internal) continue;
+      if (isPrivateIpv4(entry.address)) return entry.address;
+      fallback ??= entry.address;
+    }
+  }
+  return fallback;
+}
+
+function buildServerUrls(port: number, host: string): { mode: "local" | "lan"; bindHost: string; localUrl: string; lanUrl: string | undefined } {
+  const localUrl = `http://127.0.0.1:${port}`;
+  if (host === "0.0.0.0") {
+    const lanIp = detectLanIp();
+    return {
+      mode: "lan",
+      bindHost: host,
+      localUrl,
+      lanUrl: lanIp ? `http://${lanIp}:${port}` : undefined,
+    };
+  }
+  return { mode: "local", bindHost: host, localUrl, lanUrl: undefined };
 }
 
 function requiresGovernance(status: string | undefined): boolean {
@@ -98,8 +130,17 @@ export interface ShortcutConfigSpec {
   alt?: boolean;
 }
 
+export interface ServerUiConfig {
+  mode: "local" | "lan";
+  bindHost: string;
+  port: number;
+  localUrl: string;
+  lanUrl?: string | undefined;
+}
+
 export interface UiConfig {
   shortcuts?: Partial<Record<"create" | "edit" | "delete" | "submit", ShortcutConfigSpec>>;
+  server?: ServerUiConfig | undefined;
 }
 
 function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPrefix = "", uiConfig?: UiConfig, isBusy?: () => boolean) {
@@ -701,6 +742,7 @@ function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, stati
 export interface ServeOptions {
   port?: number;
   planRoot: string;
+  host?: string | undefined;
   staticDir?: string | undefined;
   quiet?: boolean;
   uiConfig?: UiConfig | undefined;
@@ -709,14 +751,19 @@ export interface ServeOptions {
 
 export interface ServeHandle {
   url: string;
+  localUrl: string;
+  lanUrl?: string | undefined;
+  mode: "local" | "lan";
+  bindHost: string;
   hub: WsHub;
   close: () => Promise<void>;
 }
 
 export async function serve(options: ServeOptions): Promise<ServeHandle> {
-  const { port = 3030, planRoot } = options;
+  const { port = 3030, planRoot, host = "127.0.0.1" } = options;
 
   const store = new PlanStore(planRoot);
+  const runtimeUiConfig: UiConfig = { ...(options.uiConfig ?? {}) };
 
   if (!(await store.exists())) {
     throw new Error(`.planner/ not found at: ${planRoot}. Run plan-init first.`);
@@ -727,11 +774,11 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
 
   // Shared mutable reference — routes see the hub after it's created
   const hubRef: { current: WsHub | null } = { current: null };
-  const app = createSpaApp(store, hubRef, options.staticDir, options.uiConfig, options.isBusy);
+  const app = createSpaApp(store, hubRef, options.staticDir, runtimeUiConfig, options.isBusy);
 
   return new Promise((resolve, reject) => {
     // Create the Node HTTP server without listening yet
-    const server = createAdaptorServer({ fetch: app.fetch, hostname: "127.0.0.1" });
+    const server = createAdaptorServer({ fetch: app.fetch, hostname: host });
 
     // Attach WebSocket hub to the underlying HTTP server
     const hub = new WsHub(server as unknown as http.Server, options.quiet, (err) => reject(err));
@@ -744,7 +791,7 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
       reject(err);
     });
 
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, host, () => {
       // When port=0 (random), resolve the actually assigned port from the server address.
       const actualPort = (() => {
         try {
@@ -753,16 +800,23 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
         } catch {}
         return port;
       })();
-      const url = `http://127.0.0.1:${actualPort}`;
+      const serverUrls = buildServerUrls(actualPort, host);
+      runtimeUiConfig.server = { ...serverUrls, port: actualPort };
+      const { localUrl, lanUrl } = serverUrls;
       if (!options.quiet) {
-        console.log(`[plan-server] listening at ${url}`);
+        console.log(`[plan-server] listening at ${localUrl}`);
         console.log(`[plan-server] ws endpoint: ws://127.0.0.1:${actualPort}/ws`);
+        if (lanUrl) console.log(`[plan-server] lan url: ${lanUrl}`);
       }
 
       startWatcher(planRoot, hubRef);
 
       resolve({
-        url,
+        url: localUrl,
+        localUrl,
+        lanUrl,
+        mode: serverUrls.mode,
+        bindHost: serverUrls.bindHost,
         hub,
         close: async () => {
           stopWatcher();

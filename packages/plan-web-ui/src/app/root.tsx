@@ -30,7 +30,7 @@ export function RootRoute() {
   return (
     <ShortcutProvider shortcuts={uiConfig.shortcuts}>
       <LiveSyncBridge />
-      <AppShell project={project} activeTasks={activeTasks} handoffExists={handoff.exists} />
+      <AppShell project={project} activeTasks={activeTasks} handoffExists={handoff.exists} serverInfo={uiConfig.server} />
     </ShortcutProvider>
   );
 }

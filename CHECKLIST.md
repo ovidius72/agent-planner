@@ -71,6 +71,7 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Preparato il monorepo al publish npm: package pubblici/privati coerenti, metadata, `files`, `publishConfig.access`, script di release, LICENSE/README package-level e validazione con `pack --dry-run`.
 - [ ] Memoria progetto / handoff automatico / porte web per progetto (handoff fatto — vedi `BACKLOG.md`)
 - [ ] Rivedere generazione markdown con dati reali
+- [x] Web UI: scegliere local/LAN a start e mostrare URL LAN nella dashboard
 - [x] Fix race `phase_create` auto-numbering per la stessa feature quando chiamato in parallelo
 
 > Il backlog canonico e persistente ora vive in `BACKLOG.md`. Questa checklist traccia la sessione corrente.
