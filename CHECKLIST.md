@@ -69,6 +69,7 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [ ] Runtime validation post-restart / Claude Code hook validation del nuovo modello `Edit|Write + bypass`. Vedi `BACKLOG.md`.
 - [ ] Memoria progetto / handoff automatico / porte web per progetto (handoff fatto — vedi `BACKLOG.md`)
 - [ ] Rivedere generazione markdown con dati reali
+- [x] Web UI: scegliere local/LAN a start e mostrare URL LAN nella dashboard
 
 > Il backlog canonico e persistente ora vive in `BACKLOG.md`. Questa checklist traccia la sessione corrente.
 

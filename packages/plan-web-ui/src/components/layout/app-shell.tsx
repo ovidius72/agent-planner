@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Link, Outlet, useNavigation } from "react-router-dom";
 import { TopNav } from "./top-nav";
 import { FormattedText } from "../ui/formatted-text";
-import type { ActiveTaskSummary } from "../../lib/api";
+import type { ActiveTaskSummary, ServerInfo } from "../../lib/api";
 import type { Project } from "../../lib/types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting" | "disconnected";
@@ -51,7 +51,7 @@ function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }
   );
 }
 
-export function AppShell({ project, activeTasks, handoffExists }: { project: Project; activeTasks: ActiveTaskSummary[]; handoffExists: boolean }) {
+export function AppShell({ project, activeTasks, handoffExists, serverInfo }: { project: Project; activeTasks: ActiveTaskSummary[]; handoffExists: boolean; serverInfo?: ServerInfo | undefined }) {
   const navigation = useNavigation();
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("connecting");
 
@@ -78,6 +78,21 @@ export function AppShell({ project, activeTasks, handoffExists }: { project: Pro
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[var(--text-subtle)]">Current project</p>
             <h1 className="text-2xl font-black tracking-tight text-[var(--text)] md:text-3xl"><Link to="/" className="hover:text-[var(--accent)]">{project?.name ?? "Agent Plan"}</Link></h1>
             {project?.projectRoot ? <p className="mt-2 truncate font-mono text-xs text-[var(--text-subtle)]" title={project.projectRoot}>{project.projectRoot}</p> : null}
+            {serverInfo ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold uppercase tracking-[0.12em] ${serverInfo.mode === "lan" ? "bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] text-[var(--accent)]" : "bg-[var(--surface-elevated)] text-[var(--text-muted)]"}`}>
+                  <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+                  {serverInfo.mode === "lan" ? "LAN visible" : "Local only"}
+                </span>
+                <a href={serverInfo.localUrl} target="_blank" rel="noreferrer" className="font-mono text-[var(--text-subtle)] underline-offset-2 hover:text-[var(--accent)] hover:underline">{serverInfo.localUrl}</a>
+                {serverInfo.lanUrl ? (
+                  <>
+                    <span className="text-[var(--text-subtle)]">·</span>
+                    <a href={serverInfo.lanUrl} target="_blank" rel="noreferrer" className="font-mono text-[var(--text-subtle)] underline-offset-2 hover:text-[var(--accent)] hover:underline">{serverInfo.lanUrl}</a>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {project?.description ? <FormattedText text={project.description} className="mt-2 max-w-3xl" /> : null}
           </div>
           {navigation.state !== "idle" ? <div className="text-sm font-semibold text-[var(--accent)]">Updating…</div> : null}
