@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -871,7 +871,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         enablePlanner = false; // 'never' persisted — no prompt, no activation
       } else {
         try {
-          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y/n/a/e)");
+          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y)es / (n)o / (a)lways / n(e)ver)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["a", "always", "sempre"].includes(normalized)) {
             enablePlanner = true;
@@ -923,7 +923,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startWeb = false; // 'never' persisted
       } else if (server === null) {
         try {
-          const ans = await ctx.ui.input("Start the planner web UI? (y/n/a/e)");
+          const ans = await ctx.ui.input("Start the planner web UI? (y)es / (n)o / (a)lways / n(e)ver)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["a", "always", "sempre"].includes(normalized)) {
             startWeb = true;
@@ -1693,26 +1693,35 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
         const feature = await pickFeature();
         if (!feature) { ctx.ui.notify("Phase creation cancelled: no feature selected.", "warning"); return; }
-        const phases = await st.loadAllPhases();
-        const featurePhases = phases.filter((p) => p.featureId === feature.id);
-        const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
-        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-        const id = createPhaseId();
-        const phase: Phase = {
-          id, number, slug, title, featureId: feature.id, status: "draft", discussedAt: "", contextReady: false, contextReadyReason: "", summary: "", description: "", notes: "",
-          goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
-          openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
-          createdAt: nowISO(), updatedAt: nowISO(),
-        };
-        await st.savePhase(phase);
-        feature.phaseIds = [...feature.phaseIds, phase.id];
-        feature.updatedAt = nowISO();
-        await st.saveFeatures({ features });
-        await st.writeGenerated();
-        ctx.ui.notify(`Phase created: ${id} — ${title} (feature ${feature.name})`, "info");
+        let phase: Phase | undefined;
+        await withFeatureLock(feature.id, async () => {
+          const phases = await st.loadAllPhases();
+          const featurePhases = phases.filter((p) => p.featureId === feature.id);
+          const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
+          const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+          const id = createPhaseId();
+          phase = {
+            id, number, slug, title, featureId: feature.id, status: "draft", discussedAt: "", contextReady: false, contextReadyReason: "", summary: "", description: "", notes: "",
+            goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
+            openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
+            createdAt: nowISO(), updatedAt: nowISO(),
+          };
+          await st.savePhase(phase);
+          await st.updateFeatures((doc) => {
+            const target = doc.features.find((f) => f.id === feature.id);
+            if (target && !target.phaseIds.includes(phase!.id)) {
+              target.phaseIds.push(phase!.id);
+              target.updatedAt = nowISO();
+            }
+            return doc;
+          });
+          await st.writeGenerated();
+        });
+        if (!phase) return;
+        ctx.ui.notify(`Phase created: ${phase.id} — ${title} (feature ${feature.name})`, "info");
         const startDiscuss = await ctx.ui.input("Start phase discuss now? Type yes to continue");
         if (isYes(startDiscuss)) {
-          await handlePlanner(`phase discuss ${id}`, ctx);
+          await handlePlanner(`phase discuss ${phase.id}`, ctx);
         }
         return;
       }
@@ -2912,38 +2921,40 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       if (!params.featureId?.trim()) return { content: [{ type: "text", text: "featureId is required: a phase must belong to a feature." }], details: {} };
-      const phases = await st.loadAllPhases();
-      const featurePhases = phases.filter((p) => p.featureId === params.featureId);
-      const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
-      const id = createPhaseId();
-      const now = nowISO();
-      const phase: Phase = {
-        id, number, slug: normalizeSlug(params.title), title: params.title,
-        featureId: params.featureId,
-        status: (params.status as Phase["status"] | undefined) ?? "draft",
-        discussedAt: "",
-        contextReady: false,
-        contextReadyReason: "",
-        summary: params.summary ?? "", description: params.description ?? "", notes: "",
-        goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
-        openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
-        createdAt: now, updatedAt: now,
-      };
-      await st.savePhase(phase);
+      let phase: Phase | undefined;
+      await withFeatureLock(params.featureId, async () => {
+        const phases = await st.loadAllPhases();
+        const featurePhases = phases.filter((p) => p.featureId === params.featureId);
+        const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
+        const id = createPhaseId();
+        const now = nowISO();
+        phase = {
+          id, number, slug: normalizeSlug(params.title), title: params.title,
+          featureId: params.featureId,
+          status: (params.status as Phase["status"] | undefined) ?? "draft",
+          discussedAt: "",
+          contextReady: false,
+          contextReadyReason: "",
+          summary: params.summary ?? "", description: params.description ?? "", notes: "",
+          goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
+          openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
+          createdAt: now, updatedAt: now,
+        };
+        await st.savePhase(phase);
 
-      if (params.featureId) {
         // Atomic: serialize concurrent phase_create linking to the same feature.
         await st.updateFeatures((doc) => {
           const feature = doc.features.find((f) => f.id === params.featureId);
-          if (feature && !feature.phaseIds.includes(id)) {
-            feature.phaseIds.push(id);
+          if (feature && !feature.phaseIds.includes(phase!.id)) {
+            feature.phaseIds.push(phase!.id);
             feature.updatedAt = now;
           }
           return doc;
         });
-      }
-      await st.writeGenerated();
-      return { content: [{ type: "text", text: `Phase created: ${id}` }], details: phase };
+        await st.writeGenerated();
+      });
+      if (!phase) return { content: [{ type: "text", text: "Phase creation failed." }], details: {} };
+      return { content: [{ type: "text", text: `Phase created: ${phase.id}` }], details: phase };
     },
   });
 

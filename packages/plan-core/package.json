@@ -1,7 +1,9 @@
 {
   "name": "@agent-plan/core",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "description": "Harness-agnostic core for Agent Plan: schemas, persistence, ordering, status rollups, and markdown rendering.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,6 +12,31 @@
     "./schema": "./dist/schema.js",
     "./naming": "./dist/naming.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ovidius72/agent-planner.git"
+  },
+  "homepage": "https://github.com/ovidius72/agent-planner#readme",
+  "bugs": {
+    "url": "https://github.com/ovidius72/agent-planner/issues"
+  },
+  "keywords": [
+    "planner",
+    "project-planning",
+    "schema",
+    "typescript",
+    "ai-agent"
+  ],
   "dependencies": {
     "zod": "^3.24.0"
   },

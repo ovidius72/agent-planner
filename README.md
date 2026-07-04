@@ -53,12 +53,6 @@ my-project/
 
 JSON files are the source of truth. Markdown files under `.planner/generated/` are generated views for humans and agents.
 
-### `.plan/` is never used
-
-Agent Plan only owns `.planner/`.
-
-It does not fall back to `.plan/`, migrate `.plan/`, or treat `.plan/` as a planner root. If `.plan/` exists, it is ignored during scanning so data from other tools is not accidentally imported into Agent Plan.
-
 ### Hierarchy
 
 The public planning hierarchy is:
@@ -72,21 +66,6 @@ Requirements currently exist as internal/project seed data and are not exposed a
 ### Harness-agnostic core
 
 The core planning model lives outside Pi, Claude Code, or any other harness. Adapters should call shared planning logic rather than owning business rules.
-
----
-
-## Installation model
-
-There are two separate actions:
-
-1. **Install Agent Plan for an agent/harness**.
-2. **Initialize `.planner/` inside a specific project when you want planning there**.
-
-These are intentionally separate.
-
-Installing Agent Plan into Claude Code should not create `.planner/` in every repository. A project is initialized only when the user explicitly runs `/planner init` or `agent-plan init` inside that project.
-
----
 
 ## Recommended Claude Code setup
 
@@ -113,7 +92,7 @@ This does three things:
 ~/.claude/commands/planner.md
 ```
 
-3. installs a Claude Code `PreToolUse` task guard hook in:
+1. installs a Claude Code `PreToolUse` task guard hook in:
 
 ```text
 ~/.claude/settings.json
@@ -565,15 +544,15 @@ Recommended workflow:
 /planner task start <task-id>
 ```
 
-2. If the user explicitly wants work without opening a task, authorize a temporary bypass:
+1. If the user explicitly wants work without opening a task, authorize a temporary bypass:
 
 ```text
 /planner bypass
 ```
 
-3. Do the edit/write work.
+1. Do the edit/write work.
 
-4. Revoke the bypass when you want normal discipline back:
+2. Revoke the bypass when you want normal discipline back:
 
 ```text
 /planner clear-bypass
@@ -731,28 +710,6 @@ If needed, re-run:
 agent-plan setup claude-code --user --force
 ```
 
-### `.planner/` does not exist
-
-That is expected until a project is initialized.
-
-Run:
-
-```text
-/planner init
-```
-
-or:
-
-```bash
-agent-plan init
-```
-
-### `.plan/` exists
-
-Agent Plan ignores `.plan/`. It is not an Agent Plan directory.
-
-Do not rename or migrate `.plan/` into `.planner/` unless you intentionally know what you are doing outside Agent Plan.
-
 ---
 
 ## Design principles
@@ -763,3 +720,111 @@ Do not rename or migrate `.plan/` into `.planner/` unless you intentionally know
 - Pi, Claude Code, and future agents are adapters over the same planning model.
 - Installation should be global/user-level when possible; project initialization should remain explicit.
 - Public naming uses `planner-*` for MCP tools and `/planner ...` for human command UX.
+
+---
+
+## Build and publish
+
+This repository is a pnpm workspace. Only some packages are published to npm.
+
+### Packages
+
+**Published (public npm)**:
+
+- `@agent-plan/core` — schemas, persistence, ordering, status rollups, rendering
+- `@agent-plan/mcp` — MCP stdio server
+- `@agent-plan/server` — local HTTP/WebSocket server
+- `agent-plan` — CLI (`init`, `mcp`, `setup claude-code`, `export`, `guard pre-tool-use`)
+
+**Private (not published)**:
+
+- `@agent-plan/pi-adapter` — Pi extension; depends on the local monorepo layout (web UI path), so it is not a standalone npm package yet
+- `@agent-plan/web-ui` — Vite application, served as a build artifact, not a standalone npm package
+
+### Prerequisites
+
+- Node.js and pnpm installed
+- `npm login` performed (or `NPM_TOKEN` configured) on the account that owns the `@agent-plan` scope
+
+### Build and validate
+
+From the repository root:
+
+```bash
+pnpm install
+pnpm release:validate
+```
+
+`release:validate` runs the full build and the TypeScript check:
+
+```bash
+pnpm build
+pnpm check
+```
+
+### Inspect the published tarballs
+
+Before publishing, inspect what would actually be packaged:
+
+```bash
+pnpm release:pack-dry-run
+```
+
+Important: use `pnpm pack` (or `pnpm release:pack-dry-run`), **not** `npm pack`.
+
+`pnpm pack`/`pnpm publish` rewrite `workspace:*` dependency ranges to the real
+published versions inside the tarball. `npm pack` leaves `workspace:*` verbatim,
+which makes the resulting tarball uninstallable.
+
+The expected tarball contents for each public package are:
+
+- `dist/**/*.js`, `dist/**/*.d.ts`, `dist/**/*.d.ts.map`
+- `README.md`
+- `LICENSE`
+- `package.json`
+
+`src/`, `tsconfig.json`, and `dist/.tsbuildinfo` must NOT appear in the tarball.
+
+### Publish to npm
+
+From the repository root:
+
+```bash
+pnpm release:publish
+```
+
+This publishes the public packages in dependency order:
+
+1. `@agent-plan/core`
+2. `@agent-plan/mcp`
+3. `@agent-plan/server`
+4. `agent-plan`
+
+Each step runs `pnpm publish --access public`, so `workspace:*` ranges are
+rewritten to the resolved versions before upload.
+
+Do **not** run `npm publish` manually per package: it would publish stale
+`workspace:*` ranges that npm cannot install.
+
+### Versioning
+
+All public packages currently share version `0.1.0`. To release a new version,
+bump the `version` field in each public `package.json`, commit, tag if desired,
+then run `pnpm release:publish`.
+
+### Install the published CLI
+
+After publishing, end users install once:
+
+```bash
+npm install -g agent-plan
+```
+
+Then configure an agent harness, e.g. for Claude Code at user scope:
+
+```bash
+agent-plan setup claude-code --user
+```
+
+Project initialization stays explicit and is done later inside a project with
+`/planner init` or `agent-plan init`.

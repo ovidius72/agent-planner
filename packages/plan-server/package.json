@@ -1,7 +1,9 @@
 {
   "name": "@agent-plan/server",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "description": "Local HTTP/WebSocket server for Agent Plan dashboards and planner APIs.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,6 +11,31 @@
     ".": "./dist/index.js",
     "./serve": "./dist/serve.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ovidius72/agent-planner.git"
+  },
+  "homepage": "https://github.com/ovidius72/agent-planner#readme",
+  "bugs": {
+    "url": "https://github.com/ovidius72/agent-planner/issues"
+  },
+  "keywords": [
+    "planner",
+    "server",
+    "websocket",
+    "dashboard",
+    "ai-agent"
+  ],
   "dependencies": {
     "@agent-plan/core": "workspace:*",
     "hono": "^4.7.0",
