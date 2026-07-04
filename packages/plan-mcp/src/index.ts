@@ -4,7 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task } from "@agent-plan/core/schema";
 
@@ -339,47 +339,53 @@ server.registerTool("planner-phase-add", {
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
-  const phases = await st.loadAllPhases();
   const featuresDoc = await st.loadFeatures();
   const feature = featureRef ? findFeatureByRef(featuresDoc.features, featureRef) : featuresDoc.features[0];
   if (featureRef && !feature) return text(`Feature not found: ${featureRef}`);
-  const featurePhases = feature ? phases.filter((phase) => phase.featureId === feature.id) : phases;
-  const timestamp = nowISO();
-  const phase: Phase = {
-    id: createPhaseId(),
-    number: featurePhases.reduce((max, entry) => Math.max(max, entry.number), 0) + 1,
-    slug: normalizeSlug(title),
-    title: title.trim(),
-    featureId: feature?.id,
-    status: "draft",
-    discussedAt: "",
-    contextReady: false,
-    contextReadyReason: "",
-    summary: summary?.trim() ?? "",
-    description: description?.trim() ?? "",
-    notes: "",
-    goals: [],
-    nonGoals: [],
-    dependencies: [],
-    dependsOn: [],
-    risks: [],
-    openQuestions: [],
-    decisions: [],
-    acceptedDecisions: [],
-    completionCriteria: [],
-    taskIds: [],
-    tasks: [],
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-  await st.savePhase(phase);
-  if (feature) {
-    await st.updateFeatures((doc) => {
-      const target = doc.features.find((entry) => entry.id === feature.id);
-      if (target && !target.phaseIds.includes(phase.id)) target.phaseIds.push(phase.id);
-      return doc;
-    });
-  }
+  const lockKey = feature?.id ?? "__unscoped__";
+  let phase: Phase | undefined;
+  await withFeatureLock(lockKey, async () => {
+    const phases = await st.loadAllPhases();
+    const featurePhases = feature ? phases.filter((phase) => phase.featureId === feature.id) : phases;
+    const timestamp = nowISO();
+    phase = {
+      id: createPhaseId(),
+      number: featurePhases.reduce((max, entry) => Math.max(max, entry.number), 0) + 1,
+      slug: normalizeSlug(title),
+      title: title.trim(),
+      featureId: feature?.id,
+      status: "draft",
+      discussedAt: "",
+      contextReady: false,
+      contextReadyReason: "",
+      summary: summary?.trim() ?? "",
+      description: description?.trim() ?? "",
+      notes: "",
+      goals: [],
+      nonGoals: [],
+      dependencies: [],
+      dependsOn: [],
+      risks: [],
+      openQuestions: [],
+      decisions: [],
+      acceptedDecisions: [],
+      completionCriteria: [],
+      taskIds: [],
+      tasks: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await st.savePhase(phase);
+    if (feature) {
+      await st.updateFeatures((doc) => {
+        const target = doc.features.find((entry) => entry.id === feature.id);
+        if (target && !target.phaseIds.includes(phase!.id)) target.phaseIds.push(phase!.id);
+        return doc;
+      });
+    }
+    await st.writeGenerated();
+  });
+  if (!phase) return text("Phase creation failed.");
   return writeAndSummarize(st, `Phase created: ${phase.id} — ${phase.title}`, { phase });
 });
 

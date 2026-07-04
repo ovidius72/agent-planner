@@ -46,6 +46,10 @@ export class PlanStoreError extends Error {
 // parallel tool calls (feature_create/phase_create/...) don't truncate JSON.
 const writeLocks = new Map<string, Promise<void>>();
 
+// Per-feature mutex: serializes concurrent phase_create calls that target the
+// same feature, so auto-numbering can read/assign the next phase number safely.
+const featureLocks = new Map<string, Promise<void>>();
+
 // Optional global hook fired around every atomic write so adapters can mark the
 // plan as "busy" (e.g. to make the web server return 503 during mutations).
 let writeBusyHook: ((busy: boolean) => void) | undefined;
@@ -68,6 +72,17 @@ function withWriteLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
   return prev.then(fn).finally(() => {
     release();
     if (writeLocks.get(path) === prev.then(() => next)) writeLocks.delete(path);
+  });
+}
+
+export function withFeatureLock<T>(featureId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = featureLocks.get(featureId) ?? Promise.resolve();
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => { release = resolve; });
+  featureLocks.set(featureId, prev.then(() => next));
+  return prev.then(fn).finally(() => {
+    release();
+    if (featureLocks.get(featureId) === prev.then(() => next)) featureLocks.delete(featureId);
   });
 }
 

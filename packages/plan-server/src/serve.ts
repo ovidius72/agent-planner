@@ -5,7 +5,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug, withFeatureLock } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -320,53 +320,58 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const featureId = body.featureId?.trim();
     if (!featureId) return c.json({ error: "featureId required: a phase must belong to a feature" }, 400);
 
-    const allPhases = await store.loadAllPhases();
-    const number = allPhases.filter((p) => p.featureId === featureId).length + 1;
-    const slug = normalizeSlug(title);
-    const now = nowISO();
-    const phase: Phase = {
-      id: createPhaseId(),
-      featureId,
-      number,
-      slug,
-      title,
-      status: "draft",
-      discussedAt: "",
-      contextReady: false,
-      contextReadyReason: "",
-      summary: body.summary ?? "",
-      description: body.description ?? "",
-      notes: "",
-      goals: [],
-      nonGoals: [],
-      dependencies: [],
-      risks: [],
-      openQuestions: [],
-      completionCriteria: [],
-      decisions: [],
-      acceptedDecisions: [],
-      taskIds: [],
-      tasks: [],
-      dependsOn: [],
-      createdAt: now,
-      updatedAt: now,
-    };
+    let phase: Phase | undefined;
+    await withFeatureLock(featureId, async () => {
+      const allPhases = await store.loadAllPhases();
+      const number = allPhases.filter((p) => p.featureId === featureId).length + 1;
+      const slug = normalizeSlug(title);
+      const now = nowISO();
+      phase = {
+        id: createPhaseId(),
+        featureId,
+        number,
+        slug,
+        title,
+        status: "draft",
+        discussedAt: "",
+        contextReady: false,
+        contextReadyReason: "",
+        summary: body.summary ?? "",
+        description: body.description ?? "",
+        notes: "",
+        goals: [],
+        nonGoals: [],
+        dependencies: [],
+        risks: [],
+        openQuestions: [],
+        completionCriteria: [],
+        decisions: [],
+        acceptedDecisions: [],
+        taskIds: [],
+        tasks: [],
+        dependsOn: [],
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    await store.savePhase(phase);
+      await store.savePhase(phase);
 
-    // Link to feature if featureId provided
-    if (body.featureId) {
-      await store.updateFeatures((features) => {
-        const feature = features.features.find((f) => f.id === body.featureId);
-        if (feature && !feature.phaseIds.includes(phase.id)) {
-          feature.phaseIds.push(phase.id);
-        }
-        return features;
-      });
-      hub()?.broadcast({ type: "features-updated", data: { action: "updated", id: body.featureId, featureId: body.featureId } });
-    }
+      // Link to feature if featureId provided
+      if (body.featureId) {
+        await store.updateFeatures((features) => {
+          const feature = features.features.find((f) => f.id === body.featureId);
+          if (feature && !feature.phaseIds.includes(phase!.id)) {
+            feature.phaseIds.push(phase!.id);
+          }
+          return features;
+        });
+        hub()?.broadcast({ type: "features-updated", data: { action: "updated", id: body.featureId, featureId: body.featureId } });
+      }
 
-    await store.writeGenerated();
+      await store.writeGenerated();
+    });
+
+    if (!phase) return c.json({ error: "phase creation failed" }, 500);
     hub()?.broadcast({ type: "phases-updated", data: { action: "created", id: phase.id, phaseId: phase.id, featureId: phase.featureId ?? "" } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.syncStatuses();
