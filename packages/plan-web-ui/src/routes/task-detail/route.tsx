@@ -13,7 +13,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { EntityBadge } from "../../components/ui/entity-badge";
+import { EntityBadge, ParentBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
@@ -85,12 +85,14 @@ export function TaskDetailRoute() {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name, to: `/features/${feature.id}` }, { label: phase.title, to: `/features/${feature.id}/phases/${phase.id}` }, { label: task.title }]} />
-          <div className="mt-2"><EntityBadge kind="task" /></div>
+          <div className="mt-2 flex items-center gap-2">
+            <EntityBadge type="task" number={task.number} />
+            <ParentBadge type="task" phaseNum={phase.number} featureNum={feature.number} />
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">{task.title}</h2>
             <StatusBadge status={task.status} />
           </div>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">{task.id}</p>
         </div>
 
         <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/delete`} onSubmit={(event) => {
@@ -103,7 +105,7 @@ export function TaskDetailRoute() {
       <Card className="grid gap-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <EntityBadge kind="task" label="Task overview" />
+            <EntityBadge type="task" number={task.number} />
             <p className="mt-2 text-sm text-[var(--text-muted)]">Single-focus task view. Editing opens in a modal route.</p>
           </div>
           <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>

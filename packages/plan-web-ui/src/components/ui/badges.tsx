@@ -14,15 +14,17 @@ function formatSeq(n: number | undefined): string {
 
 export function EntityBadge({ type, number }: { type: EntityType; number?: number | undefined }) {
   const color = TYPE_COLORS[type] || TYPE_COLORS.task;
+  const soft = color?.soft || "transparent";
+  const strong = color?.strong || "inherit";
   return (
     <span
       className="inline-flex items-center justify-center font-mono text-[11px] font-bold leading-none px-2 py-1 rounded-md transition-colors"
       style={{
-        backgroundColor: (color as any).soft || "transparent",
-        color: (color as any).strong || "inherit",
+        backgroundColor: soft,
+        color: strong,
       }}
     >
-      {(type && type.length > 0 ? type[0].toUpperCase() : "?")}{formatSeq(number)}
+      {(type ? type.charAt(0).toUpperCase() : "?")}{formatSeq(number)}
     </span>
   );
 }

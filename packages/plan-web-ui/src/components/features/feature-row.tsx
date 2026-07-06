@@ -4,7 +4,7 @@ import { featureStatuses } from "../../lib/statuses";
 import { formatStatusSummary, type StatusSummary } from "../../lib/status-summary";
 import type { Feature } from "../../lib/types";
 import { Button } from "../ui/button";
-import { StatusBadge } from "../ui/status-badge";
+import { EntityBadge } from "../ui/badges";
 
 export interface FeatureActivitySummary {
   currentPhase: string | undefined;
@@ -44,10 +44,10 @@ export function FeatureRow({
 
   return (
     <div className="surface-card px-4 py-2">
-      <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-subtle)]">{feature.id}</div>
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,132px)_minmax(0,152px)_124px_44px_44px] xl:items-center">
         <div className="flex min-w-0 items-start justify-between gap-3 xl:contents">
           <div className="flex min-w-0 items-center gap-2">
+            <EntityBadge type="feature" number={feature.number} />
             <Link to={`/features/${feature.id}`} className="entity-link--feature min-w-0 truncate text-sm font-semibold underline-offset-4 hover:underline">
               {feature.name}
             </Link>

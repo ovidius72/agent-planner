@@ -104,10 +104,6 @@ function readStoredArray<T extends string>(key: string, fallback: T[], allowed: 
     if (!stored) return fallback;
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed)) return fallback;
-    // Schema signature: if the set of known statuses has changed since the
-    // filters were last saved (e.g. new statuses like deferred/rejected were
-    // introduced), the saved selection is stale — reset to the full default so
-    // the new statuses are visible instead of being filtered out.
     const schemaKey = `${key}-schema`;
     const currentSchema = allowed.slice().sort().join(",");
     const savedSchema = window.localStorage.getItem(schemaKey);
@@ -847,7 +843,7 @@ export function DashboardRoute() {
                         const phaseExpanded = expandedPhaseIds.includes(phase.id);
                         const phaseRecentlyChanged = recentPhaseIds.includes(phase.id);
                         return (
-                          <div key={phase.id} className={`grid gap-2 transition-colors ${phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)] px-2 py-2" : ""}`}>
+                          <div key={phase.id} className={`grid gap-2 transition-colors ${phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-2" : ""}`}>
                             <div className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${phaseRecentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}>
                               <div className="flex min-w-0 items-start gap-2 font-mono text-sm">
                                 <button
@@ -899,7 +895,7 @@ export function DashboardRoute() {
                                               <span
                                                 aria-hidden="true"
                                                 className="inline-block h-2 w-2 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
-                                              />
+                                                />
                                             ) : null}
                                             <div className="flex items-center gap-2">
                                               <EntityBadge type="task" number={task.number} />

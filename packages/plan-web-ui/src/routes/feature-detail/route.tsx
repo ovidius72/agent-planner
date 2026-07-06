@@ -6,7 +6,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { EntityBadge } from "../../components/ui/entity-badge";
+import { EntityBadge, ParentBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
@@ -78,12 +78,13 @@ export function FeatureDetailRoute() {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name }]} />
-          <div className="mt-2"><EntityBadge kind="feature" /></div>
+          <div className="mt-2">
+            <EntityBadge type="feature" number={feature.number} />
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">{feature.name}</h2>
             <StatusBadge status={feature.status} />
           </div>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">{feature.id}</p>
           {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
         </div>
 
@@ -96,8 +97,9 @@ export function FeatureDetailRoute() {
 
       <Card className="grid gap-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <EntityBadge kind="feature" label="Feature overview" />
+          <div className="mt-2 flex items-center gap-2">
+            <EntityBadge type="feature" number={feature.number} />
+          </div>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Snapshot of this feature only.</p>
           </div>
           <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>
@@ -128,8 +130,8 @@ export function FeatureDetailRoute() {
 
       <Card className="grid gap-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <EntityBadge kind="phase" label="Phases" />
+          <div className="mt-2 flex items-center gap-2">
+            <EntityBadge type="phase" number={0} />
             <p className="mt-2 text-sm text-[var(--text-muted)]">Filter this feature's phases by name or status.</p>
           </div>
           <Link to="phases/new"><Button type="button" variant="primary" shortcut="create">Create phase</Button></Link>
@@ -145,7 +147,7 @@ export function FeatureDetailRoute() {
         />
 
         <div className="grid gap-3">
-          {filteredPhases.length > 0 ? filteredPhases.map((phase) => <PhaseRow key={phase.id} featureId={feature.id} phase={phase} />) : <Card className="p-4 text-sm text-[var(--text-muted)]">No phases match the current filters.</Card>}
+          {filteredPhases.length > 0 ? filteredPhases.map((phase) => <PhaseRow key={phase.id} featureId={feature.id} feature={feature} phase={phase} />) : <Card className="p-4 text-sm text-[var(--text-muted)]">No phases match the current filters.</Card>}
         </div>
       </Card>
       <Outlet />
