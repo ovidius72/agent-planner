@@ -803,7 +803,7 @@ export function DashboardRoute() {
               const featureExpanded = expandedFeatureIds.includes(feature.id);
               const featureRecentlyChanged = recentFeatureIds.includes(feature.id);
               return (
-                <div key={feature.id} className={`surface-card px-4 py-3 transition-colors ${hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${featureRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
+                <div key={feature.id} className={`surface-card px-4 py-3 transition-colors ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${featureRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
                   <div className={`flex items-start justify-between gap-3 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${featureRecentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}>
                     <div className="flex min-w-0 items-start gap-2 font-mono text-sm font-semibold">
                       <button
@@ -818,10 +818,7 @@ export function DashboardRoute() {
                       <span className="text-[var(--text-subtle)]">└─</span>
                       <Link to={`/features/${feature.id}`} className="entity-link--feature inline-flex min-w-0 items-center gap-2 truncate underline-offset-4 hover:underline">
                         {hasActiveTask ? (
-                          <span
-                            aria-hidden="true"
-                            className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
-                          />
+                          <span aria-hidden="true" className="ap-progress-dot" />
                         ) : null}
                         <div className="flex items-center gap-2">
                           <EntityBadge type="feature" number={feature.number} />
@@ -843,7 +840,7 @@ export function DashboardRoute() {
                         const phaseExpanded = expandedPhaseIds.includes(phase.id);
                         const phaseRecentlyChanged = recentPhaseIds.includes(phase.id);
                         return (
-                          <div key={phase.id} className={`grid gap-2 transition-colors ${phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-2" : ""}`}>
+                          <div key={phase.id} className={`grid gap-2 transition-colors ${phase.status === "in-progress" ? "ap-in-progress rounded-[12px]" : phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-2" : ""}`}>
                             <div className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${phaseRecentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}>
                               <div className="flex min-w-0 items-start gap-2 font-mono text-sm">
                                 <button
@@ -858,10 +855,7 @@ export function DashboardRoute() {
                                 <span className="text-[var(--text-subtle)]">{phasePrefix}</span>
                                 <Link to={`/features/${feature.id}/phases/${phase.id}`} className="entity-link--phase inline-flex min-w-0 items-center gap-2 truncate underline-offset-4 hover:underline">
                                   {phaseHasActiveTask ? (
-                                    <span
-                                      aria-hidden="true"
-                                      className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
-                                    />
+                                    <span aria-hidden="true" className="ap-progress-dot" />
                                   ) : null}
                                   <div className="flex items-center gap-2">
                                   <EntityBadge type="phase" number={phase.number} />
@@ -884,7 +878,7 @@ export function DashboardRoute() {
                                     const taskPrefix = taskIndex === allTasks.length - 1 ? "└─" : "├─";
                                     const taskRecentlyChanged = recentTaskIds.includes(task.id);
                                     return (
-                                      <div key={task.id} className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 font-mono text-sm transition-colors hover:bg-[var(--accent-soft)] ${task.status === "in-progress" ? "bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_8%,transparent)]" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${task.status === "done" ? "text-[var(--text-muted)]" : ""} ${taskRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
+                                      <div key={task.id} className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 font-mono text-sm transition-colors hover:bg-[var(--accent-soft)] ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${task.status === "done" ? "text-[var(--text-muted)]" : ""} ${taskRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
                                         <Link
                                           to={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}`}
                                           className="min-w-0 text-[var(--text-muted)] transition hover:text-[var(--accent)]"
@@ -892,10 +886,7 @@ export function DashboardRoute() {
                                           <span className="text-[var(--text-subtle)]">│  {taskPrefix} </span>
                                           <span className="inline-flex items-center gap-2">
                                             {task.status === "in-progress" ? (
-                                              <span
-                                                aria-hidden="true"
-                                                className="inline-block h-2 w-2 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
-                                                />
+                                              <span aria-hidden="true" className="ap-progress-dot" />
                                             ) : null}
                                             <div className="flex items-center gap-2">
                                               <EntityBadge type="task" number={task.number} />
@@ -938,10 +929,7 @@ export function DashboardRoute() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="inline-flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-[var(--text)]">
                       {task.status === "in-progress" ? (
-                        <span
-                          aria-hidden="true"
-                          className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
-                        />
+                        <span aria-hidden="true" className="ap-progress-dot" />
                       ) : null}
                       <span className="truncate">T{formatSequence(task.number)} — {task.title}</span>
                     </span>
