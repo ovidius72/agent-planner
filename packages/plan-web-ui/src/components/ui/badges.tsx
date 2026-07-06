@@ -13,16 +13,16 @@ function formatSeq(n: number | undefined): string {
 }
 
 export function EntityBadge({ type, number }: { type: EntityType; number?: number | undefined }) {
-  const color = TYPE_COLORS[type] ?? TYPE_COLORS.task;
+  const color = TYPE_COLORS[type] || TYPE_COLORS.task;
   return (
     <span
       className="inline-flex items-center justify-center font-mono text-[11px] font-bold leading-none px-2 py-1 rounded-md transition-colors"
       style={{
-        backgroundColor: color.soft,
-        color: color.strong,
+        backgroundColor: (color as any).soft || "transparent",
+        color: (color as any).strong || "inherit",
       }}
     >
-      {type[0].toUpperCase()}{formatSeq(number)}
+      {(type && type.length > 0 ? type[0].toUpperCase() : "?")}{formatSeq(number)}
     </span>
   );
 }

@@ -103,8 +103,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export interface ServerInfo {
+  mode: "local" | "lan";
+  bindHost: string;
+  port: number;
+  localUrl: string;
+  lanUrl?: string | undefined;
+}
+
 export interface UiConfig {
   shortcuts?: Partial<Record<"create" | "edit" | "delete" | "submit", ShortcutSpec>>;
+  server?: ServerInfo | undefined;
 }
 
 export interface ActiveTaskSummary {

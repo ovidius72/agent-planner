@@ -721,13 +721,32 @@ async function maybeStartWeb(ctx: ExtensionContext): Promise<void> {
   }
 }
 
-async function startServer(ctx: ExtensionContext, requestedPort?: number): Promise<void> {
+function normalizeVisibility(input: string | undefined): "local" | "lan" | undefined {
+  const v = (input ?? "").trim().toLowerCase();
+  if (!v) return undefined;
+  if (v === "lan" || v === "network" || v === "0.0.0.0") return "lan";
+  if (v === "local" || v === "localhost" || v === "127.0.0.1") return "local";
+  return undefined;
+}
+
+async function promptWebVisibility(ctx: ExtensionContext): Promise<"local" | "lan"> {
+  try {
+    const ans = await ctx.ui.input("Web UI visibility: (local) only this machine  /  (lan) visible on the local network? [local/lan]");
+    const v = normalizeVisibility(ans);
+    if (v) return v;
+  } catch {}
+  return "local";
+}
+
+async function startServer(ctx: ExtensionContext, requestedPort?: number, visibility: "local" | "lan" = "local"): Promise<void> {
   plannerSessionEnabled = true;
   if (server) return;
+  const host = visibility === "lan" ? "0.0.0.0" : "127.0.0.1";
   const port = await pickProjectPort(ctx, requestedPort);
   try {
     server = await serve({
       port,
+      host,
       planRoot: resolvePlanRoot(ctx.cwd),
       staticDir: resolveStaticDir(),
       quiet: true,
@@ -740,6 +759,7 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number): Promi
       try {
         server = await serve({
           port: 0,
+          host,
           planRoot: resolvePlanRoot(ctx.cwd),
           staticDir: resolveStaticDir(),
           quiet: true,
@@ -759,7 +779,7 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number): Promi
     // retry on port 0, where the `port` variable still holds the requested 0).
     let realPort = port;
     try { const p = Number(new URL(server.url).port); if (p) realPort = p; } catch {}
-    capturedPi?.appendEntry("plan-web-state", { running: true, port: realPort });
+    capturedPi?.appendEntry("plan-web-state", { running: true, port: realPort, mode: server.mode });
     lastKnownWebPort = realPort;
 
     // Persist the actual listening port in project data so other processes
@@ -922,9 +942,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
 
       if (startWeb && server === null) {
-        await startServer(ctx, preferredPort).catch(() => {});
+        const visibility = await promptWebVisibility(ctx);
+        await startServer(ctx, preferredPort, visibility).catch(() => {});
         const srv = server as ServeHandle | null;
-        if (srv) ctx.ui.notify(`Web UI started at ${srv.url}`, "info");
+        if (srv) {
+          const urls = srv.lanUrl ? `${srv.localUrl} (LAN: ${srv.lanUrl})` : srv.url;
+          ctx.ui.notify(`Web UI started at ${urls}`, "info");
+        }
       }
 
       const url = (server as ServeHandle | null)?.url ?? "Starting server...";
@@ -2172,19 +2196,29 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return;
       }
       switch (action) {
-        case "start":
-          if (server) { ctx.ui.notify(`Already running at ${server.url}`, "info"); return; }
-          ctx.ui.notify(requestedPort ? `Starting web server on port ${requestedPort} …` : "Starting web server on this project's assigned port …", "info");
-          await startServer(ctx, requestedPort);
-          ctx.ui.notify(`Web UI ready. Open: ${server!.url}`, "info");
+        case "start": {
+          if (server) { ctx.ui.notify(`Already running at ${server.lanUrl ? server.localUrl + " (LAN: " + server.lanUrl + ")" : server.url}`, "info"); return; }
+          const visibilityArg = normalizeVisibility(parts[2]);
+          const portArg = parts[2]?.trim() && Number.isFinite(parseInt(parts[2], 10)) ? parseInt(parts[2], 10) : undefined;
+          const visibility = visibilityArg ?? await promptWebVisibility(ctx);
+          ctx.ui.notify(`Starting web server (${visibility})${portArg ? ` on port ${portArg}` : ""} …`, "info");
+          await startServer(ctx, portArg, visibility);
+          const srv = server as ServeHandle | null;
+          if (srv) ctx.ui.notify(srv.lanUrl ? `Web UI ready. Local: ${srv.localUrl} — LAN: ${srv.lanUrl}` : `Web UI ready. Open: ${srv.url}`, "info");
           break;
+        }
         case "stop":
           if (!server) { ctx.ui.notify("Not running", "info"); return; }
           await stopServer();
           ctx.ui.notify("Server stopped", "info");
           break;
-        default:
-          ctx.ui.notify(server ? `Web UI running. Open: ${server.url}` : "Not running", "info");
+        default: {
+          const srv = server as ServeHandle | null;
+          if (!srv) { ctx.ui.notify("Not running", "info"); return; }
+          const lines = [`Web UI running (${srv.mode}).`, `  local: ${srv.localUrl}`];
+          if (srv.lanUrl) lines.push(`  lan:   ${srv.lanUrl}`);
+          ctx.ui.notify(lines.join("\n"), "info");
+        }
       }
       return;
     }
