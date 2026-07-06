@@ -602,7 +602,6 @@ server.registerTool("planner-task-start", {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
-  if (found.task.status === "done") return text(`Task is already done: ${found.task.id}. Use planner-task-update to reopen.`);
   const timestamp = nowISO();
   let updatedTask: Task | undefined;
   await st.updatePhase(found.phase.id, (phase) => {

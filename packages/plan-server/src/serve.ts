@@ -524,7 +524,12 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     hub()?.broadcast({ type: "phases-updated", data: { action: "task-created", id: phase.id, phaseId: phase.id, featureId: phase.featureId ?? "", taskId: task.id } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.appendActivity("task_created", task.id, `Task created: ${task.title} (phase ${phaseId})`);
-    return c.json(task, 201);
+    // Build a human-readable composite label so agents echo this instead of the UUID.
+    const featuresDoc = await store.loadFeatures();
+    const featureNum = phase.featureId ? (featuresDoc.features.find((f) => f.id === phase.featureId)?.number ?? 0) : 0;
+    const seq = (n: number) => String(n && n > 0 ? n : 0).padStart(3, "0");
+    const label = `T${seq(task.number)}(P${seq(phase.number)}/F${seq(featureNum)}) - ${task.title}`;
+    return c.json({ ...task, label }, 201);
   });
 
   // ── Tasks ─────────────────────────────────────────────────────────

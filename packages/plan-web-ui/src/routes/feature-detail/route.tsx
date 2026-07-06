@@ -97,9 +97,10 @@ export function FeatureDetailRoute() {
 
       <Card className="grid gap-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="mt-2 flex items-center gap-2">
-            <EntityBadge type="feature" number={feature.number} />
-          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <EntityBadge type="feature" number={feature.number} />
+            </div>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Snapshot of this feature only.</p>
           </div>
           <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>

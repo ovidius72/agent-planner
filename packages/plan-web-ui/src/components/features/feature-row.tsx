@@ -4,6 +4,7 @@ import { featureStatuses } from "../../lib/statuses";
 import { formatStatusSummary, type StatusSummary } from "../../lib/status-summary";
 import type { Feature } from "../../lib/types";
 import { Button } from "../ui/button";
+import { StatusBadge } from "../ui/status-badge";
 import { EntityBadge } from "../ui/badges";
 
 export interface FeatureActivitySummary {

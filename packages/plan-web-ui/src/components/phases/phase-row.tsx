@@ -2,8 +2,9 @@ import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Form, Link, useFetcher } from "react-router-dom";
 import { phaseStatuses } from "../../lib/statuses";
 import { formatStatusSummary, summarizeTaskStatuses } from "../../lib/status-summary";
-import type { Phase } from "../../lib/types";
+import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
+import { StatusBadge } from "../ui/status-badge";
 import { EntityBadge, ParentBadge } from "../ui/badges";
 
 export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
