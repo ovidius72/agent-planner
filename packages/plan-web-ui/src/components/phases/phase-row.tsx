@@ -2,11 +2,12 @@ import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Form, Link, useFetcher } from "react-router-dom";
 import { phaseStatuses } from "../../lib/statuses";
 import { formatStatusSummary, summarizeTaskStatuses } from "../../lib/status-summary";
-import type { Phase } from "../../lib/types";
+import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
+import { EntityBadge, ParentBadge } from "../ui/badges";
 
-export function PhaseRow({ featureId, phase }: { featureId: string; phase: Phase }) {
+export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
   const statusFetcher = useFetcher();
   const deleteFetcher = useFetcher();
   const optimisticStatus = statusFetcher.formData?.get("status") as Phase["status"] | null;
@@ -17,10 +18,11 @@ export function PhaseRow({ featureId, phase }: { featureId: string; phase: Phase
 
   return (
     <div className="surface-card px-4 py-2">
-      <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-[var(--text-subtle)]">{phase.id}</div>
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,150px)_124px_44px_44px] lg:items-center">
         <div className="flex min-w-0 items-start justify-between gap-3 lg:contents">
           <div className="flex min-w-0 items-center gap-2">
+            <EntityBadge type="phase" number={phase.number} />
+            <ParentBadge type="phase" featureNum={feature.number} />
             <Link to={`/features/${featureId}/phases/${phase.id}`} className="entity-link--phase min-w-0 truncate text-sm font-semibold underline-offset-4 hover:underline">
               {phase.title}
             </Link>

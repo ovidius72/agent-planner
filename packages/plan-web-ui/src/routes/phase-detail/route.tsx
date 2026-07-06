@@ -6,7 +6,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { EntityBadge } from "../../components/ui/entity-badge";
+import { EntityBadge, ParentBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
@@ -78,8 +78,9 @@ export function PhaseDetailRoute() {
               { label: phase.title },
             ]}
           />
-          <div className="mt-2">
-            <EntityBadge kind="phase" />
+          <div className="mt-2 flex items-center gap-2">
+            <EntityBadge type="phase" number={phase.number} />
+            <ParentBadge type="phase" featureNum={feature.number} />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">
@@ -87,7 +88,6 @@ export function PhaseDetailRoute() {
             </h2>
             <StatusBadge status={phase.status} />
           </div>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">{phase.id}</p>
           {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
         </div>
 
@@ -108,7 +108,7 @@ export function PhaseDetailRoute() {
       <Card className="grid gap-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <EntityBadge kind="phase" label="Phase overview" />
+            <EntityBadge type="phase" number={phase.number} />
             <p className="mt-2 text-sm text-[var(--text-muted)]">Snapshot of this phase.</p>
           </div>
           <div className="flex gap-2">
@@ -208,7 +208,7 @@ export function PhaseDetailRoute() {
 
       <Card className="grid gap-5">
         <div>
-          <EntityBadge kind="task" label="Tasks" />
+          <EntityBadge type="task" number={0} />
           <p className="mt-2 text-sm text-[var(--text-muted)]">
             Filter this phase's tasks by name or status.
           </p>

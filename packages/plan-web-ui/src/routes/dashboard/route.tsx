@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { StatusBadge } from "../../components/ui/status-badge";
+import { EntityBadge, ParentBadge } from "../../components/ui/badges";
 import type { ActiveTaskSummary, RepairReport } from "../../lib/api";
 import { repairPlan, getIntegrity } from "../../lib/api";
 import { featureStatuses, phaseStatuses, taskStatuses } from "../../lib/statuses";
@@ -103,10 +104,6 @@ function readStoredArray<T extends string>(key: string, fallback: T[], allowed: 
     if (!stored) return fallback;
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed)) return fallback;
-    // Schema signature: if the set of known statuses has changed since the
-    // filters were last saved (e.g. new statuses like deferred/rejected were
-    // introduced), the saved selection is stale — reset to the full default so
-    // the new statuses are visible instead of being filtered out.
     const schemaKey = `${key}-schema`;
     const currentSchema = allowed.slice().sort().join(",");
     const savedSchema = window.localStorage.getItem(schemaKey);
@@ -245,6 +242,7 @@ export function DashboardRoute() {
         .map((task) => ({
           task,
           phase,
+          feature: features.find((f) => f.id === phase.featureId),
           featureName: phase.featureId ? (featureNameById.get(phase.featureId) ?? phase.featureId) : "Unlinked feature",
           completedAt: task.completedAt || task.updatedAt,
         })))
@@ -805,7 +803,7 @@ export function DashboardRoute() {
               const featureExpanded = expandedFeatureIds.includes(feature.id);
               const featureRecentlyChanged = recentFeatureIds.includes(feature.id);
               return (
-                <div key={feature.id} className={`surface-card px-4 py-3 transition-colors ${hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${featureRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
+                <div key={feature.id} className={`surface-card px-4 py-3 transition-colors ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${featureRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
                   <div className={`flex items-start justify-between gap-3 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${featureRecentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}>
                     <div className="flex min-w-0 items-start gap-2 font-mono text-sm font-semibold">
                       <button
@@ -820,12 +818,12 @@ export function DashboardRoute() {
                       <span className="text-[var(--text-subtle)]">└─</span>
                       <Link to={`/features/${feature.id}`} className="entity-link--feature inline-flex min-w-0 items-center gap-2 truncate underline-offset-4 hover:underline">
                         {hasActiveTask ? (
-                          <span
-                            aria-hidden="true"
-                            className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
-                          />
+                          <span aria-hidden="true" className="ap-progress-dot" />
                         ) : null}
-                        <span className="truncate">F{formatSequence(feature.number)} — {feature.name}</span>
+                        <div className="flex items-center gap-2">
+                          <EntityBadge type="feature" number={feature.number} />
+                          <span className="truncate">{feature.name}</span>
+                        </div>
                       </Link>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -842,7 +840,7 @@ export function DashboardRoute() {
                         const phaseExpanded = expandedPhaseIds.includes(phase.id);
                         const phaseRecentlyChanged = recentPhaseIds.includes(phase.id);
                         return (
-                          <div key={phase.id} className={`grid gap-2 transition-colors ${phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)] px-2 py-2" : ""}`}>
+                          <div key={phase.id} className={`grid gap-2 transition-colors ${phase.status === "in-progress" ? "ap-in-progress rounded-[12px]" : phaseHasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${phaseRecentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-2" : ""}`}>
                             <div className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${phaseRecentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}>
                               <div className="flex min-w-0 items-start gap-2 font-mono text-sm">
                                 <button
@@ -857,12 +855,13 @@ export function DashboardRoute() {
                                 <span className="text-[var(--text-subtle)]">{phasePrefix}</span>
                                 <Link to={`/features/${feature.id}/phases/${phase.id}`} className="entity-link--phase inline-flex min-w-0 items-center gap-2 truncate underline-offset-4 hover:underline">
                                   {phaseHasActiveTask ? (
-                                    <span
-                                      aria-hidden="true"
-                                      className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
-                                    />
+                                    <span aria-hidden="true" className="ap-progress-dot" />
                                   ) : null}
-                                  <span className="truncate">P{formatSequence(phase.number)} — {phase.title}</span>
+                                  <div className="flex items-center gap-2">
+                                  <EntityBadge type="phase" number={phase.number} />
+                                  <ParentBadge type="phase" featureNum={feature?.number} />
+                                  <span className="truncate">{phase.title}</span>
+                                </div>
                                 </Link>
                               </div>
                               <div className="flex shrink-0 items-center gap-2">
@@ -879,7 +878,7 @@ export function DashboardRoute() {
                                     const taskPrefix = taskIndex === allTasks.length - 1 ? "└─" : "├─";
                                     const taskRecentlyChanged = recentTaskIds.includes(task.id);
                                     return (
-                                      <div key={task.id} className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 font-mono text-sm transition-colors hover:bg-[var(--accent-soft)] ${task.status === "in-progress" ? "bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_8%,transparent)]" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${task.status === "done" ? "text-[var(--text-muted)]" : ""} ${taskRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
+                                      <div key={task.id} className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 font-mono text-sm transition-colors hover:bg-[var(--accent-soft)] ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${task.status === "done" ? "text-[var(--text-muted)]" : ""} ${taskRecentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
                                         <Link
                                           to={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}`}
                                           className="min-w-0 text-[var(--text-muted)] transition hover:text-[var(--accent)]"
@@ -887,12 +886,13 @@ export function DashboardRoute() {
                                           <span className="text-[var(--text-subtle)]">│  {taskPrefix} </span>
                                           <span className="inline-flex items-center gap-2">
                                             {task.status === "in-progress" ? (
-                                              <span
-                                                aria-hidden="true"
-                                                className="inline-block h-2 w-2 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
-                                              />
+                                              <span aria-hidden="true" className="ap-progress-dot" />
                                             ) : null}
-                                            <span className="entity-link--task underline-offset-4 hover:underline">T{formatSequence(task.number)} — {task.title}</span>
+                                            <div className="flex items-center gap-2">
+                                              <EntityBadge type="task" number={task.number} />
+                                              <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
+                                              <span className="entity-link--task underline-offset-4 hover:underline">{task.title}</span>
+                                            </div>
                                           </span>
                                         </Link>
                                         <div className="flex shrink-0 items-center gap-2">
@@ -929,10 +929,7 @@ export function DashboardRoute() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="inline-flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-[var(--text)]">
                       {task.status === "in-progress" ? (
-                        <span
-                          aria-hidden="true"
-                          className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
-                        />
+                        <span aria-hidden="true" className="ap-progress-dot" />
                       ) : null}
                       <span className="truncate">T{formatSequence(task.number)} — {task.title}</span>
                     </span>
@@ -959,17 +956,24 @@ export function DashboardRoute() {
         </div>
 
         <div className="grid gap-3">
-          {latestCompletedTasks.length > 0 ? latestCompletedTasks.map(({ task, phase, featureName, completedAt }) => (
+          {latestCompletedTasks.length > 0 ? latestCompletedTasks.map(({ task, phase, feature, featureName, completedAt }) => (
             <Link
               key={task.id}
               to={phase.featureId ? `/features/${phase.featureId}/phases/${phase.id}/tasks/${task.id}` : "/features"}
               className="surface-card grid gap-1 px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="entity-link--task truncate text-sm font-semibold underline-offset-4 hover:underline">T{formatSequence(task.number)} — {task.title}</span>
+                <div className="flex items-center gap-2">
+                  <EntityBadge type="task" number={task.number} />
+                  <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
+                  <span className="entity-link--task truncate text-sm font-semibold underline-offset-4 hover:underline">{task.title}</span>
+                </div>
                 <StatusBadge status={task.status} />
               </div>
-              <div className="text-xs text-[var(--text-muted)]">F{formatSequence(features.find((entry) => entry.id === phase.featureId)?.number)} {featureName} · P{formatSequence(phase.number)} {phase.title}</div>
+              <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                <ParentBadge type="phase" featureNum={feature?.number} />
+                <span>{featureName} · {phase.title}</span>
+              </div>
               <div className="text-[11px] text-[var(--text-subtle)]">Completed {formatDateTime(completedAt)}</div>
             </Link>
           )) : (

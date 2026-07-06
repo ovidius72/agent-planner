@@ -983,15 +983,21 @@ export class PlanStore {
   // ── Savers ───────────────────────────────────────────────────────────
 
   async updateProject(updater: (p: Project) => Project): Promise<Project> {
-    return atomicUpdateJson(this.projectPath(), ProjectSchema, updater);
+    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, updater);
+    await this.maybeAutoSync();
+    return updated;
   }
 
   async updateFeatures(updater: (f: FeaturesDocument) => FeaturesDocument): Promise<FeaturesDocument> {
-    return atomicUpdateJson(this.featuresPath(), FeaturesDocumentSchema, (current) => this.normalizeFeaturesDocument(updater(current)).doc);
+    const updated = await atomicUpdateJson(this.featuresPath(), FeaturesDocumentSchema, (current) => this.normalizeFeaturesDocument(updater(current)).doc);
+    await this.maybeAutoSync();
+    return updated;
   }
 
   async updateRequirements(updater: (r: RequirementsDocument) => RequirementsDocument): Promise<RequirementsDocument> {
-    return atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater);
+    const updated = await atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater);
+    await this.maybeAutoSync();
+    return updated;
   }
 
   async saveProject(project: Project): Promise<void> {
@@ -1026,7 +1032,9 @@ export class PlanStore {
    *  task_create / phase_update calls on the SAME phaseId so batch operations
    *  don't lose tasks (last-write-wins race condition). */
   async updatePhase(phaseId: string, updater: (phase: Phase) => Phase): Promise<Phase> {
-    return atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (phase) => this.normalizePhaseDocument(updater(phase)).phase);
+    const updated = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (phase) => this.normalizePhaseDocument(updater(phase)).phase);
+    await this.maybeAutoSync();
+    return updated;
   }
 
   async deletePhase(phaseId: string): Promise<void> {

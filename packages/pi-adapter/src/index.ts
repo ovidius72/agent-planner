@@ -848,6 +848,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     autoHandoffTriggered = false;
     previousContextPercent = 0;
     const st = ensureStore(ctx);
+    st.enableAutoSync(true);
 
     // Read any persisted web port (for reuse), but do NOT auto-start here.
     // The two-step gating below decides whether to start the server.
@@ -914,6 +915,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ctx.ui.notify(`Migration failed: ${e instanceof Error ? e.message : String(e)}`, "error");
       }
       await st.ensureStructureOrdering().catch(() => {});
+      // Reconcile derived statuses once on startup: backfills any drift from
+      // manual edits, pre-fix data, or tools that bypassed the rollup.
+      await st.syncStatuses().catch(() => {});
 
       // Decide whether to start the web UI based on persisted prefs or prompt.
       let startWeb = false;
@@ -1033,10 +1037,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (event.toolName === "task_update") {
       const nextStatus = (event.input as { status?: string } | undefined)?.status;
       if (nextStatus === "in-progress" || nextStatus === "done") {
-        return {
-          block: true,
-          reason: `Planner guard: do not use task_update to move a task to ${nextStatus}. Use task_start or task_complete so lifecycle timestamps stay correct.`,
-        };
+        // Allow reopen: if the task is currently 'done', moving it to 'in-progress' is a legal reopen.
+        // To verify, we need to check the current status.
+        const st = ensureStore(ctx);
+        const tasks = await st.loadAllPhases().then(phases => phases.flatMap(p => p.tasks));
+        const task = tasks.find(t => t.id === (event.input as any).taskId);
+        if (nextStatus === "in-progress" && task?.status === "done") {
+          // Legal reopen
+        } else {
+          return {
+            block: true,
+            reason: `Planner guard: do not use task_update to move a task to ${nextStatus}. Use task_start or task_complete so lifecycle timestamps stay correct.`,
+          };
+        }
       }
     }
 
@@ -1057,11 +1070,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (await st.isGuardBypassed().catch(() => false)) return; // user authorized → allow
 
     const focusHint = guard.focusTaskId
-      ? ` Start the task first with task_start (recommended: ${guard.focusTaskId} — ${guard.focusTaskTitle}) or /planner task start ${guard.focusTaskId}.`
-      : " Start the relevant task first with task_start or /planner task start.";
+      ? `\n\n👉 SUGGERIMENTO: Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Eseguilo ora con: \`/planner task start ${guard.focusTaskId}\``
+      : `\n\n👉 SUGGERIMENTO: Scegli un task dal piano e avvialo con \`/planner task start <taskId>\`.`;
     return {
       block: true,
-      reason: `Planner guard: no task is currently in-progress, so ${event.toolName} is blocked. Before writing code, either start a task${focusHint} OR ask the user to authorize a one-time bypass (they can run /planner bypass, or you can call the authorize-bypass tool). After authorization, ${event.toolName} will be allowed for a short window.`,
+      reason: `🚨 LOCK ATTIVO: Nessun task è attualmente 'in-progress'. Per garantire l'integrità del piano e l'accuratezza della dashboard, l'estensione blocca l'accesso a edit/write.${focusHint}\n\nSe l'operazione è un'emergenza o un fix minore, puoi richiedere un bypass (/planner bypass), ma l'uso di task_start è l'unico modo per mantenere il piano sincronizzato.`,
     };
   });
 
@@ -3518,7 +3531,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- If you forget these task status calls, the derived rollup breaks: phase/feature can stay stale, the dashboard shows wrong active work, and resume focus is wrong.",
         "- Before your final answer after implementation work, either call task_complete if the task is finished, or explicitly tell the user the task remains in-progress.",
         "- Use task_complete with force=true only if you have a good reason to skip the checklist check.",
-        "- To reopen a completed task, use task_update.",
+        "- To reopen a completed task, use task_start (recommended) or task_update.",
         handoff?.content ? "Handoff detected at `.planner/HANDOFF.md`. Read it as previous-session context, but validate it against the current planner state, ordering, and dependencies before treating any target as the next task." : "",
         handoff?.content ? "If planner state shows no task/phase in-progress, do NOT present the handoff target as the current focus; present it only as a candidate to validate." : "",
         handoff?.content ? "When the handoff has been fully consumed and work is safely resumed, delete `.planner/HANDOFF.md` using the dedicated handoff delete command/tool." : "",
