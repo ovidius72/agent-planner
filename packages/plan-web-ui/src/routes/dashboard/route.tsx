@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { StatusBadge } from "../../components/ui/status-badge";
+import { EntityBadge, ParentBadge } from "../../components/ui/badges";
 import type { ActiveTaskSummary, RepairReport } from "../../lib/api";
 import { repairPlan, getIntegrity } from "../../lib/api";
 import { featureStatuses, phaseStatuses, taskStatuses } from "../../lib/statuses";
@@ -245,6 +246,7 @@ export function DashboardRoute() {
         .map((task) => ({
           task,
           phase,
+          feature: features.find((f) => f.id === phase.featureId),
           featureName: phase.featureId ? (featureNameById.get(phase.featureId) ?? phase.featureId) : "Unlinked feature",
           completedAt: task.completedAt || task.updatedAt,
         })))
@@ -825,7 +827,10 @@ export function DashboardRoute() {
                             className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
                           />
                         ) : null}
-                        <span className="truncate">F{formatSequence(feature.number)} — {feature.name}</span>
+                        <div className="flex items-center gap-2">
+                          <EntityBadge type="feature" number={feature.number} />
+                          <span className="truncate">{feature.name}</span>
+                        </div>
                       </Link>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -862,7 +867,11 @@ export function DashboardRoute() {
                                       className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--color-status-in-progress)] shadow-[0_0_10px_color-mix(in_srgb,var(--color-status-in-progress)_55%,transparent)] animate-pulse"
                                     />
                                   ) : null}
-                                  <span className="truncate">P{formatSequence(phase.number)} — {phase.title}</span>
+                                  <div className="flex items-center gap-2">
+                                  <EntityBadge type="phase" number={phase.number} />
+                                  <ParentBadge type="phase" featureNum={feature?.number} />
+                                  <span className="truncate">{phase.title}</span>
+                                </div>
                                 </Link>
                               </div>
                               <div className="flex shrink-0 items-center gap-2">
@@ -892,7 +901,11 @@ export function DashboardRoute() {
                                                 className="inline-block h-2 w-2 rounded-full bg-[var(--color-status-in-progress)] animate-pulse"
                                               />
                                             ) : null}
-                                            <span className="entity-link--task underline-offset-4 hover:underline">T{formatSequence(task.number)} — {task.title}</span>
+                                            <div className="flex items-center gap-2">
+                                              <EntityBadge type="task" number={task.number} />
+                                              <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
+                                              <span className="entity-link--task underline-offset-4 hover:underline">{task.title}</span>
+                                            </div>
                                           </span>
                                         </Link>
                                         <div className="flex shrink-0 items-center gap-2">
@@ -959,17 +972,24 @@ export function DashboardRoute() {
         </div>
 
         <div className="grid gap-3">
-          {latestCompletedTasks.length > 0 ? latestCompletedTasks.map(({ task, phase, featureName, completedAt }) => (
+          {latestCompletedTasks.length > 0 ? latestCompletedTasks.map(({ task, phase, feature, featureName, completedAt }) => (
             <Link
               key={task.id}
               to={phase.featureId ? `/features/${phase.featureId}/phases/${phase.id}/tasks/${task.id}` : "/features"}
               className="surface-card grid gap-1 px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
             >
               <div className="flex items-center justify-between gap-3">
-                <span className="entity-link--task truncate text-sm font-semibold underline-offset-4 hover:underline">T{formatSequence(task.number)} — {task.title}</span>
+                <div className="flex items-center gap-2">
+                  <EntityBadge type="task" number={task.number} />
+                  <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
+                  <span className="entity-link--task truncate text-sm font-semibold underline-offset-4 hover:underline">{task.title}</span>
+                </div>
                 <StatusBadge status={task.status} />
               </div>
-              <div className="text-xs text-[var(--text-muted)]">F{formatSequence(features.find((entry) => entry.id === phase.featureId)?.number)} {featureName} · P{formatSequence(phase.number)} {phase.title}</div>
+              <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                <ParentBadge type="phase" featureNum={feature?.number} />
+                <span>{featureName} · {phase.title}</span>
+              </div>
               <div className="text-[11px] text-[var(--text-subtle)]">Completed {formatDateTime(completedAt)}</div>
             </Link>
           )) : (

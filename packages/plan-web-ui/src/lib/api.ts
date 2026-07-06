@@ -112,7 +112,9 @@ export interface ActiveTaskSummary {
   number: number;
   title: string;
   phaseId: string;
+  phaseNumber: number;
   featureId: string;
+  featureNumber: number;
   status: string;
 }
 

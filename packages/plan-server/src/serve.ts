@@ -489,14 +489,16 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   // ── Tasks ─────────────────────────────────────────────────────────
   app.get(route("/tasks/active"), async (c) => {
     const [phases, featuresDoc] = await Promise.all([store.loadAllPhases(), store.loadFeatures()]);
-    // Build phaseId -> featureId lookup from features.phaseIds as a fallback
+    // Build lookups for IDs and numbers
     const phaseToFeature = new Map<string, string>();
+    const featureIdToNum = new Map<string, number>();
     for (const feature of featuresDoc.features) {
+      featureIdToNum.set(feature.id, feature.number);
       for (const phaseId of feature.phaseIds) {
         if (!phaseToFeature.has(phaseId)) phaseToFeature.set(phaseId, feature.id);
       }
     }
-    const activeTasksMap = new Map<string, { id: string; number: number; title: string; phaseId: string; featureId: string; status: string }>();
+    const activeTasksMap = new Map<string, { id: string; number: number; title: string; phaseId: string; phaseNumber: number; featureId: string; featureNumber: number; status: string }>();
     for (const phase of phases) {
       for (const task of phase.tasks) {
         if (task.status === "in-progress") {
@@ -507,7 +509,9 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
             number: task.number,
             title: task.title,
             phaseId: phase.id,
+            phaseNumber: phase.number,
             featureId,
+            featureNumber: featureIdToNum.get(featureId) ?? 0,
             status: task.status,
           });
         }

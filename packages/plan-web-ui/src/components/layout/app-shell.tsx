@@ -3,6 +3,7 @@ import { Link, Outlet, useNavigation } from "react-router-dom";
 import { TopNav } from "./top-nav";
 import { FormattedText } from "../ui/formatted-text";
 import type { ActiveTaskSummary } from "../../lib/api";
+import { EntityBadge, ParentBadge } from "../ui/badges";
 import type { Project } from "../../lib/types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting" | "disconnected";
@@ -36,11 +37,18 @@ function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }
                   to={to}
                   className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
                 >
-                  {task.status === "in-progress" ? (
-                    <span className="mt-[1px] h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--accent)]" aria-label="In progress" />
-                  ) : null}
-                  <span className="min-w-0 truncate font-medium">{task.title}</span>
-                  <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{task.phaseId}</span>
+                  <div className="flex items-center gap-2">
+                    {task.status === "in-progress" ? (
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 rounded-full bg-[var(--accent)]"
+                        aria-label="In progress"
+                      />
+                    ) : null}
+                    <EntityBadge type="task" number={task.number} />
+                    <ParentBadge type="task" phaseNum={task.phaseNumber} featureNum={task.featureNumber} />
+                    <span className="min-w-0 truncate font-medium">{task.title}</span>
+                  </div>
                 </Link>
               );
             })}
