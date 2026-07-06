@@ -185,6 +185,10 @@ textarea:disabled {
   width: 9px;
   height: 9px;
   flex: none;
+  /* Keep the ping halo visible even when the dot sits near a row edge —
+     the ::after scales to ~2.6x and would otherwise be clipped. */
+  margin-inline: 6px;
+  overflow: visible;
 }
 .ap-progress-dot::before {
   content: "";
@@ -201,6 +205,8 @@ textarea:disabled {
   border-radius: 999px;
   background: var(--color-status-in-progress);
   animation: ap-dot-ping 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+  /* Expand symmetrically from the dot center, not from a corner. */
+  transform-origin: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
