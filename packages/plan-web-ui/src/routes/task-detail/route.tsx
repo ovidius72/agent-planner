@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useCallback, useRef } from "react";
 
 function formatDateTime(value: string): string {
@@ -112,53 +112,64 @@ export function TaskDetailRoute() {
         </div>
 
         {task.description ? <FormattedText text={task.description} className="plan-description" /> : null}
-        <details className="group mt-4">
-          <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
-            <span>Notes</span>
+        <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
+          <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Notes</span>
+            </div>
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
           </summary>
-          <div className="mt-2">
+          <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
             {task.notes ? <FormattedText text={task.notes} /> : <p className="text-sm text-[var(--text-muted)] italic">No notes provided.</p>}
           </div>
         </details>
         {task.statusLog && task.statusLog.length > 0 ? (
-          <details className="group mt-4" open>
-            <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
-              <span>Status History ({task.statusLog.length})</span>
+          <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden" open>
+            <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Status History ({task.statusLog.length})</span>
+              </div>
+              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
             </summary>
-            <div className="mt-3 ml-2 border-l-2 border-[var(--border)] pl-4 space-y-3">
-              {[...task.statusLog].reverse().map((entry, idx) => (
-                <div key={entry.id} className="relative">
-                  <div className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--border)] bg-[var(--surface)]" />
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    <span className="text-xs font-bold text-[var(--text-muted)]">
-                      {formatDateTime(entry.date)}
-                    </span>
-                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
-                      entry.toStatus === "done" ? "bg-[color:color-mix(in_srgb,var(--color-status-done)_16%,transparent)] text-[var(--color-status-done)]"
-                      : entry.toStatus === "blocked" ? "bg-[color:color-mix(in_srgb,var(--color-status-blocked)_16%,transparent)] text-[var(--color-status-blocked)]"
-                      : entry.toStatus === "canceled" ? "bg-[color:color-mix(in_srgb,var(--color-status-canceled)_16%,transparent)] text-[var(--color-status-canceled)]"
-                      : entry.toStatus === "in-progress" ? "bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_16%,transparent)] text-[var(--color-status-in-progress)]"
-                      : "bg-[color:color-mix(in_srgb,var(--color-status-planned)_16%,transparent)] text-[var(--color-status-planned)]"
-                    }`}>
-                      {entry.fromStatus} → {entry.toStatus}
-                    </span>
+            <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
+              <div className="mt-3 ml-2 border-l-2 border-[var(--border)] pl-4 space-y-3">
+                {[...task.statusLog].reverse().map((entry, idx) => (
+                  <div key={entry.id} className="relative">
+                    <div className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--border)] bg-[var(--surface)]" />
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-xs font-bold text-[var(--text-muted)]">
+                        {formatDateTime(entry.date)}
+                      </span>
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                        entry.toStatus === "done" ? "bg-[color:color-mix(in_srgb,var(--color-status-done)_16%,transparent)] text-[var(--color-status-done)]"
+                        : entry.toStatus === "blocked" ? "bg-[color:color-mix(in_srgb,var(--color-status-blocked)_16%,transparent)] text-[var(--color-status-blocked)]"
+                        : entry.toStatus === "canceled" ? "bg-[color:color-mix(in_srgb,var(--color-status-canceled)_16%,transparent)] text-[var(--color-status-canceled)]"
+                        : entry.toStatus === "in-progress" ? "bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_16%,transparent)] text-[var(--color-status-in-progress)]"
+                        : "bg-[color:color-mix(in_srgb,var(--color-status-planned)_16%,transparent)] text-[var(--color-status-planned)]"
+                      }`}>
+                        {entry.fromStatus} → {entry.toStatus}
+                      </span>
+                    </div>
+                    {entry.title && entry.title !== `${entry.fromStatus} → ${entry.toStatus}` ? (
+                      <p className="mt-1 text-sm font-medium text-[var(--text)]">{entry.title}</p>
+                    ) : null}
+                    {entry.description ? (
+                      <p className="mt-0.5 text-sm text-[var(--text-muted)]">{entry.description}</p>
+                    ) : null}
                   </div>
-                  {entry.title && entry.title !== `${entry.fromStatus} → ${entry.toStatus}` ? (
-                    <p className="mt-1 text-sm font-medium text-[var(--text)]">{entry.title}</p>
-                  ) : null}
-                  {entry.description ? (
-                    <p className="mt-0.5 text-sm text-[var(--text-muted)]">{entry.description}</p>
-                  ) : null}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </details>
         ) : (
-          <details className="group mt-4">
-            <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
-              <span>Status History</span>
+          <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
+            <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Status History</span>
+              </div>
+              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
             </summary>
-            <div className="mt-2">
+            <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
               <p className="text-sm text-[var(--text-muted)] italic">No status history available.</p>
             </div>
           </details>
