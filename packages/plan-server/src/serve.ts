@@ -6,8 +6,8 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug, withFeatureLock } from "@agent-plan/core";
-import type { Feature, Phase, Project, Requirement, Task } from "@agent-plan/core/schema";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
 // ─── Watcher ────────────────────────────────────────────────────────────
@@ -501,6 +501,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       status: initialStatus,
       description: body.description ?? "",
       notes: "",
+      statusLog: [],
       decisions: [],
       acceptedDecisions: [],
       checklist: [],
@@ -578,13 +579,20 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   app.put(route("/tasks/:id"), async (c) => {
     const taskId = c.req.param("id");
-    const body = await c.req.json<{ phaseId: string } & Partial<Task>>();
+    const body = await c.req.json<{ phaseId: string; motivation?: string } & Partial<Task>>();
     if (!body.phaseId) return c.json({ error: "phaseId required" }, 400);
 
     const phase = await store.loadPhase(body.phaseId).catch(() => null);
     if (!phase) return c.json({ error: "phase not found" }, 404);
     const existing = phase.tasks.find((t) => t.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
+
+    // Validate motivation requirement for status transitions.
+    if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status)) {
+      if (!body.motivation || !body.motivation.trim()) {
+        return c.json({ error: `Status transition "${existing.status} → ${body.status}" requires a motivation. Provide the "motivation" field with a detailed explanation.` }, 400);
+      }
+    }
 
     if (entersGovernedState(existing.status, body.status) && phase.featureId) {
       const features = await store.loadFeatures();
@@ -612,6 +620,19 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
     if (body.status) {
       applyTaskLifecycleDates(updated, body.status, now);
+    }
+
+    // Record status change in the incremental statusLog.
+    if (body.status && body.status !== existing.status) {
+      const entry: StatusLogEntry = {
+        id: createTaskId(),
+        date: now,
+        fromStatus: existing.status,
+        toStatus: body.status,
+        title: body.motivation?.split("\n")[0]?.trim() || `${existing.status} → ${body.status}`,
+        description: body.motivation?.trim() || "",
+      };
+      updated.statusLog = [...(existing.statusLog ?? []), entry];
     }
 
     const tIdx = phase.tasks.findIndex((t) => t.id === taskId);

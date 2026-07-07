@@ -11,9 +11,9 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
-import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, Task } from "@agent-plan/core/schema";
+import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -1036,19 +1036,23 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     if (event.toolName === "task_update") {
       const nextStatus = (event.input as { status?: string } | undefined)?.status;
-      if (nextStatus === "in-progress" || nextStatus === "done") {
-        // Allow reopen: if the task is currently 'done', moving it to 'in-progress' is a legal reopen.
-        // To verify, we need to check the current status.
+      const motivation = (event.input as { motivation?: string } | undefined)?.motivation;
+      if (nextStatus) {
         const st = ensureStore(ctx);
         const tasks = await st.loadAllPhases().then(phases => phases.flatMap(p => p.tasks));
         const task = tasks.find(t => t.id === (event.input as any).taskId);
-        if (nextStatus === "in-progress" && task?.status === "done") {
-          // Legal reopen
-        } else {
-          return {
-            block: true,
-            reason: `Planner guard: do not use task_update to move a task to ${nextStatus}. Use task_start or task_complete so lifecycle timestamps stay correct.`,
-          };
+        if (task) {
+          // Allow legal reopen: done → in-progress via task_update.
+          if (nextStatus === "in-progress" && task.status === "done") {
+            // Legal reopen — no motivation needed.
+          } else if (needsMotivation(task.status, nextStatus)) {
+            if (!motivation || !motivation.trim()) {
+              return {
+                block: true,
+                reason: `Status transition "${task.status} → ${nextStatus}" requires a motivation. Add a "motivation" parameter with a detailed explanation of why this change is needed.`,
+              };
+            }
+          }
         }
       }
     }
@@ -1932,6 +1936,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           title: title.trim(), status: "planned",
           description: "",
           notes: "",
+          statusLog: [],
           decisions: [],
           acceptedDecisions: [],
           checklist: [], subtasks: [],
@@ -2088,11 +2093,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
         }
-        if (task.status === "done") {
-          ctx.ui.notify(`Task "${task.title}" is already done. Use /planner task update to reopen.`, "warning");
-          return;
-        }
         const now = nowISO();
+        // Record status change in the incremental statusLog.
+        const prevStatus = task.status;
+        const entry: StatusLogEntry = {
+          id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-in-progress`),
+          date: now,
+          fromStatus: task.status as any,
+          toStatus: "in-progress" as any,
+          title: task.status === "done" ? "Reopened" : `→ in-progress`,
+          description: task.status === "done" ? "Task reopened from done status." : "",
+        };
+        task.statusLog = [...(task.statusLog ?? []), entry];
         applyTaskLifecycleDates(task, "in-progress", now);
         task.updatedAt = now;
         phase!.updatedAt = now;
@@ -2129,6 +2141,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           }
         }
         const now = nowISO();
+        // Record status change in the incremental statusLog.
+        const entry: StatusLogEntry = {
+          id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-done`),
+          date: now,
+          fromStatus: task.status as any,
+          toStatus: "done" as any,
+          title: `→ done`,
+          description: "",
+        };
+        task.statusLog = [...(task.statusLog ?? []), entry];
         applyTaskLifecycleDates(task, "done", now);
         task.updatedAt = now;
         phase!.updatedAt = now;
@@ -3148,6 +3170,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         status: initialStatus,
         description: params.description ?? "",
         notes: "",
+        statusLog: [],
         decisions: [],
         acceptedDecisions: [],
         checklist: [], subtasks: [],
@@ -3176,9 +3199,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ID" }),
       title: Type.Optional(Type.String({ description: "New title" })),
-      status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled" })),
+      status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled|rejected|deferred|waiting" })),
       description: Type.Optional(Type.String({ description: "New description" })),
       notes: Type.Optional(Type.String({ description: "New implementation notes" })),
+      motivation: Type.Optional(Type.String({ description: "Motivation for status change. REQUIRED when changing to blocked, canceled, rejected, deferred, waiting, or back to planned from another status." })),
       decisions: Type.Optional(Type.Array(Type.String(), { description: "Replace decisions list" })),
       acceptedDecisions: Type.Optional(Type.Array(Type.Object({
         id: Type.String(),
@@ -3215,7 +3239,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
               checked: false,
             }));
           }
-          if (params.status !== undefined) applyTaskLifecycleDates(task, params.status as Task["status"], now);
+          if (params.status !== undefined) {
+            if (params.status !== task.status) {
+              const entry: StatusLogEntry = {
+                id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-${params.status}`),
+                date: now,
+                fromStatus: task.status as any,
+                toStatus: params.status as any,
+                title: params.motivation?.split("\n")[0]?.trim() || `${task.status} → ${params.status}`,
+                description: params.motivation?.trim() || "",
+              };
+              task.statusLog = [...(task.statusLog ?? []), entry];
+            }
+            applyTaskLifecycleDates(task, params.status as Task["status"], now);
+          }
           task.updatedAt = now;
           phase.updatedAt = now;
           updatedTask = task;

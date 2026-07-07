@@ -63,7 +63,37 @@ Esempi:
 - `auth-core-task-001-db-schema`
 - `auth-core-task-002-login-flow`
 
-### 7. Stack deciso finora
+### 7. Task status changes e motivazioni
+
+Ogni cambio di stato di un task deve essere documentato nel `statusLog` (array incrementale nel task).
+
+#### Motivazione obbligatoria
+La motivazione è **obbligatoria** quando lo stato nuovo è:
+- `blocked`, `canceled`, `rejected`, `deferred`, `waiting`
+- `planned` (se lo stato precedente NON era `planned`)
+
+La motivazione **non è necessaria** quando lo stato nuovo è:
+- `done`
+- `in-progress` da `planned` (avvio normale)
+
+#### Formato della nota (StatusLogEntry)
+Ogni entry nel `statusLog` ha:
+- `id`: identificativo univoco
+- `date`: timestamp ISO
+- `fromStatus`: stato precedente
+- `toStatus`: stato nuovo
+- `title`: prima riga della motivazione (o auto-generata: "fromStatus → toStatus")
+- `description`: spiegazione esaustiva del perché del cambio
+
+Le note sono **incrementali** — non modificano o eliminano le precedenti. La nota più recente è sempre quella di riferimento.
+
+#### Regola per gli agenti
+Quando cambi lo stato di un task:
+1. Usa `task_update` con il parametro `motivation` (obbligatorio per stati restrittivi)
+2. Scrivi una motivazione esaustiva: chiunque torni a lavorare sul task deve capire cosa sia successo
+3. Non usare `task_start` o `task_complete` per cambi di stato non lifecycle (usa `task_update`)
+
+### 8. Stack deciso finora
 Direzione corrente:
 - frontend: React + TypeScript
 - backend locale: Hono su Node
@@ -71,7 +101,7 @@ Direzione corrente:
 - sync live: SSE inizialmente
 - architettura: platform core + adapter Pi
 
-### 8. Comunicazione e Riferimenti
+### 9. Comunicazione e Riferimenti
 L'agente DEVE evitare di fare riferimento a feature, fasi o task utilizzando i loro UUID tecnici (es. `bd6ed366`). 
 I riferimenti devono essere sempre umani, univoci e compositi, seguendo il formato:
 - Feature: `F001 - Nome`
@@ -81,7 +111,7 @@ I riferimenti devono essere sempre umani, univoci e compositi, seguendo il forma
 Esempio CORRETTO: "Procedo con il task T003(P001/F001) - Implementazione API"
 Esempio ERRATO: "Procedo con il task bd6ed366"
 
-### 9. Fonte dei requisiti correnti
+### 10. Fonte dei requisiti correnti
 Documenti da leggere prima di modificare architettura o processo:
 - `PROJECT.md`
 - `ROADMAP.md`

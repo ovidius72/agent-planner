@@ -46,6 +46,15 @@ export interface ChecklistItem {
   checked: boolean;
 }
 
+export interface StatusLogEntry {
+  id: string;
+  date: string;
+  fromStatus: TaskStatus;
+  toStatus: TaskStatus;
+  title: string;
+  description: string;
+}
+
 export interface Task {
   id: string;
   phaseId: string;
@@ -55,6 +64,7 @@ export interface Task {
   status: TaskStatus;
   description: string;
   notes: string;
+  statusLog: StatusLogEntry[];
   decisions: string[];
   acceptedDecisions: AcceptedDecision[];
   checklist: ChecklistItem[];

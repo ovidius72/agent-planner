@@ -4,9 +4,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
-import type { Feature, Phase, Task } from "@agent-plan/core/schema";
+import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
 const PHASE_STATUS_VALUES = ["draft", "discovery", ...STATUS_VALUES] as const;
@@ -495,6 +495,7 @@ server.registerTool("planner-task-add", {
     status: "planned",
     description: description?.trim() ?? "",
     notes: "",
+    statusLog: [],
     decisions: [],
     acceptedDecisions: [],
     checklist: (checklist ?? []).map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), title: item, checked: false })),
@@ -550,25 +551,49 @@ server.registerTool("planner-task-discuss", {
 });
 
 server.registerTool("planner-task-update", {
-  description: "Update task fields.",
+  description: "Update task fields. A motivation is REQUIRED when changing to blocked, canceled, deferred, rejected, waiting, or back to planned from another status.",
   inputSchema: {
     task: z.string().min(1),
     title: z.string().optional(),
     status: z.enum(STATUS_VALUES).optional(),
     description: z.string().optional(),
+    motivation: z.string().optional(),
   },
-}, async ({ task: ref, title, status, description }) => {
+}, async ({ task: ref, title, status, description, motivation }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
+
+  // Validate motivation requirement for status transitions.
+  if (status !== undefined && needsMotivation(found.task.status, status)) {
+    if (!motivation || !motivation.trim()) {
+      return text(
+        `Status transition \"${found.task.status} → ${status}\" requires a motivation. ` +
+        `Provide the \"motivation\" parameter with a detailed explanation of why this change is needed.`
+      );
+    }
+  }
+
   let updatedTask: Task | undefined;
   const timestamp = nowISO();
   await st.updatePhase(found.phase.id, (phase) => {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     if (title !== undefined) task.title = title.trim();
-    if (status !== undefined) applyTaskLifecycleDates(task, status, timestamp);
     if (description !== undefined) task.description = description.trim();
+    if (status !== undefined && status !== task.status) {
+      // Record status change in the incremental statusLog.
+      const entry: StatusLogEntry = {
+        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-${status}`),
+        date: timestamp,
+        fromStatus: task.status as any,
+        toStatus: status as any,
+        title: motivation?.split("\n")[0]?.trim() || `${task.status} → ${status}`,
+        description: motivation?.trim() || "",
+      };
+      task.statusLog = [...(task.statusLog ?? []), entry];
+      applyTaskLifecycleDates(task, status, timestamp);
+    }
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
     updatedTask = task;
@@ -608,6 +633,17 @@ server.registerTool("planner-task-start", {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     applyTaskLifecycleDates(task, "in-progress", timestamp);
+    if (task.status !== "in-progress") {
+      const entry: StatusLogEntry = {
+        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-in-progress`),
+        date: timestamp,
+        fromStatus: task.status as any,
+        toStatus: "in-progress" as any,
+        title: task.status === "done" ? "Reopened" : `→ in-progress`,
+        description: task.status === "done" ? "Task reopened from done status." : "",
+      };
+      task.statusLog = [...(task.statusLog ?? []), entry];
+    }
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
     updatedTask = task;
@@ -635,6 +671,17 @@ server.registerTool("planner-task-complete", {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     applyTaskLifecycleDates(task, "done", timestamp);
+    if (task.status !== "done") {
+      const entry: StatusLogEntry = {
+        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-done`),
+        date: timestamp,
+        fromStatus: task.status as any,
+        toStatus: "done" as any,
+        title: `→ done`,
+        description: "",
+      };
+      task.statusLog = [...(task.statusLog ?? []), entry];
+    }
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
     updatedTask = task;
