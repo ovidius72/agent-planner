@@ -112,16 +112,14 @@ export function TaskDetailRoute() {
         </div>
 
         {task.description ? <FormattedText text={task.description} className="plan-description" /> : null}
-        {task.notes ? (
-          <details className="group mt-4">
-            <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
-              <span>Notes</span>
-            </summary>
-            <div className="mt-2">
-              <FormattedText text={task.notes} />
-            </div>
-          </details>
-        ) : null}
+        <details className="group mt-4">
+          <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
+            <span>Notes</span>
+          </summary>
+          <div className="mt-2">
+            {task.notes ? <FormattedText text={task.notes} /> : <p className="text-sm text-[var(--text-muted)] italic">No notes provided.</p>}
+          </div>
+        </details>
         {task.statusLog && task.statusLog.length > 0 ? (
           <details className="group mt-4" open>
             <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
@@ -155,7 +153,16 @@ export function TaskDetailRoute() {
               ))}
             </div>
           </details>
-        ) : null}
+        ) : (
+          <details className="group mt-4">
+            <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
+              <span>Status History</span>
+            </summary>
+            <div className="mt-2">
+              <p className="text-sm text-[var(--text-muted)] italic">No status history available.</p>
+            </div>
+          </details>
+        )}
         {taskDecisions.length > 0 ? (
           <details className="group mt-4">
             <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
