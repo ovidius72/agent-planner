@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PlanStore, ExportService, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
@@ -625,9 +626,20 @@ server.registerTool("planner-task-start", {
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
   const st = await requireStore();
+
+  // Hygiene Gate: block starting work if a pending handoff exists.
+  if (existsSync(join(st.root, "HANDOFF.md"))) {
+    return text(
+      `🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. ` +
+      `You MUST read and delete it before you can officially start a task. ` +
+      `This is a non-negotiable rule in AGENTS.md.`
+    );
+  }
+
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
   const timestamp = nowISO();
+
   let updatedTask: Task | undefined;
   await st.updatePhase(found.phase.id, (phase) => {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);

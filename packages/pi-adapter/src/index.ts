@@ -2064,11 +2064,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (title?.trim()) task.title = title.trim();
         const now = nowISO();
         if (statusInput?.trim()) {
+          const normalizedStatus = statusInput.trim();
           const valid = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
-          if (!valid.includes(statusInput.trim())) {
+          if (!valid.includes(normalizedStatus)) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
-          applyTaskLifecycleDates(task, statusInput.trim() as Task["status"], now);
+          if (normalizedStatus === "in-progress" && existsSync(join(st.root, "HANDOFF.md"))) {
+            ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can move a task to in-progress.", "error");
+            return;
+          }
+          applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
         if (desc?.trim()) task.description = desc.trim();
         task.updatedAt = now;
@@ -2095,6 +2100,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
         if (task.status === "in-progress") {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
+          return;
+        }
+        // Hygiene Gate: block starting work if a pending handoff exists.
+        if (existsSync(join(st.root, "HANDOFF.md"))) {
+          ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can officially start a task.", "error");
           return;
         }
         const now = nowISO();
