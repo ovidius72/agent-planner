@@ -899,6 +899,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
     plannerSessionEnabled = enablePlanner;
 
+    // Proactive check for leftover handoff files.
+    if (plannerSessionEnabled) {
+      const handoffPath = join(st.root, "HANDOFF.md");
+      if (existsSync(handoffPath)) {
+        ctx.ui.notify("🚨 HANDOFF DETECTED: Read and delete .planner/HANDOFF.md immediately to avoid state conflicts.", "warning");
+      }
+    }
+
     // If the user declined enablement, skip EVERYTHING (no web prompt, no migration, no summary).
     if (exists && !enablePlanner) {
       startupResumePromptPending = false;
@@ -956,7 +964,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
 
       const url = (server as ServeHandle | null)?.url ?? "Starting server...";
-      ctx.ui.notify(`Planner attivato. Dashboard: ${url}\nSto analizzando lo stato del progetto e preparando il summary di ripresa…`, "info");
+      ctx.ui.notify(`Planner enabled. Dashboard: ${url}\nAnalyzing project state and preparing resume summary...`, "info");
       await ensureProjectLanguagePreferences(st).catch(() => null);
       await maybeHealStatuses(st).catch(() => {});
       // Background cleanup of orphan .bak/.tmp.* files (non-blocking)
@@ -1073,7 +1081,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       ? `Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Avvialo con: \`/planner task start ${guard.focusTaskId}\``
       : `Scegli un task dal piano e avvialo con \`/planner task start <taskId>\`.`;
     
-    ctx.ui.notify(`⚠️  NESSUN TASK ATTIVO: Stai modificando file senza un task in-progress. Ricordati di aggiornare il piano per mantenere l'integrità della dashboard. ${focusHint}`, "warning");
+    ctx.ui.notify(`⚠️  NO ACTIVE TASK: You are editing files without an in-progress task. Remember to update the plan to maintain dashboard integrity. ${focusHint}`, "warning");
     return; // Allow the tool to proceed
 
   });

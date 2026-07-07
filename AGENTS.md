@@ -17,13 +17,14 @@ File di riferimento iniziale:
 - `CHECKLIST.md`
 
 ### 2. Rispetta rigorosamente il Lifecycle dei Task
-L'integrità del piano e la precisione della dashboard dipendono dalla sincronizzazione tra l'attività dell'agente e lo stato dei task. Sebbene l'estensione non blocchi più l'accesso ai file (edit/write), l'aggiornamento del piano rimane un obbligo operativo.
+L'integrità del piano e la precisione della dashboard dipendono dalla sincronizzazione **immediata** tra l'attività dell'agente e lo stato dei task. L'aggiornamento del piano non è un'attività di "chiusura sessione", ma un prerequisito operativo.
 
 Regole operative:
-- **Sempre `task_start`**: prima di toccare una sola riga di codice, l'agente DEVE chiamare `task_start`. È l'attivazione del contesto di lavoro che rende il piano utile e navigabile.
-- **Sempre `task_complete`**: al termine di ogni deliverable, l'agente DEVE chiamare `task_complete`. Senza questo, la dashboard e il resume rimarranno in uno stato incoerente.
+- **Sempre `task_start`**: prima di toccare una sola riga di codice, l'agente DEVE chiamare `task_start`. È l'attivazione del contesto di lavoro.
+- **Sempre `task_complete`**: al termine di ogni deliverable, l'agente DEVE chiamare `task_complete`.
+- **Sincronizzazione Istantanea**: i cambi di stato (start/complete/block) devono avvenire **nel momento esatto** in cui la transizione avviene. È vietato accumulare aggiornamenti di stato per l'ultima fase della sessione.
 - **Sincronizzazione costante**: se l'estensione segnala "Nessun task attivo", l'agente deve regolarizzare immediatamente la situazione avviando il task corretto.
-- **Stato = Verità**: se un task è `in-progress`, l'agente deve effettivamente starci lavorando. Se smette, deve chiuderlo o bloccarlo (giustificando il blocco nello `statusLog`).
+- **Stato = Verità**: se un task è `in-progress`, l'agente deve effettivamente starci lavorando. Se smette, deve chiuderlo o bloccarlo (giustificando l'azione nello `statusLog`).
 
 ### 2. Non usare il markdown come source of truth del piano
 Il piano di progetto deve avere come fonte primaria dati strutturati in `.planner/`.
@@ -116,6 +117,21 @@ Documenti da leggere prima di modificare architettura o processo:
 - `PROJECT.md`
 - `ROADMAP.md`
 - `CHECKLIST.md`
+
+### 11. Igiene Operativa (Zero Tolerance)
+
+L'operatività dell'agente deve essere pulita e senza residui. Ogni omissione procedurale è considerata un errore di esecuzione.
+
+#### Gestione Handoff
+L'handoff è un meccanismo di passaggio di testimone, non un archivio di note.
+- **Cancellazione Immediata**: l'agente DEVE cancellare `.planner/HANDOFF.md` immediatamente dopo averlo letto e processato. 
+- **Divieto di Persistenza**: lasciare un file di handoff nel repository dopo l'avvio della sessione è una violazione del protocollo.
+
+#### Disciplina degli Aggiornamenti
+L'agente non deve attendere promemoria dall'utente o dall'estensione per aggiornare il piano.
+- **Attivazione Proattiva**: l'agente deve avviare il task (`task_start`) PRIMA di iniziare a pensare all'implementazione.
+- **Chiusura Immediata**: il task va completato (`task_complete`) NON DOPO l'invio del codice, ma COME PARTE della consegna del deliverable.
+- **Motivazione Esaustiva**: ogni blocco deve essere motivato in modo che un terzo possa comprendere l'impedimento senza dover leggere l'intera cronologia della chat.
 
 ## Comportamento atteso dagli agenti
 Quando inizi a lavorare:
