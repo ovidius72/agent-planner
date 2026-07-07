@@ -17,13 +17,13 @@ File di riferimento iniziale:
 - `CHECKLIST.md`
 
 ### 2. Rispetta rigorosamente il Lifecycle dei Task
-L'integrità del piano dipende dalla sincronizzazione tra l'attività dell'agente e lo stato dei task. I lock di scrittura (edit/write) sono l'unico modo per garantire che l'agente non lavori "al di fuori" del piano.
+L'integrità del piano e la precisione della dashboard dipendono dalla sincronizzazione tra l'attività dell'agente e lo stato dei task. Sebbene l'estensione non blocchi più l'accesso ai file (edit/write), l'aggiornamento del piano rimane un obbligo operativo.
 
 Regole operative:
-- **Sempre `task_start`**: prima di toccare una sola riga di codice, l'agente DEVE chiamare `task_start`. Non è un optional, è l'attivazione del contesto di lavoro.
+- **Sempre `task_start`**: prima di toccare una sola riga di codice, l'agente DEVE chiamare `task_start`. È l'attivazione del contesto di lavoro che rende il piano utile e navigabile.
 - **Sempre `task_complete`**: al termine di ogni deliverable, l'agente DEVE chiamare `task_complete`. Senza questo, la dashboard e il resume rimarranno in uno stato incoerente.
-- **No bypass arbitrari**: il bypass del lock deve essere l'ultima risorsa (es. fix rapidi di typo). Per ogni modifica sostanziale, l'unico modo corretto è l'attivazione del task.
-- **Stato = Verità**: se un task è `in-progress`, l'agente deve effettivamente starci lavorando. Se smette, deve chiuderlo o bloccarlo.
+- **Sincronizzazione costante**: se l'estensione segnala "Nessun task attivo", l'agente deve regolarizzare immediatamente la situazione avviando il task corretto.
+- **Stato = Verità**: se un task è `in-progress`, l'agente deve effettivamente starci lavorando. Se smette, deve chiuderlo o bloccarlo (giustificando il blocco nello `statusLog`).
 
 ### 2. Non usare il markdown come source of truth del piano
 Il piano di progetto deve avere come fonte primaria dati strutturati in `.planner/`.

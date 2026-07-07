@@ -1057,11 +1057,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
     }
 
-    // Guard only the code-writing tools (edit/write). bash stays free so that
-    // git pull, build, test, ls, etc. always work. The block is not a dead
-    // wall: the agent can ask the user to authorize a one-time bypass via
-    // /planner bypass (or the authorize tool), after which edit/write proceeds
-    // even with no task in-progress.
+    // Guard the code-writing tools (edit/write). bash stays free so that
+    // git pull, build, test, ls, etc. always work.
     if (event.toolName !== "edit" && event.toolName !== "write") return;
 
     const st = loadStore(ctx);
@@ -1070,16 +1067,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     const guard = await getPlannerExecutionGuard(st).catch(() => null);
     if (!guard || guard.totalTasks === 0) return; // nothing to enforce yet
-    if (guard.inProgressTaskIds.length > 0) return; // a task is open → allow
-    if (await st.isGuardBypassed().catch(() => false)) return; // user authorized → allow
+    if (guard.inProgressTaskIds.length > 0) return; // a task is open → we're good
 
     const focusHint = guard.focusTaskId
-      ? `\n\n👉 SUGGERIMENTO: Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Eseguilo ora con: \`/planner task start ${guard.focusTaskId}\``
-      : `\n\n👉 SUGGERIMENTO: Scegli un task dal piano e avvialo con \`/planner task start <taskId>\`.`;
-    return {
-      block: true,
-      reason: `🚨 LOCK ATTIVO: Nessun task è attualmente 'in-progress'. Per garantire l'integrità del piano e l'accuratezza della dashboard, l'estensione blocca l'accesso a edit/write.${focusHint}\n\nSe l'operazione è un'emergenza o un fix minore, puoi richiedere un bypass (/planner bypass), ma l'uso di task_start è l'unico modo per mantenere il piano sincronizzato.`,
-    };
+      ? `Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Avvialo con: \`/planner task start ${guard.focusTaskId}\``
+      : `Scegli un task dal piano e avvialo con \`/planner task start <taskId>\`.`;
+    
+    ctx.ui.notify(`⚠️  NESSUN TASK ATTIVO: Stai modificando file senza un task in-progress. Ricordati di aggiornare il piano per mantenere l'integrità della dashboard. ${focusHint}`, "warning");
+    return; // Allow the tool to proceed
+
   });
 
   // Reset per-turn flags at the start of each turn.
