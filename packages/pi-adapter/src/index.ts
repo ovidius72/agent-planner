@@ -3516,6 +3516,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // Build/refresh the context block (slow path: cache miss).
       const contextBlock = [
         `[Plan Context — ${project.name}]`,
+        // ── MANDATORY OPERATIONAL PROTOCOL (top priority, non-negotiable) ──
+        "",
+        "═══════════════════════════════════════════════════════════════",
+        "MANDATORY OPERATIONAL PROTOCOL (violation = execution failure):",
+        "═══════════════════════════════════════════════════════════════",
+        "1. HANDOFF HYGIENE: If .planner/HANDOFF.md exists, READ and DELETE it IMMEDIATELY using the handoff delete tool. Do NOT summarize first. Do NOT ask for confirmation. Do NOT defer cleanup. DELETE \u2192 THEN work.",
+        "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'.",
+        "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
+        "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
+        "5. NO SHORTCUTS: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.",
+        "═══════════════════════════════════════════════════════════════",
+        "",
+        // ── Project details ──
         `Goal: ${project.goal || "(not set)"}`,
         project.description ? `Description: ${project.description}` : "",
         `Stack: ${[...project.technologies, ...project.tools].join(", ") || "(not set)"}`,

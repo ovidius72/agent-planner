@@ -112,26 +112,30 @@ export function TaskDetailRoute() {
         </div>
 
         {task.description ? <FormattedText text={task.description} className="plan-description" /> : null}
-        <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
-          <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Notes</span>
-            </div>
-            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
-          </summary>
-          <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
-            {task.notes ? <FormattedText text={task.notes} /> : <p className="text-sm text-[var(--text-muted)] italic">No notes provided.</p>}
-          </div>
-        </details>
-        {task.statusLog && task.statusLog.length > 0 ? (
-          <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden" open>
+        {task.notes ? (
+          <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
             <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
               <div className="flex items-center gap-2">
-                <span className="text-sm">Status History ({task.statusLog.length})</span>
+                <span className="text-sm">Notes</span>
               </div>
               <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
             </summary>
             <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
+              <FormattedText text={task.notes} />
+            </div>
+          </details>
+        ) : (
+          <p className="mt-4 text-sm text-[var(--text-muted)]">No notes</p>
+        )}
+        <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden" open={task.statusLog && task.statusLog.length > 0}>
+          <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Status History ({task.statusLog?.length ?? 0})</span>
+            </div>
+            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
+          </summary>
+          <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
+            {task.statusLog && task.statusLog.length > 0 ? (
               <div className="mt-3 ml-2 border-l-2 border-[var(--border)] pl-4 space-y-3">
                 {[...task.statusLog].reverse().map((entry, idx) => (
                   <div key={entry.id} className="relative">
@@ -159,21 +163,11 @@ export function TaskDetailRoute() {
                   </div>
                 ))}
               </div>
-            </div>
-          </details>
-        ) : (
-          <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
-            <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Status History</span>
-              </div>
-              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
-            </summary>
-            <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
-              <p className="text-sm text-[var(--text-muted)] italic">No status history available.</p>
-            </div>
-          </details>
-        )}
+            ) : (
+              <p className="text-sm text-[var(--text-muted)] italic">No status changes recorded.</p>
+            )}
+          </div>
+        </details>
         {taskDecisions.length > 0 ? (
           <details className="group mt-4">
             <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
