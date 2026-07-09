@@ -104,7 +104,9 @@ The planner should be a living traceable source of truth, not a static index of 
 - Tool descriptions and parameter descriptions all updated to guide the agent toward rich, traceable context.
 
 **Status:** Implemented.
-Still open from original checklist. Requirements CRUD is in the server but no UI page.
+
+### [P2-3] Web UI: requirements page
+Requirements CRUD is in the server but no UI page.
 **Status:** Not started.
 
 ### [P2-4] README + usage guide maintenance

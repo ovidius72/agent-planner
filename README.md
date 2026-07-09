@@ -132,21 +132,62 @@ Claude Code receives two layers:
 1. **MCP tools** named `planner-*`.
 2. A generated slash command `/planner ...` that routes natural command text to those tools.
 
-Examples:
+### Core
 
-```text
-/planner init
-/planner show
-/planner reload
-/planner feature list
-/planner feature add Auth flow
-/planner phase add Login API
-/planner task start <task-id>
-/planner task complete <task-id>
-/planner handoff prepare
-```
+- `/planner init` — Initialize planner
+- `/planner show` — Show planner overview
+- `/planner repair` — Repair planner integrity
+- `/planner load` — Re-enable planner
+- `/planner disable` — Disable planner for this session
 
-The slash command is a prompt router. It tells Claude Code which MCP tool to call. It is not the same mechanism as Pi's native command implementation.
+### Project
+
+- `/planner project discuss` — Run project discovery
+- `/planner project language` — Set persistent language preferences
+
+### Features
+
+- `/planner feature list` — List features
+- `/planner feature add <name>` — Create a feature
+- `/planner feature show <id>` — Show a feature
+- `/planner feature update <id>` — Update a feature
+- `/planner feature delete <id>` — Delete a feature
+
+### Phases
+
+- `/planner phase add <title>` — Add a phase
+- `/planner phase show <id>` — Show a phase
+- `/planner phase discuss <id>` — Discuss a phase
+- `/planner phase update <id>` — Update a phase
+- `/planner phase delete <id>` — Delete a phase
+
+### Tasks
+
+- `/planner task add <title>` — Add a task
+- `/planner task show <id>` — Show a task
+- `/planner task discuss <id>` — Discuss a task
+- `/planner task update <id>` — Update a task
+- `/planner task delete <id>` — Delete a task
+- `/planner task start <id>` — Mark a task in-progress
+- `/planner task complete <id>` — Mark a task done
+
+### Handoff
+
+- `/planner handoff prepare` — Tell the agent to create/update the handoff
+- `/planner handoff show` — Show the current handoff
+- `/planner handoff write` — Write handoff from planner data
+- `/planner handoff clear` — Delete the current handoff
+
+### Export & Web
+
+- `/planner export` — Export plan summary as Markdown
+- `/planner export-full` — Export full detailed plan as Markdown
+- `/planner web start|stop|status` — Manage the web UI
+
+### Guard bypass
+
+- `/planner bypass` — Authorize edit/write without a task (15 min)
+- `/planner clear-bypass` — Revoke the bypass
 
 ---
 
@@ -360,27 +401,67 @@ Pi exposes Agent Plan as one grouped command:
 /planner
 ```
 
-Examples:
+### Core
 
-```text
-/planner init
-/planner show
-/planner load
-/planner disable
-/planner feature list
-/planner feature add
-/planner phase add
-/planner phase discuss
-/planner task start
-/planner task complete
-/planner bypass
-/planner clear-bypass
-/planner handoff prepare
-/planner export
-/planner export-full
-/planner web start
-/planner web status
-```
+- `/planner init` — Initialize planner in this project
+- `/planner show` — Show planner overview
+- `/planner repair` — Repair planner integrity
+- `/planner load` — Re-enable planner and start web UI
+- `/planner disable` — Reset planner preferences and disable for this session
+
+### Project
+
+- `/planner project discuss` — Run project discovery
+- `/planner project language` — Set persistent language preferences
+
+### Features
+
+- `/planner feature list` — List features
+- `/planner feature add` — Create a feature
+- `/planner feature show` — Show a feature
+- `/planner feature update` — Update a feature
+- `/planner feature delete` — Delete a feature
+
+### Phases
+
+- `/planner phase add` — Add a phase
+- `/planner phase show` — Show a phase
+- `/planner phase discuss` — Discuss a phase
+- `/planner phase update` — Update a phase
+- `/planner phase delete` — Delete a phase
+
+### Tasks
+
+- `/planner task add` — Add a task
+- `/planner task show` — Show a task
+- `/planner task discuss` — Discuss a task
+- `/planner task update` — Update a task
+- `/planner task delete` — Delete a task
+- `/planner task start` — Mark a task in-progress
+- `/planner task complete` — Mark a task done
+
+### Handoff
+
+- `/planner handoff prepare` — Tell the agent to create/update the handoff
+- `/planner handoff show` — Show the current handoff
+- `/planner handoff write` — Write handoff directly from planner data
+- `/planner handoff clear` — Delete the current handoff
+
+### Web
+
+- `/planner web start` — Start the web UI
+- `/planner web stop` — Stop the web UI
+- `/planner web status` — Show web UI status
+
+### Export
+
+- `/planner export` — Export plan summary as Markdown
+- `/planner export-full` — Export full detailed plan as Markdown
+
+### Guard bypass
+
+- `/planner bypass` — Authorize edit/write without a task in-progress (15 min)
+- `/planner clear-bypass` — Revoke the guard bypass
 
 ### Pi session prompts and startup resume
 
