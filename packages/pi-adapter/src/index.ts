@@ -2776,10 +2776,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "feature_create",
     label: "Feature Create",
-    description: "Create a new feature. Returns the generated feature id. Feature status is generally derived from child phases/tasks, so prefer not to set it directly unless you truly need an explicit override during setup.",
+    description: "Create a new feature with a RICH description. REQUIRED: description must include code references (file:line), current implementation state (what exists, what is unimplemented), systems/structs/traits involved, concrete goals, and behaviors to preserve. The description is the primary context for future agents resuming this feature; one-liners cause misalignment. Returns the generated feature id. Feature status is generally derived from child phases/tasks, so prefer not to set it directly unless you truly need an explicit override during setup.",
     parameters: Type.Object({
       name: Type.String({ description: "Feature name/title" }),
-      description: Type.Optional(Type.String({ description: "Feature description" })),
+      description: Type.Optional(Type.String({ description: "REQUIRED — code references (file:line), current state of the art, structs/traits/systems involved, goals, behaviors to preserve. Not a one-liner." })),
       status: Type.Optional(Type.String({ description: "Initial status. One of: planned, in-progress, done, blocked, canceled. Default: planned. Usually leave this alone: feature status is derived from child phases/tasks." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -2960,12 +2960,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "phase_create",
     label: "Phase Create",
-    description: "Create a new phase linked to a feature. Status defaults to draft. featureId is required. Once tasks exist, phase status is generally derived from task statuses.",
+    description: "Create a new phase linked to a feature with a RICH description. REQUIRED: description must include code references (file:line), current implementation state, dependencies, specific files/systems to modify, and behaviors to preserve. The description is the primary context for future agents; one-liners cause misalignment. Status defaults to draft. featureId is required. Once tasks exist, phase status is generally derived from task statuses.",
     parameters: Type.Object({
       title: Type.String({ description: "Phase title" }),
       featureId: Type.String({ description: "Feature ID to link this phase to (required)" }),
-      summary: Type.Optional(Type.String({ description: "Short summary" })),
-      description: Type.Optional(Type.String({ description: "Detailed description" })),
+      summary: Type.Optional(Type.String({ description: "One-line summary of the phase" })),
+      description: Type.Optional(Type.String({ description: "REQUIRED — code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner." })),
       status: Type.Optional(Type.String({ description: "Initial status. Default: draft. Usually leave this alone: once tasks exist, phase status is derived from task statuses." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -3157,11 +3157,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_create",
     label: "Task Create",
-    description: "Add a task to a phase. Status defaults to planned.",
+    description: "Add a task to a phase with a RICH description. REQUIRED: description must include code references (file:line), what already exists vs what needs to be built, specific structs/traits/systems to modify, concrete implementation steps, and edge cases to handle. The description is the execution context for agents; one-liners cause misalignment. Status defaults to planned.",
     parameters: Type.Object({
       phaseId: Type.String({ description: "Phase ID the task belongs to" }),
       title: Type.String({ description: "Task title" }),
-      description: Type.Optional(Type.String({ description: "Task description" })),
+      description: Type.Optional(Type.String({ description: "REQUIRED — execution context: code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner." })),
       status: Type.Optional(Type.String({ description: "Initial status. Default: planned" })),
       shortName: Type.Optional(Type.String({ description: "Short slug for the task id. Auto-derived from title if omitted." })),
     }),

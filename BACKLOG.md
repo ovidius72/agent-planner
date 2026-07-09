@@ -80,7 +80,23 @@ Phases on disk that are not referenced by any feature (orphans) have no cleanup 
 Add `/planner phase cleanup-orphans` (with confirmation) and/or a server endpoint.
 **Status:** Not started.
 
-### [P2-3] Web UI: requirements page
+### [P2-6] Richer task descriptions with code references at creation + evolution at completion
+**Reported by:** heca subagent chat (subagent-chat-019f4178)
+
+**Problem:** Task descriptions are too sparse (one-liners) and lack code context. An agent resuming a task sees a paraphrase, not a traceable reference. The codebase evolves, the planner stays stale.
+
+**Requirements:**
+1. **At creation**: the agent must include code references (file:line), current state, actual work steps, and behaviors to preserve — not a one-liner. Context must be traceable and verifiable.
+2. **At completion**: the agent updates the task/phase description with what was actually done, which files were touched, decisions made, commit hashes, and updated code references (new line numbers).
+
+The planner should be a living traceable source of truth, not a static index of one-liners.
+
+**Acceptance criteria:**
+- Task/phase/feature creation tools validate that descriptions include at least one code reference or explicitly mark that the design precedes implementation.
+- Task completion workflow prompts the agent to update the task description with post-hoc details.
+- Export/render shows enriched descriptions.
+
+**Status:** Not started.
 Still open from original checklist. Requirements CRUD is in the server but no UI page.
 **Status:** Not started.
 

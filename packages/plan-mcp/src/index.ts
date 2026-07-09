@@ -219,10 +219,10 @@ server.registerTool("planner-feature-list", {
 });
 
 server.registerTool("planner-feature-add", {
-  description: "Create a feature.",
+  description: "Create a feature with a rich description. REQUIRED: description must include code references (file:line), current implementation state (what exists, what is unimplemented), systems/structs/traits involved, concrete goals, and behaviors to preserve. The description is the primary context for future agents resuming this feature; one-liners cause misalignment.",
   inputSchema: {
     name: z.string().min(1),
-    description: z.string().optional(),
+    description: z.string().optional().describe("Detailed context with code references (file:line), current state of the art, structs/traits/systems involved, goals, and behaviors to preserve. Not a one-liner."),
     status: z.enum(STATUS_VALUES).optional(),
   },
 }, async ({ name, description, status }) => {
@@ -331,12 +331,12 @@ server.registerTool("planner-feature-delete", {
 });
 
 server.registerTool("planner-phase-add", {
-  description: "Create a phase, optionally attached to a feature.",
+  description: "Create a phase with a rich description. REQUIRED: description must include code references (file:line), current implementation state, dependencies, specific files/systems to modify, and behaviors to preserve. The description is the primary context for future agents; one-liners cause misalignment.",
   inputSchema: {
     title: z.string().min(1),
     feature: z.string().optional().describe("Feature id or name"),
-    summary: z.string().optional(),
-    description: z.string().optional(),
+    summary: z.string().optional().describe("One-line summary of the phase"),
+    description: z.string().optional().describe("Detailed context: code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner."),
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
@@ -474,11 +474,11 @@ server.registerTool("planner-phase-delete", {
 });
 
 server.registerTool("planner-task-add", {
-  description: "Create a task in a phase.",
+  description: "Create a task with a rich description. REQUIRED: description must include code references (file:line), what already exists vs what needs to be built, specific structs/traits/systems to modify, concrete implementation steps, and edge cases to handle. The description is the execution context for agents; one-liners cause misalignment.",
   inputSchema: {
     phase: z.string().min(1).describe("Phase id or name"),
     title: z.string().min(1),
-    description: z.string().optional(),
+    description: z.string().optional().describe("Execution context: code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner."),
     checklist: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, title, description, checklist }) => {
