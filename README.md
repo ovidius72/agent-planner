@@ -592,6 +592,34 @@ planner-clear-bypass
 
 The bypass is harness-agnostic (stored in `resume.json`), so Pi, Claude Code, Codex and other adapters all respect it.
 
+### Deeper rules — mandatory protocol
+
+Pi and Claude Code agents receive a **MANDATORY OPERATIONAL PROTOCOL** injected into the system prompt at every turn, before any project context. The rules are:
+
+1. **Handoff Hygiene**: If `.planner/HANDOFF.md` exists, READ and DELETE it immediately. Do NOT summarize first. Do NOT ask for confirmation. DELETE → then work.
+2. **Task Lifecycle**: BEFORE coding any file: call `task_start`. AFTER finishing work on any task: call `task_complete`. No exceptions.
+3. **Immediate Sync**: Update task status AT THE EXACT MOMENT of transition. Never batch status updates at end of session.
+4. **Blocked Motivation**: Transitions to `blocked` / `canceled` / `rejected` / `deferred` / `waiting` / `planned` (from non-planned) MUST include a detailed `motivation` parameter. Every tool-level transition validates this; missing motivation returns an error.
+5. **No Shortcuts**: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.
+
+### Motivation requirement for restrictive transitions
+
+Agent Plan records a **statusLog** on every task — an incremental, append-only array of all status changes. For restrictive transitions (`blocked`, `canceled`, `rejected`, `deferred`, `waiting`, `planned` from a non-planned status), a `motivation` string is mandatory.
+
+- MCP (`planner-task-update`): returns an error if `motivation` is missing for a restricted transition.
+- Pi adapter: tool-level guard blocks the transition and requires `motivation`.
+- HTTP API (`PUT /tasks/:id`): validates and returns a 400 error on violation.
+- Web UI: Status History shows all entries (most recent first) with a collapsible timeline.
+
+### Resume summary — web dashboard URLs
+
+The startup resume summary automatically includes the web dashboard URL(s):
+
+- **Local only**: `http://localhost:PORT`
+- **LAN mode**: `http://localhost:PORT (LAN: http://192.168.x.x:PORT)`
+
+The summary is shown in both Italian and English, depending on the project's chat language preference, and the URLs appear **after** the project progress and focus details (not at the top, to avoid off-screen truncation).
+
 ---
 
 ## Repository structure
