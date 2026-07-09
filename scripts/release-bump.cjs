@@ -13,6 +13,7 @@ const pkgs = [
   "packages/plan-mcp",
   "packages/plan-server",
   "packages/agent-plan",
+  "packages/pi-adapter",
 ];
 
 const cur = JSON.parse(

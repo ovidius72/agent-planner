@@ -1,6 +1,6 @@
 {
   "name": "agent-plan",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": false,
   "description": "CLI for Agent Plan: project initialization, Claude Code setup, export, and MCP server startup.",
   "license": "MIT",

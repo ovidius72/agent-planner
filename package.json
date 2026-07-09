@@ -19,11 +19,13 @@
     "build": "tsc -b --clean && tsc -b && pnpm build:web-ui",
     "clean": "tsc -b --clean",
     "build:web-ui": "pnpm --filter @agent-plan/web-ui build",
+    "build:pi-adapter": "pnpm build:web-ui && bash scripts/copy-web-ui.sh && pnpm --filter @agent-plan/pi-adapter build",
     "dev:web": "pnpm --filter @agent-plan/web-ui dev",
     "dev:server": "node packages/plan-server/dist/cli.js",
     "release:validate": "pnpm build && pnpm check",
     "release:pack-dry-run": "for p in packages/plan-core packages/plan-mcp packages/plan-server packages/agent-plan; do echo '=== ' $p; (cd \"$p\" && npm pack --dry-run); echo; done",
     "release:publish": "pnpm --filter @agent-plan/core publish --access public && pnpm --filter @agent-plan/mcp publish --access public && pnpm --filter @agent-plan/server publish --access public && pnpm --filter agent-plan publish --access public",
+    "release:publish:adapter": "pnpm build:pi-adapter && pnpm --filter @agent-plan/pi-adapter publish --access public --no-git-checks",
     "release:bump": "node scripts/release-bump.cjs"
   },
   "devDependencies": {

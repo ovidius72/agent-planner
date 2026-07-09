@@ -695,11 +695,12 @@ async function pickProjectPort(ctx: ExtensionContext, explicitPort?: number): Pr
 
 function resolveStaticDir(): string | undefined {
   try {
-    // When loaded as Pi extension, find the monorepo's plan-web dist
     const adapterFile = fileURLToPath(import.meta.url);
     const adapterDir = dirname(adapterFile);
-    // adapter is in packages/pi-adapter/src/
-    // web dist is in packages/plan-web-ui/dist/
+    // When installed as Pi package: node_modules/@agent-plan/pi-adapter/web-ui-dist/
+    const pkgWebUi = join(adapterDir, "..", "web-ui-dist");
+    if (existsSync(pkgWebUi)) return pkgWebUi;
+    // Fallback: monorepo dev — packages/plan-web-ui/dist/
     return join(adapterDir, "..", "..", "plan-web-ui", "dist");
   } catch {
     return undefined;

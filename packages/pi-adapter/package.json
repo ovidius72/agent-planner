@@ -1,25 +1,43 @@
 {
   "name": "@agent-plan/pi-adapter",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.5",
+  "private": false,
+  "description": "Pi agent extension for Agent Plan — structured project planning in .planner/",
+  "keywords": [
+    "pi-package",
+    "agent-plan",
+    "planner"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "web-ui-dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "."
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && rm -f dist/.tsbuildinfo",
+    "build:full": "pnpm build && ../../scripts/copy-web-ui.sh",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
   "dependencies": {
-    "@agent-plan/core": "workspace:*",
-    "@agent-plan/server": "workspace:*",
+    "@agent-plan/core": "^0.2.0",
+    "@agent-plan/server": "^0.2.0",
+    "typebox": "^1.1.24",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.74.0",
-    "@earendil-works/pi-ai": "^0.74.0",
-    "typebox": "^1.1.24"
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "@earendil-works/pi-ai": "^0.74.0"
   }
 }
