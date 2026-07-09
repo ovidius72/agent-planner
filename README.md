@@ -125,12 +125,9 @@ If a project is not initialized, Agent Plan tools should report that `.planner/`
 
 ---
 
-## Claude Code commands
+## User commands — Claude Code
 
-Claude Code receives two layers:
-
-1. **MCP tools** named `planner-*`.
-2. A generated slash command `/planner ...` that routes natural command text to those tools.
+Claude Code supports a slash command `/planner ...` that routes natural command text to the underlying MCP tools.
 
 ### Core
 
@@ -191,9 +188,9 @@ Claude Code receives two layers:
 
 ---
 
-## Claude Code MCP tools
+## Agent tools (MCP)
 
-The MCP server exposes public tools using the `planner-*` namespace.
+The MCP server exposes public tools using the `planner-*` namespace. These tools are called **by AI agents** (Claude Code, Codex, Zed), not by humans. Human users should use the `/planner ...` slash commands instead.
 
 Current Phase 1 tools include:
 
@@ -393,7 +390,7 @@ Useful options:
 
 ---
 
-## Pi usage
+## User commands — Pi
 
 Pi exposes Agent Plan as one grouped command:
 
