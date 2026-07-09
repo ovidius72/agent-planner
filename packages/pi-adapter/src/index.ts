@@ -324,7 +324,9 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
 
   const chatLanguage = (plan.project.chatLanguage || "").toLowerCase();
   const italian = chatLanguage.includes("ital");
-  const webUrl = server?.url ?? "";
+  const localUrl = server?.localUrl ?? server?.url ?? "";
+  const lanUrl = server?.lanUrl ?? "";
+  const webUrl = lanUrl ? `${localUrl} (LAN: ${lanUrl})` : localUrl;
 
   if (italian || !chatLanguage) {
     return [
