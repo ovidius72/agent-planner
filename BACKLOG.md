@@ -92,11 +92,18 @@ Add `/planner phase cleanup-orphans` (with confirmation) and/or a server endpoin
 The planner should be a living traceable source of truth, not a static index of one-liners.
 
 **Acceptance criteria:**
-- Task/phase/feature creation tools validate that descriptions include at least one code reference or explicitly mark that the design precedes implementation.
-- Task completion workflow prompts the agent to update the task description with post-hoc details.
+- Task/phase/feature creation tools validate that descriptions are at least 50 characters (prevent one-liners) unless prefixed with 'design-only'.
+- Task completion workflow accepts `description_update` parameter that appends post-hoc details to the task description (commit hashes, files touched, decisions, updated code refs).
 - Export/render shows enriched descriptions.
 
-**Status:** Not started.
+**Implemented:**
+- MCP: `planner-feature-add`, `planner-phase-add`, `planner-task-add` — description now required with `z.string().min(50)` validation.
+- Pi adapter: `feature_create`, `phase_create`, `task_create` — description now required with `Type.String({ minLength: 50 })`.
+- MCP: `planner-task-complete` — new optional `description_update` parameter; appends completion summary to task description with separator.
+- Pi adapter: `task_complete` — new optional `description_update` parameter; same append logic.
+- Tool descriptions and parameter descriptions all updated to guide the agent toward rich, traceable context.
+
+**Status:** Implemented.
 Still open from original checklist. Requirements CRUD is in the server but no UI page.
 **Status:** Not started.
 

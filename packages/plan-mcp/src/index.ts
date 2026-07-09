@@ -222,7 +222,7 @@ server.registerTool("planner-feature-add", {
   description: "Create a feature with a rich description. REQUIRED: description must include code references (file:line), current implementation state (what exists, what is unimplemented), systems/structs/traits involved, concrete goals, and behaviors to preserve. The description is the primary context for future agents resuming this feature; one-liners cause misalignment.",
   inputSchema: {
     name: z.string().min(1),
-    description: z.string().optional().describe("Detailed context with code references (file:line), current state of the art, structs/traits/systems involved, goals, and behaviors to preserve. Not a one-liner."),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, goals, and behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks without code refs.").describe("Required code references (file:line), current state of the art, structs/traits/systems involved, goals, and behaviors to preserve. Not a one-liner."),
     status: z.enum(STATUS_VALUES).optional(),
   },
 }, async ({ name, description, status }) => {
@@ -336,7 +336,7 @@ server.registerTool("planner-phase-add", {
     title: z.string().min(1),
     feature: z.string().optional().describe("Feature id or name"),
     summary: z.string().optional().describe("One-line summary of the phase"),
-    description: z.string().optional().describe("Detailed context: code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner."),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner."),
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
@@ -478,7 +478,7 @@ server.registerTool("planner-task-add", {
   inputSchema: {
     phase: z.string().min(1).describe("Phase id or name"),
     title: z.string().min(1),
-    description: z.string().optional().describe("Execution context: code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner."),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner."),
     checklist: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, title, description, checklist }) => {
@@ -670,8 +670,9 @@ server.registerTool("planner-task-complete", {
   inputSchema: {
     task: z.string().min(1),
     force: z.boolean().optional(),
+    description_update: z.string().min(10).optional().describe("Post-hoc summary of what was done: commit hash(s), files touched, decisions made, updated code references with new line numbers. Keeps the planner alive and traceable."),
   },
-}, async ({ task: ref, force }) => {
+}, async ({ task: ref, force, description_update }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -693,6 +694,10 @@ server.registerTool("planner-task-complete", {
         description: "",
       };
       task.statusLog = [...(task.statusLog ?? []), entry];
+    }
+    if (description_update) {
+      const sep = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
+      task.description = task.description + sep + description_update;
     }
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
