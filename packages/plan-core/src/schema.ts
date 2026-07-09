@@ -127,6 +127,33 @@ export const ChecklistItemSchema = z.object({
 
 const ChecklistInputSchema = z.union([z.string().min(1), ChecklistItemSchema]);
 
+/** Status transitions that require a motivation note from the agent. */
+export const STATUS_LOG_MOTIVATION_REQUIRED = new Set([
+  "blocked", "canceled", "deferred", "rejected", "waiting",
+]);
+
+/**
+ * Returns true when a status transition requires a written motivation.
+ * - → DONE never requires motivation.
+ * - → BLOCKED / CANCELED / DEFERRED / REJECTED / WAITING always require it.
+ * - → PLANNED from a non-PLANNED status requires it.
+ */
+export function needsMotivation(fromStatus: string, toStatus: string): boolean {
+  if (toStatus === "done") return false;
+  if (STATUS_LOG_MOTIVATION_REQUIRED.has(toStatus)) return true;
+  if (toStatus === "planned" && fromStatus !== "planned") return true;
+  return false;
+}
+
+export const StatusLogEntrySchema = z.object({
+  id: z.string().min(1),
+  date: TimestampSchema,
+  fromStatus: TaskStatusSchema,
+  toStatus: TaskStatusSchema,
+  title: z.string().min(1),
+  description: z.string().default(""),
+});
+
 export const TaskSchema = z.object({
   id: z.string(),
   phaseId: z.string(),
@@ -136,6 +163,7 @@ export const TaskSchema = z.object({
   status: TaskStatusSchema,
   description: z.string().default(""),
   notes: z.string().default(""),
+  statusLog: z.array(StatusLogEntrySchema).default([]),
   decisions: z.array(z.string().min(1)).default([]),
   acceptedDecisions: z.array(AcceptedDecisionSchema).default([]),
   checklist: z.array(ChecklistInputSchema).default([]),
@@ -258,6 +286,7 @@ export type AcceptedDecision = z.infer<typeof AcceptedDecisionSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
+export type StatusLogEntry = z.infer<typeof StatusLogEntrySchema>;
 export type Task = z.infer<typeof TaskSchema>;
 export type Phase = z.infer<typeof PhaseSchema>;
 export type MacroTask = z.infer<typeof MacroTaskSchema>;

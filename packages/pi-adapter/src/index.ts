@@ -11,9 +11,9 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
-import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, Task } from "@agent-plan/core/schema";
+import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -324,7 +324,9 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
 
   const chatLanguage = (plan.project.chatLanguage || "").toLowerCase();
   const italian = chatLanguage.includes("ital");
-  const webUrl = server?.url ?? "";
+  const localUrl = server?.localUrl ?? server?.url ?? "";
+  const lanUrl = server?.lanUrl ?? "";
+  const webUrl = lanUrl ? `${localUrl} (LAN: ${lanUrl})` : localUrl;
 
   if (italian || !chatLanguage) {
     return [
@@ -899,6 +901,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
     plannerSessionEnabled = enablePlanner;
 
+    // Proactive check for leftover handoff files.
+    if (plannerSessionEnabled) {
+      const handoffPath = join(st.root, "HANDOFF.md");
+      if (existsSync(handoffPath)) {
+        ctx.ui.notify("🚨 HANDOFF DETECTED: Read and delete .planner/HANDOFF.md immediately to avoid state conflicts.", "warning");
+      }
+    }
+
     // If the user declined enablement, skip EVERYTHING (no web prompt, no migration, no summary).
     if (exists && !enablePlanner) {
       startupResumePromptPending = false;
@@ -956,7 +966,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
 
       const url = (server as ServeHandle | null)?.url ?? "Starting server...";
-      ctx.ui.notify(`Planner attivato. Dashboard: ${url}\nSto analizzando lo stato del progetto e preparando il summary di ripresa…`, "info");
+      ctx.ui.notify(`Planner enabled. Dashboard: ${url}\nAnalyzing project state and preparing resume summary...`, "info");
       await ensureProjectLanguagePreferences(st).catch(() => null);
       await maybeHealStatuses(st).catch(() => {});
       // Background cleanup of orphan .bak/.tmp.* files (non-blocking)
@@ -1036,28 +1046,29 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     if (event.toolName === "task_update") {
       const nextStatus = (event.input as { status?: string } | undefined)?.status;
-      if (nextStatus === "in-progress" || nextStatus === "done") {
-        // Allow reopen: if the task is currently 'done', moving it to 'in-progress' is a legal reopen.
-        // To verify, we need to check the current status.
+      const motivation = (event.input as { motivation?: string } | undefined)?.motivation;
+      if (nextStatus) {
         const st = ensureStore(ctx);
         const tasks = await st.loadAllPhases().then(phases => phases.flatMap(p => p.tasks));
         const task = tasks.find(t => t.id === (event.input as any).taskId);
-        if (nextStatus === "in-progress" && task?.status === "done") {
-          // Legal reopen
-        } else {
-          return {
-            block: true,
-            reason: `Planner guard: do not use task_update to move a task to ${nextStatus}. Use task_start or task_complete so lifecycle timestamps stay correct.`,
-          };
+        if (task) {
+          // Allow legal reopen: done → in-progress via task_update.
+          if (nextStatus === "in-progress" && task.status === "done") {
+            // Legal reopen — no motivation needed.
+          } else if (needsMotivation(task.status, nextStatus)) {
+            if (!motivation || !motivation.trim()) {
+              return {
+                block: true,
+                reason: `Status transition "${task.status} → ${nextStatus}" requires a motivation. Add a "motivation" parameter with a detailed explanation of why this change is needed.`,
+              };
+            }
+          }
         }
       }
     }
 
-    // Guard only the code-writing tools (edit/write). bash stays free so that
-    // git pull, build, test, ls, etc. always work. The block is not a dead
-    // wall: the agent can ask the user to authorize a one-time bypass via
-    // /planner bypass (or the authorize tool), after which edit/write proceeds
-    // even with no task in-progress.
+    // Guard the code-writing tools (edit/write). bash stays free so that
+    // git pull, build, test, ls, etc. always work.
     if (event.toolName !== "edit" && event.toolName !== "write") return;
 
     const st = loadStore(ctx);
@@ -1066,16 +1077,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     const guard = await getPlannerExecutionGuard(st).catch(() => null);
     if (!guard || guard.totalTasks === 0) return; // nothing to enforce yet
-    if (guard.inProgressTaskIds.length > 0) return; // a task is open → allow
-    if (await st.isGuardBypassed().catch(() => false)) return; // user authorized → allow
+    if (guard.inProgressTaskIds.length > 0) return; // a task is open → we're good
 
     const focusHint = guard.focusTaskId
-      ? `\n\n👉 SUGGERIMENTO: Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Eseguilo ora con: \`/planner task start ${guard.focusTaskId}\``
-      : `\n\n👉 SUGGERIMENTO: Scegli un task dal piano e avvialo con \`/planner task start <taskId>\`.`;
-    return {
-      block: true,
-      reason: `🚨 LOCK ATTIVO: Nessun task è attualmente 'in-progress'. Per garantire l'integrità del piano e l'accuratezza della dashboard, l'estensione blocca l'accesso a edit/write.${focusHint}\n\nSe l'operazione è un'emergenza o un fix minore, puoi richiedere un bypass (/planner bypass), ma l'uso di task_start è l'unico modo per mantenere il piano sincronizzato.`,
-    };
+      ? `Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Avvialo con: \`/planner task start ${guard.focusTaskId}\``
+      : `Scegli un task dal piano e avvialo con \`/planner task start <taskId>\`.`;
+    
+    ctx.ui.notify(`⚠️  NO ACTIVE TASK: You are editing files without an in-progress task. Remember to update the plan to maintain dashboard integrity. ${focusHint}`, "warning");
+    return; // Allow the tool to proceed
+
   });
 
   // Reset per-turn flags at the start of each turn.
@@ -1932,6 +1942,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           title: title.trim(), status: "planned",
           description: "",
           notes: "",
+          statusLog: [],
           decisions: [],
           acceptedDecisions: [],
           checklist: [], subtasks: [],
@@ -2055,11 +2066,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (title?.trim()) task.title = title.trim();
         const now = nowISO();
         if (statusInput?.trim()) {
+          const normalizedStatus = statusInput.trim();
           const valid = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
-          if (!valid.includes(statusInput.trim())) {
+          if (!valid.includes(normalizedStatus)) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
-          applyTaskLifecycleDates(task, statusInput.trim() as Task["status"], now);
+          if (normalizedStatus === "in-progress" && existsSync(join(st.root, "HANDOFF.md"))) {
+            ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can move a task to in-progress.", "error");
+            return;
+          }
+          applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
         if (desc?.trim()) task.description = desc.trim();
         task.updatedAt = now;
@@ -2088,11 +2104,23 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
         }
-        if (task.status === "done") {
-          ctx.ui.notify(`Task "${task.title}" is already done. Use /planner task update to reopen.`, "warning");
+        // Hygiene Gate: block starting work if a pending handoff exists.
+        if (existsSync(join(st.root, "HANDOFF.md"))) {
+          ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can officially start a task.", "error");
           return;
         }
         const now = nowISO();
+        // Record status change in the incremental statusLog.
+        const prevStatus = task.status;
+        const entry: StatusLogEntry = {
+          id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-in-progress`),
+          date: now,
+          fromStatus: task.status as any,
+          toStatus: "in-progress" as any,
+          title: task.status === "done" ? "Reopened" : `→ in-progress`,
+          description: task.status === "done" ? "Task reopened from done status." : "",
+        };
+        task.statusLog = [...(task.statusLog ?? []), entry];
         applyTaskLifecycleDates(task, "in-progress", now);
         task.updatedAt = now;
         phase!.updatedAt = now;
@@ -2129,6 +2157,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           }
         }
         const now = nowISO();
+        // Record status change in the incremental statusLog.
+        const entry: StatusLogEntry = {
+          id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-done`),
+          date: now,
+          fromStatus: task.status as any,
+          toStatus: "done" as any,
+          title: `→ done`,
+          description: "",
+        };
+        task.statusLog = [...(task.statusLog ?? []), entry];
         applyTaskLifecycleDates(task, "done", now);
         task.updatedAt = now;
         phase!.updatedAt = now;
@@ -2738,10 +2776,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "feature_create",
     label: "Feature Create",
-    description: "Create a new feature. Returns the generated feature id. Feature status is generally derived from child phases/tasks, so prefer not to set it directly unless you truly need an explicit override during setup.",
+    description: "Create a new feature with a RICH description. REQUIRED: description must include code references (file:line), current implementation state (what exists, what is unimplemented), systems/structs/traits involved, concrete goals, and behaviors to preserve. The description is the primary context for future agents resuming this feature; one-liners cause misalignment. Returns the generated feature id. Feature status is generally derived from child phases/tasks, so prefer not to set it directly unless you truly need an explicit override during setup.",
     parameters: Type.Object({
       name: Type.String({ description: "Feature name/title" }),
-      description: Type.Optional(Type.String({ description: "Feature description" })),
+      description: Type.String({ description: "REQUIRED — code references (file:line), current state of the art, structs/traits/systems involved, goals, behaviors to preserve. Not a one-liner. Prefix with 'design-only' for pre-implementation design tasks.", minLength: 50 }),
       status: Type.Optional(Type.String({ description: "Initial status. One of: planned, in-progress, done, blocked, canceled. Default: planned. Usually leave this alone: feature status is derived from child phases/tasks." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -2922,12 +2960,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "phase_create",
     label: "Phase Create",
-    description: "Create a new phase linked to a feature. Status defaults to draft. featureId is required. Once tasks exist, phase status is generally derived from task statuses.",
+    description: "Create a new phase linked to a feature with a RICH description. REQUIRED: description must include code references (file:line), current implementation state, dependencies, specific files/systems to modify, and behaviors to preserve. The description is the primary context for future agents; one-liners cause misalignment. Status defaults to draft. featureId is required. Once tasks exist, phase status is generally derived from task statuses.",
     parameters: Type.Object({
       title: Type.String({ description: "Phase title" }),
       featureId: Type.String({ description: "Feature ID to link this phase to (required)" }),
-      summary: Type.Optional(Type.String({ description: "Short summary" })),
-      description: Type.Optional(Type.String({ description: "Detailed description" })),
+      summary: Type.Optional(Type.String({ description: "One-line summary of the phase" })),
+      description: Type.String({ description: "REQUIRED — code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner. Prefix with 'design-only' for pre-implementation design tasks.", minLength: 50 }),
       status: Type.Optional(Type.String({ description: "Initial status. Default: draft. Usually leave this alone: once tasks exist, phase status is derived from task statuses." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -3119,11 +3157,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_create",
     label: "Task Create",
-    description: "Add a task to a phase. Status defaults to planned.",
+    description: "Add a task to a phase with a RICH description. REQUIRED: description must include code references (file:line), what already exists vs what needs to be built, specific structs/traits/systems to modify, concrete implementation steps, and edge cases to handle. The description is the execution context for agents; one-liners cause misalignment. Status defaults to planned.",
     parameters: Type.Object({
       phaseId: Type.String({ description: "Phase ID the task belongs to" }),
       title: Type.String({ description: "Task title" }),
-      description: Type.Optional(Type.String({ description: "Task description" })),
+      description: Type.String({ description: "REQUIRED — execution context: code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner. Prefix with 'design-only' for pre-implementation design tasks.", minLength: 50 }),
       status: Type.Optional(Type.String({ description: "Initial status. Default: planned" })),
       shortName: Type.Optional(Type.String({ description: "Short slug for the task id. Auto-derived from title if omitted." })),
     }),
@@ -3148,6 +3186,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         status: initialStatus,
         description: params.description ?? "",
         notes: "",
+        statusLog: [],
         decisions: [],
         acceptedDecisions: [],
         checklist: [], subtasks: [],
@@ -3176,9 +3215,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ID" }),
       title: Type.Optional(Type.String({ description: "New title" })),
-      status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled" })),
+      status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled|rejected|deferred|waiting" })),
       description: Type.Optional(Type.String({ description: "New description" })),
       notes: Type.Optional(Type.String({ description: "New implementation notes" })),
+      motivation: Type.Optional(Type.String({ description: "Motivation for status change. REQUIRED when changing to blocked, canceled, rejected, deferred, waiting, or back to planned from another status." })),
       decisions: Type.Optional(Type.Array(Type.String(), { description: "Replace decisions list" })),
       acceptedDecisions: Type.Optional(Type.Array(Type.Object({
         id: Type.String(),
@@ -3215,7 +3255,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
               checked: false,
             }));
           }
-          if (params.status !== undefined) applyTaskLifecycleDates(task, params.status as Task["status"], now);
+          if (params.status !== undefined) {
+            if (params.status !== task.status) {
+              const entry: StatusLogEntry = {
+                id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-${params.status}`),
+                date: now,
+                fromStatus: task.status as any,
+                toStatus: params.status as any,
+                title: params.motivation?.split("\n")[0]?.trim() || `${task.status} → ${params.status}`,
+                description: params.motivation?.trim() || "",
+              };
+              task.statusLog = [...(task.statusLog ?? []), entry];
+            }
+            applyTaskLifecycleDates(task, params.status as Task["status"], now);
+          }
           task.updatedAt = now;
           phase.updatedAt = now;
           updatedTask = task;
@@ -3297,6 +3350,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ID to complete" }),
       force: Type.Optional(Type.Boolean({ description: "Skip checklist completion check. Default: false" })),
+      description_update: Type.Optional(Type.String({ description: "Post-hoc summary: commit hash(s), files touched, decisions made, updated code references with new line numbers. Keeps the planner alive and traceable." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3319,6 +3373,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const t = phase.tasks.find((x) => x.id === params.taskId);
         if (!t) return phase;
         applyTaskLifecycleDates(t, "done", now);
+        if (params.description_update) {
+          const sep = t.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
+          t.description = t.description + sep + params.description_update;
+        }
         t.updatedAt = now;
         phase.updatedAt = now;
         completedTask = t;
@@ -3465,6 +3523,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // Build/refresh the context block (slow path: cache miss).
       const contextBlock = [
         `[Plan Context — ${project.name}]`,
+        // ── MANDATORY OPERATIONAL PROTOCOL (top priority, non-negotiable) ──
+        "",
+        "═══════════════════════════════════════════════════════════════",
+        "MANDATORY OPERATIONAL PROTOCOL (violation = execution failure):",
+        "═══════════════════════════════════════════════════════════════",
+        "1. HANDOFF HYGIENE: If .planner/HANDOFF.md exists, READ and DELETE it IMMEDIATELY using the handoff delete tool. Do NOT summarize first. Do NOT ask for confirmation. Do NOT defer cleanup. DELETE \u2192 THEN work.",
+        "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'.",
+        "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
+        "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
+        "5. NO SHORTCUTS: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.",
+        "═══════════════════════════════════════════════════════════════",
+        "",
+        // ── Project details ──
         `Goal: ${project.goal || "(not set)"}`,
         project.description ? `Description: ${project.description}` : "",
         `Stack: ${[...project.technologies, ...project.tools].join(", ") || "(not set)"}`,

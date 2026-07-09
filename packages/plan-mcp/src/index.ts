@@ -3,10 +3,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
-import type { Feature, Phase, Task } from "@agent-plan/core/schema";
+import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
 const PHASE_STATUS_VALUES = ["draft", "discovery", ...STATUS_VALUES] as const;
@@ -218,10 +219,10 @@ server.registerTool("planner-feature-list", {
 });
 
 server.registerTool("planner-feature-add", {
-  description: "Create a feature.",
+  description: "Create a feature with a rich description. REQUIRED: description must include code references (file:line), current implementation state (what exists, what is unimplemented), systems/structs/traits involved, concrete goals, and behaviors to preserve. The description is the primary context for future agents resuming this feature; one-liners cause misalignment.",
   inputSchema: {
     name: z.string().min(1),
-    description: z.string().optional(),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, goals, and behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks without code refs.").describe("Required code references (file:line), current state of the art, structs/traits/systems involved, goals, and behaviors to preserve. Not a one-liner."),
     status: z.enum(STATUS_VALUES).optional(),
   },
 }, async ({ name, description, status }) => {
@@ -330,12 +331,12 @@ server.registerTool("planner-feature-delete", {
 });
 
 server.registerTool("planner-phase-add", {
-  description: "Create a phase, optionally attached to a feature.",
+  description: "Create a phase with a rich description. REQUIRED: description must include code references (file:line), current implementation state, dependencies, specific files/systems to modify, and behaviors to preserve. The description is the primary context for future agents; one-liners cause misalignment.",
   inputSchema: {
     title: z.string().min(1),
     feature: z.string().optional().describe("Feature id or name"),
-    summary: z.string().optional(),
-    description: z.string().optional(),
+    summary: z.string().optional().describe("One-line summary of the phase"),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner."),
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
@@ -473,11 +474,11 @@ server.registerTool("planner-phase-delete", {
 });
 
 server.registerTool("planner-task-add", {
-  description: "Create a task in a phase.",
+  description: "Create a task with a rich description. REQUIRED: description must include code references (file:line), what already exists vs what needs to be built, specific structs/traits/systems to modify, concrete implementation steps, and edge cases to handle. The description is the execution context for agents; one-liners cause misalignment.",
   inputSchema: {
     phase: z.string().min(1).describe("Phase id or name"),
     title: z.string().min(1),
-    description: z.string().optional(),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner."),
     checklist: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, title, description, checklist }) => {
@@ -495,6 +496,7 @@ server.registerTool("planner-task-add", {
     status: "planned",
     description: description?.trim() ?? "",
     notes: "",
+    statusLog: [],
     decisions: [],
     acceptedDecisions: [],
     checklist: (checklist ?? []).map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), title: item, checked: false })),
@@ -550,25 +552,49 @@ server.registerTool("planner-task-discuss", {
 });
 
 server.registerTool("planner-task-update", {
-  description: "Update task fields.",
+  description: "Update task fields. A motivation is REQUIRED when changing to blocked, canceled, deferred, rejected, waiting, or back to planned from another status.",
   inputSchema: {
     task: z.string().min(1),
     title: z.string().optional(),
     status: z.enum(STATUS_VALUES).optional(),
     description: z.string().optional(),
+    motivation: z.string().optional(),
   },
-}, async ({ task: ref, title, status, description }) => {
+}, async ({ task: ref, title, status, description, motivation }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
+
+  // Validate motivation requirement for status transitions.
+  if (status !== undefined && needsMotivation(found.task.status, status)) {
+    if (!motivation || !motivation.trim()) {
+      return text(
+        `Status transition \"${found.task.status} → ${status}\" requires a motivation. ` +
+        `Provide the \"motivation\" parameter with a detailed explanation of why this change is needed.`
+      );
+    }
+  }
+
   let updatedTask: Task | undefined;
   const timestamp = nowISO();
   await st.updatePhase(found.phase.id, (phase) => {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     if (title !== undefined) task.title = title.trim();
-    if (status !== undefined) applyTaskLifecycleDates(task, status, timestamp);
     if (description !== undefined) task.description = description.trim();
+    if (status !== undefined && status !== task.status) {
+      // Record status change in the incremental statusLog.
+      const entry: StatusLogEntry = {
+        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-${status}`),
+        date: timestamp,
+        fromStatus: task.status as any,
+        toStatus: status as any,
+        title: motivation?.split("\n")[0]?.trim() || `${task.status} → ${status}`,
+        description: motivation?.trim() || "",
+      };
+      task.statusLog = [...(task.statusLog ?? []), entry];
+      applyTaskLifecycleDates(task, status, timestamp);
+    }
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
     updatedTask = task;
@@ -600,14 +626,36 @@ server.registerTool("planner-task-start", {
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
   const st = await requireStore();
+
+  // Hygiene Gate: block starting work if a pending handoff exists.
+  if (existsSync(join(st.root, "HANDOFF.md"))) {
+    return text(
+      `🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. ` +
+      `You MUST read and delete it before you can officially start a task. ` +
+      `This is a non-negotiable rule in AGENTS.md.`
+    );
+  }
+
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
   const timestamp = nowISO();
+
   let updatedTask: Task | undefined;
   await st.updatePhase(found.phase.id, (phase) => {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     applyTaskLifecycleDates(task, "in-progress", timestamp);
+    if (task.status !== "in-progress") {
+      const entry: StatusLogEntry = {
+        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-in-progress`),
+        date: timestamp,
+        fromStatus: task.status as any,
+        toStatus: "in-progress" as any,
+        title: task.status === "done" ? "Reopened" : `→ in-progress`,
+        description: task.status === "done" ? "Task reopened from done status." : "",
+      };
+      task.statusLog = [...(task.statusLog ?? []), entry];
+    }
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
     updatedTask = task;
@@ -622,8 +670,9 @@ server.registerTool("planner-task-complete", {
   inputSchema: {
     task: z.string().min(1),
     force: z.boolean().optional(),
+    description_update: z.string().min(10).optional().describe("Post-hoc summary of what was done: commit hash(s), files touched, decisions made, updated code references with new line numbers. Keeps the planner alive and traceable."),
   },
-}, async ({ task: ref, force }) => {
+}, async ({ task: ref, force, description_update }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -635,6 +684,21 @@ server.registerTool("planner-task-complete", {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     applyTaskLifecycleDates(task, "done", timestamp);
+    if (task.status !== "done") {
+      const entry: StatusLogEntry = {
+        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-done`),
+        date: timestamp,
+        fromStatus: task.status as any,
+        toStatus: "done" as any,
+        title: `→ done`,
+        description: "",
+      };
+      task.statusLog = [...(task.statusLog ?? []), entry];
+    }
+    if (description_update) {
+      const sep = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
+      task.description = task.description + sep + description_update;
+    }
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
     updatedTask = task;

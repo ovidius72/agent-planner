@@ -17,13 +17,14 @@ File di riferimento iniziale:
 - `CHECKLIST.md`
 
 ### 2. Rispetta rigorosamente il Lifecycle dei Task
-L'integrità del piano dipende dalla sincronizzazione tra l'attività dell'agente e lo stato dei task. I lock di scrittura (edit/write) sono l'unico modo per garantire che l'agente non lavori "al di fuori" del piano.
+L'integrità del piano e la precisione della dashboard dipendono dalla sincronizzazione **immediata** tra l'attività dell'agente e lo stato dei task. L'aggiornamento del piano non è un'attività di "chiusura sessione", ma un prerequisito operativo.
 
 Regole operative:
-- **Sempre `task_start`**: prima di toccare una sola riga di codice, l'agente DEVE chiamare `task_start`. Non è un optional, è l'attivazione del contesto di lavoro.
-- **Sempre `task_complete`**: al termine di ogni deliverable, l'agente DEVE chiamare `task_complete`. Senza questo, la dashboard e il resume rimarranno in uno stato incoerente.
-- **No bypass arbitrari**: il bypass del lock deve essere l'ultima risorsa (es. fix rapidi di typo). Per ogni modifica sostanziale, l'unico modo corretto è l'attivazione del task.
-- **Stato = Verità**: se un task è `in-progress`, l'agente deve effettivamente starci lavorando. Se smette, deve chiuderlo o bloccarlo.
+- **Sempre `task_start`**: prima di toccare una sola riga di codice, l'agente DEVE chiamare `task_start`. È l'attivazione del contesto di lavoro.
+- **Sempre `task_complete`**: al termine di ogni deliverable, l'agente DEVE chiamare `task_complete`.
+- **Sincronizzazione Istantanea**: i cambi di stato (start/complete/block) devono avvenire **nel momento esatto** in cui la transizione avviene. È vietato accumulare aggiornamenti di stato per l'ultima fase della sessione.
+- **Sincronizzazione costante**: se l'estensione segnala "Nessun task attivo", l'agente deve regolarizzare immediatamente la situazione avviando il task corretto.
+- **Stato = Verità**: se un task è `in-progress`, l'agente deve effettivamente starci lavorando. Se smette, deve chiuderlo o bloccarlo (giustificando l'azione nello `statusLog`).
 
 ### 2. Non usare il markdown come source of truth del piano
 Il piano di progetto deve avere come fonte primaria dati strutturati in `.planner/`.
@@ -63,7 +64,37 @@ Esempi:
 - `auth-core-task-001-db-schema`
 - `auth-core-task-002-login-flow`
 
-### 7. Stack deciso finora
+### 7. Task status changes e motivazioni
+
+Ogni cambio di stato di un task deve essere documentato nel `statusLog` (array incrementale nel task).
+
+#### Motivazione obbligatoria
+La motivazione è **obbligatoria** quando lo stato nuovo è:
+- `blocked`, `canceled`, `rejected`, `deferred`, `waiting`
+- `planned` (se lo stato precedente NON era `planned`)
+
+La motivazione **non è necessaria** quando lo stato nuovo è:
+- `done`
+- `in-progress` da `planned` (avvio normale)
+
+#### Formato della nota (StatusLogEntry)
+Ogni entry nel `statusLog` ha:
+- `id`: identificativo univoco
+- `date`: timestamp ISO
+- `fromStatus`: stato precedente
+- `toStatus`: stato nuovo
+- `title`: prima riga della motivazione (o auto-generata: "fromStatus → toStatus")
+- `description`: spiegazione esaustiva del perché del cambio
+
+Le note sono **incrementali** — non modificano o eliminano le precedenti. La nota più recente è sempre quella di riferimento.
+
+#### Regola per gli agenti
+Quando cambi lo stato di un task:
+1. Usa `task_update` con il parametro `motivation` (obbligatorio per stati restrittivi)
+2. Scrivi una motivazione esaustiva: chiunque torni a lavorare sul task deve capire cosa sia successo
+3. Non usare `task_start` o `task_complete` per cambi di stato non lifecycle (usa `task_update`)
+
+### 8. Stack deciso finora
 Direzione corrente:
 - frontend: React + TypeScript
 - backend locale: Hono su Node
@@ -71,7 +102,7 @@ Direzione corrente:
 - sync live: SSE inizialmente
 - architettura: platform core + adapter Pi
 
-### 8. Comunicazione e Riferimenti
+### 9. Comunicazione e Riferimenti
 L'agente DEVE evitare di fare riferimento a feature, fasi o task utilizzando i loro UUID tecnici (es. `bd6ed366`). 
 I riferimenti devono essere sempre umani, univoci e compositi, seguendo il formato:
 - Feature: `F001 - Nome`
@@ -81,11 +112,26 @@ I riferimenti devono essere sempre umani, univoci e compositi, seguendo il forma
 Esempio CORRETTO: "Procedo con il task T003(P001/F001) - Implementazione API"
 Esempio ERRATO: "Procedo con il task bd6ed366"
 
-### 9. Fonte dei requisiti correnti
+### 10. Fonte dei requisiti correnti
 Documenti da leggere prima di modificare architettura o processo:
 - `PROJECT.md`
 - `ROADMAP.md`
 - `CHECKLIST.md`
+
+### 11. Igiene Operativa (Zero Tolerance)
+
+L'operatività dell'agente deve essere pulita e senza residui. Ogni omissione procedurale è considerata un errore di esecuzione.
+
+#### Gestione Handoff
+L'handoff è un meccanismo di passaggio di testimone, non un archivio di note.
+- **Cancellazione Immediata**: l'agente DEVE cancellare `.planner/HANDOFF.md` immediatamente dopo averlo letto e processato. 
+- **Divieto di Persistenza**: lasciare un file di handoff nel repository dopo l'avvio della sessione è una violazione del protocollo.
+
+#### Disciplina degli Aggiornamenti
+L'agente non deve attendere promemoria dall'utente o dall'estensione per aggiornare il piano.
+- **Attivazione Proattiva**: l'agente deve avviare il task (`task_start`) PRIMA di iniziare a pensare all'implementazione.
+- **Chiusura Immediata**: il task va completato (`task_complete`) NON DOPO l'invio del codice, ma COME PARTE della consegna del deliverable.
+- **Motivazione Esaustiva**: ogni blocco deve essere motivato in modo che un terzo possa comprendere l'impedimento senza dover leggere l'intera cronologia della chat.
 
 ## Comportamento atteso dagli agenti
 Quando inizi a lavorare:
