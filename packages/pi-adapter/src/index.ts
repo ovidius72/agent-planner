@@ -2246,15 +2246,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ctx.ui.notify("Starting web server (LAN) …", "info");
         await startServer(ctx, undefined, "lan").catch(() => {});
       }
-      const srv = server as ServeHandle | null;
-      ctx.ui.notify(srv?.lanUrl ? `Planner loaded. Web UI: ${srv.localUrl} (LAN: ${srv.lanUrl})` : `Planner loaded. Web UI: ${srv?.url ?? "(not started)"}`, "info");
-      // Trigger the mandatory startup resume summary so the agent surfaces the
-      // web UI address (and project state) immediately after loading.
+      // Trigger the resume summary immediately. The web UI address is shown
+      // at the END of that summary (not in a notify here) so it stays visible.
       startupResumePromptPending = true;
       startupResumeSummaryPending = true;
       pi.sendMessage({
         customType: "planner-resume-trigger",
-        content: "Emit the mandatory planner startup resume summary now (include the web UI address and port).",
+        content: "planner recap",
         display: false,
       }, {
         triggerTurn: true,
@@ -3445,6 +3443,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "",
         "STARTUP RESUME PROTOCOL (first reply of the session — mandatory):",
         "- You are resuming a planner-backed project session.",
+        "- Respond DIRECTLY with the summary. Do NOT narrate (no 'The user wants me to...', 'Let me check...', 'I\'ll emit...'). Do NOT run any tools (bash/read/grep/ls) before responding. Output ONLY the summary text.",
         "- FIRST give the user a concise summary of progress so far.",
         `- Mention progress counts: ${doneFeaturesCount}/${plan.features.features.length} features done, ${activeFeaturesCount} active; ${donePhasesCount}/${plan.phases.length} phases done, ${activePhasesCount} active; ${doneTasksCount}/${totalTasksCount} tasks done.`,
         currentFeature ? `- Mention current feature ONLY because it is actually active: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Mention that no current feature is active.",
