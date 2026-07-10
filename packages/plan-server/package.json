@@ -1,6 +1,6 @@
 {
   "name": "@agent-plan/server",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": false,
   "description": "Local HTTP/WebSocket server for Agent Plan dashboards and planner APIs.",
   "license": "MIT",
@@ -38,11 +38,11 @@
   ],
   "dependencies": {
     "@agent-plan/core": "workspace:*",
+    "@hono/node-server": "^1.14.0",
     "hono": "^4.7.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.14.0",
     "@types/ws": "^8.18.0"
   },
   "scripts": {

@@ -367,6 +367,7 @@ async function buildHandoffMarkdown(
     howToResume?: string;
     nextSteps?: string[];
     blockers?: string[];
+    extraSections?: Array<{ heading: string; body: string }>;
   },
 ): Promise<string> {
   const [plan, resume, activity, existingHandoff] = await Promise.all([
@@ -492,6 +493,25 @@ async function buildHandoffMarkdown(
       ? inferredRecentChanges.map((entry) => `- ${entry}`)
       : ["- No recent activity recorded"];
 
+  // Auto-derived: all task statuses for the current phase, so a resuming agent
+  // sees the full picture (not just the single in-progress task).
+  const currentPhaseTaskLines = currentPhase && currentPhase.tasks.length > 0
+    ? [...currentPhase.tasks]
+      .sort((a, b) => a.number - b.number || a.createdAt.localeCompare(b.createdAt))
+      .map((task) => `- ${statusIcon(task.status)} \`${task.id}\` — ${task.title} (${task.status})`)
+    : [];
+  // Caller-supplied rich context sections (locked design decisions,
+  // architecture, mode/state flows, plugin/API contracts, data mappings,
+  // known gaps, ...) injected between "What was being done" and "How to resume".
+  const extraSectionLines = (overrides?.extraSections ?? []).flatMap((section) => [
+    "",
+    `## ${section.heading}`,
+    section.body,
+  ]);
+  const autoCurrentTaskSection = currentPhaseTaskLines.length > 0
+    ? ["", `## Current Task Statuses (phase ${currentPhase!.id})`, ...currentPhaseTaskLines]
+    : [];
+
   return [
     "# Handoff",
     "",
@@ -511,6 +531,8 @@ async function buildHandoffMarkdown(
     "",
     "## What was being done",
     whatWasBeingDone || "No additional execution notes were captured.",
+    ...extraSectionLines,
+    ...autoCurrentTaskSection,
     "",
     "## How to resume",
     howToResume,
@@ -540,6 +562,7 @@ async function writeProjectHandoff(
     howToResume?: string;
     nextSteps?: string[];
     blockers?: string[];
+    extraSections?: Array<{ heading: string; body: string }>;
   },
 ): Promise<void> {
   const markdown = await buildHandoffMarkdown(st, reason, overrides);
@@ -928,7 +951,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.ensureStructureOrdering().catch(() => {});
       // Reconcile derived statuses once on startup: backfills any drift from
       // manual edits, pre-fix data, or tools that bypassed the rollup.
-      await st.syncStatuses().catch(() => {});
+      // Uses maybeHealStatuses (idempotent via healedStatusRoots guard) so the
+      // later call below and before_agent_start don't re-run it (startup dedup).
+      await maybeHealStatuses(st).catch(() => {});
 
       // Decide whether to start the web UI based on persisted prefs or prompt.
       let startWeb = false;
@@ -969,13 +994,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const url = (server as ServeHandle | null)?.url ?? "Starting server...";
       ctx.ui.notify(`Planner enabled. Dashboard: ${url}\nAnalyzing project state and preparing resume summary...`, "info");
       await ensureProjectLanguagePreferences(st).catch(() => null);
-      await maybeHealStatuses(st).catch(() => {});
+      // (maybeHealStatuses already ran above — skipped here thanks to the guard.)
       // Background cleanup of orphan .bak/.tmp.* files (non-blocking)
       st.cleanupOrphanBackups().catch(() => {});
       const handoff = await st.loadHandoff().catch(() => null);
       if (handoff?.content) {
         ctx.ui.notify(`Handoff detected at .planner/HANDOFF.md (updated ${handoff.updatedAt}). It will be loaded automatically when the agent starts.`, "info");
       }
+
+      // Mark heavy init done so before_agent_start doesn't re-run migration,
+      // status healing, and language prefs on the first turn (startup dedup:
+      // all of these already ran in this session_start block). refreshResume is
+      // safe to skip here because the per-turn context builder falls back to
+      // loadResume() ?? refreshResume() when building the system prompt.
+      plannerHeavyInitDone = true;
 
       pi.sendMessage({
         customType: "planner-resume-trigger",
@@ -2676,11 +2708,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_write_handoff",
     label: "Plan Write Handoff",
-    description: "Write or refresh the canonical .planner/HANDOFF.md document.",
+    description: "Write or refresh the canonical .planner/HANDOFF.md document. Capture full design context, not just operational resume steps: pass extraSections with locked decisions, architecture (with file:line refs), mode/state flows, plugin/API contracts, data mappings, files touched, and known gaps so a resuming agent doesn't re-discover decisions already made.",
     parameters: Type.Object({
       reason: Type.Optional(Type.String({ description: "Why the handoff is being written" })),
       whatWasBeingDone: Type.Optional(Type.String({ description: "Optional override for the current work summary" })),
       howToResume: Type.Optional(Type.String({ description: "Optional override for resume instructions" })),
+      extraSections: Type.Optional(Type.Array(
+        Type.Object({
+          heading: Type.String({ description: "Section heading (without the leading ## markers)" }),
+          body: Type.String({ description: "Markdown body of the section. Use file:line refs, IDs, and concrete mappings." }),
+        }),
+        { description: "Rich context sections injected between 'What was being done' and 'How to resume'. Use for: Locked Design Decisions ({id,title,decision,rationale}), Architecture (new modules with file:line), Mode/State Flow (textual diagrams), Plugin/API Contracts, Data Mappings, Files Touched (new/modified/planner), Known Gaps. Maximize the design context a resuming agent needs." },
+      )),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -2688,6 +2727,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await writeProjectHandoff(st, params.reason?.trim() || "manual tool handoff", {
         ...(params.whatWasBeingDone?.trim() ? { whatWasBeingDone: params.whatWasBeingDone.trim() } : {}),
         ...(params.howToResume?.trim() ? { howToResume: params.howToResume.trim() } : {}),
+        ...(params.extraSections && params.extraSections.length > 0
+          ? {
+              extraSections: params.extraSections
+                .map((section) => ({ heading: section.heading?.trim() ?? "", body: section.body ?? "" }))
+                .filter((section) => section.heading),
+            }
+          : {}),
       });
       const handoff = await st.loadHandoff();
       return { content: [{ type: "text", text: "Wrote .planner/HANDOFF.md" }], details: handoff ?? {} };

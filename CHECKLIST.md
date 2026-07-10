@@ -107,9 +107,17 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Renderer markdown aggiornato per includere accepted decisions e dettagli operativi persistiti
 - [x] Ridotta la confusione con GSD nei flussi planner discuss tramite regole/prompt espliciti
 
+### Fatto — stabilità package NPM + startup dedup + handoff ricco (sessione 2026-07-10)
+- [x] **Fix bloccante NPM freeze**: `@hono/node-server` era in `devDependencies` di `plan-server` ma importato a runtime da `serve.ts`; spostato in `dependencies`. Senza di esso l'estensione non si caricava affatto da NPM (import di `serve.js` falliva → `session_start` non partiva → nessun prompt + Pi bloccato). Riprodotto e confermato.
+- [x] **Dedup startup**: `session_start` eseguiva `migrateToUuids`/`syncStatuses`/`ensureProjectLanguagePreferences` che `before_agent_start` rifaceva al primo turno (migrate x2, syncStatuses x2 nello stesso session_start). Ora `session_start` usa `maybeHealStatuses` (idempotente, guard `healedStatusRoots`) e setta `plannerHeavyInitDone = true` prima del resume-trigger, così `before_agent_start` salta l'heavy init ridondante.
+- [x] **Handoff ricco**: aggiunto parametro `extraSections: Array<{heading, body}>` al tool `plan_write_handoff`; le sezioni vengono iniettate tra "What was being done" e "How to resume" per catturare decisioni di design, architettura (con file:line), mode flow, plugin contract, data mapping, known gap. Aggiunta anche sezione auto-derivata "Current Task Statuses" con tutti i task della fase corrente.
+- [x] Version bump: `plan-server` 0.2.3 → 0.2.4 (fix dep), `pi-adapter` 0.2.3 → 0.2.6 (supersede 0.2.5 rotta su npm + include i fix). `plan-core` invariato a 0.2.3.
+- [x] Validazione: `pnpm -r build` ok, `pnpm check` ok, `git diff --check` ok, test funzionale ordinamento sezioni handoff ok.
+
 ### Prossimi passi
 - [ ] Web UI: pagina requirements (vedi `BACKLOG.md` P2-3)
 - [ ] Manutenere README + guida d'uso in sync (vedi `BACKLOG.md` P2-4)
+- [ ] **Republish NPM**: `pnpm --filter @agent-plan/server publish --access public` poi `pnpm build:pi-adapter && pnpm --filter @agent-plan/pi-adapter publish --access public --no-git-checks` (versioni 0.2.4 / 0.2.6). Verificare dopo: reinstall fresh e confermare che il prompt di enable appare.
 - [x] Introdotta numerazione progressiva persistente `001/002/...` per feature/fase/task e usato quell'ordine in WorkTree + resume.
 - [x] Corretto startup resume: link dashboard esplicitato nel protocollo/summary; handoff e resume target trattati come suggerimenti da validare, non come focus corrente implicito.
 - [x] README/docs riallineati alle ultime feature: guard+bypass, housekeeping `.planner/.gitignore`, numerazione persistente `F001/P001/T001`, Work Tree order, runtime notes, semantics corrette di handoff/resume.
