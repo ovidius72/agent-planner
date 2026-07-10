@@ -184,6 +184,26 @@ function normalizeLanguagePref(value: string | undefined): string {
   return value?.trim() ?? "";
 }
 
+// Safety net: ctx.ui.input() can hang forever when the extension is loaded from
+// an NPM-installed package (the prompt never renders, the await never resolves,
+// and Pi freezes). Race the prompt against a timeout; on timeout, fall back to the
+// empty answer (treated as "no / this session only" by the gating logic) and notify
+// the user how to enable manually. This preserves the interactive prompt for the
+// working case while guaranteeing session_start can never block Pi permanently.
+const PROMPT_TIMEOUT_MS = 20000;
+async function safeInput(ctx: ExtensionContext, prompt: string): Promise<string | undefined> {
+  try {
+    return await Promise.race<string | undefined>([
+      ctx.ui.input(prompt),
+      new Promise<string | undefined>((resolve) =>
+        setTimeout(() => resolve("__PLANNER_PROMPT_TIMEOUT__"), PROMPT_TIMEOUT_MS),
+      ),
+    ]);
+  } catch {
+    return "";
+  }
+}
+
 async function ensureProjectLanguagePreferences(st: PlanStore): Promise<Project> {
   const project = await st.loadProject();
   const contentLanguage = normalizeLanguagePref(project.contentLanguage);
@@ -898,7 +918,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         enablePlanner = false; // 'never' persisted — no prompt, no activation
       } else {
         try {
-          const ans = await ctx.ui.input("Planner detected in this project. Enable the planner extension? (y)es / (n)o / (a)lways / n(e)ver)");
+          const ans = await safeInput(ctx, "Planner detected in this project. Enable the planner extension? (y)es / (n)o / (a)lways / n(e)ver)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["a", "always", "sempre"].includes(normalized)) {
             enablePlanner = true;
@@ -963,7 +983,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startWeb = false; // 'never' persisted
       } else if (server === null) {
         try {
-          const ans = await ctx.ui.input("Start the planner web UI? (y)es / (n)o / (a)lways / n(e)ver)");
+          const ans = await safeInput(ctx, "Start the planner web UI? (y)es / (n)o / (a)lways / n(e)ver)");
           const normalized = ans?.trim().toLowerCase() ?? "";
           if (["a", "always", "sempre"].includes(normalized)) {
             startWeb = true;
