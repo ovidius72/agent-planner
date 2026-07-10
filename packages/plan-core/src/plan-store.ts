@@ -466,10 +466,6 @@ export class PlanStore {
       tools: [],
       contentLanguage: "",
       chatLanguage: "",
-      plannerAutoEnable: false,
-      plannerNeverAsk: false,
-      plannerAutoStartWeb: false,
-      plannerNeverStartWeb: false,
       acceptedDecisions: [],
       workflowRules: {
         beforePhaseStart: [],

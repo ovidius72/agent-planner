@@ -120,8 +120,8 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "export-full", label: "export-full", description: "Export full detailed plan as Markdown" },
   { value: "bypass", label: "bypass", description: "Authorize edit/write without a task in-progress (15 min)" },
   { value: "clear-bypass", label: "clear-bypass", description: "Revoke the guard bypass" },
-  { value: "load", label: "load", description: "Re-enable planner and start web UI" },
-  { value: "disable", label: "disable", description: "Reset planner preferences and disable for this session" },
+  { value: "load", label: "load", description: "Enable planner + start web UI (LAN) and show resume summary" },
+  { value: "stop", label: "stop", description: "Disable planner and shut down the web UI" },
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -184,25 +184,6 @@ function normalizeLanguagePref(value: string | undefined): string {
   return value?.trim() ?? "";
 }
 
-// Safety net: ctx.ui.input() can hang forever when the extension is loaded from
-// an NPM-installed package (the prompt never renders, the await never resolves,
-// and Pi freezes). Race the prompt against a timeout; on timeout, fall back to the
-// empty answer (treated as "no / this session only" by the gating logic) and notify
-// the user how to enable manually. This preserves the interactive prompt for the
-// working case while guaranteeing session_start can never block Pi permanently.
-const PROMPT_TIMEOUT_MS = 20000;
-async function safeInput(ctx: ExtensionContext, prompt: string): Promise<string | undefined> {
-  try {
-    return await Promise.race<string | undefined>([
-      ctx.ui.input(prompt),
-      new Promise<string | undefined>((resolve) =>
-        setTimeout(() => resolve("__PLANNER_PROMPT_TIMEOUT__"), PROMPT_TIMEOUT_MS),
-      ),
-    ]);
-  } catch {
-    return "";
-  }
-}
 
 async function ensureProjectLanguagePreferences(st: PlanStore): Promise<Project> {
   const project = await st.loadProject();
@@ -357,10 +338,11 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
       currentTask ? `- Focus task: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Focus task: nessun task attivo in questo momento.",
       handoff?.updatedAt ? `- Handoff letto da .planner/HANDOFF.md (aggiornato ${handoff.updatedAt}).` : "- Nessun handoff strutturato disponibile.",
       !hasActiveWork && handoff?.updatedAt ? "- Nota: l'handoff è un suggerimento della sessione precedente; con 0 task/fasi attivi va validato contro stato e dipendenze correnti prima di riprendere un task specifico." : "",
-      webUrl ? `- Dashboard web: ${webUrl}` : "- Dashboard web: non attiva in questa sessione.",
       `- Prossima attività consigliata: ${nextActivity}.`,
       "",
       "Vuoi che riprendiamo da qui?",
+      "",
+      webUrl ? `🌐 Web UI: ${webUrl}${lastKnownWebPort ? ` (port ${lastKnownWebPort})` : ""}` : "🌐 Web UI: not running — avvia con /planner load",
     ].filter(Boolean).join("\n");
   }
 
@@ -372,10 +354,11 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
     currentTask ? `- Task focus: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Task focus: no active task right now.",
     handoff?.updatedAt ? `- Handoff loaded from .planner/HANDOFF.md (updated ${handoff.updatedAt}).` : "- No structured handoff found.",
     !hasActiveWork && handoff?.updatedAt ? "- Note: the handoff is only a previous-session hint; with 0 active tasks/phases it must be validated against current planner state and dependencies before resuming a specific task." : "",
-    webUrl ? `- Web dashboard: ${webUrl}` : "- Web dashboard: not active in this session.",
     `- Recommended next activity: ${nextActivity}.`,
     "",
     "Do you want to resume from here?",
+    "",
+    webUrl ? `🌐 Web UI: ${webUrl}${lastKnownWebPort ? ` (port ${lastKnownWebPort})` : ""}` : "🌐 Web UI: not running — start with /planner load",
   ].filter(Boolean).join("\n");
 }
 
@@ -755,15 +738,13 @@ async function maybeStartWeb(ctx: ExtensionContext): Promise<void> {
     plannerSessionEnabled = true;
     return;
   }
-  const ans = await ctx.ui.input("Planner active for this session. Start the web UI now? (y/N)");
-  if (ans && /^(y|yes|s|si|sì)$/i.test(ans.trim())) {
-    ctx.ui.notify("Starting web server…", "info");
-    try {
-      await startServer(ctx);
-      ctx.ui.notify(`Web UI ready. Open: ${(server as ServeHandle | null)?.url ?? "?"}`, "info");
-    } catch (err) {
-      ctx.ui.notify(`Failed to start web server: ${String(err)}`, "error");
-    }
+  ctx.ui.notify("Starting web server (LAN)…", "info");
+  try {
+    await startServer(ctx, undefined, "lan");
+    const srv = server as ServeHandle | null;
+    ctx.ui.notify(srv?.lanUrl ? `Web UI ready. Local: ${srv.localUrl} — LAN: ${srv.lanUrl}` : `Web UI ready. Open: ${srv?.url ?? "?"}`, "info");
+  } catch (err) {
+    ctx.ui.notify(`Failed to start web server: ${String(err)}`, "error");
   }
 }
 
@@ -775,16 +756,7 @@ function normalizeVisibility(input: string | undefined): "local" | "lan" | undef
   return undefined;
 }
 
-async function promptWebVisibility(ctx: ExtensionContext): Promise<"local" | "lan"> {
-  try {
-    const ans = await ctx.ui.input("Web UI visibility: (local) only this machine  /  (lan) visible on the local network? [local/lan]");
-    const v = normalizeVisibility(ans);
-    if (v) return v;
-  } catch {}
-  return "local";
-}
-
-async function startServer(ctx: ExtensionContext, requestedPort?: number, visibility: "local" | "lan" = "local"): Promise<void> {
+async function startServer(ctx: ExtensionContext, requestedPort?: number, visibility: "local" | "lan" = "lan"): Promise<void> {
   plannerSessionEnabled = true;
   if (server) return;
   const host = visibility === "lan" ? "0.0.0.0" : "127.0.0.1";
@@ -910,38 +882,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     let project = exists ? await st.loadProject().catch(() => null) : null;
 
     // ── Step 1: Enable gating ───────────────────────────────────────
+    // No blocking prompt in session_start: ctx.ui.input()/select() do not
+    // render for NPM-loaded ESM extensions during session_start (they hang
+    // until the safety-net timeout). The planner is always DISABLED at
+    // startup; the user enables it with '/planner load' (which also starts
+    // the web UI on LAN and triggers the resume summary showing the URL).
     let enablePlanner = false;
     if (exists) {
-      if (project?.plannerAutoEnable) {
-        enablePlanner = true; // 'always' persisted — no prompt
-      } else if (project?.plannerNeverAsk) {
-        enablePlanner = false; // 'never' persisted — no prompt, no activation
-      } else {
-        try {
-          const ans = await safeInput(ctx, "Planner detected in this project. Enable the planner extension? (y)es / (n)o / (a)lways / n(e)ver)");
-          const normalized = ans?.trim().toLowerCase() ?? "";
-          if (["a", "always", "sempre"].includes(normalized)) {
-            enablePlanner = true;
-            if (project) { project.plannerAutoEnable = true; project.plannerNeverAsk = false; await st.saveProject(project); }
-            ctx.ui.notify("Saved: planner will auto-enable for this project.", "info");
-          } else if (["e", "never", "mai"].includes(normalized)) {
-            enablePlanner = false;
-            if (project) { project.plannerNeverAsk = true; project.plannerAutoEnable = false; await st.saveProject(project); }
-            try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
-            ctx.ui.notify("Saved: planner will not ask again for this project. Use '/planner load' to re-enable manually.", "info");
-          } else if (/^(y|yes|s|si|sì)$/i.test(normalized)) {
-            enablePlanner = true; // this session only
-          } else {
-            // 'n' / 'no' / empty — this session only, NOT persisted
-            enablePlanner = false;
-            try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
-            ctx.ui.notify("Planner disabled for this session. Use '/planner load' to enable manually.", "info");
-          }
-        } catch {
-          enablePlanner = false;
-          try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
-        }
-      }
+      ctx.ui.notify("Planner detected in this project. Run '/planner load' to enable the planner and start the web UI (LAN).", "info");
     }
     plannerSessionEnabled = enablePlanner;
 
@@ -960,83 +908,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       return;
     }
 
-    // ── Step 2: Web UI gating (only if planner enabled) ─────────────
-    startupResumePromptPending = exists && plannerSessionEnabled;
-    startupResumeSummaryPending = exists && plannerSessionEnabled;
-    if (exists && plannerSessionEnabled) {
-      // Migration first.
-      try { await migrateToUuids(st); } catch (e) {
-        ctx.ui.notify(`Migration failed: ${e instanceof Error ? e.message : String(e)}`, "error");
-      }
-      await st.ensureStructureOrdering().catch(() => {});
-      // Reconcile derived statuses once on startup: backfills any drift from
-      // manual edits, pre-fix data, or tools that bypassed the rollup.
-      // Uses maybeHealStatuses (idempotent via healedStatusRoots guard) so the
-      // later call below and before_agent_start don't re-run it (startup dedup).
-      await maybeHealStatuses(st).catch(() => {});
-
-      // Decide whether to start the web UI based on persisted prefs or prompt.
-      let startWeb = false;
-      if (project?.plannerAutoStartWeb) {
-        startWeb = true; // 'always' persisted
-      } else if (project?.plannerNeverStartWeb) {
-        startWeb = false; // 'never' persisted
-      } else if (server === null) {
-        try {
-          const ans = await safeInput(ctx, "Start the planner web UI? (y)es / (n)o / (a)lways / n(e)ver)");
-          const normalized = ans?.trim().toLowerCase() ?? "";
-          if (["a", "always", "sempre"].includes(normalized)) {
-            startWeb = true;
-            if (project) { project.plannerAutoStartWeb = true; project.plannerNeverStartWeb = false; await st.saveProject(project); }
-          } else if (["e", "never", "mai"].includes(normalized)) {
-            startWeb = false;
-            if (project) { project.plannerNeverStartWeb = true; project.plannerAutoStartWeb = false; await st.saveProject(project); }
-          } else if (/^(y|yes|s|si|sì)$/i.test(normalized)) {
-            startWeb = true;
-          } else {
-            startWeb = false; // 'n' / 'no' / empty — this session only
-          }
-        } catch {
-          startWeb = false;
-        }
-      }
-
-      if (startWeb && server === null) {
-        const visibility = await promptWebVisibility(ctx);
-        await startServer(ctx, preferredPort, visibility).catch(() => {});
-        const srv = server as ServeHandle | null;
-        if (srv) {
-          const urls = srv.lanUrl ? `${srv.localUrl} (LAN: ${srv.lanUrl})` : srv.url;
-          ctx.ui.notify(`Web UI started at ${urls}`, "info");
-        }
-      }
-
-      const url = (server as ServeHandle | null)?.url ?? "Starting server...";
-      ctx.ui.notify(`Planner enabled. Dashboard: ${url}\nAnalyzing project state and preparing resume summary...`, "info");
-      await ensureProjectLanguagePreferences(st).catch(() => null);
-      // (maybeHealStatuses already ran above — skipped here thanks to the guard.)
-      // Background cleanup of orphan .bak/.tmp.* files (non-blocking)
-      st.cleanupOrphanBackups().catch(() => {});
-      const handoff = await st.loadHandoff().catch(() => null);
-      if (handoff?.content) {
-        ctx.ui.notify(`Handoff detected at .planner/HANDOFF.md (updated ${handoff.updatedAt}). It will be loaded automatically when the agent starts.`, "info");
-      }
-
-      // Mark heavy init done so before_agent_start doesn't re-run migration,
-      // status healing, and language prefs on the first turn (startup dedup:
-      // all of these already ran in this session_start block). refreshResume is
-      // safe to skip here because the per-turn context builder falls back to
-      // loadResume() ?? refreshResume() when building the system prompt.
-      plannerHeavyInitDone = true;
-
-      pi.sendMessage({
-        customType: "planner-resume-trigger",
-        content: "Emit the mandatory planner startup resume summary now.",
-        display: false,
-      }, {
-        triggerTurn: true,
-      });
-    }
     } catch (e) {
       // Defensive: never let session_start throw crash Pi silently.
       try { ctx.ui.notify(`Planner session_start error: ${e instanceof Error ? e.message : String(e)}`, "error"); } catch {}
@@ -1215,10 +1086,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       "bypass",
       "clear-bypass",
       "load",
-      "disable",
+      "stop",
     ];
 
-    const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, disable\n" +
+    const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, stop\n" +
       "Try: /planner <TAB>  |  /planner feature list  |  /planner task start  |  /planner export-full\n" +
       "Handoff actions: /planner handoff prepare | show | write | clear";
 
@@ -2304,7 +2175,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (server) { ctx.ui.notify(`Already running at ${server.lanUrl ? server.localUrl + " (LAN: " + server.lanUrl + ")" : server.url}`, "info"); return; }
           const visibilityArg = normalizeVisibility(parts[2]);
           const portArg = parts[2]?.trim() && Number.isFinite(parseInt(parts[2], 10)) ? parseInt(parts[2], 10) : undefined;
-          const visibility = visibilityArg ?? await promptWebVisibility(ctx);
+          const visibility = visibilityArg ?? "lan";
           ctx.ui.notify(`Starting web server (${visibility})${portArg ? ` on port ${portArg}` : ""} …`, "info");
           await startServer(ctx, portArg, visibility);
           const srv = server as ServeHandle | null;
@@ -2370,38 +2241,32 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
 
     if (a === "load") {
-      const project = await st.loadProject().catch(() => null);
-      if (project) {
-        let changed = false;
-        if (project.plannerNeverAsk) { project.plannerNeverAsk = false; changed = true; }
-        if (project.plannerNeverStartWeb) { project.plannerNeverStartWeb = false; changed = true; }
-        if (changed) {
-          await st.saveProject(project);
-          ctx.ui.notify("Cleared 'never' flags. Planner enabled for this session.", "info");
-        }
-      }
       plannerSessionEnabled = true;
       if (!server) {
-        ctx.ui.notify("Starting web server …", "info");
-        await startServer(ctx);
+        ctx.ui.notify("Starting web server (LAN) …", "info");
+        await startServer(ctx, undefined, "lan").catch(() => {});
       }
-      ctx.ui.notify(`Planner loaded. Web UI: ${server?.url ?? "(not started)"}`, "info");
+      const srv = server as ServeHandle | null;
+      ctx.ui.notify(srv?.lanUrl ? `Planner loaded. Web UI: ${srv.localUrl} (LAN: ${srv.lanUrl})` : `Planner loaded. Web UI: ${srv?.url ?? "(not started)"}`, "info");
+      // Trigger the mandatory startup resume summary so the agent surfaces the
+      // web UI address (and project state) immediately after loading.
+      startupResumePromptPending = true;
+      startupResumeSummaryPending = true;
+      pi.sendMessage({
+        customType: "planner-resume-trigger",
+        content: "Emit the mandatory planner startup resume summary now (include the web UI address and port).",
+        display: false,
+      }, {
+        triggerTurn: true,
+      });
       return;
     }
 
-    if (a === "disable") {
-      const project = await st.loadProject().catch(() => null);
-      if (project) {
-        project.plannerAutoEnable = false;
-        project.plannerNeverAsk = false;
-        project.plannerAutoStartWeb = false;
-        project.plannerNeverStartWeb = false;
-        await st.saveProject(project);
-      }
+    if (a === "stop" || a === "disable") {
       plannerSessionEnabled = false;
       await stopServer().catch(() => {});
       try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
-      ctx.ui.notify("Planner preferences reset to 'ask'. Disabled for this session. Next restart will prompt again.", "info");
+      ctx.ui.notify("Planner stopped. Web UI shut down. Run '/planner load' to re-enable.", "info");
       return;
     }
 
@@ -3545,7 +3410,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         : (handoff?.updatedAt
           ? "Read the handoff, then validate current plan ordering and dependencies before picking the next task."
           : "Review the current plan and choose the next task.");
-      const webUrl = server?.url ?? "";
+      const webServer = server as ServeHandle | null;
+      const webLocalUrl = webServer?.localUrl ?? webServer?.url ?? "";
+      const webLanUrl = webServer?.lanUrl ?? "";
+      let webPort = "";
+      try { const p = new URL(webLocalUrl).port; if (p) webPort = p; } catch {}
+      const webUrl = webLocalUrl;
+      const webUrlFull = webLanUrl ? `${webLocalUrl} (LAN: ${webLanUrl})` : webLocalUrl;
 
       const openQuestions = plan.phases
         .flatMap((p: Phase) => p.openQuestions.map((q: string) => `[${p.id}] ${q}`))
@@ -3580,7 +3451,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         currentPhase ? `- Mention current phase ONLY because it is actually active: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Mention that no current phase is active.",
         currentTask ? `- Mention current task ONLY because it is actually active: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Mention that no current task is active.",
         !hasActiveWork ? "- If a handoff exists, describe it only as a previous-session hint to validate against current planner state, ordering, and dependencies. Do NOT present it as the current focus." : "",
-        webUrl ? `- Mention the active web dashboard URL: ${webUrl}` : "- Explicitly say whether the web dashboard is active in this session.",
+        webUrl ? `- At the END of your summary, you MUST print a dedicated line with the web dashboard address and port, exactly: '🌐 Web UI: ${webLocalUrl}${webPort ? ` (port ${webPort})` : ""}${webLanUrl ? ` — LAN: ${webLanUrl}` : ""}'. This line is mandatory; do not omit it.` : "- Explicitly tell the user whether the web dashboard is active in this session (and how to start it with '/planner web start' if not).",
         `- Mention the next suggested activity: ${nextActivity}`,
         "- THEN ask the user explicitly whether they want to resume that activity now.",
         "- Do NOT assume yes. Wait for the user's answer before continuing implementation work.",
@@ -3590,6 +3461,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // Build/refresh the context block (slow path: cache miss).
       const contextBlock = [
         `[Plan Context — ${project.name}]`,
+        // ── Web UI status (prominent — agent must surface URL in its summary) ──
+        webUrl ? `🌐 WEB UI RUNNING: ${webUrlFull}${webPort ? ` (port ${webPort})` : ""}. Include this address+port at the end of your resume summary.` : `Web UI: not running. Start it with '/planner web start'.`,
+        "",
         // ── MANDATORY OPERATIONAL PROTOCOL (top priority, non-negotiable) ──
         "",
         "═══════════════════════════════════════════════════════════════",

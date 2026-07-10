@@ -96,10 +96,6 @@ export const ProjectSchema = z.object({
   tools: z.array(z.string().min(1)).default([]),
   contentLanguage: z.string().default(""),
   chatLanguage: z.string().default(""),
-  plannerAutoEnable: z.boolean().default(false),
-  plannerNeverAsk: z.boolean().default(false),
-  plannerAutoStartWeb: z.boolean().default(false),
-  plannerNeverStartWeb: z.boolean().default(false),
   workflowRules: WorkflowRulesSchema,
   acceptedDecisions: z.array(AcceptedDecisionSchema).default([]),
 });
