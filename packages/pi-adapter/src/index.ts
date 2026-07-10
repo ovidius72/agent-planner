@@ -80,6 +80,7 @@ let startupResumePromptPending = false;
 let startupResumeSummaryPending = false;
 let plannerHeavyInitDone = false; // runs migrate/heal/refreshResume once per session, not every turn
 let startupResumeSummaryText = "";
+let startupResumeSummaryTimer: ReturnType<typeof setTimeout> | null = null;
 let contextBlockCache = ""; // cached before_agent_start context; rebuilt only when plan changes
 let contextBlockDirty = true; // build on first turn; invalidated by write notify hook
 let editedThisTurn = false; // tracks edit/write activity for the task_complete reminder
@@ -949,18 +950,30 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (!plannerSessionEnabled) return;
     if (!startupResumeSummaryPending) return;
     if (event.message.role !== "assistant") return;
-    const hasVisibleText = event.message.content.some((item) => item.type === "text" && Boolean((item as { text?: string }).text?.trim()));
-    if (!hasVisibleText) return;
+    const visibleText = event.message.content
+      .filter((item) => item.type === "text")
+      .map((item) => (item as { text?: string }).text ?? "")
+      .join("");
+    if (!visibleText.trim()) return;
+    // Dedupe: if the agent already printed the address, don't double-append.
+    if (visibleText.includes("🌐 Web UI:")) return;
 
-    startupResumeSummaryPending = false;
-    const summaryText = startupResumeSummaryText.trim();
-    startupResumeSummaryText = "";
-    if (!summaryText) return;
+    // Append the web address to EVERY assistant text message during the recap
+    // turn (template: "{agent_summary}\n\n{web_address}"). We intentionally do
+    // NOT consume the flag here: the recap turn can span several assistant
+    // messages (tool calls + final summary), and we must guarantee the address
+    // lands on the final summary the user actually reads. The flag is cleared
+    // at the start of the next turn (before_agent_start) plus a safety timeout.
+    const webServer = server as ServeHandle | null;
+    const localUrl = webServer?.localUrl ?? webServer?.url ?? "";
+    if (!localUrl) return;
+    const lanUrl = webServer?.lanUrl ?? "";
+    const urlLine = `\n\n🌐 Web UI: ${localUrl}${lanUrl ? ` — LAN: ${lanUrl}` : ""}`;
 
     return {
       message: {
         ...event.message,
-        content: [{ type: "text", text: summaryText }],
+        content: [...event.message.content, { type: "text" as const, text: urlLine }],
       },
     };
   });
@@ -2250,6 +2263,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // at the END of that summary (not in a notify here) so it stays visible.
       startupResumePromptPending = true;
       startupResumeSummaryPending = true;
+      if (startupResumeSummaryTimer) clearTimeout(startupResumeSummaryTimer);
+      startupResumeSummaryTimer = setTimeout(() => {
+        startupResumeSummaryPending = false;
+        startupResumeSummaryTimer = null;
+      }, 60000);
       pi.sendMessage({
         customType: "planner-resume-trigger",
         content: "planner recap",
@@ -3434,6 +3452,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const ambientSummary = ambient
         ? `node=${ambient.nodeVersion || "?"} pm=${ambient.packageManager || "?"} lockfile=${ambient.lockfile || "none"} scripts=${Object.entries(ambient.scripts).map(([k, v]) => `${k}="${v}"`).join(", ") || "none"}`
         : "(not scanned)";
+
+      // The recap turn is over once we reach a turn that wasn't triggered by
+      // /planner load: startupResumePromptPending is consumed on the recap turn
+      // itself, so on any later turn we stop appending the web address.
+      if (startupResumeSummaryPending && !startupResumePromptPending) {
+        startupResumeSummaryPending = false;
+      }
 
       if (startupResumeSummaryPending) {
         startupResumeSummaryText = await buildStartupResumeSummary(st).catch(() => "");

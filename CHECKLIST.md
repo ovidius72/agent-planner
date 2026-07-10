@@ -118,6 +118,21 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **Sblocco immediato heca**: impostato `plannerAutoEnable: true` + `plannerAutoStartWeb: true` in `heca/.planner/project.json` → entrambi i prompt saltati (auto-enable + auto-start-web) → nessuna `ctx.ui.input()` in `session_start` → Pi si sblocca con planner **abilitato**. (Poi reverted `plannerAutoEnable` a false in 0.2.8 per ripristinare la domanda.)
 - [x] **Fix 0.2.8 (UX + robustezza)**: l'utente ha segnalato che auto-enable skippava del tutto la domanda. Sostituito `ctx.ui.input()` (testo libero, 4-way) con `ctx.ui.select()` menu a 4 voci (Yes/Always/No/Never) per entrambi i gating (enable + web). UX migliore per una scelta fissa E usa un componente UI diverso (select vs input) che potrebbe renderizzare dove `input()` non lo faceva. Aggiunto `safeSelect(ctx, title, options)` con guard `ctx.hasUI` + race con timeout 20s (safety net). Reverted heca `plannerAutoEnable: false` così la domanda viene posta via menu.
 
+### Fatto — refactor Dashboard Web UI (sessione 2026-07-10)
+- [x] **Work Tree: feature `done` collapsed di default**: in modalità `"all"` (default all'avvio) le feature con `status === "done"` non vengono più auto-espande. L'utente può espanderle manualmente col chevron (passa in modalità `"smart"` per quel nodo).
+- [x] **Refactor `routes/dashboard/route.tsx`** (da ~800 righe a 60): il componente monolitico è stato scomposto in moduli/hook/componenti dedicati, preserving behavior (build + `pnpm check` puliti, pipeline `build:pi-adapter` verde con `web-ui-dist` popolato):
+  - `lib/dashboard-storage.ts` — helper localStorage puri (`dashboardStorageKey`, `readStoredArray`, `writeStoredArray`, `readStoredBoolean`).
+  - `lib/dashboard-tree.ts` — `buildWorkTree` + tipi `WorkTreeFeature`/`WorkTreePhase` + `countTasks`/`countDoneTasks`/`formatSequence` + `PlannerWsMessage`.
+  - `lib/dashboard-filters.ts` — `toggleStatus`/`matchesStatus` + liste `all*StatusValues`.
+  - `hooks/use-dashboard-tree.ts` — hook che racchiude TUTTO lo state del Work Tree: tree, espansione (mode + per-node), filtri status, hide-done/planned, active-only, highlight recenti via WS, persistenza localStorage. Include il fix done-collapsed.
+  - `components/dashboard/stat-cards.tsx` — le 4 stat card (compute interna).
+  - `components/dashboard/ai-consolidated-context.tsx` — card collapsible context (scope/rules/decisions).
+  - `components/dashboard/latest-completed-tasks.tsx` — sezione ultimi task completati.
+  - `components/dashboard/work-tree-rows.tsx` — `FeatureTreeRow`/`PhaseTreeRow`/`TaskTreeRow` presentazionali (estratto il JSX triplamente annidato).
+  - `components/dashboard/work-tree.tsx` — `WorkTree` che consuma `useDashboardTree` + renderizza filter bar + tree + fallback active tasks + repair.
+  - `routes/dashboard/route.tsx` — orchestratore snello (Project Goal + composizione 4 sezioni).
+- [ ] **Pubblicare 0.2.13**: `pnpm release:publish:adapter` (rebuilda web-ui in `web-ui-dist` + pubblica; include anche il fix `message_end` URL-append). Serve OTP. Poi `pi install npm:@agent-plan/pi-adapter` + riavvio + `/planner load`.
+
 ### Prossimi passi
 - [ ] Web UI: pagina requirements (vedi `BACKLOG.md` P2-3)
 - [ ] Manutenere README + guida d'uso in sync (vedi `BACKLOG.md` P2-4)
