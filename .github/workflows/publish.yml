@@ -1,0 +1,77 @@
+name: publish
+
+# Publishes all public packages to npm on every push to main.
+# Idempotent: each package is published only if its current version is not
+# already on npm (checked via `npm view <name>@<version>`), so re-runs and
+# pushes without version bumps are no-ops.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build & typecheck (core, mcp, server, agent-plan, web-ui)
+        run: pnpm build && pnpm check
+
+      - name: Build pi-adapter (web-ui-dist + adapter)
+        run: pnpm build:pi-adapter
+
+      - name: Publish (skip already-published versions)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          publish_pkg() {
+            local dir="$1"
+            local name ver priv
+            name=$(node -p "require('./${dir}/package.json').name")
+            ver=$(node -p "require('./${dir}/package.json').version")
+            priv=$(node -p "require('./${dir}/package.json').private || false")
+
+            if [ "$priv" = "true" ]; then
+              echo "private  → ${name} (skip)"
+              return 0
+            fi
+
+            if npm view "${name}@${ver}" >/dev/null 2>&1; then
+              echo "skip     → ${name}@${ver} (already on npm)"
+              return 0
+            fi
+
+            echo "publish  → ${name}@${ver}"
+            pnpm --filter "${name}" publish --access public --no-git-checks
+          }
+
+          # Order matters for clarity only: each package is independent at
+          # publish time. pnpm resolves workspace:* ranges automatically.
+          publish_pkg packages/plan-core
+          publish_pkg packages/plan-mcp
+          publish_pkg packages/plan-server
+          publish_pkg packages/agent-plan
+          publish_pkg packages/pi-adapter
