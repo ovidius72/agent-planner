@@ -157,6 +157,18 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Build + typecheck puliti; `dist` verificato (clearing a riga 3438, cache early-return a 3445, ordine corretto).
 - [ ] **Da fare al release**: bump pi-adapter a `0.2.14` (`pnpm release:bump:adapter`) prima della PR `develop → main` per pubblicare la fix.
 
+### Fatto — planner-web management in plan-mcp (sessione 2026-07-13)
+- [x] **Problema**: in Claude Code (integrazione via `plan-mcp` MCP stdio) il tool `planner-web` era uno stub che restituiva solo testo guida ("MCP stdio package does not manage the web server yet"). Nessuna gestione effettiva del web server, a differenza del Pi adapter (`/planner web status`).
+- [x] **Fix** (`packages/plan-mcp/src/index.ts` + `package.json`):
+  - aggiunta dipendenza workspace `@agent-plan/server`.
+  - import di `serve()`/`ServeHandle` da `@agent-plan/server` (stessa API di plan-server CLI e Pi adapter).
+  - variabile di modulo `webHandle` (in-process, vive finché il processo MCP è attivo).
+  - implementati i 3 action: **start** (`serve({planRoot, host:"0.0.0.0", port:0, quiet:true})` → LAN + porta dinamica OS-assegnata), **status** (URL/port/mode o "not running"), **stop** (`handle.close()`).
+  - plan-root riusa `AGENT_PLAN_ROOT || cwd()/.planner` (coerente con gli altri tool).
+- [x] Scelte di design (approvate): **in-process** come Pi, **LAN** (`0.0.0.0`), **porta dinamica** (zero conflitti con plan-server CLI/Pi).
+- [x] Build + typecheck puliti; smoke test `serve({port:0,host:"0.0.0.0"})` verificato (porta dinamica `51262`, `localUrl`+`lanUrl` corretti, mode `lan`, HTTP risponde, close pulita).
+- [ ] **Da fare al release**: bump `@agent-plan/mcp` prima della PR `develop → main` per pubblicare.
+
 ### Prossimi passi
 - [ ] **Configurare secret `NPM_TOKEN`** nel repo GitHub (Automation/Granular token) e pushare il workflow + le modifiche su `main` per attivare la publish automatica (pubblica agent-plan 0.2.8 e gli altri 0.2.8 se non ancora su npm).
 - [ ] Web UI: pagina requirements (vedi `BACKLOG.md` P2-3)

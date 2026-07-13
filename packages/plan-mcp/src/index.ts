@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { PlanStore, ExportService, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { serve } from "@agent-plan/server";
+import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
@@ -37,6 +39,10 @@ async function requireStore(): Promise<PlanStore> {
   if (!(await st.exists())) throw new Error(`No .planner/ found at ${st.root}. Use planner-init first.`);
   return st;
 }
+
+// In-process web server handle, managed by the planner-web tool. Lives as long
+// as this MCP stdio process (i.e. the host session). Null when not running.
+let webHandle: ServeHandle | null = null;
 
 function findFeatureByRef(features: Feature[], ref: string): Feature | undefined {
   const normalized = ref.trim().toLowerCase();
@@ -746,11 +752,43 @@ server.registerTool("planner-handoff-clear", {
 });
 
 server.registerTool("planner-web", {
-  description: "Planner web command placeholder for MCP stdio. Use plan-server CLI directly for now.",
+  description: "Manage the planner web dashboard (start/status/stop) from MCP stdio. Runs an in-process HTTP+WS server bound to LAN; it lives as long as this MCP process. plan-root comes from AGENT_PLAN_ROOT or cwd()/.planner.",
   inputSchema: {
     action: z.enum(["start", "stop", "status"]).default("status"),
   },
-}, async ({ action }) => text(`planner-web ${action}: MCP stdio package does not manage the web server yet. Use \`pnpm --filter @agent-plan/server build\` and the plan-server CLI, or Pi /planner web ${action}.`));
+}, async ({ action }) => {
+  if (action === "start") {
+    if (webHandle) {
+      return text(`planner-web already running: ${webHandle.localUrl}${webHandle.lanUrl ? ` — LAN: ${webHandle.lanUrl}` : ""} (mode: ${webHandle.mode})`);
+    }
+    const root = planRoot();
+    const storeCheck = new PlanStore(root);
+    if (!(await storeCheck.exists())) {
+      return text(`planner-web start: no .planner/ found at ${root}. Run planner-init first.`);
+    }
+    try {
+      // port: 0 → OS assigns a free port (no conflict with plan-server CLI / Pi).
+      // host: 0.0.0.0 → bind LAN (reachable from other devices), like Pi /planner load.
+      webHandle = await serve({ planRoot: root, host: "0.0.0.0", port: 0, quiet: true });
+      return text(`planner-web started: ${webHandle.localUrl}${webHandle.lanUrl ? ` — LAN: ${webHandle.lanUrl}` : ""} (mode: ${webHandle.mode})`);
+    } catch (err) {
+      webHandle = null;
+      return text(`planner-web start failed: ${(err as Error).message}`);
+    }
+  }
+  if (action === "stop") {
+    if (!webHandle) return text("planner-web not running.");
+    const stoppedUrl = webHandle.localUrl;
+    await webHandle.close().catch(() => {});
+    webHandle = null;
+    return text(`planner-web stopped (was ${stoppedUrl}).`);
+  }
+  // status
+  if (webHandle) {
+    return text(`planner-web running: ${webHandle.localUrl}${webHandle.lanUrl ? ` — LAN: ${webHandle.lanUrl}` : ""} (mode: ${webHandle.mode}, bindHost: ${webHandle.bindHost})`);
+  }
+  return text("planner-web not running. Use planner-web with action=start to start the dashboard.");
+});
 
 server.registerTool("planner-load", {
   description: "MCP no-op equivalent of Pi /planner load. MCP server is already loaded when tools are available.",

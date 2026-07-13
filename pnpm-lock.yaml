@@ -57,6 +57,9 @@ importers:
       '@agent-plan/core':
         specifier: workspace:*
         version: link:../plan-core
+      '@agent-plan/server':
+        specifier: workspace:*
+        version: link:../plan-server
       '@modelcontextprotocol/sdk':
         specifier: ^1.17.0
         version: 1.29.0(zod@3.25.76)
