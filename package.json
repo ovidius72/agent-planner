@@ -14,6 +14,9 @@
   "license": "MIT",
   "repository": "https://github.com/agent-plan/agent-plan-platform",
   "type": "module",
+  "engines": {
+    "node": ">=25"
+  },
   "scripts": {
     "check": "tsc -b",
     "build": "tsc -b --clean && tsc -b && pnpm build:web-ui",
@@ -30,7 +33,7 @@
     "release:bump:adapter": "node scripts/release-bump.cjs --adapter"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.0.0",
     "typescript": "^5.8.0"
   },
   "pnpm": {
