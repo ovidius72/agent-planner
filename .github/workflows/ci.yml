@@ -1,0 +1,42 @@
+name: ci
+
+# Validates build + typecheck on develop and on every pull request.
+# Does NOT publish (that is publish.yml, on push to main only).
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '25'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (core, mcp, server, agent-plan, web-ui)
+        run: pnpm build
+
+      - name: Build pi-adapter (web-ui-dist + adapter)
+        run: pnpm build:pi-adapter
+
+      - name: Typecheck
+        run: pnpm check
