@@ -2263,6 +2263,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // at the END of that summary (not in a notify here) so it stays visible.
       startupResumePromptPending = true;
       startupResumeSummaryPending = true;
+      // Force the recap turn to rebuild the context (slow path) so the resume
+      // protocol is injected fresh. The protocol is appended per-turn and is
+      // never baked into the cache, so later turns won't see it.
+      contextBlockDirty = true;
       if (startupResumeSummaryTimer) clearTimeout(startupResumeSummaryTimer);
       startupResumeSummaryTimer = setTimeout(() => {
         startupResumeSummaryPending = false;
@@ -3355,6 +3359,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         plannerHeavyInitDone = true;
       }
 
+      // Resume-flag lifecycle — MUST run every turn, including cache hits.
+      // /planner load sets both flags and dirties the cache so the recap turn
+      // rebuilds (slow path) and injects the resume protocol. We consume
+      // startupResumePromptPending here (it marks the recap turn only), and we
+      // stop appending the web UI address on every later turn. Doing this
+      // BEFORE the cache fast-path is what prevents the URL from leaking onto
+      // every assistant message after /planner load.
+      const isRecapTurn = startupResumePromptPending;
+      startupResumePromptPending = false;
+      if (startupResumeSummaryPending && !isRecapTurn) {
+        startupResumeSummaryPending = false;
+      }
+
       // Fast path: on steady turns (no plan changes since last build) reuse
       // the cached context block and skip all the per-turn I/O + string build.
       // The cache is invalidated by the write-notify hook whenever the plan
@@ -3453,18 +3470,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ? `node=${ambient.nodeVersion || "?"} pm=${ambient.packageManager || "?"} lockfile=${ambient.lockfile || "none"} scripts=${Object.entries(ambient.scripts).map(([k, v]) => `${k}="${v}"`).join(", ") || "none"}`
         : "(not scanned)";
 
-      // The recap turn is over once we reach a turn that wasn't triggered by
-      // /planner load: startupResumePromptPending is consumed on the recap turn
-      // itself, so on any later turn we stop appending the web address.
-      if (startupResumeSummaryPending && !startupResumePromptPending) {
-        startupResumeSummaryPending = false;
-      }
-
-      if (startupResumeSummaryPending) {
-        startupResumeSummaryText = await buildStartupResumeSummary(st).catch(() => "");
-      }
-
-      const startupResumeProtocol = startupResumePromptPending ? [
+      const startupResumeProtocol = isRecapTurn ? [
         "",
         "STARTUP RESUME PROTOCOL (first reply of the session — mandatory):",
         "- You are resuming a planner-backed project session.",
@@ -3572,15 +3578,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         handoff?.content ? "If planner state shows no task/phase in-progress, do NOT present the handoff target as the current focus; present it only as a candidate to validate." : "",
         handoff?.content ? "When the handoff has been fully consumed and work is safely resumed, delete `.planner/HANDOFF.md` using the dedicated handoff delete command/tool." : "",
         handoff?.content ? handoff.content : "",
-        startupResumeProtocol,
         "Plan tools available: project_set_language_preferences, plan_init, project_update, requirement_list, requirement_create, requirement_update, requirement_delete, plan_get, feature_list, feature_get, feature_create, feature_update, feature_delete, phase_list, phase_get, phase_create, phase_update, phase_delete, task_list, task_get, task_create, task_update, task_delete, task_start, task_complete, plan_render, plan_get_handoff, plan_write_handoff, plan_delete_handoff, plan_authorize_bypass, plan_clear_bypass",
       ].filter(Boolean).join("\n");
         contextBlockCache = contextBlock;
         contextBlockDirty = false;
 
-      startupResumePromptPending = false;
+      // The resume protocol is per-turn only (the recap turn) — never bake it
+      // into the cached context block, or it would persist on every later turn.
       return {
-        systemPrompt: `${event.systemPrompt}\n\n---\n${contextBlockCache}`,
+        systemPrompt: `${event.systemPrompt}\n\n---\n${contextBlockCache}${startupResumeProtocol ? `\n\n${startupResumeProtocol}` : ""}`,
       };
     } catch {
       return;
