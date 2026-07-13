@@ -129,7 +129,7 @@ function defaultMcpConfig(flags: CliFlags): Record<string, unknown> {
 function plannerCommandTemplate(): string {
   return `---
 description: Route Agent Plan planner commands to MCP tools
-argument-hint: "init | show | export | export-full | reload | web status | feature list | feature add <name> | phase add <title> | task start <id> | task complete <id> | handoff prepare"
+argument-hint: "init | show | reload | load | disable | repair | export [--full] | web <status|start|stop> | feature <list|add|show|update|delete> | phase <add|show|discuss|update|delete> | task <add|show|discuss|update|delete|start|complete> | handoff <prepare|show|write|clear> | project <discuss|language> | bypass | clear-bypass"
 ---
 
 You are handling the Agent Plan slash command for this project.
