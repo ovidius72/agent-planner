@@ -148,6 +148,15 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **Conferma pubblicazione CI**: primo run su `main` ha pubblicato tutti i 5 package pubblicabili (core/mcp/server/agent-plan/pi-adapter), verificato sync 5/5 tra locale e npm.
 - [x] **Nuovo flusso di lavoro**: da oggi integrazione via feature branch + PR a `main` (modello `develop` → PR `main`). Il trigger `push: branches:[main]` pubblica automaticamente al merge della PR.
 
+### Fatto — Fix: Web UI address solo sul recap iniziale (sessione 2026-07-13)
+- [x] **Root cause**: l'indirizzo Web UI veniva accodato a OGNI messaggio dell'agente perché la logica di azzeramento dei flag (`startupResumeSummaryPending`/`startupResumePromptPending`) e l'iniezione del `startupResumeProtocol` stavano **dentro il ramo cache-miss** di `before_agent_start`, DOPO l'early-return della cache fast-path. Sui turni normali (cache valida) quelle righe non giravano mai → `startupResumeSummaryPending` restava `true` fino al timeout di 60s → URL su ogni risposta.
+- [x] **Fix** (`packages/pi-adapter/src/index.ts`):
+  - gestione del ciclo di vita dei flag (`isRecapTurn`, consumo di `promptPending`, azzeramento di `summaryPending` sui turni non-recap) spostata **PRIMA** della cache fast-path → gira su ogni turno, cache-hit inclusi.
+  - `/planner load` imposta `contextBlockDirty = true` così la turnata di recap ricostruisce il context (slow path) e inietta il protocollo fresco.
+  - `startupResumeProtocol` rimosso dal `contextBlock` (non più cotto in cache, che altrimenti sarebbe persistito su ogni turno) e accodato dinamicamente al `return` solo sul turno di recap.
+- [x] Build + typecheck puliti; `dist` verificato (clearing a riga 3438, cache early-return a 3445, ordine corretto).
+- [ ] **Da fare al release**: bump pi-adapter a `0.2.14` (`pnpm release:bump:adapter`) prima della PR `develop → main` per pubblicare la fix.
+
 ### Fatto — planner-web management in plan-mcp (sessione 2026-07-13)
 - [x] **Problema**: in Claude Code (integrazione via `plan-mcp` MCP stdio) il tool `planner-web` era uno stub che restituiva solo testo guida ("MCP stdio package does not manage the web server yet"). Nessuna gestione effettiva del web server, a differenza del Pi adapter (`/planner web status`).
 - [x] **Fix** (`packages/plan-mcp/src/index.ts` + `package.json`):
