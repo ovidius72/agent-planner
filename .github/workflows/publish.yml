@@ -47,6 +47,13 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "❌ NPM_TOKEN secret is not set."
+            echo "   Repo → Settings → Secrets and variables → Actions → New repository secret"
+            echo "   Name: NPM_TOKEN   Value: an npm Automation/Granular token with publish permission."
+            exit 1
+          fi
+
           publish_pkg() {
             local dir="$1"
             local name ver priv
