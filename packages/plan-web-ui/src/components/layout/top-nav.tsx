@@ -17,7 +17,7 @@ function LiveStatusBadge({ liveStatus }: { liveStatus: LiveStatus }) {
   return (
     <span className={`inline-flex min-h-11 items-center gap-2 rounded-[14px] border px-3 py-2 text-sm font-semibold ${config.className}`}>
       <span className={`h-2.5 w-2.5 rounded-full ${config.dotClassName}`} />
-      {config.label}
+      <span className="hidden sm:inline">{config.label}</span>
     </span>
   );
 }
@@ -68,8 +68,8 @@ export function TopNav({
   }
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur-xl">
-      <div className="page-container flex flex-col gap-4 py-3 md:flex-row md:items-center md:justify-between">
+    <div className="border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl backdrop-saturate-150">
+      <div className="page-container flex flex-col gap-3 py-2.5 md:flex-row md:items-center md:justify-between sm:gap-4 sm:py-3">
         <Link to="/" className="flex min-w-0 items-center gap-3">
           <div className="surface-card flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--accent)]">
             <Layers className="h-4 w-4" />
@@ -103,18 +103,18 @@ export function TopNav({
           </div>
         </Link>
 
-        <div className="flex items-center justify-between gap-3 md:justify-end">
+        <div className="flex items-center justify-end gap-2 sm:gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <LiveStatusBadge liveStatus={liveStatus} />
           </div>
-          <nav className="flex flex-wrap items-center gap-2">
+          <nav className="flex items-center gap-1.5 sm:gap-2">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.to === "/"}
                 className={({ isActive }) =>
-                  `inline-flex min-h-11 items-center gap-2 rounded-[14px] border px-4 py-2 text-sm font-semibold transition ${
+                  `inline-flex min-h-11 items-center gap-2 rounded-[14px] border px-3 py-2 text-sm font-semibold transition sm:px-4 ${
                     isActive
                       ? "border-transparent bg-[var(--accent-soft)] text-[var(--accent)]"
                       : "border-transparent text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
@@ -122,7 +122,7 @@ export function TopNav({
                 }
               >
                 <item.icon className="h-4 w-4" />
-                {item.label}
+                <span className="hidden sm:inline">{item.label}</span>
               </NavLink>
             ))}
           </nav>
@@ -133,10 +133,10 @@ export function TopNav({
               aria-haspopup="menu"
               aria-expanded={exportOpen}
               onClick={() => setExportOpen((open) => !open)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)]"
+              className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)] sm:px-4"
             >
               <Download className="h-4 w-4" />
-              Export
+              <span className="hidden sm:inline">Export</span>
               <ChevronDown className={`h-4 w-4 transition-transform ${exportOpen ? "rotate-180" : ""}`} />
             </button>
             {exportOpen ? (

@@ -169,6 +169,16 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Build + typecheck puliti; smoke test `serve({port:0,host:"0.0.0.0"})` verificato (porta dinamica `51262`, `localUrl`+`lanUrl` corretti, mode `lan`, HTTP risponde, close pulita).
 - [ ] **Da fare al release**: bump `@agent-plan/mcp` prima della PR `develop → main` per pubblicare.
 
+### Fatto — Responsive Web UI mobile (sessione 2026-07-13)
+- [x] **Problema**: su mobile il sito era inguardabile: (1) header `sticky` semitrasparente (`bg/90`) faceva vedere il contenuto sotto scrollando; (2) nomi task lunghi non andavano a capo → overflow che rompeva il layout; (3) bottoni header (Live/Dashboard/Features/Export) si affollavano e andavano a capo male; (4) testo e filtri troppo piccoli.
+- [x] **Fix** (`packages/plan-web-ui/src`):
+  - **Header**: `top-nav.tsx` root `bg-[var(--surface)]/90` → `/95` + `backdrop-saturate-150` (mantiene `backdrop-blur-xl`). Sfondo blur opaco, niente bleed.
+  - **Work Tree ridisegnato** (`work-tree-rows.tsx` + nuovo `EntityPathBadge` in `badges.tsx`): identificatore unificato `F00x[/P00x][/T00x]` in un singolo badge con segmenti colorati per gruppo (feature=viola, phase=ciano, task=verde). Il titolo ora sta **sotto** il badge e wrappa (`break-words [overflow-wrap:anywhere]`) invece di overfloware. Rimossi i glyph ASCII dell'albero (└─├─│); indentazione + chevron conservano la gerarchia.
+  - **Header mobile compatto** (`top-nav.tsx`): etichette Live/nav/Export nascoste sotto `sm` (`hidden sm:inline`) → su mobile solo icone, una riga ordinata; padding `px-3 sm:px-4`.
+  - **Leggibilità mobile**: `base.css` media query `max-width:640px { :root { font-size: 106.25% } }` (scale rem-based text). Filtri (`list-filters.tsx`): tap target `min-h-10` → `min-h-11`, padding `p-3 sm:p-4`, results label `text-xs` → `text-sm`.
+- [x] Build + typecheck puliti; `web-ui-dist` del pi-adapter ricostruito e servito contiene le nuove regole (`entity-path-badge` + media query).
+- [ ] **Da fare al release**: bump pi-adapter a `0.2.14` (`pnpm release:bump:adapter`) prima della PR `develop → main`.
+
 ### Prossimi passi
 - [ ] **Configurare secret `NPM_TOKEN`** nel repo GitHub (Automation/Granular token) e pushare il workflow + le modifiche su `main` per attivare la publish automatica (pubblica agent-plan 0.2.8 e gli altri 0.2.8 se non ancora su npm).
 - [ ] Web UI: pagina requirements (vedi `BACKLOG.md` P2-3)

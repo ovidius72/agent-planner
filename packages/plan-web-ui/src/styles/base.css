@@ -136,6 +136,49 @@ a { color: inherit; text-decoration: none; }
   color: var(--color-entity-task);
 }
 
+.entity-path-badge {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-elevated);
+  overflow: hidden;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.entity-path-seg {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.entity-path-seg--feature {
+  color: var(--color-entity-feature);
+  background: color-mix(in srgb, var(--color-entity-feature) 14%, transparent);
+}
+.entity-path-seg--phase {
+  color: var(--color-entity-phase);
+  background: color-mix(in srgb, var(--color-entity-phase) 14%, transparent);
+}
+.entity-path-seg--task {
+  color: var(--color-entity-task);
+  background: color-mix(in srgb, var(--color-entity-task) 14%, transparent);
+}
+.entity-path-sep {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 0.2rem;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  :root { font-size: 106.25%; }
+}
+
 .btn-primary {
   background: var(--accent);
   color: white;

@@ -69,3 +69,39 @@ export function ParentBadge({
 
   return null;
 }
+
+/**
+ * Unified entity-path badge: F00x[/P00x][/T00x] in a single pill, each segment
+ * color-coded by group (feature=purple, phase=cyan, task=green). Used in the
+ * Work Tree so the full identifier is easy to scan and type. The title sits
+ * below this badge on its own (wrapping) line.
+ */
+export function EntityPathBadge({
+  featureNum,
+  phaseNum,
+  taskNum,
+}: {
+  featureNum?: number | undefined;
+  phaseNum?: number | undefined;
+  taskNum?: number | undefined;
+}) {
+  return (
+    <span className="entity-path-badge">
+      {featureNum !== undefined ? (
+        <span className="entity-path-seg entity-path-seg--feature">F{formatSeq(featureNum)}</span>
+      ) : null}
+      {phaseNum !== undefined ? (
+        <>
+          <span className="entity-path-sep" aria-hidden="true">/</span>
+          <span className="entity-path-seg entity-path-seg--phase">P{formatSeq(phaseNum)}</span>
+        </>
+      ) : null}
+      {taskNum !== undefined ? (
+        <>
+          <span className="entity-path-sep" aria-hidden="true">/</span>
+          <span className="entity-path-seg entity-path-seg--task">T{formatSeq(taskNum)}</span>
+        </>
+      ) : null}
+    </span>
+  );
+}
