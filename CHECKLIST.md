@@ -139,6 +139,15 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **`agent-plan` 0.2.7 → 0.2.8**: bump chirurgico del solo CLI (versioni divergenti tra gruppi: il `release:bump` core avrebbe saltato agent-plan per il guard anti-downgrade). Build pulita, `dist` porta l'hint nuovo, `npm pack --dry-run` verificato (0.2.8 tgz). Da pubblicare.
 - [x] **Workflow GitHub Actions `.github/workflows/publish.yml`**: su ogni push su `main` (+ `workflow_dispatch`) esegue `pnpm install --frozen-lockfile` → `pnpm build && pnpm check` → `pnpm build:pi-adapter` → pubblica i 5 package pubblicabili (`core`, `mcp`, `server`, `agent-plan`, `pi-adapter`) con guard idempotente (`npm view <name>@<version>` → skip se già su npm). Usa `pnpm publish` per risolvere i range `workspace:*`. Necessita secret `NPM_TOKEN` (token npm Automation/Granular con permesso publish, bypassa OTP in CI). YAML validato.
 
+### Fatto — Node 25 + CI action upgrades (sessione 2026-07-13)
+- [x] **Workflow CI su Node 25 + azioni Node 24**: bump `actions/checkout@v4 → @v5` e `actions/setup-node@v4 → @v5` (entrambe ora girano sul runtime interno Node 24, silenziando il warning di deprecazione Node 20 di GitHub). `pnpm/action-setup@v4` mantenuto (nessuna release Node 24 ancora taggata dal team pnpm; commento nel workflow a documentare). `node-version: '22' → '25'` nel job.
+- [x] **Root `engines.node >= 25`** + **`@types/node ^22 → ^25`** (risolta 25.9.5) per allineare tipi e contratto al runtime di sviluppo.
+- [x] **`.nvmrc` = `25.4.0`** creato, così `fnm`/`nvm` allineano i collaboratori al runtime del progetto.
+- [x] **Guard secret esplicito** nel workflow: se `NPM_TOKEN` manca, exit 1 con messaggio chiaro invece del criptico 404 npm.
+- [x] Validazione: `pnpm install` (lockfile aggiornato), `pnpm build`, `pnpm check` verdi; YAML workflow validato.
+- [x] **Conferma pubblicazione CI**: primo run su `main` ha pubblicato tutti i 5 package pubblicabili (core/mcp/server/agent-plan/pi-adapter), verificato sync 5/5 tra locale e npm.
+- [x] **Nuovo flusso di lavoro**: da oggi integrazione via feature branch + PR a `main` (modello `develop` → PR `main`). Il trigger `push: branches:[main]` pubblica automaticamente al merge della PR.
+
 ### Prossimi passi
 - [ ] **Configurare secret `NPM_TOKEN`** nel repo GitHub (Automation/Granular token) e pushare il workflow + le modifiche su `main` per attivare la publish automatica (pubblica agent-plan 0.2.8 e gli altri 0.2.8 se non ancora su npm).
 - [ ] Web UI: pagina requirements (vedi `BACKLOG.md` P2-3)
