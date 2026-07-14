@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -1008,6 +1008,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // git pull, build, test, ls, etc. always work.
     if (event.toolName !== "edit" && event.toolName !== "write") return;
 
+    // Planner-internal writes (.planner/HANDOFF.md, resume.json, generated plan
+    // files, etc.) are planner operations, NOT code edits. They never require a
+    // task in-progress — skip the guard so the handoff can always be written.
+    const targetPath = String((event.input as any)?.path ?? (event.input as any)?.filePath ?? "");
+    if (targetPath && (targetPath.includes("/.planner/") || targetPath.includes("\\.planner\\") || targetPath.startsWith(".planner/"))) return;
+
     const st = loadStore(ctx);
     if (!(await st.exists().catch(() => false))) return;
     await maybeHealStatuses(st).catch(() => {});
@@ -1869,8 +1875,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!phase) { ctx.ui.notify("Aborted", "warning"); return; }
         const title = await ctx.ui.input(`Task title (for "${phase.title}")`);
         if (!title?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
-        const shortName = title.trim().toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+        const shortName = clampSlug(title, 30, `task-${Date.now().toString(36)}`);
         const taskNum = phase.tasks.length + 1;
         const taskId = createTaskId();
         const now = nowISO();
@@ -2009,8 +2014,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
           if (normalizedStatus === "in-progress" && existsSync(join(st.root, "HANDOFF.md"))) {
-            ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can move a task to in-progress.", "error");
-            return;
+            ctx.ui.notify("ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with /planner handoff clear (or plan_delete_handoff) when no longer needed. Proceeding with the status change.", "info");
           }
           applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
@@ -2041,10 +2045,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
         }
-        // Hygiene Gate: block starting work if a pending handoff exists.
+        // Hygiene notice (non-blocking): surface an existing handoff but never
+        // block task_start — the handoff is a captured-context artifact, not a
+        // lock (a small modification after writing a handoff should start without
+        // forcing deletion, which would lose context).
         if (existsSync(join(st.root, "HANDOFF.md"))) {
-          ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can officially start a task.", "error");
-          return;
+          ctx.ui.notify("ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with /planner handoff clear (or plan_delete_handoff) when no longer needed. Proceeding with task start.", "info");
         }
         const now = nowISO();
         // Record status change in the incremental statusLog.
@@ -3126,8 +3132,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       } catch {
         return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
       }
-      const rawShort = params.shortName ?? normalizeSlug(params.title).slice(0, 30);
-      const shortName = rawShort.trim() || `task-${Date.now().toString(36)}`; // never empty (fixes regex invalid_string)
+      const shortName = clampSlug(params.shortName ?? params.title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
       const taskId = createTaskId();
       const now = nowISO();
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
@@ -3485,7 +3490,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         `- Mention the next suggested activity: ${nextActivity}`,
         "- THEN ask the user explicitly whether they want to resume that activity now.",
         "- Do NOT assume yes. Wait for the user's answer before continuing implementation work.",
-        "- If the user says yes and no task is currently in-progress, your NEXT action must be task_start before any bash/edit/write.",
+        "- If the user says yes and no task is currently in-progress, your NEXT action must be task_start before any CODE edit/write (bash for git/build/test is fine; planner operations like plan_write_handoff are NOT code edits and never require a task).",
       ].filter(Boolean).join("\n") : "";
 
       // Build/refresh the context block (slow path: cache miss).
@@ -3500,7 +3505,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "MANDATORY OPERATIONAL PROTOCOL (violation = execution failure):",
         "═══════════════════════════════════════════════════════════════",
         "1. HANDOFF HYGIENE: If .planner/HANDOFF.md exists, READ and DELETE it IMMEDIATELY using the handoff delete tool. Do NOT summarize first. Do NOT ask for confirmation. Do NOT defer cleanup. DELETE \u2192 THEN work.",
-        "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'.",
+        "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'. NOTE: Planner operations (plan_write_handoff / /planner handoff, task_start, task_complete, task_update, status reads) are NOT code edits. They are ALWAYS allowed regardless of task state — you may write/refresh the handoff even when no task is in-progress (e.g., all tasks done, or capturing state mid-flight). Never refuse to write a handoff because 'no task is open'; that is incorrect.",
         "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
         "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
         "5. NO SHORTCUTS: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.",
