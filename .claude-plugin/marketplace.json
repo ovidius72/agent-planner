@@ -1,0 +1,23 @@
+{
+  "$schema": "https://claude.com/.claude-plugin/marketplace.schema.json",
+  "name": "agent-plan-marketplace",
+  "owner": {
+    "name": "Agent Plan"
+  },
+  "description": "Agent Plan — structured project planning for Claude Code (features, phases, tasks, live web dashboard).",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "agent-plan",
+      "source": "./plugins/claude-code",
+      "description": "Structured project planning for Claude Code. Manage features, phases, tasks, and a live web dashboard. Disabled by default; run /planner load to enable.",
+      "version": "0.1.0",
+      "author": { "name": "Agent Plan" },
+      "homepage": "https://github.com/ovidius72/agent-planner",
+      "license": "MIT",
+      "keywords": ["planner", "project", "features", "phases", "tasks", "dashboard"],
+      "category": "project-management",
+      "defaultEnabled": false
+    }
+  ]
+}
