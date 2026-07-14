@@ -204,6 +204,7 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] Corretto startup resume: link dashboard esplicitato nel protocollo/summary; handoff e resume target trattati come suggerimenti da validare, non come focus corrente implicito.
 - [x] README/docs riallineati alle ultime feature: guard+bypass, housekeeping `.planner/.gitignore`, numerazione persistente `F001/P001/T001`, Work Tree order, runtime notes, semantics corrette di handoff/resume.
 - [x] Autocomplete subcommand in Pi (completato)
+- [x] **F002 — Tool web lifecycle esposti all'agente (pi-adapter 0.2.14)**: registrati 3 agent tool in `packages/pi-adapter/src/index.ts` (`planner-web`, `planner-load`, `planner-stop`) che wrappano le stesse funzioni interne degli slash command (`startServer`/`stopServer`/`buildStartupResumeSummary`). Parità con `@agent-plan/mcp` (`planner-web` PR #11). Motivo: i comandi `/planner *` non vengono intercettati quando il planner è disabilitato (default), quindi né utente né agente potevano avviare il web; ora l'agente Pi può gestire il web direttamente via tool. Smoke test verificato: start su porta dinamica LAN, status, load con recap+URL, stop. Build + `pnpm check` puliti.
 
 ### Note operative
 - La checklist va tenuta viva e aggiornata con stati, blocchi e completamenti.

@@ -3345,6 +3345,81 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     },
   });
 
+  // ── Web lifecycle tools (agent-callable; parity with @agent-plan/mcp planner-web) ──
+  // These let the agent manage the web dashboard directly, without relying
+  // on the /planner slash command (which is not intercepted when the planner
+  // is disabled by default). Planner operations are NOT code edits.
+
+  pi.registerTool({
+    name: "planner-web",
+    label: "Planner Web",
+    description: "Manage the planner web dashboard (start/status/stop). The dashboard is LAN-bound (0.0.0.0) with a dynamic OS-assigned port by default. Planner operations are NOT code edits and need no active task. The web does NOT auto-start; call action=start explicitly.",
+    parameters: Type.Object({
+      action: Type.Union([Type.Literal("start"), Type.Literal("stop"), Type.Literal("status")], { description: "start | stop | status. Default: status" }),
+      port: Type.Optional(Type.Number({ description: "Optional requested port for start. Omit/0 → OS assigns a free port." })),
+      visibility: Type.Optional(Type.Union([Type.Literal("local"), Type.Literal("lan")], { description: "Bind scope for start. Default: lan (0.0.0.0, reachable from other devices)." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const action = params.action ?? "status";
+      if (action === "start") {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { running: false } };
+        const visibility = params.visibility ?? "lan";
+        if (server) {
+          const srv = server as ServeHandle;
+          return { content: [{ type: "text", text: `Web UI already running. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
+        }
+        await startServer(ctx, params.port && params.port > 0 ? params.port : undefined, visibility);
+        const srv = server as ServeHandle | null;
+        if (!srv) return { content: [{ type: "text", text: "Failed to start web server." }], details: { running: false } };
+        return { content: [{ type: "text", text: `Web UI started. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
+      }
+      if (action === "stop") {
+        if (!server) return { content: [{ type: "text", text: "Web UI not running." }], details: { running: false } };
+        const stoppedUrl = (server as ServeHandle).localUrl;
+        await stopServer();
+        return { content: [{ type: "text", text: `Web UI stopped (was ${stoppedUrl}).` }], details: { running: false } };
+      }
+      // status
+      const srv = server as ServeHandle | null;
+      if (!srv) return { content: [{ type: "text", text: "Web UI not running. Use planner-web with action=start to start the dashboard." }], details: { running: false } };
+      return { content: [{ type: "text", text: `Web UI running. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
+    },
+  });
+
+  pi.registerTool({
+    name: "planner-load",
+    label: "Planner Load",
+    description: "Enable the planner for this project and start the web dashboard (LAN), then return a resume recap (project status + handoff if present + Web UI address). This is the explicit way to enable the planner — it does NOT auto-start. Planner operations are NOT code edits.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { enabled: false, running: false } };
+      plannerSessionEnabled = true;
+      if (!server) {
+        await startServer(ctx, undefined, "lan").catch(() => {});
+      }
+      let recap = "";
+      try { recap = await buildStartupResumeSummary(st); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
+      const srv = server as ServeHandle | null;
+      const webLine = srv ? `\n🌐 Web UI: ${srv.localUrl}${lastKnownWebPort ? ` (port ${lastKnownWebPort})` : ""}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""}` : "\n🌐 Web UI: not running";
+      return { content: [{ type: "text", text: `${recap}${webLine}` }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort } };
+    },
+  });
+
+  pi.registerTool({
+    name: "planner-stop",
+    label: "Planner Stop",
+    description: "Disable the planner for this project and stop the web dashboard. Alias: planner-disable. Planner operations are NOT code edits.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, _ctx) {
+      plannerSessionEnabled = false;
+      await stopServer().catch(() => {});
+      try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
+      return { content: [{ type: "text", text: "Planner disabled. Web UI shut down. Run /planner load or planner-load to re-enable." }], details: { disabled: true, webRunning: false } };
+    },
+  });
+
   // ── Context injection ─────────────────────────────────────────────
 
   pi.on("before_agent_start", async (event, ctx) => {
