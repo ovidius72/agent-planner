@@ -6,7 +6,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { EntityBadge, ParentBadge } from "../../components/ui/badges";
+import { CopyableBadge, EntityBadge, EntityPathBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
@@ -75,37 +75,27 @@ export function FeatureDetailRoute() {
         <ArrowLeft className="h-4 w-4" /> Back to features
       </Link>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name }]} />
-          <div className="mt-2">
-            <EntityBadge type="feature" number={feature.number} />
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">{feature.name}</h2>
-            <StatusBadge status={feature.status} />
-          </div>
-          {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
+      <div className="min-w-0">
+        <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name }]} />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <CopyableBadge id={formatEntityPath({ featureNum: feature.number })}>
+            <EntityPathBadge featureNum={feature.number} />
+          </CopyableBadge>
+          <StatusBadge status={feature.status} />
         </div>
-
-        <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/delete`} onSubmit={(event) => {
-          if (!window.confirm(`Delete feature \"${feature.name}\"?`)) event.preventDefault();
-        }}>
-          <Button type="submit" variant="danger" shortcut="delete">Delete feature</Button>
-        </Form>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
+        {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>
+          <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/delete`} className="inline-flex" onSubmit={(event) => {
+            if (!window.confirm(`Delete feature \"${feature.name}\"?`)) event.preventDefault();
+          }}>
+            <Button type="submit" variant="danger" shortcut="delete">Delete feature</Button>
+          </Form>
+        </div>
       </div>
 
       <Card className="grid gap-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <EntityBadge type="feature" number={feature.number} />
-            </div>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">Snapshot of this feature only.</p>
-          </div>
-          <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>
-        </div>
-
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{phases.length}</p></CompactCard>

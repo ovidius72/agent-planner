@@ -136,7 +136,7 @@ export function FormattedText({ text, className = "" }: { text: string; classNam
   const blocks = text.trim().split(/\n\s*\n/).filter(Boolean);
 
   return (
-    <div className={`grid gap-3 ${className}`}>
+    <div className={`formatted-text grid grid-cols-1 gap-3 ${className}`}>
       {blocks.map((block, blockIndex) => renderBlock(block, blockIndex))}
     </div>
   );
