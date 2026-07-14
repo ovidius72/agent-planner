@@ -152,9 +152,13 @@ Quando inizi a lavorare:
 1. leggi `AGENTS.md`
 2. leggi `CHECKLIST.md`
 3. leggi i documenti rilevanti (`PROJECT.md`, `ROADMAP.md`)
-4. **avvia la sessione del planner**: chiama `planner-load` (MCP, alias `/planner load` o `/planner recap` in Claude Code/Codex) oppure `/planner load` (Pi). Il tool ritorna un recap consolidato (stato progetto, task in-progress, eventuale handoff pendente, URL del web). Presenta il recap all'utente e termina con una riga prominente `🌐 Web UI: <url>`. Se il recap include un handoff pendente, sintetizzalo all'utente e poi cancellalo con `planner-handoff-clear` (o `/planner handoff clear`).
-5. aggiorna la checklist prima e dopo cambi significativi
-6. se cambi una decisione architetturale, documentala esplicitamente
+4. aggiorna la checklist prima e dopo cambi significativi
+5. se cambi una decisione architetturale, documentala esplicitamente
+
+### Avvio del planner (solo su esplicita richiesta)
+- Il planner e la Web UI **non partono mai in automatico**. Non chiamare `planner-load`, non avviare la Web UI, né mostrare l'URL del web se l'utente non lo chiede.
+- **Solo quando l'utente lo richiede** (`/planner load` o `/planner recap` in Pi e Claude Code/Codex; equivalente MCP `planner-load`): chiama il tool, presenta il recap consolidato (stato progetto, task in-progress, eventuale handoff pendente, URL del web) **in quella singola risposta**, e termina quella risposta con una riga prominente `🌐 Web UI: <url>`. Se il recap include un handoff pendente, sintetizzalo all'utente e poi cancellalo con `planner-handoff-clear` (o `/planner handoff clear`).
+- **L'URL del web appare solo**: (a) in quella risposta di recap dopo `load`/`recap`, o (b) quando l'utente chiama `/planner web status`. **Mai** in altre risposte o ad ogni messaggio.
 
 ### Regola dettagli (task / phase / feature)
 - **Scrivi appena hai punti rilevanti**: non appena emergono punti rilevanti (decisioni, vincoli, stato attuale, riferimenti file:line, edge case), scrivili nella description/notes del task, phase o feature corrispondente (`planner-task-update`, `planner-phase-update`, `planner-feature-update`). Non lasciare lavoro implicito solo nella conversazione.

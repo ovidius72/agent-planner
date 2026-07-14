@@ -147,7 +147,7 @@ Route common commands as follows:
 - \`init\` → call \`planner-init\`; if required fields are missing, ask for a concise project name first
 - \`show\` → call \`planner-show\`
 - \`reload\` → call \`planner-load\`, then present the returned recap to the user (state, active task, pending handoff, web URL)
-- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present the recap to the user. If a pending handoff is included in the result, read it, summarize it to the user, then call \`planner-handoff-clear\` to remove it. Always end your reply with a prominent final line showing the web URL, e.g. \`🌐 Web UI: <url>\`.
+- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present the recap to the user **in this reply only**. If a pending handoff is included in the result, read it, summarize it to the user, then call \`planner-handoff-clear\` to remove it. End **this recap reply** with a prominent final line showing the web URL, e.g. \`🌐 Web UI: <url>\`. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
 - \`recap\` → call \`planner-load\` (same as \`load\`: returns the recap + handoff + web URL); present it to the user
 - \`disable\` → call \`planner-disable\`
 - \`repair\` → call \`planner-repair\`
