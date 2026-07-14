@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { PlanStore, ExportService, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -497,7 +497,7 @@ server.registerTool("planner-task-add", {
     id: taskId,
     phaseId: found.id,
     number: found.tasks.length + 1,
-    shortName: normalizeSlug(title).slice(0, 30),
+    shortName: clampSlug(title, 30, `task-${Date.now().toString(36)}`),
     title: title.trim(),
     status: "planned",
     description: description?.trim() ?? "",
@@ -633,14 +633,13 @@ server.registerTool("planner-task-start", {
 }, async ({ task: ref }) => {
   const st = await requireStore();
 
-  // Hygiene Gate: block starting work if a pending handoff exists.
-  if (existsSync(join(st.root, "HANDOFF.md"))) {
-    return text(
-      `🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. ` +
-      `You MUST read and delete it before you can officially start a task. ` +
-      `This is a non-negotiable rule in AGENTS.md.`
-    );
-  }
+  // Hygiene notice (non-blocking): surface an existing handoff but never block
+  // task_start — the handoff is a captured-context artifact, not a lock (e.g. a
+  // small modification after writing a handoff should start without forcing
+  // deletion, which would lose context).
+  const handoffNotice = existsSync(join(st.root, "HANDOFF.md"))
+    ? "ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with planner-handoff-delete when no longer needed. Proceeding with task start.\n"
+    : "";
 
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -668,7 +667,7 @@ server.registerTool("planner-task-start", {
     return phase;
   });
   await st.syncTaskStatusRollup(found.phase.id);
-  return writeAndSummarize(st, `✅ Task started: ${found.task.id}`, { task: updatedTask ?? found.task });
+  return writeAndSummarize(st, `${handoffNotice}✅ Task started: ${found.task.id}`, { task: updatedTask ?? found.task });
 });
 
 server.registerTool("planner-task-complete", {

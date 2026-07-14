@@ -12,6 +12,16 @@ export function normalizeSlug(input: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/** Normalize, truncate to maxLen, and strip dangling dashes so the result
+ * always satisfies SlugSchema (/^[a-z0-9]+(?:-[a-z0-9]+)*$/). Returns fallback
+ * when the input yields no usable chars (e.g. emoji-only titles) — prevents
+ * the "invalid shortName" rejection caused by slice(maxLen) leaving a trailing
+ * dash or an empty string. */
+export function clampSlug(input: string, maxLen = 30, fallback = "untitled"): string {
+  const slug = normalizeSlug(input).slice(0, maxLen).replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
+
 export function formatTwoDigitNumber(value: number): string {
   return String(value).padStart(2, "0");
 }
