@@ -11,6 +11,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SRC="$PROJECT_ROOT/packages/plan-web-ui/dist"
 DST="$PROJECT_ROOT/packages/pi-adapter/web-ui-dist"
+DST2="$PROJECT_ROOT/packages/plan-server/web-ui-dist"
 
 if [ ! -f "$SRC/index.html" ] || [ ! -d "$SRC/assets" ]; then
   echo "Vite build not found at $SRC (expected index.html + assets/)." >&2
@@ -18,9 +19,14 @@ if [ ! -f "$SRC/index.html" ] || [ ! -d "$SRC/assets" ]; then
   exit 1
 fi
 
-echo "Copying Vite build from $SRC to $DST"
-rm -rf "$DST"
-mkdir -p "$DST/assets"
-cp "$SRC/index.html" "$DST/index.html"
-cp -r "$SRC/assets/." "$DST/assets/"
-echo "Done. ($(du -sh "$DST" | cut -f1))"
+copy_to () {
+  local dest="$1"
+  rm -rf "$dest"
+  mkdir -p "$dest/assets"
+  cp "$SRC/index.html" "$dest/index.html"
+  cp -r "$SRC/assets/." "$dest/assets/"
+}
+echo "Copying Vite build from $SRC to $DST and $DST2"
+copy_to "$DST"
+copy_to "$DST2"
+echo "Done. ($DST: $(du -sh "$DST" | cut -f1); $DST2: $(du -sh "$DST2" | cut -f1))"

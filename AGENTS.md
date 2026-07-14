@@ -155,6 +155,16 @@ Quando inizi a lavorare:
 4. aggiorna la checklist prima e dopo cambi significativi
 5. se cambi una decisione architetturale, documentala esplicitamente
 
+### Avvio del planner (solo su esplicita richiesta)
+- Il planner e la Web UI **non partono mai in automatico**. Non chiamare `planner-load`, non avviare la Web UI, né mostrare l'URL del web se l'utente non lo chiede.
+- **Solo quando l'utente lo richiede** (`/planner load` o `/planner recap` in Pi e Claude Code/Codex; equivalente MCP `planner-load`): chiama il tool, presenta il recap consolidato (stato progetto, task in-progress, eventuale handoff pendente, URL del web) **in quella singola risposta**, e termina quella risposta con una riga prominente `🌐 Web UI: <url>`. Se il recap include un handoff pendente, sintetizzalo all'utente e poi cancellalo con `planner-handoff-clear` (o `/planner handoff clear`).
+- **L'URL del web appare solo**: (a) in quella risposta di recap dopo `load`/`recap`, o (b) quando l'utente chiama `/planner web status`. **Mai** in altre risposte o ad ogni messaggio.
+
+### Regola dettagli (task / phase / feature)
+- **Scrivi appena hai punti rilevanti**: non appena emergono punti rilevanti (decisioni, vincoli, stato attuale, riferimenti file:line, edge case), scrivili nella description/notes del task, phase o feature corrispondente (`planner-task-update`, `planner-phase-update`, `planner-feature-update`). Non lasciare lavoro implicito solo nella conversazione.
+- **Leggi quando inizi un task**: prima di iniziare a lavorare su un task, leggi la sua description e notes (e quelle della phase/feature genitore) con `planner-task-show` / `planner-phase-show`. Se esiste un handoff, leggilo come contesto.
+- **Riferimenti umani**: cita task/phase/feature con il composito univoco (es. `#T007 · F001/P002/T003`), non con UUID nudi.
+
 ### Pre-flight Protocol (Mandatory)
 Prima di iniziare qualsiasi nuova fase, nuovo task o nuova feature, l'agente deve:
 1. **Dichiarare l'intento**: "Sto per [iniziare la fase X / creare il task Y / ecc.]."

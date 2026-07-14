@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, normalizeSlug } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -1008,6 +1008,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // git pull, build, test, ls, etc. always work.
     if (event.toolName !== "edit" && event.toolName !== "write") return;
 
+    // Planner-internal writes (.planner/HANDOFF.md, resume.json, generated plan
+    // files, etc.) are planner operations, NOT code edits. They never require a
+    // task in-progress — skip the guard so the handoff can always be written.
+    const targetPath = String((event.input as any)?.path ?? (event.input as any)?.filePath ?? "");
+    if (targetPath && (targetPath.includes("/.planner/") || targetPath.includes("\\.planner\\") || targetPath.startsWith(".planner/"))) return;
+
     const st = loadStore(ctx);
     if (!(await st.exists().catch(() => false))) return;
     await maybeHealStatuses(st).catch(() => {});
@@ -1869,8 +1875,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!phase) { ctx.ui.notify("Aborted", "warning"); return; }
         const title = await ctx.ui.input(`Task title (for "${phase.title}")`);
         if (!title?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
-        const shortName = title.trim().toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+        const shortName = clampSlug(title, 30, `task-${Date.now().toString(36)}`);
         const taskNum = phase.tasks.length + 1;
         const taskId = createTaskId();
         const now = nowISO();
@@ -2009,8 +2014,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
           if (normalizedStatus === "in-progress" && existsSync(join(st.root, "HANDOFF.md"))) {
-            ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can move a task to in-progress.", "error");
-            return;
+            ctx.ui.notify("ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with /planner handoff clear (or plan_delete_handoff) when no longer needed. Proceeding with the status change.", "info");
           }
           applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
@@ -2041,10 +2045,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
         }
-        // Hygiene Gate: block starting work if a pending handoff exists.
+        // Hygiene notice (non-blocking): surface an existing handoff but never
+        // block task_start — the handoff is a captured-context artifact, not a
+        // lock (a small modification after writing a handoff should start without
+        // forcing deletion, which would lose context).
         if (existsSync(join(st.root, "HANDOFF.md"))) {
-          ctx.ui.notify("🚨 HYGIENE VIOLATION: A pending handoff file exists at .planner/HANDOFF.md. You MUST read and delete it before you can officially start a task.", "error");
-          return;
+          ctx.ui.notify("ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with /planner handoff clear (or plan_delete_handoff) when no longer needed. Proceeding with task start.", "info");
         }
         const now = nowISO();
         // Record status change in the incremental statusLog.
@@ -3126,8 +3132,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       } catch {
         return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
       }
-      const rawShort = params.shortName ?? normalizeSlug(params.title).slice(0, 30);
-      const shortName = rawShort.trim() || `task-${Date.now().toString(36)}`; // never empty (fixes regex invalid_string)
+      const shortName = clampSlug(params.shortName ?? params.title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
       const taskId = createTaskId();
       const now = nowISO();
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
@@ -3340,6 +3345,81 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     },
   });
 
+  // ── Web lifecycle tools (agent-callable; parity with @agent-plan/mcp planner-web) ──
+  // These let the agent manage the web dashboard directly, without relying
+  // on the /planner slash command (which is not intercepted when the planner
+  // is disabled by default). Planner operations are NOT code edits.
+
+  pi.registerTool({
+    name: "planner-web",
+    label: "Planner Web",
+    description: "Manage the planner web dashboard (start/status/stop). The dashboard is LAN-bound (0.0.0.0) with a dynamic OS-assigned port by default. Planner operations are NOT code edits and need no active task. The web does NOT auto-start; call action=start explicitly.",
+    parameters: Type.Object({
+      action: Type.Union([Type.Literal("start"), Type.Literal("stop"), Type.Literal("status")], { description: "start | stop | status. Default: status" }),
+      port: Type.Optional(Type.Number({ description: "Optional requested port for start. Omit/0 → OS assigns a free port." })),
+      visibility: Type.Optional(Type.Union([Type.Literal("local"), Type.Literal("lan")], { description: "Bind scope for start. Default: lan (0.0.0.0, reachable from other devices)." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const action = params.action ?? "status";
+      if (action === "start") {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { running: false } };
+        const visibility = params.visibility ?? "lan";
+        if (server) {
+          const srv = server as ServeHandle;
+          return { content: [{ type: "text", text: `Web UI already running. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
+        }
+        await startServer(ctx, params.port && params.port > 0 ? params.port : undefined, visibility);
+        const srv = server as ServeHandle | null;
+        if (!srv) return { content: [{ type: "text", text: "Failed to start web server." }], details: { running: false } };
+        return { content: [{ type: "text", text: `Web UI started. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
+      }
+      if (action === "stop") {
+        if (!server) return { content: [{ type: "text", text: "Web UI not running." }], details: { running: false } };
+        const stoppedUrl = (server as ServeHandle).localUrl;
+        await stopServer();
+        return { content: [{ type: "text", text: `Web UI stopped (was ${stoppedUrl}).` }], details: { running: false } };
+      }
+      // status
+      const srv = server as ServeHandle | null;
+      if (!srv) return { content: [{ type: "text", text: "Web UI not running. Use planner-web with action=start to start the dashboard." }], details: { running: false } };
+      return { content: [{ type: "text", text: `Web UI running. Local: ${srv.localUrl}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""} (mode: ${srv.mode}, port: ${lastKnownWebPort ?? "?"})` }], details: { running: true, localUrl: srv.localUrl, lanUrl: srv.lanUrl, port: lastKnownWebPort, mode: srv.mode } };
+    },
+  });
+
+  pi.registerTool({
+    name: "planner-load",
+    label: "Planner Load",
+    description: "Enable the planner for this project and start the web dashboard (LAN), then return a resume recap (project status + handoff if present + Web UI address). This is the explicit way to enable the planner — it does NOT auto-start. Planner operations are NOT code edits.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { enabled: false, running: false } };
+      plannerSessionEnabled = true;
+      if (!server) {
+        await startServer(ctx, undefined, "lan").catch(() => {});
+      }
+      let recap = "";
+      try { recap = await buildStartupResumeSummary(st); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
+      const srv = server as ServeHandle | null;
+      const webLine = srv ? `\n🌐 Web UI: ${srv.localUrl}${lastKnownWebPort ? ` (port ${lastKnownWebPort})` : ""}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""}` : "\n🌐 Web UI: not running";
+      return { content: [{ type: "text", text: `${recap}${webLine}` }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort } };
+    },
+  });
+
+  pi.registerTool({
+    name: "planner-stop",
+    label: "Planner Stop",
+    description: "Disable the planner for this project and stop the web dashboard. Alias: planner-disable. Planner operations are NOT code edits.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, _ctx) {
+      plannerSessionEnabled = false;
+      await stopServer().catch(() => {});
+      try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
+      return { content: [{ type: "text", text: "Planner disabled. Web UI shut down. Run /planner load or planner-load to re-enable." }], details: { disabled: true, webRunning: false } };
+    },
+  });
+
   // ── Context injection ─────────────────────────────────────────────
 
   pi.on("before_agent_start", async (event, ctx) => {
@@ -3485,7 +3565,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         `- Mention the next suggested activity: ${nextActivity}`,
         "- THEN ask the user explicitly whether they want to resume that activity now.",
         "- Do NOT assume yes. Wait for the user's answer before continuing implementation work.",
-        "- If the user says yes and no task is currently in-progress, your NEXT action must be task_start before any bash/edit/write.",
+        "- If the user says yes and no task is currently in-progress, your NEXT action must be task_start before any CODE edit/write (bash for git/build/test is fine; planner operations like plan_write_handoff are NOT code edits and never require a task).",
       ].filter(Boolean).join("\n") : "";
 
       // Build/refresh the context block (slow path: cache miss).
@@ -3500,7 +3580,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "MANDATORY OPERATIONAL PROTOCOL (violation = execution failure):",
         "═══════════════════════════════════════════════════════════════",
         "1. HANDOFF HYGIENE: If .planner/HANDOFF.md exists, READ and DELETE it IMMEDIATELY using the handoff delete tool. Do NOT summarize first. Do NOT ask for confirmation. Do NOT defer cleanup. DELETE \u2192 THEN work.",
-        "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'.",
+        "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'. NOTE: Planner operations (plan_write_handoff / /planner handoff, task_start, task_complete, task_update, status reads) are NOT code edits. They are ALWAYS allowed regardless of task state — you may write/refresh the handoff even when no task is in-progress (e.g., all tasks done, or capturing state mid-flight). Never refuse to write a handoff because 'no task is open'; that is incorrect.",
         "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
         "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
         "5. NO SHORTCUTS: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.",

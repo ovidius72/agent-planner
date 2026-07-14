@@ -18,7 +18,7 @@ export function PhaseCreateModalRoute() {
   return (
     <ModalShell title="Create phase" description="A phase belongs to the current feature.">
       <Form ref={formRef} method="post" className="grid gap-4">
-        <Field label="Phase title"><Input name="title" placeholder="Creazione APIs" required /></Field>
+        <Field label="Phase title"><Input name="title" placeholder="API creation" required /></Field>
         <Field label="Summary"><Textarea name="summary" placeholder="Brief phase summary" /></Field>
         <Field label="Description"><Textarea name="description" placeholder="Initial implementation notes" /></Field>
         <ModalActions>

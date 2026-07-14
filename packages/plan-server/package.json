@@ -1,6 +1,6 @@
 {
   "name": "@agent-plan/server",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "private": false,
   "description": "Local HTTP/WebSocket server for Agent Plan dashboards and planner APIs.",
   "license": "MIT",
@@ -15,6 +15,7 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "dist/**/*.d.ts.map",
+    "web-ui-dist/**",
     "README.md",
     "LICENSE"
   ],

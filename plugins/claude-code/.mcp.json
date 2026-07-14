@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agent-plan": {
+      "command": "npx",
+      "args": ["-y", "@agent-plan/mcp"]
+    }
+  }
+}
