@@ -27,18 +27,18 @@ export function TaskRow({ featureId, phaseId, task }: { featureId: string; phase
   return (
     <div className="surface-card px-4 py-2">
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,168px)_124px_44px_44px] lg:items-center">
-        <div className="flex min-w-0 items-start justify-between gap-3 lg:contents">
+        <div className="flex min-w-0 flex-col items-start gap-1 lg:contents">
           <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
             <div className="flex items-center gap-2">
               <EntityBadge type="task" number={task.number} />
               <span className="shrink-0"><StatusBadge status={status} /></span>
             </div>
-            <Link to={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}`} className="entity-link--task min-w-0 w-full truncate text-sm font-semibold underline-offset-4 hover:underline lg:w-auto">
+            <Link to={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}`} className="entity-link--task min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline lg:w-auto lg:truncate">
               {task.title}
             </Link>
           </div>
 
-          <div className="flex items-center gap-2 lg:hidden">
+          <div className="flex items-center gap-2 self-end lg:hidden">
             <Link to={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}/edit`} aria-label={`Edit task ${task.title}`}>
               <Button type="button" variant="secondary" className="min-h-8 w-8 rounded-[10px] px-0 text-[var(--text-muted)] hover:text-[var(--text)]">
                 <Pencil className="h-3.5 w-3.5" />

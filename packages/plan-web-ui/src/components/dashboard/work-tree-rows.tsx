@@ -57,8 +57,14 @@ function StatusCluster({
   return (
     <div className={className}>
       {recentlyChanged ? <UpdatedTag /> : null}
-      {hasCounters ? <span className="text-xs text-[var(--text-muted)]">({doneTasks}/{totalTasks || 0})</span> : null}
-      <span className="shrink-0"><StatusBadge status={status} /></span>
+      {hasCounters ? (
+        <span className="text-xs text-[var(--text-muted)]">
+          ({doneTasks}/{totalTasks || 0})
+        </span>
+      ) : null}
+      <span className="shrink-0">
+        <StatusBadge status={status} />
+      </span>
     </div>
   );
 }
@@ -85,24 +91,38 @@ export function FeatureTreeRow({
   const { feature, totalTasks, doneTasks, allPhases, hasActiveTask } = entry;
 
   return (
-    <div className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
-      <div className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}>
+    <div
+      className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+    >
+      <div
+        className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}
+      >
         <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
             type="button"
             onClick={onToggle}
             className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-subtle)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
-            aria-label={expanded ? `Collapse feature ${feature.name}` : `Expand feature ${feature.name}`}
+            aria-label={
+              expanded
+                ? `Collapse feature ${feature.name}`
+                : `Expand feature ${feature.name}`
+            }
             aria-expanded={expanded}
           >
-            <ChevronRight className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`} />
+            <ChevronRight
+              className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`}
+            />
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <CopyableBadge id={formatEntityPath({ featureNum: feature.number })}>
+              <CopyableBadge
+                id={formatEntityPath({ featureNum: feature.number })}
+              >
                 <EntityPathBadge featureNum={feature.number} />
               </CopyableBadge>
-              {hasActiveTask ? <span aria-hidden="true" className="ap-progress-dot" /> : null}
+              {hasActiveTask ? (
+                <span aria-hidden="true" className="ap-progress-dot" />
+              ) : null}
             </div>
             <StatusCluster
               status={feature.status}
@@ -111,7 +131,10 @@ export function FeatureTreeRow({
               recentlyChanged={recentlyChanged}
               className="mt-1 flex flex-wrap items-center gap-2 sm:hidden"
             />
-            <Link to={`/features/${feature.id}`} className={`entity-link--feature ${TITLE_CLASS} underline-offset-4 hover:underline`}>
+            <Link
+              to={`/features/${feature.id}`}
+              className={`entity-link--feature ${TITLE_CLASS} underline-offset-4 hover:underline`}
+            >
               {feature.name}
             </Link>
           </div>
@@ -162,24 +185,44 @@ export function PhaseTreeRow({
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
 
   return (
-    <div className={`grid min-w-0 grid-cols-1 gap-2 transition-colors ${phase.status === "in-progress" ? "ap-in-progress rounded-[12px]" : hasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${recentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-2" : ""}`}>
-      <div className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}>
+    <div
+      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 rounded-[12px] p-3 transition-colors ${phase.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)]" : ""} ${phase.status === "done" ? "opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+    >
+      <div
+        className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}
+      >
         <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
             type="button"
             onClick={onToggle}
             className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-subtle)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
-            aria-label={expanded ? `Collapse phase ${phase.title}` : `Expand phase ${phase.title}`}
+            aria-label={
+              expanded
+                ? `Collapse phase ${phase.title}`
+                : `Expand phase ${phase.title}`
+            }
             aria-expanded={expanded}
           >
-            <ChevronRight className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`} />
+            <ChevronRight
+              className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`}
+            />
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <CopyableBadge id={formatEntityPath({ featureNum: feature?.number, phaseNum: phase.number })}>
-                <EntityPathBadge featureNum={feature?.number} phaseNum={phase.number} />
+              <CopyableBadge
+                id={formatEntityPath({
+                  featureNum: feature?.number,
+                  phaseNum: phase.number,
+                })}
+              >
+                <EntityPathBadge
+                  featureNum={feature?.number}
+                  phaseNum={phase.number}
+                />
               </CopyableBadge>
-              {hasActiveTask ? <span aria-hidden="true" className="ap-progress-dot" /> : null}
+              {hasActiveTask ? (
+                <span aria-hidden="true" className="ap-progress-dot" />
+              ) : null}
             </div>
             <StatusCluster
               status={phase.status}
@@ -188,7 +231,10 @@ export function PhaseTreeRow({
               recentlyChanged={recentlyChanged}
               className="mt-1 flex flex-wrap items-center gap-2 sm:hidden"
             />
-            <Link to={`/features/${feature.id}/phases/${phase.id}`} className={`entity-link--phase ${TITLE_CLASS} underline-offset-4 hover:underline`}>
+            <Link
+              to={`/features/${feature.id}/phases/${phase.id}`}
+              className={`entity-link--phase ${TITLE_CLASS} underline-offset-4 hover:underline`}
+            >
               {phase.title}
             </Link>
           </div>
@@ -216,7 +262,9 @@ export function PhaseTreeRow({
             ))}
           </div>
         ) : (
-          <p className="ml-1.5 text-xs italic text-[var(--text-subtle)] sm:ml-4">No tasks</p>
+          <p className="ml-1.5 text-xs italic text-[var(--text-subtle)] sm:ml-4">
+            No tasks
+          </p>
         )
       ) : null}
     </div>
@@ -235,13 +283,27 @@ export function TaskTreeRow({
   recentlyChanged: boolean;
 }) {
   return (
-    <div className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
+    <div
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <CopyableBadge id={formatEntityPath({ featureNum: feature?.number, phaseNum: phase.number, taskNum: task.number })}>
-            <EntityPathBadge featureNum={feature?.number} phaseNum={phase.number} taskNum={task.number} />
+          <CopyableBadge
+            id={formatEntityPath({
+              featureNum: feature?.number,
+              phaseNum: phase.number,
+              taskNum: task.number,
+            })}
+          >
+            <EntityPathBadge
+              featureNum={feature?.number}
+              phaseNum={phase.number}
+              taskNum={task.number}
+            />
           </CopyableBadge>
-          {task.status === "in-progress" ? <span aria-hidden="true" className="ap-progress-dot" /> : null}
+          {task.status === "in-progress" ? (
+            <span aria-hidden="true" className="ap-progress-dot" />
+          ) : null}
         </div>
         <StatusCluster
           status={task.status}
