@@ -6,7 +6,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { EntityBadge, ParentBadge } from "../../components/ui/badges";
+import { CopyableBadge, EntityBadge, EntityPathBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
@@ -69,60 +69,42 @@ export function PhaseDetailRoute() {
         <ArrowLeft className="h-4 w-4" /> Back to feature
       </Link>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <Breadcrumbs
-            items={[
-              { label: "Features", to: "/features" },
-              { label: feature.name, to: `/features/${feature.id}` },
-              { label: phase.title },
-            ]}
-          />
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <EntityBadge type="phase" number={phase.number} />
-            <ParentBadge type="phase" featureNum={feature.number} />
-            <StatusBadge status={phase.status} />
-          </div>
-          <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
-            {phase.title}
-          </h2>
-          {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
+      <div className="min-w-0">
+        <Breadcrumbs
+          items={[
+            { label: "Features", to: "/features" },
+            { label: feature.name, to: `/features/${feature.id}` },
+            { label: phase.title },
+          ]}
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number })}>
+            <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} />
+          </CopyableBadge>
+          <StatusBadge status={phase.status} />
         </div>
-
-        <Form
-          ref={deleteFormRef}
-          method="post"
-          action={`/features/${feature.id}/phases/${phase.id}/delete`}
-          onSubmit={(event) => {
-            if (!window.confirm(`Delete phase \"${phase.title}\"?`)) event.preventDefault();
-          }}
-        >
-          <Button type="submit" variant="danger" shortcut="delete">
-            Delete phase
-          </Button>
-        </Form>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
+          {phase.title}
+        </h2>
+        {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Link to="edit"><Button type="button" shortcut="edit">Edit phase</Button></Link>
+          <Link to="tasks/new"><Button type="button" variant="primary" shortcut="create">Create task</Button></Link>
+          <Form
+            ref={deleteFormRef}
+            method="post"
+            action={`/features/${feature.id}/phases/${phase.id}/delete`}
+            className="inline-flex"
+            onSubmit={(event) => {
+              if (!window.confirm(`Delete phase \"${phase.title}\"?`)) event.preventDefault();
+            }}
+          >
+            <Button type="submit" variant="danger" shortcut="delete">Delete phase</Button>
+          </Form>
+        </div>
       </div>
 
       <Card className="grid gap-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <EntityBadge type="phase" number={phase.number} />
-            <p className="mt-2 text-sm text-[var(--text-muted)]">Snapshot of this phase.</p>
-          </div>
-          <div className="flex gap-2">
-            <Link to="edit">
-              <Button type="button" shortcut="edit">
-                Edit phase
-              </Button>
-            </Link>
-            <Link to="tasks/new">
-              <Button type="button" variant="primary" shortcut="create">
-                Create task
-              </Button>
-            </Link>
-          </div>
-        </div>
-
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <CompactCard>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
