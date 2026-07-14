@@ -107,7 +107,19 @@ Per-harness behavior (consistent across harnesses):
 /plugin install agent-plan@agent-plan-marketplace
 ```
 
-Updates: push to the repo, then `/plugin marketplace update`.
+### Update
+
+The plugin version is bumped by `pnpm release` together with the npm packages (the plugin has its own version track, independent from the npm package versions). The MCP server auto-updates because `.mcp.json` runs `npx -y @agent-plan/mcp`, which fetches the latest published `@agent-plan/mcp` from npm.
+
+**As a user** — after a new release is merged to `main`, refresh in Claude Code:
+
+```text
+/plugin marketplace update
+```
+
+Then restart Claude Code in the project so the MCP server re-launches with the new `@agent-plan/mcp`.
+
+**As a maintainer** — push plugin changes to the repo's default branch (`main`, where `.claude-plugin/marketplace.json` lives). The release script bumps the plugin version in `plugins/claude-code/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` so `/plugin marketplace update` detects the new version.
 
 ### Local development / testing
 

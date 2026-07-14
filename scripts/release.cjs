@@ -36,6 +36,14 @@ const PACKAGES = [
   { dir: "pi-adapter", name: "@agent-plan/pi-adapter" },
 ];
 
+// Plugin manifests have their own version track (independent from npm packages).
+// The release script bumps them by the same level so /plugin marketplace update
+// detects a new version. The marketplace.json lives at the repo root.
+const PLUGIN_FILES = {
+  manifest: path.join(root, "plugins", "claude-code", ".claude-plugin", "plugin.json"),
+  marketplace: path.join(root, ".claude-plugin", "marketplace.json"),
+};
+
 function sh(cmd, opts = {}) {
   try {
     return execSync(cmd, { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], ...opts }).trim();
@@ -54,6 +62,20 @@ function writeVersion(dir, version) {
   const j = JSON.parse(fs.readFileSync(p, "utf8"));
   j.version = version;
   fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+}
+function readPluginVersion() { return JSON.parse(fs.readFileSync(PLUGIN_FILES.manifest, "utf8")).version; }
+function writePluginVersion(version) {
+  // plugin.json
+  const mp = PLUGIN_FILES.manifest;
+  const mj = JSON.parse(fs.readFileSync(mp, "utf8"));
+  mj.version = version;
+  fs.writeFileSync(mp, JSON.stringify(mj, null, 2) + "\n");
+  // marketplace.json: plugins[0].version + top-level catalog version
+  const mk = PLUGIN_FILES.marketplace;
+  const mkj = JSON.parse(fs.readFileSync(mk, "utf8"));
+  mkj.version = version;
+  if (Array.isArray(mkj.plugins) && mkj.plugins[0]) mkj.plugins[0].version = version;
+  fs.writeFileSync(mk, JSON.stringify(mkj, null, 2) + "\n");
 }
 function parse(v) { return v.split(".").map(Number); }
 function cmp(a, b) { for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] - b[i]; } return 0; }
@@ -105,8 +127,23 @@ console.log(`\n› Release: ${currentStr} → ${target}  (${dryRun ? "DRY-RUN" :
 console.log("  Packages:");
 for (const p of PACKAGES) console.log(`    ${p.name.padEnd(26)} ${readVersion(p.dir)} → ${target}`);
 
+// --- plugin version (independent track, same bump level) ---
+const pluginCurrent = readPluginVersion();
+let pluginTarget;
+if (/^\d+\.\d+\.\d+$/.test(level)) {
+  // explicit version applies to packages only; bump plugin by same level from its current
+  pluginTarget = bumpVer(pluginCurrent, levelArg ? level : "patch");
+} else {
+  pluginTarget = bumpVer(pluginCurrent, level);
+}
+if (cmp(parse(pluginTarget), parse(pluginCurrent)) <= 0) {
+  console.error(`✗ Plugin target ${pluginTarget} is not greater than current ${pluginCurrent}. Aborting (downgrade guard).`);
+  process.exit(1);
+}
+console.log(`    ${"plugin (claude-code)".padEnd(26)} ${pluginCurrent} → ${pluginTarget}`);
+
 if (dryRun) {
-  console.log("\n[dry-run] Would: create release/v" + target + ", bump all, install, build, check, commit, push, open PR → main.");
+  console.log("\n[dry-run] Would: create release/v" + target + ", bump all packages to " + target + ", bump plugin to " + pluginTarget + ", install, build, check, commit, push, open PR → main.");
   process.exit(0);
 }
 
@@ -119,6 +156,7 @@ sh(`git switch -c ${branchName}`);
 
 // --- bump all ---
 for (const p of PACKAGES) writeVersion(p.dir, target);
+writePluginVersion(pluginTarget);
 
 // --- install + build + check (rollback on failure) ---
 function rollback() {
@@ -138,6 +176,7 @@ sh('git add -A');
 execSync(`git commit -m "chore(release): v${target}
 
 Unified version bump for all packages (core, mcp, server, agent-plan, pi-adapter).
+Also bumps the Claude Code plugin manifest + marketplace version to ${pluginTarget}.
 Merge this PR into main to publish via .github/workflows/publish.yml."`, { cwd: root, stdio: "inherit" });
 
 // --- push ---
@@ -152,12 +191,13 @@ try { changelog = sh("git log --oneline origin/main..HEAD"); } catch {}
 const versionTable = PACKAGES.map((p) => `| ${p.name} | ${""} | ${target} |`).join("\n");
 const body = `## Release v${target}
 
-Unified version bump for all packages. Merge into \`main\` to publish via \`.github/workflows/publish.yml\`.
+Unified version bump for all packages + Claude Code plugin manifest. Merge into \`main\` to publish via \`.github/workflows/publish.yml\`.
 
 ### Versions
 | Package | Before | After |
 |---|---|---|
 ${versionTable}
+| plugin (claude-code) | ${pluginCurrent} | ${pluginTarget} |
 
 ### Changelog (commits since origin/main)
 \`\`\`
