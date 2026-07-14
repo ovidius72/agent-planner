@@ -152,8 +152,14 @@ Quando inizi a lavorare:
 1. leggi `AGENTS.md`
 2. leggi `CHECKLIST.md`
 3. leggi i documenti rilevanti (`PROJECT.md`, `ROADMAP.md`)
-4. aggiorna la checklist prima e dopo cambi significativi
-5. se cambi una decisione architetturale, documentala esplicitamente
+4. **avvia la sessione del planner**: chiama `planner-load` (MCP, alias `/planner load` o `/planner recap` in Claude Code/Codex) oppure `/planner load` (Pi). Il tool ritorna un recap consolidato (stato progetto, task in-progress, eventuale handoff pendente, URL del web). Presenta il recap all'utente e termina con una riga prominente `🌐 Web UI: <url>`. Se il recap include un handoff pendente, sintetizzalo all'utente e poi cancellalo con `planner-handoff-clear` (o `/planner handoff clear`).
+5. aggiorna la checklist prima e dopo cambi significativi
+6. se cambi una decisione architetturale, documentala esplicitamente
+
+### Regola dettagli (task / phase / feature)
+- **Scrivi appena hai punti rilevanti**: non appena emergono punti rilevanti (decisioni, vincoli, stato attuale, riferimenti file:line, edge case), scrivili nella description/notes del task, phase o feature corrispondente (`planner-task-update`, `planner-phase-update`, `planner-feature-update`). Non lasciare lavoro implicito solo nella conversazione.
+- **Leggi quando inizi un task**: prima di iniziare a lavorare su un task, leggi la sua description e notes (e quelle della phase/feature genitore) con `planner-task-show` / `planner-phase-show`. Se esiste un handoff, leggilo come contesto.
+- **Riferimenti umani**: cita task/phase/feature con il composito univoco (es. `#T007 · F001/P002/T003`), non con UUID nudi.
 
 ### Pre-flight Protocol (Mandatory)
 Prima di iniziare qualsiasi nuova fase, nuovo task o nuova feature, l'agente deve:
