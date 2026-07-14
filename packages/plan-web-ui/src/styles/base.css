@@ -24,6 +24,25 @@ a { color: inherit; text-decoration: none; }
   margin-inline: auto;
 }
 
+/* Grid items default to min-width:auto, which prevents them from shrinking and
+   lets a single long token (URL, path, code) blow out the whole layout. Force
+   shrinkability so content wraps inside its track instead of overflowing.
+   Flex chains still opt in per-case via the min-w-0 utility. */
+.grid > * {
+  min-width: 0;
+}
+
+/* Formatted markdown text: never let a long token (URL, path, code) blow out
+   the layout — the grid column is minmax(0,1fr) and every text node may wrap. */
+.formatted-text { min-width: 0; }
+.formatted-text p,
+.formatted-text li,
+.formatted-text blockquote,
+.formatted-text a,
+.formatted-text code {
+  overflow-wrap: anywhere;
+}
+
 .surface-panel {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -134,6 +153,75 @@ a { color: inherit; text-decoration: none; }
 
 .entity-link--task {
   color: var(--color-entity-task);
+}
+
+.entity-path-badge {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-elevated);
+  overflow: hidden;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.entity-path-seg {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.entity-path-seg--feature {
+  color: var(--color-entity-feature);
+  background: color-mix(in srgb, var(--color-entity-feature) 14%, transparent);
+}
+.entity-path-seg--phase {
+  color: var(--color-entity-phase);
+  background: color-mix(in srgb, var(--color-entity-phase) 14%, transparent);
+}
+.entity-path-seg--task {
+  color: var(--color-entity-task);
+  background: color-mix(in srgb, var(--color-entity-task) 14%, transparent);
+}
+.entity-path-sep {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 0.2rem;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* ── Copyable entity id badge (click to copy the F/P/T path) ── */
+.copyable-id {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: 8px;
+}
+.copyable-id:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.copyable-id__icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+.copyable-id:hover .copyable-id__icon,
+.copyable-id:focus-visible .copyable-id__icon {
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  :root { font-size: 106.25%; }
 }
 
 .btn-primary {

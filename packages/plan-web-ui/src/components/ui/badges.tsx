@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
 
 export type EntityType = "feature" | "phase" | "task";
 
@@ -12,13 +13,57 @@ function formatSeq(n: number | undefined): string {
   return String(n && n > 0 ? n : 0).padStart(3, "0");
 }
 
+/** Plain entity-path identifier string, e.g. "F001/P002/T003". Used for copy. */
+export function formatEntityPath({
+  featureNum,
+  phaseNum,
+  taskNum,
+}: {
+  featureNum?: number | undefined;
+  phaseNum?: number | undefined;
+  taskNum?: number | undefined;
+}): string {
+  const parts: string[] = [];
+  if (featureNum !== undefined) parts.push(`F${formatSeq(featureNum)}`);
+  if (phaseNum !== undefined) parts.push(`P${formatSeq(phaseNum)}`);
+  if (taskNum !== undefined) parts.push(`T${formatSeq(taskNum)}`);
+  return parts.join("/");
+}
+
+/** Copy text with a fallback for non-secure contexts (http LAN). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy fallback */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function EntityBadge({ type, number }: { type: EntityType; number?: number | undefined }) {
   const color = TYPE_COLORS[type] || TYPE_COLORS.task;
   const soft = color?.soft || "transparent";
   const strong = color?.strong || "inherit";
   return (
     <span
-      className="inline-flex items-center justify-center font-mono text-[11px] font-bold leading-none px-2 py-1 rounded-md transition-colors"
+      className="shrink-0 inline-flex items-center justify-center font-mono text-[11px] font-bold leading-none px-2 py-1 rounded-md transition-colors"
       style={{
         backgroundColor: soft,
         color: strong,
@@ -45,7 +90,7 @@ export function ParentBadge({
   if (type === "phase") {
     if (featureNum === undefined) return null;
     return (
-      <div className="inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
+      <div className="shrink-0 inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
         <span className="px-2 py-1 text-[var(--text-muted)]">F{formatSeq(featureNum)}</span>
       </div>
     );
@@ -55,7 +100,7 @@ export function ParentBadge({
   if (type === "task") {
     if (phaseNum === undefined) return null;
     return (
-      <div className="inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
+      <div className="shrink-0 inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
         <span className="px-2 py-1 text-[var(--text-muted)]">P{formatSeq(phaseNum)}</span>
         {featureNum !== undefined && (
           <>
@@ -68,4 +113,71 @@ export function ParentBadge({
   }
 
   return null;
+}
+
+/**
+ * Unified entity-path badge: F00x[/P00x][/T00x] in a single pill, each segment
+ * color-coded by group (feature=purple, phase=cyan, task=green). Used in the
+ * Work Tree so the full identifier is easy to scan and type. The title sits
+ * below this badge on its own (wrapping) line.
+ */
+export function EntityPathBadge({
+  featureNum,
+  phaseNum,
+  taskNum,
+}: {
+  featureNum?: number | undefined;
+  phaseNum?: number | undefined;
+  taskNum?: number | undefined;
+}) {
+  return (
+    <span className="entity-path-badge">
+      {featureNum !== undefined ? (
+        <span className="entity-path-seg entity-path-seg--feature">F{formatSeq(featureNum)}</span>
+      ) : null}
+      {phaseNum !== undefined ? (
+        <>
+          <span className="entity-path-sep" aria-hidden="true">/</span>
+          <span className="entity-path-seg entity-path-seg--phase">P{formatSeq(phaseNum)}</span>
+        </>
+      ) : null}
+      {taskNum !== undefined ? (
+        <>
+          <span className="entity-path-sep" aria-hidden="true">/</span>
+          <span className="entity-path-seg entity-path-seg--task">T{formatSeq(taskNum)}</span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * Wraps an id badge so clicking it copies the identifier. Works on secure
+ * contexts (clipboard API) and on http LAN (execCommand fallback). Shows a
+ * transient check on success. Sibling of a navigation link — never nested
+ * inside an <a>.
+ */
+export function CopyableBadge({ id, children }: { id: string; children: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (await copyText(id)) {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }
+      }}
+      title={copied ? "Copied" : `Copy ${id}`}
+      aria-label={copied ? "Copied" : `Copy ${id}`}
+      className="copyable-id group inline-flex items-center gap-1.5"
+    >
+      {children}
+      <span className="copyable-id__icon" aria-hidden="true">
+        {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+      </span>
+    </button>
+  );
 }

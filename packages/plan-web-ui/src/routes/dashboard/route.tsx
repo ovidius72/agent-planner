@@ -30,8 +30,8 @@ export function DashboardRoute() {
   const projectStorageScope = project.projectRoot || project.planRoot || project.name || "default";
 
   return (
-    <div className="grid gap-8">
-      <Card className="grid gap-4">
+    <div className="grid grid-cols-1 gap-8">
+      <Card className="grid grid-cols-1 gap-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h2 className="text-lg font-bold text-[var(--text)]">Project Goal</h2>

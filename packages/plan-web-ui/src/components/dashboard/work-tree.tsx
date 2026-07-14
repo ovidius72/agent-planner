@@ -55,7 +55,7 @@ export function WorkTree({
         </div>
       </div>
 
-      <div className="grid gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
+      <div className="grid grid-cols-1 gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

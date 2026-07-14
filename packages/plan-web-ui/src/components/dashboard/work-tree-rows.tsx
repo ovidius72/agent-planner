@@ -1,16 +1,73 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { EntityBadge, ParentBadge } from "../ui/badges";
+import { CopyableBadge, EntityPathBadge, formatEntityPath } from "../ui/badges";
 import { StatusBadge } from "../ui/status-badge";
 import type { WorkTreeFeature, WorkTreePhase } from "../../lib/dashboard-tree";
 import type { Feature, Phase, Task } from "../../lib/types";
 
 /**
- * Presentational rows for the Work Tree. Each is a pure function of its props:
- * expansion and recent-change state are passed down from the WorkTree
- * component (which owns them via useDashboardTree), so the rows have no hooks
- * of their own and stay trivial to read.
+ * Presentational rows for the Work Tree. Pure functions of props (expansion
+ * and recent-change state are owned by the WorkTree component).
+ *
+ * Layout — identical responsive shape for all three rows:
+ *
+ *   mobile (column)        desktop (>= sm)
+ *   ───────────────        ───────────────
+ *   ▸ F00x/P00x            ▸ F00x/P00x    Title wrapping…     ● status (3/5)
+ *     ● status
+ *     Title wrapping…
+ *
+ * Mobile order is deliberately: entity badge → status → title (the title is
+ * fluid and always wraps, never overflows). On desktop the status moves to
+ * the far right and the title grows to fill.
+ *
+ * Indentation is minimal on small screens (ml-1.5 pl-3, ~18px per level) so
+ * deep feature→phase→task nesting doesn't steal horizontal space; it widens
+ * to the comfortable ml-4 pl-4 at >= sm. The in-progress dot lives inline in
+ * the badge row (tasks have no gutter). Overflow safety: min-w-0 is propagated
+ * through the whole chain and list containers use grid-cols-1.
  */
+
+const TITLE_CLASS =
+  "mt-1 block min-w-0 break-words font-mono text-sm font-semibold leading-snug [overflow-wrap:anywhere]";
+
+function UpdatedTag() {
+  return (
+    <span className="rounded-full bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">
+      Updated
+    </span>
+  );
+}
+
+/** Status + optional counters + updated tag. Rendered once for mobile, once for desktop. */
+function StatusCluster({
+  status,
+  doneTasks,
+  totalTasks,
+  recentlyChanged,
+  className,
+}: {
+  status: string;
+  doneTasks?: number;
+  totalTasks?: number;
+  recentlyChanged?: boolean;
+  className?: string;
+}) {
+  const hasCounters = doneTasks != null && totalTasks != null;
+  return (
+    <div className={className}>
+      {recentlyChanged ? <UpdatedTag /> : null}
+      {hasCounters ? (
+        <span className="text-xs text-[var(--text-muted)]">
+          ({doneTasks}/{totalTasks || 0})
+        </span>
+      ) : null}
+      <span className="shrink-0">
+        <StatusBadge status={status} />
+      </span>
+    </div>
+  );
+}
 
 export function FeatureTreeRow({
   entry,
@@ -34,45 +91,70 @@ export function FeatureTreeRow({
   const { feature, totalTasks, doneTasks, allPhases, hasActiveTask } = entry;
 
   return (
-    <div className={`surface-card px-4 py-3 transition-colors ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
-      <div className={`flex items-start justify-between gap-3 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}>
-        <div className="flex min-w-0 items-start gap-2 font-mono text-sm font-semibold">
+    <div
+      className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+    >
+      <div
+        className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}
+      >
+        <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
             type="button"
             onClick={onToggle}
             className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-subtle)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
-            aria-label={expanded ? `Collapse feature ${feature.name}` : `Expand feature ${feature.name}`}
+            aria-label={
+              expanded
+                ? `Collapse feature ${feature.name}`
+                : `Expand feature ${feature.name}`
+            }
             aria-expanded={expanded}
           >
-            <ChevronRight className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`} />
+            <ChevronRight
+              className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`}
+            />
           </button>
-          <span className="text-[var(--text-subtle)]">└─</span>
-          <Link to={`/features/${feature.id}`} className="entity-link--feature inline-flex min-w-0 items-center gap-2 truncate underline-offset-4 hover:underline">
-            {hasActiveTask ? (
-              <span aria-hidden="true" className="ap-progress-dot" />
-            ) : null}
-            <div className="flex items-center gap-2">
-              <EntityBadge type="feature" number={feature.number} />
-              <span className="truncate">{feature.name}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <CopyableBadge
+                id={formatEntityPath({ featureNum: feature.number })}
+              >
+                <EntityPathBadge featureNum={feature.number} />
+              </CopyableBadge>
+              {hasActiveTask ? (
+                <span aria-hidden="true" className="ap-progress-dot" />
+              ) : null}
             </div>
-          </Link>
+            <StatusCluster
+              status={feature.status}
+              doneTasks={doneTasks}
+              totalTasks={totalTasks}
+              recentlyChanged={recentlyChanged}
+              className="mt-1 flex flex-wrap items-center gap-2 sm:hidden"
+            />
+            <Link
+              to={`/features/${feature.id}`}
+              className={`entity-link--feature ${TITLE_CLASS} underline-offset-4 hover:underline`}
+            >
+              {feature.name}
+            </Link>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {recentlyChanged ? <span className="rounded-full bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">Updated</span> : null}
-          <span className="text-xs text-[var(--text-muted)]">({doneTasks}/{totalTasks || 0})</span>
-          <StatusBadge status={feature.status} />
-        </div>
+        <StatusCluster
+          status={feature.status}
+          doneTasks={doneTasks}
+          totalTasks={totalTasks}
+          recentlyChanged={recentlyChanged}
+          className="hidden shrink-0 items-center gap-2 sm:flex"
+        />
       </div>
 
       {expanded && allPhases.length > 0 ? (
-        <div className="mt-3 ml-4 grid gap-2 border-l border-[var(--border)] pl-4">
-          {allPhases.map((phaseEntry, phaseIndex) => (
+        <div className="mt-2 ml-1.5 grid grid-cols-1 gap-2 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
+          {allPhases.map((phaseEntry) => (
             <PhaseTreeRow
               key={phaseEntry.phase.id}
               feature={feature}
               phaseEntry={phaseEntry}
-              phaseIndex={phaseIndex}
-              phaseCount={allPhases.length}
               expanded={isPhaseExpanded(phaseEntry.phase.id)}
               recentlyChanged={isPhaseRecentlyChanged(phaseEntry.phase.id)}
               onToggle={() => onTogglePhase(phaseEntry.phase.id)}
@@ -88,8 +170,6 @@ export function FeatureTreeRow({
 export function PhaseTreeRow({
   feature,
   phaseEntry,
-  phaseIndex,
-  phaseCount,
   expanded,
   recentlyChanged,
   onToggle,
@@ -97,65 +177,94 @@ export function PhaseTreeRow({
 }: {
   feature: Feature;
   phaseEntry: WorkTreePhase;
-  phaseIndex: number;
-  phaseCount: number;
   expanded: boolean;
   recentlyChanged: boolean;
   onToggle: () => void;
   isTaskRecentlyChanged: (taskId: string) => boolean;
 }) {
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
-  const phasePrefix = phaseIndex === phaseCount - 1 ? "└─" : "├─";
 
   return (
-    <div className={`grid gap-2 transition-colors ${phase.status === "in-progress" ? "ap-in-progress rounded-[12px]" : hasActiveTask ? "rounded-[12px] border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)] px-2 py-2" : ""} ${phase.status === "done" ? "rounded-[12px] opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] px-2 py-2" : ""} ${recentlyChanged ? "rounded-[12px] ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] px-2 py-2" : ""}`}>
-      <div className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}>
-        <div className="flex min-w-0 items-start gap-2 font-mono text-sm">
+    <div
+      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 rounded-[12px] p-3 transition-colors ${phase.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)]" : ""} ${phase.status === "done" ? "opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+    >
+      <div
+        className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}
+      >
+        <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
             type="button"
             onClick={onToggle}
             className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-subtle)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
-            aria-label={expanded ? `Collapse phase ${phase.title}` : `Expand phase ${phase.title}`}
+            aria-label={
+              expanded
+                ? `Collapse phase ${phase.title}`
+                : `Expand phase ${phase.title}`
+            }
             aria-expanded={expanded}
           >
-            <ChevronRight className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`} />
+            <ChevronRight
+              className={`h-4 w-4 transition ${expanded ? "rotate-90" : "rotate-0"}`}
+            />
           </button>
-          <span className="text-[var(--text-subtle)]">{phasePrefix}</span>
-          <Link to={`/features/${feature.id}/phases/${phase.id}`} className="entity-link--phase inline-flex min-w-0 items-center gap-2 truncate underline-offset-4 hover:underline">
-            {hasActiveTask ? (
-              <span aria-hidden="true" className="ap-progress-dot" />
-            ) : null}
-            <div className="flex items-center gap-2">
-              <EntityBadge type="phase" number={phase.number} />
-              <ParentBadge type="phase" featureNum={feature?.number} />
-              <span className="truncate">{phase.title}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <CopyableBadge
+                id={formatEntityPath({
+                  featureNum: feature?.number,
+                  phaseNum: phase.number,
+                })}
+              >
+                <EntityPathBadge
+                  featureNum={feature?.number}
+                  phaseNum={phase.number}
+                />
+              </CopyableBadge>
+              {hasActiveTask ? (
+                <span aria-hidden="true" className="ap-progress-dot" />
+              ) : null}
             </div>
-          </Link>
+            <StatusCluster
+              status={phase.status}
+              doneTasks={doneTasks}
+              totalTasks={totalTasks}
+              recentlyChanged={recentlyChanged}
+              className="mt-1 flex flex-wrap items-center gap-2 sm:hidden"
+            />
+            <Link
+              to={`/features/${feature.id}/phases/${phase.id}`}
+              className={`entity-link--phase ${TITLE_CLASS} underline-offset-4 hover:underline`}
+            >
+              {phase.title}
+            </Link>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {recentlyChanged ? <span className="rounded-full bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">Updated</span> : null}
-          <span className="text-xs text-[var(--text-muted)]">({doneTasks}/{totalTasks || 0})</span>
-          <StatusBadge status={phase.status} />
-        </div>
+        <StatusCluster
+          status={phase.status}
+          doneTasks={doneTasks}
+          totalTasks={totalTasks}
+          recentlyChanged={recentlyChanged}
+          className="hidden shrink-0 items-center gap-2 sm:flex"
+        />
       </div>
 
       {expanded ? (
         allTasks.length > 0 ? (
-          <div className="ml-4 grid gap-1 border-l border-[var(--border)] pl-4">
-            {allTasks.map((task, taskIndex) => (
+          <div className="ml-1.5 grid grid-cols-1 gap-1 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
+            {allTasks.map((task) => (
               <TaskTreeRow
                 key={task.id}
                 feature={feature}
                 phase={phase}
                 task={task}
-                taskIndex={taskIndex}
-                taskCount={allTasks.length}
                 recentlyChanged={isTaskRecentlyChanged(task.id)}
               />
             ))}
           </div>
         ) : (
-          <p className="ml-4 font-mono text-xs text-[var(--text-subtle)]">│  └─ no tasks</p>
+          <p className="ml-1.5 text-xs italic text-[var(--text-subtle)] sm:ml-4">
+            No tasks
+          </p>
         )
       ) : null}
     </div>
@@ -166,41 +275,53 @@ export function TaskTreeRow({
   feature,
   phase,
   task,
-  taskIndex,
-  taskCount,
   recentlyChanged,
 }: {
   feature: Feature;
   phase: Phase;
   task: Task;
-  taskIndex: number;
-  taskCount: number;
   recentlyChanged: boolean;
 }) {
-  const taskPrefix = taskIndex === taskCount - 1 ? "└─" : "├─";
-
   return (
-    <div className={`flex items-start justify-between gap-3 rounded-[10px] px-1 py-1 font-mono text-sm transition-colors hover:bg-[var(--accent-soft)] ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${task.status === "done" ? "text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}>
-      <Link
-        to={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}`}
-        className="min-w-0 text-[var(--text-muted)] transition hover:text-[var(--accent)]"
-      >
-        <span className="text-[var(--text-subtle)]">│  {taskPrefix} </span>
-        <span className="inline-flex items-center gap-2">
+    <div
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <CopyableBadge
+            id={formatEntityPath({
+              featureNum: feature?.number,
+              phaseNum: phase.number,
+              taskNum: task.number,
+            })}
+          >
+            <EntityPathBadge
+              featureNum={feature?.number}
+              phaseNum={phase.number}
+              taskNum={task.number}
+            />
+          </CopyableBadge>
           {task.status === "in-progress" ? (
             <span aria-hidden="true" className="ap-progress-dot" />
           ) : null}
-          <div className="flex items-center gap-2">
-            <EntityBadge type="task" number={task.number} />
-            <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
-            <span className="entity-link--task underline-offset-4 hover:underline">{task.title}</span>
-          </div>
-        </span>
-      </Link>
-      <div className="flex shrink-0 items-center gap-2">
-        {recentlyChanged ? <span className="rounded-full bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">Updated</span> : null}
-        <span className="shrink-0"><StatusBadge status={task.status} /></span>
+        </div>
+        <StatusCluster
+          status={task.status}
+          recentlyChanged={recentlyChanged}
+          className="mt-1 flex flex-wrap items-center gap-2 sm:hidden"
+        />
+        <Link
+          to={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}`}
+          className={`entity-link--task ${TITLE_CLASS} underline-offset-4 hover:underline`}
+        >
+          {task.title}
+        </Link>
       </div>
+      <StatusCluster
+        status={task.status}
+        recentlyChanged={recentlyChanged}
+        className="hidden shrink-0 items-center gap-2 sm:flex"
+      />
     </div>
   );
 }

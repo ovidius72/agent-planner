@@ -13,7 +13,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { EntityBadge, ParentBadge } from "../../components/ui/badges";
+import { CopyableBadge, EntityPathBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
@@ -82,35 +82,26 @@ export function TaskDetailRoute() {
         <ArrowLeft className="h-4 w-4" /> Back to phase
       </Link>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name, to: `/features/${feature.id}` }, { label: phase.title, to: `/features/${feature.id}/phases/${phase.id}` }, { label: task.title }]} />
-          <div className="mt-2 flex items-center gap-2">
-            <EntityBadge type="task" number={task.number} />
-            <ParentBadge type="task" phaseNum={phase.number} featureNum={feature.number} />
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">{task.title}</h2>
-            <StatusBadge status={task.status} />
-          </div>
+      <div className="min-w-0">
+        <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name, to: `/features/${feature.id}` }, { label: phase.title, to: `/features/${feature.id}/phases/${phase.id}` }, { label: task.title }]} />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number, taskNum: task.number })}>
+            <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} taskNum={task.number} />
+          </CopyableBadge>
+          <StatusBadge status={task.status} />
         </div>
-
-        <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/delete`} onSubmit={(event) => {
-          if (!window.confirm(`Delete task \"${task.title}\"?`)) event.preventDefault();
-        }}>
-          <Button type="submit" variant="danger" shortcut="delete">Delete task</Button>
-        </Form>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{task.title}</h2>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>
+          <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/delete`} className="inline-flex" onSubmit={(event) => {
+            if (!window.confirm(`Delete task \"${task.title}\"?`)) event.preventDefault();
+          }}>
+            <Button type="submit" variant="danger" shortcut="delete">Delete task</Button>
+          </Form>
+        </div>
       </div>
 
       <Card className="grid gap-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <EntityBadge type="task" number={task.number} />
-            <p className="mt-2 text-sm text-[var(--text-muted)]">Single-focus task view. Editing opens in a modal route.</p>
-          </div>
-          <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>
-        </div>
-
         {task.description ? <FormattedText text={task.description} className="plan-description" /> : null}
         {task.notes ? (
           <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
