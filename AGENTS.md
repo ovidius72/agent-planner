@@ -141,11 +141,13 @@ Regole operative:
 - **Branch di partenza**: ogni feature branch nasce da `develop`, **non** da `main`.
   - `git switch develop && git pull && git switch -c feature/<nome>`
 - **PR verso `develop`**: il lavoro quotidiano si integra con PR **verso `develop`**. È vietato pushare direttamente su `main` o `develop` senza PR.
-- **`main` è solo release**: `main` riceve modifiche **esclusivamente** via PR da `develop`. Il merge `develop → main` è l'atto di release.
+- **`main` è solo release**: `main` riceve modifiche **esclusivamente** via PR di release (`release/v<versione>` create dallo script `release`). Il merge della PR di release su `main` è l'atto di release.
 - **Pubblicazione automatica**: il workflow `.github/workflows/publish.yml` pubblica su npm **solo** al merge di una PR su `main` (trigger `push: branches:[main]`). Il merge su `develop` **non** pubblica (è staging).
-- **Bump versione deliberato e manuale**: il bump delle versioni dei package non è automatico. Si fa con `pnpm release:bump [-- patch|minor|major]` (gruppo core: `plan-core`, `plan-mcp`, `plan-server`, `agent-plan`) e `pnpm release:bump:adapter` (pi-adapter, cadenza indipendente), **prima** di una PR `develop → main` che si intende rilasciare.
+- **Versioning unificato**: tutti i 5 package (`@agent-plan/core`, `@agent-plan/mcp`, `@agent-plan/server`, `agent-plan`, `@agent-plan/pi-adapter`) condividono **una sola versione** per release. Il bump è deliberato e manuale, eseguito dallo script `pnpm release`.
+- **Script `release`**: `pnpm release [-- patch|minor|major|X.Y.Z]` (default `patch`) fa tutto — verifica pre-flight (clean tree, su `develop` aggiornato), calcola la versione unificata (`bump(max(versioni correnti), livello)` con guardia anti-downgrade), crea branch `release/v<versione>` da `develop`, bumpa tutti i package, `pnpm install` + build + check (con rollback su fallimento), commit, push, apre PR **verso `main``. Anteprima con `pnpm release -- --dry-run`.
+- **Dopo la release**: una volta mergiata la PR su `main` (pubblicazione automatica), sincronizzare `develop`: `git switch develop && git pull && git merge origin/main && git push`.
 - **Validazione CI**: `.github/workflows/ci.yml` esegue `build + check` su `develop` e su ogni PR. Il codice deve essere verde prima del merge.
-- **Branch di default**: `develop` è il default branch su GitHub, quindi le nuove PR puntano a `develop`.
+- **Branch di default**: `develop` è il default branch su GitHub, quindi le nuove PR (feature) puntano a `develop`. Le PR di release puntano a `main`.
 
 ## Comportamento atteso dagli agenti
 Quando inizi a lavorare:
