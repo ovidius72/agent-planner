@@ -15,6 +15,7 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "dist/**/*.d.ts.map",
+    "web-ui-dist/**",
     "README.md",
     "LICENSE"
   ],

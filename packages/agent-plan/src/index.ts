@@ -129,7 +129,7 @@ function defaultMcpConfig(flags: CliFlags): Record<string, unknown> {
 function plannerCommandTemplate(): string {
   return `---
 description: Route Agent Plan planner commands to MCP tools
-argument-hint: "init | show | reload | load | disable | repair | export [--full] | web <status|start|stop> | feature <list|add|show|update|delete> | phase <add|show|discuss|update|delete> | task <add|show|discuss|update|delete|start|complete> | handoff <prepare|show|write|clear> | project <discuss|language> | bypass | clear-bypass"
+argument-hint: "init | show | reload | load | recap | disable | repair | export [--full] | web <status|start|stop> | feature <list|add|show|update|delete> | phase <add|show|discuss|update|delete> | task <add|show|discuss|update|delete|start|complete> | handoff <prepare|show|write|clear> | project <discuss|language> | bypass | clear-bypass"
 ---
 
 You are handling the Agent Plan slash command for this project.
@@ -146,8 +146,9 @@ Route common commands as follows:
 
 - \`init\` → call \`planner-init\`; if required fields are missing, ask for a concise project name first
 - \`show\` → call \`planner-show\`
-- \`reload\` → call \`planner-load\`, then call \`planner-show\` to confirm current state
-- \`load\` → call \`planner-load\`
+- \`reload\` → call \`planner-load\`, then present the returned recap to the user (state, active task, pending handoff, web URL)
+- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present the recap to the user **in this reply only**. If a pending handoff is included in the result, read it, summarize it to the user, then call \`planner-handoff-clear\` to remove it. End **this recap reply** with a prominent final line showing the web URL, e.g. \`🌐 Web UI: <url>\`. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
+- \`recap\` → call \`planner-load\` (same as \`load\`: returns the recap + handoff + web URL); present it to the user
 - \`disable\` → call \`planner-disable\`
 - \`repair\` → call \`planner-repair\`
 - \`bypass\` → call \`planner-authorize-bypass\` (default 15 min); only when the user authorizes proceeding without a task

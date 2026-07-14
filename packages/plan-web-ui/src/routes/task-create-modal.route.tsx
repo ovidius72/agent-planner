@@ -20,7 +20,7 @@ export function TaskCreateModalRoute() {
   return (
     <ModalShell title="Create task" description="A task belongs to the current phase.">
       <Form ref={formRef} method="post" className="grid gap-4">
-        <Field label="Task title"><Input name="title" placeholder="Integrazione custom fetcher" required /></Field>
+        <Field label="Task title"><Input name="title" placeholder="Custom fetcher integration" required /></Field>
         <Field label="Description"><Textarea name="description" placeholder="Initial task context" /></Field>
         <Field label="Status">
           <Select name="status" defaultValue="planned">

@@ -2,6 +2,7 @@ import { watch, existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { networkInterfaces } from "node:os";
+import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
@@ -769,6 +770,18 @@ function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, stati
 
 // ─── Serve ──────────────────────────────────────────────────────────────
 
+/** Resolve the web UI bundle shipped alongside this package (../web-ui-dist
+ * relative to dist/serve.js). Returns undefined when not bundled (dev/API-only).
+ * Callers can pass staticDir: "" to force API-only even when the bundle exists. */
+function resolveBundledStaticDir(): string | undefined {
+  try {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "web-ui-dist");
+    return existsSync(join(dir, "index.html")) ? dir : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface ServeOptions {
   port?: number;
   planRoot: string;
@@ -804,7 +817,10 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
 
   // Shared mutable reference — routes see the hub after it's created
   const hubRef: { current: WsHub | null } = { current: null };
-  const app = createSpaApp(store, hubRef, options.staticDir, runtimeUiConfig, options.isBusy);
+  // Default to the bundled web UI when the caller doesn't pass staticDir. Pass
+  // an empty string ("") to force API-only even when the bundle is present.
+  const staticDir = options.staticDir ?? resolveBundledStaticDir();
+  const app = createSpaApp(store, hubRef, staticDir, runtimeUiConfig, options.isBusy);
 
   return new Promise((resolve, reject) => {
     // Create the Node HTTP server without listening yet

@@ -19,7 +19,7 @@ export function FeatureCreateModalRoute() {
     <ModalShell title="Create feature" description="Top-level container for phases and tasks.">
       <Form ref={formRef} method="post" className="grid gap-4">
         <Field label="Feature name">
-          <Input name="name" placeholder="Realizzazione pagina prodotti" required />
+          <Input name="name" placeholder="Products page implementation" required />
         </Field>
         <Field label="Description">
           <Textarea name="description" placeholder="Short context for the feature" />

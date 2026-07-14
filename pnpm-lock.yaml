@@ -27,11 +27,11 @@ importers:
   packages/pi-adapter:
     dependencies:
       '@agent-plan/core':
-        specifier: ^0.2.0
-        version: 0.2.3
+        specifier: workspace:*
+        version: link:../plan-core
       '@agent-plan/server':
-        specifier: ^0.2.0
-        version: 0.2.3
+        specifier: workspace:*
+        version: link:../plan-server
       typebox:
         specifier: ^1.1.24
         version: 1.3.1
@@ -124,12 +124,6 @@ importers:
         version: 6.4.3(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
 
 packages:
-
-  '@agent-plan/core@0.2.3':
-    resolution: {integrity: sha512-3rXqU7PmgUztldWrqfLNHo0ZXBByDXsxNRMV+4z3VcLKQ/dH3VQn2pjTvBr3QQaJoBvo8CbFMNUDnWOU6FlvKw==}
-
-  '@agent-plan/server@0.2.3':
-    resolution: {integrity: sha512-NViJ9GXX9VHd/SkfOy9YKuOCChDots+tfJazzIhK/DctcGFn4bO+YDmAM1pKsScFHnyPdTNPcBktiUe0KHIX2g==}
 
   '@anthropic-ai/sdk@0.91.1':
     resolution: {integrity: sha512-LAmu761tSN9r66ixvmciswUj/ZC+1Q4iAfpedTfSVLeswRwnY3n2Nb6Tsk+cLPP28aLOPWeMgIuTuCcMC6W/iw==}
@@ -1842,19 +1836,6 @@ packages:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
-
-  '@agent-plan/core@0.2.3':
-    dependencies:
-      zod: 3.25.76
-
-  '@agent-plan/server@0.2.3':
-    dependencies:
-      '@agent-plan/core': 0.2.3
-      hono: 4.12.27
-      ws: 8.21.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   '@anthropic-ai/sdk@0.91.1(zod@3.25.76)':
     dependencies:
