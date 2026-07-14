@@ -68,7 +68,7 @@ export function TopNav({
   }
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-xl backdrop-saturate-150">
+    <div className="border-b border-[var(--border)] bg-[var(--surface-elevated)] backdrop-blur-xl backdrop-saturate-150">
       <div className="page-container flex flex-col gap-3 py-2.5 md:flex-row md:items-center md:justify-between sm:gap-4 sm:py-3">
         <Link to="/" className="flex min-w-0 items-center gap-3">
           <div className="surface-card flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--accent)]">

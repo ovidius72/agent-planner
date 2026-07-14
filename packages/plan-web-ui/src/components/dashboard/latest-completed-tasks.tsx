@@ -55,19 +55,17 @@ export function LatestCompletedTasks({ features, phases }: { features: Feature[]
           <Link
             key={task.id}
             to={phase.featureId ? `/features/${phase.featureId}/phases/${phase.id}/tasks/${task.id}` : "/features"}
-            className="surface-card grid gap-1 px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
+            className="surface-card grid min-w-0 grid-cols-1 gap-1 px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
           >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <EntityBadge type="task" number={task.number} />
-                <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
-                <span className="entity-link--task truncate text-sm font-semibold underline-offset-4 hover:underline">{task.title}</span>
-              </div>
-              <StatusBadge status={task.status} />
+            <div className="flex flex-wrap items-center gap-2">
+              <EntityBadge type="task" number={task.number} />
+              <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
+              <span className="shrink-0"><StatusBadge status={task.status} /></span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <span className="entity-link--task min-w-0 break-words text-sm font-semibold underline-offset-4 [overflow-wrap:anywhere]">{task.title}</span>
+            <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--text-muted)]">
               <ParentBadge type="phase" featureNum={feature?.number} />
-              <span>{featureName} · {phase.title}</span>
+              <span className="min-w-0 truncate">{featureName} · {phase.title}</span>
             </div>
             <div className="text-[11px] text-[var(--text-subtle)]">Completed {formatDateTime(completedAt)}</div>
           </Link>

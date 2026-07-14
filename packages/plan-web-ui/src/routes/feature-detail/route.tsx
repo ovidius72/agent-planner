@@ -78,13 +78,11 @@ export function FeatureDetailRoute() {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name }]} />
-          <div className="mt-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <EntityBadge type="feature" number={feature.number} />
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">{feature.name}</h2>
             <StatusBadge status={feature.status} />
           </div>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
           {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
         </div>
 

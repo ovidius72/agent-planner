@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState, type ReactNode } from "react";
+import { Check, Copy } from "lucide-react";
 
 export type EntityType = "feature" | "phase" | "task";
 
@@ -10,6 +11,50 @@ const TYPE_COLORS: Record<EntityType, { soft: string; strong: string }> = {
 
 function formatSeq(n: number | undefined): string {
   return String(n && n > 0 ? n : 0).padStart(3, "0");
+}
+
+/** Plain entity-path identifier string, e.g. "F001/P002/T003". Used for copy. */
+export function formatEntityPath({
+  featureNum,
+  phaseNum,
+  taskNum,
+}: {
+  featureNum?: number | undefined;
+  phaseNum?: number | undefined;
+  taskNum?: number | undefined;
+}): string {
+  const parts: string[] = [];
+  if (featureNum !== undefined) parts.push(`F${formatSeq(featureNum)}`);
+  if (phaseNum !== undefined) parts.push(`P${formatSeq(phaseNum)}`);
+  if (taskNum !== undefined) parts.push(`T${formatSeq(taskNum)}`);
+  return parts.join("/");
+}
+
+/** Copy text with a fallback for non-secure contexts (http LAN). */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy fallback */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
 }
 
 export function EntityBadge({ type, number }: { type: EntityType; number?: number | undefined }) {
@@ -103,5 +148,36 @@ export function EntityPathBadge({
         </>
       ) : null}
     </span>
+  );
+}
+
+/**
+ * Wraps an id badge so clicking it copies the identifier. Works on secure
+ * contexts (clipboard API) and on http LAN (execCommand fallback). Shows a
+ * transient check on success. Sibling of a navigation link — never nested
+ * inside an <a>.
+ */
+export function CopyableBadge({ id, children }: { id: string; children: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (await copyText(id)) {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }
+      }}
+      title={copied ? "Copied" : `Copy ${id}`}
+      aria-label={copied ? "Copied" : `Copy ${id}`}
+      className="copyable-id group inline-flex items-center gap-1.5"
+    >
+      {children}
+      <span className="copyable-id__icon" aria-hidden="true">
+        {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+      </span>
+    </button>
   );
 }

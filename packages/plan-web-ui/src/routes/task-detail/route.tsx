@@ -85,14 +85,12 @@ export function TaskDetailRoute() {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name, to: `/features/${feature.id}` }, { label: phase.title, to: `/features/${feature.id}/phases/${phase.id}` }, { label: task.title }]} />
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <EntityBadge type="task" number={task.number} />
             <ParentBadge type="task" phaseNum={phase.number} featureNum={feature.number} />
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">{task.title}</h2>
             <StatusBadge status={task.status} />
           </div>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{task.title}</h2>
         </div>
 
         <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/delete`} onSubmit={(event) => {

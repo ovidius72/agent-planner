@@ -78,16 +78,14 @@ export function PhaseDetailRoute() {
               { label: phase.title },
             ]}
           />
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <EntityBadge type="phase" number={phase.number} />
             <ParentBadge type="phase" featureNum={feature.number} />
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h2 className="text-2xl font-black tracking-tight text-[var(--text)] break-words">
-              {phase.title}
-            </h2>
             <StatusBadge status={phase.status} />
           </div>
+          <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
+            {phase.title}
+          </h2>
           {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
         </div>
 

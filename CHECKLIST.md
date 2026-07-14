@@ -177,6 +177,14 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
   - **Header mobile compatto** (`top-nav.tsx`): etichette Live/nav/Export nascoste sotto `sm` (`hidden sm:inline`) → su mobile solo icone, una riga ordinata; padding `px-3 sm:px-4`.
   - **Leggibilità mobile**: `base.css` media query `max-width:640px { :root { font-size: 106.25% } }` (scale rem-based text). Filtri (`list-filters.tsx`): tap target `min-h-10` → `min-h-11`, padding `p-3 sm:p-4`, results label `text-xs` → `text-sm`.
 - [x] Build + typecheck puliti; `web-ui-dist` del pi-adapter ricostruito e servito contiene le nuove regole (`entity-path-badge` + media query).
+- [x] **Responsive mobile + layout detail (round 2)** — overflow azzerato ovunque (dashboard + feature/phase/task-detail = 0px a 390px):
+  - **Fix sistemica grid overflow** (`base.css`): regola globale `.grid > * { min-width: 0 }` — i grid-item hanno `min-width:auto` di default e non shrinkano, causando overflow con token lunghi. Una regola risolve ~40 container `grid` nudi in tutta l'app.
+  - **Markdown overflow-proof** (`formatted-text.tsx` + `base.css`): container `FormattedText` ora `formatted-text grid grid-cols-1` + regola `.formatted-text p/li/blockquote/a/code { overflow-wrap: anywhere }` → URL/path/codice lunghi non overflowano mai (Project Goal, description, notes, decisions).
+  - **Work Tree mobile ridisegnato** (`work-tree-rows.tsx`): layout a **colonna** su mobile nell'ordine **badge numerico → status → titolo fluido** (desktop: titolo a sinistra che cresce, status a destra). Indent ridotti su mobile (`ml-1.5 pl-3`, ~18px/livello, vs `ml-4 pl-4` desktop) per non rubare spazio; rimosso il gutter waste dei task (dot in-progress inline nel badge). Badge F/P/T ora **click-to-copy** (`CopyableBadge` in `badges.tsx` + stili `.copyable-id` in `base.css`, fallback execCommand per http LAN).
+  - **Header detail ridisegnato** (`feature/phase/task-detail/route.tsx`): riga badge (**numero + parent + status**) in alto, **titolo su riga propria sotto** (più grande su desktop `sm:text-3xl`), invece di titolo+status in linea.
+  - **Latest completed tasks** (`latest-completed-tasks.tsx`): ristrutturato a colonna (badge+status, titolo fluido, riga parent truncate) con catena `min-w-0`.
+  - **App-shell in-progress bar** (`app-shell.tsx`): fix catena `min-w-0 flex-1` così il `truncate` del titolo shrinka davvero (era la causa dei 604px di overflow sulla home).
+  - **Dashboard** (`route.tsx`): page grid + card → `grid-cols-1`.
 - [ ] **Da fare al release**: bump pi-adapter a `0.2.14` (`pnpm release:bump:adapter`) prima della PR `develop → main`.
 
 ### Prossimi passi
