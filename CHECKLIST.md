@@ -148,6 +148,45 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **Conferma pubblicazione CI**: primo run su `main` ha pubblicato tutti i 5 package pubblicabili (core/mcp/server/agent-plan/pi-adapter), verificato sync 5/5 tra locale e npm.
 - [x] **Nuovo flusso di lavoro**: da oggi integrazione via feature branch + PR a `main` (modello `develop` → PR `main`). Il trigger `push: branches:[main]` pubblica automaticamente al merge della PR.
 
+### Fatto — Fix: Web UI address solo sul recap iniziale (sessione 2026-07-13)
+- [x] **Root cause**: l'indirizzo Web UI veniva accodato a OGNI messaggio dell'agente perché la logica di azzeramento dei flag (`startupResumeSummaryPending`/`startupResumePromptPending`) e l'iniezione del `startupResumeProtocol` stavano **dentro il ramo cache-miss** di `before_agent_start`, DOPO l'early-return della cache fast-path. Sui turni normali (cache valida) quelle righe non giravano mai → `startupResumeSummaryPending` restava `true` fino al timeout di 60s → URL su ogni risposta.
+- [x] **Fix** (`packages/pi-adapter/src/index.ts`):
+  - gestione del ciclo di vita dei flag (`isRecapTurn`, consumo di `promptPending`, azzeramento di `summaryPending` sui turni non-recap) spostata **PRIMA** della cache fast-path → gira su ogni turno, cache-hit inclusi.
+  - `/planner load` imposta `contextBlockDirty = true` così la turnata di recap ricostruisce il context (slow path) e inietta il protocollo fresco.
+  - `startupResumeProtocol` rimosso dal `contextBlock` (non più cotto in cache, che altrimenti sarebbe persistito su ogni turno) e accodato dinamicamente al `return` solo sul turno di recap.
+- [x] Build + typecheck puliti; `dist` verificato (clearing a riga 3438, cache early-return a 3445, ordine corretto).
+- [ ] **Da fare al release**: bump pi-adapter a `0.2.14` (`pnpm release:bump:adapter`) prima della PR `develop → main` per pubblicare la fix.
+
+### Fatto — planner-web management in plan-mcp (sessione 2026-07-13)
+- [x] **Problema**: in Claude Code (integrazione via `plan-mcp` MCP stdio) il tool `planner-web` era uno stub che restituiva solo testo guida ("MCP stdio package does not manage the web server yet"). Nessuna gestione effettiva del web server, a differenza del Pi adapter (`/planner web status`).
+- [x] **Fix** (`packages/plan-mcp/src/index.ts` + `package.json`):
+  - aggiunta dipendenza workspace `@agent-plan/server`.
+  - import di `serve()`/`ServeHandle` da `@agent-plan/server` (stessa API di plan-server CLI e Pi adapter).
+  - variabile di modulo `webHandle` (in-process, vive finché il processo MCP è attivo).
+  - implementati i 3 action: **start** (`serve({planRoot, host:"0.0.0.0", port:0, quiet:true})` → LAN + porta dinamica OS-assegnata), **status** (URL/port/mode o "not running"), **stop** (`handle.close()`).
+  - plan-root riusa `AGENT_PLAN_ROOT || cwd()/.planner` (coerente con gli altri tool).
+- [x] Scelte di design (approvate): **in-process** come Pi, **LAN** (`0.0.0.0`), **porta dinamica** (zero conflitti con plan-server CLI/Pi).
+- [x] Build + typecheck puliti; smoke test `serve({port:0,host:"0.0.0.0"})` verificato (porta dinamica `51262`, `localUrl`+`lanUrl` corretti, mode `lan`, HTTP risponde, close pulita).
+- [ ] **Da fare al release**: bump `@agent-plan/mcp` prima della PR `develop → main` per pubblicare.
+
+### Fatto — Responsive Web UI mobile (sessione 2026-07-13)
+- [x] **Problema**: su mobile il sito era inguardabile: (1) header `sticky` semitrasparente (`bg/90`) faceva vedere il contenuto sotto scrollando; (2) nomi task lunghi non andavano a capo → overflow che rompeva il layout; (3) bottoni header (Live/Dashboard/Features/Export) si affollavano e andavano a capo male; (4) testo e filtri troppo piccoli.
+- [x] **Fix** (`packages/plan-web-ui/src`):
+  - **Header**: `top-nav.tsx` root `bg-[var(--surface)]/90` → `/95` + `backdrop-saturate-150` (mantiene `backdrop-blur-xl`). Sfondo blur opaco, niente bleed.
+  - **Work Tree ridisegnato** (`work-tree-rows.tsx` + nuovo `EntityPathBadge` in `badges.tsx`): identificatore unificato `F00x[/P00x][/T00x]` in un singolo badge con segmenti colorati per gruppo (feature=viola, phase=ciano, task=verde). Il titolo ora sta **sotto** il badge e wrappa (`break-words [overflow-wrap:anywhere]`) invece di overfloware. Rimossi i glyph ASCII dell'albero (└─├─│); indentazione + chevron conservano la gerarchia.
+  - **Header mobile compatto** (`top-nav.tsx`): etichette Live/nav/Export nascoste sotto `sm` (`hidden sm:inline`) → su mobile solo icone, una riga ordinata; padding `px-3 sm:px-4`.
+  - **Leggibilità mobile**: `base.css` media query `max-width:640px { :root { font-size: 106.25% } }` (scale rem-based text). Filtri (`list-filters.tsx`): tap target `min-h-10` → `min-h-11`, padding `p-3 sm:p-4`, results label `text-xs` → `text-sm`.
+- [x] Build + typecheck puliti; `web-ui-dist` del pi-adapter ricostruito e servito contiene le nuove regole (`entity-path-badge` + media query).
+- [x] **Responsive mobile + layout detail (round 2)** — overflow azzerato ovunque (dashboard + feature/phase/task-detail = 0px a 390px):
+  - **Fix sistemica grid overflow** (`base.css`): regola globale `.grid > * { min-width: 0 }` — i grid-item hanno `min-width:auto` di default e non shrinkano, causando overflow con token lunghi. Una regola risolve ~40 container `grid` nudi in tutta l'app.
+  - **Markdown overflow-proof** (`formatted-text.tsx` + `base.css`): container `FormattedText` ora `formatted-text grid grid-cols-1` + regola `.formatted-text p/li/blockquote/a/code { overflow-wrap: anywhere }` → URL/path/codice lunghi non overflowano mai (Project Goal, description, notes, decisions).
+  - **Work Tree mobile ridisegnato** (`work-tree-rows.tsx`): layout a **colonna** su mobile nell'ordine **badge numerico → status → titolo fluido** (desktop: titolo a sinistra che cresce, status a destra). Indent ridotti su mobile (`ml-1.5 pl-3`, ~18px/livello, vs `ml-4 pl-4` desktop) per non rubare spazio; rimosso il gutter waste dei task (dot in-progress inline nel badge). Badge F/P/T ora **click-to-copy** (`CopyableBadge` in `badges.tsx` + stili `.copyable-id` in `base.css`, fallback execCommand per http LAN).
+  - **Header detail ridisegnato** (`feature/phase/task-detail/route.tsx`): riga badge (**numero + parent + status**) in alto, **titolo su riga propria sotto** (più grande su desktop `sm:text-3xl`), invece di titolo+status in linea.
+  - **Latest completed tasks** (`latest-completed-tasks.tsx`): ristrutturato a colonna (badge+status, titolo fluido, riga parent truncate) con catena `min-w-0`.
+  - **App-shell in-progress bar** (`app-shell.tsx`): fix catena `min-w-0 flex-1` così il `truncate` del titolo shrinka davvero (era la causa dei 604px di overflow sulla home).
+  - **Dashboard** (`route.tsx`): page grid + card → `grid-cols-1`.
+- [ ] **Da fare al release**: bump pi-adapter a `0.2.14` (`pnpm release:bump:adapter`) prima della PR `develop → main`.
+
 ### Prossimi passi
 - [ ] **Configurare secret `NPM_TOKEN`** nel repo GitHub (Automation/Granular token) e pushare il workflow + le modifiche su `main` per attivare la publish automatica (pubblica agent-plan 0.2.8 e gli altri 0.2.8 se non ancora su npm).
 - [ ] Web UI: pagina requirements (vedi `BACKLOG.md` P2-3)

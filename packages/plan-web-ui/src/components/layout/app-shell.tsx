@@ -26,7 +26,7 @@ function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }
       <div className="page-container py-2.5">
         <div className="grid gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">In-progress tasks ({uniqueTasks.length})</span>
-          <div className="grid max-h-[35vh] gap-1.5 overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 max-h-[35vh] gap-1.5 overflow-y-auto pr-1">
             {uniqueTasks.map((task) => {
               const to = task.featureId
                 ? `/features/${task.featureId}/phases/${task.phaseId}/tasks/${task.id}`
@@ -37,7 +37,7 @@ function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }
                   to={to}
                   className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
                     {task.status === "in-progress" ? (
                       <span
                         aria-hidden="true"

@@ -1,6 +1,6 @@
 {
   "name": "@agent-plan/mcp",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "private": false,
   "description": "MCP server for Agent Plan, exposing planner-* tools over stdio.",
   "license": "MIT",
@@ -40,6 +40,7 @@
   ],
   "dependencies": {
     "@agent-plan/core": "workspace:*",
+    "@agent-plan/server": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.0",
     "zod": "^3.24.0"
   },

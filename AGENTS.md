@@ -133,6 +133,20 @@ L'agente non deve attendere promemoria dall'utente o dall'estensione per aggiorn
 - **Chiusura Immediata**: il task va completato (`task_complete`) NON DOPO l'invio del codice, ma COME PARTE della consegna del deliverable.
 - **Motivazione Esaustiva**: ogni blocco deve essere motivato in modo che un terzo possa comprendere l'impedimento senza dover leggere l'intera cronologia della chat.
 
+### 12. Branching & Release
+
+Il progetto segue un flusso a due rami: **`develop`** (integrazione) e **`main`** (release).
+
+Regole operative:
+- **Branch di partenza**: ogni feature branch nasce da `develop`, **non** da `main`.
+  - `git switch develop && git pull && git switch -c feature/<nome>`
+- **PR verso `develop`**: il lavoro quotidiano si integra con PR **verso `develop`**. È vietato pushare direttamente su `main` o `develop` senza PR.
+- **`main` è solo release**: `main` riceve modifiche **esclusivamente** via PR da `develop`. Il merge `develop → main` è l'atto di release.
+- **Pubblicazione automatica**: il workflow `.github/workflows/publish.yml` pubblica su npm **solo** al merge di una PR su `main` (trigger `push: branches:[main]`). Il merge su `develop` **non** pubblica (è staging).
+- **Bump versione deliberato e manuale**: il bump delle versioni dei package non è automatico. Si fa con `pnpm release:bump [-- patch|minor|major]` (gruppo core: `plan-core`, `plan-mcp`, `plan-server`, `agent-plan`) e `pnpm release:bump:adapter` (pi-adapter, cadenza indipendente), **prima** di una PR `develop → main` che si intende rilasciare.
+- **Validazione CI**: `.github/workflows/ci.yml` esegue `build + check` su `develop` e su ogni PR. Il codice deve essere verde prima del merge.
+- **Branch di default**: `develop` è il default branch su GitHub, quindi le nuove PR puntano a `develop`.
+
 ## Comportamento atteso dagli agenti
 Quando inizi a lavorare:
 1. leggi `AGENTS.md`

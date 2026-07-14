@@ -22,7 +22,7 @@ export function ListFilters({
   const submit = useSubmit();
 
   return (
-    <Form method="get" className="surface-card grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_200px_auto_auto] md:items-end">
+    <Form method="get" className="surface-card grid gap-3 p-3 md:grid-cols-[minmax(0,1fr)_200px_auto_auto] md:items-end sm:p-4">
       <div>
         <label htmlFor="list-filter-query" className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
           Name
@@ -32,7 +32,7 @@ export function ListFilters({
           name="q"
           defaultValue={query}
           placeholder={placeholder}
-          className="min-h-10 py-2.5"
+          className="min-h-11 py-2.5"
           onChange={(event) => submit(event.currentTarget.form)}
         />
       </div>
@@ -42,7 +42,7 @@ export function ListFilters({
           Status
         </label>
         <div className="relative">
-          <Select id="list-filter-status" name="status" defaultValue={status} className="min-h-10 appearance-none py-2.5 pr-8">
+          <Select id="list-filter-status" name="status" defaultValue={status} className="min-h-11 appearance-none py-2.5 pr-8">
             <option value="">All statuses</option>
             {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
@@ -52,12 +52,12 @@ export function ListFilters({
         </div>
       </div>
 
-      <Button type="submit" variant="secondary" className="min-h-10">Apply filters</Button>
-      <Link to={clearTo} className="inline-flex min-h-10 items-center justify-center rounded-[14px] px-3 text-sm font-semibold text-[var(--text-muted)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--text)]">
+      <Button type="submit" variant="secondary" className="min-h-11">Apply filters</Button>
+      <Link to={clearTo} className="inline-flex min-h-11 items-center justify-center rounded-[14px] px-3 text-sm font-semibold text-[var(--text-muted)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--text)]">
         Clear
       </Link>
 
-      <div className="text-xs text-[var(--text-muted)] md:col-span-4">{resultsLabel}</div>
+      <div className="text-sm text-[var(--text-muted)] md:col-span-4">{resultsLabel}</div>
     </Form>
   );
 }
