@@ -63,7 +63,7 @@ export function EntityBadge({ type, number }: { type: EntityType; number?: numbe
   const strong = color?.strong || "inherit";
   return (
     <span
-      className="inline-flex items-center justify-center font-mono text-[11px] font-bold leading-none px-2 py-1 rounded-md transition-colors"
+      className="shrink-0 inline-flex items-center justify-center font-mono text-[11px] font-bold leading-none px-2 py-1 rounded-md transition-colors"
       style={{
         backgroundColor: soft,
         color: strong,
@@ -90,7 +90,7 @@ export function ParentBadge({
   if (type === "phase") {
     if (featureNum === undefined) return null;
     return (
-      <div className="inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
+      <div className="shrink-0 inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
         <span className="px-2 py-1 text-[var(--text-muted)]">F{formatSeq(featureNum)}</span>
       </div>
     );
@@ -100,7 +100,7 @@ export function ParentBadge({
   if (type === "task") {
     if (phaseNum === undefined) return null;
     return (
-      <div className="inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
+      <div className="shrink-0 inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
         <span className="px-2 py-1 text-[var(--text-muted)]">P{formatSeq(phaseNum)}</span>
         {featureNum !== undefined && (
           <>
