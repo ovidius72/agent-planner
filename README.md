@@ -22,7 +22,7 @@ This project is under active development.
 Current focus:
 
 - Pi integration is available through a grouped `/planner` command.
-- Claude Code Phase 1 is available through MCP and a generated `/planner` slash command.
+- Claude Code integration is available both as a self-hosted plugin (marketplace) and via MCP + a generated `/planner` slash command.
 - The canonical project data directory is `.planner/`.
 - Agent Plan intentionally does **not** read, migrate, or use `.plan/`; that directory belongs to other tools such as GSD/get-shit-done.
 
@@ -67,7 +67,75 @@ Requirements currently exist as internal/project seed data and are not exposed a
 
 The core planning model lives outside Pi, Claude Code, or any other harness. Adapters should call shared planning logic rather than owning business rules.
 
+---
+
+## Plugins
+
+Agent Plan is distributed to AI coding harnesses through a **self-hosted plugin marketplace**. Plugins are static bundles (JSON + Markdown + shell scripts) living in the top-level `plugins/` directory, separate from the npm packages in `packages/`.
+
+### How plugins work
+
+A plugin does **not** reimplement planning logic. It wires a harness to the shared planning core (`@agent-plan/mcp`, the MCP stdio server, backed by `@agent-plan/core`) and provides harness-specific integration: a slash-command router, a non-blocking session-start notification, and the MCP server declaration.
+
+```text
+plugins/
+  claude-code/                 Claude Code plugin (ready)
+    .claude-plugin/plugin.json   plugin manifest
+    .mcp.json                     @agent-plan/mcp stdio server (npx)
+    skills/planner/SKILL.md       /planner routing (derived from _shared/)
+    hooks/hooks.json              SessionStart non-blocking notify
+    scripts/notify-session-start.sh
+  codex/                      Codex plugin (planned)
+  _shared/                    single-source-of-truth templates
+    planner-skill.md.in
+    notify-session-start.sh.in
+.claude-plugin/marketplace.json   marketplace catalog (repo root, per Claude Code spec)
+```
+
+Per-harness behavior (consistent across harnesses):
+
+- The planner is **disabled by default**; nothing auto-starts.
+- `/planner load` — enable the planner, start the web dashboard (LAN-bound, dynamic port), emit a recap (status + handoff + Web UI address).
+- `/planner stop` (alias `/planner disable`) — disable the planner and stop the web.
+- The Web UI address is shown **only** on the `load` recap or via `/planner web status` — never appended to every message.
+- Planner operations (handoff, plan CRUD) are **not** code edits and are always allowed regardless of task state.
+
+### Install (Claude Code, self-hosted marketplace — no approval required)
+
+```text
+/plugin marketplace add ovidius72/agent-planner
+/plugin install agent-plan@agent-plan-marketplace
+```
+
+Updates: push to the repo, then `/plugin marketplace update`.
+
+### Local development / testing
+
+```bash
+claude --plugin-dir ./plugins/claude-code --debug
+```
+
+Or add the repo itself as a local marketplace:
+
+```text
+/plugin marketplace add ./
+/plugin install agent-plan@agent-plan-marketplace
+```
+
+### Scaffolding a new harness plugin
+
+1. Add a subdirectory under `plugins/<harness>/` with `.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/`.
+2. Add an entry to the `HARNESSES` table in `scripts/sync-plugins.cjs`.
+3. Edit the templates in `plugins/_shared/` (never edit derived files directly).
+4. Run `pnpm plugins:sync` to regenerate derived files (`pnpm plugins:check` for the CI drift guard).
+
+See `plugins/README.md` and `plugins/DECISIONS.md` for the full design and decision record.
+
+---
+
 ## Recommended Claude Code setup
+
+> **Prefer the plugin** — the self-hosted marketplace plugin (see [Plugins](#plugins) above) is now the recommended install path: `/plugin marketplace add ovidius72/agent-planner` then `/plugin install agent-plan@agent-plan-marketplace`. The CLI-based setup below remains a valid manual alternative and is still used to register the MCP server, slash command, and write guard hook at user/project scope.
 
 ### 1. Install once
 
@@ -404,7 +472,7 @@ Pi exposes Agent Plan as one grouped command:
 - `/planner show` — Show planner overview
 - `/planner repair` — Repair planner integrity
 - `/planner load` — Re-enable planner and start web UI
-- `/planner disable` — Reset planner preferences and disable for this session
+- `/planner disable` — Disable planner and stop web UI for this session (alias: `/planner stop`)
 
 ### Project
 
@@ -460,24 +528,17 @@ Pi exposes Agent Plan as one grouped command:
 - `/planner bypass` — Authorize edit/write without a task in-progress (15 min)
 - `/planner clear-bypass` — Revoke the guard bypass
 
-### Pi session prompts and startup resume
+### Pi startup behavior and resume
 
-When Pi detects an existing planner in the project, it can ask whether to enable the planner extension and whether to start the web UI.
-
-Prompt keys are intentionally short:
-
-- `y` = yes for this session
-- `n` = no for this session
-- `a` = always for this project
-- `e` = never ask again for this project
+The planner is **disabled by default** at Pi startup. No enablement or web-UI prompt is shown — nothing auto-starts. To enable the planner, the user (or agent) runs `/planner load`; to disable it, `/planner stop` (alias `/planner disable`).
 
 Why this exists:
 
-- Pi sessions should be quick to resume;
-- repeated setup prompts are noisy in established projects;
-- project-level preferences should persist without forcing planning into unrelated repos.
+- Pi sessions should be quick to resume without blocking prompts;
+- the planner must not start automatically — only on explicit request;
+- the same model applies consistently across harnesses (Pi, Claude Code, Codex).
 
-When the planner web server is active, the startup resume summary includes the dashboard URL.
+When the planner is loaded, the startup resume summary includes the dashboard URL (LAN address + port). The Web UI address appears **only** in that `load` recap or via `/planner web status` — never appended to every message.
 
 If no feature/phase/task is actually `in-progress`, the resume summary must not invent a current focus from the handoff. In that case, the handoff is treated as a **previous-session hint to validate** against the current plan state, ordering, and dependencies.
 
@@ -521,7 +582,7 @@ The web UI visualizes:
 - accepted decisions;
 - handoff state.
 
-In MCP Phase 1, `planner-web` is exposed as a guidance/no-op tool. Full web lifecycle management from Claude Code is not finalized yet; use Pi or the server CLI for now.
+The `planner-web` MCP tool fully manages the web lifecycle (start / status / stop) in-process, binding LAN (`0.0.0.0`) with a dynamic OS-assigned port. The same lifecycle is exposed in the Pi adapter as agent tools (`planner-web`, `planner-load`, `planner-stop`) and as `/planner web` / `/planner load` / `/planner stop` slash commands.
 
 ### Planner housekeeping
 
@@ -682,6 +743,15 @@ packages/
   plan-web-ui/     React dashboard
   plan-mcp/        MCP stdio server for Claude Code
   pi-adapter/      Pi extension adapter
+plugins/
+  claude-code/     Claude Code plugin (marketplace bundle)
+  codex/           Codex plugin (planned)
+  _shared/         single-source-of-truth templates for plugins
+.claude-plugin/marketplace.json   self-hosted marketplace catalog (repo root)
+scripts/
+  release.cjs      unified release helper (pnpm release)
+  sync-plugins.cjs regenerate plugin derived files from _shared/
+  copy-web-ui.sh   copy Vite build into server/adapter web-ui-dist
 ```
 
 Important docs:
@@ -690,6 +760,9 @@ Important docs:
 PROJECT.md
 ROADMAP.md
 CHECKLIST.md
+AGENTS.md
+plugins/README.md
+plugins/DECISIONS.md
 docs/multi-agent-strategy.md
 docs/setup-claude-code.md
 ```
@@ -813,10 +886,10 @@ This repository is a pnpm workspace. Only some packages are published to npm.
 - `@agent-plan/mcp` — MCP stdio server
 - `@agent-plan/server` — local HTTP/WebSocket server
 - `agent-plan` — CLI (`init`, `mcp`, `setup claude-code`, `export`, `guard pre-tool-use`)
+- `@agent-plan/pi-adapter` — Pi extension adapter
 
 **Private (not published)**:
 
-- `@agent-plan/pi-adapter` — Pi extension; depends on the local monorepo layout (web UI path), so it is not a standalone npm package yet
 - `@agent-plan/web-ui` — Vite application, served as a build artifact, not a standalone npm package
 
 ### Prerequisites
@@ -865,30 +938,39 @@ The expected tarball contents for each public package are:
 
 ### Publish to npm
 
-From the repository root:
+Publishing is automated by GitHub Actions. The workflow `.github/workflows/publish.yml` runs **only** on merge of a release PR into `main` (`push: branches:[main]`). It publishes all five public packages in dependency order using `pnpm publish` (which rewrites `workspace:*` ranges to the resolved versions). Merging into `develop` does **not** publish — `develop` is staging.
+
+Do **not** run `npm publish` manually per package: it would publish stale `workspace:*` ranges that npm cannot install.
+
+### Versioning & release
+
+All public packages share a **single unified version** per release. Releases are driven by the `release` script (`scripts/release.cjs`).
+
+From a clean `develop` branch, up to date with `origin`:
 
 ```bash
-pnpm release:publish
+pnpm release              # patch (default)
+pnpm release -- minor      # minor
+pnpm release -- major      # major
+pnpm release -- 1.0.0      # explicit version
+pnpm release -- --dry-run  # preview only
 ```
 
-This publishes the public packages in dependency order:
+The script does everything:
 
-1. `@agent-plan/core`
-2. `@agent-plan/mcp`
-3. `@agent-plan/server`
-4. `agent-plan`
+1. **Pre-flight** — clean working tree, on `develop`, up to date with `origin/develop`.
+2. **Compute the unified target version** — `bump(max(current versions), level)` with a downgrade guard.
+3. **Create `release/v<version>`** from `develop` and bump all 5 packages to that version.
+4. **Verify** — `pnpm install` + `pnpm -r build` + `pnpm check` (rolls back the branch on failure).
+5. **Commit, push, and open a PR → `main`**.
 
-Each step runs `pnpm publish --access public`, so `workspace:*` ranges are
-rewritten to the resolved versions before upload.
+Merge the release PR into `main` to trigger `publish.yml` (npm publish). Then sync `develop`:
 
-Do **not** run `npm publish` manually per package: it would publish stale
-`workspace:*` ranges that npm cannot install.
+```bash
+git switch develop && git pull && git merge origin/main && git push
+```
 
-### Versioning
-
-All public packages currently share version `0.1.0`. To release a new version,
-bump the `version` field in each public `package.json`, commit, tag if desired,
-then run `pnpm release:publish`.
+See `AGENTS.md` §12 (Branching & Release) for the full rules.
 
 ### Install the published CLI
 
