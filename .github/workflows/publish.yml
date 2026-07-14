@@ -20,10 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # pnpm/action-setup has no Node 24 release yet (PR #205 merged to master,
-      # unreleased). Kept on v4 (latest stable) until they tag a Node 24 build.
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10
 
