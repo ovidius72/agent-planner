@@ -27,10 +27,8 @@
     "dev:server": "node packages/plan-server/dist/cli.js",
     "release:validate": "pnpm build && pnpm check",
     "release:pack-dry-run": "for p in packages/plan-core packages/plan-mcp packages/plan-server packages/agent-plan; do echo '=== ' $p; (cd \"$p\" && npm pack --dry-run); echo; done",
-    "release:publish": "pnpm --filter @agent-plan/core publish --access public && pnpm --filter @agent-plan/mcp publish --access public && pnpm --filter @agent-plan/server publish --access public && pnpm --filter agent-plan publish --access public",
-    "release:publish:adapter": "pnpm build:pi-adapter && pnpm --filter @agent-plan/pi-adapter publish --access public --no-git-checks",
-    "release:bump": "node scripts/release-bump.cjs",
-    "release:bump:adapter": "node scripts/release-bump.cjs --adapter",
+    "release:publish": "pnpm --filter @agent-plan/core publish --access public && pnpm --filter @agent-plan/mcp publish --access public && pnpm --filter @agent-plan/server publish --access public && pnpm --filter agent-plan publish --access public && pnpm --filter @agent-plan/pi-adapter publish --access public --no-git-checks",
+    "release": "node scripts/release.cjs",
     "plugins:sync": "node scripts/sync-plugins.cjs",
     "plugins:check": "node scripts/sync-plugins.cjs --check"
   },

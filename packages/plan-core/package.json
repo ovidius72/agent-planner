@@ -1,6 +1,6 @@
 {
   "name": "@agent-plan/core",
-  "version": "0.2.11",
+  "version": "0.2.16",
   "private": false,
   "description": "Harness-agnostic core for Agent Plan: schemas, persistence, ordering, status rollups, and markdown rendering.",
   "license": "MIT",
