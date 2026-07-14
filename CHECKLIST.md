@@ -209,3 +209,11 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - La checklist va tenuta viva e aggiornata con stati, blocchi e completamenti.
 - Il core del piano deve restare harness-agnostic.
 - I dati del piano vivono in `.planner/` dentro il progetto target.
+
+- [x] **MCP parity (Claude Code/Codex)** — `planner-load` reale + recap + web UI bundle (`fix/mcp-parity-recap-web-ui`):
+  - **Web UI bundle in `@agent-plan/server`**: `serve()` ora defaulta `staticDir` alla UI bundle (`../web-ui-dist` relativo a `dist/serve.js`) quando il caller non la passa. `scripts/copy-web-ui.sh` copia la dist Vite anche in `packages/plan-server/web-ui-dist`; `plan-server` package `files` include `web-ui-dist/**`. Risultato: `planner-web start` (MCP) e `plan-server` CLI servono **UI + API** out-of-the-box (prima solo API → Claude vedeva niente UI). `staticDir: ""` per forzare API-only.
+  - **`planner-load` reale (plan-mcp)**: non più stub. Avvia il web su LAN (0.0.0.0:0) + ritorna un **recap consolidato** (stato progetto, task in-progress con focus, eventuale handoff pendente incluso nel risultato, URL web). Una chiamata = parity con `/planner load` di Pi. Helper `ensureWebStarted()` (condiviso con `planner-web`) + `buildRecapText()`.
+  - **Template `setup claude-code`**: `/planner load` istruisce l'agente a presentare il recap, processare l'handoff incluso (poi `planner-handoff-clear`), e terminare con `🌐 Web UI: <url>`. Aggiunto `/planner recap` (alias di load).
+  - **AGENTS.md**: nuova regola "avvia la sessione del planner" (chiama `planner-load`/`/planner load`/`recap` a inizio lavoro + presenta recap + URL + consuma handoff) + "Regola dettagli" (scrivi su task/phase/feature appena hai punti rilevanti; leggi description/notes quando inizi un task; riferimenti con composito `#T007 · F001/P002/T003`, non UUID nudi).
+  - Smoke test: `serve()` default serve UI (GET / → 200 HTML) + API su /api/health; `buildRecapText` su heca → Heca F10/P77/T294, 1 in-progress con focus corretto, nextSteps, no handoff.
+  - **Limiti residui MCP**: nessun auto-trigger (no hook session_start in MCP) → dipende dall'agente che chiama il tool, reso "automatico" via AGENTS.md + template; nessun URL appended a ogni messaggio (no message_end hook) → URL solo nel recap e in `planner-web status`.

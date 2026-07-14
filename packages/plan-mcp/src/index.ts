@@ -40,9 +40,63 @@ async function requireStore(): Promise<PlanStore> {
   return st;
 }
 
-// In-process web server handle, managed by the planner-web tool. Lives as long
-// as this MCP stdio process (i.e. the host session). Null when not running.
+// In-process web server handle, managed by the planner-web tool and planner-load.
+// Lives as long as this MCP stdio process (i.e. the host session). Null when not running.
 let webHandle: ServeHandle | null = null;
+
+/** Start the web dashboard on LAN (0.0.0.0:0, OS-assigned port) if not already
+ *  running. Returns the local/LAN URLs. No-op (empty url) when no .planner/ exists. */
+async function ensureWebStarted(): Promise<{ localUrl: string; lanUrl?: string | undefined; mode?: string }> {
+  if (webHandle) return { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode };
+  const root = planRoot();
+  const st = new PlanStore(root);
+  if (!(await st.exists())) return { localUrl: "" };
+  try {
+    webHandle = await serve({ planRoot: root, host: "0.0.0.0", port: 0, quiet: true });
+    return { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode };
+  } catch {
+    return { localUrl: "" };
+  }
+}
+
+/** Build a consolidated planner recap (project state + active work + pending
+ *  handoff + web URL). Harness-agnostic equivalent of Pi's buildStartupResumeSummary. */
+async function buildRecapText(st: PlanStore, web: { localUrl: string; lanUrl?: string | undefined }): Promise<string> {
+  const [plan, resume, handoff] = await Promise.all([st.loadAll(), st.loadResume(), st.loadHandoff()]);
+  const allTasks = plan.phases.flatMap((p) => p.tasks.map((t) => ({ phase: p, task: t })));
+  const totalF = plan.features.features.length;
+  const doneF = plan.features.features.filter((f) => f.status === "done").length;
+  const activeF = plan.features.features.filter((f) => f.status === "in-progress").length;
+  const totalP = plan.phases.length;
+  const doneP = plan.phases.filter((p) => p.status === "done").length;
+  const activeP = plan.phases.filter((p) => p.status === "in-progress" || p.status === "discovery").length;
+  const totalT = allTasks.length;
+  const doneT = allTasks.filter(({ task }) => task.status === "done").length;
+  const activeT = allTasks.filter(({ task }) => task.status === "in-progress").length;
+  const inProgress = allTasks.filter(({ task }) => task.status === "in-progress");
+  const focus = inProgress[0];
+  const focusFeature = focus ? plan.features.features.find((f) => f.id === focus.phase.featureId) : undefined;
+  const lines: string[] = [];
+  lines.push("## Planner recap");
+  const name = plan.project.name || "(unnamed project)";
+  lines.push(`Project: ${name}${plan.project.goal ? " — " + plan.project.goal : ""}`);
+  lines.push(`Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active)`);
+  if (focus) {
+    lines.push(`Current focus: ${focusFeature?.name ?? "?"} / ${focus.phase.title} / ${focus.task.title} (in-progress)`);
+  } else {
+    lines.push("Current focus: no active task — review the plan and pick the next concrete task");
+  }
+  if (resume?.nextSteps?.length) lines.push(`Next step: ${resume.nextSteps[0]}`);
+  if (handoff) {
+    lines.push("", "## Pending handoff (read me first)", handoff.content || "(empty handoff)", "", "→ After processing the handoff above, call planner-handoff-clear to remove it.");
+  } else if (activeT === 0) {
+    lines.push("", "No handoff pending and no task in-progress. Use planner-task-add / planner-task-start to begin work.");
+  }
+  if (web.localUrl) {
+    lines.push("", "## Web UI", `🌐 ${web.localUrl}${web.lanUrl ? " (LAN: " + web.lanUrl + ")" : ""}`);
+  }
+  return lines.join("\n");
+}
 
 function findFeatureByRef(features: Feature[], ref: string): Feature | undefined {
   const normalized = ref.trim().toLowerCase();
@@ -790,8 +844,14 @@ server.registerTool("planner-web", {
 });
 
 server.registerTool("planner-load", {
-  description: "MCP no-op equivalent of Pi /planner load. MCP server is already loaded when tools are available.",
-}, async () => text("Planner MCP server is loaded."));
+  description: "Load/refresh the planner on explicit user request (NOT automatic): starts the web dashboard on LAN and returns a consolidated recap (project state, active task, pending handoff, web URL). This is the MCP equivalent of Pi /planner load. Call it ONLY when the user runs /planner load or /planner recap (or asks to load the planner). Present the recap to the user in that reply, including the web URL on a final prominent line. If a pending handoff is included, read it, summarize it to the user, then call planner-handoff-clear. Do NOT start the planner/web or show the web URL unless the user explicitly asks (load/recap/web status).",
+}, async () => {
+  const st = store();
+  if (!(await st.exists())) return text("No .planner/ found at " + planRoot() + ". Run planner-init first.");
+  const web = await ensureWebStarted();
+  const recap = await buildRecapText(st, web);
+  return text(recap);
+});
 
 server.registerTool("planner-disable", {
   description: "MCP no-op equivalent of Pi /planner disable. Stop the MCP process from the host to disable it.",
