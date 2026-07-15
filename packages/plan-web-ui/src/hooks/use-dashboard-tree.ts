@@ -19,6 +19,7 @@ import {
   writeStoredArray,
 } from "../lib/dashboard-storage";
 import type { Feature, FeatureStatus, Phase, PhaseStatus, TaskStatus } from "../lib/types";
+import { isSearchActive, matchTask, parseSearchQuery } from "../lib/task-search";
 
 export type TreeOpenMode = "smart" | "all" | "none";
 
@@ -50,6 +51,12 @@ export interface DashboardTreeApi {
   toggleFeatureStatusFilter: (value: FeatureStatus) => void;
   togglePhaseStatusFilter: (value: PhaseStatus) => void;
   toggleTaskStatusFilter: (value: TaskStatus) => void;
+  searchQuery: string;
+  setSearchQuery: Dispatch<SetStateAction<string>>;
+  searchActive: boolean;
+  matchedTaskIds: Set<string>;
+  matchedFeatureIds: Set<string>;
+  matchedPhaseIds: Set<string>;
 }
 
 /**
@@ -82,7 +89,30 @@ export function useDashboardTree({
   const hidePlannedStorageKey = dashboardStorageKey(projectStorageScope, "hide-planned");
   const onlyActiveBranchesStorageKey = dashboardStorageKey(projectStorageScope, "only-active-branches");
 
+  const [searchQuery, setSearchQuery] = useState("");
   const workTree = useMemo(() => buildWorkTree(features, phases), [features, phases]);
+
+  // ── Structured search (elastic-input) ───────────────────────────────────
+  const searchFilters = useMemo(() => parseSearchQuery(searchQuery), [searchQuery]);
+  const searchActive = isSearchActive(searchFilters);
+  const { matchedTaskIds, matchedFeatureIds, matchedPhaseIds } = useMemo(() => {
+    const taskIds = new Set<string>();
+    const featureIds = new Set<string>();
+    const phaseIds = new Set<string>();
+    if (!searchActive) return { matchedTaskIds: taskIds, matchedFeatureIds: featureIds, matchedPhaseIds: phaseIds };
+    for (const entry of workTree) {
+      for (const pe of entry.allPhases) {
+        for (const t of pe.allTasks) {
+          if (matchTask(searchFilters, { feature: entry.feature, phase: pe.phase, task: t })) {
+            taskIds.add(t.id);
+            featureIds.add(entry.feature.id);
+            phaseIds.add(pe.phase.id);
+          }
+        }
+      }
+    }
+    return { matchedTaskIds: taskIds, matchedFeatureIds: featureIds, matchedPhaseIds: phaseIds };
+  }, [searchActive, searchFilters, workTree]);
 
   const [showAllFeatures, setShowAllFeatures] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -168,6 +198,21 @@ export function useDashboardTree({
 
   // ── The filtered, active-only-pruned tree actually rendered ────────────
   const displayedWorkTree = useMemo<WorkTreeFeature[]>(() => {
+    // Search overrides status filters: show only branches containing matched tasks.
+    if (searchActive) {
+      return workTree
+        .map((entry) => ({
+          ...entry,
+          allPhases: entry.allPhases
+            .map((phaseEntry) => ({
+              ...phaseEntry,
+              allTasks: phaseEntry.allTasks.filter((task) => matchedTaskIds.has(task.id)),
+            }))
+            .filter((phaseEntry) => phaseEntry.allTasks.length > 0),
+        }))
+        .filter((entry) => entry.allPhases.length > 0);
+    }
+
     const activeOnly = !showAllFeatures || onlyActiveBranches;
     const base = showAllFeatures ? workTree : workTree.filter((entry) => entry.isActive);
 
@@ -195,7 +240,7 @@ export function useDashboardTree({
         if (activeOnly) return hasActiveTask || allPhases.some((phaseEntry) => phaseEntry.hasActiveTask);
         return allPhases.length > 0 || showAllFeatures;
       });
-  }, [effectiveFeatureStatusFilters, effectivePhaseStatusFilters, effectiveTaskStatusFilters, onlyActiveBranches, showAllFeatures, workTree]);
+  }, [searchActive, matchedTaskIds, workTree, effectiveFeatureStatusFilters, effectivePhaseStatusFilters, effectiveTaskStatusFilters, onlyActiveBranches, showAllFeatures]);
 
   // ── Sync expansion state with the open mode ────────────────────────────
   useEffect(() => {
@@ -351,5 +396,11 @@ export function useDashboardTree({
     toggleFeatureStatusFilter,
     togglePhaseStatusFilter,
     toggleTaskStatusFilter,
+    searchQuery,
+    setSearchQuery,
+    searchActive,
+    matchedTaskIds,
+    matchedFeatureIds,
+    matchedPhaseIds,
   };
 }

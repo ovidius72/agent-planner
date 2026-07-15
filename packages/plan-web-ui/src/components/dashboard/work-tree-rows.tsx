@@ -80,6 +80,7 @@ export function FeatureTreeRow({
   onTogglePhase,
   isPhaseRecentlyChanged,
   isTaskRecentlyChanged,
+  highlightedTaskIds,
 }: {
   entry: WorkTreeFeature;
   expanded: boolean;
@@ -89,6 +90,7 @@ export function FeatureTreeRow({
   onTogglePhase: (phaseId: string) => void;
   isPhaseRecentlyChanged: (phaseId: string) => boolean;
   isTaskRecentlyChanged: (taskId: string) => boolean;
+  highlightedTaskIds: Set<string> | undefined;
 }) {
   const { feature, totalTasks, doneTasks, allPhases, hasActiveTask } = entry;
 
@@ -164,6 +166,7 @@ export function FeatureTreeRow({
                   recentlyChanged={isPhaseRecentlyChanged(phaseEntry.phase.id)}
                   onToggle={() => onTogglePhase(phaseEntry.phase.id)}
                   isTaskRecentlyChanged={isTaskRecentlyChanged}
+                  highlightedTaskIds={highlightedTaskIds}
                 />
               </SortableItem>
             ))}
@@ -181,6 +184,7 @@ export function PhaseTreeRow({
   recentlyChanged,
   onToggle,
   isTaskRecentlyChanged,
+  highlightedTaskIds,
 }: {
   feature: Feature;
   phaseEntry: WorkTreePhase;
@@ -188,6 +192,7 @@ export function PhaseTreeRow({
   recentlyChanged: boolean;
   onToggle: () => void;
   isTaskRecentlyChanged: (taskId: string) => boolean;
+  highlightedTaskIds: Set<string> | undefined;
 }) {
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
 
@@ -268,6 +273,7 @@ export function PhaseTreeRow({
                     phase={phase}
                     task={task}
                     recentlyChanged={isTaskRecentlyChanged(task.id)}
+                    highlighted={highlightedTaskIds?.has(task.id)}
                   />
                 </SortableItem>
               ))}
@@ -288,15 +294,17 @@ export function TaskTreeRow({
   phase,
   task,
   recentlyChanged,
+  highlighted,
 }: {
   feature: Feature;
   phase: Phase;
   task: Task;
   recentlyChanged: boolean;
+  highlighted: boolean | undefined;
 }) {
   return (
     <div
-      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""} ${highlighted ? "ap-search-hit" : ""}`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">

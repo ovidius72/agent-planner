@@ -12,6 +12,7 @@ import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
 import { SortableItem } from "./sortable";
+import { SearchBar } from "./search-bar";
 
 /**
  * The collapsible feature → phase → task Work Tree, plus its filter bar
@@ -66,7 +67,8 @@ export function WorkTree({
     }
   };
 
-  const isPhaseExpanded = (phaseId: string) => tree.expandedPhaseIds.includes(phaseId);
+  const isPhaseExpanded = (phaseId: string) =>
+    tree.expandedPhaseIds.includes(phaseId) || (tree.searchActive && tree.matchedPhaseIds.has(phaseId));
   const isPhaseRecentlyChanged = (phaseId: string) => tree.recentPhaseIds.includes(phaseId);
   const isTaskRecentlyChanged = (taskId: string) => tree.recentTaskIds.includes(taskId);
 
@@ -90,6 +92,12 @@ export function WorkTree({
         </div>
       </div>
 
+      <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
+      {tree.searchActive ? (
+        <p className="text-xs text-[var(--text-muted)]">
+          {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — search overrides status filters. Clear the box to reset.
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -209,13 +217,14 @@ export function WorkTree({
                 <SortableItem key={entry.feature.id} id={entry.feature.id}>
                   <FeatureTreeRow
                     entry={entry}
-                    expanded={tree.expandedFeatureIds.includes(entry.feature.id)}
+                    expanded={tree.expandedFeatureIds.includes(entry.feature.id) || (tree.searchActive && tree.matchedFeatureIds.has(entry.feature.id))}
                     recentlyChanged={tree.recentFeatureIds.includes(entry.feature.id)}
                     onToggle={() => tree.toggleExpandedFeature(entry.feature.id)}
                     isPhaseExpanded={isPhaseExpanded}
                     onTogglePhase={tree.toggleExpandedPhase}
                     isPhaseRecentlyChanged={isPhaseRecentlyChanged}
                     isTaskRecentlyChanged={isTaskRecentlyChanged}
+                    highlightedTaskIds={tree.searchActive ? tree.matchedTaskIds : undefined}
                   />
                 </SortableItem>
               ))}
