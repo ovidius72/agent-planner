@@ -99,6 +99,7 @@ export function WorkTree({
         </div>
       </div>
 
+      <div className="ap-search-sticky z-20" style={{ top: headerH }}>
       <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
       {tree.searchActive ? (
         <p className="text-xs text-[var(--text-muted)]">
@@ -157,8 +158,9 @@ export function WorkTree({
           {repairMsg ? <span className="hidden text-xs text-[var(--text-muted)] sm:inline sm:truncate">{repairMsg}</span> : null}
         </div>
       </div>
+      </div>
 
-      <div className="ap-tree-scroll grid gap-3 pr-1" style={{ maxHeight: `calc(100dvh - ${headerH}px - 220px)` }}>
+      <div className="grid gap-3">
         {tree.displayedWorkTree.length > 0 ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={tree.displayedWorkTree.map((e) => e.feature.id)} strategy={verticalListSortingStrategy}>
