@@ -739,8 +739,8 @@ server.registerTool("planner-task-start", {
   // task_start — the handoff is a captured-context artifact, not a lock (e.g. a
   // small modification after writing a handoff should start without forcing
   // deletion, which would lose context).
-  const handoffNotice = existsSync(join(st.root, "HANDOFF.md"))
-    ? "ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with planner-handoff-delete when no longer needed. Proceeding with task start.\n"
+  const handoffNotice = (existsSync(join(st.root, "HANDOFF.md")) || (await st.listHandoffs()).length > 0)
+    ? "ℹ️  A handoff exists — read it with planner-handoff-list | planner-handoff-show, then clear with planner-handoff-clear when no longer needed. Proceeding with task start.\n"
     : "";
 
   const found = findTaskByRef(await st.loadAllPhases(), ref);
@@ -852,11 +852,11 @@ server.registerTool("planner-handoff-write", {
 });
 
 server.registerTool("planner-handoff-prepare", {
-  description: "Return instructions for the agent to prepare a canonical handoff, then call planner-handoff-write.",
+  description: "Return instructions for the agent to prepare a canonical handoff, then call planner-handoff-write (entity-scoped, phase.handoff).",
 }, async () => text([
-  "Prepare the canonical session handoff and write it with planner-handoff-write.",
+  "Prepare the canonical session handoff and write it on the current in-progress phase with planner-handoff-write (omit phaseRef to target the in-progress phase).",
   "Required sections: Created at, Updated at, Reason, Current focus, What was being done, How to resume, Files touched, Blockers, Next steps, Recent decisions, Reminder.",
-  "Canonical path: .planner/HANDOFF.md.",
+  "Stored on the phase.handoff field (entity-scoped). .planner/HANDOFF.md is deprecated.",
 ].join("\n")));
 
 server.registerTool("planner-handoff-clear", {
