@@ -1,7 +1,29 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 
 const SLUG_PATTERN = /[^a-z0-9]+/g;
 const MULTI_DASH_PATTERN = /-+/g;
+
+/** Crockford Base32 alphabet — excludes ambiguous characters 0/O/1/I/L
+ *  to minimize human transcription errors. 32 symbols → 5 chars = 33M combos. */
+export const CROCKFORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export const SHORT_ID_LENGTH = 5;
+export const SHORT_ID_PATTERN = /^[A-Z2-9]{5}$/;
+
+/** Generate a globally-unique short id (5 chars, Crockford Base32, e.g. `UUXD1`-style
+ *  but without 0/1/I/O). Retries until the id is not in `existing` (project-scoped
+ *  collision guard). Throws only in the impossible saturation case (~50 retries). */
+export function createShortId(existing: Set<string> = new Set()): string {
+  const max = CROCKFORD_ALPHABET.length;
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    let id = "";
+    for (let i = 0; i < SHORT_ID_LENGTH; i += 1) {
+      id += CROCKFORD_ALPHABET[randomInt(0, max)];
+    }
+    if (!existing.has(id)) return id;
+  }
+  throw new Error("createShortId: could not generate a unique id after 64 attempts");
+}
 
 export function normalizeSlug(input: string): string {
   return input

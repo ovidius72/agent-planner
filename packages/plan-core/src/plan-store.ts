@@ -24,7 +24,7 @@ import {
   type CodebaseProfile,
   type ResumeFocus,
 } from "./schema.js";
-import { createFeatureId, createPhaseId, createRequirementId, createTaskId, isLegacyPhaseId } from "./naming.js";
+import { createFeatureId, createPhaseId, createRequirementId, createShortId, createTaskId, isLegacyPhaseId } from "./naming.js";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -850,21 +850,155 @@ export class PlanStore {
     return { removed };
   }
 
+  /** All non-empty shortIds currently assigned in the project (features + phases + tasks).
+   *  Read-only; used by createShortId collision guard during entity creation. */
+  async assignedShortIds(): Promise<Set<string>> {
+    const features = await this.loadFeatures();
+    const phases = await this.loadAllPhases();
+    const ids = new Set<string>();
+    for (const f of features.features) if (f.shortId) ids.add(f.shortId);
+    for (const p of phases) {
+      if (p.shortId) ids.add(p.shortId);
+      for (const t of p.tasks) if (t.shortId) ids.add(t.shortId);
+    }
+    return ids;
+  }
+
+  /** Next priority (>=1) for a new entity within its scope.
+   *  - feature: max priority among features + 1
+   *  - phase: max priority among phases of parentId (featureId) + 1
+   *  - task: max priority among tasks of parentId (phaseId) + 1 */
+  async nextPriority(kind: "feature" | "phase" | "task", parentId?: string): Promise<number> {
+    if (kind === "feature") {
+      const features = await this.loadFeatures();
+      const max = features.features.reduce((m, f) => Math.max(m, f.priority ?? 0), 0);
+      return max + 1;
+    }
+    if (kind === "phase") {
+      const phases = await this.loadAllPhases();
+      const siblings = phases.filter((p) => p.featureId === parentId);
+      const max = siblings.reduce((m, p) => Math.max(m, p.priority ?? 0), 0);
+      return max + 1;
+    }
+    // task
+    const phase = parentId ? await this.loadPhase(parentId).catch(() => undefined) : undefined;
+    const tasks = phase?.tasks ?? [];
+    const max = tasks.reduce((m, t) => Math.max(m, t.priority ?? 0), 0);
+    return max + 1;
+  }
+
+  /** Idempotent backfill of shortId (globally-unique 5-char Crockford) and priority
+   *  (per-scope display order). Assigns missing shortIds and priorities; never overwrites
+   *  existing non-empty shortIds or non-zero priorities. Safe to run at startup. */
+  async ensureShortIdsAndPriority(): Promise<{
+    shortIdsAssigned: number;
+    prioritiesAssigned: number;
+    duplicateShortIds: string[];
+  }> {
+    return this.runAsBatch(async () => {
+      const featuresDoc = await this.loadFeatures();
+      const phases = await this.loadAllPhases();
+      const existing = new Set<string>();
+      for (const f of featuresDoc.features) if (f.shortId) existing.add(f.shortId);
+      for (const p of phases) {
+        if (p.shortId) existing.add(p.shortId);
+        for (const t of p.tasks) if (t.shortId) existing.add(t.shortId);
+      }
+
+      let shortIdsAssigned = 0;
+      let prioritiesAssigned = 0;
+      let featuresDirty = false;
+
+      const assignPriority = (current: number, index: number): number => {
+        if (current === 0) { prioritiesAssigned += 1; return index + 1; }
+        return current;
+      };
+
+      // Features: shortId + priority (project scope)
+      const sortedFeatures = [...featuresDoc.features].sort(
+        (a, b) => a.number - b.number || a.createdAt.localeCompare(b.createdAt),
+      );
+      sortedFeatures.forEach((f, index) => {
+        if (!f.shortId) {
+          f.shortId = createShortId(existing);
+          existing.add(f.shortId);
+          shortIdsAssigned += 1;
+          featuresDirty = true;
+        }
+        const nextP = assignPriority(f.priority ?? 0, index);
+        if (nextP !== f.priority) { f.priority = nextP; featuresDirty = true; }
+      });
+      if (featuresDirty) {
+        featuresDoc.features.sort((a, b) => a.priority - b.priority || a.number - b.number);
+        await this.saveFeatures(featuresDoc);
+      }
+
+      // Phases + tasks
+      for (const phase of phases) {
+        let phaseDirty = false;
+        if (!phase.shortId) {
+          phase.shortId = createShortId(existing);
+          existing.add(phase.shortId);
+          shortIdsAssigned += 1;
+          phaseDirty = true;
+        }
+        const phaseIndex = phase.number - 1; // stable pre-migration order
+        const nextPP = assignPriority(phase.priority ?? 0, phaseIndex < 0 ? 0 : phaseIndex);
+        if (nextPP !== phase.priority) { phase.priority = nextPP; phaseDirty = true; }
+
+        const sortedTasks = [...phase.tasks].sort(
+          (a, b) => a.number - b.number || a.createdAt.localeCompare(b.createdAt),
+        );
+        sortedTasks.forEach((t, index) => {
+          if (!t.shortId) {
+            t.shortId = createShortId(existing);
+            existing.add(t.shortId);
+            shortIdsAssigned += 1;
+            phaseDirty = true;
+          }
+          const nextTP = assignPriority(t.priority ?? 0, index);
+          if (nextTP !== t.priority) { t.priority = nextTP; phaseDirty = true; }
+        });
+        if (phaseDirty) {
+          phase.tasks.sort((a, b) => a.priority - b.priority || a.number - b.number);
+          phase.taskIds = phase.tasks.map((t) => t.id);
+          phase.updatedAt = nowISO();
+          await this.savePhase(phase);
+        }
+      }
+
+      // Duplicate shortId report (across all entities)
+      const allShortIds: string[] = [];
+      for (const f of featuresDoc.features) if (f.shortId) allShortIds.push(f.shortId);
+      for (const ph of phases) {
+        if (ph.shortId) allShortIds.push(ph.shortId);
+        for (const t of ph.tasks) if (t.shortId) allShortIds.push(t.shortId);
+      }
+      const counts = new Map<string, number>();
+      for (const id of allShortIds) counts.set(id, (counts.get(id) ?? 0) + 1);
+      const duplicateShortIds = [...counts.entries()].filter(([, c]) => c > 1).map(([id]) => id);
+
+      return { shortIdsAssigned, prioritiesAssigned, duplicateShortIds };
+    });
+  }
+
   /** Repair dangling references and report integrity. One-shot maintenance op. */
   async repair(): Promise<{
     migrated: { renamed: number; repaired: number; inferred: number };
-    integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };
+    backfill: { shortIdsAssigned: number; prioritiesAssigned: number; duplicateShortIds: string[] };
+    integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
   }> {
     return this.runAsBatch(async () => {
       const migrated = await this.migratePhaseIds();
+      const backfill = await this.ensureShortIdsAndPriority();
       const integrity = await this.validateIntegrity();
       await this.writeGenerated();
-      return { migrated, integrity };
+      return { migrated, backfill, integrity };
     });
   }
 
   /** Validate plan integrity: globally unique phase ids and resolvable feature.phaseIds. */
-  async validateIntegrity(): Promise<{ duplicatePhaseIds: string[]; danglingPhaseIds: string[] }> {
+  async validateIntegrity(): Promise<{ duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] }> {
     const phases = await this.loadAllPhases();
     const features = await this.loadFeatures();
     const seen = new Map<string, number>();
@@ -879,7 +1013,17 @@ export class PlanStore {
         if (!knownPhaseIds.has(ref)) danglingPhaseIds.push(`${feature.id} -> ${ref}`);
       }
     }
-    return { duplicatePhaseIds, danglingPhaseIds };
+    // Duplicate shortIds across all entities
+    const allShortIds: string[] = [];
+    for (const f of features.features) if (f.shortId) allShortIds.push(f.shortId);
+    for (const ph of phases) {
+      if (ph.shortId) allShortIds.push(ph.shortId);
+      for (const t of ph.tasks) if (t.shortId) allShortIds.push(t.shortId);
+    }
+    const sidCounts = new Map<string, number>();
+    for (const id of allShortIds) sidCounts.set(id, (sidCounts.get(id) ?? 0) + 1);
+    const duplicateShortIds = [...sidCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id);
+    return { duplicatePhaseIds, danglingPhaseIds, duplicateShortIds };
   }
 
   private derivePhaseStatus(phase: Phase): Phase["status"] {

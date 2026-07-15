@@ -7,7 +7,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createShortId, createTaskId, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -257,10 +257,14 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
     const features = await store.loadFeatures();
     const number = features.features.length + 1;
+    const shortId = createShortId(await store.assignedShortIds());
+    const priority = await store.nextPriority("feature");
     const now = nowISO();
     const feature: Feature = {
       id: createFeatureId(),
       number,
+      shortId,
+      priority,
       name,
       description: body.description ?? "",
       status: "planned",
@@ -367,11 +371,15 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       const allPhases = await store.loadAllPhases();
       const number = allPhases.filter((p) => p.featureId === featureId).length + 1;
       const slug = normalizeSlug(title);
+      const shortId = createShortId(await store.assignedShortIds());
+      const priority = await store.nextPriority("phase", featureId);
       const now = nowISO();
       phase = {
         id: createPhaseId(),
         featureId,
         number,
+        shortId,
+        priority,
         slug,
         title,
         status: "draft",
@@ -493,10 +501,14 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const taskNumber = nextTaskNumber(phase);
     const shortName = normalizeSlug(title).trim() || `task-${Date.now().toString(36)}`;
     const initialStatus = body.status ?? "planned";
+    const shortId = createShortId(await store.assignedShortIds());
+    const priority = await store.nextPriority("task", phase.id);
     const task: Task = {
       id: createTaskId(),
       phaseId: phase.id,
       number: taskNumber,
+      shortId,
+      priority,
       shortName,
       title,
       status: initialStatus,
