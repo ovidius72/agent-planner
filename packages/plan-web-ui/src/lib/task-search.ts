@@ -15,6 +15,8 @@ export interface SearchFilters {
   taskNumbers: Set<number> | null;
   shortIds: Set<string> | null;
   status: string | null;
+  featureStatus: string | null;
+  phaseStatus: string | null;
   text: string | null;
 }
 
@@ -24,10 +26,12 @@ export const EMPTY_FILTERS: SearchFilters = {
   taskNumbers: null,
   shortIds: null,
   status: null,
+  featureStatus: null,
+  phaseStatus: null,
   text: null,
 };
 
-const KEY_PATTERN = /^(feature|phase|task|id|status|title):(.*)$/i;
+const KEY_PATTERN = /^(feature-status|phase-status|feature|phase|task|id|status|title):(.*)$/i;
 
 function splitCommaList(raw: string): string[] {
   return raw
@@ -82,17 +86,21 @@ export function parseSearchQuery(query: string): SearchFilters {
       const key = (keyMatch[1] ?? "").toLowerCase();
       const value = keyMatch[2] ?? "";
       if (key === "feature") {
-        filters.featureNumbers = toNumberSet(value);
+        const set = toNumberSet(value); if (set.size) filters.featureNumbers = set;
       } else if (key === "phase") {
-        filters.phaseNumbers = toNumberSet(value);
+        const set = toNumberSet(value); if (set.size) filters.phaseNumbers = set;
       } else if (key === "task") {
-        filters.taskNumbers = toNumberSet(value);
+        const set = toNumberSet(value); if (set.size) filters.taskNumbers = set;
       } else if (key === "id") {
-        filters.shortIds = new Set(splitCommaList(value).map((s) => s.toUpperCase()));
+        const set = new Set(splitCommaList(value).map((s) => s.toUpperCase())); if (set.size) filters.shortIds = set;
       } else if (key === "status") {
-        filters.status = value.toLowerCase();
+        if (value.trim()) filters.status = value.toLowerCase();
+      } else if (key === "feature-status") {
+        if (value.trim()) filters.featureStatus = value.toLowerCase();
+      } else if (key === "phase-status") {
+        if (value.trim()) filters.phaseStatus = value.toLowerCase();
       } else if (key === "title") {
-        filters.text = value.toLowerCase();
+        if (value.trim()) filters.text = value.toLowerCase();
       }
     } else {
       bareText.push(token.toLowerCase());
@@ -113,6 +121,8 @@ export function isSearchActive(filters: SearchFilters): boolean {
       || filters.taskNumbers
       || filters.shortIds
       || filters.status
+      || filters.featureStatus
+      || filters.phaseStatus
       || filters.text,
   );
 }
@@ -137,6 +147,8 @@ export function matchTask(
     // also allow matching when the filter targets a phase/feature status? Keep task-only for status.
     return false;
   }
+  if (filters.featureStatus && ctx.feature.status !== filters.featureStatus) return false;
+  if (filters.phaseStatus && ctx.phase.status !== filters.phaseStatus) return false;
   if (filters.text) {
     const t = filters.text;
     const hay = [

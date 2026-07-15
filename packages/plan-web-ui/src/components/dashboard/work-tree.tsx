@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -7,7 +7,6 @@ import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
 import { formatSequence } from "../../lib/dashboard-tree";
-import { featureStatuses, phaseStatuses, taskStatuses } from "../../lib/statuses";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
@@ -34,6 +33,17 @@ export function WorkTree({
   const tree = useDashboardTree({ features, phases, projectStorageScope });
   const [repairing, setRepairing] = useState(false);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
+  const [headerH, setHeaderH] = useState(0);
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (!header) return;
+    const update = () => setHeaderH(header.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(header);
+    window.addEventListener("resize", update);
+    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+  }, []);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -92,10 +102,11 @@ export function WorkTree({
         </div>
       </div>
 
+      <div className="ap-search-sticky z-20" style={{ top: headerH }}>
       <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
       {tree.searchActive ? (
         <p className="text-xs text-[var(--text-muted)]">
-          {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — search overrides status filters. Clear the box to reset.
+          {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
         </p>
       ) : null}
       <div className="grid grid-cols-1 gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
@@ -148,65 +159,7 @@ export function WorkTree({
           </Button>
           {repairMsg ? <span className="text-xs text-[var(--text-muted)]">{repairMsg}</span> : null}
         </div>
-
-        <div className="grid gap-3 lg:grid-cols-3">
-          <div className="grid gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">Feature status</p>
-            <div className="flex flex-wrap gap-2">
-              {featureStatuses.map((option) => {
-                const active = tree.featureStatusFilters.includes(option.value);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => tree.toggleFeatureStatusFilter(option.value)}
-                    className={`status-chip transition ${active ? `status-${option.value}` : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">Phase status</p>
-            <div className="flex flex-wrap gap-2">
-              {phaseStatuses.map((option) => {
-                const active = tree.phaseStatusFilters.includes(option.value);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => tree.togglePhaseStatusFilter(option.value)}
-                    className={`status-chip transition ${active ? `status-${option.value}` : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">Task status</p>
-            <div className="flex flex-wrap gap-2">
-              {taskStatuses.map((option) => {
-                const active = tree.taskStatusFilters.includes(option.value);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => tree.toggleTaskStatusFilter(option.value)}
-                    className={`status-chip transition ${active ? `status-${option.value}` : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+      </div>
       </div>
 
       <div className="grid gap-3">
