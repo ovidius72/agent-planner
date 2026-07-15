@@ -402,6 +402,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         dependsOn: [],
         createdAt: now,
         updatedAt: now,
+        handoff: "",
+        handoffUpdatedAt: "",
       };
 
       await store.savePhase(phase);

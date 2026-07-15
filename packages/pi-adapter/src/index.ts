@@ -1677,6 +1677,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
             openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
             createdAt: nowISO(), updatedAt: nowISO(),
+            handoff: "", handoffUpdatedAt: "",
           };
           await st.savePhase(phase);
           await st.updateFeatures((doc) => {
@@ -2964,6 +2965,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
           openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
           createdAt: now, updatedAt: now,
+          handoff: "", handoffUpdatedAt: "",
         };
         await st.savePhase(phase);
 

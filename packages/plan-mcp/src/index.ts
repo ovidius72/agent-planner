@@ -452,6 +452,8 @@ server.registerTool("planner-phase-add", {
       tasks: [],
       createdAt: timestamp,
       updatedAt: timestamp,
+      handoff: "",
+      handoffUpdatedAt: "",
     };
     await st.savePhase(phase);
     if (feature) {

@@ -24,7 +24,7 @@ import {
   type CodebaseProfile,
   type ResumeFocus,
 } from "./schema.js";
-import { createFeatureId, createPhaseId, createRequirementId, createShortId, createTaskId, isLegacyPhaseId } from "./naming.js";
+import { createFeatureId, createPhaseId, createRequirementId, createShortId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -133,6 +133,24 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
     }
     return parsed;
   });
+}
+
+/** Summary of a phase that has a non-empty handoff, for the listHandoffs() API. */
+export interface PhaseHandoffSummary {
+  phaseId: string;
+  /** Human-readable composite ref, e.g. `P003` or `P003(F002)`. */
+  compositeRef: string;
+  /** handoffUpdatedAt (falls back to phase.updatedAt if unset). */
+  updatedAt: string;
+  /** First non-empty line of the handoff, leading markdown headers stripped, ~80 chars. */
+  firstLine: string;
+}
+
+/** Extract the first meaningful line of a handoff: skip blank lines, strip a
+ *  leading markdown header (#), trim, and truncate to ~80 chars. */
+function handoffFirstLine(text: string): string {
+  const line = text.trim().split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  return line.replace(/^#+\s*/, "").trim().slice(0, 80);
 }
 
 export async function migrateToUuids(store: PlanStore): Promise<void> {
@@ -1269,6 +1287,48 @@ export class PlanStore {
     const updated = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (phase) => this.normalizePhaseDocument(updater(phase)).phase);
     await this.maybeAutoSync();
     return updated;
+  }
+
+  // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────
+
+  /** Get the handoff text for a phase ("" if none). Throws if phase missing. */
+  async getPhaseHandoff(phaseId: string): Promise<string> {
+    return (await this.loadPhase(phaseId)).handoff;
+  }
+
+  /** Set the handoff text for a phase + stamp handoffUpdatedAt. Atomic per-file
+   *  update via updatePhase (so the web UI refreshes via maybeAutoSync). */
+  async setPhaseHandoff(phaseId: string, text: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: text, handoffUpdatedAt: now }));
+  }
+
+  /** Clear the handoff text for a phase (handoff=""). handoffUpdatedAt is left
+   *  unchanged as an audit trail (when a handoff last existed). */
+  async clearPhaseHandoff(phaseId: string): Promise<void> {
+    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: "" }));
+  }
+
+  /** List all phases that have a non-empty handoff, newest first, with a
+   *  human-readable composite ref (P00x or P00x(F00x)) and a first-line excerpt. */
+  async listHandoffs(): Promise<PhaseHandoffSummary[]> {
+    const phases = await this.loadAllPhases();
+    const features = await this.loadFeatures();
+    const featureNumber = new Map<string, number>();
+    for (const f of features.features) featureNumber.set(f.id, f.number);
+    const out: PhaseHandoffSummary[] = [];
+    for (const p of phases) {
+      if (!p.handoff) continue;
+      const fnum = p.featureId ? featureNumber.get(p.featureId) : undefined;
+      out.push({
+        phaseId: p.id,
+        compositeRef: formatPhaseRef(p.number, fnum),
+        updatedAt: p.handoffUpdatedAt || p.updatedAt,
+        firstLine: handoffFirstLine(p.handoff),
+      });
+    }
+    out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return out;
   }
 
   async deletePhase(phaseId: string): Promise<void> {
