@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
 import { formatSequence } from "../../lib/dashboard-tree";
 import { featureStatuses, phaseStatuses, taskStatuses } from "../../lib/statuses";
-import { repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
+import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
+import { SortableItem } from "./sortable";
 
 /**
  * The collapsible feature → phase → task Work Tree, plus its filter bar
@@ -30,6 +33,38 @@ export function WorkTree({
   const tree = useDashboardTree({ features, phases, projectStorageScope });
   const [repairing, setRepairing] = useState(false);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    // Features scope
+    const featureIds = tree.displayedWorkTree.map((e) => e.feature.id);
+    if (featureIds.includes(activeId) && featureIds.includes(overId)) {
+      await reorder("feature", arrayMove(featureIds, featureIds.indexOf(activeId), featureIds.indexOf(overId))).catch(() => {});
+      return;
+    }
+    // Phases scope (within a feature)
+    for (const entry of tree.displayedWorkTree) {
+      const phaseIds = entry.allPhases.map((p) => p.phase.id);
+      if (phaseIds.includes(activeId) && phaseIds.includes(overId)) {
+        await reorder("phase", arrayMove(phaseIds, phaseIds.indexOf(activeId), phaseIds.indexOf(overId))).catch(() => {});
+        return;
+      }
+    }
+    // Tasks scope (within a phase)
+    for (const entry of tree.displayedWorkTree) {
+      for (const pe of entry.allPhases) {
+        const taskIds = pe.allTasks.map((t) => t.id);
+        if (taskIds.includes(activeId) && taskIds.includes(overId)) {
+          await reorder("task", arrayMove(taskIds, taskIds.indexOf(activeId), taskIds.indexOf(overId))).catch(() => {});
+          return;
+        }
+      }
+    }
+  };
 
   const isPhaseExpanded = (phaseId: string) => tree.expandedPhaseIds.includes(phaseId);
   const isPhaseRecentlyChanged = (phaseId: string) => tree.recentPhaseIds.includes(phaseId);
@@ -168,19 +203,24 @@ export function WorkTree({
 
       <div className="grid gap-3">
         {tree.displayedWorkTree.length > 0 ? (
-          tree.displayedWorkTree.map((entry) => (
-            <FeatureTreeRow
-              key={entry.feature.id}
-              entry={entry}
-              expanded={tree.expandedFeatureIds.includes(entry.feature.id)}
-              recentlyChanged={tree.recentFeatureIds.includes(entry.feature.id)}
-              onToggle={() => tree.toggleExpandedFeature(entry.feature.id)}
-              isPhaseExpanded={isPhaseExpanded}
-              onTogglePhase={tree.toggleExpandedPhase}
-              isPhaseRecentlyChanged={isPhaseRecentlyChanged}
-              isTaskRecentlyChanged={isTaskRecentlyChanged}
-            />
-          ))
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={tree.displayedWorkTree.map((e) => e.feature.id)} strategy={verticalListSortingStrategy}>
+              {tree.displayedWorkTree.map((entry) => (
+                <SortableItem key={entry.feature.id} id={entry.feature.id}>
+                  <FeatureTreeRow
+                    entry={entry}
+                    expanded={tree.expandedFeatureIds.includes(entry.feature.id)}
+                    recentlyChanged={tree.recentFeatureIds.includes(entry.feature.id)}
+                    onToggle={() => tree.toggleExpandedFeature(entry.feature.id)}
+                    isPhaseExpanded={isPhaseExpanded}
+                    onTogglePhase={tree.toggleExpandedPhase}
+                    isPhaseRecentlyChanged={isPhaseRecentlyChanged}
+                    isTaskRecentlyChanged={isTaskRecentlyChanged}
+                  />
+                </SortableItem>
+              ))}
+            </SortableContext>
+          </DndContext>
         ) : activeTasks.length > 0 ? (
           activeTasks.map((task) => {
             const to = task.featureId

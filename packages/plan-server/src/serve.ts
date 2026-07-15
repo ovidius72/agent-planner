@@ -709,6 +709,53 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(report);
   });
 
+  // ── Reorder (priority) ───────────────────────────────────────────
+  app.post(route("/reorder"), async (c) => {
+    const body = await c.req.json<{ kind: "feature" | "phase" | "task"; ids: string[] }>();
+    const { kind, ids } = body;
+    if (!Array.isArray(ids) || ids.length === 0) return c.json({ error: "ids required" }, 400);
+    const gap = 10;
+    if (kind === "feature") {
+      await store.updateFeatures((doc) => {
+        for (const [i, id] of ids.entries()) {
+          const f = doc.features.find((x) => x.id === id);
+          if (f) f.priority = (i + 1) * gap;
+        }
+        doc.features.sort((a, b) => a.priority - b.priority || a.number - b.number);
+        return doc;
+      });
+      hub()?.broadcast({ type: "features-updated", data: { action: "reordered" } });
+    } else if (kind === "phase") {
+      const phases = await store.loadAllPhases();
+      for (const [i, id] of ids.entries()) {
+        if (phases.some((x) => x.id === id)) {
+          await store.updatePhase(id, (entry) => { entry.priority = (i + 1) * gap; return entry; });
+        }
+      }
+      hub()?.broadcast({ type: "phases-updated", data: { action: "reordered" } });
+    } else if (kind === "task") {
+      const allPhases = await store.loadAllPhases();
+      const host = allPhases.find((p) => p.tasks.some((t) => ids.includes(t.id)));
+      if (host) {
+        await store.updatePhase(host.id, (phase) => {
+          for (const [i, id] of ids.entries()) {
+            const t = phase.tasks.find((x) => x.id === id);
+            if (t) t.priority = (i + 1) * gap;
+          }
+          phase.tasks.sort((a, b) => a.priority - b.priority || a.number - b.number);
+          phase.taskIds = phase.tasks.map((t) => t.id);
+          return phase;
+        });
+        hub()?.broadcast({ type: "phases-updated", data: { action: "reordered", phaseId: host.id, featureId: host.featureId } });
+      }
+    } else {
+      return c.json({ error: "invalid kind" }, 400);
+    }
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ ok: true, kind, count: ids.length });
+  });
+
   // ── Render ───────────────────────────────────────────────────────
   app.post(route("/render"), async (c) => {
     const files = await store.writeGenerated();

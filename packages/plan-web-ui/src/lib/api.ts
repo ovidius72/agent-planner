@@ -219,7 +219,8 @@ export async function exportPlan(full = false): Promise<ExportReport> {
 
 export interface RepairReport {
   migrated: { renamed: number; repaired: number; inferred: number };
-  integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };
+  backfill: { shortIdsAssigned: number; prioritiesAssigned: number; duplicateShortIds: string[] };
+  integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
 }
 
 export async function repairPlan(): Promise<RepairReport> {
@@ -228,4 +229,10 @@ export async function repairPlan(): Promise<RepairReport> {
 
 export async function getIntegrity(): Promise<RepairReport["integrity"]> {
   return request("/integrity");
+}
+
+export type ReorderKind = "feature" | "phase" | "task";
+
+export async function reorder(kind: ReorderKind, ids: string[]): Promise<{ ok: boolean; kind: ReorderKind; count: number }> {
+  return request("/reorder", { method: "POST", body: JSON.stringify({ kind, ids }) });
 }

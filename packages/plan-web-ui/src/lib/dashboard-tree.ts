@@ -66,7 +66,8 @@ export function buildWorkTree(features: Feature[], phases: Phase[]): WorkTreeFea
       const allPhases = featurePhases.map((phase) => {
         const allTasks = [...phase.tasks].sort(
           (left, right) =>
-            left.number - right.number
+            (left.priority ?? 0) - (right.priority ?? 0)
+            || left.number - right.number
             || left.createdAt.localeCompare(right.createdAt)
             || left.title.localeCompare(right.title),
         );
@@ -91,14 +92,15 @@ export function buildWorkTree(features: Feature[], phases: Phase[]): WorkTreeFea
         feature,
         totalTasks,
         doneTasks,
-        allPhases: allPhases.sort((left, right) => left.phase.number - right.phase.number),
+        allPhases: allPhases.sort((left, right) => (left.phase.priority ?? 0) - (right.phase.priority ?? 0) || left.phase.number - right.phase.number),
         hasActiveTask: allPhases.some((entry) => entry.hasActiveTask),
         isActive: hasActiveBranch,
       };
     })
     .sort(
       (left, right) =>
-        left.feature.number - right.feature.number
+        (left.feature.priority ?? 0) - (right.feature.priority ?? 0)
+        || left.feature.number - right.feature.number
         || left.feature.name.localeCompare(right.feature.name),
     );
 }

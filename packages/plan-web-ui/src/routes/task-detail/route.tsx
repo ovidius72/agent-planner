@@ -13,7 +13,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { CopyableBadge, EntityPathBadge, formatEntityPath } from "../../components/ui/badges";
+import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
@@ -88,6 +88,7 @@ export function TaskDetailRoute() {
           <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number, taskNum: task.number })}>
             <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} taskNum={task.number} />
           </CopyableBadge>
+          {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
           <StatusBadge status={task.status} />
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{task.title}</h2>
