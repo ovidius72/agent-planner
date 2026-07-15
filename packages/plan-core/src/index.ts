@@ -1,4 +1,5 @@
 export * from "./naming.js";
+export * from "./refs.js";
 export * from "./schema.js";
 export { PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, type PhaseHandoffSummary } from "./plan-store.js";
 export { PlanRenderer } from "./renderer.js";
