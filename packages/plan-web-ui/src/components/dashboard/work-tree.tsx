@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
 import { formatSequence } from "../../lib/dashboard-tree";
-import { featureStatuses, phaseStatuses, taskStatuses } from "../../lib/statuses";
-import { repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
+import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
+import { SortableItem } from "./sortable";
+import { SearchBar } from "./search-bar";
 
 /**
  * The collapsible feature → phase → task Work Tree, plus its filter bar
@@ -30,8 +33,68 @@ export function WorkTree({
   const tree = useDashboardTree({ features, phases, projectStorageScope });
   const [repairing, setRepairing] = useState(false);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
+  const [headerH, setHeaderH] = useState(0);
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (!header) return;
+    const update = () => setHeaderH(header.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(header);
+    window.addEventListener("resize", update);
+    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+  }, []);
+  // After a filter/search change, if the sticky bar scrolled out of view above
+  // the header (the tree shrank below the scroll position), gently re-pin it.
+  // Fires only on user-facing filter changes, not on data/WebSocket updates.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const bar = document.querySelector(".ap-search-sticky");
+      const header = document.querySelector("header");
+      if (!bar || !header) return;
+      const rect = bar.getBoundingClientRect();
+      if (rect.top < 0) {
+        const target = rect.top + window.scrollY - header.offsetHeight;
+        window.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+      }
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [tree.searchQuery, tree.hideDone, tree.hidePlanned, tree.onlyActiveBranches]);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const isPhaseExpanded = (phaseId: string) => tree.expandedPhaseIds.includes(phaseId);
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    // Features scope
+    const featureIds = tree.displayedWorkTree.map((e) => e.feature.id);
+    if (featureIds.includes(activeId) && featureIds.includes(overId)) {
+      await reorder("feature", arrayMove(featureIds, featureIds.indexOf(activeId), featureIds.indexOf(overId))).catch(() => {});
+      return;
+    }
+    // Phases scope (within a feature)
+    for (const entry of tree.displayedWorkTree) {
+      const phaseIds = entry.allPhases.map((p) => p.phase.id);
+      if (phaseIds.includes(activeId) && phaseIds.includes(overId)) {
+        await reorder("phase", arrayMove(phaseIds, phaseIds.indexOf(activeId), phaseIds.indexOf(overId))).catch(() => {});
+        return;
+      }
+    }
+    // Tasks scope (within a phase)
+    for (const entry of tree.displayedWorkTree) {
+      for (const pe of entry.allPhases) {
+        const taskIds = pe.allTasks.map((t) => t.id);
+        if (taskIds.includes(activeId) && taskIds.includes(overId)) {
+          await reorder("task", arrayMove(taskIds, taskIds.indexOf(activeId), taskIds.indexOf(overId))).catch(() => {});
+          return;
+        }
+      }
+    }
+  };
+
+  const isPhaseExpanded = (phaseId: string) =>
+    tree.expandedPhaseIds.includes(phaseId);
   const isPhaseRecentlyChanged = (phaseId: string) => tree.recentPhaseIds.includes(phaseId);
   const isTaskRecentlyChanged = (taskId: string) => tree.recentTaskIds.includes(taskId);
 
@@ -49,14 +112,18 @@ export function WorkTree({
           <Button type="button" variant="secondary" onClick={() => tree.setTreeOpenMode("none")}>
             Collapse all
           </Button>
-          <Button type="button" variant="secondary" onClick={() => tree.setShowAllFeatures((value) => !value)}>
-            {tree.showAllFeatures ? "Show active only" : "Show all features"}
-          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="ap-search-sticky z-20" style={{ top: headerH }}>
+      <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
+      {tree.searchActive ? (
+        <p className="text-xs text-[var(--text-muted)]">
+          {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
+        </p>
+      ) : null}
+      <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:rounded-[18px] sm:px-4 sm:py-3">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => tree.setHideDone((value) => !value)}
@@ -76,14 +143,15 @@ export function WorkTree({
             onClick={() => tree.setOnlyActiveBranches((value) => !value)}
             className={`status-chip transition ${tree.onlyActiveBranches ? "status-in-progress" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
           >
-            Only active branches
+            Only active
           </button>
-          <Button type="button" variant="secondary" onClick={tree.resetFilters}>
-            Reset filters
+          <Button type="button" variant="secondary" className="!min-h-9 !px-3 !py-1 !text-xs sm:!min-h-11 sm:!px-4 sm:!py-2 sm:!text-sm" onClick={tree.resetFilters}>
+            Reset
           </Button>
           <Button
             type="button"
             variant="secondary"
+            className="!min-h-9 !px-3 !py-1 !text-xs sm:!min-h-11 sm:!px-4 sm:!py-2 sm:!text-sm"
             disabled={repairing}
             onClick={async () => {
               setRepairing(true);
@@ -101,86 +169,34 @@ export function WorkTree({
               }
             }}
           >
-            {repairing ? "Repairing…" : "Repair plan"}
+            {repairing ? "Repairing…" : "Repair"}
           </Button>
-          {repairMsg ? <span className="text-xs text-[var(--text-muted)]">{repairMsg}</span> : null}
+          {repairMsg ? <span className="hidden text-xs text-[var(--text-muted)] sm:inline sm:truncate">{repairMsg}</span> : null}
         </div>
-
-        <div className="grid gap-3 lg:grid-cols-3">
-          <div className="grid gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">Feature status</p>
-            <div className="flex flex-wrap gap-2">
-              {featureStatuses.map((option) => {
-                const active = tree.featureStatusFilters.includes(option.value);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => tree.toggleFeatureStatusFilter(option.value)}
-                    className={`status-chip transition ${active ? `status-${option.value}` : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">Phase status</p>
-            <div className="flex flex-wrap gap-2">
-              {phaseStatuses.map((option) => {
-                const active = tree.phaseStatusFilters.includes(option.value);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => tree.togglePhaseStatusFilter(option.value)}
-                    className={`status-chip transition ${active ? `status-${option.value}` : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">Task status</p>
-            <div className="flex flex-wrap gap-2">
-              {taskStatuses.map((option) => {
-                const active = tree.taskStatusFilters.includes(option.value);
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => tree.toggleTaskStatusFilter(option.value)}
-                    className={`status-chip transition ${active ? `status-${option.value}` : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+      </div>
       </div>
 
       <div className="grid gap-3">
         {tree.displayedWorkTree.length > 0 ? (
-          tree.displayedWorkTree.map((entry) => (
-            <FeatureTreeRow
-              key={entry.feature.id}
-              entry={entry}
-              expanded={tree.expandedFeatureIds.includes(entry.feature.id)}
-              recentlyChanged={tree.recentFeatureIds.includes(entry.feature.id)}
-              onToggle={() => tree.toggleExpandedFeature(entry.feature.id)}
-              isPhaseExpanded={isPhaseExpanded}
-              onTogglePhase={tree.toggleExpandedPhase}
-              isPhaseRecentlyChanged={isPhaseRecentlyChanged}
-              isTaskRecentlyChanged={isTaskRecentlyChanged}
-            />
-          ))
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={tree.displayedWorkTree.map((e) => e.feature.id)} strategy={verticalListSortingStrategy}>
+              {tree.displayedWorkTree.map((entry) => (
+                <SortableItem key={entry.feature.id} id={entry.feature.id}>
+                  <FeatureTreeRow
+                    entry={entry}
+                    expanded={tree.expandedFeatureIds.includes(entry.feature.id)}
+                    recentlyChanged={tree.recentFeatureIds.includes(entry.feature.id)}
+                    onToggle={() => tree.toggleExpandedFeature(entry.feature.id)}
+                    isPhaseExpanded={isPhaseExpanded}
+                    onTogglePhase={tree.toggleExpandedPhase}
+                    isPhaseRecentlyChanged={isPhaseRecentlyChanged}
+                    isTaskRecentlyChanged={isTaskRecentlyChanged}
+                    highlightedTaskIds={tree.searchActive ? tree.matchedTaskIds : undefined}
+                  />
+                </SortableItem>
+              ))}
+            </SortableContext>
+          </DndContext>
         ) : activeTasks.length > 0 ? (
           activeTasks.map((task) => {
             const to = task.featureId

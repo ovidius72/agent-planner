@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -1505,9 +1505,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
         const now = nowISO();
         const featureNumber = (await st.loadFeatures()).features.length + 1;
+        const shortId = createShortId(await st.assignedShortIds());
+        const priority = await st.nextPriority("feature");
         const feature: Feature = {
           id: createFeatureId(),
           number: featureNumber,
+          shortId,
+          priority,
           name: nameInput.trim(),
           description: description?.trim() ?? "",
           status: status as Feature["status"],
@@ -1666,8 +1670,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
           const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
           const id = createPhaseId();
+          const shortId = createShortId(await st.assignedShortIds());
+          const priority = await st.nextPriority("phase", feature.id);
           phase = {
-            id, number, slug, title, featureId: feature.id, status: "draft", discussedAt: "", contextReady: false, contextReadyReason: "", summary: "", description: "", notes: "",
+            id, number, shortId, priority, slug, title, featureId: feature.id, status: "draft", discussedAt: "", contextReady: false, contextReadyReason: "", summary: "", description: "", notes: "",
             goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
             openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
             createdAt: nowISO(), updatedAt: nowISO(),
@@ -1878,9 +1884,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const shortName = clampSlug(title, 30, `task-${Date.now().toString(36)}`);
         const taskNum = phase.tasks.length + 1;
         const taskId = createTaskId();
+        const shortId = createShortId(await st.assignedShortIds());
+        const priority = await st.nextPriority("task", phase.id);
         const now = nowISO();
         const task: Task = {
-          id: taskId, phaseId: phase.id, number: taskNum, shortName,
+          id: taskId, phaseId: phase.id, number: taskNum, shortId, priority, shortName,
           title: title.trim(), status: "planned",
           description: "",
           notes: "",
@@ -2746,9 +2754,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const now = nowISO();
       const status = (params.status as Feature["status"] | undefined) ?? "planned";
       const currentFeatures = (await st.loadFeatures()).features;
+      const shortId = createShortId(await st.assignedShortIds());
+      const priority = await st.nextPriority("feature");
       const feature: Feature = {
         id: createFeatureId(),
         number: currentFeatures.length + 1,
+        shortId,
+        priority,
         name: params.name,
         description: params.description ?? "",
         status,
@@ -2789,6 +2801,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       endDate: Type.Optional(Type.String({ description: "End date (YYYY-MM-DD)" })),
       workDone: Type.Optional(Type.String({ description: "Notes on work done" })),
       workRemaining: Type.Optional(Type.String({ description: "Notes on remaining work" })),
+      priority: Type.Optional(Type.Number({ description: "Display order within the project (lower = higher). Tiebreak by number then createdAt." })),
       acceptedDecisions: Type.Optional(Type.Array(Type.Object({
         id: Type.String(),
         title: Type.String(),
@@ -2813,6 +2826,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (params.workRemaining !== undefined) feature.workRemaining = params.workRemaining;
           if (params.startDate !== undefined) feature.startDate = params.startDate;
           if (params.endDate !== undefined) feature.endDate = params.endDate;
+          if (params.priority !== undefined) feature.priority = params.priority;
           if (params.acceptedDecisions !== undefined) feature.acceptedDecisions = params.acceptedDecisions;
 
           if (params.status !== undefined) {
@@ -2936,9 +2950,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const featurePhases = phases.filter((p) => p.featureId === params.featureId);
         const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
         const id = createPhaseId();
+        const shortId = createShortId(await st.assignedShortIds());
+        const priority = await st.nextPriority("phase", params.featureId);
         const now = nowISO();
         phase = {
-          id, number, slug: normalizeSlug(params.title), title: params.title,
+          id, number, shortId, priority, slug: normalizeSlug(params.title), title: params.title,
           featureId: params.featureId,
           status: (params.status as Phase["status"] | undefined) ?? "draft",
           discussedAt: "",
@@ -2978,6 +2994,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       summary: Type.Optional(Type.String({ description: "New summary" })),
       description: Type.Optional(Type.String({ description: "New description" })),
       featureId: Type.Optional(Type.String({ description: "Link/unlink phase to a feature. Use empty string to unlink." })),
+      priority: Type.Optional(Type.Number({ description: "Display order within the feature (lower = higher)" })),
       goals: Type.Optional(Type.Array(Type.String(), { description: "Replace goals list" })),
       nonGoals: Type.Optional(Type.Array(Type.String(), { description: "Replace non-goals list" })),
       dependencies: Type.Optional(Type.Array(Type.String(), { description: "Replace dependencies list" })),
@@ -3009,6 +3026,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (params.status !== undefined) phase.status = params.status as Phase["status"];
       if (params.summary !== undefined) phase.summary = params.summary;
       if (params.description !== undefined) phase.description = params.description;
+      if (params.priority !== undefined) phase.priority = params.priority;
       if (params.goals !== undefined) phase.goals = params.goals;
       if (params.nonGoals !== undefined) phase.nonGoals = params.nonGoals;
       if (params.dependencies !== undefined) phase.dependencies = params.dependencies;
@@ -3134,11 +3152,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       const shortName = clampSlug(params.shortName ?? params.title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
       const taskId = createTaskId();
+      const shortId = createShortId(await st.assignedShortIds());
+      const priority = await st.nextPriority("task", params.phaseId);
       const now = nowISO();
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
       const existingPhase = await st.loadPhase(params.phaseId);
       const task: Task = {
-        id: taskId, phaseId: params.phaseId, number: existingPhase.tasks.length + 1, shortName,
+        id: taskId, phaseId: params.phaseId, number: existingPhase.tasks.length + 1, shortId, priority, shortName,
         title: params.title,
         status: initialStatus,
         description: params.description ?? "",
@@ -3185,6 +3205,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         implementationNotes: Type.String(),
         acceptedAt: Type.String(),
       }), { description: "Replace accepted decisions list" })),
+      priority: Type.Optional(Type.Number({ description: "Display order within the phase (lower = higher)" })),
       checklist: Type.Optional(Type.Array(Type.String(), { description: "Replace checklist (plain strings). For interactive toggling use the web UI." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -3201,6 +3222,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           const task = phase.tasks.find((t) => t.id === params.taskId);
           if (!task) return phase;
           if (params.title !== undefined) task.title = params.title;
+          if (params.priority !== undefined) task.priority = params.priority;
           if (params.description !== undefined) task.description = params.description;
           if (params.notes !== undefined) task.notes = params.notes;
           if (params.decisions !== undefined) task.decisions = params.decisions;
@@ -3433,6 +3455,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // add seconds of latency on every turn if run unconditionally.
       if (!plannerHeavyInitDone) {
         await migrateToUuids(st);
+        await st.ensureShortIdsAndPriority().catch(() => null);
         await ensureProjectLanguagePreferences(st).catch(() => null);
         await maybeHealStatuses(st);
         await st.refreshResume();

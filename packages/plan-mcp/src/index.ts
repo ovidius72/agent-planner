@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { PlanStore, ExportService, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -37,8 +37,15 @@ function store(): PlanStore {
 async function requireStore(): Promise<PlanStore> {
   const st = store();
   if (!(await st.exists())) throw new Error(`No .planner/ found at ${st.root}. Use planner-init first.`);
+  // One-time idempotent backfill of shortId + priority (safe, best-effort).
+  if (!planBackfillDone) {
+    planBackfillDone = true;
+    await st.ensureShortIdsAndPriority().catch(() => {});
+  }
   return st;
 }
+
+let planBackfillDone = false;
 
 // In-process web server handle, managed by the planner-web tool and planner-load.
 // Lives as long as this MCP stdio process (i.e. the host session). Null when not running.
@@ -290,9 +297,13 @@ server.registerTool("planner-feature-add", {
   const timestamp = nowISO();
   const effectiveStatus = status ?? "planned";
   const existingFeatures = (await st.loadFeatures()).features;
+  const shortId = createShortId(await st.assignedShortIds());
+  const priority = await st.nextPriority("feature");
   const feature: Feature = {
     id: createFeatureId(),
     number: existingFeatures.length + 1,
+    shortId,
+    priority,
     name: name.trim(),
     description: description?.trim() ?? "",
     status: effectiveStatus,
@@ -339,6 +350,7 @@ server.registerTool("planner-feature-update", {
     workRemaining: z.string().optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
+    priority: z.number().int().nonnegative().optional().describe("Display order within the project (lower = higher). Tiebreak by number then createdAt."),
   },
 }, async ({ feature: ref, ...updates }) => {
   const st = await requireStore();
@@ -355,6 +367,7 @@ server.registerTool("planner-feature-update", {
     if (updates.workRemaining !== undefined) target.workRemaining = updates.workRemaining.trim();
     if (updates.startDate !== undefined) target.startDate = updates.startDate.trim();
     if (updates.endDate !== undefined) target.endDate = updates.endDate.trim();
+    if (updates.priority !== undefined) target.priority = updates.priority;
     target.updatedAt = nowISO();
     return doc;
   });
@@ -409,9 +422,13 @@ server.registerTool("planner-phase-add", {
     const phases = await st.loadAllPhases();
     const featurePhases = feature ? phases.filter((phase) => phase.featureId === feature.id) : phases;
     const timestamp = nowISO();
+    const shortId = createShortId(await st.assignedShortIds());
+    const priority = await st.nextPriority("phase", feature?.id);
     phase = {
       id: createPhaseId(),
       number: featurePhases.reduce((max, entry) => Math.max(max, entry.number), 0) + 1,
+      shortId,
+      priority,
       slug: normalizeSlug(title),
       title: title.trim(),
       featureId: feature?.id,
@@ -502,6 +519,7 @@ server.registerTool("planner-phase-update", {
     status: z.enum(PHASE_STATUS_VALUES).optional(),
     summary: z.string().optional(),
     description: z.string().optional(),
+    priority: z.number().int().nonnegative().optional().describe("Display order within the feature (lower = higher)."),
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
@@ -512,6 +530,7 @@ server.registerTool("planner-phase-update", {
     if (updates.status !== undefined) entry.status = updates.status;
     if (updates.summary !== undefined) entry.summary = updates.summary.trim();
     if (updates.description !== undefined) entry.description = updates.description.trim();
+    if (updates.priority !== undefined) entry.priority = updates.priority;
     entry.updatedAt = nowISO();
     return entry;
   });
@@ -547,10 +566,14 @@ server.registerTool("planner-task-add", {
   if (!found) return text(`Phase not found: ${ref}`);
   const timestamp = nowISO();
   const taskId = createTaskId();
+  const shortId = createShortId(await st.assignedShortIds());
+  const priority = await st.nextPriority("task", found.id);
   const task: Task = {
     id: taskId,
     phaseId: found.id,
     number: found.tasks.length + 1,
+    shortId,
+    priority,
     shortName: clampSlug(title, 30, `task-${Date.now().toString(36)}`),
     title: title.trim(),
     status: "planned",
@@ -619,8 +642,9 @@ server.registerTool("planner-task-update", {
     status: z.enum(STATUS_VALUES).optional(),
     description: z.string().optional(),
     motivation: z.string().optional(),
+    priority: z.number().int().nonnegative().optional().describe("Display order within the phase (lower = higher)."),
   },
-}, async ({ task: ref, title, status, description, motivation }) => {
+}, async ({ task: ref, title, status, description, motivation, priority }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -641,6 +665,7 @@ server.registerTool("planner-task-update", {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     if (title !== undefined) task.title = title.trim();
+    if (priority !== undefined) task.priority = priority;
     if (description !== undefined) task.description = description.trim();
     if (status !== undefined && status !== task.status) {
       // Record status change in the incremental statusLog.

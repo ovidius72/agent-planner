@@ -1,7 +1,9 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { CopyableBadge, EntityPathBadge, formatEntityPath } from "../ui/badges";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusBadge } from "../ui/status-badge";
+import { DragHandle, SortableItem } from "./sortable";
 import type { WorkTreeFeature, WorkTreePhase } from "../../lib/dashboard-tree";
 import type { Feature, Phase, Task } from "../../lib/types";
 
@@ -78,6 +80,7 @@ export function FeatureTreeRow({
   onTogglePhase,
   isPhaseRecentlyChanged,
   isTaskRecentlyChanged,
+  highlightedTaskIds,
 }: {
   entry: WorkTreeFeature;
   expanded: boolean;
@@ -87,6 +90,7 @@ export function FeatureTreeRow({
   onTogglePhase: (phaseId: string) => void;
   isPhaseRecentlyChanged: (phaseId: string) => boolean;
   isTaskRecentlyChanged: (taskId: string) => boolean;
+  highlightedTaskIds: Set<string> | undefined;
 }) {
   const { feature, totalTasks, doneTasks, allPhases, hasActiveTask } = entry;
 
@@ -115,11 +119,13 @@ export function FeatureTreeRow({
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
+              <DragHandle />
               <CopyableBadge
                 id={formatEntityPath({ featureNum: feature.number })}
               >
                 <EntityPathBadge featureNum={feature.number} />
               </CopyableBadge>
+              {feature.shortId ? <ShortIdBadge shortId={feature.shortId} /> : null}
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}
@@ -150,17 +156,21 @@ export function FeatureTreeRow({
 
       {expanded && allPhases.length > 0 ? (
         <div className="mt-2 ml-1.5 grid grid-cols-1 gap-2 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
-          {allPhases.map((phaseEntry) => (
-            <PhaseTreeRow
-              key={phaseEntry.phase.id}
-              feature={feature}
-              phaseEntry={phaseEntry}
-              expanded={isPhaseExpanded(phaseEntry.phase.id)}
-              recentlyChanged={isPhaseRecentlyChanged(phaseEntry.phase.id)}
-              onToggle={() => onTogglePhase(phaseEntry.phase.id)}
-              isTaskRecentlyChanged={isTaskRecentlyChanged}
-            />
-          ))}
+          <SortableContext items={allPhases.map((p) => p.phase.id)} strategy={verticalListSortingStrategy}>
+            {allPhases.map((phaseEntry) => (
+              <SortableItem key={phaseEntry.phase.id} id={phaseEntry.phase.id}>
+                <PhaseTreeRow
+                  feature={feature}
+                  phaseEntry={phaseEntry}
+                  expanded={isPhaseExpanded(phaseEntry.phase.id)}
+                  recentlyChanged={isPhaseRecentlyChanged(phaseEntry.phase.id)}
+                  onToggle={() => onTogglePhase(phaseEntry.phase.id)}
+                  isTaskRecentlyChanged={isTaskRecentlyChanged}
+                  highlightedTaskIds={highlightedTaskIds}
+                />
+              </SortableItem>
+            ))}
+          </SortableContext>
         </div>
       ) : null}
     </div>
@@ -174,6 +184,7 @@ export function PhaseTreeRow({
   recentlyChanged,
   onToggle,
   isTaskRecentlyChanged,
+  highlightedTaskIds,
 }: {
   feature: Feature;
   phaseEntry: WorkTreePhase;
@@ -181,6 +192,7 @@ export function PhaseTreeRow({
   recentlyChanged: boolean;
   onToggle: () => void;
   isTaskRecentlyChanged: (taskId: string) => boolean;
+  highlightedTaskIds: Set<string> | undefined;
 }) {
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
 
@@ -209,6 +221,7 @@ export function PhaseTreeRow({
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
+              <DragHandle />
               <CopyableBadge
                 id={formatEntityPath({
                   featureNum: feature?.number,
@@ -220,6 +233,7 @@ export function PhaseTreeRow({
                   phaseNum={phase.number}
                 />
               </CopyableBadge>
+              {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}
@@ -251,15 +265,19 @@ export function PhaseTreeRow({
       {expanded ? (
         allTasks.length > 0 ? (
           <div className="ml-1.5 grid grid-cols-1 gap-1 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
-            {allTasks.map((task) => (
-              <TaskTreeRow
-                key={task.id}
-                feature={feature}
-                phase={phase}
-                task={task}
-                recentlyChanged={isTaskRecentlyChanged(task.id)}
-              />
-            ))}
+            <SortableContext items={allTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              {allTasks.map((task) => (
+                <SortableItem key={task.id} id={task.id}>
+                  <TaskTreeRow
+                    feature={feature}
+                    phase={phase}
+                    task={task}
+                    recentlyChanged={isTaskRecentlyChanged(task.id)}
+                    highlighted={highlightedTaskIds?.has(task.id)}
+                  />
+                </SortableItem>
+              ))}
+            </SortableContext>
           </div>
         ) : (
           <p className="ml-1.5 text-xs italic text-[var(--text-subtle)] sm:ml-4">
@@ -276,18 +294,21 @@ export function TaskTreeRow({
   phase,
   task,
   recentlyChanged,
+  highlighted,
 }: {
   feature: Feature;
   phase: Phase;
   task: Task;
   recentlyChanged: boolean;
+  highlighted: boolean | undefined;
 }) {
   return (
     <div
-      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""} ${highlighted ? "ap-search-hit" : ""}`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
+          <DragHandle />
           <CopyableBadge
             id={formatEntityPath({
               featureNum: feature?.number,
@@ -301,6 +322,7 @@ export function TaskTreeRow({
               taskNum={task.number}
             />
           </CopyableBadge>
+          {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
           {task.status === "in-progress" ? (
             <span aria-hidden="true" className="ap-progress-dot" />
           ) : null}

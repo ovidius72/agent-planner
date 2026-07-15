@@ -301,3 +301,68 @@ textarea:disabled {
   .ap-in-progress { animation: none; }
   .ap-progress-dot::after { animation: none; opacity: 0; }
 }
+
+/* Short global id pill (Crockford 5-char, e.g. "UUXD1"). Compact, neutral,
+   copyable via CopyableBadge. Sits next to the composite F00x/P00x/T00x. */
+.short-id-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Drag-and-drop reorder handle (Work Tree). Inline grip icon; only visible on
+   hover/focus to keep the tree calm. Tap target >= 32px (mobile-safe). */
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  color: var(--text-subtle);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0.35;
+  transition: opacity .12s, background .12s, color .12s, border-color .12s;
+}
+.drag-handle:hover,
+.drag-handle:focus-visible {
+  opacity: 1;
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-color: var(--border);
+}
+.drag-handle:active { cursor: grabbing; }
+.ap-sortable--dragging { opacity: .55; outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 12px; }
+
+/* elastic-input placeholder alignment: the placeholder box is already
+   positioned at the editor's text line, so only horizontal padding is needed
+   (a top padding pushes the text too low). */
+.search-bar .ei-placeholder { padding: 0 12px; }
+
+/* Sticky Work Tree search + filter bar: stays pinned below the header while
+   the page scrolls. top offset is set inline from the measured <header> height. */
+.ap-search-sticky {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  background: var(--surface-elevated);
+  backdrop-filter: saturate(180%) blur(10px);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}

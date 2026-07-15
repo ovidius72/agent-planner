@@ -14,6 +14,8 @@ export interface AcceptedDecision {
 export interface Feature {
   id: string;
   number: number;
+  shortId: string;
+  priority: number;
   name: string;
   description: string;
   status: FeatureStatus;
@@ -59,6 +61,8 @@ export interface Task {
   id: string;
   phaseId: string;
   number: number;
+  shortId: string;
+  priority: number;
   shortName: string;
   title: string;
   status: TaskStatus;
@@ -80,6 +84,8 @@ export interface Phase {
   id: string;
   featureId?: string;
   number: number;
+  shortId: string;
+  priority: number;
   slug: string;
   title: string;
   status: PhaseStatus;

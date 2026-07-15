@@ -181,3 +181,14 @@ export function CopyableBadge({ id, children }: { id: string; children: ReactNod
     </button>
   );
 }
+
+/** Compact, copyable short id pill (e.g. "UUXD1"). Globally unique within a
+ *  project (Crockford 5-char). Shown alongside the composite F00x/P00x/T00x
+ *  badge so both the per-parent number and the global short id are visible. */
+export function ShortIdBadge({ shortId }: { shortId: string }) {
+  return (
+    <CopyableBadge id={shortId}>
+      <span className="short-id-badge">{shortId}</span>
+    </CopyableBadge>
+  );
+}

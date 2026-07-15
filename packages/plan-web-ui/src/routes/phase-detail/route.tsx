@@ -6,7 +6,7 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
-import { CopyableBadge, EntityBadge, EntityPathBadge, formatEntityPath } from "../../components/ui/badges";
+import { CopyableBadge, EntityBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
@@ -81,6 +81,7 @@ export function PhaseDetailRoute() {
           <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number })}>
             <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} />
           </CopyableBadge>
+          {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
           <StatusBadge status={phase.status} />
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
