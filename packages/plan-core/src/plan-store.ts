@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CodebaseProfileSchema,
@@ -383,7 +383,7 @@ export class PlanStore {
 
   async ensureStructureOrdering(): Promise<{ changed: boolean }> {
     return this.runAsBatch(async () => {
-      const featuresDoc = await readJson(this.featuresPath(), FeaturesDocumentSchema).catch(() => ({ features: [] }));
+      const featuresDoc = await this.loadFeatures();
       const phases = await this.loadAllPhases();
       const normalized = this.normalizeStructureSnapshot(featuresDoc, phases);
       if (!normalized.changed) return { changed: false };
@@ -408,6 +408,34 @@ export class PlanStore {
   }
   private featuresPath(): string {
     return join(this.root, "features.json");
+  }
+  private featuresDir(): string {
+    return join(this.root, "features");
+  }
+  private featurePath(featureId: string): string {
+    return join(this.featuresDir(), `${featureId}.json`);
+  }
+  private withFeaturesLock<T>(fn: () => Promise<T>): Promise<T> {
+    // Sentinel-keyed mutex (the features dir path) serializing all feature
+    // mutations so read-modify-write via updateFeatures is race-free and the
+    // one-time legacy→per-file migration never interleaves with a writer.
+    return withWriteLock(this.featuresDir(), fn);
+  }
+  /** Idempotent one-time migration: if a legacy features.json exists, split it
+   *  into features/<id>.json (one per feature) and remove the legacy file.
+   *  Must be called under withFeaturesLock. Crash-safe: re-run overwrites. */
+  private async migrateLegacy(): Promise<void> {
+    let legacy: FeaturesDocument;
+    try {
+      legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+    } catch {
+      return; // no legacy features.json (already migrated or fresh project)
+    }
+    await mkdir(this.featuresDir(), { recursive: true });
+    for (const feat of legacy.features) {
+      await atomicWriteJson(this.featurePath(feat.id), feat);
+    }
+    await unlink(this.featuresPath()).catch(() => {});
   }
   private phasesDir(): string {
     return join(this.root, "phases");
@@ -440,6 +468,7 @@ export class PlanStore {
 
     await mkdir(this.root, { recursive: true });
     await mkdir(this.phasesDir(), { recursive: true });
+    await mkdir(this.featuresDir(), { recursive: true });
     await mkdir(join(this.generatedDir(), "phases"), { recursive: true });
     await mkdir(join(this.root, "schema"), { recursive: true });
     await mkdir(join(this.root, "adapters"), { recursive: true });
@@ -545,9 +574,31 @@ export class PlanStore {
   }
 
   async loadFeatures(): Promise<FeaturesDocument> {
+    // Per-file layout: read features/<id>.json (one file per feature).
+    let jsonFiles: string[] = [];
     try {
-      const features = await readJson(this.featuresPath(), FeaturesDocumentSchema);
-      return this.normalizeFeaturesDocument(features).doc;
+      const all = await readdir(this.featuresDir());
+      jsonFiles = all.filter((f) => f.endsWith(".json"));
+    } catch {
+      // features/ absent → fall through to legacy single-file layout
+    }
+    if (jsonFiles.length > 0) {
+      const features: Feature[] = [];
+      for (const f of jsonFiles) {
+        const id = f.replace(/\.json$/, "");
+        try {
+          features.push(await readJson(this.featurePath(id), FeatureSchema));
+        } catch (err) {
+          // Skip an invalid feature file rather than failing the whole load.
+          console.warn(`[plan-store] skipping invalid feature file ${f}:`, err);
+        }
+      }
+      return this.normalizeFeaturesDocument({ features }).doc;
+    }
+    // Legacy: single features.json (pre-migration read; migration writes on first write op).
+    try {
+      const legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+      return this.normalizeFeaturesDocument(legacy).doc;
     } catch {
       return { features: [] };
     }
@@ -1129,7 +1180,13 @@ export class PlanStore {
   }
 
   async updateFeatures(updater: (f: FeaturesDocument) => FeaturesDocument): Promise<FeaturesDocument> {
-    const updated = await atomicUpdateJson(this.featuresPath(), FeaturesDocumentSchema, (current) => this.normalizeFeaturesDocument(updater(current)).doc);
+    const updated = await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      const current = await this.loadFeatures();
+      const upd = this.normalizeFeaturesDocument(updater(current)).doc;
+      await this.saveFeaturesRaw(upd);
+      return upd;
+    });
     await this.maybeAutoSync();
     return updated;
   }
@@ -1148,8 +1205,45 @@ export class PlanStore {
   }
 
   async saveFeatures(features: FeaturesDocument): Promise<void> {
+    await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      await this.saveFeaturesRaw(features);
+    });
+    await this.touchManifest();
+    await this.maybeAutoSync();
+  }
+
+  /** Per-file write of all features + orphan reconcile. No lock (caller holds withFeaturesLock). */
+  private async saveFeaturesRaw(features: FeaturesDocument): Promise<void> {
     const parsed = FeaturesDocumentSchema.parse(this.normalizeFeaturesDocument(features).doc);
-    await atomicWriteJson(this.featuresPath(), parsed);
+    await mkdir(this.featuresDir(), { recursive: true });
+    const wantIds = new Set(parsed.features.map((f) => f.id));
+    for (const feat of parsed.features) {
+      await atomicWriteJson(this.featurePath(feat.id), feat);
+    }
+    // Orphan reconcile: remove feature files no longer in the document.
+    try {
+      const files = await readdir(this.featuresDir());
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const id = f.replace(/\.json$/, "");
+        if (!wantIds.has(id)) {
+          await unlink(this.featurePath(id)).catch(() => {});
+        }
+      }
+    } catch {
+      // dir absent — nothing to reconcile
+    }
+  }
+
+  /** Granular single-feature write (per-file lock; parallel-safe across features). */
+  async saveFeature(feature: Feature): Promise<void> {
+    await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      await mkdir(this.featuresDir(), { recursive: true });
+      const parsed = FeatureSchema.parse(feature);
+      await atomicWriteJson(this.featurePath(parsed.id), parsed);
+    });
     await this.touchManifest();
     await this.maybeAutoSync();
   }

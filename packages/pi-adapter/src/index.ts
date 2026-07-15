@@ -483,7 +483,7 @@ async function buildHandoffMarkdown(
 
   const filesTouched = [
     ".planner/project.json",
-    ".planner/features.json",
+    ".planner/features/",
     currentPhase ? `.planner/phases/${currentPhase.id}.json` : "",
     latestPhaseUpdate && latestPhaseUpdate.id !== currentPhase?.id ? `.planner/phases/${latestPhaseUpdate.id}.json` : "",
     ".planner/resume.json",
