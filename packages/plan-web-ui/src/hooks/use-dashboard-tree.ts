@@ -270,6 +270,17 @@ export function useDashboardTree({
     setExpandedPhaseIds((current) => current.filter((id) => validPhaseIds.has(id)));
   }, [displayedWorkTree, treeOpenMode]);
 
+  // ── Search-driven expansion ────────────────────────────────────────────
+  // When a search is active, expand exactly the matched feature/phase branches
+  // once. The view layer no longer force-expands matched nodes, so the user can
+  // collapse them manually and “Collapse all” actually works during a search.
+  useEffect(() => {
+    if (!searchActive) return;
+    setTreeOpenMode("smart");
+    setExpandedFeatureIds(Array.from(matchedFeatureIds));
+    setExpandedPhaseIds(Array.from(matchedPhaseIds));
+  }, [searchActive, matchedFeatureIds, matchedPhaseIds]);
+
   const toggleExpandedFeature = (featureId: string) => {
     setTreeOpenMode("smart");
     setExpandedFeatureIds((current) => (current.includes(featureId)

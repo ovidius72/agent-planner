@@ -78,7 +78,7 @@ export function WorkTree({
   };
 
   const isPhaseExpanded = (phaseId: string) =>
-    tree.expandedPhaseIds.includes(phaseId) || (tree.searchActive && tree.matchedPhaseIds.has(phaseId));
+    tree.expandedPhaseIds.includes(phaseId);
   const isPhaseRecentlyChanged = (phaseId: string) => tree.recentPhaseIds.includes(phaseId);
   const isTaskRecentlyChanged = (taskId: string) => tree.recentTaskIds.includes(taskId);
 
@@ -96,21 +96,17 @@ export function WorkTree({
           <Button type="button" variant="secondary" onClick={() => tree.setTreeOpenMode("none")}>
             Collapse all
           </Button>
-          <Button type="button" variant="secondary" onClick={() => tree.setShowAllFeatures((value) => !value)}>
-            {tree.showAllFeatures ? "Show active only" : "Show all features"}
-          </Button>
         </div>
       </div>
 
-      <div className="ap-search-sticky z-20" style={{ top: headerH }}>
       <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
       {tree.searchActive ? (
         <p className="text-xs text-[var(--text-muted)]">
           {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
         </p>
       ) : null}
-      <div className="grid grid-cols-1 gap-3 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:rounded-[18px] sm:px-4 sm:py-3">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={() => tree.setHideDone((value) => !value)}
@@ -130,14 +126,15 @@ export function WorkTree({
             onClick={() => tree.setOnlyActiveBranches((value) => !value)}
             className={`status-chip transition ${tree.onlyActiveBranches ? "status-in-progress" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
           >
-            Only active branches
+            Only active
           </button>
-          <Button type="button" variant="secondary" onClick={tree.resetFilters}>
-            Reset filters
+          <Button type="button" variant="secondary" className="!min-h-9 !px-3 !py-1 !text-xs sm:!min-h-11 sm:!px-4 sm:!py-2 sm:!text-sm" onClick={tree.resetFilters}>
+            Reset
           </Button>
           <Button
             type="button"
             variant="secondary"
+            className="!min-h-9 !px-3 !py-1 !text-xs sm:!min-h-11 sm:!px-4 sm:!py-2 sm:!text-sm"
             disabled={repairing}
             onClick={async () => {
               setRepairing(true);
@@ -155,14 +152,13 @@ export function WorkTree({
               }
             }}
           >
-            {repairing ? "Repairing…" : "Repair plan"}
+            {repairing ? "Repairing…" : "Repair"}
           </Button>
-          {repairMsg ? <span className="text-xs text-[var(--text-muted)]">{repairMsg}</span> : null}
+          {repairMsg ? <span className="hidden text-xs text-[var(--text-muted)] sm:inline sm:truncate">{repairMsg}</span> : null}
         </div>
       </div>
-      </div>
 
-      <div className="grid gap-3">
+      <div className="ap-tree-scroll grid gap-3 pr-1" style={{ maxHeight: `calc(100dvh - ${headerH}px - 220px)` }}>
         {tree.displayedWorkTree.length > 0 ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={tree.displayedWorkTree.map((e) => e.feature.id)} strategy={verticalListSortingStrategy}>
@@ -170,7 +166,7 @@ export function WorkTree({
                 <SortableItem key={entry.feature.id} id={entry.feature.id}>
                   <FeatureTreeRow
                     entry={entry}
-                    expanded={tree.expandedFeatureIds.includes(entry.feature.id) || (tree.searchActive && tree.matchedFeatureIds.has(entry.feature.id))}
+                    expanded={tree.expandedFeatureIds.includes(entry.feature.id)}
                     recentlyChanged={tree.recentFeatureIds.includes(entry.feature.id)}
                     onToggle={() => tree.toggleExpandedFeature(entry.feature.id)}
                     isPhaseExpanded={isPhaseExpanded}
