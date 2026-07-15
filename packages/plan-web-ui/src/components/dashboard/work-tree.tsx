@@ -44,6 +44,22 @@ export function WorkTree({
     window.addEventListener("resize", update);
     return () => { ro.disconnect(); window.removeEventListener("resize", update); };
   }, []);
+  // After a filter/search change, if the sticky bar scrolled out of view above
+  // the header (the tree shrank below the scroll position), gently re-pin it.
+  // Fires only on user-facing filter changes, not on data/WebSocket updates.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const bar = document.querySelector(".ap-search-sticky");
+      const header = document.querySelector("header");
+      if (!bar || !header) return;
+      const rect = bar.getBoundingClientRect();
+      if (rect.top < 0) {
+        const target = rect.top + window.scrollY - header.offsetHeight;
+        window.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+      }
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [tree.searchQuery, tree.hideDone, tree.hidePlanned, tree.onlyActiveBranches]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const handleDragEnd = async (event: DragEndEvent) => {
