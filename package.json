@@ -30,7 +30,8 @@
     "release:publish": "pnpm --filter @agent-plan/core publish --access public && pnpm --filter @agent-plan/mcp publish --access public && pnpm --filter @agent-plan/server publish --access public && pnpm --filter agent-plan publish --access public && pnpm --filter @agent-plan/pi-adapter publish --access public --no-git-checks",
     "release": "node scripts/release.cjs",
     "plugins:sync": "node scripts/sync-plugins.cjs",
-    "plugins:check": "node scripts/sync-plugins.cjs --check"
+    "plugins:check": "node scripts/sync-plugins.cjs --check",
+    "release:next": "node scripts/release-next.cjs"
   },
   "devDependencies": {
     "@types/node": "^25.0.0",

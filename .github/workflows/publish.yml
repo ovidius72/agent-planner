@@ -1,13 +1,19 @@
 name: publish
 
-# Publishes all public packages to npm on every push to main.
+# Publishes all public packages to npm.
+# - On push to `main`: stable release, dist-tag `latest`.
+# - On push to `next`: prerelease channel, dist-tag `next` (does NOT touch
+#   `latest`; install with `npm i @agent-plan/core@next`).
 # Idempotent: each package is published only if its current version is not
 # already on npm (checked via `npm view <name>@<version>`), so re-runs and
 # pushes without version bumps are no-ops.
+#
+# Use prerelease versions on `next` (e.g. 0.2.19-next.0, next.1, ...) since
+# npm rejects re-publishing the same version. Bump with `pnpm release:next`.
 
 on:
   push:
-    branches: [main]
+    branches: [main, next]
   workflow_dispatch:
 
 permissions:
@@ -54,6 +60,14 @@ jobs:
             exit 1
           fi
 
+          # Dist-tag: `next` branch → next (prerelease channel); main → latest (stable).
+          if [ "${GITHUB_REF}" = "refs/heads/next" ]; then
+            NPM_TAG="next"
+          else
+            NPM_TAG="latest"
+          fi
+          echo "Publishing with npm dist-tag: ${NPM_TAG}"
+
           publish_pkg() {
             local dir="$1"
             local name ver priv
@@ -71,8 +85,8 @@ jobs:
               return 0
             fi
 
-            echo "publish  → ${name}@${ver}"
-            pnpm --filter "${name}" publish --access public --no-git-checks
+            echo "publish  → ${name}@${ver} (tag: ${NPM_TAG})"
+            pnpm --filter "${name}" publish --access public --no-git-checks --tag "${NPM_TAG}"
           }
 
           # Order matters for clarity only: each package is independent at

@@ -1,6 +1,6 @@
 {
   "name": "@agent-plan/server",
-  "version": "0.2.17",
+  "version": "0.2.19-next.0",
   "private": false,
   "description": "Local HTTP/WebSocket server for Agent Plan dashboards and planner APIs.",
   "license": "MIT",
