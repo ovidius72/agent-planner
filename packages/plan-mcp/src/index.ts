@@ -69,7 +69,7 @@ async function ensureWebStarted(): Promise<{ localUrl: string; lanUrl?: string |
 /** Build a consolidated planner recap (project state + active work + pending
  *  handoff + web URL). Harness-agnostic equivalent of Pi's buildStartupResumeSummary. */
 async function buildRecapText(st: PlanStore, web: { localUrl: string; lanUrl?: string | undefined }): Promise<string> {
-  const [plan, resume, handoff] = await Promise.all([st.loadAll(), st.loadResume(), st.loadHandoff()]);
+  const [plan, resume, handoffs] = await Promise.all([st.loadAll(), st.loadResume(), st.listHandoffs()]);
   const allTasks = plan.phases.flatMap((p) => p.tasks.map((t) => ({ phase: p, task: t })));
   const totalF = plan.features.features.length;
   const doneF = plan.features.features.filter((f) => f.status === "done").length;
@@ -94,10 +94,12 @@ async function buildRecapText(st: PlanStore, web: { localUrl: string; lanUrl?: s
     lines.push("Current focus: no active task — review the plan and pick the next concrete task");
   }
   if (resume?.nextSteps?.length) lines.push(`Next step: ${resume.nextSteps[0]}`);
-  if (handoff) {
-    lines.push("", "## Pending handoff (read me first)", handoff.content || "(empty handoff)", "", "→ After processing the handoff above, call planner-handoff-clear to remove it.");
+  if (handoffs.length > 0) {
+    lines.push("", `## Pending phase handoffs (${handoffs.length})`);
+    handoffs.forEach((h, i) => lines.push(`[${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`));
+    lines.push("", "→ Read the relevant one with planner-handoff-show <ref> (validate against current state), then call planner-handoff-clear <ref> once consumed (delete-on-resume).");
   } else if (activeT === 0) {
-    lines.push("", "No handoff pending and no task in-progress. Use planner-task-add / planner-task-start to begin work.");
+    lines.push("", "No phase handoff pending and no task in-progress. Use planner-task-add / planner-task-start to begin work.");
   }
   if (web.localUrl) {
     lines.push("", "## Web UI", `🌐 ${web.localUrl}${web.lanUrl ? " (LAN: " + web.lanUrl + ")" : ""}`);
