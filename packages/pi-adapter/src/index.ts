@@ -176,10 +176,13 @@ function resetState(): void {
   taskCompleteReminderSaidThisTurn = false;
 }
 
-async function maybeHealStatuses(st: PlanStore): Promise<void> {
+async function maybeHealStatuses(st: PlanStore, ctx?: any): Promise<void> {
   if (healedStatusRoots.has(st.root)) return;
-  await st.syncStatuses();
+  const cleared = await st.syncStatuses();
   healedStatusRoots.add(st.root);
+  if (cleared.length > 0 && ctx?.ui?.notify) {
+    try { ctx.ui.notify(`ℹ️  Handoff auto-cleared (phase completed): ${cleared.join(", ")}`, "info"); } catch {}
+  }
 }
 
 function normalizeLanguagePref(value: string | undefined): string {
@@ -895,11 +898,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
     plannerSessionEnabled = enablePlanner;
 
-    // Proactive check for leftover handoff files.
+    // Proactive review hint: surface pending phase handoffs (entity-scoped).
     if (plannerSessionEnabled) {
-      const handoffPath = join(st.root, "HANDOFF.md");
-      if (existsSync(handoffPath)) {
-        ctx.ui.notify("🚨 HANDOFF DETECTED: Read and delete .planner/HANDOFF.md immediately to avoid state conflicts.", "warning");
+      const handoffs = await st.listHandoffs().catch(() => []);
+      if (handoffs.length > 0) {
+        ctx.ui.notify(`ℹ️  ${handoffs.length} phase handoff(s) pending — review with /planner handoff list.`, "info");
       }
     }
 
@@ -1017,7 +1020,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     const st = loadStore(ctx);
     if (!(await st.exists().catch(() => false))) return;
-    await maybeHealStatuses(st).catch(() => {});
+    await maybeHealStatuses(st, ctx).catch(() => {});
 
     const guard = await getPlannerExecutionGuard(st).catch(() => null);
     if (!guard || guard.totalTasks === 0) return; // nothing to enforce yet
@@ -2023,8 +2026,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (!valid.includes(normalizedStatus)) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
-          if (normalizedStatus === "in-progress" && (existsSync(join(st.root, "HANDOFF.md")) || (await st.listHandoffs()).length > 0)) {
-            ctx.ui.notify("ℹ️  A handoff exists — read it with /planner handoff list|show, then clear with /planner handoff clear when no longer needed. Proceeding with the status change.", "info");
+          if (normalizedStatus === "in-progress" && (await st.listHandoffs()).length > 0) {
+            ctx.ui.notify("ℹ️  One or more phases have a pending handoff — if relevant to this task, read it with /planner handoff show <ref>, then clear with /planner handoff clear. Proceeding with the status change.", "info");
           }
           applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
@@ -2059,8 +2062,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // block task_start — the handoff is a captured-context artifact, not a
         // lock (a small modification after writing a handoff should start without
         // forcing deletion, which would lose context).
-        if (existsSync(join(st.root, "HANDOFF.md")) || (await st.listHandoffs()).length > 0) {
-          ctx.ui.notify("ℹ️  A handoff exists — read it with /planner handoff list|show, then clear with /planner handoff clear when no longer needed. Proceeding with task start.", "info");
+        if ((await st.listHandoffs()).length > 0) {
+          ctx.ui.notify("ℹ️  One or more phases have a pending handoff — if relevant to the task you're starting, read it with /planner handoff show <ref>, then clear with /planner handoff clear. Proceeding with task start.", "info");
         }
         const now = nowISO();
         // Record status change in the incremental statusLog.
@@ -2343,7 +2346,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   async function requirePlan(ctx: ExtensionContext): Promise<PlanStore | null> {
     const st = loadStore(ctx);
     if (!(await st.exists())) return null;
-    await maybeHealStatuses(st);
+    await maybeHealStatuses(st, ctx);
     return st;
   }
 
@@ -3573,7 +3576,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await migrateToUuids(st);
         await st.ensureShortIdsAndPriority().catch(() => null);
         await ensureProjectLanguagePreferences(st).catch(() => null);
-        await maybeHealStatuses(st);
+        await maybeHealStatuses(st, ctx);
         await st.refreshResume();
         plannerHeavyInitDone = true;
       }

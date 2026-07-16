@@ -739,8 +739,8 @@ server.registerTool("planner-task-start", {
   // task_start — the handoff is a captured-context artifact, not a lock (e.g. a
   // small modification after writing a handoff should start without forcing
   // deletion, which would lose context).
-  const handoffNotice = (existsSync(join(st.root, "HANDOFF.md")) || (await st.listHandoffs()).length > 0)
-    ? "ℹ️  A handoff exists — read it with planner-handoff-list | planner-handoff-show, then clear with planner-handoff-clear when no longer needed. Proceeding with task start.\n"
+  const handoffNotice = (await st.listHandoffs()).length > 0
+    ? "ℹ️  One or more phases have a pending handoff — if relevant to the task you're starting, read it with planner-handoff-show <ref>, then clear with planner-handoff-clear. Proceeding with task start.\n"
     : "";
 
   const found = findTaskByRef(await st.loadAllPhases(), ref);
@@ -811,8 +811,8 @@ server.registerTool("planner-task-complete", {
     updatedTask = task;
     return phase;
   });
-  await st.syncTaskStatusRollup(found.phase.id);
-  return writeAndSummarize(st, `✅ Task completed: ${found.task.id}`, { task: updatedTask ?? found.task });
+  const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
+  return writeAndSummarize(st, `✅ Task completed: ${found.task.id}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}`, { task: updatedTask ?? found.task });
 });
 
 server.registerTool("planner-handoff-list", {

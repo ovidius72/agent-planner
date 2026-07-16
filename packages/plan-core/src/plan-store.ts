@@ -1140,17 +1140,28 @@ export class PlanStore {
     return "planned";
   }
 
-  async syncStatuses(): Promise<void> {
+  async syncStatuses(): Promise<string[]> {
     // Run as a batch so the internal saveFeatures + N savePhase calls do not
     // re-trigger syncStatuses on every write (O(N^2) on large planners).
+    // Returns the composite refs of phases whose handoff was auto-cleared
+    // (phase transitioned to done).
+    const cleared: string[] = [];
     await this.runAsBatch(async () => {
       await this.migratePhaseIds();
       const workspace = await this.loadAll();
       const { phases, features } = workspace;
+      const featNum = new Map(features.features.map((f) => [f.id, f.number]));
 
-      // 1. Update Phase statuses based on tasks
+      // 1. Update Phase statuses based on tasks; auto-clear handoff when a
+      //    phase transitions to done (completed phases don't keep stale
+      //    handoffs). handoffUpdatedAt is kept as an audit trail.
       for (const phase of phases) {
+        const was = phase.status;
         phase.status = this.derivePhaseStatus(phase);
+        if (phase.status === "done" && was !== "done" && phase.handoff) {
+          phase.handoff = "";
+          cleared.push(formatPhaseRef(phase.number, featNum.get(phase.featureId ?? "")));
+        }
       }
 
       // 2. Update Feature statuses based on phases
@@ -1167,18 +1178,26 @@ export class PlanStore {
       // 4. Refresh resume focus so a subentrating agent sees current state
       await this.refreshResume();
     });
+    return cleared;
   }
 
   /** Optimized rollup: syncs only the affected phase and its parent feature.
-   *  Drastically reduces write operations and 'busy' window for task updates. */
-  async syncTaskStatusRollup(phaseId: string): Promise<void> {
+   *  Drastically reduces write operations and 'busy' window for task updates.
+   *  Returns the composite ref of the phase if its handoff was auto-cleared
+   *  (phase transitioned to done), else null. */
+  async syncTaskStatusRollup(phaseId: string): Promise<string | null> {
     const phase = await this.loadPhase(phaseId);
+    const was = phase.status;
     phase.status = this.derivePhaseStatus(phase);
+    // Auto-clear handoff when the phase transitions to done.
+    const cleared = phase.status === "done" && was !== "done" && phase.handoff !== "";
+    if (cleared) phase.handoff = "";
     await this.savePhase(phase);
 
+    let feature: Feature | undefined;
     if (phase.featureId) {
       const featuresDoc = await this.loadFeatures();
-      const feature = featuresDoc.features.find((f) => f.id === phase.featureId);
+      feature = featuresDoc.features.find((f) => f.id === phase.featureId);
       if (feature) {
         // To derive feature status, we still need the statuses of all its phases
         const allPhases = await this.loadAllPhases();
@@ -1187,6 +1206,7 @@ export class PlanStore {
       }
     }
     await this.refreshResume();
+    return cleared ? formatPhaseRef(phase.number, feature?.number) : null;
   }
 
   // ── Savers ───────────────────────────────────────────────────────────
