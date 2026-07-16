@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
+import { CopyableBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusBadge } from "../ui/status-badge";
 import { DragHandle, SortableItem } from "./sortable";
 import type { WorkTreeFeature, WorkTreePhase } from "../../lib/dashboard-tree";
@@ -234,6 +234,7 @@ export function PhaseTreeRow({
                 />
               </CopyableBadge>
               {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
+              {phase.handoff ? <HandoffBadge updatedAt={phase.handoffUpdatedAt} /> : null}
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}

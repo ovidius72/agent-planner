@@ -52,6 +52,14 @@ export function formatThreeDigitNumber(value: number): string {
   return String(value).padStart(3, "0");
 }
 
+/** Human-readable phase composite ref: `P00x` or `P00x(F00x)` when the parent
+ *  feature number is known. Harness-agnostic (used by core handoff listing +
+ *  adapters). */
+export function formatPhaseRef(phaseNumber: number, featureNumber?: number): string {
+  const p = `P${formatThreeDigitNumber(phaseNumber)}`;
+  return featureNumber != null ? `${p}(F${formatThreeDigitNumber(featureNumber)})` : p;
+}
+
 export function createPhaseId(): string {
   return randomUUID();
 }

@@ -11,8 +11,8 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation, findPhaseByRef } from "@agent-plan/core";
+import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -110,10 +110,11 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "task delete", label: "task delete", description: "Delete a task" },
   { value: "task start", label: "task start", description: "Mark a task in-progress" },
   { value: "task complete", label: "task complete", description: "Mark a task done" },
-  { value: "handoff prepare", label: "handoff prepare", description: "Tell the agent to create/update the handoff" },
-  { value: "handoff show", label: "handoff show", description: "Show the current handoff" },
-  { value: "handoff write", label: "handoff write", description: "Write handoff directly from planner data" },
-  { value: "handoff clear", label: "handoff clear", description: "Delete the current handoff" },
+  { value: "handoff list", label: "handoff list", description: "List phases with a handoff" },
+  { value: "handoff prepare", label: "handoff prepare", description: "Tell the agent to write the handoff (legacy file-based)" },
+  { value: "handoff show", label: "handoff show [P00x]", description: "Show a phase handoff (default: in-progress phase)" },
+  { value: "handoff write", label: "handoff write [P00x]", description: "Write a phase handoff (default: in-progress phase)" },
+  { value: "handoff clear", label: "handoff clear [P00x]", description: "Clear a phase handoff (default: in-progress phase)" },
   { value: "web start", label: "web start", description: "Start the web UI" },
   { value: "web stop", label: "web stop", description: "Stop the web UI" },
   { value: "web status", label: "web status", description: "Show web UI status" },
@@ -175,10 +176,13 @@ function resetState(): void {
   taskCompleteReminderSaidThisTurn = false;
 }
 
-async function maybeHealStatuses(st: PlanStore): Promise<void> {
+async function maybeHealStatuses(st: PlanStore, ctx?: any): Promise<void> {
   if (healedStatusRoots.has(st.root)) return;
-  await st.syncStatuses();
+  const cleared = await st.syncStatuses();
   healedStatusRoots.add(st.root);
+  if (cleared.length > 0 && ctx?.ui?.notify) {
+    try { ctx.ui.notify(`ℹ️  Handoff auto-cleared (phase completed): ${cleared.join(", ")}`, "info"); } catch {}
+  }
 }
 
 function normalizeLanguagePref(value: string | undefined): string {
@@ -257,10 +261,10 @@ function taskLabel(task: Task): string {
 }
 
 async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
-  const [plan, resume, handoff] = await Promise.all([
+  const [plan, resume, handoffs] = await Promise.all([
     st.loadAll(),
     st.refreshResume(),
-    st.loadHandoff(),
+    st.listHandoffs(),
   ]);
 
   const phaseById = new Map(plan.phases.map((phase) => [phase.id, phase]));
@@ -320,8 +324,8 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
         : currentPhase
           ? `riprendere la fase ${currentPhase.id} — ${phaseLabel(currentPhase)}`
           : "riprendere il lavoro attivo corrente"))
-    : (handoff?.updatedAt
-      ? "leggere l'handoff e verificare ordine, dipendenze e stato reale del piano prima di scegliere il prossimo task"
+    : (handoffs.length > 0
+      ? "leggere l'handoff di fase più recente (handoff show <ref>) e verificarne ordine e stato rispetto al piano prima di scegliere il prossimo task"
       : "rivedere il piano e scegliere il prossimo task concreto");
 
   const chatLanguage = (plan.project.chatLanguage || "").toLowerCase();
@@ -337,8 +341,8 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
       currentFeature ? `- Focus feature: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Focus feature: nessuna feature attiva chiara.",
       currentPhase ? `- Focus fase: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Focus fase: nessuna fase attiva chiara.",
       currentTask ? `- Focus task: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Focus task: nessun task attivo in questo momento.",
-      handoff?.updatedAt ? `- Handoff letto da .planner/HANDOFF.md (aggiornato ${handoff.updatedAt}).` : "- Nessun handoff strutturato disponibile.",
-      !hasActiveWork && handoff?.updatedAt ? "- Nota: l'handoff è un suggerimento della sessione precedente; con 0 task/fasi attivi va validato contro stato e dipendenze correnti prima di riprendere un task specifico." : "",
+      handoffs.length > 0 ? `- Handoff di fase pendenti (${handoffs.length}):\n${handoffs.map((h, i) => `  [${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`).join("\n")}` : "- Nessun handoff di fase pendente.",
+      !hasActiveWork && handoffs.length > 0 ? "- Nota: l'handoff di fase è un suggerimento della sessione precedente; con 0 task/fasi attivi va validato contro stato e dipendenze correnti prima di riprendere un task specifico." : "",
       `- Prossima attività consigliata: ${nextActivity}.`,
       "",
       "Vuoi che riprendiamo da qui?",
@@ -353,8 +357,8 @@ async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
     currentFeature ? `- Feature focus: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Feature focus: no clear active feature.",
     currentPhase ? `- Phase focus: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Phase focus: no clear active phase.",
     currentTask ? `- Task focus: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Task focus: no active task right now.",
-    handoff?.updatedAt ? `- Handoff loaded from .planner/HANDOFF.md (updated ${handoff.updatedAt}).` : "- No structured handoff found.",
-    !hasActiveWork && handoff?.updatedAt ? "- Note: the handoff is only a previous-session hint; with 0 active tasks/phases it must be validated against current planner state and dependencies before resuming a specific task." : "",
+    handoffs.length > 0 ? `- Pending phase handoffs (${handoffs.length}):\n${handoffs.map((h, i) => `  [${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`).join("\n")}` : "- No pending phase handoffs.",
+    !hasActiveWork && handoffs.length > 0 ? "- Note: the phase handoff is only a previous-session hint; with 0 active tasks/phases it must be validated against current planner state and dependencies before resuming a specific task." : "",
     `- Recommended next activity: ${nextActivity}.`,
     "",
     "Do you want to resume from here?",
@@ -374,14 +378,13 @@ async function buildHandoffMarkdown(
     extraSections?: Array<{ heading: string; body: string }>;
   },
 ): Promise<string> {
-  const [plan, resume, activity, existingHandoff] = await Promise.all([
+  const [plan, resume, activity] = await Promise.all([
     st.loadAll(),
-    st.refreshResume(),
+ st.refreshResume(),
     st.loadActivityLog(),
-    st.loadHandoff(),
   ]);
 
-  const createdAt = existingHandoff?.createdAt || nowISO();
+  const createdAt = nowISO();
   const updatedAt = nowISO();
   const allTasks = plan.phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
   const nonTerminalTasks = allTasks.filter(({ task }) => task.status !== "done" && task.status !== "canceled");
@@ -474,7 +477,7 @@ async function buildHandoffMarkdown(
         : currentPhase
           ? `1. Open phase ${currentPhase.id} (${currentPhase.title}).`
           : "1. Open the planner dashboard and inspect the latest feature/phase state.",
-      "2. Read `.planner/HANDOFF.md` and compare it with the latest planner data.",
+      "2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.",
       currentTask && currentTask.status !== "in-progress"
         ? `3. Before implementation work, run /planner task start ${currentTask.id} (or call task_start).`
         : "3. Confirm whether the current task is already in-progress before doing implementation work.",
@@ -483,11 +486,10 @@ async function buildHandoffMarkdown(
 
   const filesTouched = [
     ".planner/project.json",
-    ".planner/features.json",
+    ".planner/features/",
     currentPhase ? `.planner/phases/${currentPhase.id}.json` : "",
     latestPhaseUpdate && latestPhaseUpdate.id !== currentPhase?.id ? `.planner/phases/${latestPhaseUpdate.id}.json` : "",
     ".planner/resume.json",
-    ".planner/HANDOFF.md",
     ".planner/generated/PLAN.md",
   ].filter(Boolean);
 
@@ -554,7 +556,7 @@ async function buildHandoffMarkdown(
     ...recentActivityLines,
     "",
     "## Reminder",
-    "- When work is fully resumed and this handoff is no longer needed, delete `.planner/HANDOFF.md`.",
+    "- When work is fully resumed and this handoff is no longer needed, clear the phase handoff with handoff clear <ref> (or /planner handoff clear).",
   ].join("\n");
 }
 
@@ -569,8 +571,14 @@ async function writeProjectHandoff(
     extraSections?: Array<{ heading: string; body: string }>;
   },
 ): Promise<void> {
+  // Entity-scoped: write the auto-handoff on the current in-progress phase
+  // (not the deprecated .planner/HANDOFF.md file). If no in-progress phase,
+  // skip silently — the resume flow falls back to resume.json.
+  const phases = await st.loadAllPhases();
+  const phase = phases.find((p) => p.status === "in-progress") ?? null;
+  if (!phase) return;
   const markdown = await buildHandoffMarkdown(st, reason, overrides);
-  await st.saveHandoff(markdown);
+  await st.setPhaseHandoff(phase.id, markdown);
 }
 
 function compactShortcut(spec: ShortcutConfigSpec): ShortcutConfigSpec {
@@ -894,11 +902,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
     plannerSessionEnabled = enablePlanner;
 
-    // Proactive check for leftover handoff files.
+    // Proactive review hint: surface pending phase handoffs (entity-scoped).
     if (plannerSessionEnabled) {
-      const handoffPath = join(st.root, "HANDOFF.md");
-      if (existsSync(handoffPath)) {
-        ctx.ui.notify("🚨 HANDOFF DETECTED: Read and delete .planner/HANDOFF.md immediately to avoid state conflicts.", "warning");
+      const handoffs = await st.listHandoffs().catch(() => []);
+      if (handoffs.length > 0) {
+        ctx.ui.notify(`ℹ️  ${handoffs.length} phase handoff(s) pending — review with /planner handoff list.`, "info");
       }
     }
 
@@ -1016,7 +1024,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     const st = loadStore(ctx);
     if (!(await st.exists().catch(() => false))) return;
-    await maybeHealStatuses(st).catch(() => {});
+    await maybeHealStatuses(st, ctx).catch(() => {});
 
     const guard = await getPlannerExecutionGuard(st).catch(() => null);
     if (!guard || guard.totalTasks === 0) return; // nothing to enforce yet
@@ -1110,7 +1118,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     const SUB_HELP = "Available: init, show, repair, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, stop\n" +
       "Try: /planner <TAB>  |  /planner feature list  |  /planner task start  |  /planner export-full\n" +
-      "Handoff actions: /planner handoff prepare | show | write | clear";
+      "Handoff actions: /planner handoff list | show [P00x] | write [P00x] | clear [P00x] | prepare";
 
     if (!a) {
       const action = await ctx.ui.select("Planner action", PLANNER_MENU_ACTIONS);
@@ -1677,6 +1685,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
             openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
             createdAt: nowISO(), updatedAt: nowISO(),
+            handoff: "", handoffUpdatedAt: "",
           };
           await st.savePhase(phase);
           await st.updateFeatures((doc) => {
@@ -2021,8 +2030,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (!valid.includes(normalizedStatus)) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
-          if (normalizedStatus === "in-progress" && existsSync(join(st.root, "HANDOFF.md"))) {
-            ctx.ui.notify("ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with /planner handoff clear (or plan_delete_handoff) when no longer needed. Proceeding with the status change.", "info");
+          if (normalizedStatus === "in-progress" && (await st.listHandoffs()).length > 0) {
+            ctx.ui.notify("ℹ️  One or more phases have a pending handoff — if relevant to this task, read it with /planner handoff show <ref>, then clear with /planner handoff clear. Proceeding with the status change.", "info");
           }
           applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
@@ -2057,8 +2066,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // block task_start — the handoff is a captured-context artifact, not a
         // lock (a small modification after writing a handoff should start without
         // forcing deletion, which would lose context).
-        if (existsSync(join(st.root, "HANDOFF.md"))) {
-          ctx.ui.notify("ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with /planner handoff clear (or plan_delete_handoff) when no longer needed. Proceeding with task start.", "info");
+        if ((await st.listHandoffs()).length > 0) {
+          ctx.ui.notify("ℹ️  One or more phases have a pending handoff — if relevant to the task you're starting, read it with /planner handoff show <ref>, then clear with /planner handoff clear. Proceeding with task start.", "info");
         }
         const now = nowISO();
         // Record status change in the incremental statusLog.
@@ -2139,53 +2148,61 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // ── handoff ──
     if (a === "handoff") {
       const action = b || "show";
+      const phaseRef = parts[2]?.trim();
       if (!(await st.exists())) { ctx.ui.notify("No .planner/ found.", "warning"); return; }
-      if (action === "show") {
-        const handoff = await st.loadHandoff();
-        if (!handoff) { ctx.ui.notify("No .planner/HANDOFF.md present.", "info"); return; }
-        ctx.ui.notify(handoff.content, "info");
+      if (action === "list") {
+        const list = await st.listHandoffs();
+        if (list.length === 0) { ctx.ui.notify("No phase handoffs set.", "info"); return; }
+        ctx.ui.notify(list.map((e) => `• ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`).join("\n"), "info");
         return;
       }
-      if (action === "prepare" || action === "write") {
-        if (action === "prepare") {
-          if (!capturedPi) { ctx.ui.notify("Agent bridge unavailable; use /planner handoff write for an auto-generated handoff.", "warning"); return; }
-          const handoff = await st.loadHandoff();
-          await capturedPi.sendUserMessage(
-            "Prepare the canonical session handoff now and write it to `.planner/HANDOFF.md` using the `plan_write_handoff` tool.\n\n" +
-            "The handoff MUST be a structured markdown document containing at minimum:\n" +
-            "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
-            "- `Reason:` why this handoff is being written\n" +
-            "- `## Current focus`: the current feature (id + name + status), phase (id + title + status) and task (id + title + status). Derive them from the plan data.\n" +
-            "- `## What was being done`: a concrete 3–10 line narrative of the work in progress, based on our conversation and the current task notes/description.\n" +
-            "- `## How to resume`: explicit, ordered steps to pick the work back up (next command / tool / file to open / build to run).\n" +
-            "- `## Files touched`: explicit file paths modified during this session.\n" +
-            "- `## Blockers`: any open blockers, or `None recorded`.\n" +
-            "- `## Next steps`: the immediate next steps.\n" +
-            "- `## Recent decisions`: accepted decisions made this session, if any.\n" +
-            "- `## Reminder`: note that when the work is fully resumed, the agent must delete `.planner/HANDOFF.md` using `plan_delete_handoff`.\n\n" +
-            "Do NOT write the handoff to `.pi/`. The canonical path is `.planner/HANDOFF.md`. " +
-            (handoff?.content ? "A previous handoff exists; refresh its `Updated at` and merge/replace stale sections. " : "") +
-            "Once written, confirm to me with a one-line summary."
-          );
-          ctx.ui.notify("Instructing the agent to prepare .planner/HANDOFF.md…", "info");
-          return;
-        }
-        // action === "write": auto-generate from plan data without agent narrative.
-        const whatWasBeingDone = await ctx.ui.input("What was being done? (optional override)");
-        const howToResume = await ctx.ui.input("How should the next agent resume? (optional override)");
-        await writeProjectHandoff(st, "manual on-demand handoff", {
-          ...(whatWasBeingDone?.trim() ? { whatWasBeingDone: whatWasBeingDone.trim() } : {}),
-          ...(howToResume?.trim() ? { howToResume: howToResume.trim() } : {}),
-        });
-        ctx.ui.notify("Wrote .planner/HANDOFF.md", "info");
+      if (action === "show") {
+        const r = await resolvePhaseForHandoff(st, phaseRef);
+        if (!r.ok) { ctx.ui.notify(r.error, "warning"); return; }
+        const content = await st.getPhaseHandoff(r.phase.id);
+        ctx.ui.notify(content.trim() ? `Handoff ${r.compositeRef}:\n${content}` : `No handoff set on ${r.compositeRef}.`, "info");
+        return;
+      }
+      if (action === "write") {
+        const r = await resolvePhaseForHandoff(st, phaseRef);
+        if (!r.ok) { ctx.ui.notify(r.error, "warning"); return; }
+        const text = await ctx.ui.input(`Handoff text for ${r.compositeRef}`);
+        if (!text?.trim()) { ctx.ui.notify("No text provided; nothing written.", "info"); return; }
+        await st.setPhaseHandoff(r.phase.id, text);
+        ctx.ui.notify(`Wrote handoff on ${r.compositeRef}`, "info");
+        return;
+      }
+      if (action === "prepare") {
+        if (!capturedPi) { ctx.ui.notify("Agent bridge unavailable; use /planner handoff write for an auto-generated handoff.", "warning"); return; }
+        const handoffs = await st.listHandoffs();
+        await capturedPi.sendUserMessage(
+          "Prepare the canonical session handoff now and write it on the current in-progress phase using the `handoff_write` tool (entity-scoped, stored on phase.handoff — .planner/HANDOFF.md is deprecated).\n\n" +
+          "The handoff MUST be a structured markdown document containing at minimum:\n" +
+          "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
+          "- `Reason:` why this handoff is being written\n" +
+          "- `## Current focus`: the current feature (id + name + status), phase (id + title + status) and task (id + title + status). Derive them from the plan data.\n" +
+          "- `## What was being done`: a concrete 3–10 line narrative of the work in progress, based on our conversation and the current task notes/description.\n" +
+          "- `## How to resume`: explicit, ordered steps to pick the work back up (next command / tool / file to open / build to run).\n" +
+          "- `## Files touched`: explicit file paths modified during this session.\n" +
+          "- `## Blockers`: any open blockers, or `None recorded`.\n" +
+          "- `## Next steps`: the immediate next steps.\n" +
+          "- `## Recent decisions`: accepted decisions made this session, if any.\n" +
+          "- `## Reminder`: note that when the work is fully resumed, the agent should clear the phase handoff using `handoff_clear`.\n\n" +
+          "The handoff is stored on the phase.handoff field of the current in-progress phase (entity-scoped). " +
+          (handoffs.length > 0 ? "A previous phase handoff exists; refresh its `Updated at` and merge/replace stale sections. " : "") +
+          "Once written, confirm to me with a one-line summary."
+        );
+        ctx.ui.notify("Instructing the agent to prepare the phase handoff…", "info");
         return;
       }
       if (action === "clear" || action === "delete") {
-        await st.deleteHandoff();
-        ctx.ui.notify("Deleted .planner/HANDOFF.md", "info");
+        const r = await resolvePhaseForHandoff(st, phaseRef);
+        if (!r.ok) { ctx.ui.notify(r.error, "warning"); return; }
+        await st.clearPhaseHandoff(r.phase.id);
+        ctx.ui.notify(`Cleared handoff on ${r.compositeRef}`, "info");
         return;
       }
-      ctx.ui.notify("handoff actions: prepare | show | write | clear\nUse: /planner handoff prepare | show | write | clear", "info");
+      ctx.ui.notify("handoff actions: list | show [phaseRef] | write [phaseRef] | clear [phaseRef] | prepare\nUse: /planner handoff list | show | write | clear | prepare", "info");
       return;
     }
 
@@ -2333,7 +2350,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   async function requirePlan(ctx: ExtensionContext): Promise<PlanStore | null> {
     const st = loadStore(ctx);
     if (!(await st.exists())) return null;
-    await maybeHealStatuses(st);
+    await maybeHealStatuses(st, ctx);
     return st;
   }
 
@@ -2613,21 +2630,22 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_get_handoff",
     label: "Plan Get Handoff",
-    description: "Read the current .planner/HANDOFF.md if present.",
+    description: "DEPRECATED — redirects to the entity-scoped handoff (phase.handoff). Lists current phase handoffs. Prefer handoff_list / handoff_show.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const handoff = await st.loadHandoff();
-      if (!handoff) return { content: [{ type: "text", text: "No .planner/HANDOFF.md present." }], details: { exists: false } };
-      return { content: [{ type: "text", text: handoff.content }], details: { exists: true, ...handoff } };
+      const list = await st.listHandoffs();
+      if (list.length === 0) return { content: [{ type: "text", text: "⚠️ plan_get_handoff is deprecated — no phase handoffs set. Use handoff_list / handoff_show (entity-scoped, phase.handoff field)." }], details: { deprecated: true, count: 0 } };
+      const lines = list.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`);
+      return { content: [{ type: "text", text: `⚠️ plan_get_handoff is deprecated — use handoff_list / handoff_show. Phase handoffs (${list.length}):\n${lines.join("\n")}` }], details: { deprecated: true, count: list.length, handoffs: list } };
     },
   });
 
   pi.registerTool({
     name: "plan_write_handoff",
     label: "Plan Write Handoff",
-    description: "Write or refresh the canonical .planner/HANDOFF.md document. Capture full design context, not just operational resume steps: pass extraSections with locked decisions, architecture (with file:line refs), mode/state flows, plugin/API contracts, data mappings, files touched, and known gaps so a resuming agent doesn't re-discover decisions already made.",
+    description: "DEPRECATED — writes to the entity-scoped phase.handoff (not .planner/HANDOFF.md). Prefer handoff_write. Write or refresh the canonical phase handoff. Capture full design context, not just operational resume steps: pass extraSections with locked decisions, architecture (with file:line refs), mode/state flows, plugin/API contracts, data mappings, files touched, and known gaps so a resuming agent doesn't re-discover decisions already made.",
     parameters: Type.Object({
       reason: Type.Optional(Type.String({ description: "Why the handoff is being written" })),
       whatWasBeingDone: Type.Optional(Type.String({ description: "Optional override for the current work summary" })),
@@ -2643,7 +2661,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      await writeProjectHandoff(st, params.reason?.trim() || "manual tool handoff", {
+      const markdown = await buildHandoffMarkdown(st, params.reason?.trim() || "manual tool handoff", {
         ...(params.whatWasBeingDone?.trim() ? { whatWasBeingDone: params.whatWasBeingDone.trim() } : {}),
         ...(params.howToResume?.trim() ? { howToResume: params.howToResume.trim() } : {}),
         ...(params.extraSections && params.extraSections.length > 0
@@ -2654,21 +2672,125 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             }
           : {}),
       });
-      const handoff = await st.loadHandoff();
-      return { content: [{ type: "text", text: "Wrote .planner/HANDOFF.md" }], details: handoff ?? {} };
+      const r = await resolvePhaseForHandoff(st, undefined);
+      if (!r.ok) return { content: [{ type: "text", text: `⚠️ plan_write_handoff is deprecated (writes to phase.handoff, not .planner/HANDOFF.md). ${r.error}` }], details: { deprecated: true, error: r.error } };
+      await st.setPhaseHandoff(r.phase.id, markdown);
+      return { content: [{ type: "text", text: `⚠️ plan_write_handoff is deprecated — wrote handoff on ${r.compositeRef} (phase.handoff field) instead of .planner/HANDOFF.md. Prefer the handoff_write tool.` }], details: { deprecated: true, phaseRef: r.compositeRef, phaseId: r.phase.id } };
     },
   });
 
   pi.registerTool({
     name: "plan_delete_handoff",
     label: "Plan Delete Handoff",
-    description: "Delete .planner/HANDOFF.md after the resume has been fully consumed.",
+    description: "DEPRECATED — clears the entity-scoped handoff of the current in-progress phase. Prefer handoff_clear.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      await st.deleteHandoff();
-      return { content: [{ type: "text", text: "Deleted .planner/HANDOFF.md" }], details: { deleted: true } };
+      const r = await resolvePhaseForHandoff(st, undefined);
+      if (!r.ok) return { content: [{ type: "text", text: `⚠️ plan_delete_handoff is deprecated — use handoff_clear. ${r.error}` }], details: { deprecated: true, error: r.error } };
+      await st.clearPhaseHandoff(r.phase.id);
+      return { content: [{ type: "text", text: `⚠️ plan_delete_handoff is deprecated — cleared handoff on ${r.compositeRef} (phase.handoff). Prefer handoff_clear.` }], details: { deprecated: true, phaseRef: r.compositeRef, phaseId: r.phase.id } };
+    },
+  });
+
+  // ── entity-scoped handoff (phase.handoff field) ──
+  type PhaseHandoffResolve =
+    | { ok: true; phase: Phase; compositeRef: string }
+    | { ok: false; error: string };
+
+  // Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
+  // UUID | title; omitted -> current in-progress phase (phase.status, or the
+  // phase containing an in-progress task). Returns the phase + its composite ref.
+  async function resolvePhaseForHandoff(
+    st: PlanStore,
+    ref: string | undefined,
+  ): Promise<PhaseHandoffResolve> {
+    const phases = await st.loadAllPhases();
+    const features = (await st.loadFeatures()).features;
+    let phase: Phase | undefined;
+    if (ref && ref.trim()) {
+      phase = findPhaseByRef(phases, features, ref.trim());
+    } else {
+      phase = phases.find((p) => p.status === "in-progress")
+        ?? phases.find((p) => p.tasks.some((t) => t.status === "in-progress"));
+    }
+    if (!phase) {
+      return {
+        ok: false,
+        error: ref && ref.trim()
+          ? `Phase not found: "${ref.trim()}". Use P00x, P00x(F00x), UUID, or title.`
+          : "No in-progress phase. Specify a phaseRef (P00x or P00x(F00x)).",
+      };
+    }
+    const feat = phase.featureId ? features.find((f) => f.id === phase.featureId) : undefined;
+    return { ok: true, phase, compositeRef: formatPhaseRef(phase.number, feat?.number) };
+  }
+
+  pi.registerTool({
+    name: "handoff_list",
+    label: "Handoff List",
+    description: "List all phases with a non-empty entity-scoped handoff (phase.handoff field). Returns composite refs (P00x / P00x(F00x)) with the first line and last-updated time.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const list = await st.listHandoffs();
+      if (list.length === 0) return { content: [{ type: "text", text: "No phase handoffs set." }], details: { count: 0 } };
+      const lines = list.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`);
+      return { content: [{ type: "text", text: `Phase handoffs (${list.length}):\n${lines.join("\n")}` }], details: { count: list.length, handoffs: list } };
+    },
+  });
+
+  pi.registerTool({
+    name: "handoff_show",
+    label: "Handoff Show",
+    description: "Read the entity-scoped handoff of a phase. phaseRef accepts P00x, P00x(F00x), UUID, or title. Omit to target the current in-progress phase.",
+    parameters: Type.Object({ phaseRef: Type.Optional(Type.String({ description: "Phase ref: P00x | P00x(F00x) | UUID | title. Default: current in-progress phase." })) }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const r = await resolvePhaseForHandoff(st, params.phaseRef);
+      if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
+      const content = await st.getPhaseHandoff(r.phase.id);
+      if (!content.trim()) return { content: [{ type: "text", text: `No handoff set on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, empty: true } };
+      return { content: [{ type: "text", text: `Handoff for ${r.compositeRef}:\n\n${content}` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
+    },
+  });
+
+  pi.registerTool({
+    name: "handoff_write",
+    label: "Handoff Write",
+    description: "Write/refresh the entity-scoped handoff on a phase. Pass content (or markdown_content). phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase.",
+    parameters: Type.Object({
+      phaseRef: Type.Optional(Type.String({ description: "Phase ref. Default: current in-progress phase." })),
+      content: Type.Optional(Type.String({ description: "Handoff text (plain)." })),
+      markdown_content: Type.Optional(Type.String({ description: "Handoff text (markdown). Preferred over content." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const body = (params.markdown_content ?? params.content ?? "").trim();
+      if (!body) return { content: [{ type: "text", text: "❌ Provide the handoff text (content or markdown_content)." }], details: { error: "empty text" } };
+      const r = await resolvePhaseForHandoff(st, params.phaseRef);
+      if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
+      await st.setPhaseHandoff(r.phase.id, body);
+      return { content: [{ type: "text", text: `✅ Wrote handoff on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
+    },
+  });
+
+  pi.registerTool({
+    name: "handoff_clear",
+    label: "Handoff Clear",
+    description: "Clear the entity-scoped handoff of a phase (sets handoff to empty, keeps handoffUpdatedAt as an audit trail). phaseRef optional (default: current in-progress phase).",
+    parameters: Type.Object({ phaseRef: Type.Optional(Type.String({ description: "Phase ref. Default: current in-progress phase." })) }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const r = await resolvePhaseForHandoff(st, params.phaseRef);
+      if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
+      await st.clearPhaseHandoff(r.phase.id);
+      return { content: [{ type: "text", text: `✅ Cleared handoff on ${r.compositeRef}. (handoffUpdatedAt preserved as audit)` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
     },
   });
 
@@ -2964,6 +3086,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
           openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
           createdAt: now, updatedAt: now,
+          handoff: "", handoffUpdatedAt: "",
         };
         await st.savePhase(phase);
 
@@ -3457,7 +3580,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await migrateToUuids(st);
         await st.ensureShortIdsAndPriority().catch(() => null);
         await ensureProjectLanguagePreferences(st).catch(() => null);
-        await maybeHealStatuses(st);
+        await maybeHealStatuses(st, ctx);
         await st.refreshResume();
         plannerHeavyInitDone = true;
       }
@@ -3491,7 +3614,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const resume = await st.loadResume().catch(() => null) ?? await st.refreshResume();
       const activity = await st.loadActivityLog();
       const recentActivity = activity.entries.slice(-8).reverse();
-      const handoff = await st.loadHandoff();
+      const handoffs = await st.listHandoffs();
 
       const phaseById = new Map(plan.phases.map((phase) => [phase.id, phase]));
       const orderedPhases = [
@@ -3543,8 +3666,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const nextActivity = hasActiveWork
         ? (resume.nextSteps[0]
           ?? (currentTask ? `Resume task ${currentTask.id} — ${taskLabel(currentTask)}` : currentPhase ? `Resume phase ${currentPhase.id} — ${phaseLabel(currentPhase)}` : "Resume the active work stream"))
-        : (handoff?.updatedAt
-          ? "Read the handoff, then validate current plan ordering and dependencies before picking the next task."
+        : (handoffs.length > 0
+          ? "Read the most recent phase handoff (handoff show <ref>), validate it against current plan ordering and dependencies, then pick the next task."
           : "Review the current plan and choose the next task.");
       const webServer = server as ServeHandle | null;
       const webLocalUrl = webServer?.localUrl ?? webServer?.url ?? "";
@@ -3583,7 +3706,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         currentFeature ? `- Mention current feature ONLY because it is actually active: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Mention that no current feature is active.",
         currentPhase ? `- Mention current phase ONLY because it is actually active: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Mention that no current phase is active.",
         currentTask ? `- Mention current task ONLY because it is actually active: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Mention that no current task is active.",
-        !hasActiveWork ? "- If a handoff exists, describe it only as a previous-session hint to validate against current planner state, ordering, and dependencies. Do NOT present it as the current focus." : "",
+        handoffs.length > 0 ? `- PHASE HANDOFFS (${handoffs.length} pending):` : "",
+        ...handoffs.map((h, i) => `  [${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`),
+        handoffs.length > 0 ? "- Present this numbered list to the user. Recommend the most recent (or the one aligned with the current resume focus)." : "",
+        handoffs.length > 0 ? "- Ask the user to confirm which one to resume. Then run handoff show <ref> (or /planner handoff show <ref>) to read it." : "",
+        handoffs.length > 0 ? "- After reading and confirming the resume, CLEAR that handoff with handoff clear <ref> (or /planner handoff clear) BEFORE starting implementation work — a resumed handoff must not go stale." : "",
+        handoffs.length === 0 ? "- No pending phase handoffs: fall back to the resume.json focus (current in-progress task/phase) above." : "",
         webUrl ? `- At the END of your summary, you MUST print a dedicated line with the web dashboard address and port, exactly: '🌐 Web UI: ${webLocalUrl}${webPort ? ` (port ${webPort})` : ""}${webLanUrl ? ` — LAN: ${webLanUrl}` : ""}'. This line is mandatory; do not omit it.` : "- Explicitly tell the user whether the web dashboard is active in this session (and how to start it with '/planner web start' if not).",
         `- Mention the next suggested activity: ${nextActivity}`,
         "- THEN ask the user explicitly whether they want to resume that activity now.",
@@ -3602,7 +3730,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "═══════════════════════════════════════════════════════════════",
         "MANDATORY OPERATIONAL PROTOCOL (violation = execution failure):",
         "═══════════════════════════════════════════════════════════════",
-        "1. HANDOFF HYGIENE: If .planner/HANDOFF.md exists, READ and DELETE it IMMEDIATELY using the handoff delete tool. Do NOT summarize first. Do NOT ask for confirmation. Do NOT defer cleanup. DELETE \u2192 THEN work.",
+        "1. HANDOFF HYGIENE: If one or more phases have a pending handoff (entity-scoped, phase.handoff), present the list, read the relevant one with handoff show <ref>, then CLEAR it with handoff clear <ref> once consumed. Handoffs are non-blocking context artifacts, not locks — they never block task_start.",
         "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'. NOTE: Planner operations (plan_write_handoff / /planner handoff, task_start, task_complete, task_update, status reads) are NOT code edits. They are ALWAYS allowed regardless of task state — you may write/refresh the handoff even when no task is in-progress (e.g., all tasks done, or capturing state mid-flight). Never refuse to write a handoff because 'no task is open'; that is incorrect.",
         "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
         "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
@@ -3677,11 +3805,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- Before your final answer after implementation work, either call task_complete if the task is finished, or explicitly tell the user the task remains in-progress.",
         "- Use task_complete with force=true only if you have a good reason to skip the checklist check.",
         "- To reopen a completed task, use task_start (recommended) or task_update.",
-        handoff?.content ? "Handoff detected at `.planner/HANDOFF.md`. Read it as previous-session context, but validate it against the current planner state, ordering, and dependencies before treating any target as the next task." : "",
-        handoff?.content ? "If planner state shows no task/phase in-progress, do NOT present the handoff target as the current focus; present it only as a candidate to validate." : "",
-        handoff?.content ? "When the handoff has been fully consumed and work is safely resumed, delete `.planner/HANDOFF.md` using the dedicated handoff delete command/tool." : "",
-        handoff?.content ? handoff.content : "",
-        "Plan tools available: project_set_language_preferences, plan_init, project_update, requirement_list, requirement_create, requirement_update, requirement_delete, plan_get, feature_list, feature_get, feature_create, feature_update, feature_delete, phase_list, phase_get, phase_create, phase_update, phase_delete, task_list, task_get, task_create, task_update, task_delete, task_start, task_complete, plan_render, plan_get_handoff, plan_write_handoff, plan_delete_handoff, plan_authorize_bypass, plan_clear_bypass",
+        handoffs.length > 0 ? `Pending phase handoffs (${handoffs.length}):` : "",
+        ...handoffs.map((h, i) => `  [${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`),
+        handoffs.length > 0 ? "Read the relevant one with handoff show <ref> (or /planner handoff show <ref>) as previous-session context, but validate it against the current planner state, ordering, and dependencies before treating any target as the next task." : "",
+        handoffs.length > 0 ? "If planner state shows no task/phase in-progress, do NOT present a handoff target as the current focus; present it only as a candidate to validate." : "",
+        handoffs.length > 0 ? "Once a handoff is fully consumed and work is safely resumed, clear it with handoff clear <ref> (or /planner handoff clear)." : "",
+        "Plan tools available: project_set_language_preferences, plan_init, project_update, requirement_list, requirement_create, requirement_update, requirement_delete, plan_get, feature_list, feature_get, feature_create, feature_update, feature_delete, phase_list, phase_get, phase_create, phase_update, phase_delete, task_list, task_get, task_create, task_update, task_delete, task_start, task_complete, plan_render, plan_get_handoff, plan_write_handoff, plan_delete_handoff, handoff_list, handoff_show, handoff_write, handoff_clear, plan_authorize_bypass, plan_clear_bypass",
       ].filter(Boolean).join("\n");
         contextBlockCache = contextBlock;
         contextBlockDirty = false;

@@ -192,3 +192,24 @@ export function ShortIdBadge({ shortId }: { shortId: string }) {
     </CopyableBadge>
   );
 }
+
+/** Indicator that a phase has a pending entity-scoped handoff (phase.handoff).
+ *  Small document icon + tooltip. Links to the /handoff viewer. */
+export function HandoffBadge({ updatedAt }: { updatedAt?: string | undefined }) {
+  const title = `Phase handoff pending${updatedAt ? ` · updated ${new Date(updatedAt).toLocaleString()}` : ""}`;
+  return (
+    <a
+      href="/handoff"
+      className="handoff-badge shrink-0"
+      title={title}
+      aria-label={title}
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 2h5l3 3v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+        <path d="M9 2v3h3" />
+        <path d="M5.5 8h5M5.5 10.5h5" />
+      </svg>
+      <span className="handoff-badge__label">handoff</span>
+    </a>
+  );
+}

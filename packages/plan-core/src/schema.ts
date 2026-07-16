@@ -208,6 +208,8 @@ export const PhaseSchema = z.object({
   tasks: z.array(TaskSchema).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  handoff: z.string().default(""),
+  handoffUpdatedAt: z.string().default(""),
 });
 
 export const FeatureSchema = z.object({

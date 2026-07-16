@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CodebaseProfileSchema,
@@ -24,7 +24,7 @@ import {
   type CodebaseProfile,
   type ResumeFocus,
 } from "./schema.js";
-import { createFeatureId, createPhaseId, createRequirementId, createShortId, createTaskId, isLegacyPhaseId } from "./naming.js";
+import { createFeatureId, createPhaseId, createRequirementId, createShortId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -133,6 +133,24 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
     }
     return parsed;
   });
+}
+
+/** Summary of a phase that has a non-empty handoff, for the listHandoffs() API. */
+export interface PhaseHandoffSummary {
+  phaseId: string;
+  /** Human-readable composite ref, e.g. `P003` or `P003(F002)`. */
+  compositeRef: string;
+  /** handoffUpdatedAt (falls back to phase.updatedAt if unset). */
+  updatedAt: string;
+  /** First non-empty line of the handoff, leading markdown headers stripped, ~80 chars. */
+  firstLine: string;
+}
+
+/** Extract the first meaningful line of a handoff: skip blank lines, strip a
+ *  leading markdown header (#), trim, and truncate to ~80 chars. */
+function handoffFirstLine(text: string): string {
+  const line = text.trim().split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  return line.replace(/^#+\s*/, "").trim().slice(0, 80);
 }
 
 export async function migrateToUuids(store: PlanStore): Promise<void> {
@@ -383,7 +401,7 @@ export class PlanStore {
 
   async ensureStructureOrdering(): Promise<{ changed: boolean }> {
     return this.runAsBatch(async () => {
-      const featuresDoc = await readJson(this.featuresPath(), FeaturesDocumentSchema).catch(() => ({ features: [] }));
+      const featuresDoc = await this.loadFeatures();
       const phases = await this.loadAllPhases();
       const normalized = this.normalizeStructureSnapshot(featuresDoc, phases);
       if (!normalized.changed) return { changed: false };
@@ -408,6 +426,34 @@ export class PlanStore {
   }
   private featuresPath(): string {
     return join(this.root, "features.json");
+  }
+  private featuresDir(): string {
+    return join(this.root, "features");
+  }
+  private featurePath(featureId: string): string {
+    return join(this.featuresDir(), `${featureId}.json`);
+  }
+  private withFeaturesLock<T>(fn: () => Promise<T>): Promise<T> {
+    // Sentinel-keyed mutex (the features dir path) serializing all feature
+    // mutations so read-modify-write via updateFeatures is race-free and the
+    // one-time legacy→per-file migration never interleaves with a writer.
+    return withWriteLock(this.featuresDir(), fn);
+  }
+  /** Idempotent one-time migration: if a legacy features.json exists, split it
+   *  into features/<id>.json (one per feature) and remove the legacy file.
+   *  Must be called under withFeaturesLock. Crash-safe: re-run overwrites. */
+  private async migrateLegacy(): Promise<void> {
+    let legacy: FeaturesDocument;
+    try {
+      legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+    } catch {
+      return; // no legacy features.json (already migrated or fresh project)
+    }
+    await mkdir(this.featuresDir(), { recursive: true });
+    for (const feat of legacy.features) {
+      await atomicWriteJson(this.featurePath(feat.id), feat);
+    }
+    await unlink(this.featuresPath()).catch(() => {});
   }
   private phasesDir(): string {
     return join(this.root, "phases");
@@ -440,6 +486,7 @@ export class PlanStore {
 
     await mkdir(this.root, { recursive: true });
     await mkdir(this.phasesDir(), { recursive: true });
+    await mkdir(this.featuresDir(), { recursive: true });
     await mkdir(join(this.generatedDir(), "phases"), { recursive: true });
     await mkdir(join(this.root, "schema"), { recursive: true });
     await mkdir(join(this.root, "adapters"), { recursive: true });
@@ -545,9 +592,31 @@ export class PlanStore {
   }
 
   async loadFeatures(): Promise<FeaturesDocument> {
+    // Per-file layout: read features/<id>.json (one file per feature).
+    let jsonFiles: string[] = [];
     try {
-      const features = await readJson(this.featuresPath(), FeaturesDocumentSchema);
-      return this.normalizeFeaturesDocument(features).doc;
+      const all = await readdir(this.featuresDir());
+      jsonFiles = all.filter((f) => f.endsWith(".json"));
+    } catch {
+      // features/ absent → fall through to legacy single-file layout
+    }
+    if (jsonFiles.length > 0) {
+      const features: Feature[] = [];
+      for (const f of jsonFiles) {
+        const id = f.replace(/\.json$/, "");
+        try {
+          features.push(await readJson(this.featurePath(id), FeatureSchema));
+        } catch (err) {
+          // Skip an invalid feature file rather than failing the whole load.
+          console.warn(`[plan-store] skipping invalid feature file ${f}:`, err);
+        }
+      }
+      return this.normalizeFeaturesDocument({ features }).doc;
+    }
+    // Legacy: single features.json (pre-migration read; migration writes on first write op).
+    try {
+      const legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+      return this.normalizeFeaturesDocument(legacy).doc;
     } catch {
       return { features: [] };
     }
@@ -1071,17 +1140,28 @@ export class PlanStore {
     return "planned";
   }
 
-  async syncStatuses(): Promise<void> {
+  async syncStatuses(): Promise<string[]> {
     // Run as a batch so the internal saveFeatures + N savePhase calls do not
     // re-trigger syncStatuses on every write (O(N^2) on large planners).
+    // Returns the composite refs of phases whose handoff was auto-cleared
+    // (phase transitioned to done).
+    const cleared: string[] = [];
     await this.runAsBatch(async () => {
       await this.migratePhaseIds();
       const workspace = await this.loadAll();
       const { phases, features } = workspace;
+      const featNum = new Map(features.features.map((f) => [f.id, f.number]));
 
-      // 1. Update Phase statuses based on tasks
+      // 1. Update Phase statuses based on tasks; auto-clear handoff when a
+      //    phase transitions to done (completed phases don't keep stale
+      //    handoffs). handoffUpdatedAt is kept as an audit trail.
       for (const phase of phases) {
+        const was = phase.status;
         phase.status = this.derivePhaseStatus(phase);
+        if (phase.status === "done" && was !== "done" && phase.handoff) {
+          phase.handoff = "";
+          cleared.push(formatPhaseRef(phase.number, featNum.get(phase.featureId ?? "")));
+        }
       }
 
       // 2. Update Feature statuses based on phases
@@ -1098,18 +1178,26 @@ export class PlanStore {
       // 4. Refresh resume focus so a subentrating agent sees current state
       await this.refreshResume();
     });
+    return cleared;
   }
 
   /** Optimized rollup: syncs only the affected phase and its parent feature.
-   *  Drastically reduces write operations and 'busy' window for task updates. */
-  async syncTaskStatusRollup(phaseId: string): Promise<void> {
+   *  Drastically reduces write operations and 'busy' window for task updates.
+   *  Returns the composite ref of the phase if its handoff was auto-cleared
+   *  (phase transitioned to done), else null. */
+  async syncTaskStatusRollup(phaseId: string): Promise<string | null> {
     const phase = await this.loadPhase(phaseId);
+    const was = phase.status;
     phase.status = this.derivePhaseStatus(phase);
+    // Auto-clear handoff when the phase transitions to done.
+    const cleared = phase.status === "done" && was !== "done" && phase.handoff !== "";
+    if (cleared) phase.handoff = "";
     await this.savePhase(phase);
 
+    let feature: Feature | undefined;
     if (phase.featureId) {
       const featuresDoc = await this.loadFeatures();
-      const feature = featuresDoc.features.find((f) => f.id === phase.featureId);
+      feature = featuresDoc.features.find((f) => f.id === phase.featureId);
       if (feature) {
         // To derive feature status, we still need the statuses of all its phases
         const allPhases = await this.loadAllPhases();
@@ -1118,6 +1206,7 @@ export class PlanStore {
       }
     }
     await this.refreshResume();
+    return cleared ? formatPhaseRef(phase.number, feature?.number) : null;
   }
 
   // ── Savers ───────────────────────────────────────────────────────────
@@ -1129,7 +1218,13 @@ export class PlanStore {
   }
 
   async updateFeatures(updater: (f: FeaturesDocument) => FeaturesDocument): Promise<FeaturesDocument> {
-    const updated = await atomicUpdateJson(this.featuresPath(), FeaturesDocumentSchema, (current) => this.normalizeFeaturesDocument(updater(current)).doc);
+    const updated = await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      const current = await this.loadFeatures();
+      const upd = this.normalizeFeaturesDocument(updater(current)).doc;
+      await this.saveFeaturesRaw(upd);
+      return upd;
+    });
     await this.maybeAutoSync();
     return updated;
   }
@@ -1148,8 +1243,45 @@ export class PlanStore {
   }
 
   async saveFeatures(features: FeaturesDocument): Promise<void> {
+    await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      await this.saveFeaturesRaw(features);
+    });
+    await this.touchManifest();
+    await this.maybeAutoSync();
+  }
+
+  /** Per-file write of all features + orphan reconcile. No lock (caller holds withFeaturesLock). */
+  private async saveFeaturesRaw(features: FeaturesDocument): Promise<void> {
     const parsed = FeaturesDocumentSchema.parse(this.normalizeFeaturesDocument(features).doc);
-    await atomicWriteJson(this.featuresPath(), parsed);
+    await mkdir(this.featuresDir(), { recursive: true });
+    const wantIds = new Set(parsed.features.map((f) => f.id));
+    for (const feat of parsed.features) {
+      await atomicWriteJson(this.featurePath(feat.id), feat);
+    }
+    // Orphan reconcile: remove feature files no longer in the document.
+    try {
+      const files = await readdir(this.featuresDir());
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const id = f.replace(/\.json$/, "");
+        if (!wantIds.has(id)) {
+          await unlink(this.featurePath(id)).catch(() => {});
+        }
+      }
+    } catch {
+      // dir absent — nothing to reconcile
+    }
+  }
+
+  /** Granular single-feature write (per-file lock; parallel-safe across features). */
+  async saveFeature(feature: Feature): Promise<void> {
+    await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      await mkdir(this.featuresDir(), { recursive: true });
+      const parsed = FeatureSchema.parse(feature);
+      await atomicWriteJson(this.featurePath(parsed.id), parsed);
+    });
     await this.touchManifest();
     await this.maybeAutoSync();
   }
@@ -1175,6 +1307,48 @@ export class PlanStore {
     const updated = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (phase) => this.normalizePhaseDocument(updater(phase)).phase);
     await this.maybeAutoSync();
     return updated;
+  }
+
+  // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────
+
+  /** Get the handoff text for a phase ("" if none). Throws if phase missing. */
+  async getPhaseHandoff(phaseId: string): Promise<string> {
+    return (await this.loadPhase(phaseId)).handoff;
+  }
+
+  /** Set the handoff text for a phase + stamp handoffUpdatedAt. Atomic per-file
+   *  update via updatePhase (so the web UI refreshes via maybeAutoSync). */
+  async setPhaseHandoff(phaseId: string, text: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: text, handoffUpdatedAt: now }));
+  }
+
+  /** Clear the handoff text for a phase (handoff=""). handoffUpdatedAt is left
+   *  unchanged as an audit trail (when a handoff last existed). */
+  async clearPhaseHandoff(phaseId: string): Promise<void> {
+    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: "" }));
+  }
+
+  /** List all phases that have a non-empty handoff, newest first, with a
+   *  human-readable composite ref (P00x or P00x(F00x)) and a first-line excerpt. */
+  async listHandoffs(): Promise<PhaseHandoffSummary[]> {
+    const phases = await this.loadAllPhases();
+    const features = await this.loadFeatures();
+    const featureNumber = new Map<string, number>();
+    for (const f of features.features) featureNumber.set(f.id, f.number);
+    const out: PhaseHandoffSummary[] = [];
+    for (const p of phases) {
+      if (!p.handoff) continue;
+      const fnum = p.featureId ? featureNumber.get(p.featureId) : undefined;
+      out.push({
+        phaseId: p.id,
+        compositeRef: formatPhaseRef(p.number, fnum),
+        updatedAt: p.handoffUpdatedAt || p.updatedAt,
+        firstLine: handoffFirstLine(p.handoff),
+      });
+    }
+    out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return out;
   }
 
   async deletePhase(phaseId: string): Promise<void> {

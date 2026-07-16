@@ -106,14 +106,21 @@ export interface Phase {
   completionCriteria: string[];
   taskIds: string[];
   tasks: Task[];
+  handoff: string;
+  handoffUpdatedAt: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface HandoffDocument {
-  exists: boolean;
+export interface HandoffSummary {
+  phaseId: string;
+  compositeRef: string;
+  updatedAt: string;
+  firstLine: string;
+}
+
+export interface PhaseHandoff {
   content: string;
-  createdAt: string;
   updatedAt: string;
 }
 

@@ -122,10 +122,18 @@ Documenti da leggere prima di modificare architettura o processo:
 
 L'operatività dell'agente deve essere pulita e senza residui. Ogni omissione procedurale è considerata un errore di esecuzione.
 
-#### Gestione Handoff
-L'handoff è un meccanismo di passaggio di testimone, non un archivio di note.
-- **Cancellazione Immediata**: l'agente DEVE cancellare `.planner/HANDOFF.md` immediatamente dopo averlo letto e processato. 
-- **Divieto di Persistenza**: lasciare un file di handoff nel repository dopo l'avvio della sessione è una violazione del protocollo.
+#### Gestione Handoff (per-entity, su fase)
+L'handoff è un meccanismo di passaggio di testimone tra sessioni, non un archivio di note. È **entity-scoped**: vive sul campo `phase.handoff` di una fase, non su un file.
+
+- **Deprecato**: `.planner/HANDOFF.md` come source of truth è DEPRECATO. Il flusso di resume legge `handoff list` (le fasi con `phase.handoff` non vuoto), non il file.
+- **Ciclo di vita**:
+  - **Scrittura (pause)**: `handoff write <fase>` (o `/planner handoff write`) scrive l'handoff sulla fase in-progress corrente. Gli eventi di sessione (compact/shutdown) lo scrivono automaticamente sulla fase attiva.
+  - **Lettura (resume)**: `handoff list` mostra le fasi con handoff pendente (compositeRef `P00x(F00x)` + data + prima riga); `handoff show <fase>` legge il contenuto full.
+  - **Delete-on-resume**: dopo aver letto e confermato la ripresa, l'agente DEVE cancellare l'handoff con `handoff clear <fase>` (o `/planner handoff clear`) PRIMA di iniziare il lavoro. Un handoff ripreso non deve restare stale. L'agente può tenere la voce se legge ma non riprende davvero.
+  - **Auto-clear su done**: quando una fase transita a `done` (syncStatuses), il suo `phase.handoff` viene automaticamente svuotato (`handoffUpdatedAt` tenuto come audit). Il reopen non lo ripristina.
+- **Non-bloccante**: un handoff pendente NON blocca mai `task_start`. È contesto, non un lock. L'hygiene gate emette un warning non-bloccante ("if relevant, handoff show → clear").
+- **Operazioni = planner ops**: `handoff list/show/write/clear` sono operazioni di planner, non code edit. Sono SEMPRE permesse, indipendentemente dallo stato dei task (anche con 0 task in-progress). Non confonderle con `plan_write_handoff` (deprecated, redirige su `handoff_write`).
+- **Divieto di persistenza stale**: lasciare un handoff stale su una fase dopo averlo processato è una violazione del protocollo (cancellarlo con `handoff clear`).
 
 #### Disciplina degli Aggiornamenti
 L'agente non deve attendere promemoria dall'utente o dall'estensione per aggiornare il piano.

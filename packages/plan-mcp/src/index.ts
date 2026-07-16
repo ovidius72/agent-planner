@@ -5,10 +5,10 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -69,7 +69,7 @@ async function ensureWebStarted(): Promise<{ localUrl: string; lanUrl?: string |
 /** Build a consolidated planner recap (project state + active work + pending
  *  handoff + web URL). Harness-agnostic equivalent of Pi's buildStartupResumeSummary. */
 async function buildRecapText(st: PlanStore, web: { localUrl: string; lanUrl?: string | undefined }): Promise<string> {
-  const [plan, resume, handoff] = await Promise.all([st.loadAll(), st.loadResume(), st.loadHandoff()]);
+  const [plan, resume, handoffs] = await Promise.all([st.loadAll(), st.loadResume(), st.listHandoffs()]);
   const allTasks = plan.phases.flatMap((p) => p.tasks.map((t) => ({ phase: p, task: t })));
   const totalF = plan.features.features.length;
   const doneF = plan.features.features.filter((f) => f.status === "done").length;
@@ -94,10 +94,12 @@ async function buildRecapText(st: PlanStore, web: { localUrl: string; lanUrl?: s
     lines.push("Current focus: no active task — review the plan and pick the next concrete task");
   }
   if (resume?.nextSteps?.length) lines.push(`Next step: ${resume.nextSteps[0]}`);
-  if (handoff) {
-    lines.push("", "## Pending handoff (read me first)", handoff.content || "(empty handoff)", "", "→ After processing the handoff above, call planner-handoff-clear to remove it.");
+  if (handoffs.length > 0) {
+    lines.push("", `## Pending phase handoffs (${handoffs.length})`);
+    handoffs.forEach((h, i) => lines.push(`[${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`));
+    lines.push("", "→ Read the relevant one with planner-handoff-show <ref> (validate against current state), then call planner-handoff-clear <ref> once consumed (delete-on-resume).");
   } else if (activeT === 0) {
-    lines.push("", "No handoff pending and no task in-progress. Use planner-task-add / planner-task-start to begin work.");
+    lines.push("", "No phase handoff pending and no task in-progress. Use planner-task-add / planner-task-start to begin work.");
   }
   if (web.localUrl) {
     lines.push("", "## Web UI", `🌐 ${web.localUrl}${web.lanUrl ? " (LAN: " + web.lanUrl + ")" : ""}`);
@@ -110,13 +112,6 @@ function findFeatureByRef(features: Feature[], ref: string): Feature | undefined
   return features.find((feature) => feature.id.toLowerCase() === normalized)
     ?? features.find((feature) => feature.name.toLowerCase() === normalized)
     ?? features.find((feature) => feature.name.toLowerCase().includes(normalized));
-}
-
-function findPhaseByRef(phases: Phase[], ref: string): Phase | undefined {
-  const normalized = ref.trim().toLowerCase();
-  return phases.find((phase) => phase.id.toLowerCase() === normalized)
-    ?? phases.find((phase) => phase.title.toLowerCase() === normalized)
-    ?? phases.find((phase) => phase.title.toLowerCase().includes(normalized));
 }
 
 function findTaskByRef(phases: Phase[], ref: string): { phase: Phase; task: Task } | undefined {
@@ -151,6 +146,34 @@ const server = new McpServer({
   name: "agent-plan-planner",
   version: "0.1.0",
 });
+
+// Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
+// UUID | title; omitted -> current in-progress phase.
+type PhaseHandoffResolve =
+  | { ok: true; phase: Phase; compositeRef: string }
+  | { ok: false; error: string };
+
+async function resolvePhaseForHandoff(st: PlanStore, ref: string | undefined): Promise<PhaseHandoffResolve> {
+  const phases = await st.loadAllPhases();
+  const features = (await st.loadFeatures()).features;
+  let phase: Phase | undefined;
+  if (ref && ref.trim()) {
+    phase = findPhaseByRef(phases, features, ref.trim());
+  } else {
+    phase = phases.find((p) => p.status === "in-progress")
+      ?? phases.find((p) => p.tasks.some((t) => t.status === "in-progress"));
+  }
+  if (!phase) {
+    return {
+      ok: false,
+      error: ref && ref.trim()
+        ? `Phase not found: "${ref.trim()}". Use P00x, P00x(F00x), UUID, or title.`
+        : "No in-progress phase. Specify a phaseRef (P00x or P00x(F00x)).",
+    };
+  }
+  const feat = phase.featureId ? features.find((f) => f.id === phase.featureId) : undefined;
+  return { ok: true, phase, compositeRef: formatPhaseRef(phase.number, feat?.number) };
+}
 
 server.registerTool("planner-export", {
   description: "Export the project plan as a Markdown report. Supports a concise summary or full hierarchical detail.",
@@ -452,6 +475,8 @@ server.registerTool("planner-phase-add", {
       tasks: [],
       createdAt: timestamp,
       updatedAt: timestamp,
+      handoff: "",
+      handoffUpdatedAt: "",
     };
     await st.savePhase(phase);
     if (feature) {
@@ -472,7 +497,7 @@ server.registerTool("planner-phase-show", {
   inputSchema: { phase: z.string().min(1).describe("Phase id or name") },
 }, async ({ phase: ref }) => {
   const st = await requireStore();
-  const phase = findPhaseByRef(await st.loadAllPhases(), ref);
+  const phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!phase) return text(`Phase not found: ${ref}`);
   return text(`${phase.title} (${phase.id}) — ${phase.status}; ${phase.tasks.length} tasks`, { phase });
 });
@@ -491,7 +516,7 @@ server.registerTool("planner-phase-discuss", {
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
-  const found = findPhaseByRef(await st.loadAllPhases(), ref);
+  const found = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
   const phase = await st.updatePhase(found.id, (entry) => {
     if (updates.goal !== undefined) entry.goals = [updates.goal.trim()].filter(Boolean);
@@ -523,7 +548,7 @@ server.registerTool("planner-phase-update", {
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
-  const found = findPhaseByRef(await st.loadAllPhases(), ref);
+  const found = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
   const phase = await st.updatePhase(found.id, (entry) => {
     if (updates.title !== undefined) entry.title = updates.title.trim();
@@ -542,7 +567,7 @@ server.registerTool("planner-phase-delete", {
   inputSchema: { phase: z.string().min(1) },
 }, async ({ phase: ref }) => {
   const st = await requireStore();
-  const phase = findPhaseByRef(await st.loadAllPhases(), ref);
+  const phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!phase) return text(`Phase not found: ${ref}`);
   await st.deletePhase(phase.id);
   await st.updateFeatures((doc) => {
@@ -562,7 +587,7 @@ server.registerTool("planner-task-add", {
   },
 }, async ({ phase: ref, title, description, checklist }) => {
   const st = await requireStore();
-  const found = findPhaseByRef(await st.loadAllPhases(), ref);
+  const found = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
   const timestamp = nowISO();
   const taskId = createTaskId();
@@ -716,8 +741,8 @@ server.registerTool("planner-task-start", {
   // task_start — the handoff is a captured-context artifact, not a lock (e.g. a
   // small modification after writing a handoff should start without forcing
   // deletion, which would lose context).
-  const handoffNotice = existsSync(join(st.root, "HANDOFF.md"))
-    ? "ℹ️  A handoff exists at .planner/HANDOFF.md — read it for context, then delete it with planner-handoff-delete when no longer needed. Proceeding with task start.\n"
+  const handoffNotice = (await st.listHandoffs()).length > 0
+    ? "ℹ️  One or more phases have a pending handoff — if relevant to the task you're starting, read it with planner-handoff-show <ref>, then clear with planner-handoff-clear. Proceeding with task start.\n"
     : "";
 
   const found = findTaskByRef(await st.loadAllPhases(), ref);
@@ -788,45 +813,63 @@ server.registerTool("planner-task-complete", {
     updatedTask = task;
     return phase;
   });
-  await st.syncTaskStatusRollup(found.phase.id);
-  return writeAndSummarize(st, `✅ Task completed: ${found.task.id}`, { task: updatedTask ?? found.task });
+  const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
+  return writeAndSummarize(st, `✅ Task completed: ${found.task.id}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}`, { task: updatedTask ?? found.task });
+});
+
+server.registerTool("planner-handoff-list", {
+  description: "List all phases with a non-empty entity-scoped handoff (phase.handoff field). Returns composite refs (P00x / P00x(F00x)) with the first line and last-updated time.",
+}, async () => {
+  const st = await requireStore();
+  const list = await st.listHandoffs();
+  if (list.length === 0) return text("No phase handoffs set.");
+  const lines = list.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`);
+  return text(`Phase handoffs (${list.length}):\n${lines.join("\n")}`, { count: list.length, handoffs: list });
 });
 
 server.registerTool("planner-handoff-show", {
-  description: "Show .planner/HANDOFF.md if present.",
-}, async () => {
+  description: "Read the entity-scoped handoff of a phase. phaseRef accepts P00x, P00x(F00x), UUID, or title. Omit to target the current in-progress phase.",
+  inputSchema: { phaseRef: z.string().optional().describe("Phase ref: P00x | P00x(F00x) | UUID | title. Default: current in-progress phase.") },
+}, async ({ phaseRef }) => {
   const st = await requireStore();
-  const handoff = await st.loadHandoff();
-  return text(handoff?.content ?? "No .planner/HANDOFF.md present.", { handoff: handoff ?? null });
+  const r = await resolvePhaseForHandoff(st, phaseRef);
+  if (!r.ok) return text(`❌ ${r.error}`);
+  const content = await st.getPhaseHandoff(r.phase.id);
+  if (!content.trim()) return text(`No handoff set on ${r.compositeRef}.`, { phaseRef: r.compositeRef, empty: true });
+  return text(`Handoff for ${r.compositeRef}:\n\n${content}`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
 server.registerTool("planner-handoff-write", {
-  description: "Write .planner/HANDOFF.md content.",
+  description: "Write/refresh the entity-scoped handoff on a phase. Pass content (markdown). phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase.",
   inputSchema: {
-    content: z.string().min(1),
-    reason: z.string().optional(),
+    phaseRef: z.string().optional().describe("Phase ref. Default: current in-progress phase."),
+    content: z.string().min(1).describe("Handoff text (markdown)."),
   },
-}, async ({ content, reason }) => {
+}, async ({ phaseRef, content }) => {
   const st = await requireStore();
-  const finalContent = reason && !content.includes("Reason:") ? `Reason: ${reason}\n\n${content}` : content;
-  await st.saveHandoff(finalContent);
-  return text("Wrote .planner/HANDOFF.md");
+  const r = await resolvePhaseForHandoff(st, phaseRef);
+  if (!r.ok) return text(`❌ ${r.error}`);
+  await st.setPhaseHandoff(r.phase.id, content);
+  return text(`✅ Wrote handoff on ${r.compositeRef}.`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
 server.registerTool("planner-handoff-prepare", {
-  description: "Return instructions for the agent to prepare a canonical handoff, then call planner-handoff-write.",
+  description: "Return instructions for the agent to prepare a canonical handoff, then call planner-handoff-write (entity-scoped, phase.handoff).",
 }, async () => text([
-  "Prepare the canonical session handoff and write it with planner-handoff-write.",
+  "Prepare the canonical session handoff and write it on the current in-progress phase with planner-handoff-write (omit phaseRef to target the in-progress phase).",
   "Required sections: Created at, Updated at, Reason, Current focus, What was being done, How to resume, Files touched, Blockers, Next steps, Recent decisions, Reminder.",
-  "Canonical path: .planner/HANDOFF.md.",
+  "Stored on the phase.handoff field (entity-scoped). .planner/HANDOFF.md is deprecated.",
 ].join("\n")));
 
 server.registerTool("planner-handoff-clear", {
-  description: "Delete .planner/HANDOFF.md.",
-}, async () => {
+  description: "Clear the entity-scoped handoff of a phase (sets handoff to empty, keeps handoffUpdatedAt as an audit trail). phaseRef optional (default: current in-progress phase).",
+  inputSchema: { phaseRef: z.string().optional().describe("Phase ref. Default: current in-progress phase.") },
+}, async ({ phaseRef }) => {
   const st = await requireStore();
-  await st.deleteHandoff();
-  return text("Deleted .planner/HANDOFF.md");
+  const r = await resolvePhaseForHandoff(st, phaseRef);
+  if (!r.ok) return text(`❌ ${r.error}`);
+  await st.clearPhaseHandoff(r.phase.id);
+  return text(`✅ Cleared handoff on ${r.compositeRef}. (handoffUpdatedAt preserved as audit)`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
 server.registerTool("planner-web", {
