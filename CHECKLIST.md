@@ -275,3 +275,16 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **T4 viewer** (`routes/handoff.route.tsx`, riscritto da file-based): two-pane responsive — lista pending (`CopyableBadge` compositeRef + firstLine + data) | contenuto full `FormattedText` (`.formatted-text` overflow rules) + pulsante **Clear** (delete-on-resume da UI). WS live re-fetch su `handoffUpdated`/`handoffCleared`. Empty state "No pending phase handoffs". Default seleziona il primo. Route (non modal) → scroll naturale su mobile, overflow 0.
 - [x] Validazione: `pnpm -r build` + `pnpm check` puliti; 16/16 API smoke verdi; Puppeteer @390px verde (badge presente/assente correttamente + tooltip + click→/handoff; viewer 2 handoff + switch content + Clear→empty + FormattedText + 0 overflow + 0 errori console). Bundle syncato su `plan-server` + `pi-adapter` web-ui-dist.
 - [ ] **Da fare al release**: bump `@agent-plan/server` (API entity + WS events) + `@agent-plan/web-ui` (badge+viewer+client) prima della PR `develop → main`.
+
+### Fatto — P006 Docs + @next prerelease channel (sessione 2026-07-16)
+- [x] **P006 completato** (feature F004, fase P006). F004 completa (6 fasi), pubblicata come `@next` prerelease.
+- [x] **T1 docs**: AGENTS.md §11 riscritta entity-scoped (delete-on-resume, auto-clear-on-done, comandi `handoff list/show/write/clear`, operazioni = planner ops non-bloccanti, `.planner/HANDOFF.md` deprecato). §9 verificato allineato (`P001(F001)` = compositeRef handoff). CHECKLIST sommario F004 aggiunto.
+- [x] **T2 release-ready + target**: 29/29 test core verdi; `pnpm -r build` + `pnpm check` puliti; tree clean. Target versione 0.2.19 (supera guard local 0.2.17 e npm 0.2.18). Deciso di NON usare `pnpm release` (develop→main) per restare su next.
+- [x] **T3 @next prerelease channel** (nuovo modello, per decisione utente — restare su next, non toccare develop/main):
+  - `.github/workflows/publish.yml`: trigger `push: [main, next]`; su `next` pubblica con `--tag next` (dist-tag `next`, NON tocca `latest`); su `main` `latest`. Idempotente.
+  - 5 package → `0.2.19-next.0` (prerelease di 0.2.19).
+  - `scripts/release-next.cjs` + `pnpm release:next`: bumpa counter `next.N`, build/check, commit, push → publish.yml auto-pubblica `@next`.
+  - **Pubblicato**: workflow 29483874117 success; npm verificato — 5 package @ `0.2.19-next.0` dist-tag `next`; `latest` intatto a `0.2.18`. Install: `npm i @agent-plan/core@next`.
+- [x] **develop reconciliation**: avevo prematuramente mergiato PR #27 (next→develop) + syncato develop da main. Per correzione utente, force-push develop → `6e391cc` (PR #26 shortid, pre-F004, zero commit F004 verificati). develop fermo fino a proving di next. main non toccato.
+- [x] **F004 completa su `next`** (13 commit, P001-P006). Stable release (latest) + merge next→develop differiti fino a proving del channel `@next`.
+- [ ] **Prossimo**: testare `@next` in un progetto reale (`pi install npm:@agent-plan/pi-adapter@next` o `npm i @agent-plan/core@next`); quando verificato, merge `next`→`develop` e release stable via `pnpm release`. Aggiornare §12 AGENTS.md al nuovo modello next-prerelease.
