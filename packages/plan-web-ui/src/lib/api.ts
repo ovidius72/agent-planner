@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { Feature, HandoffDocument, Phase, Project, Task } from "./types";
+import type { Feature, HandoffSummary, Phase, PhaseHandoff, Project, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -35,6 +35,8 @@ function normalizePhase(phase: Phase): Phase {
     completionCriteria: phase.completionCriteria ?? [],
     taskIds: phase.taskIds ?? [],
     tasks: (phase.tasks ?? []).map(normalizeTask),
+    handoff: phase.handoff ?? "",
+    handoffUpdatedAt: phase.handoffUpdatedAt ?? "",
   };
 }
 
@@ -200,12 +202,21 @@ export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
   return request("/tasks/active");
 }
 
-export async function getHandoff(): Promise<HandoffDocument> {
-  return request("/handoff");
+export async function listHandoffs(): Promise<HandoffSummary[]> {
+  const r = await request<{ handoffs: HandoffSummary[] }>("/handoffs");
+  return r.handoffs ?? [];
 }
 
-export async function deleteHandoff(): Promise<{ deleted: boolean }> {
-  return request("/handoff", { method: "DELETE" });
+export async function getPhaseHandoff(phaseId: string): Promise<PhaseHandoff> {
+  return request(`/phases/${phaseId}/handoff`);
+}
+
+export async function setPhaseHandoff(phaseId: string, content: string): Promise<PhaseHandoff | { cleared: boolean }> {
+  return request(`/phases/${phaseId}/handoff`, { method: "PUT", body: JSON.stringify({ content }) });
+}
+
+export async function clearPhaseHandoff(phaseId: string): Promise<{ cleared: boolean }> {
+  return request(`/phases/${phaseId}/handoff`, { method: "DELETE" });
 }
 
 export interface ExportReport {

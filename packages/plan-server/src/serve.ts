@@ -765,20 +765,53 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json({ files });
   });
 
-  // ── Handoff ──────────────────────────────────────────────────────
-  app.get(route("/handoff"), async (c) => {
-    const handoff = await store.loadHandoff();
-    return c.json({
-      exists: Boolean(handoff),
-      content: handoff?.content ?? "",
-      createdAt: handoff?.createdAt ?? "",
-      updatedAt: handoff?.updatedAt ?? "",
-    });
+  // ── Handoff (entity-scoped, phase.handoff) ────────────────────
+  app.get(route("/handoffs"), async (c) => {
+    const list = await store.listHandoffs();
+    return c.json({ handoffs: list });
   });
 
-  app.delete(route("/handoff"), async (c) => {
-    await store.deleteHandoff();
-    return c.json({ deleted: true });
+  app.get(route("/phases/:id/handoff"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const phase = await store.loadPhase(id).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
+    const content = await store.getPhaseHandoff(id);
+    return c.json({ content, updatedAt: phase.handoffUpdatedAt ?? "" });
+  });
+
+  app.put(route("/phases/:id/handoff"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const phase = await store.loadPhase(id).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
+    const body = await c.req.json<{ content: string }>().catch(() => ({ content: "" }));
+    const content = (body?.content ?? "").trim();
+    if (!content) {
+      // empty PUT = clear equivalent
+      await store.clearPhaseHandoff(id);
+      hub()?.broadcast({ type: "handoffCleared", data: { phaseId: id } });
+      hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: phase.featureId ?? "" } });
+      hub()?.broadcast({ type: "plan-rendered", data: {} });
+      return c.json({ cleared: true });
+    }
+    await store.setPhaseHandoff(id, content);
+    hub()?.broadcast({ type: "handoffUpdated", data: { phaseId: id } });
+    hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: phase.featureId ?? "" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ content, updatedAt: (await store.loadPhase(id)).handoffUpdatedAt ?? "" });
+  });
+
+  app.delete(route("/phases/:id/handoff"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const phase = await store.loadPhase(id).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
+    await store.clearPhaseHandoff(id);
+    hub()?.broadcast({ type: "handoffCleared", data: { phaseId: id } });
+    hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: phase.featureId ?? "" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ cleared: true });
   });
 
   // ── Health ───────────────────────────────────────────────────────

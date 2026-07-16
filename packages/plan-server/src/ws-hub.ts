@@ -14,7 +14,9 @@ export type WsEvent =
   | { type: "requirements-updated"; data: unknown }
   | { type: "features-updated"; data: unknown }
   | { type: "phases-updated"; data: unknown }
-  | { type: "plan-rendered"; data: unknown };
+  | { type: "plan-rendered"; data: unknown }
+  | { type: "handoffUpdated"; data: { phaseId: string } }
+  | { type: "handoffCleared"; data: { phaseId: string } };
 
 export class WsHub {
   private wss: WebSocketServer;
