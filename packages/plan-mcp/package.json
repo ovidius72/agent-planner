@@ -1,6 +1,6 @@
 {
   "name": "@agent-plan/mcp",
-  "version": "0.2.17",
+  "version": "0.2.19",
   "private": false,
   "description": "MCP server for Agent Plan, exposing planner-* tools over stdio.",
   "license": "MIT",
