@@ -33,6 +33,7 @@ export function PhaseEditModalRoute() {
             {phaseStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
+        <Field label="Priority"><Input type="number" name="priority" defaultValue={phase.priority ?? 0} min={0} /></Field>
         <Field label="Summary"><Textarea name="summary" defaultValue={phase.summary} /></Field>
         <Field label="Description"><Textarea name="description" defaultValue={phase.description} /></Field>
         <Field label="Goals (one per line)"><Textarea name="goals" defaultValue={joinLines(phase.goals)} /></Field>

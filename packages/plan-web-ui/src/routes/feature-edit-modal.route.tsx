@@ -34,6 +34,7 @@ export function FeatureEditModalRoute() {
             {featureStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
+        <Field label="Priority"><Input type="number" name="priority" defaultValue={feature.priority ?? 0} min={0} /></Field>
         <Field label="Work done"><Textarea name="workDone" defaultValue={feature.workDone} /></Field>
         <Field label="Work remaining"><Textarea name="workRemaining" defaultValue={feature.workRemaining} /></Field>
         <ModalActions>

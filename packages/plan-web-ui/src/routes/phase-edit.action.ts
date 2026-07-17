@@ -1,6 +1,6 @@
 import { redirect } from "react-router-dom";
 import { getPhase, updatePhase } from "../lib/api";
-import { optionalString, requiredParam, requiredString, stringList } from "../lib/forms";
+import { optionalNumber, optionalString, requiredParam, requiredString, stringList } from "../lib/forms";
 import type { PhaseStatus } from "../lib/types";
 
 export async function action({ request, params }: { request: Request; params: Record<string, string | undefined> }) {
@@ -13,6 +13,7 @@ export async function action({ request, params }: { request: Request; params: Re
     ...current,
     title: requiredString(formData, "title"),
     status: requiredString(formData, "status") as PhaseStatus,
+    priority: optionalNumber(formData, "priority"),
     summary: optionalString(formData, "summary"),
     description: optionalString(formData, "description"),
     goals: stringList(formData, "goals"),

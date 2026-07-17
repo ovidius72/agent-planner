@@ -1,6 +1,6 @@
 import { redirect } from "react-router-dom";
 import { getFeature, updateFeature } from "../lib/api";
-import { optionalString, requiredParam, requiredString } from "../lib/forms";
+import { optionalNumber, optionalString, requiredParam, requiredString } from "../lib/forms";
 import type { FeatureStatus } from "../lib/types";
 
 export async function action({ request, params }: { request: Request; params: Record<string, string | undefined> }) {
@@ -15,6 +15,7 @@ export async function action({ request, params }: { request: Request; params: Re
     startDate: optionalString(formData, "startDate"),
     endDate: optionalString(formData, "endDate"),
     status: requiredString(formData, "status") as FeatureStatus,
+    priority: optionalNumber(formData, "priority"),
     workDone: optionalString(formData, "workDone"),
     workRemaining: optionalString(formData, "workRemaining"),
   });

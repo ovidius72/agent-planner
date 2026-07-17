@@ -335,7 +335,7 @@ textarea:disabled {
   border: 1px solid transparent;
   cursor: grab;
   touch-action: none;
-  opacity: 0.35;
+  opacity: 0.6;
   transition: opacity .12s, background .12s, color .12s, border-color .12s;
 }
 .drag-handle:hover,
