@@ -109,7 +109,9 @@ I riferimenti devono essere sempre umani, univoci e compositi, seguendo il forma
 - Fase: `P001(F001) - Titolo`
 - Task: `T001(P001/F001) - Titolo`
 
-Esempio CORRETTO: "Procedo con il task T003(P001/F001) - Implementazione API"
+In alternativa al composite ID, si può usare lo **shortId globale** (5 caratteri, es. `UUXD1`), che identifica univocamente qualsiasi entità (feature, fase o task) nel progetto. Gli shortId sono visibili nella Web UI e nei risultati dei tool.
+
+Esempio CORRETTO: "Procedo con il task T003(P001/F001) - Implementazione API" oppure "Procedo con UUXD1"
 Esempio ERRATO: "Procedo con il task bd6ed366"
 
 ### 10. Fonte dei requisiti correnti

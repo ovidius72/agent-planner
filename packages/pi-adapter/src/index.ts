@@ -3735,6 +3735,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
         "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
         "5. NO SHORTCUTS: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.",
+        "6. ENTITY REFERENCES: When you mention a feature/phase/task in chat, use its composite ID (F00x / P00x / T00x, e.g. T003(P002/F001)) or its 5-char shortId (e.g. UUXD1) — NEVER a raw UUID like bd6ed366. Tool responses already show these refs (compositeRef, shortId); reuse them.",
         "═══════════════════════════════════════════════════════════════",
         "",
         // ── Project details ──
