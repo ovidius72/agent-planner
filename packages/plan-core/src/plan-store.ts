@@ -1099,21 +1099,19 @@ export class PlanStore {
     if (phase.tasks.length === 0) return phase.status;
 
     const taskStatuses = phase.tasks.map((task) => task.status);
-    const allRejectedOrCanceled = taskStatuses.every((status) => status === "rejected" || status === "canceled");
-    const anyBlocked = taskStatuses.some((status) => status === "blocked");
-    const anyInProgress = taskStatuses.some((status) => status === "in-progress");
-    const anyWaiting = taskStatuses.some((status) => status === "waiting");
-    const anyDeferred = taskStatuses.some((status) => status === "deferred");
-    const anyPlanned = taskStatuses.some((status) => status === "planned");
-    const anyDone = taskStatuses.some((status) => status === "done");
-
-    if (allRejectedOrCanceled) return "rejected";
-    if (anyBlocked) return "blocked";
-    if (anyInProgress) return "in-progress";
-    if (anyWaiting) return "waiting";
-    if (anyDeferred) return "deferred";
-    if (anyPlanned) return "planned";
-    if (anyDone) return "done";
+    // Ignore rejected/canceled tasks (void) when deriving progress.
+    const meaningful = taskStatuses.filter((s) => s !== "rejected" && s !== "canceled");
+    if (meaningful.length === 0) return "rejected";
+    if (meaningful.every((s) => s === "done")) return "done";
+    // Lifecycle truth: any progress (active work OR partial completion) ⇒
+    // in-progress, until fully done. This is what prevents a single
+    // blocked/waiting/deferred task from poisoning the parent when there is
+    // substantial done or in-progress work (the long-standing rollup bug).
+    if (meaningful.some((s) => s === "in-progress") || meaningful.some((s) => s === "done")) return "in-progress";
+    // No progress at all ⇒ surface the stall / not-started state (blocked > waiting > deferred > planned).
+    if (meaningful.some((s) => s === "blocked")) return "blocked";
+    if (meaningful.some((s) => s === "waiting")) return "waiting";
+    if (meaningful.some((s) => s === "deferred")) return "deferred";
     return "planned";
   }
 
@@ -1122,21 +1120,18 @@ export class PlanStore {
     if (featurePhases.length === 0) return currentStatus;
 
     const phaseStatuses = featurePhases.map((phase) => phase.status);
-    const allRejectedOrCanceled = phaseStatuses.every((status) => status === "rejected" || status === "canceled");
-    const anyBlocked = phaseStatuses.some((status) => status === "blocked");
-    const anyActive = phaseStatuses.some((status) => status === "discovery" || status === "in-progress");
-    const anyWaiting = phaseStatuses.some((status) => status === "waiting");
-    const anyDeferred = phaseStatuses.some((status) => status === "deferred");
-    const anyPlannedLike = phaseStatuses.some((status) => status === "draft" || status === "planned");
-    const anyDone = phaseStatuses.every((status) => status === "done");
-
-    if (allRejectedOrCanceled) return "rejected";
-    if (anyBlocked) return "blocked";
-    if (anyActive) return "in-progress";
-    if (anyWaiting) return "waiting";
-    if (anyDeferred) return "deferred";
-    if (anyPlannedLike) return "planned";
-    if (anyDone) return "done";
+    // Ignore rejected/canceled phases when deriving progress.
+    const meaningful = phaseStatuses.filter((s) => s !== "rejected" && s !== "canceled");
+    if (meaningful.length === 0) return "rejected";
+    if (meaningful.every((s) => s === "done")) return "done";
+    // Any progress (an active phase, or a partially-complete done phase) ⇒
+    // in-progress. Prevents a single stalled phase from poisoning the feature
+    // when other phases have done/in-progress work.
+    if (meaningful.some((s) => s === "discovery" || s === "in-progress") || meaningful.some((s) => s === "done")) return "in-progress";
+    // No progress at all ⇒ surface the stall / not-started state.
+    if (meaningful.some((s) => s === "blocked")) return "blocked";
+    if (meaningful.some((s) => s === "waiting")) return "waiting";
+    if (meaningful.some((s) => s === "deferred")) return "deferred";
     return "planned";
   }
 
