@@ -876,7 +876,7 @@ server.registerTool("planner-load", {
   const st = store();
   if (!(await st.exists())) return text("No .planner/ found at " + planRoot() + ". Run planner-init first.");
   const web = await ensureWebStarted();
-  const recap = await buildRecap(st, web);
+  const recap = await buildRecap(st, web, { harness: "mcp" });
   return text(recap);
 });
 
