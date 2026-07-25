@@ -348,6 +348,10 @@ textarea:disabled {
 .drag-handle:active { cursor: grabbing; }
 .ap-sortable--dragging { opacity: .55; outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 12px; }
 
+/* Floating drag preview (DragOverlay) — a clean clone that follows the cursor
+   while the original row stays faded in place. */
+.ap-drag-overlay { box-shadow: 0 12px 32px -8px rgba(0,0,0,.40); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 12px; cursor: grabbing; background: var(--surface-elevated); }
+
 /* elastic-input placeholder alignment: the placeholder box is already
    positioned at the editor's text line, so only horizontal padding is needed
    (a top padding pushes the text too low). */

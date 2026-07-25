@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
+import { EntityPathBadge } from "../ui/badges";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
 import { formatSequence } from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
@@ -33,6 +34,8 @@ export function WorkTree({
   const tree = useDashboardTree({ features, phases, projectStorageScope });
   const [repairing, setRepairing] = useState(false);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const handleDragStart = (event: DragStartEvent) => setActiveId(String(event.active.id));
   const [headerH, setHeaderH] = useState(0);
   useEffect(() => {
     const header = document.querySelector("header");
@@ -64,6 +67,7 @@ export function WorkTree({
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveId(null);
     if (!over || active.id === over.id) return;
     const activeId = String(active.id);
     const overId = String(over.id);
@@ -97,6 +101,54 @@ export function WorkTree({
     tree.expandedPhaseIds.includes(phaseId);
   const isPhaseRecentlyChanged = (phaseId: string) => tree.recentPhaseIds.includes(phaseId);
   const isTaskRecentlyChanged = (taskId: string) => tree.recentTaskIds.includes(taskId);
+
+  // Floating drag preview for the DragOverlay: finds the active entity (feature /
+  // phase / task) by id and renders a compact badge + title + status card. The
+  // original row stays in place (faded via .ap-sortable--dragging) while this
+  // clone follows the cursor — cleaner than transforming the row in-place.
+  const renderDragPreview = () => {
+    if (!activeId) return null;
+    for (const entry of tree.displayedWorkTree) {
+      if (entry.feature.id === activeId) {
+        return (
+          <div className="ap-drag-overlay surface-card min-w-0 max-w-md px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <EntityPathBadge featureNum={entry.feature.number} />
+              <StatusBadge status={entry.feature.status} />
+            </div>
+            <div className="mt-1 break-words font-mono text-sm font-semibold [overflow-wrap:anywhere]">{entry.feature.name}</div>
+          </div>
+        );
+      }
+      for (const pe of entry.allPhases) {
+        if (pe.phase.id === activeId) {
+          return (
+            <div className="ap-drag-overlay surface-card min-w-0 max-w-md px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <EntityPathBadge featureNum={entry.feature.number} phaseNum={pe.phase.number} />
+                <StatusBadge status={pe.phase.status} />
+              </div>
+              <div className="mt-1 break-words font-mono text-sm font-semibold [overflow-wrap:anywhere]">{pe.phase.title}</div>
+            </div>
+          );
+        }
+        for (const t of pe.allTasks) {
+          if (t.id === activeId) {
+            return (
+              <div className="ap-drag-overlay surface-card min-w-0 max-w-md px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <EntityPathBadge featureNum={entry.feature.number} phaseNum={pe.phase.number} taskNum={t.number} />
+                  <StatusBadge status={t.status} />
+                </div>
+                <div className="mt-1 break-words font-mono text-sm font-semibold [overflow-wrap:anywhere]">{t.title}</div>
+              </div>
+            );
+          }
+        }
+      }
+    }
+    return null;
+  };
 
   return (
     <Card className="grid gap-4">
@@ -178,7 +230,7 @@ export function WorkTree({
 
       <div className="grid gap-3">
         {tree.displayedWorkTree.length > 0 ? (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <SortableContext items={tree.displayedWorkTree.map((e) => e.feature.id)} strategy={verticalListSortingStrategy}>
               {tree.displayedWorkTree.map((entry) => (
                 <SortableItem key={entry.feature.id} id={entry.feature.id}>
@@ -196,6 +248,7 @@ export function WorkTree({
                 </SortableItem>
               ))}
             </SortableContext>
+            <DragOverlay dropAnimation={{ duration: 150, easing: "ease" }}>{renderDragPreview()}</DragOverlay>
           </DndContext>
         ) : activeTasks.length > 0 ? (
           activeTasks.map((task) => {

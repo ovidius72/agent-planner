@@ -25,6 +25,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --no-warnings --test --experimental-strip-types \"test/*.test.mjs\""
   }
 }

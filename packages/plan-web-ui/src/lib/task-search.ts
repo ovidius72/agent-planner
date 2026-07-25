@@ -4,8 +4,21 @@
 //
 // Supported keys: feature (number), phase (number), task (number),
 // id (shortId), status (enum), title (text). Bare tokens become title/text
-// substring matches. Comma-lists are supported for number/shortId fields.
+// substring matches (full-text when no field scope is selected).
+// Comma-lists are supported for number/shortId fields.
 // Quoted values are supported (e.g. title:"my task").
+//
+// Boolean combination:
+//   - Multiple clauses of the SAME field combine as a UNION (OR). E.g.
+//     `feature:1 AND feature:2` → features 1 OR 2 (both appear). Repeating a
+//     field no longer overwrites — it adds to the set.
+//   - Different fields combine as an INTERSECTION (AND). E.g.
+//     `feature:1 status:in-progress` → feature 1 AND in-progress.
+//   - The keywords `AND` / `OR` (case-insensitive) act as clause separators
+//     only — they are ignored, not treated as text. So `feature:1 AND feature:2`
+//     is equivalent to `feature:1 feature:2`.
+//   - `key: value` with a space after the colon is tolerated (the next token is
+//     used as the value), so `feature: 001` works like `feature:001`.
 
 import type { Feature, Phase, Task } from "./types";
 
@@ -48,6 +61,26 @@ function toNumberSet(raw: string): Set<number> {
   );
 }
 
+/** Boolean keywords act as clause separators only (ignored, not text). */
+function isBooleanKeyword(token: string): boolean {
+  const up = token.toUpperCase();
+  return up === "AND" || up === "OR";
+}
+
+/** Merge a comma-list of numbers into an accumulating set (UNION). */
+function addNumbers(set: Set<number> | null, raw: string): Set<number> {
+  const next = set ?? new Set<number>();
+  for (const n of toNumberSet(raw)) next.add(n);
+  return next;
+}
+
+/** Merge a comma-list of short ids into an accumulating set (UNION). */
+function addShortIds(set: Set<string> | null, raw: string): Set<string> {
+  const next = set ?? new Set<string>();
+  for (const s of splitCommaList(raw).map((x) => x.toUpperCase())) next.add(s);
+  return next;
+}
+
 /** Parse a structured search query into typed filters. Tolerant: unknown
  *  keys are treated as bare text. Returns EMPTY_FILTERS for blank input. */
 export function parseSearchQuery(query: string): SearchFilters {
@@ -80,19 +113,35 @@ export function parseSearchQuery(query: string): SearchFilters {
     }
   }
 
-  for (let token of tokens) {
+  let idx = 0;
+  while (idx < tokens.length) {
+    const token = tokens[idx]!;
+    if (isBooleanKeyword(token)) {
+      idx += 1;
+      continue;
+    }
     const keyMatch = token.match(KEY_PATTERN);
     if (keyMatch) {
       const key = (keyMatch[1] ?? "").toLowerCase();
-      const value = keyMatch[2] ?? "";
+      let value = keyMatch[2] ?? "";
+      // `feature: 001` (space after colon) → value is empty; peek the next
+      // non-boolean token as the value (but don't consume another `key:` token).
+      if (value.trim() === "" && idx + 1 < tokens.length) {
+        let nextIdx = idx + 1;
+        while (nextIdx < tokens.length && isBooleanKeyword(tokens[nextIdx]!)) nextIdx += 1;
+        if (nextIdx < tokens.length && !tokens[nextIdx]!.match(KEY_PATTERN)) {
+          value = tokens[nextIdx]!;
+          idx = nextIdx; // consume the value token; the trailing idx+=1 moves past it
+        }
+      }
       if (key === "feature") {
-        const set = toNumberSet(value); if (set.size) filters.featureNumbers = set;
+        const set = addNumbers(filters.featureNumbers, value); if (set.size) filters.featureNumbers = set;
       } else if (key === "phase") {
-        const set = toNumberSet(value); if (set.size) filters.phaseNumbers = set;
+        const set = addNumbers(filters.phaseNumbers, value); if (set.size) filters.phaseNumbers = set;
       } else if (key === "task") {
-        const set = toNumberSet(value); if (set.size) filters.taskNumbers = set;
+        const set = addNumbers(filters.taskNumbers, value); if (set.size) filters.taskNumbers = set;
       } else if (key === "id") {
-        const set = new Set(splitCommaList(value).map((s) => s.toUpperCase())); if (set.size) filters.shortIds = set;
+        const set = addShortIds(filters.shortIds, value); if (set.size) filters.shortIds = set;
       } else if (key === "status") {
         if (value.trim()) filters.status = value.toLowerCase();
       } else if (key === "feature-status") {
@@ -105,6 +154,7 @@ export function parseSearchQuery(query: string): SearchFilters {
     } else {
       bareText.push(token.toLowerCase());
     }
+    idx += 1;
   }
 
   if (bareText.length > 0 && !filters.text) {

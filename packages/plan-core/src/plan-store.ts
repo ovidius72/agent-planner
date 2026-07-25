@@ -284,6 +284,13 @@ export class PlanStore {
     return this.runAsBatch(fn);
   }
 
+  /** Public batch wrapper: suspend autoSync (status rollup) for a sequence of
+   *  writes. Use for priority-only reorders so they don't recompute phase/feature
+   *  status (a reorder must not flip a partially-done feature to in-progress). */
+  async runBatch<T>(fn: () => Promise<T>): Promise<T> {
+    return this.runAsBatch(fn);
+  }
+
   private async maybeAutoSync(): Promise<void> {
     if (!this.autoSync || this.syncGuard || this.batchInProgress) return;
     try {
