@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, buildRecap } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef } from "@agent-plan/core/naming";
@@ -64,47 +64,6 @@ async function ensureWebStarted(): Promise<{ localUrl: string; lanUrl?: string |
   } catch {
     return { localUrl: "" };
   }
-}
-
-/** Build a consolidated planner recap (project state + active work + pending
- *  handoff + web URL). Harness-agnostic equivalent of Pi's buildStartupResumeSummary. */
-async function buildRecapText(st: PlanStore, web: { localUrl: string; lanUrl?: string | undefined }): Promise<string> {
-  const [plan, resume, handoffs] = await Promise.all([st.loadAll(), st.loadResume(), st.listHandoffs()]);
-  const allTasks = plan.phases.flatMap((p) => p.tasks.map((t) => ({ phase: p, task: t })));
-  const totalF = plan.features.features.length;
-  const doneF = plan.features.features.filter((f) => f.status === "done").length;
-  const activeF = plan.features.features.filter((f) => f.status === "in-progress").length;
-  const totalP = plan.phases.length;
-  const doneP = plan.phases.filter((p) => p.status === "done").length;
-  const activeP = plan.phases.filter((p) => p.status === "in-progress" || p.status === "discovery").length;
-  const totalT = allTasks.length;
-  const doneT = allTasks.filter(({ task }) => task.status === "done").length;
-  const activeT = allTasks.filter(({ task }) => task.status === "in-progress").length;
-  const inProgress = allTasks.filter(({ task }) => task.status === "in-progress");
-  const focus = inProgress[0];
-  const focusFeature = focus ? plan.features.features.find((f) => f.id === focus.phase.featureId) : undefined;
-  const lines: string[] = [];
-  lines.push("## Planner recap");
-  const name = plan.project.name || "(unnamed project)";
-  lines.push(`Project: ${name}${plan.project.goal ? " — " + plan.project.goal : ""}`);
-  lines.push(`Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active)`);
-  if (focus) {
-    lines.push(`Current focus: ${focusFeature?.name ?? "?"} / ${focus.phase.title} / ${focus.task.title} (in-progress)`);
-  } else {
-    lines.push("Current focus: no active task — review the plan and pick the next concrete task");
-  }
-  if (resume?.nextSteps?.length) lines.push(`Next step: ${resume.nextSteps[0]}`);
-  if (handoffs.length > 0) {
-    lines.push("", `## Pending phase handoffs (${handoffs.length})`);
-    handoffs.forEach((h, i) => lines.push(`[${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`));
-    lines.push("", "→ Read the relevant one with planner-handoff-show <ref> (validate against current state), then call planner-handoff-clear <ref> once consumed (delete-on-resume).");
-  } else if (activeT === 0) {
-    lines.push("", "No phase handoff pending and no task in-progress. Use planner-task-add / planner-task-start to begin work.");
-  }
-  if (web.localUrl) {
-    lines.push("", "## Web UI", `🌐 ${web.localUrl}${web.lanUrl ? " (LAN: " + web.lanUrl + ")" : ""}`);
-  }
-  return lines.join("\n");
 }
 
 function findFeatureByRef(features: Feature[], ref: string): Feature | undefined {
@@ -917,7 +876,7 @@ server.registerTool("planner-load", {
   const st = store();
   if (!(await st.exists())) return text("No .planner/ found at " + planRoot() + ". Run planner-init first.");
   const web = await ensureWebStarted();
-  const recap = await buildRecapText(st, web);
+  const recap = await buildRecap(st, web);
   return text(recap);
 });
 

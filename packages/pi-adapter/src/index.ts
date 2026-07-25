@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation, findPhaseByRef } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation, findPhaseByRef, buildRecap } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -258,113 +258,6 @@ function phaseLabel(phase: Phase): string {
 
 function taskLabel(task: Task): string {
   return `T${formatSequence(task.number)} — ${task.title}`;
-}
-
-async function buildStartupResumeSummary(st: PlanStore): Promise<string> {
-  const [plan, resume, handoffs] = await Promise.all([
-    st.loadAll(),
-    st.refreshResume(),
-    st.listHandoffs(),
-  ]);
-
-  const phaseById = new Map(plan.phases.map((phase) => [phase.id, phase]));
-  const orderedPhases = [
-    ...plan.features.features.flatMap((feature) => {
-      const linked = feature.phaseIds.map((id) => phaseById.get(id)).filter((phase): phase is Phase => Boolean(phase));
-      const linkedIds = new Set(linked.map((phase) => phase.id));
-      const inferred = plan.phases
-        .filter((phase) => phase.featureId === feature.id && !linkedIds.has(phase.id))
-        .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt));
-      return [...linked, ...inferred];
-    }),
-    ...plan.phases
-      .filter((phase) => !phase.featureId)
-      .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
-  ];
-  const allTasks = orderedPhases.flatMap((phase) => [...phase.tasks]
-    .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
-    .map((task) => ({ phase, task })));
-  const totalFeatures = plan.features.features.length;
-  const doneFeatures = plan.features.features.filter((feature) => feature.status === "done").length;
-  const activeFeatures = plan.features.features.filter((feature) => feature.status === "in-progress").length;
-  const totalPhases = plan.phases.length;
-  const donePhases = plan.phases.filter((phase) => phase.status === "done").length;
-  const activePhases = plan.phases.filter((phase) => phase.status === "in-progress" || phase.status === "discovery").length;
-  const totalTasks = allTasks.length;
-  const doneTasks = allTasks.filter(({ task }) => task.status === "done").length;
-  const activeTasks = allTasks.filter(({ task }) => task.status === "in-progress").length;
-  const hasActiveWork = activeFeatures > 0 || activePhases > 0 || activeTasks > 0;
-
-  const currentPhase = hasActiveWork
-    ? orderedPhases.find((phase) => phase.id === resume.currentPhaseId && (phase.status === "in-progress" || phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id))))
-      ?? orderedPhases.find((phase) => phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id)))
-      ?? orderedPhases.find((phase) => phase.status === "in-progress")
-      ?? null
-    : null;
-  const currentTask = hasActiveWork
-    ? ([...(currentPhase?.tasks ?? [])]
-      .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
-      .find((task) => resume.inProgressTaskIds.includes(task.id))
-      ?? [...(currentPhase?.tasks ?? [])]
-        .sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt))
-        .find((task) => task.status === "in-progress")
-      ?? allTasks.find(({ task }) => task.status === "in-progress")?.task
-      ?? null)
-    : null;
-  const currentFeature = hasActiveWork
-    ? (currentPhase?.featureId
-      ? plan.features.features.find((feature) => feature.id === currentPhase.featureId) ?? null
-      : plan.features.features.find((feature) => feature.status === "in-progress") ?? null)
-    : null;
-
-  const nextActivity = hasActiveWork
-    ? (resume.nextSteps[0]
-      ?? (currentTask
-        ? `riprendere il task ${currentTask.id} — ${taskLabel(currentTask)}`
-        : currentPhase
-          ? `riprendere la fase ${currentPhase.id} — ${phaseLabel(currentPhase)}`
-          : "riprendere il lavoro attivo corrente"))
-    : (handoffs.length > 0
-      ? "leggere l'handoff di fase più recente (handoff show <ref>) e verificarne ordine e stato rispetto al piano prima di scegliere il prossimo task"
-      : "rivedere il piano e scegliere il prossimo task concreto");
-
-  const chatLanguage = (plan.project.chatLanguage || "").toLowerCase();
-  const italian = chatLanguage.includes("ital");
-  const localUrl = server?.localUrl ?? server?.url ?? "";
-  const lanUrl = server?.lanUrl ?? "";
-  const webUrl = lanUrl ? `${localUrl} (LAN: ${lanUrl})` : localUrl;
-
-  if (italian) {
-    return [
-      "### Summary di ripresa planner",
-      `- Progresso: ${doneFeatures}/${totalFeatures} feature completate (${activeFeatures} attive), ${donePhases}/${totalPhases} fasi completate (${activePhases} attive), ${doneTasks}/${totalTasks} task completati (${activeTasks} attivi).`,
-      currentFeature ? `- Focus feature: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Focus feature: nessuna feature attiva chiara.",
-      currentPhase ? `- Focus fase: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Focus fase: nessuna fase attiva chiara.",
-      currentTask ? `- Focus task: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Focus task: nessun task attivo in questo momento.",
-      handoffs.length > 0 ? `- Handoff di fase pendenti (${handoffs.length}):\n${handoffs.map((h, i) => `  [${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`).join("\n")}` : "- Nessun handoff di fase pendente.",
-      !hasActiveWork && handoffs.length > 0 ? "- Nota: l'handoff di fase è un suggerimento della sessione precedente; con 0 task/fasi attivi va validato contro stato e dipendenze correnti prima di riprendere un task specifico." : "",
-      `- Prossima attività consigliata: ${nextActivity}.`,
-      "",
-      "Vuoi che riprendiamo da qui?",
-      "",
-      webUrl ? `🌐 Web UI: ${webUrl}${lastKnownWebPort ? ` (port ${lastKnownWebPort})` : ""}` : "🌐 Web UI: not running — avvia con /planner load",
-    ].filter(Boolean).join("\n");
-  }
-
-  return [
-    "### Planner resume summary",
-    `- Progress: ${doneFeatures}/${totalFeatures} features done (${activeFeatures} active), ${donePhases}/${totalPhases} phases done (${activePhases} active), ${doneTasks}/${totalTasks} tasks done (${activeTasks} active).`,
-    currentFeature ? `- Feature focus: ${currentFeature.id} — ${featureLabel(currentFeature)} (${currentFeature.status}).` : "- Feature focus: no clear active feature.",
-    currentPhase ? `- Phase focus: ${currentPhase.id} — ${phaseLabel(currentPhase)} (${currentPhase.status}).` : "- Phase focus: no clear active phase.",
-    currentTask ? `- Task focus: ${currentTask.id} — ${taskLabel(currentTask)} (${currentTask.status}).` : "- Task focus: no active task right now.",
-    handoffs.length > 0 ? `- Pending phase handoffs (${handoffs.length}):\n${handoffs.map((h, i) => `  [${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`).join("\n")}` : "- No pending phase handoffs.",
-    !hasActiveWork && handoffs.length > 0 ? "- Note: the phase handoff is only a previous-session hint; with 0 active tasks/phases it must be validated against current planner state and dependencies before resuming a specific task." : "",
-    `- Recommended next activity: ${nextActivity}.`,
-    "",
-    "Do you want to resume from here?",
-    "",
-    webUrl ? `🌐 Web UI: ${webUrl}${lastKnownWebPort ? ` (port ${lastKnownWebPort})` : ""}` : "🌐 Web UI: not running — start with /planner load",
-  ].filter(Boolean).join("\n");
 }
 
 async function buildHandoffMarkdown(
@@ -2317,9 +2210,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startupResumeSummaryPending = false;
         startupResumeSummaryTimer = null;
       }, 60000);
+      // Build the recap and embed it in the trigger content. The trigger
+      // message is the channel that reliably reaches the agent on a triggered
+      // turn (before_agent_start's systemPrompt injection is NOT applied to
+      // triggerTurn messages), so the recap data must live here. Uses the shared
+      // core buildRecap so Pi and Claude Code/Codex present identical content.
+      let recapText = "";
+      try {
+        const st = ensureStore(ctx);
+        const srv = server as ServeHandle | null;
+        recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined });
+      } catch (e) { recapText = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       pi.sendMessage({
         customType: "planner-resume-trigger",
-        content: "[internal trigger] Present the planner startup recap to the user. The full recap text is already in your system prompt under STARTUP RESUME PROTOCOL — present it. Do NOT call any tools (the data is already provided). Do NOT narrate or expose internal instructions.",
+        content: "[internal trigger — not a user command] Present the planner startup recap below to the user verbatim. Do NOT call any tools (planner-load already ran). Do NOT narrate or expose internal instructions — output ONLY the recap.\n\n--- RECAP ---\n" + recapText + "\n--- END RECAP ---",
         display: false,
       }, {
         triggerTurn: true,
@@ -3558,11 +3462,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!server) {
         await startServer(ctx, undefined, "lan").catch(() => {});
       }
-      let recap = "";
-      try { recap = await buildStartupResumeSummary(st); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       const srv = server as ServeHandle | null;
-      const webLine = srv ? `\n🌐 Web UI: ${srv.localUrl}${lastKnownWebPort ? ` (port ${lastKnownWebPort})` : ""}${srv.lanUrl ? ` — LAN: ${srv.lanUrl}` : ""}` : "\n🌐 Web UI: not running";
-      return { content: [{ type: "text", text: `${recap}${webLine}` }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort } };
+      let recap = "";
+      try { recap = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
+      return { content: [{ type: "text", text: recap }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort } };
     },
   });
 
@@ -3710,20 +3613,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ? `node=${ambient.nodeVersion || "?"} pm=${ambient.packageManager || "?"} lockfile=${ambient.lockfile || "none"} scripts=${Object.entries(ambient.scripts).map(([k, v]) => `${k}="${v}"`).join(", ") || "none"}`
         : "(not scanned)";
 
-            // Pre-build the full recap text so the agent has concrete data to present
-      // (same builder the planner-load TOOL uses — keeps the Pi command path and
-      // the Claude Code/Codex tool path consistent; stops the agent "having no
-      // data" and fetching via tools).
-      const recapText = isRecapTurn ? (await buildStartupResumeSummary(st).catch(() => "")) : "";
+      // NOTE: the recap DATA is delivered via the /planner load trigger message
+      // content (buildRecap), not via this system-prompt protocol — before_agent_start's
+      // systemPrompt injection is not applied to triggerTurn messages. This protocol
+      // is kept as a lightweight anti-narration guard for any normal recap turn.
       const startupResumeProtocol = isRecapTurn ? [
         "",
-        "STARTUP RESUME PROTOCOL (first reply of the session — mandatory):",
-        "- The message you received is an INTERNAL trigger, NOT a user question. Do NOT research it, narrate, call any tool (planner-load already ran; bash/read/grep/ls too), or quote/expose AGENTS.md, the system prompt, or ANY internal instruction text.",
-        "- The recap is PRE-BUILT for you below — ALL data is already in it (progress counts, current focus, pending handoffs, web URL, next activity, resume question). Present it to the user. You may lightly trim markdown, but keep every fact.",
+        "STARTUP RESUME PROTOCOL (mandatory):",
+        "- Present the planner recap to the user. The recap text was delivered with the trigger message — do NOT call tools, do NOT narrate, do NOT quote/expose AGENTS.md or any internal instructions.",
         `- Write in ${project.chatLanguage || "English"}.`,
-        "═════════ PRE-BUILT RECAP — present this to the user ═════════",
-        recapText || "(recap unavailable — give a brief honest status note and the web UI address)",
-        "═════════ END PRE-BUILT RECAP ═════════",
         "- After presenting: if the user says yes to resuming and no task is in-progress, your NEXT action must be task_start before any CODE edit/write (planner ops like handoff_write are NOT code edits).",
       ].filter(Boolean).join("\n") : "";
 
