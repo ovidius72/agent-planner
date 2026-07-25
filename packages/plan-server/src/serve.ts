@@ -916,6 +916,11 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
 
   // Self-heal stale/legacy persisted statuses before the UI reads them.
   await store.syncStatuses();
+  // Backfill missing shortIds (globally-unique 5-char) + priorities so the
+  // Web UI always shows short IDs even before the adapter's first-turn init
+  // runs. Idempotent: only assigns MISSING shortIds/priorities, never
+  // overwrites existing ones.
+  await store.ensureShortIdsAndPriority().catch(() => null);
 
   // Shared mutable reference — routes see the hub after it's created
   const hubRef: { current: WsHub | null } = { current: null };

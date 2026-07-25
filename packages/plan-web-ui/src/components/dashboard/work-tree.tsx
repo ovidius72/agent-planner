@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { EntityPathBadge } from "../ui/badges";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
-import { formatSequence } from "../../lib/dashboard-tree";
+import { formatSequence, type WorkTreeFeature } from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
@@ -20,6 +20,38 @@ import { SearchBar } from "./search-bar";
  * All stateful logic lives in useDashboardTree; this component is mostly
  * wiring + presentation.
  */
+/** Optimistic reorder: re-sorts each tree level by a transient per-scope order
+ *  (set on drag-end) so the tree reorders instantly, before the server broadcast
+ *  arrives with the real new priorities. No-op when `pending` is empty. */
+function applyOrder(tree: WorkTreeFeature[], pending: Record<string, string[]>): WorkTreeFeature[] {
+  if (Object.keys(pending).length === 0) return tree;
+  const rankOf = (scope: string) => {
+    const po = pending[scope];
+    if (!po) return null;
+    return new Map(po.map((id, i) => [id, i]));
+  };
+  const featRank = rankOf("__features__");
+  const ordered = featRank
+    ? [...tree].sort((a, b) => (featRank.get(a.feature.id) ?? Infinity) - (featRank.get(b.feature.id) ?? Infinity))
+    : tree;
+  return ordered.map((entry) => {
+    const phaseRank = rankOf(`phase-scope:${entry.feature.id}`);
+    const allPhases = phaseRank
+      ? [...entry.allPhases].sort((a, b) => (phaseRank.get(a.phase.id) ?? Infinity) - (phaseRank.get(b.phase.id) ?? Infinity))
+      : entry.allPhases;
+    return {
+      ...entry,
+      allPhases: allPhases.map((pe) => {
+        const taskRank = rankOf(`task-scope:${pe.phase.id}`);
+        const allTasks = taskRank
+          ? [...pe.allTasks].sort((a, b) => (taskRank.get(a.id) ?? Infinity) - (taskRank.get(b.id) ?? Infinity))
+          : pe.allTasks;
+        return { ...pe, allTasks };
+      }),
+    };
+  });
+}
+
 export function WorkTree({
   features,
   phases,
@@ -32,6 +64,16 @@ export function WorkTree({
   projectStorageScope: string;
 }) {
   const tree = useDashboardTree({ features, phases, projectStorageScope });
+  // Optimistic reorder: a transient per-scope order applied on drag-end so the
+  // tree reorders instantly (no snap-back to original) before the server
+  // broadcast arrives with the real new priorities. Cleared when the data
+  // refresh changes tree.displayedWorkTree.
+  const [pendingOrder, setPendingOrder] = useState<Record<string, string[]>>({});
+  useEffect(() => { setPendingOrder({}); }, [tree.displayedWorkTree]);
+  const orderedTree = useMemo(
+    () => applyOrder(tree.displayedWorkTree, pendingOrder),
+    [tree.displayedWorkTree, pendingOrder],
+  );
   const [repairing, setRepairing] = useState(false);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -72,25 +114,31 @@ export function WorkTree({
     const activeId = String(active.id);
     const overId = String(over.id);
     // Features scope
-    const featureIds = tree.displayedWorkTree.map((e) => e.feature.id);
+    const featureIds = orderedTree.map((e) => e.feature.id);
     if (featureIds.includes(activeId) && featureIds.includes(overId)) {
-      await reorder("feature", arrayMove(featureIds, featureIds.indexOf(activeId), featureIds.indexOf(overId))).catch(() => {});
+      const next = arrayMove(featureIds, featureIds.indexOf(activeId), featureIds.indexOf(overId));
+      setPendingOrder((prev) => ({ ...prev, "__features__": next })); // optimistic: reorder now
+      await reorder("feature", next).catch(() => {});
       return;
     }
     // Phases scope (within a feature)
-    for (const entry of tree.displayedWorkTree) {
+    for (const entry of orderedTree) {
       const phaseIds = entry.allPhases.map((p) => p.phase.id);
       if (phaseIds.includes(activeId) && phaseIds.includes(overId)) {
-        await reorder("phase", arrayMove(phaseIds, phaseIds.indexOf(activeId), phaseIds.indexOf(overId))).catch(() => {});
+        const next = arrayMove(phaseIds, phaseIds.indexOf(activeId), phaseIds.indexOf(overId));
+        setPendingOrder((prev) => ({ ...prev, [`phase-scope:${entry.feature.id}`]: next }));
+        await reorder("phase", next).catch(() => {});
         return;
       }
     }
     // Tasks scope (within a phase)
-    for (const entry of tree.displayedWorkTree) {
+    for (const entry of orderedTree) {
       for (const pe of entry.allPhases) {
         const taskIds = pe.allTasks.map((t) => t.id);
         if (taskIds.includes(activeId) && taskIds.includes(overId)) {
-          await reorder("task", arrayMove(taskIds, taskIds.indexOf(activeId), taskIds.indexOf(overId))).catch(() => {});
+          const next = arrayMove(taskIds, taskIds.indexOf(activeId), taskIds.indexOf(overId));
+          setPendingOrder((prev) => ({ ...prev, [`task-scope:${pe.phase.id}`]: next }));
+          await reorder("task", next).catch(() => {});
           return;
         }
       }
@@ -108,7 +156,7 @@ export function WorkTree({
   // clone follows the cursor — cleaner than transforming the row in-place.
   const renderDragPreview = () => {
     if (!activeId) return null;
-    for (const entry of tree.displayedWorkTree) {
+    for (const entry of orderedTree) {
       if (entry.feature.id === activeId) {
         return (
           <div className="ap-drag-overlay surface-card min-w-0 max-w-md px-3 py-2">
@@ -229,10 +277,10 @@ export function WorkTree({
       </div>
 
       <div className="grid gap-3">
-        {tree.displayedWorkTree.length > 0 ? (
+        {orderedTree.length > 0 ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <SortableContext items={tree.displayedWorkTree.map((e) => e.feature.id)} strategy={verticalListSortingStrategy}>
-              {tree.displayedWorkTree.map((entry) => (
+            <SortableContext items={orderedTree.map((e) => e.feature.id)} strategy={verticalListSortingStrategy}>
+              {orderedTree.map((entry) => (
                 <SortableItem key={entry.feature.id} id={entry.feature.id}>
                   <FeatureTreeRow
                     entry={entry}
