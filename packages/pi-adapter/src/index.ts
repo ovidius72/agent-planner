@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation, findPhaseByRef, buildRecap } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -1110,58 +1110,43 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // ═══════════════════════════════════════════════════════════════
     //  Helper: pick a feature interactively
     // ═══════════════════════════════════════════════════════════════
-    async function pickFeature(): Promise<Feature | null> {
-      const features = (await st.loadFeatures().catch(() => ({ features: [] as Feature[] }))).features;
+        async function pickFeature(): Promise<Feature | null> {
+      const features = (await st.loadFeatures().catch(() => ({ features: [] as Feature[] }))).features
+        .slice()
+        .sort((a, b) => a.number - b.number);
       if (features.length === 0) return null;
-      const list = features.map((f, i) => `  ${i + 1}. ${statusIcon(f.status)} ${f.name} (${f.id})`).join("\n");
-      ctx.ui.notify(`Pick a feature:\n${list}`, "info");
-      const pick = await ctx.ui.input("Enter feature number");
-      if (!pick?.trim()) return null;
-      const idx = parseInt(pick.trim(), 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= features.length) {
-        ctx.ui.notify("Invalid number", "error");
-        return null;
-      }
-      return features[idx]!;
+      const options = features.map((f) => `  ${formatFeatureRef(f.number)} ${statusIcon(f.status)} ${f.name}${f.shortId ? ` · ${f.shortId}` : ""}`);
+      const chosen = await ctx.ui.select("Pick a feature", options);
+      if (chosen == null) return null;
+      const idx = options.indexOf(chosen);
+      return idx >= 0 ? features[idx]! : null;
     }
 
     // ═══════════════════════════════════════════════════════════════
     //  Helper: pick a phase interactively
     // ═══════════════════════════════════════════════════════════════
-    async function pickPhase(): Promise<Phase | null> {
-      const phases = await st.loadAllPhases().catch(() => [] as Phase[]);
+        async function pickPhase(): Promise<Phase | null> {
+      const phases = (await st.loadAllPhases().catch(() => [] as Phase[])).slice().sort((a, b) => a.number - b.number);
       if (phases.length === 0) { return null; }
-      const list = phases.map((p, i) =>
-        `  ${i + 1}. ${statusIcon(p.status)} ${p.title} (${p.id})`
-      ).join("\n");
-      ctx.ui.notify(`Pick a phase:\n${list}`, "info");
-      const pick = await ctx.ui.input("Enter phase number");
-      if (!pick?.trim()) return null;
-      const idx = parseInt(pick.trim(), 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= phases.length) {
-        ctx.ui.notify("Invalid number", "error");
-        return null;
-      }
-      return phases[idx]!;
+      const features = (await st.loadFeatures().catch(() => ({ features: [] as Feature[] }))).features;
+      const options = phases.map((p) => `  ${formatPhaseRef(p.number, featureNumberOfPhase(p, features))} ${statusIcon(p.status)} ${p.title}${p.shortId ? ` · ${p.shortId}` : ""}`);
+      const chosen = await ctx.ui.select("Pick a phase", options);
+      if (chosen == null) return null;
+      const idx = options.indexOf(chosen);
+      return idx >= 0 ? phases[idx]! : null;
     }
 
     // ═══════════════════════════════════════════════════════════════
     //  Helper: pick a task interactively from a phase
     // ═══════════════════════════════════════════════════════════════
-    async function pickTask(phase: Phase): Promise<Task | null> {
+        async function pickTask(phase: Phase): Promise<Task | null> {
       if (phase.tasks.length === 0) return null;
-      const list = phase.tasks.map((t, i) =>
-        `  ${i + 1}. ${statusIcon(t.status)} ${t.title} (${t.id})`
-      ).join("\n");
-      ctx.ui.notify(`Pick a task from "${phase.title}":\n${list}`, "info");
-      const pick = await ctx.ui.input("Enter task number");
-      if (!pick?.trim()) return null;
-      const idx = parseInt(pick.trim(), 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= phase.tasks.length) {
-        ctx.ui.notify("Invalid number", "error");
-        return null;
-      }
-      return phase.tasks[idx]!;
+      const tasks = phase.tasks.slice().sort((a, b) => a.number - b.number);
+      const options = tasks.map((t) => `  T${String(t.number).padStart(3, "0")} ${statusIcon(t.status)} ${t.title}${t.shortId ? ` · ${t.shortId}` : ""}`);
+      const chosen = await ctx.ui.select(`Pick a task from "${phase.title}"`, options);
+      if (chosen == null) return null;
+      const idx = options.indexOf(chosen);
+      return idx >= 0 ? tasks[idx]! : null;
     }
 
     function parseMultilineList(value: string | undefined): string[] {
@@ -1183,7 +1168,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     function findFeatureByRef(features: Feature[], ref: string): Feature | null {
       const normalized = ref.trim().toLowerCase();
       if (!normalized) return null;
-      return features.find((feature) => feature.id.toLowerCase() === normalized)
+      const fMatch = normalized.match(/^f(\d+)$/);
+      if (fMatch) {
+        const n = parseInt(fMatch[1]!, 10);
+        const byNum = features.find((f) => f.number === n);
+        if (byNum) return byNum;
+      }
+      return features.find((feature) => feature.shortId && feature.shortId.toLowerCase() === normalized)
+        ?? features.find((feature) => feature.id.toLowerCase() === normalized)
         ?? features.find((feature) => feature.name.toLowerCase() === normalized)
         ?? features.find((feature) => feature.name.toLowerCase().includes(normalized))
         ?? null;
@@ -1192,7 +1184,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     function findPhaseByRef(phases: Phase[], ref: string): Phase | null {
       const normalized = ref.trim().toLowerCase();
       if (!normalized) return null;
-      return phases.find((phase) => phase.id.toLowerCase() === normalized)
+      const pMatch = normalized.match(/^p(\d+)$/);
+      if (pMatch) {
+        const n = parseInt(pMatch[1]!, 10);
+        const byNum = phases.find((p) => p.number === n);
+        if (byNum) return byNum;
+      }
+      return phases.find((phase) => phase.shortId && phase.shortId.toLowerCase() === normalized)
+        ?? phases.find((phase) => phase.id.toLowerCase() === normalized)
         ?? phases.find((phase) => phase.title.toLowerCase() === normalized)
         ?? phases.find((phase) => phase.title.toLowerCase().includes(normalized))
         ?? null;

@@ -188,7 +188,9 @@ export const PhaseSchema = z.object({
   priority: z.number().int().nonnegative().default(0),
   slug: SlugSchema,
   title: z.string().min(1),
-  status: PhaseStatusSchema,
+  // NOTE: `status` is intentionally ABSENT from the schema — it is a DERIVED
+  // value (computed from child tasks at read time) and is never persisted.
+  // The runtime `Phase` type re-adds it as a non-optional field (see below).
   discussedAt: z.string().default(""),
   contextReady: z.boolean().default(false),
   contextReadyReason: z.string().default(""),
@@ -219,7 +221,8 @@ export const FeatureSchema = z.object({
   priority: z.number().int().nonnegative().default(0),
   name: z.string().min(1),
   description: z.string().default(""),
-  status: FeatureStatusSchema,
+  // NOTE: `status` is intentionally ABSENT — it is DERIVED from child phases
+  // at read time and never persisted. The runtime `Feature` type re-adds it.
   discussedAt: z.string().default(""),
   contextReady: z.boolean().default(false),
   contextReadyReason: z.string().default(""),
@@ -278,8 +281,8 @@ export type ActivityEntry = z.infer<typeof ActivityEntrySchema>;
 export type ActivityLog = z.infer<typeof ActivityLogSchema>;
 export type ResumeFocus = z.infer<typeof ResumeFocusSchema>;
 export type FeatureStatus = z.infer<typeof FeatureStatusSchema>;
-export type Feature = z.infer<typeof FeatureSchema>;
-export type FeaturesDocument = z.infer<typeof FeaturesDocumentSchema>;
+export type Feature = z.infer<typeof FeatureSchema> & { status: FeatureStatus };
+export type FeaturesDocument = { features: Feature[] };
 export type PhaseStatus = z.infer<typeof PhaseStatusSchema>;
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 export type RequirementStatus = z.infer<typeof RequirementStatusSchema>;
@@ -292,8 +295,8 @@ export type Subtask = z.infer<typeof SubtaskSchema>;
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
 export type StatusLogEntry = z.infer<typeof StatusLogEntrySchema>;
 export type Task = z.infer<typeof TaskSchema>;
-export type Phase = z.infer<typeof PhaseSchema>;
+export type Phase = z.infer<typeof PhaseSchema> & { status: PhaseStatus };
 export type MacroTask = z.infer<typeof MacroTaskSchema>;
 export type Requirement = z.infer<typeof RequirementSchema>;
 export type RequirementsDocument = z.infer<typeof RequirementsDocumentSchema>;
-export type PlanWorkspace = z.infer<typeof PlanWorkspaceSchema>;
+export type PlanWorkspace = Omit<z.infer<typeof PlanWorkspaceSchema>, "phases" | "features"> & { phases: Phase[]; features: FeaturesDocument };

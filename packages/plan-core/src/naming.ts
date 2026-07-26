@@ -60,6 +60,19 @@ export function formatPhaseRef(phaseNumber: number, featureNumber?: number): str
   return featureNumber != null ? `${p}(F${formatThreeDigitNumber(featureNumber)})` : p;
 }
 
+/** Human-readable feature ref: `F00x`. Harness-agnostic. */
+export function formatFeatureRef(featureNumber: number): string {
+  return `F${formatThreeDigitNumber(featureNumber)}`;
+}
+
+/** Find the parent feature's number for a phase (for P00x(F00x) composite refs). */
+export function featureNumberOfPhase(
+  phase: { featureId?: string | null | undefined },
+  features: { id: string; number: number }[]
+): number | undefined {
+  return phase.featureId ? features.find((f) => f.id === phase.featureId)?.number : undefined;
+}
+
 export function createPhaseId(): string {
   return randomUUID();
 }

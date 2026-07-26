@@ -288,3 +288,45 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **develop reconciliation**: avevo prematuramente mergiato PR #27 (next→develop) + syncato develop da main. Per correzione utente, force-push develop → `6e391cc` (PR #26 shortid, pre-F004, zero commit F004 verificati). develop fermo fino a proving di next. main non toccato.
 - [x] **F004 completa su `next`** (13 commit, P001-P006). Stable release (latest) + merge next→develop differiti fino a proving del channel `@next`.
 - [ ] **Prossimo**: testare `@next` in un progetto reale (`pi install npm:@agent-plan/pi-adapter@next` o `npm i @agent-plan/core@next`); quando verificato, merge `next`→`develop` e release stable via `pnpm release`. Aggiornare §12 AGENTS.md al nuovo modello next-prerelease.
+
+### Fatto — Derivazione status fasi/feature (non scritto su file) (sessione 2026-07-25)
+- [x] **Problema**: lo status di fase/feature veniva persistito sui file e diventava stale (es. F001 in-progress rimasto dopo DnD anche se tutte le fasi done). Il drag&drop salvava lo status del momento e `syncStatuses` non sempre ricalcolava.
+- [x] **Soluzione approvata**: status DERIVATO a read-time dai figli, NON scritto sui file. Rimossa la fonte di verità persistita → niente più stale/flip.
+- [x] **Schema** (`packages/plan-core/src/schema.ts`): rimosso `status` da `PhaseSchema` + `FeatureSchema` (zod lo strippa su parse → mai scritto). Tipi runtime ri-augmentati: `Phase = z.infer<PhaseSchema> & { status }`, `Feature = ... & { status }`, `FeaturesDocument = { features: Feature[] }`, `PlanWorkspace` riscritto con `phases: Phase[]` + `features: FeaturesDocument`.
+- [x] **Store** (`packages/plan-core/src/plan-store.ts`):
+  - `loadPhase`/`loadAll`/`loadFeatures` (nuovo `loadRawFeatures`) → derivano `status` dai figli (task→phase, phase→feature).
+  - `updatePhase` → augmenta status DERIVATO prima dell'updater (gli updater che leggono `phase.status` vedono la verità); `PhaseSchema.parse` strippa status al save; return re-derivato.
+  - `derivePhaseStatus(tasks)`: vuoto→"draft"; tutte done→done; una qualsiasi in-progress/done→in-progress; stall: blocked>waiting>deferred; resto→planned.
+  - `deriveFeatureStatus(featureId, phases)`: vuoto→"planned"; stessa logica su fasi (discovery/in-progress/done→in-progress).
+  - `syncStatuses` → no-op (ritorna []); `syncTaskStatusRollup` → solo auto-clear handoff quando fase deriva done (status non più scritto); `maybeAutoSync` → no-op. `enableAutoSync`/`runBatch` mantenuti invariati (no-op innocui).
+- [x] **Adattatori/server**: `savePhase`/`saveFeature`/`saveFeaturesRaw` non cambiati (`*Schema.parse` strippa status in automatico). `feature_update`/`phase_update` status param → no-op (saver strippa). Create-site (serve.ts/mcp/pi-adapter) lasciano "draft"(phase)/"planned"(feature) che matchano il derive-empty → no flip al reload.
+- [x] **Migrazione locale** (`.planner` gitignored): strippato `status` da 14 phase file + 5 feature per-file + 5 entry legacy `features.json`.
+- [x] **Validazione**: `pnpm -r build` pulito; `pnpm check` (tsc -b) exit 0; smoke test post-strip → F1 "Improvements" deriva `in-progress` (fase in-progress), altre 4 done; 0 file phase con key `status`.
+- [ ] **Da fare al release**: bump `@agent-plan/core` (schema+store), poi `@agent-plan/server`/`mcp`/`pi-adapter`/`agent-plan` (rebuild dist). Branch `fix/derive-status` da `develop`, PR a `develop`.
+- [x] **Bug renumering feature FIXATO** (`packages/plan-core/src/plan-store.ts`): `loadRawFeatures` non ordinava l'output → `readdir` (ordine UUID casuale) → `normalizeFeaturesDocument` renumerava `index+1` sovrascrivendo i numeri persistiti (F2 e F4 scambiati, ecc.). Fix: `out.sort((a,b) => (a.number-b.number) || a.id.localeCompare(b.id))` prima del return (anche path legacy `features.json`). Ora `loadFeatures` e `loadAll` concordano (0 mismatch), numeri stabili nell'ordine di creazione. `loadAllPhases` faceva già `files.sort()` + sort finale → le fasi non avevano il bug.
+
+### Fatto — Echo contesto su create/modify task (sessione 2026-07-25)
+- [x] **Problema**: in Claude Code, quando un tool MCP ritorna sia `content[].text` sia `structuredContent`, l'LLM riceve **solo `structuredContent`** (il testo breve viene scartato — issue claude-code #55677). `planner-task-add` ritornava `structuredContent: { task, phase }` (task completo + fase completa con tutte le descrizioni) → eco enorme nel contesto LLM a ogni create/modify.
+- [x] **Fix plan-mcp** (`packages/plan-mcp/src/index.ts`):
+  - `findTaskByRef` v2: ora accetta shortId (5-char) + composite `P00x(F00x)/T00x` / `T00x(P00x/F00x)` (match per phase.number + task.number), oltre a UUID/titolo.
+  - helper `featureNumberOfPhase` + `taskCompositeRef` (ref umano `P00x(F00x)/T00x`, pad 3 cifre).
+  - task-add/update/start/complete/discuss: rimossi i `structuredContent` pieni (`{task, phase}` / `{task}`); ora ritornano SOLO `content.text` slim: `✅ Task <verb>: <compositeRef> — <title> (<status>) · <shortId>`. Niente description, niente fase, niente UUID.
+- [x] **Fix pi-adapter** (`packages/pi-adapter/src/index.ts`): in Pi `details` non raggiunge l'LLM, ma il `content.text` usava l'UUID (`Task created: ${taskId}`). Allineato: task-create/update/start/complete ora `content.text` slim con compositeRef + shortId (no UUID). `findTaskByRef` v2 (stessa logica). Helper a scope modulo. `details` mantenuto pieno (non è eco LLM in Pi).
+- [x] **Risultato**: da ~1455 char (solo description) + fase (migliaia) → 66 char slim. `task-show` lascia pieno (è il suo scopo).
+- [x] **Verifica end-to-end** (client MCP stdio su copia temp del `.planner`): `planner-task-add` → `"✅ Task created: P001(F005)/T005 — Echo Test Task (planned) · 7WGBE"`, **no `structuredContent`**, non contiene la description né la phase description.
+- [x] `pnpm -r build` + `pnpm check` puliti.
+- [ ] **Da fare al release**: bump `@agent-plan/mcp` + `@agent-plan/pi-adapter` (rebuild dist). Stesso branch `experiment/recap-delivery` fino a verifica.
+- [ ] **Nota scope**: feature/phase create/update hanno lo stesso pattern (`structuredContent` pieno) — stesso eco in Claude Code. Non fixati ora (user ha segnalato solo task). Fixabili allo stesso modo se richiesto.
+
+### Fatto — Picker entity senza UUID + numerazione automatica (sessione 2026-07-25)
+- [x] **Problema**: i picker interattivi Pi (`pickFeature`/`pickPhase`/`pickTask`) mostravano gli UUID (`name (uuid)`) e accettavano SOLO l'indice 1-based della lista (`parseInt`). Dopo aver reso `F00x`/`P00x`/`T00x` + shortId lo standard per indirizzare le entità, digitare `P001`/`T001` nel prompt "Enter phase/task number" → `parseInt("P001")` → `NaN` → **"Invalid number"**, ogni volta. Inoltre la numerazione delle entità è già auto-assegnata alla creazione (`feature.number`/`phase.number`/`phase.tasks.length+1`): nessun motivo di farti digitare un numero.
+- [x] **Fix pi-adapter** (`packages/pi-adapter/src/index.ts`): i 3 picker ora usano `ctx.ui.select` (menu freccette, stesso meccanismo del menu `/planner` principale a riga 1037) con label leggibili — **nessun UUID, nessun numero da digitare**:
+  - Feature: `F001 ○ name · shortId`
+  - Phase: `P001(F005) ○ title · shortId` (parent feature calcolato via `featureNumberOfPhase`)
+  - Task: `T001 ○ title · shortId`
+  - Lista ordinata per `number`. Selezione via freccette → mapping indice→entità. Niente più "Invalid number".
+- [x] **Risolutori ref potenziati** (path inline `/planner task discuss T001` e tool args): `findFeatureByRef`/`findPhaseByRef` (pi-adapter locali) + `findFeatureByRef` (plan-mcp locale) + `findPhaseByRef` (core `refs.ts`) ora accettano **uniformemente** `F00x`/`P00x` + shortId, oltre a UUID/titolo. `findTaskByRef` (v2, già fatto) accetta composite + shortId.
+- [x] **Helper harness-agnostic in core** (`packages/plan-core/src/naming.ts`): aggiunti `formatFeatureRef(n)` → `F00x` e `featureNumberOfPhase(phase, features)` → numero feature parent (per il composite `P00x(F00x)`).`formatPhaseRef` esisteva già.
+- [x] **Parità cross-harness confermata**: in Claude Code/Codex (plan-mcp) `phase: "P001"`/`feature: "F001"`/`task: "T00x"`/shortId funzionano nei tool args (nessun picker, nessuna digitazione di numero, numero auto-assegnato). Stessa semantica ref ovunque. (Consolidamento completo di tutti i risolutori in core = cleanup futuro separato.)
+- [x] Validazione: `pnpm -r build` + `pnpm check` (tsc -b) puliti.
+- [ ] **Da fare al release**: bump `@agent-plan/core` (naming + refs shortId), `@agent-plan/mcp` (findFeatureByRef), `@agent-plan/pi-adapter` (picker + resolver). Branch `experiment/recap-delivery`.

@@ -244,6 +244,13 @@ async function readJson<T>(path: string, schema: { parse(v: unknown): T }): Prom
 
 // ─── PlanStore ──────────────────────────────────────────────────────────
 
+// Raw (on-disk) shapes: the schema-inferred objects WITHOUT the derived `status`
+// field. `Phase`/`Feature` (runtime) re-add `status` (derived from children at
+// read time). The schema parse strips any persisted `status`, so the file never
+// stores it — status is always recomputed on load.
+type RawPhase = Omit<Phase, "status">;
+type RawFeature = Omit<Feature, "status">;
+
 export class PlanStore {
   public readonly root: string;
   private autoSync = false;
@@ -292,13 +299,8 @@ export class PlanStore {
   }
 
   private async maybeAutoSync(): Promise<void> {
-    if (!this.autoSync || this.syncGuard || this.batchInProgress) return;
-    try {
-      this.syncGuard = true;
-      await this.syncStatuses();
-    } finally {
-      this.syncGuard = false;
-    }
+    // No-op: status is derived on read, so there is nothing to sync after a
+    // save. Kept so existing save* call sites compile unchanged.
   }
 
   private normalizeTasks(tasks: Task[]): { tasks: Task[]; changed: boolean } {
@@ -321,7 +323,7 @@ export class PlanStore {
     return { doc: { features: normalized }, changed };
   }
 
-  private normalizePhaseDocument(phase: Phase): { phase: Phase; changed: boolean } {
+  private normalizePhaseDocument(phase: RawPhase): { phase: RawPhase; changed: boolean } {
     const { tasks, changed } = this.normalizeTasks(phase.tasks);
     const nextTaskIds = tasks.map((task) => task.id);
     const taskIdsChanged = nextTaskIds.length !== phase.taskIds.length || nextTaskIds.some((id, index) => id !== phase.taskIds[index]);
@@ -450,7 +452,7 @@ export class PlanStore {
    *  into features/<id>.json (one per feature) and remove the legacy file.
    *  Must be called under withFeaturesLock. Crash-safe: re-run overwrites. */
   private async migrateLegacy(): Promise<void> {
-    let legacy: FeaturesDocument;
+    let legacy: { features: RawFeature[] };
     try {
       legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
     } catch {
@@ -594,12 +596,15 @@ export class PlanStore {
 
 
   async loadPhase(phaseId: string): Promise<Phase> {
-    const phase = await readJson(this.phasePath(phaseId), PhaseSchema);
-    return this.normalizePhaseDocument(phase).phase;
+    const raw = await readJson(this.phasePath(phaseId), PhaseSchema);
+    const normalized = this.normalizePhaseDocument(raw).phase;
+    return { ...normalized, status: this.derivePhaseStatus(normalized.tasks) };
   }
 
-  async loadFeatures(): Promise<FeaturesDocument> {
-    // Per-file layout: read features/<id>.json (one file per feature).
+  /** Read raw feature files WITHOUT the derived `status` field. Used
+   *  internally so loadFeatures/loadAll can derive status from phases without
+   *  double-loading. */
+  private async loadRawFeatures(): Promise<RawFeature[]> {
     let jsonFiles: string[] = [];
     try {
       const all = await readdir(this.featuresDir());
@@ -608,25 +613,39 @@ export class PlanStore {
       // features/ absent → fall through to legacy single-file layout
     }
     if (jsonFiles.length > 0) {
-      const features: Feature[] = [];
+      const out: RawFeature[] = [];
       for (const f of jsonFiles) {
         const id = f.replace(/\.json$/, "");
         try {
-          features.push(await readJson(this.featurePath(id), FeatureSchema));
+          out.push(await readJson(this.featurePath(id), FeatureSchema));
         } catch (err) {
           // Skip an invalid feature file rather than failing the whole load.
           console.warn(`[plan-store] skipping invalid feature file ${f}:`, err);
         }
       }
-      return this.normalizeFeaturesDocument({ features }).doc;
+      // Deterministic order: sort by the persisted `number` (creation order)
+      // so callers that renumber by index (normalizeFeaturesDocument) and
+      // callers that keep persisted numbers (loadAll) agree, regardless of the
+      // filesystem readdir order. Tiebreak by id for full determinism.
+      out.sort((a, b) => (a.number - b.number) || a.id.localeCompare(b.id));
+      return out;
     }
     // Legacy: single features.json (pre-migration read; migration writes on first write op).
     try {
       const legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
-      return this.normalizeFeaturesDocument(legacy).doc;
+      const legacyFeatures = legacy.features;
+      legacyFeatures.sort((a, b) => (a.number - b.number) || a.id.localeCompare(b.id));
+      return legacyFeatures;
     } catch {
-      return { features: [] };
+      return [];
     }
+  }
+
+  async loadFeatures(): Promise<FeaturesDocument> {
+    const raws = await this.loadRawFeatures();
+    const phases = await this.loadAllPhases();
+    const features: Feature[] = raws.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
+    return this.normalizeFeaturesDocument({ features }).doc;
   }
 
   async loadCodebaseProfile(): Promise<CodebaseProfile | null> {
@@ -815,14 +834,15 @@ export class PlanStore {
   }
 
   async loadAll(): Promise<PlanWorkspace> {
-    const [manifest, project, features, requirements, phases] = await Promise.all([
+    const [manifest, project, requirements, phases] = await Promise.all([
       this.loadManifest(),
       this.loadProject(),
-      this.loadFeatures(),
       this.loadRequirements(),
       this.loadAllPhases(),
     ]);
-    return PlanWorkspaceSchema.parse({ manifest, project, features, requirements, phases });
+    const rawFeatures = await this.loadRawFeatures();
+    const features: Feature[] = rawFeatures.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
+    return { manifest, project, requirements, phases, features: { features } };
   }
 
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
@@ -1102,10 +1122,10 @@ export class PlanStore {
     return { duplicatePhaseIds, danglingPhaseIds, duplicateShortIds };
   }
 
-  private derivePhaseStatus(phase: Phase): Phase["status"] {
-    if (phase.tasks.length === 0) return phase.status;
+  private derivePhaseStatus(tasks: Task[]): Phase["status"] {
+    if (tasks.length === 0) return "draft";
 
-    const taskStatuses = phase.tasks.map((task) => task.status);
+    const taskStatuses = tasks.map((task) => task.status);
     // Ignore rejected/canceled tasks (void) when deriving progress.
     const meaningful = taskStatuses.filter((s) => s !== "rejected" && s !== "canceled");
     if (meaningful.length === 0) return "rejected";
@@ -1122,9 +1142,9 @@ export class PlanStore {
     return "planned";
   }
 
-  private deriveFeatureStatus(featureId: string, currentStatus: Feature["status"], phases: Phase[]): Feature["status"] {
+  private deriveFeatureStatus(featureId: string, phases: Phase[]): Feature["status"] {
     const featurePhases = phases.filter((phase) => phase.featureId === featureId);
-    if (featurePhases.length === 0) return currentStatus;
+    if (featurePhases.length === 0) return "planned";
 
     const phaseStatuses = featurePhases.map((phase) => phase.status);
     // Ignore rejected/canceled phases when deriving progress.
@@ -1143,72 +1163,27 @@ export class PlanStore {
   }
 
   async syncStatuses(): Promise<string[]> {
-    // Run as a batch so the internal saveFeatures + N savePhase calls do not
-    // re-trigger syncStatuses on every write (O(N^2) on large planners).
-    // Returns the composite refs of phases whose handoff was auto-cleared
-    // (phase transitioned to done).
-    const cleared: string[] = [];
-    await this.runAsBatch(async () => {
-      await this.migratePhaseIds();
-      const workspace = await this.loadAll();
-      const { phases, features } = workspace;
-      const featNum = new Map(features.features.map((f) => [f.id, f.number]));
-
-      // 1. Update Phase statuses based on tasks; auto-clear handoff when a
-      //    phase transitions to done (completed phases don't keep stale
-      //    handoffs). handoffUpdatedAt is kept as an audit trail.
-      for (const phase of phases) {
-        const was = phase.status;
-        phase.status = this.derivePhaseStatus(phase);
-        if (phase.status === "done" && was !== "done" && phase.handoff) {
-          phase.handoff = "";
-          cleared.push(formatPhaseRef(phase.number, featNum.get(phase.featureId ?? "")));
-        }
-      }
-
-      // 2. Update Feature statuses based on phases
-      for (const feature of features.features) {
-        feature.status = this.deriveFeatureStatus(feature.id, feature.status, phases);
-      }
-
-      // 3. Save everything
-      await this.saveFeatures(features);
-      for (const phase of phases) {
-        await this.savePhase(phase);
-      }
-
-      // 4. Refresh resume focus so a subentrating agent sees current state
-      await this.refreshResume();
-    });
-    return cleared;
+    // No-op: phase/feature status is now DERIVED at read time (never persisted),
+    // so there is nothing to sync. Kept for backward compatibility with callers
+    // (serve.ts, adapters) that invoke it after mutations.
+    return [];
   }
 
-  /** Optimized rollup: syncs only the affected phase and its parent feature.
-   *  Drastically reduces write operations and 'busy' window for task updates.
-   *  Returns the composite ref of the phase if its handoff was auto-cleared
-   *  (phase transitioned to done), else null. */
+  /** Auto-clear a phase's handoff when its DERIVED status is done. Status itself
+   *  is no longer persisted (derived on read), so the only remaining side effect
+   *  of a task→done transition is clearing a stale handoff on a completed phase.
+   *  Returns the composite ref of the phase if its handoff was cleared, else null. */
   async syncTaskStatusRollup(phaseId: string): Promise<string | null> {
     const phase = await this.loadPhase(phaseId);
-    const was = phase.status;
-    phase.status = this.derivePhaseStatus(phase);
-    // Auto-clear handoff when the phase transitions to done.
-    const cleared = phase.status === "done" && was !== "done" && phase.handoff !== "";
-    if (cleared) phase.handoff = "";
-    await this.savePhase(phase);
-
-    let feature: Feature | undefined;
-    if (phase.featureId) {
-      const featuresDoc = await this.loadFeatures();
-      feature = featuresDoc.features.find((f) => f.id === phase.featureId);
-      if (feature) {
-        // To derive feature status, we still need the statuses of all its phases
-        const allPhases = await this.loadAllPhases();
-        feature.status = this.deriveFeatureStatus(feature.id, feature.status, allPhases);
-        await this.saveFeatures(featuresDoc);
-      }
+    let cleared: string | null = null;
+    if (phase.status === "done" && phase.handoff !== "") {
+      await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffUpdatedAt: nowISO() }));
+      const features = await this.loadFeatures();
+      const feature = features.features.find((f) => f.id === phase.featureId);
+      cleared = formatPhaseRef(phase.number, feature?.number);
     }
     await this.refreshResume();
-    return cleared ? formatPhaseRef(phase.number, feature?.number) : null;
+    return cleared;
   }
 
   // ── Savers ───────────────────────────────────────────────────────────
@@ -1306,9 +1281,17 @@ export class PlanStore {
    *  task_create / phase_update calls on the SAME phaseId so batch operations
    *  don't lose tasks (last-write-wins race condition). */
   async updatePhase(phaseId: string, updater: (phase: Phase) => Phase): Promise<Phase> {
-    const updated = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (phase) => this.normalizePhaseDocument(updater(phase)).phase);
+    // Augment the raw (on-disk) phase with its DERIVED status before handing it
+    // to the updater, so updaters that read 'phase.status' see the truth. The
+    // returned object's 'status' is stripped by PhaseSchema.parse (status is
+    // not persisted); the return value is re-derived for the caller.
+    const raw = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (rawPhase) => {
+      const current: Phase = { ...rawPhase, status: this.derivePhaseStatus(rawPhase.tasks) };
+      const next = updater(current);
+      return this.normalizePhaseDocument(next).phase;
+    });
     await this.maybeAutoSync();
-    return updated;
+    return { ...raw, status: this.derivePhaseStatus(raw.tasks) };
   }
 
   // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────

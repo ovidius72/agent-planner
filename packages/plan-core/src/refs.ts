@@ -50,7 +50,12 @@ export function findPhaseByRef(
     if (found) return found;
   }
 
-  // 3. Title fallback (backward compatibility with agents using titles)
+  // 3. ShortId
+  found = phases.find((p) => p.shortId && p.shortId.toLowerCase() === normalized);
+  if (found) return found;
+
+  // 4. Title fallback (backward compatibility with agents using titles)
+  // 5. Title fallback (backward compatibility with agents using titles)
   return (
     phases.find((p) => p.title.toLowerCase() === normalized) ??
     phases.find((p) => p.title.toLowerCase().includes(normalized))

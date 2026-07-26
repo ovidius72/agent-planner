@@ -75,8 +75,22 @@ function findFeatureByRef(features: Feature[], ref: string): Feature | undefined
 
 function findTaskByRef(phases: Phase[], ref: string): { phase: Phase; task: Task } | undefined {
   const normalized = ref.trim().toLowerCase();
+  if (!normalized) return undefined;
+  // Composite ref like "P00x(F00x)/T00x" or "T00x(P00x/F00x)": match by phase + task number.
+  const tMatch = normalized.match(/t0*(\d+)/);
+  const pMatch = normalized.match(/p0*(\d+)/);
+  if (tMatch && pMatch) {
+    const tNum = parseInt(tMatch[1]!, 10);
+    const pNum = parseInt(pMatch[1]!, 10);
+    for (const phase of phases) {
+      if (phase.number !== pNum) continue;
+      const task = phase.tasks.find((t) => t.number === tNum);
+      if (task) return { phase, task };
+    }
+  }
   for (const phase of phases) {
     const task = phase.tasks.find((entry) => entry.id.toLowerCase() === normalized
+      || (entry.shortId && entry.shortId.toLowerCase() === normalized)
       || entry.title.toLowerCase() === normalized
       || entry.title.toLowerCase().includes(normalized));
     if (task) return { phase, task };
@@ -84,6 +98,12 @@ function findTaskByRef(phases: Phase[], ref: string): { phase: Phase; task: Task
   return undefined;
 }
 
+function featureNumberOfPhase(phase: Phase, features: Feature[]): number | undefined {
+  return phase.featureId ? features.find((f) => f.id === phase.featureId)?.number : undefined;
+}
+function taskCompositeRef(task: Task, phase: Phase, features: Feature[]): string {
+  return `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${String(task.number).padStart(3, "0")}`;
+}
 function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): void {
   const previousStatus = task.status;
   if (nextStatus === "in-progress" && !task.startedAt) task.startedAt = now;
@@ -574,13 +594,14 @@ server.registerTool("planner-task-add", {
     createdAt: timestamp,
     updatedAt: timestamp,
   };
-  const phase = await st.updatePhase(found.id, (entry) => {
+  await st.updatePhase(found.id, (entry) => {
     entry.tasks.push(task);
     entry.taskIds.push(task.id);
     entry.updatedAt = timestamp;
     return entry;
   });
-  return writeAndSummarize(st, `Task created: ${task.id} — ${task.title}`, { task, phase });
+  const features = (await st.loadFeatures()).features;
+  return writeAndSummarize(st, `✅ Task created: ${taskCompositeRef(task, found, features)} — ${task.title} (planned)${task.shortId ? ` · ${task.shortId}` : ""}`);
 });
 
 server.registerTool("planner-task-show", {
@@ -615,7 +636,9 @@ server.registerTool("planner-task-discuss", {
     updatedTask = task;
     return phase;
   });
-  return writeAndSummarize(st, `Task discussed/updated: ${found.task.id}`, { task: updatedTask ?? found.task });
+  const features = (await st.loadFeatures()).features;
+  const t = updatedTask ?? found.task;
+  return writeAndSummarize(st, `✅ Task discussed/updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}`);
 });
 
 server.registerTool("planner-task-update", {
@@ -670,7 +693,9 @@ server.registerTool("planner-task-update", {
     return phase;
   });
   await st.syncTaskStatusRollup(found.phase.id);
-  return writeAndSummarize(st, `Task updated: ${found.task.id}`, { task: updatedTask ?? found.task });
+  const features = (await st.loadFeatures()).features;
+  const t = updatedTask ?? found.task;
+  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}`);
 });
 
 server.registerTool("planner-task-delete", {
@@ -730,7 +755,9 @@ server.registerTool("planner-task-start", {
     return phase;
   });
   await st.syncTaskStatusRollup(found.phase.id);
-  return writeAndSummarize(st, `${handoffNotice}✅ Task started: ${found.task.id}`, { task: updatedTask ?? found.task });
+  const features = (await st.loadFeatures()).features;
+  const t = updatedTask ?? found.task;
+  return writeAndSummarize(st, `${handoffNotice}✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}`);
 });
 
 server.registerTool("planner-task-complete", {
@@ -773,7 +800,9 @@ server.registerTool("planner-task-complete", {
     return phase;
   });
   const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
-  return writeAndSummarize(st, `✅ Task completed: ${found.task.id}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}`, { task: updatedTask ?? found.task });
+  const features = (await st.loadFeatures()).features;
+  const t = updatedTask ?? found.task;
+  return writeAndSummarize(st, `✅ Task completed: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (done)${t.shortId ? ` · ${t.shortId}` : ""}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}`);
 });
 
 server.registerTool("planner-handoff-list", {
