@@ -1,6 +1,6 @@
 {
   "name": "@agent-plan/pi-adapter",
-  "version": "0.2.19-next.1",
+  "version": "0.2.19-next.2",
   "private": false,
   "description": "Pi agent extension for Agent Plan — structured project planning in .planner/",
   "keywords": [
