@@ -42,6 +42,10 @@ export const ResumeFocusSchema = z.object({
   currentPhaseId: z.string().default(""),
   inProgressTaskIds: z.array(z.string().min(1)).default([]),
   nextSteps: z.array(z.string().min(1)).default([]),
+  /** When `nextSteps` last changed (free-text can go stale; the recap surfaces
+   *  this so staleness is visible). Preserved across refreshResume (which keeps
+   *  existing nextSteps); bumped only when saveResume receives new nextSteps. */
+  nextStepsUpdatedAt: z.string().default(""),
   blockers: z.array(z.string().min(1)).default([]),
   notes: z.string().default(""),
   lastSessionSummary: z.string().default(""),

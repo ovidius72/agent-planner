@@ -536,6 +536,7 @@ export class PlanStore {
       currentPhaseId: "",
       inProgressTaskIds: [],
       nextSteps: ["Run /planner project discuss to bootstrap discovery"],
+      nextStepsUpdatedAt: nowISO(),
       blockers: [],
       notes: "Project initialized. Awaiting discovery.",
       lastSessionSummary: "",
@@ -679,7 +680,18 @@ export class PlanStore {
   }
 
   async saveResume(resume: ResumeFocus): Promise<void> {
-    const parsed = ResumeFocusSchema.parse(resume);
+    // Track when `nextSteps` actually change (free-text can go stale; the recap
+    // surfaces nextStepsUpdatedAt so staleness is visible). Preserved when
+    // refreshResume keeps existing nextSteps; bumped only on a real change.
+    const existing = await this.loadResume().catch(() => null);
+    const nextStepsChanged = JSON.stringify(existing?.nextSteps ?? []) !== JSON.stringify(resume.nextSteps ?? []);
+    const withTs: ResumeFocus = {
+      ...resume,
+      nextStepsUpdatedAt: nextStepsChanged
+        ? nowISO()
+        : (resume.nextStepsUpdatedAt || existing?.nextStepsUpdatedAt || nowISO()),
+    };
+    const parsed = ResumeFocusSchema.parse(withTs);
     await atomicWriteJson(this.resumePath(), parsed);
     await this.touchManifest();
   }
@@ -696,6 +708,7 @@ export class PlanStore {
       currentPhaseId: "",
       inProgressTaskIds: [],
       nextSteps: [],
+      nextStepsUpdatedAt: "",
       blockers: [],
       notes: "",
       lastSessionSummary: "",
@@ -759,6 +772,7 @@ export class PlanStore {
       currentPhaseId: inProgressPhases[0]?.id ?? existing?.currentPhaseId ?? "",
       inProgressTaskIds: inProgressTasks.map((t) => t.id),
       nextSteps: existing?.nextSteps ?? [],
+      nextStepsUpdatedAt: existing?.nextStepsUpdatedAt ?? "",
       blockers: blockedTasks.map((t) => `${t.id}: ${t.title}`),
       notes: notes ?? existing?.notes ?? "",
       lastSessionSummary: lastSessionSummary ?? existing?.lastSessionSummary ?? "",

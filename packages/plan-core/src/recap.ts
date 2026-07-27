@@ -76,7 +76,6 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   const featureAddCmd = cmd("/planner feature add", "planner-feature-add");
   const phaseAddCmd = cmd("/planner phase add", "planner-phase-add");
   const handoffShowCmd = cmd("/planner handoff show", "planner-handoff-show");
-  const handoffClearCmd = cmd("/planner handoff clear", "planner-handoff-clear");
 
   const lines: string[] = [];
   lines.push(italian ? "## Ripresa planner" : "## Planner recap");
@@ -107,11 +106,27 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     lines.push(`${italian ? "Focus corrente" : "Current focus"}: ${italian ? "nessun task attivo — rivedi il piano e scegli il prossimo task concreto" : "no active task — review the plan and pick the next concrete task"}`);
   }
 
-  // Next step: only surface resume.nextSteps when the plan is NOT complete —
-  // otherwise stale init-time steps (e.g. "bootstrap discovery") leak through
-  // and contradict an all-done plan.
-  if (!planComplete && resume?.nextSteps?.length) {
+  // Next step: the phase handoff (phase.handoff) is the authoritative,
+  // actively-managed resume context. When a handoff is pending, point to it
+  // instead of surfacing potentially-stale resume.json nextSteps. When no
+  // handoff exists, fall back to resume.nextSteps but mark them as possibly
+  // stale (free-text that refreshResume never touches, so they can drift).
+  if (handoffs.length > 0) {
+    lines.push(
+      italian
+        ? `Prossimo step: leggi l'handoff di fase pendente sotto (fonte autorevole, gestita attivamente). I nextSteps legacy di resume.json sono soppressi perché possono essere stale.`
+        : `Next step: read the pending phase handoff below (authoritative, actively maintained). Legacy resume.json nextSteps are suppressed because they may be stale.`,
+    );
+  } else if (!planComplete && resume?.nextSteps?.length) {
     lines.push(`${italian ? "Prossimo step" : "Next step"}: ${resume.nextSteps[0]}`);
+    const staleNote = resume.nextStepsUpdatedAt
+      ? (italian
+        ? `⚠️ nextSteps free-text da resume.json, ultimo aggiornamento ${resume.nextStepsUpdatedAt} — può essere stale; verifica contro lo stato attuale prima di agire.`
+        : `⚠️ nextSteps are free-text from resume.json, last updated ${resume.nextStepsUpdatedAt} — may be stale; verify against current state before acting.`)
+      : (italian
+        ? `⚠️ nextSteps free-text da resume.json — può essere stale; verifica contro lo stato attuale prima di agire.`
+        : `⚠️ nextSteps are free-text from resume.json — may be stale; verify against current state before acting.`);
+    lines.push(staleNote);
   }
 
   if (handoffs.length > 0) {
@@ -120,8 +135,8 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     lines.push(
       "",
       italian
-        ? `→ Leggi quello pertinente con ${handoffShowCmd} <ref> (valida contro lo stato attuale), poi ${handoffClearCmd} <ref> una volta consumato.`
-        : `→ Read the relevant one with ${handoffShowCmd} <ref> (validate against current state), then call ${handoffClearCmd} <ref> once consumed (delete-on-resume).`,
+        ? `→ Leggi quello pertinente con ${handoffShowCmd} <ref> (valida contro lo stato attuale). L'handoff è MANTENUTO finché un task della fase non parte (auto-archiviato) o la fase non si conclude — non serve cancellarlo a mano.`
+        : `→ Read the relevant one with ${handoffShowCmd} <ref> (validate against current state). It is KEPT until a task in that phase starts (then auto-archived) or the phase completes — no need to clear it manually.`,
     );
   } else if (planComplete) {
     lines.push(

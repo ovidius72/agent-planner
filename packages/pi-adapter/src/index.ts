@@ -3612,12 +3612,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         : hasActiveWork
           ? plan.features.features.find((feature) => feature.status === "in-progress") ?? null
           : null;
-      const nextActivity = hasActiveWork
-        ? (resume.nextSteps[0]
-          ?? (currentTask ? `Resume task ${currentTask.id} — ${taskLabel(currentTask)}` : currentPhase ? `Resume phase ${currentPhase.id} — ${phaseLabel(currentPhase)}` : "Resume the active work stream"))
-        : (handoffs.length > 0
-          ? "Read the most recent phase handoff (handoff show <ref>), validate it against current plan ordering and dependencies, then pick the next task."
-          : "Review the current plan and choose the next task.");
+      const nextActivity = handoffs.length > 0
+        ? "Read the most recent phase handoff (handoff show <ref>), validate it against current plan ordering and dependencies, then pick the next task. (Legacy resume.json nextSteps may be stale — the handoff is authoritative.)"
+        : hasActiveWork
+          ? (resume.nextSteps[0]
+            ?? (currentTask ? `Resume task ${currentTask.id} — ${taskLabel(currentTask)}` : currentPhase ? `Resume phase ${currentPhase.id} — ${phaseLabel(currentPhase)}` : "Resume the active work stream"))
+          : "Review the current plan and choose the next task.";
       const webServer = server as ServeHandle | null;
       const webLocalUrl = webServer?.localUrl ?? webServer?.url ?? "";
       const webLanUrl = webServer?.lanUrl ?? "";
@@ -3704,7 +3704,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         resume.currentPhaseId ? `  current phase: ${resume.currentPhaseId}` : "  current phase: (none)",
         resume.inProgressTaskIds.length ? `  in-progress tasks: ${resume.inProgressTaskIds.join(", ")}` : "  in-progress tasks: (none)",
         resume.blockers.length ? `  blockers: ${resume.blockers.join("; ")}` : "  blockers: (none)",
-        resume.nextSteps.length ? `  next steps: ${resume.nextSteps.join("; ")}` : "  next steps: (none)",
+        resume.nextSteps.length ? `  next steps: ${resume.nextSteps.join("; ")}${handoffs.length > 0 ? " (⚠️ may be stale — handoff is authoritative)" : resume.nextStepsUpdatedAt ? ` (last updated ${resume.nextStepsUpdatedAt}, may be stale)` : ""}` : "  next steps: (none)",
         resume.lastSessionSummary ? `  last session: ${resume.lastSessionSummary}` : "",
         "",
         recentActivity.length ? "Recent activity (most recent first):" : "",
