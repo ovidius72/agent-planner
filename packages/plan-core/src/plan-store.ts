@@ -560,14 +560,21 @@ export class PlanStore {
     ].join("\n");
     await writeFile(join(this.root, "README.md"), readme, "utf-8");
 
-    // Write a .gitignore inside .planner/ so transient backup/tmp files are
+    // Write a .gitignore inside .planner/ so transient/derived files are
     // not tracked by the host project's git. Git respects nested .gitignore.
+    // - *.bak/*.tmp.*: crash backups from atomic writes
+    // - resume.json: per-session resume focus + the machine-local guard-bypass
+    //   timestamp (guardBypassUntil must NOT leak into git/other clones)
+    // - generated/: auto-regenerated markdown views (derived from JSON; churn)
     await writeFile(
       join(this.root, ".gitignore"),
       [
-        "# Agent Plan transient files — do not track",
+        "# Agent Plan transient/derived files — do not track",
         "*.bak",
         "*.tmp.*",
+        "resume.json",
+        "resume.*.json",
+        "generated/",
         "",
       ].join("\n"),
       "utf-8",

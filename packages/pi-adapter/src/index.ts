@@ -76,6 +76,25 @@ setWriteNotifyHook(() => {
 let previousContextPercent = 0;
 let autoHandoffTriggered = false;
 let plannerSessionEnabled = false;
+
+// In-process guard bypass (per session, NOT persisted/shared). The edit/write
+// guard is advisory in Pi (warns "NO ACTIVE TASK" but does not block). When a
+// bypass is active the warning is silenced for the window. Lives in memory only:
+// not on disk, not in git, not shared across agents/sessions on the same folder.
+let guardBypassUntil = "";
+function authorizeGuardBypass(durationMinutes = 15): string {
+  const until = new Date(Date.now() + durationMinutes * 60_000).toISOString();
+  guardBypassUntil = until;
+  return until;
+}
+function clearGuardBypass(): void { guardBypassUntil = ""; }
+function isGuardBypassed(): boolean {
+  if (!guardBypassUntil) return false;
+  const until = Date.parse(guardBypassUntil);
+  if (!Number.isFinite(until)) return false;
+  if (until <= Date.now()) { guardBypassUntil = ""; return false; }
+  return true;
+}
 let startupResumePromptPending = false;
 let startupResumeSummaryPending = false;
 let plannerHeavyInitDone = false; // runs migrate/heal/refreshResume once per session, not every turn
@@ -936,6 +955,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     const guard = await getPlannerExecutionGuard(st).catch(() => null);
     if (!guard || guard.totalTasks === 0) return; // nothing to enforce yet
     if (guard.inProgressTaskIds.length > 0) return; // a task is open → we're good
+    if (isGuardBypassed()) return; // user authorized proceeding without a task
 
     const focusHint = guard.focusTaskId
       ? `Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Avvialo con: \`/planner task start ${guard.focusTaskId}\``
@@ -2178,11 +2198,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       try {
         if (a === "bypass") {
           const mins = parseInt(subArgs.trim(), 10);
-          const until = await st.authorizeGuardBypass(Number.isFinite(mins) && mins > 0 ? mins : 15);
-          ctx.ui.notify(`Guard bypass authorized until ${until}. edit/write will work without a task in-progress for that window.`, "info");
+          const until = authorizeGuardBypass(Number.isFinite(mins) && mins > 0 ? mins : 15);
+          ctx.ui.notify(`Guard bypass authorized until ${until}. edit/write advisory warnings silenced for that window (per-session, not shared).`, "info");
         } else {
-          await st.clearGuardBypass();
-          ctx.ui.notify("Guard bypass revoked. edit/write now requires a task in-progress again.", "info");
+          clearGuardBypass();
+          ctx.ui.notify("Guard bypass revoked. edit/write advisory warnings re-enabled.", "info");
         }
       } catch (e) {
         ctx.ui.notify(`Bypass action failed: ${e instanceof Error ? e.message : String(e)}`, "error");
@@ -2714,28 +2734,28 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_authorize_bypass",
     label: "Plan Authorize Guard Bypass",
-    description: "Authorize a temporary guard bypass (default 15 minutes) so edit/write tools can proceed even when no task is in-progress. Use this ONLY after the user explicitly authorizes proceeding without a task. Harness-agnostic: stored in resume.json so all adapters respect it.",
+    description: "Authorize a temporary guard bypass (default 15 minutes) so the edit/write advisory guard stops warning when no task is in-progress. Per-session in-memory: not persisted, not shared across agents. Use ONLY after the user explicitly authorizes proceeding without a task.",
     parameters: Type.Object({
       durationMinutes: Type.Optional(Type.Number({ description: "Bypass window in minutes. Default 15." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const ok = await requirePlan(ctx);
+      if (!ok) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const mins = params.durationMinutes ?? 15;
-      const until = await st.authorizeGuardBypass(mins);
-      return { content: [{ type: "text", text: `Guard bypass authorized until ${until}. edit/write is allowed without a task in-progress for ${mins} minutes.` }], details: { until } };
+      const until = authorizeGuardBypass(mins);
+      return { content: [{ type: "text", text: `Guard bypass authorized until ${until}. Advisory edit/write warnings silenced for ${mins} minutes (per-session, not shared).` }], details: { until } };
     },
   });
 
   pi.registerTool({
     name: "plan_clear_bypass",
     label: "Plan Clear Guard Bypass",
-    description: "Revoke any active guard bypass so edit/write again requires a task in-progress.",
+    description: "Revoke the per-session guard bypass so the edit/write advisory warnings resume.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      await st.clearGuardBypass();
+      const ok = await requirePlan(ctx);
+      if (!ok) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      clearGuardBypass();
       return { content: [{ type: "text", text: "Guard bypass revoked." }], details: { cleared: true } };
     },
   });
