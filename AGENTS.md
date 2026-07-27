@@ -104,15 +104,22 @@ Direzione corrente:
 - architettura: platform core + adapter Pi
 
 ### 9. Comunicazione e Riferimenti
-L'agente DEVE evitare di fare riferimento a feature, fasi o task utilizzando i loro UUID tecnici (es. `bd6ed366`). 
+L'agente DEVE evitare di fare riferimento a feature, fasi o task utilizzando i loro UUID tecnici (es. `bd6ed366`).
 I riferimenti devono essere sempre umani, univoci e compositi, seguendo il formato:
 - Feature: `F001 - Nome`
 - Fase: `P001(F001) - Titolo`
-- Task: `T001(P001/F001) - Titolo`
+- Task: `T003(P001/F001) - Titolo`
 
-In alternativa al composite ID, si può usare lo **shortId globale** (5 caratteri, es. `UUXD1`), che identifica univocamente qualsiasi entità (feature, fase o task) nel progetto. Gli shortId sono visibili nella Web UI e nei risultati dei tool.
+**Numerazione globale (F/P/T sono sequenze globali progetto-wide).** I numeri di Feature, Phase e Task sono assegnati una sola volta alla creazione da un contatore monotono globale e **non vengono mai ri-assegnati**: le cancellazioni lasciano buchi (es. dopo F001, F003 potresti non vedere F002 se è stata eliminata). Di conseguenza:
+- `P00x` e `T00x` sono **univoci a livello di progetto** (non per-feature/per-phase): esiste UN solo `P003` e UN solo `T007` in tutto il piano.
+- Puoi usare la forma corta `P003` / `T007` da sola come riferimento univoco e non ambiguo, oltre al composito `F00x/P00x/T00x`.
+- Il composito resta il formato preferito per chiarezza, ma la forma corta `P00x`/`T00x` è ora un riferimento valido.
 
-Esempio CORRETTO: "Procedo con il task T003(P001/F001) - Implementazione API" oppure "Procedo con UUXD1"
+In alternativa al composito, si può usare lo **shortId globale** (5 caratteri, es. `UUXD1`), che identifica univocamente qualsiasi entità (feature, fase o task) nel progetto. Gli shortId sono visibili nella Web UI e nei risultati dei tool.
+
+Formati di riferimento accettati dai tool (task/phase/feature): composito `F00x/P00x/T00x`, forma corta `P00x`/`T00x`/`F00x`, shortId 5-caratteri, UUID, o titolo.
+
+Esempio CORRETTO: "Procedo con il task T003(P001/F001) - Implementazione API" oppure "Procedo con T007" oppure "Procedo con UUXD1"
 Esempio ERRATO: "Procedo con il task bd6ed366"
 
 ### 10. Fonte dei requisiti correnti

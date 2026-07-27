@@ -102,6 +102,10 @@ export const ProjectSchema = z.object({
   chatLanguage: z.string().default(""),
   workflowRules: WorkflowRulesSchema,
   acceptedDecisions: z.array(AcceptedDecisionSchema).default([]),
+  /** Monotonic global sequence counters — assigned at creation, never reused (gaps on delete). */
+  nextFeatureNumber: z.number().int().positive().default(1),
+  nextPhaseNumber: z.number().int().positive().default(1),
+  nextTaskNumber: z.number().int().positive().default(1),
 });
 
 export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
@@ -157,6 +161,7 @@ export const StatusLogEntrySchema = z.object({
 export const TaskSchema = z.object({
   id: z.string(),
   phaseId: z.string(),
+  /** Global project-wide task sequence (assigned once at creation from project.nextTaskNumber; stable, gaps on delete). Bare T00x is unambiguous. */
   number: z.number().int().nonnegative().default(0),
   shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),
   priority: z.number().int().nonnegative().default(0),
@@ -194,6 +199,7 @@ export const HandoffHistoryEntrySchema = z.object({
 export const PhaseSchema = z.object({
   id: z.string(),
   featureId: z.string().optional(),
+  /** Global project-wide phase sequence (assigned once at creation from project.nextPhaseNumber; stable, gaps on delete). Bare P00x is unambiguous. */
   number: z.number().int().positive(),
   shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),
   priority: z.number().int().nonnegative().default(0),
@@ -237,6 +243,7 @@ export const PhaseSchema = z.object({
 
 export const FeatureSchema = z.object({
   id: z.string(),
+  /** Global project-wide feature sequence (assigned once at creation from project.nextFeatureNumber; stable, gaps on delete). */
   number: z.number().int().nonnegative().default(0),
   shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),
   priority: z.number().int().nonnegative().default(0),

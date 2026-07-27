@@ -61,3 +61,90 @@ export function findPhaseByRef(
     phases.find((p) => p.title.toLowerCase().includes(normalized))
   );
 }
+/**
+ * Resolve a task reference to { phase, task }. Harness-agnostic, shared by all
+ * adapters so resolution semantics are identical everywhere.
+ *
+ * Supported task refs (case-insensitive):
+ *   - UUID:     "bd6ed366-..."            -> task.id
+ *   - Short:    "T003" | "t3"             -> task.number (GLOBALLY unique under the
+ *                                           new global-sequence numbering; bare T00x
+ *                                           is unambiguous across all phases)
+ *   - Compos:   "F001/P002/T003"          -> feature/phase/task numbers with parent
+ *                "P002(F001)/T003"          validation (feature + phase must match)
+ *                "P002/T003"
+ *   - ShortId:  "UUXD1"                   -> task.shortId (5-char, globally unique)
+ *   - Title:    exact match, then includes (backward-compat fallback)
+ *
+ * Returns `undefined` when not found, or when a composite parent (phase/feature)
+ * does not match the resolved task's parent.
+ */
+import type { Task } from "./schema.js";
+
+// Extract optional feature/phase/task numbers from a composite ref.
+// Accepts 1+ digits so "t3" == "t003". Numbers are GLOBAL (post-migration).
+function parseTaskComposite(ref: string): { featureNum?: number | undefined; phaseNum?: number | undefined; taskNum?: number | undefined } {
+  const t = ref.match(/t0*(\d+)/);
+  const p = ref.match(/p0*(\d+)/);
+  const f = ref.match(/f0*(\d+)/);
+  return {
+    taskNum: t ? parseInt(t[1]!, 10) : undefined,
+    phaseNum: p ? parseInt(p[1]!, 10) : undefined,
+    featureNum: f ? parseInt(f[1]!, 10) : undefined,
+  };
+}
+
+export function findTaskByRef(
+  phases: Phase[],
+  features: Feature[],
+  ref: string,
+): { phase: Phase; task: Task } | undefined {
+  const normalized = ref.trim().toLowerCase();
+  if (!normalized) return undefined;
+
+  // 1. UUID (exact)
+  for (const phase of phases) {
+    const task = phase.tasks.find((t) => t.id.toLowerCase() === normalized);
+    if (task) return { phase, task };
+  }
+
+  // 2. Composite / short ref with a T segment
+  const { featureNum, phaseNum, taskNum } = parseTaskComposite(normalized);
+  if (taskNum !== undefined) {
+    if (phaseNum !== undefined) {
+      // Composite: validate phase (and feature if present), then resolve task by number.
+      const phase = phases.find((p) => p.number === phaseNum);
+      if (!phase) return undefined;
+      if (featureNum !== undefined) {
+        const feat = features.find((f) => f.number === featureNum);
+        if (!feat || phase.featureId !== feat.id) return undefined;
+      }
+      const task = phase.tasks.find((t) => t.number === taskNum);
+      if (task) return { phase, task };
+      return undefined;
+    }
+    // Bare T00x — globally unique under the new numbering. Find the one task.
+    for (const phase of phases) {
+      const task = phase.tasks.find((t) => t.number === taskNum);
+      if (task) return { phase, task };
+    }
+  }
+
+  // 3. ShortId (5-char)
+  for (const phase of phases) {
+    const task = phase.tasks.find((t) => t.shortId && t.shortId.toLowerCase() === normalized);
+    if (task) return { phase, task };
+  }
+
+  // 4. Title fallback (backward compatibility)
+  for (const phase of phases) {
+    const exact = phase.tasks.find((t) => t.title.toLowerCase() === normalized);
+    if (exact) return { phase, task: exact };
+  }
+  for (const phase of phases) {
+    const incl = phase.tasks.find((t) => t.title.toLowerCase().includes(normalized));
+    if (incl) return { phase, task: incl };
+  }
+
+  return undefined;
+}

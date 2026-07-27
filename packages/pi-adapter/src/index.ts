@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, withFeatureLock, needsMotivation, findPhaseByRef, buildRecap } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -1220,18 +1220,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ?? null;
     }
 
-    function findTaskByRef(phases: Phase[], ref: string): { phase: Phase; task: Task } | null {
-      const normalized = ref.trim().toLowerCase();
-      if (!normalized) return null;
-      for (const phase of phases) {
-        const task = phase.tasks.find((entryTask) =>
-          entryTask.id.toLowerCase() === normalized
-          || entryTask.title.toLowerCase() === normalized
-          || entryTask.title.toLowerCase().includes(normalized));
-        if (task) return { phase, task };
-      }
-      return null;
-    }
 
     function profile_packageManager(pkg: CodebaseProfile["packageJson"], lockfile: string): string {
       if (pkg?.packageManager) return pkg.packageManager;
@@ -1441,7 +1429,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return;
         }
         const now = nowISO();
-        const featureNumber = (await st.loadFeatures()).features.length + 1;
+        const featureNumber = await st.allocFeatureNumber();
         const shortId = createShortId(await st.assignedShortIds());
         const priority = await st.nextPriority("feature");
         const feature: Feature = {
@@ -1604,7 +1592,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await withFeatureLock(feature.id, async () => {
           const phases = await st.loadAllPhases();
           const featurePhases = phases.filter((p) => p.featureId === feature.id);
-          const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
+          const number = await st.allocPhaseNumber();
           const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
           const id = createPhaseId();
           const shortId = createShortId(await st.assignedShortIds());
@@ -1630,7 +1618,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           await st.writeGenerated();
         });
         if (!phase) return;
-        ctx.ui.notify(`Phase created: ${phase.id} — ${title} (feature ${feature.name})`, "info");
+          ctx.ui.notify(`Phase created: ${formatPhaseRef(phase.number, feature.number)} — ${title}${phase.shortId ? ` · ${phase.shortId}` : ""} (feature ${feature.name})`, "info");
         const startDiscuss = await ctx.ui.input("Start phase discuss now? Type yes to continue");
         if (isYes(startDiscuss)) {
           await handlePlanner(`phase discuss ${phase.id}`, ctx);
@@ -1654,7 +1642,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phase.status = "discovery";
         phase.updatedAt = nowISO();
         await st.savePhase(phase);
-        ctx.ui.notify(`Discovery for ${phase.id}…`, "info");
+        ctx.ui.notify(`Discovery for ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))}…`, "info");
 
         // ── Recap: give full context before planning tasks ──
         const recapPlan = await st.loadAll();
@@ -1718,7 +1706,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phase.updatedAt = nowISO();
         await st.savePhase(phase);
         await st.writeGenerated();
-        ctx.ui.notify(`Phase ${phase.id} is now **planned**.`, "info");
+        ctx.ui.notify(`Phase ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))} is now **planned**.${phase.shortId ? ` · ${phase.shortId}` : ""}`, "info");
         return;
       }
       if (b === "show") {
@@ -1759,7 +1747,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
         await st.deletePhase(phase.id);
         await st.writeGenerated();
-        ctx.ui.notify(`Phase deleted: ${phase.id}`, "info");
+          ctx.ui.notify(`Phase deleted: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))}${phase.shortId ? ` · ${phase.shortId}` : ""}`, "info");
         return;
       }
       if (b === "update") {
@@ -1801,7 +1789,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
         await st.savePhase(phase);
         await st.writeGenerated();
-        ctx.ui.notify(`Phase updated: ${phase.id} — ${phase.title} (${phase.status})`, "info");
+          ctx.ui.notify(`Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))} — ${phase.title} (${phase.status})${phase.shortId ? ` · ${phase.shortId}` : ""}`, "info");
         return;
       }
       ctx.ui.notify(`Unknown phase action "${b}". Try: add, show, discuss, delete, update`, "warning");
@@ -1822,7 +1810,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const title = await ctx.ui.input(`Task title (for "${phase.title}")`);
         if (!title?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
         const shortName = clampSlug(title, 30, `task-${Date.now().toString(36)}`);
-        const taskNum = phase.tasks.length + 1;
+        const taskNum = await st.allocTaskNumber();
         const taskId = createTaskId();
         const shortId = createShortId(await st.assignedShortIds());
         const priority = await st.nextPriority("task", phase.id);
@@ -1854,7 +1842,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       if (b === "discuss") {
         const phases = await st.loadAllPhases();
-        let resolved = subArgs.trim() ? findTaskByRef(phases, subArgs.trim()) : null;
+        let resolved = subArgs.trim() ? findTaskByRef(phases, (await st.loadFeatures()).features, subArgs.trim()) : null;
         if (!resolved) {
           const phase = await pickPhase();
           if (!phase) { ctx.ui.notify("No phases available", "warning"); return; }
@@ -1879,14 +1867,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phase.updatedAt = nowISO();
         await st.savePhase(phase);
         await st.writeGenerated();
-        ctx.ui.notify(`Task ${task.id} discussed and updated.`, "info");
+          ctx.ui.notify(`Task ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} discussed and updated.`, "info");
         return;
       }
       if (b === "show") {
         let phase: Phase | null = null;
         let task: Task | null = null;
         if (subArgs.trim()) {
-          const resolved = findTaskByRef(await st.loadAllPhases(), subArgs.trim());
+          const resolved = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim());
           phase = resolved?.phase ?? null;
           task = resolved?.task ?? null;
         }
@@ -1931,7 +1919,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phase.updatedAt = nowISO();
         await st.savePhase(phase);
         await st.writeGenerated();
-        ctx.ui.notify(`Task deleted: ${task.id}`, "info");
+          ctx.ui.notify(`Task deleted: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")}${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
       }
       if (b === "update") {
@@ -1971,14 +1959,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phase.updatedAt = now;
         await st.savePhase(phase);
         await st.writeGenerated();
-        ctx.ui.notify(`Task updated: ${task.id} — ${task.title} (${task.status})`, "info");
+          ctx.ui.notify(`Task updated: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (${task.status})${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
       }
       if (b === "start") {
         let phase: Phase | null = null;
         let task: Task | null = null;
         if (subArgs.trim()) {
-          const resolved = findTaskByRef(await st.loadAllPhases(), subArgs.trim());
+          const resolved = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim());
           phase = resolved?.phase ?? null;
           task = resolved?.task ?? null;
         }
@@ -2021,14 +2009,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phase!.updatedAt = now;
         await st.savePhase(phase!);
         await st.writeGenerated();
-        ctx.ui.notify(`✅ Task started: ${task.id} — ${task.title} (in-progress)`, "info");
+          ctx.ui.notify(`✅ Task started: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (in-progress)${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
       }
       if (b === "complete") {
         let phase: Phase | null = null;
         let task: Task | null = null;
         if (subArgs.trim()) {
-          const resolved = findTaskByRef(await st.loadAllPhases(), subArgs.trim());
+          const resolved = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim());
           phase = resolved?.phase ?? null;
           task = resolved?.task ?? null;
         }
@@ -2067,7 +2055,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phase!.updatedAt = now;
         await st.savePhase(phase!);
         await st.writeGenerated();
-        ctx.ui.notify(`✅ Task completed: ${task.id} — ${task.title} (done)`, "info");
+          ctx.ui.notify(`✅ Task completed: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (done)${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
       }
       ctx.ui.notify(`Unknown task action "${b}". Try: add, show, discuss, delete, update, start, complete`, "warning");
@@ -2826,7 +2814,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const priority = await st.nextPriority("feature");
       const feature: Feature = {
         id: createFeatureId(),
-        number: currentFeatures.length + 1,
+        number: await st.allocFeatureNumber(),
         shortId,
         priority,
         name: params.name,
@@ -2861,7 +2849,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Feature Update",
     description: "Update one or more fields of a feature. Only provided fields are changed. IMPORTANT: feature status is derived from child phases/tasks, so do not update feature.status directly unless truly necessary.",
     parameters: Type.Object({
-      featureId: Type.String({ description: "Feature ID" }),
+      featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name" }),
       name: Type.Optional(Type.String({ description: "New name" })),
       description: Type.Optional(Type.String({ description: "New description" })),
       status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled. Avoid setting this directly unless you truly need an override: feature status is derived from child phases/tasks." })),
@@ -2928,7 +2916,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Feature Delete",
     description: "Delete a feature. Its phases are unlinked (featureId cleared) but NOT deleted unless cascade=true.",
     parameters: Type.Object({
-      featureId: Type.String({ description: "Feature ID to delete" }),
+      featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name to delete" }),
       cascade: Type.Optional(Type.Boolean({ description: "If true, also delete all phases belonging to this feature. Default: false" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -3016,7 +3004,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await withFeatureLock(params.featureId, async () => {
         const phases = await st.loadAllPhases();
         const featurePhases = phases.filter((p) => p.featureId === params.featureId);
-        const number = featurePhases.reduce((max, p) => Math.max(max, p.number), 0) + 1;
+        const number = await st.allocPhaseNumber();
         const id = createPhaseId();
         const shortId = createShortId(await st.assignedShortIds());
         const priority = await st.nextPriority("phase", params.featureId);
@@ -3051,7 +3039,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       });
       if (!phase) return { content: [{ type: "text", text: "Phase creation failed." }], details: {} };
       const phaseCreateFeatures = (await st.loadFeatures()).features;
-      return { content: [{ type: "text", text: `✅ Phase created: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseCreateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}` }], details: phase };
+        return { content: [{ type: "text", text: `✅ Phase created: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseCreateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}` }], details: phase };
     },
   });
 
@@ -3060,7 +3048,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Phase Update",
     description: "Update one or more fields of a phase. Only provided fields are changed. Supports re-linking to a feature via featureId. IMPORTANT: phase status is derived from task statuses, so do not update phase.status directly unless truly necessary.",
     parameters: Type.Object({
-      phaseId: Type.String({ description: "Phase ID" }),
+      phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title" }),
       title: Type.Optional(Type.String({ description: "New title" })),
       status: Type.Optional(Type.String({ description: "New status: draft|discovery|planned|in-progress|done|blocked|canceled. Avoid setting this directly unless you truly need an override: phase status is derived from task statuses." })),
       summary: Type.Optional(Type.String({ description: "New summary" })),
@@ -3135,7 +3123,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Phase Delete",
     description: "Delete a phase. Its tasks are deleted with it (cascade). Unlinks the phase from its feature.",
     parameters: Type.Object({
-      phaseId: Type.String({ description: "Phase ID to delete" }),
+      phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title to delete" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3169,7 +3157,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task List",
     description: "List tasks of a phase with id, status, and title.",
     parameters: Type.Object({
-      phaseId: Type.String({ description: "Phase ID" }),
+      phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3190,7 +3178,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task Get",
     description: "Read full details of a single task.",
     parameters: Type.Object({
-      taskId: Type.String({ description: "Task ID" }),
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3231,7 +3219,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
       const existingPhase = await st.loadPhase(params.phaseId);
       const task: Task = {
-        id: taskId, phaseId: params.phaseId, number: existingPhase.tasks.length + 1, shortId, priority, shortName,
+        id: taskId, phaseId: params.phaseId, number: await st.allocTaskNumber(), shortId, priority, shortName,
         title: params.title,
         status: initialStatus,
         description: params.description ?? "",
@@ -3263,7 +3251,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task Update",
     description: "Update one or more fields of a task. Only provided fields are changed. Do NOT use this tool to start or complete work; use task_start and task_complete for lifecycle transitions so startedAt/completedAt stay correct.",
     parameters: Type.Object({
-      taskId: Type.String({ description: "Task ID" }),
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
       title: Type.Optional(Type.String({ description: "New title" })),
       status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled|rejected|deferred|waiting" })),
       description: Type.Optional(Type.String({ description: "New description" })),
@@ -3341,7 +3329,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task Delete",
     description: "Delete a task from its phase.",
     parameters: Type.Object({
-      taskId: Type.String({ description: "Task ID to delete" }),
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to delete" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3367,7 +3355,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task Start",
     description: "Set a task to in-progress. Use this BEFORE starting implementation work on any task. Sets startedAt timestamp automatically.",
     parameters: Type.Object({
-      taskId: Type.String({ description: "Task ID to start" }),
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3400,7 +3388,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task Complete",
     description: "Mark a task as done. Sets completedAt and startedAt (if missing) automatically. Checks for unchecked checklist items and warns unless force=true.",
     parameters: Type.Object({
-      taskId: Type.String({ description: "Task ID to complete" }),
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to complete" }),
       force: Type.Optional(Type.Boolean({ description: "Skip checklist completion check. Default: false" })),
       description_update: Type.Optional(Type.String({ description: "Post-hoc summary: commit hash(s), files touched, decisions made, updated code references with new line numbers. Keeps the planner alive and traceable." })),
     }),
@@ -3527,6 +3515,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // add seconds of latency on every turn if run unconditionally.
       if (!plannerHeavyInitDone) {
         await migrateToUuids(st);
+        await migrateToGlobalSequence(st).catch(() => null);
         await st.ensureShortIdsAndPriority().catch(() => null);
         await ensureProjectLanguagePreferences(st).catch(() => null);
         await maybeHealStatuses(st, ctx);

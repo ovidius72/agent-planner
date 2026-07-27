@@ -363,3 +363,18 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **Fix pi-adapter startup summary** (`packages/pi-adapter/src/index.ts`): `nextActivity` — handoffs ora hanno priorità su `resume.nextSteps[0]` anche con active work (prima: nextSteps[0] primo, handoff solo senza active work). Dump "next steps:": aggiunto caveat staleness ("⚠️ may be stale — handoff is authoritative" se handoff, altrimenti "last updated <date>, may be stale").
 - [x] Validazione: `pnpm -r build` + `pnpm check` puliti. Test funzionale buildRecap: (A) con handoff → stale nextStep NON leaka, punta all'handoff; (B) senza handoff → nextStep con caveat ⚠️ + data last-updated; (C) timestamp fresco surfaced.
 - [ ] **Da fare al release**: bump `@agent-plan/core` (schema+planstore+recap) + `@agent-plan/pi-adapter` (startup summary). Branch `next`.
+
+### Fatto — Numerazione globale univoca F/P/T (Opzione 1: sequenza globale stabile) (sessione 2026-07-27)
+- [x] **Problema**: `Phase.number` era per-feature e `Task.number` per-phase (ogni feature aveva una P001, ogni phase una T001) → ambiguo in chat/handoff; gli agenti referenziavano UUID non visibili nella Web UI.
+- [x] **Modello (Opzione 1, confermato)**: F/P/T sono una **sequenza globale stabile progetto-wide**. Assegnati UNA volta alla creazione da un contatore monotono (`project.nextFeatureNumber/nextPhaseNumber/nextTaskNumber` in project.json), **mai ri-assegnati**. Le cancellazioni lasciano buchi (riferimenti stabili sopravvivono alla cancellazione). `P00x`/`T00x` ora univoci a livello di progetto.
+- [x] **Core** (`packages/plan-core/src/schema.ts`, `plan-store.ts`, `refs.ts`):
+  - aggiunti `nextFeatureNumber/nextPhaseNumber/nextTaskNumber` a ProjectSchema (int positive, default 1).
+  - `normalizeStructureSnapshot` + `normalizeTasks` + `normalizeFeaturesDocument` non ri-numerano più (number è stabile).
+  - aggiunti `allocFeatureNumber()/allocPhaseNumber()/allocTaskNumber()` (atomici, race-free dentro withFeatureLock).
+  - `migrateToGlobalSequence` (esportata): renumera tutte le F/P/T per `createdAt` asc (tiebreak id) in 1..N globale, setta i contatori, idempotente (no-op se nessun duplicato). Cablata nello startup di entrambi gli adapter (pi-adapter heavy-init dopo migrateToUuids; plan-mcp requireStore() dopo ensureShortIdsAndPriority).
+  - `findTaskByRef` condivisa in `refs.ts`: accetta UUID, **T00x nudo** (ora univoco), composito `F00x/P00x/T00x` + `P00x(F00x)/T00x` + `P00x/T00x`, shortId 5-char, titolo.
+- [x] **Adapter** (`packages/plan-mcp`, `packages/pi-adapter`): usano `findTaskByRef` condivisa (rimossa la copia locale), assegnano i number dagli alloc counter, emettono composito+shortId nelle conferme (lifecycle + show + delete), descrizioni tool pubblicizzano i formati di ref accettati.
+- [x] **Web UI**: già pronta (EntityBadge/EntityPathBadge/ShortIdBadge/CopyableBadge già esistenti; consuma `number` come id stabile, nessun assunto di contiguità, sort per number con buchi OK). Build + copia in pi-adapter/web-ui-dist.
+- [x] **AGENTS.md rule 9**: aggiornata — P/T globalmente univoci, forma corta `P00x`/`T00x` riferimento valido, buchi da cancellazione attesi.
+- [x] Validazione: `pnpm -r build` + `pnpm check` puliti. Test funzionali: migrazione su copia del .planner (19 phase/81 task/7 feature → tutti univoci 1..N, contatori max+1, idempotente); findTaskByRef risolve T00x nudo + composito + shortId + UUID + titolo; alloc incrementa e persiste i contatori.
+- [ ] **Da fare**: version bump + release @next (task successivo).

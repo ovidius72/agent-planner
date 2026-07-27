@@ -225,6 +225,86 @@ export async function migrateToUuids(store: PlanStore): Promise<void> {
   });
 }
 
+/**
+ * One-time idempotent migration to GLOBAL F/P/T numbering.
+ *
+ * Legacy plans assign Phase.number per-feature and Task.number per-phase, so
+ * every feature has a P001 and every phase has a T001 (ambiguous in chat/handoffs).
+ * This renumbers ALL features/phases/tasks by `createdAt` asc (stable tiebreak by
+ * id) into a single project-wide 1..N sequence and sets the monotonic project
+ * counters (nextFeatureNumber/nextPhaseNumber/nextTaskNumber).
+ *
+ * Idempotent: if no duplicate phase/task/feature numbers exist across the
+ * project, the plan is already global → no renumber writes happen (only the
+ * counters are ensured, in case project.json predates them). MUST run before
+ * ensureStructureOrdering (which no longer renumbers — numbers are stable).
+ */
+export async function migrateToGlobalSequence(store: PlanStore): Promise<{ migrated: boolean; phases: number; tasks: number; features: number }> {
+  return store.runBatchForMigration(async () => {
+    const ws = await store.loadAll();
+    const phases = ws.phases;
+    const features = ws.features.features;
+    const project = ws.project;
+
+    const allTasks: { phase: Phase; task: Task }[] = [];
+    for (const phase of phases) for (const task of phase.tasks) allTasks.push({ phase, task });
+
+    const hasDupes = (nums: number[]) => new Set(nums).size !== nums.length;
+    const phaseDupes = hasDupes(phases.map((p) => p.number));
+    const taskDupes = hasDupes(allTasks.map((x) => x.task.number));
+    const featureDupes = hasDupes(features.map((f) => f.number));
+
+    const maxP = phases.reduce((m, p) => Math.max(m, p.number), 0);
+    const maxT = allTasks.reduce((m, x) => Math.max(m, x.task.number), 0);
+    const maxF = features.reduce((m, f) => Math.max(m, f.number), 0);
+
+    if (!phaseDupes && !taskDupes && !featureDupes) {
+      // Already global. Ensure counters are set (project.json may predate them).
+      let changed = false;
+      if (project.nextPhaseNumber <= maxP) { project.nextPhaseNumber = maxP + 1; changed = true; }
+      if (project.nextTaskNumber <= maxT) { project.nextTaskNumber = maxT + 1; changed = true; }
+      if (project.nextFeatureNumber <= maxF) { project.nextFeatureNumber = maxF + 1; changed = true; }
+      if (changed) await store.saveProject(project);
+      return { migrated: false, phases: phases.length, tasks: allTasks.length, features: features.length };
+    }
+
+    const renumber = <T extends { number: number; createdAt: string; id: string }>(arr: T[]): T[] =>
+      arr
+        .slice()
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+        .map((x, i) => ({ ...x, number: i + 1 }));
+
+    const newFeatures = renumber(features);
+    const newPhases = renumber(phases);
+    const numberedTasks = renumber(allTasks.map((x) => x.task));
+
+    // Reassemble renumbered tasks into their phases, preserving each phase's task order.
+    const tasksByPhase = new Map<string, Task[]>();
+    for (let i = 0; i < allTasks.length; i++) {
+      const pid = allTasks[i]!.phase.id;
+      const bucket = tasksByPhase.get(pid) ?? [];
+      bucket.push(numberedTasks[i]!);
+      tasksByPhase.set(pid, bucket);
+    }
+    const finalPhases = newPhases.map((p) => {
+      const tasks = tasksByPhase.get(p.id) ?? [];
+      const order = new Map(tasks.map((t) => [t.id, t]));
+      const ordered: Task[] = p.taskIds.map((id) => order.get(id)).filter((t): t is Task => Boolean(t));
+      for (const t of tasks.sort((a, b) => a.number - b.number)) if (!ordered.includes(t)) ordered.push(t);
+      return { ...p, tasks: ordered, taskIds: ordered.map((t) => t.id) };
+    });
+
+    await store.saveFeatures({ features: newFeatures });
+    for (const p of finalPhases) await store.savePhase(p);
+    project.nextFeatureNumber = newFeatures.length + 1;
+    project.nextPhaseNumber = newPhases.length + 1;
+    project.nextTaskNumber = numberedTasks.length + 1;
+    await store.saveProject(project);
+    await store.writeGenerated();
+    return { migrated: true, phases: newPhases.length, tasks: numberedTasks.length, features: newFeatures.length };
+  });
+}
+
 async function readJson<T>(path: string, schema: { parse(v: unknown): T }): Promise<T> {
   try {
     const raw = await readFile(path, "utf-8");
@@ -304,23 +384,14 @@ export class PlanStore {
   }
 
   private normalizeTasks(tasks: Task[]): { tasks: Task[]; changed: boolean } {
-    let changed = false;
-    const normalized = tasks.map((task, index) => {
-      const nextNumber = index + 1;
-      if (task.number !== nextNumber) changed = true;
-      return { ...task, number: nextNumber };
-    });
-    return { tasks: normalized, changed };
+    // Numbers are a STABLE global sequence (assigned once at create from project.nextTaskNumber).
+    // Do NOT renumber here — renumbering would break references after deletions.
+    return { tasks, changed: false };
   }
 
   private normalizeFeaturesDocument(doc: FeaturesDocument): { doc: FeaturesDocument; changed: boolean } {
-    let changed = false;
-    const normalized = doc.features.map((feature, index) => {
-      const nextNumber = index + 1;
-      if (feature.number !== nextNumber) changed = true;
-      return { ...feature, number: nextNumber };
-    });
-    return { doc: { features: normalized }, changed };
+    // Numbers are a STABLE global sequence (assigned once at create from project.nextFeatureNumber).
+    return { doc, changed: false };
   }
 
   private normalizePhaseDocument(phase: RawPhase): { phase: RawPhase; changed: boolean } {
@@ -353,10 +424,7 @@ export class PlanStore {
       }
     }
 
-    const normalizedFeatures = featuresDoc.features.map((feature, featureIndex) => {
-      const nextFeatureNumber = featureIndex + 1;
-      if (feature.number !== nextFeatureNumber) changed = true;
-
+    const normalizedFeatures = featuresDoc.features.map((feature) => {
       const linked = feature.phaseIds.map((id) => phaseById.get(id)).filter((phase): phase is Phase => Boolean(phase));
       const linkedIds = new Set(linked.map((phase) => phase.id));
       const inferred = (phasesByFeature.get(feature.id) ?? []).filter((phase) => !linkedIds.has(phase.id));
@@ -366,12 +434,7 @@ export class PlanStore {
         changed = true;
       }
 
-      orderedPhases.forEach((phase, index) => {
-        const nextPhaseNumber = index + 1;
-        if (phase.number !== nextPhaseNumber) {
-          phase.number = nextPhaseNumber;
-          changed = true;
-        }
+      orderedPhases.forEach((phase) => {
         const normalizedPhase = this.normalizePhaseDocument(phase);
         if (normalizedPhase.changed) {
           phase.tasks = normalizedPhase.phase.tasks;
@@ -382,17 +445,11 @@ export class PlanStore {
 
       return {
         ...feature,
-        number: nextFeatureNumber,
         phaseIds: normalizedPhaseIds,
       };
     });
 
-    orphanPhases.forEach((phase, index) => {
-      const nextPhaseNumber = index + 1;
-      if (phase.number !== nextPhaseNumber) {
-        phase.number = nextPhaseNumber;
-        changed = true;
-      }
+    orphanPhases.forEach((phase) => {
       const normalizedPhase = this.normalizePhaseDocument(phase);
       if (normalizedPhase.changed) {
         phase.tasks = normalizedPhase.phase.tasks;
@@ -528,6 +585,9 @@ export class PlanStore {
         beforeTaskStart: [],
         afterPhaseComplete: [],
       },
+      nextFeatureNumber: 1,
+      nextPhaseNumber: 1,
+      nextTaskNumber: 1,
     });
     await this.saveRequirements({ requirements: [] });
     await this.saveFeatures({ features: [] });
@@ -600,6 +660,25 @@ export class PlanStore {
 
   async loadProject(): Promise<Project> {
     return readJson(this.projectPath(), ProjectSchema);
+  }
+
+  /**
+   * Allocate the next global sequence number for a feature/phase/task.
+   * Reads the monotonic counter from project.json, increments it, persists,
+   * and returns the allocated number. MUST be called within withFeatureLock
+   * (adapters create entities inside a lock) so the counter is race-free.
+   * The counter never reuses a number — deletions leave gaps (by design:
+   * stable references survive deletion).
+   */
+  async allocFeatureNumber(): Promise<number> { return this.allocSeqNumber("nextFeatureNumber"); }
+  async allocPhaseNumber(): Promise<number> { return this.allocSeqNumber("nextPhaseNumber"); }
+  async allocTaskNumber(): Promise<number> { return this.allocSeqNumber("nextTaskNumber"); }
+  private async allocSeqNumber(key: "nextFeatureNumber" | "nextPhaseNumber" | "nextTaskNumber"): Promise<number> {
+    const project = await this.loadProject();
+    const n = project[key];
+    project[key] = n + 1;
+    await this.saveProject(project);
+    return n;
   }
 
 
