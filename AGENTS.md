@@ -25,6 +25,7 @@ Regole operative:
 - **Sincronizzazione Istantanea**: i cambi di stato (start/complete/block) devono avvenire **nel momento esatto** in cui la transizione avviene. È vietato accumulare aggiornamenti di stato per l'ultima fase della sessione.
 - **Sincronizzazione costante**: se l'estensione segnala "Nessun task attivo", l'agente deve regolarizzare immediatamente la situazione avviando il task corretto.
 - **Stato = Verità**: se un task è `in-progress`, l'agente deve effettivamente starci lavorando. Se smette, deve chiuderlo o bloccarlo (giustificando l'azione nello `statusLog`).
+- **Stato derivato, non persistito**: lo stato di feature e fase è **derivato** dai task (`syncStatuses`/rollup), non memorizzato nel JSON. Il campo `status` in `.planner/features/*.json` e `.planner/phases/*.json` può essere `null` o stale — **non leggerlo come fonte di verità**. La fonte di verità è la risposta del tool (che calcola lo stato derivato) o la Web UI, non il JSON grezzo. Un agente che legge `status: null` nel file e lo scambia per "non fatto" commette un errore.
 
 ### 2. Non usare il markdown come source of truth del piano
 Il piano di progetto deve avere come fonte primaria dati strutturati in `.planner/`.

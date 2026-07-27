@@ -96,7 +96,7 @@ export function FeatureTreeRow({
 
   return (
     <div
-      className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${hasActiveTask ? "ap-in-progress" : feature.status === "in-progress" ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
     >
       <div
         className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}
@@ -198,7 +198,7 @@ export function PhaseTreeRow({
 
   return (
     <div
-      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 rounded-[12px] p-3 transition-colors ${phase.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)]" : ""} ${phase.status === "done" ? "opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 rounded-[12px] p-3 transition-colors ${hasActiveTask ? "ap-in-progress" : phase.status === "in-progress" ? "border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)]" : ""} ${phase.status === "done" ? "opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
     >
       <div
         className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}

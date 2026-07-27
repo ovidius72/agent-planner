@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, buildRecap } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -206,7 +206,7 @@ server.registerTool("planner-init", {
   if (description !== undefined) project.description = description.trim();
   if (goal !== undefined) project.goal = goal.trim();
   await st.saveProject(project);
-  return writeAndSummarize(st, `.planner/ initialized for "${project.name}"`, { project });
+  return writeAndSummarize(st, `.planner/ initialized for "${project.name}"`);
 });
 
 server.registerTool("planner-show", {
@@ -245,7 +245,7 @@ server.registerTool("planner-project-language", {
   if (contentLanguage !== undefined) project.contentLanguage = contentLanguage.trim();
   if (chatLanguage !== undefined) project.chatLanguage = chatLanguage.trim();
   await st.saveProject(project);
-  return writeAndSummarize(st, `Saved language preferences: content=${project.contentLanguage || "(unset)"}, chat=${project.chatLanguage || "(unset)"}`, { project });
+  return writeAndSummarize(st, `Saved language preferences: content=${project.contentLanguage || "(unset)"}, chat=${project.chatLanguage || "(unset)"}`);
 });
 
 server.registerTool("planner-project-discuss", {
@@ -270,7 +270,7 @@ server.registerTool("planner-project-discuss", {
   if (params.globalRules !== undefined) project.globalRules = params.globalRules.map((entry) => entry.trim()).filter(Boolean);
   if (params.decisions !== undefined) project.decisions = params.decisions.map((entry) => entry.trim()).filter(Boolean);
   await st.saveProject(project);
-  return writeAndSummarize(st, `Project discussed/updated: ${project.name}`, { project });
+  return writeAndSummarize(st, `Project discussed/updated: ${project.name}`);
 });
 
 server.registerTool("planner-feature-list", {
@@ -326,7 +326,7 @@ server.registerTool("planner-feature-add", {
     doc.features.push(feature);
     return doc;
   });
-  return writeAndSummarize(st, `Feature created: ${feature.id} — ${feature.name}`, { feature });
+  return writeAndSummarize(st, `✅ Feature created: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}`);
 });
 
 server.registerTool("planner-feature-show", {
@@ -374,7 +374,7 @@ server.registerTool("planner-feature-update", {
     return doc;
   });
   const result = updated.features.find((entry) => entry.id === feature.id)!;
-  return writeAndSummarize(st, `Feature updated: ${result.id} — ${result.name}`, { feature: result });
+  return writeAndSummarize(st, `✅ Feature updated: ${formatFeatureRef(result.number)} — ${result.name}${result.shortId ? ` · ${result.shortId}` : ""}`);
 });
 
 server.registerTool("planner-feature-delete", {
@@ -456,6 +456,8 @@ server.registerTool("planner-phase-add", {
       updatedAt: timestamp,
       handoff: "",
       handoffUpdatedAt: "",
+      handoffReadAt: "",
+      handoffHistory: [],
     };
     await st.savePhase(phase);
     if (feature) {
@@ -468,7 +470,7 @@ server.registerTool("planner-phase-add", {
     await st.writeGenerated();
   });
   if (!phase) return text("Phase creation failed.");
-  return writeAndSummarize(st, `Phase created: ${phase.id} — ${phase.title}`, { phase });
+  return writeAndSummarize(st, `✅ Phase created: ${formatPhaseRef(phase.number, feature?.number)} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}`);
 });
 
 server.registerTool("planner-phase-show", {
@@ -495,7 +497,8 @@ server.registerTool("planner-phase-discuss", {
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
-  const found = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  const features = (await st.loadFeatures()).features;
+  const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
   const phase = await st.updatePhase(found.id, (entry) => {
     if (updates.goal !== undefined) entry.goals = [updates.goal.trim()].filter(Boolean);
@@ -512,7 +515,7 @@ server.registerTool("planner-phase-discuss", {
     entry.updatedAt = nowISO();
     return entry;
   });
-  return writeAndSummarize(st, `Phase discussed/planned: ${phase.id} — ${phase.title}`, { phase });
+  return writeAndSummarize(st, `✅ Phase discussed/planned: ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}`);
 });
 
 server.registerTool("planner-phase-update", {
@@ -527,7 +530,8 @@ server.registerTool("planner-phase-update", {
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
-  const found = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  const features = (await st.loadFeatures()).features;
+  const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
   const phase = await st.updatePhase(found.id, (entry) => {
     if (updates.title !== undefined) entry.title = updates.title.trim();
@@ -538,7 +542,7 @@ server.registerTool("planner-phase-update", {
     entry.updatedAt = nowISO();
     return entry;
   });
-  return writeAndSummarize(st, `Phase updated: ${phase.id} — ${phase.title}`, { phase });
+  return writeAndSummarize(st, `✅ Phase updated: ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}`);
 });
 
 server.registerTool("planner-phase-delete", {
@@ -721,16 +725,21 @@ server.registerTool("planner-task-start", {
 }, async ({ task: ref }) => {
   const st = await requireStore();
 
-  // Hygiene notice (non-blocking): surface an existing handoff but never block
-  // task_start — the handoff is a captured-context artifact, not a lock (e.g. a
-  // small modification after writing a handoff should start without forcing
-  // deletion, which would lose context).
-  const handoffNotice = (await st.listHandoffs()).length > 0
-    ? "ℹ️  One or more phases have a pending handoff — if relevant to the task you're starting, read it with planner-handoff-show <ref>, then clear with planner-handoff-clear. Proceeding with task start.\n"
-    : "";
-
   const found = findTaskByRef(await st.loadAllPhases(), ref);
   if (!found) return text(`Task not found: ${ref}`);
+  // Auto-archive the handoff on THIS task's phase (reason: task-started) — the
+  // agent is now actively working, so the captured context is consumed. Other
+  // phases' handoffs are left untouched (informational, non-blocking).
+  const allHandoffs = await st.listHandoffs();
+  let handoffNotice = "";
+  if ((found.phase.handoff ?? "") !== "") {
+    await st.clearPhaseHandoff(found.phase.id, "task-started").catch(() => {});
+    handoffNotice = "📦 Archived handoff for this phase (task started) — recover via planner-handoff-list + .planner/handoff-archive/.\n";
+  }
+  const _otherHandoffs = allHandoffs.filter((h) => h.phaseId !== found.phase.id);
+  if (_otherHandoffs.length > 0) {
+    handoffNotice += `ℹ️  ${_otherHandoffs.length} other phase handoff(s) pending — review with planner-handoff-list if relevant.\n`;
+  }
   const timestamp = nowISO();
 
   let updatedTask: Task | undefined;
@@ -856,8 +865,8 @@ server.registerTool("planner-handoff-clear", {
   const st = await requireStore();
   const r = await resolvePhaseForHandoff(st, phaseRef);
   if (!r.ok) return text(`❌ ${r.error}`);
-  await st.clearPhaseHandoff(r.phase.id);
-  return text(`✅ Cleared handoff on ${r.compositeRef}. (handoffUpdatedAt preserved as audit)`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
+  await st.clearPhaseHandoff(r.phase.id, "manual");
+  return text(`✅ Cleared handoff on ${r.compositeRef} (handoffUpdatedAt preserved as audit; archived to .planner/handoff-archive/).`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
 server.registerTool("planner-web", {

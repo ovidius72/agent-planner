@@ -468,7 +468,7 @@ async function buildHandoffMarkdown(
     ...recentActivityLines,
     "",
     "## Reminder",
-    "- When work is fully resumed and this handoff is no longer needed, clear the phase handoff with handoff clear <ref> (or /planner handoff clear).",
+    "- This handoff is KEPT until a task in this phase starts (then auto-archived to .planner/handoff-archive/) or the phase completes. No need to clear it manually.",
   ].join("\n");
 }
 
@@ -833,6 +833,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const handoffs = await st.listHandoffs().catch(() => []);
       if (handoffs.length > 0) {
         ctx.ui.notify(`ℹ️  ${handoffs.length} phase handoff(s) pending — review with /planner handoff list.`, "info");
+        // Mark each handoff as read (recap presented). Do NOT clear — content is
+        // kept until a task in the phase starts (auto-archived) or phase completes.
+        for (const h of handoffs) await st.markHandoffRead(h.phaseId).catch(() => {});
       }
     }
 
@@ -1612,6 +1615,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
             createdAt: nowISO(), updatedAt: nowISO(),
             handoff: "", handoffUpdatedAt: "",
+            handoffReadAt: "",
+            handoffHistory: [],
           };
           await st.savePhase(phase);
           await st.updateFeatures((doc) => {
@@ -1988,12 +1993,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
         }
-        // Hygiene notice (non-blocking): surface an existing handoff but never
-        // block task_start — the handoff is a captured-context artifact, not a
-        // lock (a small modification after writing a handoff should start without
-        // forcing deletion, which would lose context).
-        if ((await st.listHandoffs()).length > 0) {
-          ctx.ui.notify("ℹ️  One or more phases have a pending handoff — if relevant to the task you're starting, read it with /planner handoff show <ref>, then clear with /planner handoff clear. Proceeding with task start.", "info");
+        // Auto-archive the handoff on THIS task's phase (reason: task-started) —
+        // the agent is now actively working, so the captured context is consumed.
+        // Other phases' handoffs are left untouched (informational, non-blocking).
+        if ((phase!.handoff ?? "") !== "") {
+          await st.clearPhaseHandoff(phase!.id, "task-started").catch(() => {});
+          ctx.ui.notify("📦 Archived handoff for this phase (task started) — recover via /planner handoff list + .planner/handoff-archive/.", "info");
+        }
+        const _otherHandoffs = (await st.listHandoffs()).filter((h) => h.phaseId !== phase!.id);
+        if (_otherHandoffs.length > 0) {
+          ctx.ui.notify(`ℹ️  ${_otherHandoffs.length} other phase handoff(s) pending — review with /planner handoff list if relevant.`, "info");
         }
         const now = nowISO();
         // Record status change in the incremental statusLog.
@@ -2124,7 +2133,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (action === "clear" || action === "delete") {
         const r = await resolvePhaseForHandoff(st, phaseRef);
         if (!r.ok) { ctx.ui.notify(r.error, "warning"); return; }
-        await st.clearPhaseHandoff(r.phase.id);
+        await st.clearPhaseHandoff(r.phase.id, "manual");
         ctx.ui.notify(`Cleared handoff on ${r.compositeRef}`, "info");
         return;
       }
@@ -2626,7 +2635,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const r = await resolvePhaseForHandoff(st, undefined);
       if (!r.ok) return { content: [{ type: "text", text: `⚠️ plan_delete_handoff is deprecated — use handoff_clear. ${r.error}` }], details: { deprecated: true, error: r.error } };
-      await st.clearPhaseHandoff(r.phase.id);
+      await st.clearPhaseHandoff(r.phase.id, "manual");
       return { content: [{ type: "text", text: `⚠️ plan_delete_handoff is deprecated — cleared handoff on ${r.compositeRef} (phase.handoff). Prefer handoff_clear.` }], details: { deprecated: true, phaseRef: r.compositeRef, phaseId: r.phase.id } };
     },
   });
@@ -2726,8 +2735,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
-      await st.clearPhaseHandoff(r.phase.id);
-      return { content: [{ type: "text", text: `✅ Cleared handoff on ${r.compositeRef}. (handoffUpdatedAt preserved as audit)` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
+      await st.clearPhaseHandoff(r.phase.id, "manual");
+      return { content: [{ type: "text", text: `✅ Cleared handoff on ${r.compositeRef} (handoffUpdatedAt preserved as audit; archived to .planner/handoff-archive/).` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
     },
   });
 
@@ -2843,7 +2852,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return doc;
       });
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Feature created: ${feature.id}` }], details: feature };
+      return { content: [{ type: "text", text: `✅ Feature created: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}` }], details: feature };
     },
   });
 
@@ -2910,7 +2919,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const feature = foundDoc?.features.find((f) => f.id === params.featureId);
       if (!feature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Feature updated: ${feature.id} (${feature.status})` }], details: feature };
+      return { content: [{ type: "text", text: `✅ Feature updated: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}` }], details: feature };
     },
   });
 
@@ -3024,6 +3033,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
           createdAt: now, updatedAt: now,
           handoff: "", handoffUpdatedAt: "",
+          handoffReadAt: "",
+          handoffHistory: [],
         };
         await st.savePhase(phase);
 
@@ -3039,7 +3050,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.writeGenerated();
       });
       if (!phase) return { content: [{ type: "text", text: "Phase creation failed." }], details: {} };
-      return { content: [{ type: "text", text: `Phase created: ${phase.id}` }], details: phase };
+      const phaseCreateFeatures = (await st.loadFeatures()).features;
+      return { content: [{ type: "text", text: `✅ Phase created: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseCreateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}` }], details: phase };
     },
   });
 
@@ -3113,7 +3125,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       phase.updatedAt = nowISO();
       await st.savePhase(phase);
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Phase updated: ${phase.id} (${phase.status})` }], details: phase };
+      const phaseUpdateFeatures = (await st.loadFeatures()).features;
+        return { content: [{ type: "text", text: `✅ Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseUpdateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}` }], details: phase };
     },
   });
 
@@ -3655,12 +3668,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "═══════════════════════════════════════════════════════════════",
         "MANDATORY OPERATIONAL PROTOCOL (violation = execution failure):",
         "═══════════════════════════════════════════════════════════════",
-        "1. HANDOFF HYGIENE: If one or more phases have a pending handoff (entity-scoped, phase.handoff), present the list, read the relevant one with handoff show <ref>, then CLEAR it with handoff clear <ref> once consumed. Handoffs are non-blocking context artifacts, not locks — they never block task_start.",
+        "1. HANDOFF HYGIENE: If one or more phases have a pending handoff (entity-scoped, phase.handoff), present the list, read the relevant one with handoff show <ref> for context. Handoffs are KEPT until a task in the phase starts (auto-archived to .planner/handoff-archive/) or the phase completes — no manual clear needed. They are non-blocking context artifacts, not locks — they never block task_start.",
         "2. TASK LIFECYCLE: BEFORE coding ANY file: call task_start. AFTER finishing work on ANY task: call task_complete. No exceptions. No 'I'll do it later'. NOTE: Planner operations (plan_write_handoff / /planner handoff, task_start, task_complete, task_update, status reads) are NOT code edits. They are ALWAYS allowed regardless of task state — you may write/refresh the handoff even when no task is in-progress (e.g., all tasks done, or capturing state mid-flight). Never refuse to write a handoff because 'no task is open'; that is incorrect.",
         "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
         "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
         "5. NO SHORTCUTS: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.",
-        "6. ENTITY REFERENCES: When you mention a feature/phase/task in chat, use its composite ID (F00x / P00x / T00x, e.g. T003(P002/F001)) or its 5-char shortId (e.g. UUXD1) — NEVER a raw UUID like bd6ed366. Tool responses already show these refs (compositeRef, shortId); reuse them.",
+        "6. ENTITY REFERENCES: When you mention a feature/phase/task in chat, PREFER its 5-char shortId (globally unique, e.g. UUXD1). The composite T00x is per-phase and AMBIGUOUS unless fully qualified as T00x(P00x/F00x) — do NOT use bare 'T00x'. NEVER a raw UUID like bd6ed366. Tool responses already show shortId + compositeRef; reuse them.",
         "═══════════════════════════════════════════════════════════════",
         "",
         // ── Project details ──
@@ -3735,7 +3748,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ...handoffs.map((h, i) => `  [${i+1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`),
         handoffs.length > 0 ? "Read the relevant one with handoff show <ref> (or /planner handoff show <ref>) as previous-session context, but validate it against the current planner state, ordering, and dependencies before treating any target as the next task." : "",
         handoffs.length > 0 ? "If planner state shows no task/phase in-progress, do NOT present a handoff target as the current focus; present it only as a candidate to validate." : "",
-        handoffs.length > 0 ? "Once a handoff is fully consumed and work is safely resumed, clear it with handoff clear <ref> (or /planner handoff clear)." : "",
+        handoffs.length > 0 ? "Handoffs are KEPT until a task in the phase starts (auto-archived to .planner/handoff-archive/) or the phase completes — read with handoff show <ref> for context; no manual clear needed." : "",
         "Plan tools available: project_set_language_preferences, plan_init, project_update, requirement_list, requirement_create, requirement_update, requirement_delete, plan_get, feature_list, feature_get, feature_create, feature_update, feature_delete, phase_list, phase_get, phase_create, phase_update, phase_delete, task_list, task_get, task_create, task_update, task_delete, task_start, task_complete, plan_render, plan_get_handoff, plan_write_handoff, plan_delete_handoff, handoff_list, handoff_show, handoff_write, handoff_clear, plan_authorize_bypass, plan_clear_bypass",
       ].filter(Boolean).join("\n");
         contextBlockCache = contextBlock;

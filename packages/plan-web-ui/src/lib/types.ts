@@ -80,6 +80,12 @@ export interface Task {
   updatedAt: string;
 }
 
+export interface HandoffHistoryEntry {
+  file: string;
+  clearedAt: string;
+  reason: string;
+}
+
 export interface Phase {
   id: string;
   featureId?: string;
@@ -108,6 +114,8 @@ export interface Phase {
   tasks: Task[];
   handoff: string;
   handoffUpdatedAt: string;
+  handoffReadAt?: string;
+  handoffHistory?: HandoffHistoryEntry[];
   createdAt: string;
   updatedAt: string;
 }

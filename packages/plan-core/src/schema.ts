@@ -180,6 +180,13 @@ export const TaskSchema = z.object({
     .filter((item) => item.title.length > 0),
 }));
 
+export const HandoffHistoryEntrySchema = z.object({
+  /** Relative path under .planner/handoff-archive/ (e.g. <phaseId>-<ISO>.md). */
+  file: z.string().default(""),
+  clearedAt: TimestampSchema,
+  /** Why the handoff was cleared: "task-started" | "phase-done" | "manual" | "superseded" | "imported". */
+  reason: z.string().default(""),
+});
 export const PhaseSchema = z.object({
   id: z.string(),
   featureId: z.string().optional(),
@@ -212,6 +219,16 @@ export const PhaseSchema = z.object({
   updatedAt: TimestampSchema,
   handoff: z.string().default(""),
   handoffUpdatedAt: z.string().default(""),
+  /** When the handoff was last read/acknowledged on recap (ISO). Non-empty means
+   *  the agent has seen it; the recap won't re-prompt every turn. The handoff
+   *  content is KEPT until a task in the phase starts (auto-clear) or the phase
+   *  completes — so a restart between read and resume does not lose context. */
+  handoffReadAt: z.string().default(""),
+  /** Metadata for recently-cleared handoffs (newest-first, capped at 5). The
+   *  full content lives as .md files in .planner/handoff-archive/ (gitignored);
+   *  this array only holds the pointer + clear reason + timestamp, so the phase
+   *  JSON stays lean and the archive is recoverable. */
+  handoffHistory: z.array(HandoffHistoryEntrySchema).default([]),
 });
 
 export const FeatureSchema = z.object({

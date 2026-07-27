@@ -409,7 +409,7 @@ export class PlanStore {
   }
 
   async ensureStructureOrdering(): Promise<{ changed: boolean }> {
-    return this.runAsBatch(async () => {
+    const result = await this.runAsBatch(async () => {
       const featuresDoc = await this.loadFeatures();
       const phases = await this.loadAllPhases();
       const normalized = this.normalizeStructureSnapshot(featuresDoc, phases);
@@ -420,6 +420,10 @@ export class PlanStore {
       }
       return { changed: true };
     });
+    // One-time import of a legacy file-based HANDOFF.md (pre-F004) into the
+    // entity-scoped phase.handoff. Idempotent — renames the file to .bak.
+    await this.importLegacyHandoffFile().catch(() => {});
+    return result;
   }
 
   // ── Path helpers ─────────────────────────────────────────────────────
@@ -482,10 +486,6 @@ export class PlanStore {
   private activityPath(): string {
     return join(this.root, "activity.json");
   }
-  private handoffPath(): string {
-    return join(this.root, "HANDOFF.md");
-  }
-
   // ── Init ─────────────────────────────────────────────────────────────
 
   async init(projectName: string): Promise<void> {
@@ -575,6 +575,7 @@ export class PlanStore {
         "resume.json",
         "resume.*.json",
         "generated/",
+        "handoff-archive/",
         "",
       ].join("\n"),
       "utf-8",
@@ -731,45 +732,6 @@ export class PlanStore {
     } catch {
       return { entries: [] };
     }
-  }
-
-  async handoffExists(): Promise<boolean> {
-    try {
-      await access(this.handoffPath());
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async loadHandoff(): Promise<{ content: string; createdAt: string; updatedAt: string } | null> {
-    try {
-      const [content, info] = await Promise.all([
-        readFile(this.handoffPath(), "utf-8"),
-        stat(this.handoffPath()),
-      ]);
-      const createdAt = content.match(/^Created at:\s*(.+)$/m)?.[1]?.trim() ?? info.birthtime.toISOString();
-      const updatedAt = content.match(/^Updated at:\s*(.+)$/m)?.[1]?.trim() ?? info.mtime.toISOString();
-      return {
-        content,
-        createdAt,
-        updatedAt,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  async saveHandoff(content: string): Promise<void> {
-    await atomicWriteText(this.handoffPath(), content);
-    await this.touchManifest();
-  }
-
-  async deleteHandoff(): Promise<void> {
-    try {
-      await unlink(this.handoffPath());
-    } catch {}
-    await this.touchManifest();
   }
 
   async appendActivity(type: string, ref: string, summary: string): Promise<ActivityEntry> {
@@ -1184,7 +1146,7 @@ export class PlanStore {
     const phase = await this.loadPhase(phaseId);
     let cleared: string | null = null;
     if (phase.status === "done" && phase.handoff !== "") {
-      await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffUpdatedAt: nowISO() }));
+      await this.clearPhaseHandoff(phaseId, "phase-done");
       const features = await this.loadFeatures();
       const feature = features.features.find((f) => f.id === phase.featureId);
       cleared = formatPhaseRef(phase.number, feature?.number);
@@ -1315,10 +1277,76 @@ export class PlanStore {
     await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: text, handoffUpdatedAt: now }));
   }
 
-  /** Clear the handoff text for a phase (handoff=""). handoffUpdatedAt is left
-   *  unchanged as an audit trail (when a handoff last existed). */
-  async clearPhaseHandoff(phaseId: string): Promise<void> {
-    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: "" }));
+  /** Directory where cleared handoff content is archived as .md files
+   *  (gitignored). Keeps the phase JSON lean while making past handoffs
+   *  recoverable + human-readable. */
+  private handoffArchiveDir(): string {
+    return join(this.root, "handoff-archive");
+  }
+
+  /** Mark the phase handoff as read/acknowledged on recap (sets handoffReadAt).
+   *  Does NOT clear the handoff — content is kept until a task starts or the
+   *  phase completes, so a restart between read and resume does not lose it. */
+  async markHandoffRead(phaseId: string): Promise<void> {
+    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoffReadAt: nowISO() }));
+  }
+
+  /** One-time import of a legacy .planner/HANDOFF.md file (file-based handoff
+   *  from before F004) into the entity-scoped phase.handoff. Idempotent: if the
+   *  file is absent or empty, no-op. If it exists + non-empty + the target phase
+   *  has no handoff, writes the content onto the current in-progress phase (or
+   *  the first phase if none in-progress) with an "imported" handoffHistory entry,
+   *  then renames the file to HANDOFF.md.bak so it won't re-import. If the target
+   *  already has a handoff, the entity-scoped one wins and the file is just .bak'd. */
+  async importLegacyHandoffFile(): Promise<{ imported: boolean; phaseRef?: string }> {
+    const filePath = join(this.root, "HANDOFF.md");
+    const content = await readFile(filePath, "utf-8").catch(() => null);
+    if (content === null) return { imported: false };
+    if (content.trim() === "") {
+      await rename(filePath, filePath + ".bak").catch(() => {});
+      return { imported: false };
+    }
+    const phases = await this.loadAllPhases();
+    const target = phases.find((p) => p.status === "in-progress") ?? phases[0] ?? null;
+    if (!target) return { imported: false }; // no phases yet — leave file for a later run
+    if ((target.handoff ?? "") === "") {
+      await this.setPhaseHandoff(target.id, content + "\n\n<!-- imported from legacy .planner/HANDOFF.md -->\n");
+      await this.updatePhase(target.id, (p) => ({
+        ...p,
+        handoffHistory: [{ file: "(legacy HANDOFF.md)", clearedAt: nowISO(), reason: "imported" }, ...(p.handoffHistory ?? [])].slice(0, 5),
+      }));
+    }
+    await rename(filePath, filePath + ".bak").catch(() => {});
+    const features = await this.loadFeatures();
+    const feat = features.features.find((f) => f.id === target.featureId);
+    return { imported: true, phaseRef: formatPhaseRef(target.number, feat?.number) };
+  }
+
+
+  /** Clear the handoff for a phase, archiving its content first. The handoff
+   *  markdown is written to .planner/handoff-archive/<phaseId>-<ISO>.md and a
+   *  metadata entry { file, clearedAt, reason } is prepended to handoffHistory
+   *  (capped at 5; oldest file is deleted when trimmed). handoffUpdatedAt is
+   *  left unchanged as an audit trail. If the handoff is empty, this is a no-op.
+   *  reason: "task-started" | "phase-done" | "manual" | "superseded" | "imported". */
+  async clearPhaseHandoff(phaseId: string, reason = "manual"): Promise<void> {
+    const phase = await this.loadPhase(phaseId).catch(() => null);
+    if (!phase || phase.handoff === "") return; // nothing to archive
+    const clearedAt = nowISO();
+    const safeTs = clearedAt.replace(/[:.]/g, "-");
+    const archiveDir = this.handoffArchiveDir();
+    await mkdir(archiveDir, { recursive: true }).catch(() => {});
+    const fileName = `${phaseId}-${safeTs}.md`;
+    const filePath = join(archiveDir, fileName);
+    await atomicWriteText(filePath, phase.handoff);
+    const entry = { file: `handoff-archive/${fileName}`, clearedAt, reason };
+    // Cap history at 5: prepend new entry, drop oldest (and delete its file).
+    const trimmed = [entry, ...(phase.handoffHistory ?? [])].slice(0, 5);
+    const dropped = (phase.handoffHistory ?? []).slice(4); // entries beyond index 4 after prepend
+    for (const d of dropped) {
+      if (d?.file) await unlink(join(this.root, d.file)).catch(() => {});
+    }
+    await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffHistory: trimmed }));
   }
 
   /** List all phases that have a non-empty handoff, newest first, with a
