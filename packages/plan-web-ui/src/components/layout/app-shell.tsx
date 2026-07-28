@@ -59,7 +59,7 @@ function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }
   );
 }
 
-export function AppShell({ project, activeTasks, handoffExists, serverInfo }: { project: Project; activeTasks: ActiveTaskSummary[]; handoffExists: boolean; serverInfo?: ServerInfo | undefined }) {
+export function AppShell({ project, activeTasks, serverInfo }: { project: Project; activeTasks: ActiveTaskSummary[]; serverInfo?: ServerInfo | undefined }) {
   const navigation = useNavigation();
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("connecting");
 
@@ -77,7 +77,7 @@ export function AppShell({ project, activeTasks, handoffExists, serverInfo }: { 
   return (
     <div className="page-shell">
       <header className="sticky top-0 z-30">
-        <TopNav projectName={project?.name} projectRoot={project?.projectRoot} planRoot={project?.planRoot} handoffExists={handoffExists} liveStatus={liveStatus} />
+        <TopNav projectName={project?.name} projectRoot={project?.projectRoot} planRoot={project?.planRoot} liveStatus={liveStatus} />
         <ActiveTasksHeader activeTasks={activeTasks} />
       </header>
       <div className="page-container py-8">

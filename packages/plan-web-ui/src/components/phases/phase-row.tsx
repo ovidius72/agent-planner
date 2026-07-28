@@ -24,7 +24,7 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
             <div className="flex items-center gap-2">
               <EntityBadge type="phase" number={phase.number} />
               <ParentBadge type="phase" featureNum={feature.number} />
-              {phase.handoff ? <HandoffBadge updatedAt={phase.handoffUpdatedAt} /> : null}
+              {phase.handoff ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
               <span className="shrink-0"><StatusBadge status={status} /></span>
             </div>
             <Link to={`/features/${featureId}/phases/${phase.id}`} className="entity-link--phase min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline lg:w-auto lg:truncate">

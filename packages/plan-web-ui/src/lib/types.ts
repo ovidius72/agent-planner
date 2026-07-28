@@ -122,9 +122,11 @@ export interface Phase {
 
 export interface HandoffSummary {
   phaseId: string;
+  featureId?: string | undefined;
   compositeRef: string;
   updatedAt: string;
   firstLine: string;
+  content: string;
 }
 
 export interface PhaseHandoff {

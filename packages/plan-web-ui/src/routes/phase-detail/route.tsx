@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Form, Link, Outlet, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
 import { TaskRow } from "../../components/tasks/task-row";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
@@ -11,6 +11,7 @@ import { FormattedText } from "../../components/ui/formatted-text";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
+import { clearPhaseHandoff } from "../../lib/api";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { taskStatuses } from "../../lib/statuses";
@@ -51,11 +52,26 @@ export function PhaseDetailRoute() {
   );
   const navigate = useNavigate();
   const deleteFormRef = useRef<HTMLFormElement>(null);
+  // Local handoff state so Clear updates the UI without a full route refetch.
+  const [handoffContent, setHandoffContent] = useState<string>(phase.handoff ?? "");
+  const [clearing, setClearing] = useState(false);
   const openEdit = useCallback(() => navigate("edit"), [navigate]);
   const openCreateTask = useCallback(() => navigate("tasks/new"), [navigate]);
   const deletePhase = useCallback(() => {
     deleteFormRef.current?.requestSubmit();
   }, []);
+  const clearHandoff = useCallback(async () => {
+    if (!window.confirm("Clear this phase's handoff?")) return;
+    setClearing(true);
+    try {
+      await clearPhaseHandoff(phase.id);
+      setHandoffContent("");
+    } catch {
+      // keep content on failure
+    } finally {
+      setClearing(false);
+    }
+  }, [phase.id]);
   useShortcut("edit", openEdit);
   useShortcut("create", openCreateTask);
   useShortcut("delete", deletePhase);
@@ -82,7 +98,7 @@ export function PhaseDetailRoute() {
             <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} />
           </CopyableBadge>
           {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
-          {phase.handoff ? <HandoffBadge updatedAt={phase.handoffUpdatedAt} /> : null}
+          {handoffContent ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
           <StatusBadge status={phase.status} />
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
@@ -187,6 +203,25 @@ export function PhaseDetailRoute() {
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
       </Card>
+
+      {handoffContent ? (
+        <Card className="grid gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-bold text-[var(--text)]">Handoff</h2>
+            <button
+              type="button"
+              onClick={clearHandoff}
+              disabled={clearing}
+              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-card)] disabled:opacity-60"
+            >
+              {clearing ? "Clearing…" : "Clear handoff"}
+            </button>
+          </div>
+          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-5 py-5">
+            <FormattedText text={handoffContent} className="formatted-text max-w-none" />
+          </div>
+        </Card>
+      ) : null}
 
       <Card className="grid gap-5">
         <div>

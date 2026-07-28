@@ -1,26 +1,24 @@
 import { useEffect } from "react";
 import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router-dom";
 import { AppShell } from "../components/layout/app-shell";
-import { getActiveTasks, getProject, getUiConfig, listHandoffs, type ActiveTaskSummary, type UiConfig } from "../lib/api";
+import { getActiveTasks, getProject, getUiConfig, type ActiveTaskSummary, type UiConfig } from "../lib/api";
 import { ShortcutProvider } from "../lib/shortcuts";
 import { LiveSyncBridge } from "./live-sync";
 
 export async function loader() {
-  const [project, uiConfig, activeTasks, handoffs] = await Promise.all([
+  const [project, uiConfig, activeTasks] = await Promise.all([
     getProject(),
     getUiConfig(),
     getActiveTasks(),
-    listHandoffs(),
   ]);
-  return { project, uiConfig, activeTasks, handoffs };
+  return { project, uiConfig, activeTasks };
 }
 
 export function RootRoute() {
-  const { project, uiConfig, activeTasks, handoffs } = useLoaderData() as {
+  const { project, uiConfig, activeTasks } = useLoaderData() as {
     project: Awaited<ReturnType<typeof getProject>>;
     uiConfig: UiConfig;
     activeTasks: ActiveTaskSummary[];
-    handoffs: Awaited<ReturnType<typeof listHandoffs>>;
   };
 
   useEffect(() => {
@@ -30,7 +28,7 @@ export function RootRoute() {
   return (
     <ShortcutProvider shortcuts={uiConfig.shortcuts}>
       <LiveSyncBridge />
-      <AppShell project={project} activeTasks={activeTasks} handoffExists={handoffs.length > 0} serverInfo={uiConfig.server} />
+      <AppShell project={project} activeTasks={activeTasks} serverInfo={uiConfig.server} />
     </ShortcutProvider>
   );
 }

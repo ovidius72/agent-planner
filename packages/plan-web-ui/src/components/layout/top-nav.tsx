@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, Download, FileText, Home, Layers, Moon, Sun } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, Home, Layers, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { exportPlan } from "../../lib/api";
@@ -26,13 +26,11 @@ export function TopNav({
   projectName,
   projectRoot,
   planRoot,
-  handoffExists,
   liveStatus,
 }: {
   projectName: string | undefined;
   projectRoot: string | undefined;
   planRoot: string | undefined;
-  handoffExists: boolean;
   liveStatus: LiveStatus;
 }) {
   const { theme, toggleTheme } = useTheme();
@@ -42,7 +40,6 @@ export function TopNav({
   const navItems = [
     { to: "/", label: "Dashboard", icon: Home },
     { to: "/features", label: "Features", icon: Layers },
-    ...(handoffExists ? [{ to: "/handoff", label: "Handoff", icon: FileText }] : []),
   ];
 
   async function downloadExport(full: boolean) {

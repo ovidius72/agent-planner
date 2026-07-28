@@ -234,7 +234,7 @@ export function PhaseTreeRow({
                 />
               </CopyableBadge>
               {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
-              {phase.handoff ? <HandoffBadge updatedAt={phase.handoffUpdatedAt} /> : null}
+              {phase.handoff ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}

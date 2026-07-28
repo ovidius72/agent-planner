@@ -138,12 +138,17 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
 /** Summary of a phase that has a non-empty handoff, for the listHandoffs() API. */
 export interface PhaseHandoffSummary {
   phaseId: string;
+  /** Owning feature id (for deep-linking to the phase-detail route). */
+  featureId?: string | undefined;
   /** Human-readable composite ref, e.g. `P003` or `P003(F002)`. */
   compositeRef: string;
   /** handoffUpdatedAt (falls back to phase.updatedAt if unset). */
   updatedAt: string;
   /** First non-empty line of the handoff, leading markdown headers stripped, ~80 chars. */
   firstLine: string;
+  /** Full handoff content (phase.handoff) — lets the /handoff viewer render
+   *  inline without a per-phase fetch. */
+  content: string;
 }
 
 /** Extract the first meaningful line of a handoff: skip blank lines, strip a
@@ -1505,9 +1510,11 @@ export class PlanStore {
       const fnum = p.featureId ? featureNumber.get(p.featureId) : undefined;
       out.push({
         phaseId: p.id,
+        featureId: p.featureId,
         compositeRef: formatPhaseRef(p.number, fnum),
         updatedAt: p.handoffUpdatedAt || p.updatedAt,
         firstLine: handoffFirstLine(p.handoff),
+        content: p.handoff,
       });
     }
     out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
