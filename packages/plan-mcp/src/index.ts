@@ -203,11 +203,11 @@ server.registerTool("planner-show", {
 });
 
 server.registerTool("planner-repair", {
-  description: "Repair dangling feature→phase references and report integrity.",
+  description: "Repair dangling feature→phase references, rebuild phase containment from each task's own phaseId (heals the migrateToGlobalSequence task-shuffle bug where tasks land in the wrong phase file), and report integrity.",
 }, async () => {
   const st = await requireStore();
   const report = await st.repair();
-  return text(`Repair done: renamed ${report.migrated.renamed}, repaired ${report.migrated.repaired} refs, inferred ${report.migrated.inferred}. Integrity: ${report.integrity.duplicatePhaseIds.length} duplicate, ${report.integrity.danglingPhaseIds.length} dangling.`, { report });
+  return text(`Repair done: renamed ${report.migrated.renamed}, repaired ${report.migrated.repaired} refs, inferred ${report.migrated.inferred}. Containment: ${report.containment.changed} phase files rewritten (${report.containment.tasks} tasks scanned, ${report.containment.orphan} orphan). Integrity: ${report.integrity.duplicatePhaseIds.length} duplicate, ${report.integrity.danglingPhaseIds.length} dangling.`, { report });
 });
 
 server.registerTool("planner-project-language", {

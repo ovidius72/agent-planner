@@ -2546,16 +2546,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_repair",
     label: "Plan Repair",
-    description: "Repair dangling feature→phase references and report plan integrity (duplicate phase ids, dangling phase refs). Safe to run anytime; run if the planner reports ENOENT/phase not found or after manual edits to .planner/.",
+    description: "Repair dangling feature→phase references, rebuild phase containment from each task's own phaseId (heals the migrateToGlobalSequence task-shuffle bug), and report plan integrity (duplicate phase ids, dangling phase refs). Safe to run anytime; run if the planner reports ENOENT/phase not found, tasks appear in the wrong phase, or after manual edits to .planner/.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const report = await st.repair();
       const m = report.migrated;
+      const c = report.containment;
       const lines = [
         `Repair complete.`,
         `Migration: renamed=${m.renamed}, repaired=${m.repaired} refs, inferred=${m.inferred}.`,
+        `Containment: ${c.changed} phase file${c.changed === 1 ? "" : "s"} rewritten (tasks regrouped by their own phaseId), ${c.tasks} tasks scanned, ${c.orphan} orphan.`,
         `Integrity: duplicatePhaseIds=${report.integrity.duplicatePhaseIds.length}, danglingPhaseIds=${report.integrity.danglingPhaseIds.length}.`,
       ];
       if (report.integrity.danglingPhaseIds.length) lines.push("Dangling: " + report.integrity.danglingPhaseIds.join(", "));

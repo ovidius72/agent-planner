@@ -278,12 +278,21 @@ export async function migrateToGlobalSequence(store: PlanStore): Promise<{ migra
     const newPhases = renumber(phases);
     const numberedTasks = renumber(allTasks.map((x) => x.task));
 
-    // Reassemble renumbered tasks into their phases, preserving each phase's task order.
+    // Reassemble renumbered tasks into their phases, keyed by the task's OWN
+    // phaseId (source of truth). NOTE: do NOT pair `numberedTasks[i]` with
+    // `allTasks[i]!.phase.id` — the two arrays are in DIFFERENT orders
+    // (numberedTasks is sorted by createdAt, allTasks is in phase-iteration
+    // order), so a positional index would file each task under the wrong phase.
+    const phaseIdByTaskId = new Map(allTasks.map((x) => [x.task.id, x.phase.id]));
+    const newPhaseIds = new Set(newPhases.map((p) => p.id));
     const tasksByPhase = new Map<string, Task[]>();
-    for (let i = 0; i < allTasks.length; i++) {
-      const pid = allTasks[i]!.phase.id;
+    for (const t of numberedTasks) {
+      // Prefer the task's own phaseId when it points to a real phase; otherwise
+      // fall back to the phase the task was loaded from (handles legacy tasks
+      // with empty/stale phaseId without losing them).
+      const pid = (t.phaseId && newPhaseIds.has(t.phaseId)) ? t.phaseId : (phaseIdByTaskId.get(t.id) ?? "");
       const bucket = tasksByPhase.get(pid) ?? [];
-      bucket.push(numberedTasks[i]!);
+      bucket.push(t);
       tasksByPhase.set(pid, bucket);
     }
     const finalPhases = newPhases.map((p) => {
@@ -481,6 +490,43 @@ export class PlanStore {
     // entity-scoped phase.handoff. Idempotent — renames the file to .bak.
     await this.importLegacyHandoffFile().catch(() => {});
     return result;
+  }
+
+  /** Rebuild each phase's `tasks` + `taskIds` from the task's OWN `phaseId`
+   *  (source of truth). Heals plans where tasks got filed into the wrong phase
+   *  file (e.g. the migrateToGlobalSequence index-mismatch bug, @agent-plan/core
+   *  <0.2.19-next.7). Deterministic, lossless, idempotent: groups every task by
+   *  its phaseId, preserves each phase's existing taskIds order, appends orphan
+   *  tasks (whose phaseId dangles or is empty) by number. Writes a phase file
+   *  only when its task set actually changed. */
+  async rebuildContainment(): Promise<{ changed: number; tasks: number; orphan: number }> {
+    return this.runAsBatch(async () => {
+      const phases = await this.loadAllPhases();
+      const phaseById = new Map(phases.map((p) => [p.id, p]));
+      const allTasks: { task: Task; fromPhaseId: string }[] = [];
+      for (const p of phases) for (const t of p.tasks) allTasks.push({ task: t, fromPhaseId: p.id });
+      const grouped = new Map<string, Task[]>();
+      let orphan = 0;
+      for (const { task, fromPhaseId } of allTasks) {
+        const pid = (task.phaseId && phaseById.has(task.phaseId)) ? task.phaseId : fromPhaseId;
+        if (!phaseById.has(pid)) orphan++;
+        const bucket = grouped.get(pid) ?? [];
+        bucket.push(task);
+        grouped.set(pid, bucket);
+      }
+      let changed = 0;
+      for (const p of phases) {
+        const tasks = grouped.get(p.id) ?? [];
+        const byId = new Map(tasks.map((t) => [t.id, t]));
+        const ordered: Task[] = p.taskIds.map((id) => byId.get(id)).filter((t): t is Task => Boolean(t));
+        for (const t of tasks.slice().sort((a, b) => a.number - b.number)) if (!ordered.some((o) => o.id === t.id)) ordered.push(t);
+        const same = ordered.length === p.tasks.length && ordered.every((t, i) => t.id === p.tasks[i]?.id);
+        if (same) continue;
+        await this.savePhase({ ...p, tasks: ordered, taskIds: ordered.map((t) => t.id) });
+        changed++;
+      }
+      return { changed, tasks: allTasks.length, orphan };
+    });
   }
 
   // ── Path helpers ─────────────────────────────────────────────────────
@@ -1144,14 +1190,19 @@ export class PlanStore {
   async repair(): Promise<{
     migrated: { renamed: number; repaired: number; inferred: number };
     backfill: { shortIdsAssigned: number; prioritiesAssigned: number; duplicateShortIds: string[] };
+    containment: { changed: number; tasks: number; orphan: number };
     integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
   }> {
     return this.runAsBatch(async () => {
       const migrated = await this.migratePhaseIds();
       const backfill = await this.ensureShortIdsAndPriority();
+      // Rebuild phase containment from each task's own phaseId. Heals plans
+      // corrupted by the migrateToGlobalSequence index-mismatch bug (core
+      // <0.2.19-next.7). Lossless + idempotent — safe to run every repair.
+      const containment = await this.rebuildContainment();
       const integrity = await this.validateIntegrity();
       await this.writeGenerated();
-      return { migrated, backfill, integrity };
+      return { migrated, backfill, containment, integrity };
     });
   }
 
