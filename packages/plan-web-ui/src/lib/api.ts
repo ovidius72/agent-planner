@@ -244,6 +244,11 @@ export async function getIntegrity(): Promise<RepairReport["integrity"]> {
 
 export type ReorderKind = "feature" | "phase" | "task";
 
-export async function reorder(kind: ReorderKind, ids: string[]): Promise<{ ok: boolean; kind: ReorderKind; count: number }> {
-  return request("/reorder", { method: "POST", body: JSON.stringify({ kind, ids }) });
+export async function reorder(
+  kind: ReorderKind,
+  movedId: string,
+  beforeId: string | null,
+  afterId: string | null,
+): Promise<{ ok: boolean; kind: ReorderKind; movedId: string }> {
+  return request("/reorder", { method: "POST", body: JSON.stringify({ kind, movedId, beforeId, afterId }) });
 }

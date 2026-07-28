@@ -19,7 +19,7 @@ import {
   writeStoredArray,
 } from "../lib/dashboard-storage";
 import type { Feature, FeatureStatus, Phase, PhaseStatus, TaskStatus } from "../lib/types";
-import { isSearchActive, matchTask, parseSearchQuery } from "../lib/task-search";
+import { isSearchActive, matchTask, parseSearchQuery, buildTaskHay } from "../lib/task-search";
 
 export type TreeOpenMode = "smart" | "all" | "none";
 
@@ -95,6 +95,21 @@ export function useDashboardTree({
   // ── Structured search (elastic-input) ───────────────────────────────────
   const searchFilters = useMemo(() => parseSearchQuery(searchQuery), [searchQuery]);
   const searchActive = isSearchActive(searchFilters);
+  // Precompute the free-text haystack per task once per data change (not per
+  // keystroke) so large plans (1000+ tasks) stay responsive. Only needed when
+  // a text filter is active; structured-only filters skip the hay.
+  const hayByTaskId = useMemo(() => {
+    if (!searchActive || !searchFilters.text) return null;
+    const map = new Map<string, string>();
+    for (const entry of workTree) {
+      for (const pe of entry.allPhases) {
+        for (const t of pe.allTasks) {
+          map.set(t.id, buildTaskHay({ feature: entry.feature, phase: pe.phase, task: t }));
+        }
+      }
+    }
+    return map;
+  }, [searchActive, searchFilters.text, workTree]);
   const { matchedTaskIds, matchedFeatureIds, matchedPhaseIds } = useMemo(() => {
     const taskIds = new Set<string>();
     const featureIds = new Set<string>();
@@ -103,7 +118,7 @@ export function useDashboardTree({
     for (const entry of workTree) {
       for (const pe of entry.allPhases) {
         for (const t of pe.allTasks) {
-          if (matchTask(searchFilters, { feature: entry.feature, phase: pe.phase, task: t })) {
+          if (matchTask(searchFilters, { feature: entry.feature, phase: pe.phase, task: t }, hayByTaskId?.get(t.id))) {
             taskIds.add(t.id);
             featureIds.add(entry.feature.id);
             phaseIds.add(pe.phase.id);
@@ -112,7 +127,7 @@ export function useDashboardTree({
       }
     }
     return { matchedTaskIds: taskIds, matchedFeatureIds: featureIds, matchedPhaseIds: phaseIds };
-  }, [searchActive, searchFilters, workTree]);
+  }, [searchActive, searchFilters, workTree, hayByTaskId]);
 
   const [showAllFeatures, setShowAllFeatures] = useState(() => {
     if (typeof window === "undefined") return true;

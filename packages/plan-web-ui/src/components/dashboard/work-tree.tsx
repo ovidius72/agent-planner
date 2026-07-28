@@ -117,8 +117,11 @@ export function WorkTree({
     const featureIds = orderedTree.map((e) => e.feature.id);
     if (featureIds.includes(activeId) && featureIds.includes(overId)) {
       const next = arrayMove(featureIds, featureIds.indexOf(activeId), featureIds.indexOf(overId));
+      const ni = next.indexOf(activeId);
+      const beforeId = ni > 0 ? (next[ni - 1] ?? null) : null;
+      const afterId = ni < next.length - 1 ? (next[ni + 1] ?? null) : null;
       setPendingOrder((prev) => ({ ...prev, "__features__": next })); // optimistic: reorder now
-      await reorder("feature", next).catch(() => {});
+      await reorder("feature", activeId, beforeId, afterId).catch(() => {});
       return;
     }
     // Phases scope (within a feature)
@@ -126,8 +129,11 @@ export function WorkTree({
       const phaseIds = entry.allPhases.map((p) => p.phase.id);
       if (phaseIds.includes(activeId) && phaseIds.includes(overId)) {
         const next = arrayMove(phaseIds, phaseIds.indexOf(activeId), phaseIds.indexOf(overId));
+        const ni = next.indexOf(activeId);
+        const beforeId = ni > 0 ? (next[ni - 1] ?? null) : null;
+        const afterId = ni < next.length - 1 ? (next[ni + 1] ?? null) : null;
         setPendingOrder((prev) => ({ ...prev, [`phase-scope:${entry.feature.id}`]: next }));
-        await reorder("phase", next).catch(() => {});
+        await reorder("phase", activeId, beforeId, afterId).catch(() => {});
         return;
       }
     }
@@ -137,8 +143,11 @@ export function WorkTree({
         const taskIds = pe.allTasks.map((t) => t.id);
         if (taskIds.includes(activeId) && taskIds.includes(overId)) {
           const next = arrayMove(taskIds, taskIds.indexOf(activeId), taskIds.indexOf(overId));
+          const ni = next.indexOf(activeId);
+          const beforeId = ni > 0 ? (next[ni - 1] ?? null) : null;
+          const afterId = ni < next.length - 1 ? (next[ni + 1] ?? null) : null;
           setPendingOrder((prev) => ({ ...prev, [`task-scope:${pe.phase.id}`]: next }));
-          await reorder("task", next).catch(() => {});
+          await reorder("task", activeId, beforeId, afterId).catch(() => {});
           return;
         }
       }

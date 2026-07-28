@@ -178,9 +178,50 @@ export function isSearchActive(filters: SearchFilters): boolean {
 }
 
 /** Does this task (within its feature/phase) match the filters? */
+/** Build the lowercased haystack for a task's free-text match. Includes
+ *  number, title, shortName, shortId, description, notes (task); title, slug,
+ *  shortId, number, description, summary, notes (phase); name, shortId,
+ *  number, description (feature); plus composite-style refs (F00x/P00x/T00x)
+ *  so bare queries like `85` or `P085` match. Exported so callers can precompute
+ *  once per data change instead of per keystroke. */
+export function buildTaskHay(ctx: { feature: Feature; phase: Phase; task: Task }): string {
+  const pad = (n: number) => String(n).padStart(3, "0");
+  return [
+    // task
+    ctx.task.title,
+    ctx.task.shortName ?? "",
+    ctx.task.shortId ?? "",
+    String(ctx.task.number),
+    `T${pad(ctx.task.number)}`,
+    ctx.task.description ?? "",
+    ctx.task.notes ?? "",
+    // phase
+    ctx.phase.title,
+    ctx.phase.slug ?? "",
+    ctx.phase.shortId ?? "",
+    String(ctx.phase.number),
+    `P${pad(ctx.phase.number)}`,
+    ctx.phase.description ?? "",
+    ctx.phase.summary ?? "",
+    ctx.phase.notes ?? "",
+    // feature
+    ctx.feature.name,
+    ctx.feature.shortId ?? "",
+    String(ctx.feature.number),
+    `F${pad(ctx.feature.number)}`,
+    ctx.feature.description ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+/** Does this task (within its feature/phase) match the filters?
+ *  Pass `precomputedHay` (from buildTaskHay) to avoid rebuilding the haystack
+ *  on every keystroke for large plans. */
 export function matchTask(
   filters: SearchFilters,
   ctx: { feature: Feature; phase: Phase; task: Task },
+  precomputedHay?: string,
 ): boolean {
   if (filters.featureNumbers && !filters.featureNumbers.has(ctx.feature.number)) return false;
   if (filters.phaseNumbers && !filters.phaseNumbers.has(ctx.phase.number)) return false;
@@ -201,16 +242,7 @@ export function matchTask(
   if (filters.phaseStatus && ctx.phase.status !== filters.phaseStatus) return false;
   if (filters.text) {
     const t = filters.text;
-    const hay = [
-      ctx.task.title,
-      ctx.task.shortId ?? "",
-      ctx.phase.title,
-      ctx.phase.shortId ?? "",
-      ctx.feature.name,
-      ctx.feature.shortId ?? "",
-    ]
-      .join(" ")
-      .toLowerCase();
+    const hay = precomputedHay ?? buildTaskHay(ctx);
     if (!hay.includes(t)) return false;
   }
   return true;

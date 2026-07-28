@@ -1113,10 +1113,9 @@ export class PlanStore {
       let prioritiesAssigned = 0;
       let featuresDirty = false;
 
-      const assignPriority = (current: number, index: number): number => {
-        if (current === 0) { prioritiesAssigned += 1; return index + 1; }
-        return current;
-      };
+      // Priority is left to reorder (midpoint-insert); ensureShortIds only
+      // backfills shortIds. New items keep priority 0 until first drag reindex.
+      const assignPriority = (current: number, _index: number): number => current;
 
       // Features: shortId + priority (project scope)
       const sortedFeatures = [...featuresDoc.features].sort(

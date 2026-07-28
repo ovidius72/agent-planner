@@ -715,18 +715,49 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   // ── Reorder (priority) ───────────────────────────────────────────
   app.post(route("/reorder"), async (c) => {
-    const body = await c.req.json<{ kind: "feature" | "phase" | "task"; ids: string[] }>();
-    const { kind, ids } = body;
-    if (!Array.isArray(ids) || ids.length === 0) return c.json({ error: "ids required" }, 400);
-    const gap = 10;
+    // Midpoint-insert reorder: only the moved item's priority changes (when
+    // the gap between its new neighbours allows it). When the gap is exhausted
+    // (≤1, e.g. all-zero defaults or tight spacing), the segment is reindexed
+    // with GAP. Keeps priority as int (no schema migration) and minimises the
+    // set of changed items per drag.
+    const body = await c.req.json<{ kind: "feature" | "phase" | "task"; movedId: string; beforeId: string | null; afterId: string | null }>();
+    const { kind, movedId, beforeId, afterId } = body;
+    if (!movedId) return c.json({ error: "movedId required" }, 400);
+    const GAP = 10;
+
+    // Reindex a list in-place: reconstruct the desired order (moved removed +
+    // reinserted between beforeId and afterId) then assign (i+1)*GAP.
+    const reindexList = (all: { id: string; priority: number; number: number }[]) => {
+      const sorted = [...all].sort((a, b) => a.priority - b.priority || a.number - b.number);
+      const moved = sorted.find((x) => x.id === movedId);
+      const withoutMoved = sorted.filter((x) => x.id !== movedId);
+      let insertIdx: number;
+      if (beforeId) {
+        const bi = withoutMoved.findIndex((x) => x.id === beforeId);
+        insertIdx = bi === -1 ? withoutMoved.length : bi + 1;
+      } else {
+        insertIdx = 0;
+      }
+      if (moved) withoutMoved.splice(insertIdx, 0, moved);
+      withoutMoved.forEach((item, i) => { item.priority = (i + 1) * GAP; });
+    };
+
     if (kind === "feature") {
       // Priority-only: suspend status rollup so reordering never flips a
       // partially-done feature to in-progress (priority ≠ status).
       await store.runBatch(async () => {
         await store.updateFeatures((doc) => {
-          for (const [i, id] of ids.entries()) {
-            const f = doc.features.find((x) => x.id === id);
-            if (f) f.priority = (i + 1) * gap;
+          const moved = doc.features.find((x) => x.id === movedId);
+          if (!moved) return doc;
+          const before = beforeId ? doc.features.find((x) => x.id === beforeId) : null;
+          const after = afterId ? doc.features.find((x) => x.id === afterId) : null;
+          const beforeP = before ? before.priority : 0;
+          const maxP = doc.features.reduce((m, f) => Math.max(m, f.priority), 0);
+          const afterP = after ? after.priority : (maxP + GAP);
+          if (afterP - beforeP > 1) {
+            moved.priority = Math.floor((beforeP + afterP) / 2);
+          } else {
+            reindexList(doc.features);
           }
           doc.features.sort((a, b) => a.priority - b.priority || a.number - b.number);
           return doc;
@@ -735,23 +766,53 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       hub()?.broadcast({ type: "features-updated", data: { action: "reordered" } });
     } else if (kind === "phase") {
       const phases = await store.loadAllPhases();
+      const moved = phases.find((p) => p.id === movedId);
+      if (!moved) return c.json({ error: "moved phase not found" }, 404);
+      const siblings = phases.filter((p) => p.featureId === moved.featureId);
+      const before = beforeId ? siblings.find((p) => p.id === beforeId) : null;
+      const after = afterId ? siblings.find((p) => p.id === afterId) : null;
+      const beforeP = before ? before.priority : 0;
+      const maxP = siblings.reduce((m, p) => Math.max(m, p.priority), 0);
+      const afterP = after ? after.priority : (maxP + GAP);
       await store.runBatch(async () => {
-        for (const [i, id] of ids.entries()) {
-          if (phases.some((x) => x.id === id)) {
-            await store.updatePhase(id, (entry) => { entry.priority = (i + 1) * gap; return entry; });
+        if (afterP - beforeP > 1) {
+          await store.updatePhase(movedId, (entry) => { entry.priority = Math.floor((beforeP + afterP) / 2); return entry; });
+        } else {
+          // Reindex all siblings (each phase is a separate file)
+          const sorted = [...siblings].sort((a, b) => a.priority - b.priority || a.number - b.number);
+          const withoutMoved = sorted.filter((x) => x.id !== movedId);
+          let insertIdx: number;
+          if (beforeId) {
+            const bi = withoutMoved.findIndex((x) => x.id === beforeId);
+            insertIdx = bi === -1 ? withoutMoved.length : bi + 1;
+          } else {
+            insertIdx = 0;
+          }
+          const movedEntry = sorted.find((x) => x.id === movedId);
+          if (movedEntry) withoutMoved.splice(insertIdx, 0, movedEntry);
+          for (const [i, p] of withoutMoved.entries()) {
+            await store.updatePhase(p.id, (entry) => { entry.priority = (i + 1) * GAP; return entry; });
           }
         }
       });
       hub()?.broadcast({ type: "phases-updated", data: { action: "reordered" } });
     } else if (kind === "task") {
       const allPhases = await store.loadAllPhases();
-      const host = allPhases.find((p) => p.tasks.some((t) => ids.includes(t.id)));
+      const host = allPhases.find((p) => p.tasks.some((t) => t.id === movedId));
       if (host) {
         await store.runBatch(async () => {
           await store.updatePhase(host.id, (phase) => {
-            for (const [i, id] of ids.entries()) {
-              const t = phase.tasks.find((x) => x.id === id);
-              if (t) t.priority = (i + 1) * gap;
+            const moved = phase.tasks.find((x) => x.id === movedId);
+            if (!moved) return phase;
+            const before = beforeId ? phase.tasks.find((x) => x.id === beforeId) : null;
+            const after = afterId ? phase.tasks.find((x) => x.id === afterId) : null;
+            const beforeP = before ? before.priority : 0;
+            const maxP = phase.tasks.reduce((m, t) => Math.max(m, t.priority), 0);
+            const afterP = after ? after.priority : (maxP + GAP);
+            if (afterP - beforeP > 1) {
+              moved.priority = Math.floor((beforeP + afterP) / 2);
+            } else {
+              reindexList(phase.tasks);
             }
             phase.tasks.sort((a, b) => a.priority - b.priority || a.number - b.number);
             phase.taskIds = phase.tasks.map((t) => t.id);
@@ -765,7 +826,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     }
     await store.writeGenerated();
     hub()?.broadcast({ type: "plan-rendered", data: {} });
-    return c.json({ ok: true, kind, count: ids.length });
+    return c.json({ ok: true, kind, movedId });
   });
 
   // ── Render ───────────────────────────────────────────────────────
