@@ -119,6 +119,15 @@ In alternativa al composito, si può usare lo **shortId globale** (5 caratteri, 
 
 Formati di riferimento accettati dai tool (task/phase/feature): composito `F00x/P00x/T00x`, forma corta `P00x`/`T00x`/`F00x`, shortId 5-caratteri, UUID, o titolo.
 
+#### Ricerca efficiente (risparmio token)
+Per trovare un'entità a partire da un ref (o scoprire quali ref esistono), l'agente DEVE usare i tool list compatti — NON leggere i file `.planner/*.json` e NON chiamare `plan_get`/`plan_get full=true` per localizzare un'entità (burns ~32K token).
+
+- **Trovare** → `feature_list` / `phase_list` / `task_list` (output compatto: `F00x/P00x/T00x · shortId — title (status)`, ~2K token per TUTTO il piano, filtrabili per feature/status).
+- **Agire** → passa il ref direttamente al tool di azione (`task_start`/`task_complete`/`task_update`/`phase_update`/... accettano composito, forma corta, shortId, UUID, titolo). Nessuna pre-lettura necessaria.
+- **Leggere la descrizione** → `task_get`/`phase_get`/`feature_get` con `full=true` per quell'UNA entità (di default restituiscono solo l'identità compatta, risparmiando token).
+
+Divieto: **non leggere** `.planner/features/*.json` o `.planner/phases/*.json` per risolvere un ref. I tool lo fanno in una chiamata, single-source (compute-on-demand, nessun drift).
+
 Esempio CORRETTO: "Procedo con il task T003(P001/F001) - Implementazione API" oppure "Procedo con T007" oppure "Procedo con UUXD1"
 Esempio ERRATO: "Procedo con il task bd6ed366"
 

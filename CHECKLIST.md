@@ -378,3 +378,13 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **AGENTS.md rule 9**: aggiornata — P/T globalmente univoci, forma corta `P00x`/`T00x` riferimento valido, buchi da cancellazione attesi.
 - [x] Validazione: `pnpm -r build` + `pnpm check` puliti. Test funzionali: migrazione su copia del .planner (19 phase/81 task/7 feature → tutti univoci 1..N, contatori max+1, idempotente); findTaskByRef risolve T00x nudo + composito + shortId + UUID + titolo; alloc incrementa e persiste i contatori.
 - [ ] **Da fare**: version bump + release @next (task successivo).
+
+### Fatto — Fast ref lookup + token reduction (compact list tools + compact show) (sessione 2026-07-27, F006/P002)
+- [x] **Problema**: l'agente bruciava 10-32K token per trovare un'entità via ref — leggeva `.planner/phases/*.json` (ogni file = fase + tutti i task con descrizioni) o chiamava `plan_get full=true` (~32K token per 81 task su questo progetto). `feature_list` emetteva UUID (non ref). I tool `*_get`/show dumpavano l'oggetto intero in `details`/`structuredContent`.
+- [x] **Soluzione (single-source, zero drift — tool compute-on-demand dai file autoritativi, nessuna persistenza)**:
+  - **plan-mcp**: fix `feature-list` (UUID→ref, drop structuredContent), new `planner-phase-list` + `planner-task-list` (righe compatte `F00x/P00x/T00x · shortId — title (status)`, filtrabili). `planner-task-show`/`phase-show`/`feature-show` compatti di default + flag `full=true` per la descrizione (rimosso dump structuredContent).
+  - **pi-adapter**: `feature_list`/`phase_list`/`task_list` riscritti (UUID→ref, `details:{}` niente dump, filtri per ref). `feature_get`/`phase_get`/`task_get` compatti + `full` flag; `task_get` ora usa `findTaskByRef` (accetta ref, non solo UUID). Fix notify feature-create/update (UUID→ref). Aggiunto helper `pad(n)`.
+  - **Direttiva**: context block pi-adapter rule 6 aggiornata (T00x ora globalmente univoco, non ambiguo) + AGENTS.md rule 9 addendum "Ricerca efficiente (risparmio token)": trovare→list tool, agire→passa ref, descrizione→show con full=true, divieto di leggere `.planner/*.json` o `plan_get full=true` per localizzare.
+- [x] **Misurato** su questo progetto (7 feature/20 fasi/85 task): feature-list=160 tok, phase-list=522 tok, task-list=1961 tok, TUTTO=2643 tok vs `plan_get full=true` ~32000 tok → **12x riduzione**.
+- [x] Validazione: `pnpm -r build` + `pnpm check` puliti. Smoke test logica list (format + token). dist verificati (2 list tool, 3 full flag, 0 dump UUID).
+- [ ] **Da fare**: commit + release @next (task successivo).

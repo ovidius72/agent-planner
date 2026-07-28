@@ -585,6 +585,9 @@ function statusIcon(status: string): string {
   return icons[status] ?? "❓";
 }
 
+function pad(n: number): string {
+  return String(n).padStart(3, "0");
+}
 function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): void {
   const previousStatus = task.status;
   if (nextStatus === "in-progress" && !task.startedAt) {
@@ -1458,7 +1461,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return doc;
         });
         await st.writeGenerated();
-        ctx.ui.notify(`Feature created: ${feature.id} — ${feature.name}`, "info");
+        ctx.ui.notify(`Feature created: ${formatFeatureRef(feature.number)}${feature.shortId ? ` +MI+ ${feature.shortId}` : ""} +EM+ ${feature.name}`, "info");
         return;
       }
       if (b === "show") {
@@ -1524,7 +1527,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         });
         feature = updatedDoc.features.find((entry) => entry.id === featureId) ?? feature;
         await st.writeGenerated();
-        ctx.ui.notify(`Feature updated: ${feature.id} — ${feature.name} (${feature.status})`, "info");
+        ctx.ui.notify(`Feature updated: ${formatFeatureRef(feature.number)}${feature.shortId ? ` +MI+ ${feature.shortId}` : ""} +EM+ ${feature.name} (${feature.status})`, "info");
         return;
       }
       if (b === "delete") {
@@ -2759,41 +2762,47 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // ── features ────────────────────────────────────────────────────────
 
-  pi.registerTool({
-    name: "feature_list",
-    label: "Feature List",
-    description: "List all features with their ids, statuses, and phase counts.",
-    parameters: Type.Object({}),
-    async execute(_id, _params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const features = (await st.loadFeatures()).features;
-      const phases = await st.loadAllPhases();
-      const summary = features.map((f) => {
-        const fp = phases.filter((p) => p.featureId === f.id);
-        return `- ${statusIcon(f.status)} ${f.id} — ${f.name} (${fp.length} phases, ${fp.reduce((t, p) => t + p.tasks.length, 0)} tasks)`;
-      }).join("\n");
-      return { content: [{ type: "text", text: summary || "No features" }], details: { features } };
-    },
-  });
+    pi.registerTool({
+      name: "feature_list",
+      label: "Feature List",
+      description: "List features (compact: F00x · shortId — name (status; N phases, M tasks)). Use this to discover refs cheaply — do NOT read .planner/ files or plan_get full=true to find entities.",
+      parameters: Type.Object({ featureRef: Type.Optional(Type.String({ description: "Optional: filter to one feature (F00x/shortId/UUID/name)" })) }),
+      async execute(_id, params, _signal, _onUpdate, ctx) {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+        const all = (await st.loadFeatures()).features;
+        const ref = params.featureRef?.trim();
+        const matchF = (f: Feature) => !ref || formatFeatureRef(f.number) === ref || f.shortId === ref || f.id === ref || f.name.toLowerCase() === ref.toLowerCase();
+        const features = all.filter(matchF);
+        const phases = await st.loadAllPhases();
+        const summary = features.map((f) => {
+          const fp = phases.filter((p) => p.featureId === f.id);
+          return `- ${formatFeatureRef(f.number)}${f.shortId ? ` · ${f.shortId}` : ""} — ${f.name} (${f.status}; ${fp.length} phases, ${fp.reduce((t, p) => t + p.tasks.length, 0)} tasks)`;
+        }).join("\n");
+        return { content: [{ type: "text", text: summary || "No features" }], details: {} };
+      },
+    });
 
-  pi.registerTool({
-    name: "feature_get",
-    label: "Feature Get",
-    description: "Read full details of a feature, including its phases and their tasks.",
-    parameters: Type.Object({
-      featureId: Type.String({ description: "Feature ID, e.g. feature-001-dynamic-header" }),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const features = (await st.loadFeatures()).features;
-      const feature = features.find((f) => f.id === params.featureId);
-      if (!feature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
-      const phases = (await st.loadAllPhases()).filter((p) => p.featureId === feature.id);
-      return { content: [{ type: "text", text: `${statusIcon(feature.status)} ${feature.name} (${feature.id}) — ${phases.length} phases` }], details: { feature, phases } };
-    },
-  });
+    pi.registerTool({
+      name: "feature_get",
+      label: "Feature Get",
+      description: "Show a feature. Compact identity by default (saves tokens); pass full=true to include the description.",
+      parameters: Type.Object({
+        featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name" }),
+        full: Type.Optional(Type.Boolean({ description: "If true, include the feature description. Default: compact identity only." })),
+      }),
+      async execute(_id, params, _signal, _onUpdate, ctx) {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+        const features = (await st.loadFeatures()).features;
+        const ref = params.featureId.trim();
+        const feature = features.find((f) => formatFeatureRef(f.number) === ref || f.shortId === ref || f.id === ref || f.name.toLowerCase() === ref.toLowerCase());
+        if (!feature) return { content: [{ type: "text", text: `Feature not found: ${ref}` }], details: {} };
+        const phases = (await st.loadAllPhases()).filter((p) => p.featureId === feature.id);
+        const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases)`;
+        return { content: [{ type: "text", text: params.full ? `${summary}\n\n${feature.description || ""}` : summary }], details: {} };
+      },
+    });
 
   pi.registerTool({
     name: "feature_create",
@@ -2948,42 +2957,53 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // ── phases ──────────────────────────────────────────────────────────
 
-  pi.registerTool({
-    name: "phase_list",
-    label: "Phase List",
-    description: "List all phases (optionally filtered by featureId) with id, status, and task counts.",
-    parameters: Type.Object({
-      featureId: Type.Optional(Type.String({ description: "If provided, only list phases of this feature" })),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      let phases = await st.loadAllPhases();
-      if (params.featureId) phases = phases.filter((p) => p.featureId === params.featureId);
-      const summary = phases.map((p) => `- ${statusIcon(p.status)} ${p.id} — ${p.title} (${p.tasks.length} tasks, feature ${p.featureId ?? "none"})`).join("\n");
-      return { content: [{ type: "text", text: summary || "No phases" }], details: { phases } };
-    },
-  });
+    pi.registerTool({
+      name: "phase_list",
+      label: "Phase List",
+      description: "List phases (compact: F00x/P00x · shortId — title (status; N tasks) [F00x]). Filters: featureRef, status. Cheap discovery — do NOT read .planner/ files or plan_get full=true.",
+      parameters: Type.Object({
+        featureRef: Type.Optional(Type.String({ description: "Optional: filter to one feature (F00x/shortId/UUID/name)" })),
+        status: Type.Optional(Type.String({ description: "Optional: filter by status name" })),
+      }),
+      async execute(_id, params, _signal, _onUpdate, ctx) {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+        const features = (await st.loadFeatures()).features;
+        let phases = await st.loadAllPhases();
+        const fref = params.featureRef?.trim();
+        if (fref) {
+          const f = features.find((x) => formatFeatureRef(x.number) === fref || x.shortId === fref || x.id === fref || x.name.toLowerCase() === fref.toLowerCase());
+          if (!f) return { content: [{ type: "text", text: `Feature not found: ${fref}` }], details: {} };
+          phases = phases.filter((p) => p.featureId === f.id);
+        }
+        if (params.status) phases = phases.filter((p) => p.status === params.status);
+        const summary = phases.map((p) => {
+          const fNum = featureNumberOfPhase(p, features);
+          const fTag = fNum !== undefined ? ` [F${pad(fNum)}]` : "";
+          return `- ${formatPhaseRef(p.number, fNum)}${p.shortId ? ` · ${p.shortId}` : ""} — ${p.title} (${p.status}; ${p.tasks.length} tasks)${fTag}`;
+        }).join("\n");
+        return { content: [{ type: "text", text: summary || "No phases" }], details: {} };
+      },
+    });
 
-  pi.registerTool({
-    name: "phase_get",
-    label: "Phase Get",
-    description: "Read full details of a phase, including its tasks.",
-    parameters: Type.Object({
-      phaseId: Type.String({ description: "Phase ID, e.g. phase-01-setup" }),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      let phase: Phase;
-      try {
-        phase = await st.loadPhase(params.phaseId);
-      } catch {
-        return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
-      }
-      return { content: [{ type: "text", text: `${statusIcon(phase.status)} ${phase.title} (${phase.id}) — ${phase.tasks.length} tasks` }], details: phase };
-    },
-  });
+    pi.registerTool({
+      name: "phase_get",
+      label: "Phase Get",
+      description: "Show a phase. Compact identity by default (saves tokens); pass full=true to include the description.",
+      parameters: Type.Object({
+        phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title" }),
+        full: Type.Optional(Type.Boolean({ description: "If true, include the phase description. Default: compact identity only." })),
+      }),
+      async execute(_id, params, _signal, _onUpdate, ctx) {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+        const features = (await st.loadFeatures()).features;
+        const phase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
+        if (!phase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+        const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks)`;
+        return { content: [{ type: "text", text: params.full ? `${summary}\n\n${phase.description || ""}` : summary }], details: {} };
+      },
+    });
 
   pi.registerTool({
     name: "phase_create",
@@ -3152,44 +3172,63 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // ── tasks ───────────────────────────────────────────────────────────
 
-  pi.registerTool({
-    name: "task_list",
-    label: "Task List",
-    description: "List tasks of a phase with id, status, and title.",
-    parameters: Type.Object({
-      phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title" }),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      let phase: Phase;
-      try {
-        phase = await st.loadPhase(params.phaseId);
-      } catch {
-        return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
-      }
-      const summary = phase.tasks.map((t) => `- ${statusIcon(t.status)} ${t.id} — ${t.title}`).join("\n");
-      return { content: [{ type: "text", text: summary || "No tasks" }], details: { tasks: phase.tasks } };
-    },
-  });
+    pi.registerTool({
+      name: "task_list",
+      label: "Task List",
+      description: "List tasks (compact: F00x/P00x/T00x · shortId — title (status)). Filters: featureRef, phaseRef, status. Omit all to list every task. Cheap discovery — do NOT read .planner/ files or plan_get full=true.",
+      parameters: Type.Object({
+        featureRef: Type.Optional(Type.String({})),
+        phaseRef: Type.Optional(Type.String({})),
+        status: Type.Optional(Type.String({ description: "Optional: filter by status name" })),
+      }),
+      async execute(_id, params, _signal, _onUpdate, ctx) {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+        const features = (await st.loadFeatures()).features;
+        let phases = await st.loadAllPhases();
+        const fref = params.featureRef?.trim();
+        if (fref) {
+          const f = features.find((x) => formatFeatureRef(x.number) === fref || x.shortId === fref || x.id === fref || x.name.toLowerCase() === fref.toLowerCase());
+          if (!f) return { content: [{ type: "text", text: `Feature not found: ${fref}` }], details: {} };
+          phases = phases.filter((p) => p.featureId === f.id);
+        }
+        const pref = params.phaseRef?.trim();
+        if (pref) {
+          const p = findPhaseByRef(phases, features, pref);
+          if (!p) return { content: [{ type: "text", text: `Phase not found: ${pref}` }], details: {} };
+          phases = [p];
+        }
+        const out: string[] = [];
+        for (const phase of phases) {
+          for (const task of phase.tasks) {
+            if (params.status && task.status !== params.status) continue;
+            out.push(`- ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${pad(task.number)}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status})`);
+          }
+        }
+        return { content: [{ type: "text", text: out.join("\n") || "No tasks" }], details: {} };
+      },
+    });
 
-  pi.registerTool({
-    name: "task_get",
-    label: "Task Get",
-    description: "Read full details of a single task.",
-    parameters: Type.Object({
-      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const st = await requirePlan(ctx);
-      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const phases = await st.loadAllPhases();
-      const phase = phases.find((p) => p.tasks.some((t) => t.id === params.taskId));
-      const task = phase?.tasks.find((t) => t.id === params.taskId);
-      if (!task || !phase) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      return { content: [{ type: "text", text: `${statusIcon(task.status)} ${task.title} (${task.id}) — phase ${phase.id}` }], details: { task, phaseId: phase.id } };
-    },
-  });
+    pi.registerTool({
+      name: "task_get",
+      label: "Task Get",
+      description: "Show a task. Compact identity by default (saves tokens); pass full=true to include the description + statusLog.",
+      parameters: Type.Object({
+        taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
+        full: Type.Optional(Type.Boolean({ description: "If true, include the task description + statusLog. Default: compact identity only." })),
+      }),
+      async execute(_id, params, _signal, _onUpdate, ctx) {
+        const st = await requirePlan(ctx);
+        if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+        const features = (await st.loadFeatures()).features;
+        const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
+        if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+        const summary = `${found.task.title} — ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status})`;
+        if (!params.full) return { content: [{ type: "text", text: summary }], details: {} };
+        const log = (found.task.statusLog ?? []).map((e) => `  - ${e.date.slice(0,10)} ${e.title}`).join("\n");
+        return { content: [{ type: "text", text: `${summary}\n\n${found.task.description || ""}${log ? `\n\nStatus log:\n${log}` : ""}` }], details: {} };
+      },
+    });
 
   pi.registerTool({
     name: "task_create",
@@ -3662,7 +3701,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "3. IMMEDIATE SYNC: Update task status AT THE EXACT MOMENT of transition. Start = task_start NOW. Done = task_complete NOW. Blocked = task_update with motivation NOW. Never batch status updates.",
         "4. BLOCKED MOTIVATION: Transitions to blocked/canceled/rejected/deferred/waiting/planned(from non-planned) MUST include a detailed 'motivation' parameter. Write it as if the next person has zero context.",
         "5. NO SHORTCUTS: If a tool blocks you, follow the protocol. Bypasses are for emergencies only, not for convenience.",
-        "6. ENTITY REFERENCES: When you mention a feature/phase/task in chat, PREFER its 5-char shortId (globally unique, e.g. UUXD1). The composite T00x is per-phase and AMBIGUOUS unless fully qualified as T00x(P00x/F00x) — do NOT use bare 'T00x'. NEVER a raw UUID like bd6ed366. Tool responses already show shortId + compositeRef; reuse them.",
+          "6. ENTITY REFERENCES & FAST LOOKUP: Feature/Phase/Task numbers are GLOBALLY unique (one P003, one T007 in the whole plan) — bare P00x/T00x is a valid unambiguous ref. PREFER the 5-char shortId (e.g. UUXD1) or composite F00x/P00x/T00x in chat; NEVER a raw UUID. To FIND an entity: call feature_list / phase_list / task_list (compact, ~2K tokens for the whole plan) — do NOT read .planner/*.json files or plan_get full=true (~32K tokens) to locate an entity. To ACT: pass the ref directly to the action tool (task_start/complete/update/phase_update accept F00x/P00x/T00x, bare P00x/T00x, shortId, UUID, title). To read a description: call task_get / phase_get / feature_get with full=true for that ONE entity. Tool responses already show shortId + compositeRef; reuse them.",
         "═══════════════════════════════════════════════════════════════",
         "",
         // ── Project details ──
