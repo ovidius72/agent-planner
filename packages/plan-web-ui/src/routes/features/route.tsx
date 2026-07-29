@@ -74,7 +74,9 @@ export function FeaturesRoute() {
         />
 
         <div className="grid gap-3">
-          {filteredFeatures.length > 0 ? filteredFeatures.map((feature) => (
+          {features.length === 0 ? (
+            <Card className="p-4 text-sm text-[var(--text-muted)]">No features yet. <Link to="/features/new" className="font-semibold text-[var(--accent)] hover:underline">Create your first feature</Link></Card>
+          ) : filteredFeatures.length > 0 ? filteredFeatures.map((feature) => (
             <FeatureRow
               key={feature.id}
               feature={feature}

@@ -245,7 +245,9 @@ export function PhaseDetailRoute() {
         />
 
         <div className="grid gap-3">
-          {filteredTasks.length > 0 ? (
+          {phase.tasks.length === 0 ? (
+            <Card className="p-4 text-sm text-[var(--text-muted)]">No tasks yet. <Link to="tasks/new" className="font-semibold text-[var(--accent)] hover:underline">Add a task</Link></Card>
+          ) : filteredTasks.length > 0 ? (
             filteredTasks.map((task) => (
               <TaskRow key={task.id} featureId={feature.id} phaseId={phase.id} task={task} />
             ))

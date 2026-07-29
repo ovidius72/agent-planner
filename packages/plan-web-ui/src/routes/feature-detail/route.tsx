@@ -139,7 +139,9 @@ export function FeatureDetailRoute() {
         />
 
         <div className="grid gap-3">
-          {filteredPhases.length > 0 ? filteredPhases.map((phase) => <PhaseRow key={phase.id} featureId={feature.id} feature={feature} phase={phase} />) : <Card className="p-4 text-sm text-[var(--text-muted)]">No phases match the current filters.</Card>}
+          {phases.length === 0 ? (
+            <Card className="p-4 text-sm text-[var(--text-muted)]">No phases yet. <Link to={`/features/${feature.id}/phases/new`} className="font-semibold text-[var(--accent)] hover:underline">Add a phase</Link></Card>
+          ) : filteredPhases.length > 0 ? filteredPhases.map((phase) => <PhaseRow key={phase.id} featureId={feature.id} feature={feature} phase={phase} />) : <Card className="p-4 text-sm text-[var(--text-muted)]">No phases match the current filters.</Card>}
         </div>
       </Card>
       <Outlet />

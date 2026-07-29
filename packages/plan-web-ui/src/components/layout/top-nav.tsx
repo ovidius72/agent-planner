@@ -139,6 +139,21 @@ export function TopNav({
             {exportOpen ? (
               <div
                 role="menu"
+                  onKeyDown={(e) => {
+                    const items = Array.from(
+                      e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]"),
+                    ).filter((el) => !el.hasAttribute("disabled"));
+                    if (items.length === 0) return;
+                    const idx = items.indexOf(document.activeElement as HTMLElement);
+                    let next = idx;
+                    if (e.key === "ArrowDown") next = idx === -1 ? 0 : (idx + 1) % items.length;
+                    else if (e.key === "ArrowUp") next = idx === -1 ? items.length - 1 : (idx - 1 + items.length) % items.length;
+                    else if (e.key === "Home") next = 0;
+                    else if (e.key === "End") next = items.length - 1;
+                    else return;
+                    e.preventDefault();
+                    items[next]?.focus();
+                  }}
                 className="absolute right-0 z-[100] mt-2 min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl"
               >
                 <button
@@ -168,6 +183,8 @@ export function TopNav({
           <button
             type="button"
             onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--text-muted)] transition hover:text-[var(--text)] sm:h-11 sm:w-11 sm:rounded-[14px]"
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
