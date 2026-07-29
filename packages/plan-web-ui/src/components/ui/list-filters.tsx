@@ -32,7 +32,7 @@ export function ListFilters({
           name="q"
           defaultValue={query}
           placeholder={placeholder}
-          className="min-h-11 py-2.5"
+          className="min-h-9 py-2 sm:min-h-11 sm:py-2.5"
           onChange={(event) => submit(event.currentTarget.form)}
         />
       </div>
@@ -42,7 +42,7 @@ export function ListFilters({
           Status
         </label>
         <div className="relative">
-          <Select id="list-filter-status" name="status" defaultValue={status} className="min-h-11 appearance-none py-2.5 pr-8">
+          <Select id="list-filter-status" name="status" defaultValue={status} className="min-h-9 appearance-none py-2 sm:min-h-11 sm:py-2.5 pr-8">
             <option value="">All statuses</option>
             {statusOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
@@ -52,8 +52,8 @@ export function ListFilters({
         </div>
       </div>
 
-      <Button type="submit" variant="secondary" className="min-h-11">Apply filters</Button>
-      <Link to={clearTo} className="inline-flex min-h-11 items-center justify-center rounded-[14px] px-3 text-sm font-semibold text-[var(--text-muted)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--text)]">
+      <Button type="submit" variant="secondary">Apply filters</Button>
+      <Link to={clearTo} className="inline-flex min-h-9 items-center justify-center rounded-[12px] px-3 text-sm font-semibold text-[var(--text-muted)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--text)] sm:min-h-11 sm:rounded-[14px]">
         Clear
       </Link>
 

@@ -75,7 +75,6 @@ export function TopNav({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <div className="truncate text-sm font-black tracking-tight">{projectName ?? "Agent Plan"}</div>
-              {planRoot ? <span className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-subtle)]">.planner/</span> : null}
             </div>
             {projectRoot ? (
               <div className="flex items-center gap-2">
@@ -140,7 +139,7 @@ export function TopNav({
             {exportOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 z-[60] mb-2 bottom-full min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl sm:bottom-auto sm:mb-0 sm:mt-2"
+                className="absolute right-0 z-[100] mt-2 min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl"
               >
                 <button
                   type="button"

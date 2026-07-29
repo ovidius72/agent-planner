@@ -75,15 +75,18 @@ export function HandoffRoute() {
                 <span className="text-xs text-[var(--text-muted)]">Updated {formatDateTime(h.updatedAt)}</span>
               </div>
               <Link
-                to={`/features/${h.featureId ?? ""}/phases/${h.phaseId}`}
+                to={h.featureId ? `/features/${h.featureId}/phases/${h.phaseId}` : "/features"}
                 className="text-xs text-[var(--text-muted)] underline-offset-2 hover:text-[var(--text)] hover:underline"
               >
-                Open phase →
+                {h.featureId ? "Open phase →" : "Browse features →"}
               </Link>
             </div>
             <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-5 py-5">
-              {/* Content's own leading header is the title — no duplicate h2 here. */}
-              <FormattedText text={h.content} className="formatted-text max-w-none" />
+              {h.firstLine ? (
+                <FormattedText text={h.content} className="formatted-text max-w-none" />
+              ) : (
+                <p className="text-sm italic text-[var(--text-muted)]">Empty handoff content.</p>
+              )}
             </div>
           </Card>
         </section>

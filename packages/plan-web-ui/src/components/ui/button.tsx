@@ -14,7 +14,7 @@ const variantClass: Record<Variant, string> = {
 export function Button({ variant = "secondary", className = "", children, shortcut, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; children: ReactNode; shortcut?: ShortcutTarget }) {
   return (
     <button
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border px-4 py-2 text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 ${variantClass[variant]} ${className}`}
+      className={`inline-flex min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-[12px] border px-3 py-1.5 text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-11 sm:rounded-[14px] sm:px-4 sm:py-2 sm:gap-2 ${variantClass[variant]} ${className}`}
       {...props}
     >
       <span>{children}</span>

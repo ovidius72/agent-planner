@@ -79,7 +79,7 @@ export function RootErrorBoundary() {
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="inline-flex min-h-11 items-center rounded-[14px] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              className="inline-flex min-h-9 items-center whitespace-nowrap rounded-[12px] bg-[var(--accent)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 sm:min-h-11 sm:rounded-[14px] sm:px-4 sm:py-2"
             >
               Reload page
             </button>

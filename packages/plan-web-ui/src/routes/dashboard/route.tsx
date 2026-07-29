@@ -1,4 +1,5 @@
-import { Link, useLoaderData, useNavigate, useRouteLoaderData } from "react-router-dom";
+import { useLoaderData, useNavigate, useRouteLoaderData } from "react-router-dom";
+import { Pencil } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { FormattedText } from "../../components/ui/formatted-text";
@@ -38,9 +39,10 @@ export function DashboardRoute() {
             <h2 className="text-lg font-bold text-[var(--text)]">Project Goal</h2>
             {project.goal ? <FormattedText text={project.goal} className="mt-2 max-w-4xl" /> : <p className="mt-2 max-w-4xl text-sm text-[var(--text-muted)]">Add a project goal to define the main objective.</p>}
           </div>
-          <Link to="/project/edit">
-            <Button type="button" shortcut="edit">Edit project</Button>
-          </Link>
+          <Button type="button" shortcut="edit" onClick={openEditProject} className="self-start">
+            <Pencil className="h-4 w-4" />
+            Edit project
+          </Button>
         </div>
       </Card>
 
