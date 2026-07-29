@@ -65,9 +65,19 @@ show this routing table and ask which subcommand they want.
 - `task complete <T00x>` → `planner-task-complete`
 - `task update <T00x>` → `planner-task-update` (use `motivation` for blocking/canceled/etc.)
 - `task delete <T00x>` → `planner-task-delete` (confirm first)
-- `task checklist-toggle <T00x> <C{n}|title> [checked]` → `planner-task-checklist-toggle` — tick/untick a checklist step WITHOUT rewriting the list. Accepts `C1`/`C2`…, item id, or title. Omit `checked` to toggle, or pass `true`/`false`.
+- `task checklist-add <T00x> <title>` → `planner-task-checklist-add` — append ONE step (next C{n}, stable id, unchecked).
+- `task checklist-remove <T00x> <C{n}|id|title>` → `planner-task-checklist-remove` — remove ONE step; remaining renumber C1..Cn (ids stable).
+- `task checklist-toggle <T00x> <C{n}|id|title> [checked]` → `planner-task-checklist-toggle` — tick/untick ONE step WITHOUT rewriting the list. Accepts `C1`/`C2`…, item id, or title. Omit `checked` to toggle, or pass `true`/`false`.
 
-**Task checklist = implementation steps.** `task add` and `task update` accept a `checklist` (array of plain strings) for implementation steps. Items are numbered **C1, C2, …** per task. Tick steps with `planner-task-checklist-toggle` (by `C{n}` or title) — do NOT write "DONE" in step titles and do NOT put steps in `description`. `task_complete` warns if any step is unchecked (override with `force=true`).
+**Task checklist = implementation steps — use it to subdivide a task, not to spawn sub-tasks.** When a task needs to be broken into smaller steps, add them as checklist items (C1, C2, …) on the SAME task — do NOT create new child tasks just to track steps: sub-tasks disperse the information and context that belong together in one task. The checklist keeps everything (description, notes, statusLog, steps) concentrated in the single task.
+
+Manage steps granularly (no full-list rewrites):
+- create: `task add` / `task update` accept a `checklist` (array of plain strings) → seeded C1..Cn.
+- add ONE step: `planner-task-checklist-add` (next C{n}, stable id, unchecked).
+- remove ONE step: `planner-task-checklist-remove` by C{n}/id/title (remaining renumber C1..Cn; ids stable).
+- tick/untick ONE step: `planner-task-checklist-toggle` by C{n}/id/title (omit `checked` to toggle, or `true`/`false`).
+
+Rules: do NOT write "DONE" in step titles; do NOT put steps in `description`. Each item has a stable `id` (the robust handle) + a progressive `number` (C{n}, readable). `task_complete` warns if any step is unchecked (override with `force=true`).
 
 ### Handoff (entity-scoped, per phase)
 - `handoff list` → `planner-handoff-list` (phases with a non-empty `phase.handoff`)

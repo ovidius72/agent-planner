@@ -446,6 +446,16 @@ textarea:disabled {
 .status-card.status-deferred { background: color-mix(in srgb, var(--color-status-deferred) 14%, transparent); color: var(--color-status-deferred); }
 .status-card.status-waiting { background: color-mix(in srgb, var(--color-status-waiting) 14%, transparent); color: var(--color-status-waiting); }
 
+  /* Future (not-yet-reached) cards: outlined + muted, override per-status fill */
+  .status-card.status-card-future {
+    background: transparent !important;
+    border-style: dashed !important;
+    border-color: var(--border-strong) !important;
+    color: var(--text-subtle) !important;
+    opacity: 0.55;
+  }
+  .status-card.status-card-future .status-card-icon { opacity: 0.6; }
+
 /* Per-task checklist item number badge (C1/C2/...) */
 .checklist-num {
   display: inline-flex;

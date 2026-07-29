@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Form, Link, Outlet, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
 import { TaskRow } from "../../components/tasks/task-row";
@@ -106,15 +106,10 @@ export function PhaseDetailRoute() {
           {phase.title}
         </h2>
         {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
-        <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden" open={(phase.statusLog?.length ?? 0) > 0}>
-          <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
-            <span className="text-sm">Status history ({phase.statusLog?.length ?? 0})</span>
-            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
-          </summary>
-          <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
-            <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} />
-          </div>
-        </details>
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Status history</p>
+          <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "planned", "in-progress", "done"]} />
+        </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit phase</Button></Link>
           <Link to="tasks/new"><Button type="button" variant="primary" shortcut="create">Create task</Button></Link>

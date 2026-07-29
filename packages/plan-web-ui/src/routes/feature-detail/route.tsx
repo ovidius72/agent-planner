@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { Form, Link, Outlet, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
 import { PhaseRow } from "../../components/phases/phase-row";
@@ -87,15 +87,10 @@ export function FeatureDetailRoute() {
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
         {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
-        <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden" open={(feature.statusLog?.length ?? 0) > 0}>
-          <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
-            <span className="text-sm">Status history ({feature.statusLog?.length ?? 0})</span>
-            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
-          </summary>
-          <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
-            <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} />
-          </div>
-        </details>
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Status history</p>
+          <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
+        </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>
           <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/delete`} className="inline-flex" onSubmit={(event) => {

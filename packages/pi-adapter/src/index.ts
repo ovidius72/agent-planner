@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -129,6 +129,9 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "task delete", label: "task delete", description: "Delete a task" },
   { value: "task start", label: "task start", description: "Mark a task in-progress" },
   { value: "task complete", label: "task complete", description: "Mark a task done" },
+  { value: "task checklist-add", label: "task checklist-add", description: "Add a checklist step: /planner task checklist-add <T00x> <title>" },
+  { value: "task checklist-remove", label: "task checklist-remove", description: "Remove a step: /planner task checklist-remove <T00x> <C{n}|title>" },
+  { value: "task checklist-toggle", label: "task checklist-toggle", description: "Tick/untick a step: /planner task checklist-toggle <T00x> <C{n}|title> [on|off]" },
   { value: "handoff list", label: "handoff list", description: "List phases with a handoff" },
   { value: "handoff prepare", label: "handoff prepare", description: "Tell the agent to write the handoff (legacy file-based)" },
   { value: "handoff show", label: "handoff show [P00x]", description: "Show a phase handoff (default: in-progress phase)" },
@@ -1806,7 +1809,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // ═══════════════════════════════════════════════════════════════
     if (a === "task") {
       if (!b) {
-        ctx.ui.notify("task actions: add  |  show [id]  |  discuss [id|name]  |  delete  |  update  |  start [id]  |  complete [id]", "info");
+        ctx.ui.notify("task actions: add  |  show [id]  |  discuss [id|name]  |  delete  |  update  |  start [id]  |  complete [id]  |  checklist-add <T00x> <title>  |  checklist-remove <T00x> <C{n}|title>  |  checklist-toggle <T00x> <C{n}|title> [on|off]", "info");
         return;
       }
       if (b === "add") {
@@ -2063,7 +2066,48 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`✅ Task completed: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (done)${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
       }
-      ctx.ui.notify(`Unknown task action "${b}". Try: add, show, discuss, delete, update, start, complete`, "warning");
+      // checklist-add <T00x> <title>  /  checklist-remove <T00x> <C{n}|title>  /  checklist-toggle <T00x> <C{n}|title> [on|off]
+      if (b === "checklist-add" || b === "checklist-remove" || b === "checklist-toggle") {
+        const [taskRef, ...itemParts] = rest;
+        const itemText = itemParts.join(" ").trim();
+        if (!taskRef || !itemText) { ctx.ui.notify(`Usage: /planner task ${b} <T00x> <${b === "checklist-add" ? "title" : "C{n}|title"}>${b === "checklist-toggle" ? " [on|off]" : ""}`, "warning"); return; }
+        const resolved = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, taskRef.trim());
+        if (!resolved) { ctx.ui.notify(`Task not found: ${taskRef}`, "warning"); return; }
+        let checked: boolean | undefined;
+        if (b === "checklist-toggle") {
+          const m = itemText.match(/\s+(on|off)$/i);
+          if (m) { checked = m[1]!.toLowerCase() === "on"; }
+        }
+        const selector = b === "checklist-toggle" ? itemText.replace(/\s+(on|off)$/i, "").trim() : itemText;
+        let msg = "";
+        await st.updatePhase(resolved.phase.id, (phase) => {
+          const task = phase.tasks.find((t) => t.id === resolved.task.id);
+          if (!task) { msg = `Task not found: ${taskRef}`; return phase; }
+          const ck = task.checklist ?? [];
+          if (b === "checklist-add") {
+            const item = addChecklistItem(ck, task.id, selector);
+            ck.push(item); task.checklist = ck;
+            msg = `Added C${item.number} "${item.title}" (${ck.length} items)`;
+          } else if (b === "checklist-remove") {
+            if (ck.length === 0) { msg = `Task "${task.title}" has no checklist.`; return phase; }
+            const removed = removeChecklistItem(ck, selector);
+            if (!removed) { msg = `No checklist item matching "${selector}".`; return phase; }
+            msg = `Removed C${removed.number} "${removed.title}" (${ck.length} items left)`;
+          } else {
+            if (ck.length === 0) { msg = `Task "${task.title}" has no checklist.`; return phase; }
+            const target = toggleChecklistItem(ck, selector, checked);
+            if (!target) { msg = `No checklist item matching "${selector}".`; return phase; }
+            const doneCount = ck.filter((i) => i.checked).length;
+            msg = `C${target.number} "${target.title}" → ${target.checked ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
+          }
+          task.updatedAt = nowISO(); phase.updatedAt = nowISO();
+          return phase;
+        });
+        await st.writeGenerated();
+        ctx.ui.notify(`✅ ${msg}`, "info");
+        return;
+      }
+      ctx.ui.notify(`Unknown task action "${b}". Try: add, show, discuss, delete, update, start, complete, checklist-add, checklist-remove, checklist-toggle`, "warning");
       return;
     }
 
@@ -3246,6 +3290,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       description: Type.String({ description: "REQUIRED — execution context: code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner. Prefix with 'design-only' for pre-implementation design tasks.", minLength: 50 }),
       status: Type.Optional(Type.String({ description: "Initial status. Default: planned" })),
       shortName: Type.Optional(Type.String({ description: "Short slug for the task id. Auto-derived from title if omitted." })),
+      checklist: Type.Optional(Type.Array(Type.String(), { description: "Initial checklist items (plain strings). Seeded as C1, C2, … (unchecked)." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3272,7 +3317,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         statusLog: [],
         decisions: [],
         acceptedDecisions: [],
-        checklist: [], subtasks: [],
+        checklist: params.checklist
+          ? params.checklist.map((itemTitle, index) => ({ number: index + 1, id: createChecklistItemId(taskId, index + 1, itemTitle), title: itemTitle, checked: false }))
+          : [],
+        subtasks: [],
         dependsOn: [],
         startedAt: initialStatus === "in-progress" || initialStatus === "done" ? now : "",
         completedAt: initialStatus === "done" ? now : "",
@@ -3493,25 +3541,74 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!task) { result = `Task not found: ${params.taskId}`; return phase; }
         const ck = task.checklist ?? [];
         if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
-        let target: typeof ck[number] | undefined;
-        const cMatch = params.item.match(/^C(\d+)$/i);
-        if (cMatch) {
-          const idx = parseInt(cMatch[1]!, 10) - 1;
-          if (idx < 0 || idx >= ck.length) { result = `C${idx + 1} not found (1..${ck.length}).`; return phase; }
-          target = ck[idx];
-        } else {
-          const needle = params.item.trim().toLowerCase();
-          target = ck.find((i) => i.id === params.item)
-            ?? ck.find((i) => i.title.trim().toLowerCase() === needle)
-            ?? ck.find((i) => i.title.trim().toLowerCase().includes(needle));
-        }
+        const target = toggleChecklistItem(ck, params.item, params.checked);
         if (!target) { result = `No checklist item matching "${params.item}".`; return phase; }
-        const newValue = params.checked ?? !target.checked;
-        target.checked = newValue;
         task.updatedAt = nowISO();
         phase.updatedAt = nowISO();
         const doneCount = ck.filter((i) => i.checked).length;
-        result = `C${target.number} "${target.title}" → ${newValue ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
+        result = `C${target.number} "${target.title}" → ${target.checked ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
+        return phase;
+      });
+      await st.writeGenerated();
+      return { content: [{ type: "text", text: `✅ ${result}` }], details: {} };
+    },
+  });
+
+  pi.registerTool({
+    name: "task_checklist_add",
+    label: "Task Checklist Add",
+    description: "Add a single checklist item (a 'step') to a task without rewriting the list. The new item is appended as C{n} (next progressive number, stable id, unchecked). Use this to subdivide a task into smaller steps INSTEAD of spawning sub-tasks — the checklist keeps description, notes, statusLog and steps concentrated in one task (sub-tasks disperse context). Also use for granular adds instead of replacing the whole checklist via task_update.",
+    parameters: Type.Object({
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
+      title: Type.String({ description: "Checklist item text (a single step)" }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      let result = "";
+      await st.updatePhase(found.phase.id, (phase) => {
+        const task = phase.tasks.find((t) => t.id === found.task.id);
+        if (!task) { result = `Task not found: ${params.taskId}`; return phase; }
+        const ck = task.checklist ?? [];
+        const item = addChecklistItem(ck, task.id, params.title);
+        ck.push(item);
+        task.checklist = ck;
+        task.updatedAt = nowISO();
+        phase.updatedAt = nowISO();
+        result = `Added C${item.number} "${item.title}" (${ck.length} items)`;
+        return phase;
+      });
+      await st.writeGenerated();
+      return { content: [{ type: "text", text: `✅ ${result}` }], details: {} };
+    },
+  });
+
+  pi.registerTool({
+    name: "task_checklist_remove",
+    label: "Task Checklist Remove",
+    description: "Remove a single checklist item (a 'step') from a task by C{n} (e.g. C2), item id, or title (case-insensitive). Remaining items are renumbered C1..Cn for readability; their stable ids are preserved. Use this for granular removes instead of replacing the whole checklist via task_update.",
+    parameters: Type.Object({
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
+      item: Type.String({ description: "Checklist item selector: C{n} (e.g. C2), item id, or title (case-insensitive)" }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      let result = "";
+      await st.updatePhase(found.phase.id, (phase) => {
+        const task = phase.tasks.find((t) => t.id === found.task.id);
+        if (!task) { result = `Task not found: ${params.taskId}`; return phase; }
+        const ck = task.checklist ?? [];
+        if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
+        const removed = removeChecklistItem(ck, params.item);
+        if (!removed) { result = `No checklist item matching "${params.item}".`; return phase; }
+        task.updatedAt = nowISO();
+        phase.updatedAt = nowISO();
+        result = `Removed C${removed.number} "${removed.title}" (${ck.length} items left)`;
         return phase;
       });
       await st.writeGenerated();

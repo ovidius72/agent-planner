@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef } from "@agent-plan/core/naming";
@@ -744,9 +744,9 @@ server.registerTool("planner-task-update", {
 server.registerTool("planner-task-checklist-toggle", {
   description: "Tick/untick a task checklist item (a 'step') without rewriting the whole list. Accepts the item as C{n} (e.g. C2), the item id, or the title (case-insensitive, first match). Pass checked=true/false to set explicitly, or omit to toggle. Use this instead of writing DONE in step titles. Items are numbered C1/C2… per task.",
   inputSchema: {
-    task: z.string().min(1),
-    item: z.string().min(1),
-    checked: z.boolean().optional(),
+    task: z.string().min(1).describe("Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title"),
+    item: z.string().min(1).describe("Checklist item selector: C{n} (e.g. C2), item id, or title (case-insensitive)"),
+    checked: z.boolean().optional().describe("Set explicitly: true=done, false=open. Omit to toggle."),
   },
 }, async ({ task: ref, item, checked }) => {
   const st = await requireStore();
@@ -758,25 +758,64 @@ server.registerTool("planner-task-checklist-toggle", {
     if (!task) { result = `Task not found: ${ref}`; return phase; }
     const ck = task.checklist ?? [];
     if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
-    let target: typeof ck[number] | undefined;
-    const cMatch = item.match(/^C(\d+)$/i);
-    if (cMatch) {
-      const idx = parseInt(cMatch[1]!, 10) - 1;
-      if (idx < 0 || idx >= ck.length) { result = `C${idx + 1} not found (1..${ck.length}).`; return phase; }
-      target = ck[idx];
-    } else {
-      const needle = item.trim().toLowerCase();
-      target = ck.find((i) => i.id === item)
-        ?? ck.find((i) => i.title.trim().toLowerCase() === needle)
-        ?? ck.find((i) => i.title.trim().toLowerCase().includes(needle));
-    }
+    const target = toggleChecklistItem(ck, item, checked);
     if (!target) { result = `No checklist item matching "${item}".`; return phase; }
-    const newValue = checked ?? !target.checked;
-    target.checked = newValue;
     task.updatedAt = nowISO();
     phase.updatedAt = nowISO();
     const doneCount = ck.filter((i) => i.checked).length;
-    result = `C${target.number} "${target.title}" → ${newValue ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
+    result = `C${target.number} "${target.title}" → ${target.checked ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
+    return phase;
+  });
+  return writeAndSummarize(st, `✅ ${result}`);
+});
+
+server.registerTool("planner-task-checklist-add", {
+  description: "Add a single checklist item (a 'step') to a task without rewriting the list. The new item is appended as C{n} (next progressive number, stable id, unchecked). Use this to subdivide a task into smaller steps INSTEAD of spawning sub-tasks — the checklist keeps description, notes, statusLog and steps concentrated in one task (sub-tasks disperse context). Also use for granular adds instead of replacing the whole checklist via planner-task-update.",
+  inputSchema: {
+    task: z.string().min(1).describe("Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title"),
+    title: z.string().min(1).describe("Checklist item text (a single step)"),
+  },
+}, async ({ task: ref, title }) => {
+  const st = await requireStore();
+  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  if (!found) return text(`Task not found: ${ref}`);
+  let result = "";
+  await st.updatePhase(found.phase.id, (phase) => {
+    const task = phase.tasks.find((entry) => entry.id === found.task.id);
+    if (!task) { result = `Task not found: ${ref}`; return phase; }
+    const ck = task.checklist ?? [];
+    const item = addChecklistItem(ck, task.id, title);
+    ck.push(item);
+    task.checklist = ck;
+    task.updatedAt = nowISO();
+    phase.updatedAt = nowISO();
+    result = `Added C${item.number} "${item.title}" (${ck.length} items)`;
+    return phase;
+  });
+  return writeAndSummarize(st, `✅ ${result}`);
+});
+
+server.registerTool("planner-task-checklist-remove", {
+  description: "Remove a single checklist item (a 'step') from a task by C{n} (e.g. C2), item id, or title (case-insensitive). Remaining items are renumbered C1..Cn for readability; their stable ids are preserved. Use this for granular removes instead of replacing the whole checklist via planner-task-update.",
+  inputSchema: {
+    task: z.string().min(1).describe("Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title"),
+    item: z.string().min(1).describe("Checklist item selector: C{n} (e.g. C2), item id, or title (case-insensitive)"),
+  },
+}, async ({ task: ref, item }) => {
+  const st = await requireStore();
+  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  if (!found) return text(`Task not found: ${ref}`);
+  let result = "";
+  await st.updatePhase(found.phase.id, (phase) => {
+    const task = phase.tasks.find((entry) => entry.id === found.task.id);
+    if (!task) { result = `Task not found: ${ref}`; return phase; }
+    const ck = task.checklist ?? [];
+    if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
+    const removed = removeChecklistItem(ck, item);
+    if (!removed) { result = `No checklist item matching "${item}".`; return phase; }
+    task.updatedAt = nowISO();
+    phase.updatedAt = nowISO();
+    result = `Removed C${removed.number} "${removed.title}" (${ck.length} items left)`;
     return phase;
   });
   return writeAndSummarize(st, `✅ ${result}`);

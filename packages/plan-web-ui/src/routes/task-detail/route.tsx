@@ -121,17 +121,10 @@ export function TaskDetailRoute() {
         ) : (
           <p className="mt-4 text-sm text-[var(--text-muted)]">No notes</p>
         )}
-                <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden" open={(task.statusLog?.length ?? 0) > 0}>
-          <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Status history ({task.statusLog?.length ?? 0})</span>
-            </div>
-            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
-          </summary>
-          <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
-            <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} />
-          </div>
-        </details>
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Status history</p>
+          <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} />
+        </div>
         {taskDecisions.length > 0 ? (
           <details className="group mt-4">
             <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
