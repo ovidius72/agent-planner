@@ -346,6 +346,7 @@ server.registerTool("planner-feature-add", {
     acceptedDecisions: [],
     phaseIds: [],
     dependsOn: [],
+    statusLog: [],
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -486,6 +487,7 @@ server.registerTool("planner-phase-add", {
       handoffUpdatedAt: "",
       handoffReadAt: "",
       handoffHistory: [],
+      statusLog: [],
     };
     await st.savePhase(phase);
     if (feature) {

@@ -158,6 +158,17 @@ export const StatusLogEntrySchema = z.object({
   description: z.string().default(""),
 });
 
+/** Like StatusLogEntrySchema but for the DERIVED PHASE status, which includes
+ *  the "draft" and "discovery" lifecycle states absent from TaskStatus. */
+export const PhaseStatusLogEntrySchema = z.object({
+  id: z.string().min(1),
+  date: TimestampSchema,
+  fromStatus: PhaseStatusSchema,
+  toStatus: PhaseStatusSchema,
+  title: z.string().min(1),
+  description: z.string().default(""),
+});
+
 export const TaskSchema = z.object({
   id: z.string(),
   phaseId: z.string(),
@@ -239,6 +250,8 @@ export const PhaseSchema = z.object({
    *  this array only holds the pointer + clear reason + timestamp, so the phase
    *  JSON stays lean and the archive is recoverable. */
   handoffHistory: z.array(HandoffHistoryEntrySchema).default([]),
+  /** Chronological audit trail of the DERIVED status (planned/in-progress/blocked/done/...). Appended ONLY when the derived status changes during a rollup; `status` itself is NOT persisted (still computed from child tasks at read time). Empty = no transition recorded yet (treated as "planned"). */
+  statusLog: z.array(PhaseStatusLogEntrySchema).default([]),
 });
 
 export const FeatureSchema = z.object({
@@ -261,6 +274,8 @@ export const FeatureSchema = z.object({
   acceptedDecisions: z.array(AcceptedDecisionSchema).default([]),
   phaseIds: z.array(z.string().min(1)).default([]),
   dependsOn: z.array(z.string().min(1)).default([]),
+  /** Chronological audit trail of the DERIVED status (computed from child phases at read time). Appended ONLY when the derived status changes during a rollup; `status` itself is NOT persisted. Empty = no transition recorded yet (treated as "planned"). */
+  statusLog: z.array(StatusLogEntrySchema).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 });
@@ -322,6 +337,7 @@ export type Project = z.infer<typeof ProjectSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
 export type StatusLogEntry = z.infer<typeof StatusLogEntrySchema>;
+export type PhaseStatusLogEntry = z.infer<typeof PhaseStatusLogEntrySchema>;
 export type Task = z.infer<typeof TaskSchema>;
 export type Phase = z.infer<typeof PhaseSchema> & { status: PhaseStatus };
 export type MacroTask = z.infer<typeof MacroTaskSchema>;

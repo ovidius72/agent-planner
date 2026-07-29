@@ -24,7 +24,7 @@ import {
   type CodebaseProfile,
   type ResumeFocus,
 } from "./schema.js";
-import { createFeatureId, createPhaseId, createRequirementId, createShortId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
+import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -1299,8 +1299,61 @@ export class PlanStore {
       const feature = features.features.find((f) => f.id === phase.featureId);
       cleared = formatPhaseRef(phase.number, feature?.number);
     }
+    // Append a statusLog entry to the phase when its DERIVED status changed
+    // (audit trail; status itself is NOT persisted). Idempotent: only appends
+    // when the new derived status differs from the last recorded toStatus.
+    await this.#appendPhaseStatusLog(phaseId);
+    // Roll up to the parent feature's statusLog too.
+    if (phase.featureId) await this.#appendFeatureStatusLog(phase.featureId);
     await this.refreshResume();
     return cleared;
+  }
+
+  /** Append a PhaseStatusLogEntry to the phase when its derived status changed
+   *  vs. the last recorded toStatus (baseline "draft" when empty, matching the
+   *  phase-creation literal). Idempotent across repeated reads of the same state. */
+  async #appendPhaseStatusLog(phaseId: string): Promise<void> {
+    await this.updatePhase(phaseId, (p) => {
+      const last = p.statusLog.at(-1)?.toStatus ?? "draft";
+      if (p.status !== last) {
+        p.statusLog = [...p.statusLog, {
+          id: createStatusLogEntryId(),
+          date: nowISO(),
+          fromStatus: last as Phase["status"],
+          toStatus: p.status,
+          title: `${last} → ${p.status}`,
+          description: "",
+        }];
+      }
+      return p;
+    });
+  }
+
+  /** Append a StatusLogEntry to the feature when its derived status changed
+   *  vs. the last recorded toStatus (baseline "planned" when empty, matching
+   *  the feature-creation/empty-phases derivation). Idempotent. */
+  async #appendFeatureStatusLog(featureId: string): Promise<void> {
+    const features = await this.loadFeatures();
+    const feature = features.features.find((f) => f.id === featureId);
+    if (!feature) return;
+    const last = feature.statusLog.at(-1)?.toStatus ?? "planned";
+    if (feature.status !== last) {
+      await this.updateFeatures((doc) => {
+        const target = doc.features.find((f) => f.id === featureId);
+        if (target && target.statusLog.at(-1)?.toStatus !== feature.status) {
+          const baseline = target.statusLog.at(-1)?.toStatus ?? "planned";
+          target.statusLog = [...target.statusLog, {
+            id: createStatusLogEntryId(),
+            date: nowISO(),
+            fromStatus: baseline as Task["status"],
+            toStatus: feature.status as Task["status"],
+            title: `${baseline} → ${feature.status}`,
+            description: "",
+          }];
+        }
+        return doc;
+      });
+    }
   }
 
   // ── Savers ───────────────────────────────────────────────────────────

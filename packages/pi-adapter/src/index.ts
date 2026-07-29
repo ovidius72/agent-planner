@@ -1453,6 +1453,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           acceptedDecisions: [],
           phaseIds: [],
           dependsOn: [],
+          statusLog: [],
           createdAt: now,
           updatedAt: now,
         };
@@ -1608,6 +1609,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             handoff: "", handoffUpdatedAt: "",
             handoffReadAt: "",
             handoffHistory: [],
+            statusLog: [],
           };
           await st.savePhase(phase);
           await st.updateFeatures((doc) => {
@@ -2841,6 +2843,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         acceptedDecisions: [],
         phaseIds: [],
         dependsOn: [],
+        statusLog: [],
         createdAt: now,
         updatedAt: now,
       };
@@ -3045,6 +3048,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           handoff: "", handoffUpdatedAt: "",
           handoffReadAt: "",
           handoffHistory: [],
+          statusLog: [],
         };
         await st.savePhase(phase);
 

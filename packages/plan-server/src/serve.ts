@@ -277,6 +277,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       workRemaining: "",
       acceptedDecisions: [],
       phaseIds: [], dependsOn: [],
+      statusLog: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -406,6 +407,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         handoffUpdatedAt: "",
           handoffReadAt: "",
           handoffHistory: [],
+          statusLog: [],
       };
 
       await store.savePhase(phase);

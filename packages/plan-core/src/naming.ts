@@ -107,3 +107,7 @@ export function createFeatureId(): string {
 export function createChecklistItemId(taskId: string, number: number, title: string): string {
   return `${taskId}-check-${formatThreeDigitNumber(number)}-${normalizeSlug(title)}`;
 }
+
+export function createStatusLogEntryId(): string {
+  return randomUUID();
+}
