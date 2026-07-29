@@ -197,7 +197,15 @@ export function WorkTree({
     // 3. once the row is in the DOM, scroll + pulse + clear the param
     const el = document.getElementById(`task-row-${locateNum}`);
     if (el) {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      // Manual scroll accounting for the sticky header (TopNav + ActiveTasksHeader,
+      // up to 35vh) and the sticky .ap-search-sticky bar (top: headerH), so the
+      // row lands just below both on mobile / low-height viewports. scrollIntoView
+      // with block:"center" ignores sticky elements and hides the row behind them.
+      const headerEl = document.querySelector("header") as HTMLElement | null;
+      const stickyBar = document.querySelector(".ap-search-sticky") as HTMLElement | null;
+      const offset = (headerEl?.offsetHeight ?? 0) + (stickyBar?.offsetHeight ?? 0) + 12;
+      const y = el.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
       setLocatePulseId(t.id);
       const pulse = window.setTimeout(() => setLocatePulseId(null), 2500);
       setSearchParams((prev) => { prev.delete("locate"); return prev; }, { replace: true });

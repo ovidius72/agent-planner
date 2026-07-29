@@ -219,12 +219,17 @@ export function useDashboardTree({
     // Search overrides status filters: show only branches containing matched tasks.
     if (searchActive) {
       return workTree
+        .filter((entry) => matchesStatus(entry.feature.status, effectiveFeatureStatusFilters))
         .map((entry) => ({
           ...entry,
           allPhases: entry.allPhases
+            .filter((phaseEntry) => matchesStatus(phaseEntry.phase.status, effectivePhaseStatusFilters))
             .map((phaseEntry) => ({
               ...phaseEntry,
-              allTasks: phaseEntry.allTasks.filter((task) => matchedTaskIds.has(task.id)),
+              allTasks: phaseEntry.allTasks.filter((task) =>
+                matchedTaskIds.has(task.id) &&
+                matchesStatus(task.status, effectiveTaskStatusFilters),
+              ),
             }))
             .filter((phaseEntry) => phaseEntry.allTasks.length > 0),
         }))
@@ -380,6 +385,7 @@ export function useDashboardTree({
   }, []);
 
   const resetFilters = () => {
+    setSearchQuery("");
     setShowAllFeatures(true);
     setHideDone(false);
     setHidePlanned(false);
