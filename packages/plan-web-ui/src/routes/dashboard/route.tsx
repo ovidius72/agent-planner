@@ -4,6 +4,7 @@ import { Card } from "../../components/ui/card";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { AiConsolidatedContext } from "../../components/dashboard/ai-consolidated-context";
 import { LatestCompletedTasks } from "../../components/dashboard/latest-completed-tasks";
+import { NewAddedTasks } from "../../components/dashboard/new-added-tasks";
 import { StatCards } from "../../components/dashboard/stat-cards";
 import { WorkTree } from "../../components/dashboard/work-tree";
 import { useShortcut } from "../../lib/shortcuts";
@@ -55,6 +56,7 @@ export function DashboardRoute() {
       />
 
       <LatestCompletedTasks features={features} phases={phases} />
+      <NewAddedTasks features={features} phases={phases} />
     </div>
   );
 }

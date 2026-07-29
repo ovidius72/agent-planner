@@ -31,11 +31,14 @@ export interface DashboardTreeApi {
   expandAll: () => void;
   expandedFeatureIds: string[];
   expandedPhaseIds: string[];
+  setExpandedFeatureIds: Dispatch<SetStateAction<string[]>>;
+  setExpandedPhaseIds: Dispatch<SetStateAction<string[]>>;
   toggleExpandedFeature: (featureId: string) => void;
   toggleExpandedPhase: (phaseId: string) => void;
   recentFeatureIds: string[];
   recentPhaseIds: string[];
   recentTaskIds: string[];
+  setRecentTaskIds: Dispatch<SetStateAction<string[]>>;
   showAllFeatures: boolean;
   setShowAllFeatures: Dispatch<SetStateAction<boolean>>;
   featureStatusFilters: FeatureStatus[];
@@ -402,11 +405,14 @@ export function useDashboardTree({
     expandAll,
     expandedFeatureIds,
     expandedPhaseIds,
+    setExpandedFeatureIds,
+    setExpandedPhaseIds,
     toggleExpandedFeature,
     toggleExpandedPhase,
     recentFeatureIds,
     recentPhaseIds,
     recentTaskIds,
+    setRecentTaskIds,
     showAllFeatures,
     setShowAllFeatures,
     featureStatusFilters,

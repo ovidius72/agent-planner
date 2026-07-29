@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
-import { Link, Outlet, useNavigation } from "react-router-dom";
+import { Link, Outlet, useNavigation, useNavigate } from "react-router-dom";
+import { LocateFixed } from "lucide-react";
 import { TopNav } from "./top-nav";
 import { FormattedText } from "../ui/formatted-text";
 import type { ActiveTaskSummary, ServerInfo } from "../../lib/api";
@@ -9,6 +10,7 @@ import type { Project } from "../../lib/types";
 export type LiveStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
 function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }) {
+    const navigate = useNavigate();
     const uniqueTasks = useMemo(() => {
       const seen = new Set();
       return activeTasks.filter((task: ActiveTaskSummary) => {
@@ -32,24 +34,36 @@ function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }
                 ? `/features/${task.featureId}/phases/${task.phaseId}/tasks/${task.id}`
                 : "/features";
               return (
-                <Link
+                <div
                   key={task.id}
-                  to={to}
                   className="flex min-w-0 items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Link to={to} className="flex min-w-0 flex-1 items-center gap-2">
                     {task.status === "in-progress" ? (
                       <span
                         aria-hidden="true"
-                        className="inline-block h-2 w-2 rounded-full bg-[var(--accent)]"
+                        className="inline-block h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]"
                         aria-label="In progress"
                       />
                     ) : null}
                     <EntityBadge type="task" number={task.number} />
                     <ParentBadge type="task" phaseNum={task.phaseNumber} featureNum={task.featureNumber} />
                     <span className="min-w-0 truncate font-medium">{task.title}</span>
-                  </div>
-                </Link>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      navigate(`/?locate=T${task.number}`);
+                    }}
+                    aria-label={`Locate T${task.number} in work tree`}
+                    title="Locate in work tree"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[var(--text-subtle)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--text)]"
+                  >
+                    <LocateFixed className="h-4 w-4" />
+                  </button>
+                </div>
               );
             })}
           </div>

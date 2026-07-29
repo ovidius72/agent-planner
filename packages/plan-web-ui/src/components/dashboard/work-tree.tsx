@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Card } from "../ui/card";
@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { EntityPathBadge } from "../ui/badges";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
-import { formatSequence, type WorkTreeFeature } from "../../lib/dashboard-tree";
+import { formatSequence, recentHighlightDurationMs, type WorkTreeFeature } from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
@@ -159,6 +159,62 @@ export function WorkTree({
   const isPhaseRecentlyChanged = (phaseId: string) => tree.recentPhaseIds.includes(phaseId);
   const isTaskRecentlyChanged = (taskId: string) => tree.recentTaskIds.includes(taskId);
 
+  // ── Locate-in-work-tree: triggered by ?locate=T00x query param (set by the
+  // header active-task "locate" icon). Clears hiding filters, force-expands the
+  // task's feature + phase, scrollIntoView the row, pulses it via a dedicated
+  // locatePulseId (independent of recentTaskIds, which the hook prunes on data
+  // change), then strips the param. Re-runs after expansion/filter renders until
+  // the row is in the DOM. ──────────────────────────────────────────────
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [locatePulseId, setLocatePulseId] = useState<string | null>(null);
+  const locateParam = searchParams.get("locate");
+  const locateNum = locateParam ? parseInt(locateParam.replace(/^T/i, ""), 10) : null;
+  useEffect(() => {
+    if (locateNum == null || Number.isNaN(locateNum)) return;
+    const found = phases
+      .flatMap((p) => p.tasks.map((t) => ({ t, p })))
+      .find(({ t }) => t.number === locateNum);
+    if (!found) {
+      setSearchParams((prev) => { prev.delete("locate"); return prev; }, { replace: true });
+      return;
+    }
+    const { t, p } = found;
+    // 1. clear filters that could hide the task/feature/phase
+    if (tree.onlyActiveBranches) tree.setOnlyActiveBranches(false);
+    if (tree.hideDone) tree.setHideDone(false);
+    if (tree.searchQuery) tree.setSearchQuery("");
+    tree.setTreeOpenMode("all");
+    // 2. ensure feature + phase expanded so the row renders
+    if (p.featureId) {
+      const fid = p.featureId;
+      if (!tree.expandedFeatureIds.includes(fid)) {
+        tree.setExpandedFeatureIds((cur) => (cur.includes(fid) ? cur : [...cur, fid]));
+      }
+    }
+    if (!tree.expandedPhaseIds.includes(p.id)) {
+      tree.setExpandedPhaseIds((cur) => (cur.includes(p.id) ? cur : [...cur, p.id]));
+    }
+    // 3. once the row is in the DOM, scroll + pulse + clear the param
+    const el = document.getElementById(`task-row-${locateNum}`);
+    if (el) {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      setLocatePulseId(t.id);
+      const pulse = window.setTimeout(() => setLocatePulseId(null), 2500);
+      setSearchParams((prev) => { prev.delete("locate"); return prev; }, { replace: true });
+      return () => window.clearTimeout(pulse);
+    }
+    // else: expansion/filter change just requested → effect re-runs after render
+  }, [
+    locateNum,
+    phases,
+    tree.expandedFeatureIds,
+    tree.expandedPhaseIds,
+    tree.onlyActiveBranches,
+    tree.hideDone,
+    tree.searchQuery,
+    tree.treeOpenMode,
+  ]);
+
   // Floating drag preview for the DragOverlay: finds the active entity (feature /
   // phase / task) by id and renders a compact badge + title + status card. The
   // original row stays in place (faded via .ap-sortable--dragging) while this
@@ -300,7 +356,7 @@ export function WorkTree({
                     onTogglePhase={tree.toggleExpandedPhase}
                     isPhaseRecentlyChanged={isPhaseRecentlyChanged}
                     isTaskRecentlyChanged={isTaskRecentlyChanged}
-                    highlightedTaskIds={tree.searchActive ? tree.matchedTaskIds : undefined}
+                    highlightedTaskIds={(() => { const base = tree.searchActive ? tree.matchedTaskIds : undefined; if (!locatePulseId) return base; const set = new Set(base ?? []); set.add(locatePulseId); return set; })()}
                   />
                 </SortableItem>
               ))}
