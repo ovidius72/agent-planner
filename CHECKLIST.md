@@ -388,3 +388,37 @@ Questa checklist deve essere aggiornata durante il lavoro, non solo a fine attiv
 - [x] **Misurato** su questo progetto (7 feature/20 fasi/85 task): feature-list=160 tok, phase-list=522 tok, task-list=1961 tok, TUTTO=2643 tok vs `plan_get full=true` ~32000 tok → **12x riduzione**.
 - [x] Validazione: `pnpm -r build` + `pnpm check` puliti. Smoke test logica list (format + token). dist verificati (2 list tool, 3 full flag, 0 dump UUID).
 - [ ] **Da fare**: commit + release @next (task successivo).
+
+## F009 — Checklist exposure + status history cards
+
+Obiettivo: rendere usabile la checklist per-task (gli agenti scrivevano "DONE"
+nel titolo o i passi nella description) e visualizzare lo storico degli stati di
+feature/phase/task come card stepper cronologico.
+
+- [x] **P001 — Core: phase/feature statusLog.** Aggiunto `statusLog` a
+  `PhaseSchema` (`PhaseStatusLogEntrySchema`, include draft/discovery) e
+  `FeatureSchema` (`StatusLogEntrySchema`). `PlanStore.syncTaskStatusRollup`
+  appende una entry solo quando lo status derivato cambia (baseline draft per
+  le phase, planned per le feature); `status` resta non persistito/derivato.
+  Idempotente; nessuna entry a status invariato. Helper `createStatusLogEntryId`.
+  Verificato: draft→planned→in-progress→blocked→in-progress→done produce 5 entry
+  phase + 4 feature; sync ripetuto non duplica.
+- [x] **P002 — Web UI: StatusCardStepper.** Nuovo componente
+  `components/ui/status-card-stepper.tsx`: row di card cronologiche (una per
+  stato visitato, oldest first), colorate per status + icona + timestamp; card
+  corrente enfatizzata. `.status-card-stepper/.status-card` CSS (flex-wrap,
+  mobile-safe). Sostituita la text-timeline in task-detail; aggiunta sezione
+  "Status history" in phase-detail + feature-detail. Types: `PhaseStatusLogEntry`
+  + `statusLog` su Phase/Feature.
+- [x] **P003 — Checklist exposure + agent tooling.** `ChecklistItem` con
+  `number` (C1/C2/C3). Nuovo tool `planner-task-checklist-toggle` (MCP) /
+  `task_checklist_toggle` (pi-adapter): tick per C{n}/id/title senza riscrivere
+  la lista, ritorna `C2 "x" → done (2/3)`. `planner-task-update` ora accetta
+  `checklist`. Web UI: campo checklist nella task-create modal, sezione "Steps"
+  sempre visibile in task-detail con badge C{n} + hint. Skill + descrizioni
+  tool: guida gli agenti a usare la checklist (non scrivere DONE nel titolo).
+  Verificato end-to-end via MCP server: C1/C2/C3 + toggle + edge cases.
+- [x] **P004 — Docs + release:next.** CHECKLIST + README (tool count 35→36,
+  `planner-task-checklist-toggle`). `pnpm release:next`.
+
+Commits: 15222a0 (P001), 2477ddd (P002), ec9de06 (P003), + release.
