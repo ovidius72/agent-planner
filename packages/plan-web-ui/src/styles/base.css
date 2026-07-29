@@ -398,3 +398,50 @@ textarea:disabled {
   margin-bottom: 0.75rem;
   border-bottom: 1px solid var(--border);
 }
+
+/* StatusCardStepper — chronological status history as filled cards */
+.status-card-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.status-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-strong);
+  padding: 0.3rem 0.5rem;
+  min-width: 0;
+  background: var(--surface);
+  opacity: 0.75;
+}
+.status-card.status-card-current {
+  opacity: 1;
+  border-width: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent);
+}
+.status-card-icon { width: 0.9rem; height: 0.9rem; flex-shrink: 0; }
+.status-card-label { font-size: 0.7rem; font-weight: 700; text-transform: capitalize; white-space: nowrap; }
+.status-card-time { font-size: 0.62rem; font-weight: 500; opacity: 0.8; white-space: nowrap; }
+.status-card-time-initial { font-style: italic; opacity: 0.6; }
+/* Reuse the .status-* color classes (bg tint + colored text) on filled cards */
+.status-card.status-draft, .status-card.status-discovery, .status-card.status-planned,
+.status-card.status-in-progress, .status-card.status-done, .status-card.status-blocked,
+.status-card.status-canceled, .status-card.status-rejected, .status-card.status-deferred,
+.status-card.status-waiting {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  border-color: color-mix(in srgb, currentColor 40%, var(--border-strong));
+}
+.status-card.status-in-progress { background: color-mix(in srgb, var(--color-status-in-progress) 14%, transparent); color: var(--color-status-in-progress); }
+.status-card.status-done { background: color-mix(in srgb, var(--color-status-done) 16%, transparent); color: var(--color-status-done); }
+.status-card.status-blocked { background: color-mix(in srgb, var(--color-status-blocked) 16%, transparent); color: var(--color-status-blocked); }
+.status-card.status-planned { background: color-mix(in srgb, var(--color-status-planned) 14%, transparent); color: var(--color-status-planned); }
+.status-card.status-draft { background: color-mix(in srgb, var(--color-status-draft) 14%, transparent); color: var(--color-status-draft); }
+.status-card.status-discovery { background: color-mix(in srgb, var(--color-status-discovery) 14%, transparent); color: var(--color-status-discovery); }
+.status-card.status-canceled { background: color-mix(in srgb, var(--color-status-canceled) 14%, transparent); color: var(--color-status-canceled); }
+.status-card.status-rejected { background: color-mix(in srgb, var(--color-status-rejected) 14%, transparent); color: var(--color-status-rejected); }
+.status-card.status-deferred { background: color-mix(in srgb, var(--color-status-deferred) 14%, transparent); color: var(--color-status-deferred); }
+.status-card.status-waiting { background: color-mix(in srgb, var(--color-status-waiting) 14%, transparent); color: var(--color-status-waiting); }

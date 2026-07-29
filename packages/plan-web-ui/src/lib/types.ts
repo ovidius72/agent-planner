@@ -29,6 +29,7 @@ export interface Feature {
   acceptedDecisions: AcceptedDecision[];
   phaseIds: string[];
   dependsOn: string[];
+  statusLog: StatusLogEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -53,6 +54,16 @@ export interface StatusLogEntry {
   date: string;
   fromStatus: TaskStatus;
   toStatus: TaskStatus;
+  title: string;
+  description: string;
+}
+
+/** Like StatusLogEntry but for the DERIVED PHASE status (includes draft/discovery). */
+export interface PhaseStatusLogEntry {
+  id: string;
+  date: string;
+  fromStatus: PhaseStatus;
+  toStatus: PhaseStatus;
   title: string;
   description: string;
 }
@@ -116,6 +127,7 @@ export interface Phase {
   handoffUpdatedAt: string;
   handoffReadAt?: string;
   handoffHistory?: HandoffHistoryEntry[];
+  statusLog: PhaseStatusLogEntry[];
   createdAt: string;
   updatedAt: string;
 }
