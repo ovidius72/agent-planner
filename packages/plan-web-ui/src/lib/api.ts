@@ -182,7 +182,7 @@ export async function deletePhase(phaseId: string): Promise<{ deleted: string }>
   return request(`/phases/${phaseId}`, { method: "DELETE" });
 }
 
-export async function createTask(phaseId: string, payload: { title: string; description?: string; status?: Task["status"] }): Promise<Task> {
+export async function createTask(phaseId: string, payload: { title: string; description?: string; status?: Task["status"]; checklist?: string[] }): Promise<Task> {
   return normalizeTask(await request(`/phases/${phaseId}/tasks`, { method: "POST", body: JSON.stringify(payload) }));
 }
 

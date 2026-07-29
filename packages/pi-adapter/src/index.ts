@@ -1862,7 +1862,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const checklistSeed = await ctx.ui.input("Checklist items (comma-separated, blank to keep current)");
         if (description?.trim()) task.description = description.trim();
         if (checklistSeed?.trim()) {
-          task.checklist = splitCsv(checklistSeed).map((itemTitle, index) => ({
+          task.checklist = splitCsv(checklistSeed).map((itemTitle, index) => ({ number: index + 1,
             id: createChecklistItemId(task.id, index + 1, itemTitle),
             title: itemTitle,
             checked: false,
@@ -3334,7 +3334,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (params.decisions !== undefined) task.decisions = params.decisions;
           if (params.acceptedDecisions !== undefined) task.acceptedDecisions = params.acceptedDecisions;
           if (params.checklist !== undefined) {
-            task.checklist = params.checklist.map((itemTitle, index) => ({
+            task.checklist = params.checklist.map((itemTitle, index) => ({ number: index + 1,
               id: createChecklistItemId(task.id, index + 1, itemTitle),
               title: itemTitle,
               checked: false,
@@ -3470,6 +3470,52 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.writeGenerated();
       if (!completedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
       return { content: [{ type: "text", text: `✅ Task completed: ${completedTask.id} — ${completedTask.title} (done)` }], details: completedTask };
+    },
+  });
+
+  pi.registerTool({
+    name: "task_checklist_toggle",
+    label: "Task Checklist Toggle",
+    description: "Tick/untick a task checklist item (a 'step') without rewriting the whole list. Accepts the item as C{n} (e.g. C2), item id, or title (case-insensitive, first match). Pass checked=true/false to set explicitly, or omit to toggle. Use this instead of writing DONE in step titles. Items are numbered C1/C2… per task.",
+    parameters: Type.Object({
+      taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
+      item: Type.String({ description: "Checklist item selector: C{n} (e.g. C2), item id, or title (case-insensitive)" }),
+      checked: Type.Optional(Type.Boolean({ description: "Set explicitly: true=done, false=open. Omit to toggle." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      let result = "";
+      await st.updatePhase(found.phase.id, (phase) => {
+        const task = phase.tasks.find((t) => t.id === found.task.id);
+        if (!task) { result = `Task not found: ${params.taskId}`; return phase; }
+        const ck = task.checklist ?? [];
+        if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
+        let target: typeof ck[number] | undefined;
+        const cMatch = params.item.match(/^C(\d+)$/i);
+        if (cMatch) {
+          const idx = parseInt(cMatch[1]!, 10) - 1;
+          if (idx < 0 || idx >= ck.length) { result = `C${idx + 1} not found (1..${ck.length}).`; return phase; }
+          target = ck[idx];
+        } else {
+          const needle = params.item.trim().toLowerCase();
+          target = ck.find((i) => i.id === params.item)
+            ?? ck.find((i) => i.title.trim().toLowerCase() === needle)
+            ?? ck.find((i) => i.title.trim().toLowerCase().includes(needle));
+        }
+        if (!target) { result = `No checklist item matching "${params.item}".`; return phase; }
+        const newValue = params.checked ?? !target.checked;
+        target.checked = newValue;
+        task.updatedAt = nowISO();
+        phase.updatedAt = nowISO();
+        const doneCount = ck.filter((i) => i.checked).length;
+        result = `C${target.number} "${target.title}" → ${newValue ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
+        return phase;
+      });
+      await st.writeGenerated();
+      return { content: [{ type: "text", text: `✅ ${result}` }], details: {} };
     },
   });
 

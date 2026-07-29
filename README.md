@@ -312,6 +312,7 @@ Current Phase 1 tools include:
 
 - `planner-task-list`
 - `planner-task-add`
+- `planner-task-checklist-toggle` (tick/untick a step by C{n}/id/title; no list rewrite)
 - `planner-task-show`
 - `planner-task-discuss`
 - `planner-task-update`
@@ -338,7 +339,7 @@ Current Phase 1 tools include:
 
 Requirements are intentionally not exposed as `planner-requirement-*` in Phase 1.
 
-The current Phase 1 count is **35** public `planner-*` tools.
+The current Phase 1 count is **36** public `planner-*` tools.
 
 ---
 
@@ -821,7 +822,7 @@ Smoke test MCP tools locally:
 node packages/agent-plan/dist/index.js mcp
 ```
 
-For automated MCP smoke testing, use the MCP SDK client to call `listTools`; the expected Phase 1 count is currently 35 public `planner-*` tools.
+For automated MCP smoke testing, use the MCP SDK client to call `listTools`; the expected Phase 1 count is currently 36 public `planner-*` tools.
 
 ### Runtime implementation notes
 

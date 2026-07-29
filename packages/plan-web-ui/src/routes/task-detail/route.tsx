@@ -55,9 +55,10 @@ function ChecklistItemToggle({
         aria-label={`Toggle checklist item ${item.title}`}
       />
       <div className="min-w-0">
-        <p className={`text-sm ${optimisticChecked ? "text-[var(--text-muted)] line-through" : "font-medium text-[var(--text)]"}`}>
+        <span className="checklist-num">C{item.number}</span>{" "}
+        <span className={`text-sm ${optimisticChecked ? "text-[var(--text-muted)] line-through" : "font-medium text-[var(--text)]"}`}>
           {item.title}
-        </p>
+        </span>
       </div>
     </div>
   );
@@ -155,12 +156,12 @@ export function TaskDetailRoute() {
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{phase.title}</p></CompactCard>
         </div>
 
-        {checklist.length ? (
-          <div className="grid gap-3">
-            <div>
-              <h3 className="text-sm font-bold text-[var(--text)]">Checklist</h3>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Always visible and linked to the real task checklist.</p>
-            </div>
+        <div className="grid gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-[var(--text)]">Steps ({checklist.length})</h3>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">Per-task checklist — agents tick steps via planner-task-checklist-toggle (C1/C2 or title), not by writing DONE in titles.</p>
+          </div>
+          {checklist.length ? (
             <div className="grid gap-2">
               {checklist.map((item) => (
                 <ChecklistItemToggle
@@ -172,8 +173,10 @@ export function TaskDetailRoute() {
                 />
               ))}
             </div>
-          </div>
-        ) : null}
+          ) : (
+            <p className="text-sm text-[var(--text-muted)] italic">No steps. Add implementation steps via <code className="text-[var(--text)]">/planner task update</code> (checklist) so they can be ticked individually.</p>
+          )}
+        </div>
 
         {task.subtasks?.length ? (
           <details className="surface-card px-4 py-4">

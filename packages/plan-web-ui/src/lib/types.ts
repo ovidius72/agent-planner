@@ -45,6 +45,7 @@ export interface Subtask {
 
 export interface ChecklistItem {
   id: string;
+  number: number;
   title: string;
   checked: boolean;
 }

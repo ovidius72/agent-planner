@@ -125,6 +125,10 @@ export const SubtaskSchema = z.object({
 
 export const ChecklistItemSchema = z.object({
   id: z.string().min(1),
+  /** Per-task 1-based position, displayed as C{number} (C1, C2, ...). Default 0
+   *  so legacy on-disk items without a number still parse; the TaskSchema
+   *  transform overwrites it with the real index+1. */
+  number: z.number().int().nonnegative().default(0),
   title: z.string().min(1),
   checked: z.boolean().default(false),
 });
@@ -195,8 +199,8 @@ export const TaskSchema = z.object({
   ...task,
   checklist: task.checklist
     .map((item, index) => typeof item === "string"
-      ? { id: createChecklistItemId(task.id, index + 1, item), title: item.trim(), checked: false }
-      : { ...item, id: item.id || createChecklistItemId(task.id, index + 1, item.title), title: item.title.trim(), checked: item.checked ?? false })
+      ? { id: createChecklistItemId(task.id, index + 1, item), number: index + 1, title: item.trim(), checked: false }
+      : { ...item, id: item.id || createChecklistItemId(task.id, index + 1, item.title), number: index + 1, title: item.title.trim(), checked: item.checked ?? false })
     .filter((item) => item.title.length > 0),
 }));
 

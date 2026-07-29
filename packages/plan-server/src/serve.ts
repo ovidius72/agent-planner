@@ -7,7 +7,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createShortId, createTaskId, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -490,7 +490,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.post(route("/phases/:phaseId/tasks"), async (c) => {
     const phaseId = c.req.param("phaseId");
     if (!phaseId) return c.json({ error: "phaseId required" }, 400);
-    const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"] }>();
+    const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"]; checklist?: string[] }>();
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title required" }, 400);
 
@@ -509,8 +509,11 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const initialStatus = body.status ?? "planned";
     const shortId = createShortId(await store.assignedShortIds());
     const priority = await store.nextPriority("task", phase.id);
+    const taskId = createTaskId();
+    const checklistItems = (body.checklist ?? []).map((s) => s.trim()).filter((s) => s.length > 0)
+      .map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), number: index + 1, title: item, checked: false }));
     const task: Task = {
-      id: createTaskId(),
+      id: taskId,
       phaseId: phase.id,
       number: taskNumber,
       shortId,
@@ -523,7 +526,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       statusLog: [],
       decisions: [],
       acceptedDecisions: [],
-      checklist: [],
+      checklist: checklistItems,
       subtasks: [],
       dependsOn: [],
       startedAt: initialStatus === "in-progress" || initialStatus === "done" ? now : "",

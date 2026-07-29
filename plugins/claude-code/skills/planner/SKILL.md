@@ -65,6 +65,9 @@ show this routing table and ask which subcommand they want.
 - `task complete <T00x>` → `planner-task-complete`
 - `task update <T00x>` → `planner-task-update` (use `motivation` for blocking/canceled/etc.)
 - `task delete <T00x>` → `planner-task-delete` (confirm first)
+- `task checklist-toggle <T00x> <C{n}|title> [checked]` → `planner-task-checklist-toggle` — tick/untick a checklist step WITHOUT rewriting the list. Accepts `C1`/`C2`…, item id, or title. Omit `checked` to toggle, or pass `true`/`false`.
+
+**Task checklist = implementation steps.** `task add` and `task update` accept a `checklist` (array of plain strings) for implementation steps. Items are numbered **C1, C2, …** per task. Tick steps with `planner-task-checklist-toggle` (by `C{n}` or title) — do NOT write "DONE" in step titles and do NOT put steps in `description`. `task_complete` warns if any step is unchecked (override with `force=true`).
 
 ### Handoff (entity-scoped, per phase)
 - `handoff list` → `planner-handoff-list` (phases with a non-empty `phase.handoff`)

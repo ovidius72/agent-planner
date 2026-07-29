@@ -11,8 +11,9 @@ function mergeChecklist(current: ChecklistItem[], nextTitles: string[]): Checkli
     const normalized = title.trim().toLowerCase();
     const existing = byId.get(current[index]?.id ?? "") ?? byTitle.get(normalized);
     return existing
-      ? { ...existing, title: title.trim() }
+      ? { ...existing, number: index + 1, title: title.trim() }
       : { id: `check-${index + 1}-${normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item"}`,
+          number: index + 1,
           title: title.trim(),
           checked: false };
   });

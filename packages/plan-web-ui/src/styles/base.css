@@ -445,3 +445,21 @@ textarea:disabled {
 .status-card.status-rejected { background: color-mix(in srgb, var(--color-status-rejected) 14%, transparent); color: var(--color-status-rejected); }
 .status-card.status-deferred { background: color-mix(in srgb, var(--color-status-deferred) 14%, transparent); color: var(--color-status-deferred); }
 .status-card.status-waiting { background: color-mix(in srgb, var(--color-status-waiting) 14%, transparent); color: var(--color-status-waiting); }
+
+/* Per-task checklist item number badge (C1/C2/...) */
+.checklist-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--text-subtle) 12%, transparent);
+  color: var(--text-subtle);
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-right: 0.15rem;
+}

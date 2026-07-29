@@ -623,7 +623,7 @@ server.registerTool("planner-task-add", {
     statusLog: [],
     decisions: [],
     acceptedDecisions: [],
-    checklist: (checklist ?? []).map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), title: item, checked: false })),
+    checklist: (checklist ?? []).map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), number: index + 1, title: item, checked: false })),
     subtasks: [],
     dependsOn: [],
     startedAt: "",
@@ -671,7 +671,8 @@ server.registerTool("planner-task-discuss", {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
     if (description !== undefined) task.description = description.trim();
-    if (checklist !== undefined) task.checklist = checklist.map((item, index) => ({ id: createChecklistItemId(task.id, index + 1, item), title: item, checked: false }));
+    if (checklist !== undefined) task.checklist = checklist.map((item, index) => ({ id: createChecklistItemId(task.id, index + 1, item), number: index + 1, title: item, checked: false }));
+    if (checklist !== undefined) task.checklist = checklist.map((item, index) => ({ id: createChecklistItemId(task.id, index + 1, item), number: index + 1, title: item, checked: false }));
     task.updatedAt = nowISO();
     phase.updatedAt = task.updatedAt;
     updatedTask = task;
@@ -691,8 +692,9 @@ server.registerTool("planner-task-update", {
     description: z.string().optional(),
     motivation: z.string().optional(),
     priority: z.number().int().nonnegative().optional().describe("Display order within the phase (lower = higher)."),
+    checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Agents should tick steps via planner-task-checklist-toggle, not write DONE in titles."),
   },
-}, async ({ task: ref, title, status, description, motivation, priority }) => {
+}, async ({ task: ref, title, status, description, motivation, priority, checklist }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -737,6 +739,47 @@ server.registerTool("planner-task-update", {
   const features = (await st.loadFeatures()).features;
   const t = updatedTask ?? found.task;
   return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}`);
+});
+
+server.registerTool("planner-task-checklist-toggle", {
+  description: "Tick/untick a task checklist item (a 'step') without rewriting the whole list. Accepts the item as C{n} (e.g. C2), the item id, or the title (case-insensitive, first match). Pass checked=true/false to set explicitly, or omit to toggle. Use this instead of writing DONE in step titles. Items are numbered C1/C2… per task.",
+  inputSchema: {
+    task: z.string().min(1),
+    item: z.string().min(1),
+    checked: z.boolean().optional(),
+  },
+}, async ({ task: ref, item, checked }) => {
+  const st = await requireStore();
+  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  if (!found) return text(`Task not found: ${ref}`);
+  let result = "";
+  await st.updatePhase(found.phase.id, (phase) => {
+    const task = phase.tasks.find((entry) => entry.id === found.task.id);
+    if (!task) { result = `Task not found: ${ref}`; return phase; }
+    const ck = task.checklist ?? [];
+    if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
+    let target: typeof ck[number] | undefined;
+    const cMatch = item.match(/^C(\d+)$/i);
+    if (cMatch) {
+      const idx = parseInt(cMatch[1]!, 10) - 1;
+      if (idx < 0 || idx >= ck.length) { result = `C${idx + 1} not found (1..${ck.length}).`; return phase; }
+      target = ck[idx];
+    } else {
+      const needle = item.trim().toLowerCase();
+      target = ck.find((i) => i.id === item)
+        ?? ck.find((i) => i.title.trim().toLowerCase() === needle)
+        ?? ck.find((i) => i.title.trim().toLowerCase().includes(needle));
+    }
+    if (!target) { result = `No checklist item matching "${item}".`; return phase; }
+    const newValue = checked ?? !target.checked;
+    target.checked = newValue;
+    task.updatedAt = nowISO();
+    phase.updatedAt = nowISO();
+    const doneCount = ck.filter((i) => i.checked).length;
+    result = `C${target.number} "${target.title}" → ${newValue ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
+    return phase;
+  });
+  return writeAndSummarize(st, `✅ ${result}`);
 });
 
 server.registerTool("planner-task-delete", {
