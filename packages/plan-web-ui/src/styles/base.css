@@ -507,18 +507,18 @@ textarea:disabled {
   transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .status-node-icon { width: 1rem; height: 1rem; }
-/* COMPLETED = soft tint of the step's own status color (not solid), colored icon (muted) */
+/* COMPLETED = no background fill, just colored border + icon */
 .status-step--completed .status-node {
-  background: color-mix(in srgb, var(--step-color) 14%, var(--surface));
+  background: transparent;
   border: 2px solid color-mix(in srgb, var(--step-color) 45%, transparent);
   color: color-mix(in srgb, var(--step-color) 70%, var(--text));
 }
 .status-step--completed .status-step-label { color: color-mix(in srgb, var(--step-color) 70%, var(--text)); }
-/* CURRENT = slightly stronger tint + ring (still soft) */
+/* CURRENT = no background fill, solid border + ring highlight */
 .status-step--current .status-node {
-  background: color-mix(in srgb, var(--step-color) 22%, var(--surface));
+  background: transparent;
   border: 2px solid var(--step-color);
-  color: color-mix(in srgb, var(--step-color) 85%, var(--text));
+  color: var(--step-color);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--step-color) 16%, transparent);
 }
 .status-step--current .status-step-label { color: var(--text); font-weight: 800; }

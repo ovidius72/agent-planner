@@ -90,10 +90,10 @@ export function PhaseDetailRoute() {
 
       <div className="min-w-0">
         <Breadcrumbs
+          stacked
           items={[
-            { label: "Features", to: "/features" },
-            { label: feature.name, to: `/features/${feature.id}` },
-            { label: phase.title },
+            { label: feature.name, to: `/features/${feature.id}`, kind: "Feature" },
+            { label: phase.title, kind: "Phase" },
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">

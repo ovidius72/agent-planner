@@ -87,7 +87,14 @@ export function TaskDetailRoute() {
       </Link>
 
       <div className="min-w-0">
-        <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name, to: `/features/${feature.id}` }, { label: phase.title, to: `/features/${feature.id}/phases/${phase.id}` }, { label: task.title }]} />
+        <Breadcrumbs
+          stacked
+          items={[
+            { label: feature.name, to: `/features/${feature.id}`, kind: "Feature" },
+            { label: phase.title, to: `/features/${feature.id}/phases/${phase.id}`, kind: "Phase" },
+            { label: task.title, kind: "Task" },
+          ]}
+        />
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number, taskNum: task.number })}>
             <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} taskNum={task.number} />
