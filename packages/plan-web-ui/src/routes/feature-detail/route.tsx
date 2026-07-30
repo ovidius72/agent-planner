@@ -94,7 +94,7 @@ export function FeatureDetailRoute() {
           </CollapsibleSection>
         ) : null}
         <div className="mt-4">
-          <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
+          <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} createdAt={feature.createdAt} updatedAt={feature.updatedAt} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>

@@ -113,7 +113,7 @@ export function TaskDetailRoute() {
         </div>
       </div>
 
-      <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} />
+      <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} createdAt={task.createdAt} updatedAt={task.updatedAt} startedAt={task.startedAt} completedAt={task.completedAt} />
 
       <Card className="grid gap-4">
         {task.description ? (

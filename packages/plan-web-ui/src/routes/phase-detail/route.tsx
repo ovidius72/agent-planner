@@ -108,7 +108,7 @@ export function PhaseDetailRoute() {
           {phase.title}
         </h2>
         {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
-        <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
+        <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} createdAt={phase.createdAt} updatedAt={phase.updatedAt} />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit phase</Button></Link>
           <Link to="tasks/new"><Button type="button" variant="primary" shortcut="create">Create task</Button></Link>

@@ -51,6 +51,11 @@ export interface StatusCardStepperProps {
   currentStatus: string;
   /** Canonical happy path, used to infer the next upcoming step. e.g. ["planned","in-progress","done"]. */
   backbone: string[];
+  /** Fallback dates used when statusLog is empty (inferred transitions). */
+  createdAt?: string;
+  updatedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 /**
@@ -67,7 +72,7 @@ export interface StatusCardStepperProps {
  * A phase that jumped Draft → Done shows only [Draft, Done], not the full
  * backbone — untraversed intermediates are never displayed.
  */
-export function StatusCardStepper({ statusLog, currentStatus, backbone }: StatusCardStepperProps) {
+export function StatusCardStepper({ statusLog, currentStatus, backbone, createdAt, updatedAt, startedAt, completedAt }: StatusCardStepperProps) {
   // Build the visited sequence (dedup consecutive).
   const visited: string[] = [];
   if (statusLog.length === 0) {
@@ -108,9 +113,16 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
   };
 
   const dateFor = (status: string): string => {
-    if (statusLog.length === 0) return "";
-    if (status === statusLog[0]?.fromStatus) return statusLog[0]?.date ?? "";
-    for (const e of statusLog) if (e.toStatus === status) return e.date;
+    if (statusLog.length > 0) {
+      if (status === statusLog[0]?.fromStatus) return statusLog[0]?.date ?? "";
+      for (const e of statusLog) if (e.toStatus === status) return e.date;
+      return "";
+    }
+    // Inferred transitions: fall back to lifecycle dates.
+    const firstState = backbone[0];
+    if (status === firstState) return createdAt ?? "";
+    if (status === "in-progress") return startedAt ?? updatedAt ?? "";
+    if (status === "done") return completedAt ?? updatedAt ?? "";
     return "";
   };
 
