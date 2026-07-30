@@ -36,19 +36,19 @@ function buildTransitions(
   backbone: string[],
   startedAt?: string,
   completedAt?: string,
-): { date: string; fromStatus: string; toStatus: string; title: string; description: string; inferred: boolean }[] {
+): { date: string; fromStatus: string; toStatus: string; inferred: boolean }[] {
   if (statusLog.length > 0) {
-    return statusLog.map((e) => ({ date: e.date, fromStatus: e.fromStatus, toStatus: e.toStatus, title: e.title, description: e.description, inferred: false }));
+    return statusLog.map((e) => ({ date: e.date, fromStatus: e.fromStatus, toStatus: e.toStatus, inferred: false }));
   }
   // Infer from backbone.
   const idx = backbone.indexOf(currentStatus);
   if (idx < 0) return [];
-  const out: { date: string; fromStatus: string; toStatus: string; title: string; description: string; inferred: boolean }[] = [];
+  const out: { date: string; fromStatus: string; toStatus: string; inferred: boolean }[] = [];
   for (let i = 1; i <= idx; i++) {
     const from = backbone[i - 1]!;
     const to = backbone[i]!;
     const date = to === "in-progress" ? (startedAt ?? "") : to === "done" ? (completedAt ?? "") : "";
-    out.push({ date, fromStatus: from, toStatus: to, title: `→ ${prettyStatus(to)}`, description: "", inferred: true });
+    out.push({ date, fromStatus: from, toStatus: to, inferred: true });
   }
   return out;
 }
@@ -81,16 +81,11 @@ export function StatusHistoryAccordion({ statusLog, currentStatus, backbone, sta
           <p className="text-sm text-[var(--text-muted)] italic">No status changes recorded.</p>
         ) : (
           transitions.map((entry, i) => (
-            <div key={i} className="grid gap-0.5 text-sm">
-              <div className="flex flex-wrap items-center gap-2 text-[var(--text)]">
-                <span className="text-xs font-mono text-[var(--text-subtle)]">{formatCompactDate(entry.date)}</span>
-                <span className="font-semibold text-[var(--text-muted)]">{prettyStatus(entry.fromStatus)}</span>
-                <span className="text-[var(--text-subtle)]">→</span>
-                <span className="font-semibold text-[var(--text)]">{prettyStatus(entry.toStatus)}</span>
-                {entry.inferred ? <span className="text-[0.6rem] uppercase tracking-wider text-[var(--text-subtle)] border border-[var(--border)] rounded px-1 py-0.5">inferred</span> : null}
-              </div>
-              {entry.title ? <p className="font-semibold text-[var(--text)]">{entry.title}</p> : null}
-              {entry.description ? <p className="text-[var(--text-muted)] whitespace-pre-wrap">{entry.description}</p> : null}
+            <div key={i} className="text-sm flex flex-wrap items-center gap-2">
+              <span className="text-xs font-mono text-[var(--text-subtle)]">{formatCompactDate(entry.date)}</span>
+              <span className="font-semibold text-[var(--text-muted)]">{prettyStatus(entry.fromStatus)}</span>
+              <span className="text-[var(--text-subtle)]">→</span>
+              <span className="font-semibold text-[var(--text)]">{prettyStatus(entry.toStatus)}</span>
             </div>
           ))
         )}
