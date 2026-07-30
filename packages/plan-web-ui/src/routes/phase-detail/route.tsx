@@ -205,7 +205,7 @@ export function PhaseDetailRoute() {
           </details>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
-        <StatusHistoryAccordion statusLog={phase.statusLog ?? []} />
+        <StatusHistoryAccordion statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
       </Card>
 
       {handoffContent ? (

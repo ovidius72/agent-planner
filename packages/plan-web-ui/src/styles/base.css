@@ -497,26 +497,26 @@ textarea:disabled {
   transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .status-node-icon { width: 1rem; height: 1rem; }
-/* COMPLETED = filled with the step's own status color */
+/* COMPLETED = soft tint of the step's own status color (not solid), colored icon (muted) */
 .status-step--completed .status-node {
-  background: var(--step-color);
-  border: 2px solid var(--step-color);
-  color: #fff;
+  background: color-mix(in srgb, var(--step-color) 14%, var(--surface));
+  border: 2px solid color-mix(in srgb, var(--step-color) 45%, transparent);
+  color: color-mix(in srgb, var(--step-color) 70%, var(--text));
 }
-.status-step--completed .status-step-label { color: var(--step-color); }
-/* CURRENT = filled with step color + ring/glow */
+.status-step--completed .status-step-label { color: color-mix(in srgb, var(--step-color) 70%, var(--text)); }
+/* CURRENT = slightly stronger tint + ring (still soft) */
 .status-step--current .status-node {
-  background: var(--step-color);
+  background: color-mix(in srgb, var(--step-color) 22%, var(--surface));
   border: 2px solid var(--step-color);
-  color: #fff;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--step-color) 22%, transparent), 0 0 14px -2px var(--step-color);
+  color: color-mix(in srgb, var(--step-color) 85%, var(--text));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--step-color) 16%, transparent);
 }
 .status-step--current .status-step-label { color: var(--text); font-weight: 800; }
-/* PENDING = muted dashed outline, icon in step color (muted) */
+/* PENDING = muted dashed outline, icon in a faint step color */
 .status-step--pending .status-node {
   background: var(--surface);
   border: 2px dashed var(--border-strong);
-  color: color-mix(in srgb, var(--step-color) 55%, var(--text-subtle));
+  color: color-mix(in srgb, var(--step-color) 45%, var(--text-subtle));
 }
 .status-step--pending .status-step-label { color: var(--text-subtle); }
 /* Connector: line on the top row leading INTO this node (skipped for first). */
@@ -529,7 +529,7 @@ textarea:disabled {
   transform: translateY(-1px);
   z-index: 0;
 }
-.status-connector--traveled { background: var(--step-color); }
+.status-connector--traveled { background: color-mix(in srgb, var(--step-color) 50%, transparent); }
 .status-connector--pending { background: repeating-linear-gradient(90deg, var(--border-strong) 0 5px, transparent 5px 10px); }
 @media (max-width: 640px) {
   .status-step { min-width: 4.2rem; }

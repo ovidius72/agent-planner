@@ -123,7 +123,7 @@ export function FeatureDetailRoute() {
           </div>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
-        <StatusHistoryAccordion statusLog={feature.statusLog ?? []} />
+        <StatusHistoryAccordion statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
       </Card>
 
       <Card className="grid gap-5">

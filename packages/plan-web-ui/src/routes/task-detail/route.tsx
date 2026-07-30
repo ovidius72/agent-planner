@@ -124,7 +124,7 @@ export function TaskDetailRoute() {
         ) : (
           <p className="mt-4 text-sm text-[var(--text-muted)]">No notes</p>
         )}
-        <StatusHistoryAccordion statusLog={task.statusLog ?? []} />
+        <StatusHistoryAccordion statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} startedAt={task.startedAt} completedAt={task.completedAt} />
         {taskDecisions.length > 0 ? (
           <details className="group mt-4">
             <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
