@@ -145,7 +145,7 @@ server.registerTool("planner-export", {
   const fs = await import("node:fs/promises");
   await fs.writeFile(join(st.root, "EXPORT.md"), markdown, "utf-8");
 
-  return text(`Project export generated. Summary results:\n\n${markdown.slice(0, 1000)}${markdown.length > 1000 ? "... (full report in .planner/EXPORT.md)" : ""}`, { markdown });
+  return text(`Project export generated. Summary results:\n\n${markdown.slice(0, 1000)}${markdown.length > 1000 ? "... (full report in .planner/EXPORT.md)" : ""}`);
 });
 
 server.registerTool("planner-authorize-bypass", {
@@ -187,19 +187,43 @@ server.registerTool("planner-init", {
 });
 
 server.registerTool("planner-show", {
-  description: "Show the current planner overview.",
+  description: "Show a compact planner overview: project metadata, counts, and a one-line summary of each feature (F00x · shortId — name (status; N phases, M tasks)). Does NOT include full descriptions, phases, or tasks — use planner-feature-list / planner-phase-list / planner-task-list for discovery and planner-*-show for full detail of a single entity. Keeps the result small to avoid token overflow.",
 }, async () => {
   const st = await requireStore();
-  const plan = await st.loadAll();
-  return text([
-    `📋 ${plan.project.name}`,
-    `Description: ${plan.project.description || "(not set)"}`,
-    `Goal: ${plan.project.goal || "(not set)"}`,
-    `Features: ${plan.features.features.length}`,
-    `Phases: ${plan.phases.length}`,
-    `Tasks: ${plan.phases.reduce((total, phase) => total + phase.tasks.length, 0)}`,
-    `Updated: ${plan.manifest.updatedAt}`,
-  ].join("\n"), { plan });
+  const features = (await st.loadFeatures()).features;
+  const phases = await st.loadAllPhases();
+  const totalTasks = phases.reduce((total, phase) => total + phase.tasks.length, 0);
+  const project = await st.loadProject();
+  const manifest = await st.loadManifest();
+  const featureLines = features.map((feature) => {
+    const featurePhases = phases.filter((phase) => phase.featureId === feature.id);
+    const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
+    return `- ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} — ${feature.name} (${feature.status}; ${featurePhases.length} phases, ${taskCount} tasks)`;
+  });
+  const summary = [
+    `📋 ${project.name}`,
+    `Description: ${project.description || "(not set)"}`,
+    `Goal: ${project.goal || "(not set)"}`,
+    `Features: ${features.length}  |  Phases: ${phases.length}  |  Tasks: ${totalTasks}`,
+    `Updated: ${manifest.updatedAt || "(unknown)"}`,
+    "",
+    "Features:",
+    featureLines.join("\n") || "(none)",
+  ].join("\n");
+  // Compact structured overview (no full plan: avoids 1M+ char token overflow).
+  const overview = {
+    project: { name: project.name, description: project.description || null, goal: project.goal || null, updatedAt: manifest.updatedAt || null },
+    counts: { features: features.length, phases: phases.length, tasks: totalTasks },
+    features: features.map((feature) => ({
+      ref: formatFeatureRef(feature.number),
+      shortId: feature.shortId || null,
+      name: feature.name,
+      status: feature.status,
+      phases: phases.filter((p) => p.featureId === feature.id).length,
+      tasks: phases.filter((p) => p.featureId === feature.id).reduce((t, p) => t + p.tasks.length, 0),
+    })),
+  };
+  return text(summary, { overview });
 });
 
 server.registerTool("planner-repair", {
