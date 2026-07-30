@@ -15,6 +15,7 @@ import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
 import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
+import { CollapsibleSection } from "../../components/ui/collapsible-section";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
@@ -108,7 +109,11 @@ export function TaskDetailRoute() {
       <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} />
 
       <Card className="grid gap-4">
-        {task.description ? <FormattedText text={task.description} className="plan-description" /> : null}
+        {task.description ? (
+          <CollapsibleSection title="Description">
+            <FormattedText text={task.description} className="plan-description" />
+          </CollapsibleSection>
+        ) : null}
         {task.notes ? (
           <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
             <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">

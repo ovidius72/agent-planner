@@ -8,6 +8,7 @@ import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
 import { CopyableBadge, EntityBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
+import { CollapsibleSection } from "../../components/ui/collapsible-section";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
@@ -87,7 +88,11 @@ export function FeatureDetailRoute() {
           <StatusBadge status={feature.status} />
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
-        {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
+        {feature.description ? (
+          <CollapsibleSection title="Description">
+            <FormattedText text={feature.description} className="plan-description max-w-4xl" />
+          </CollapsibleSection>
+        ) : null}
         <div className="mt-4">
           <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
         </div>

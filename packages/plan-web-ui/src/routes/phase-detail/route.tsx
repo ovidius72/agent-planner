@@ -8,6 +8,7 @@ import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
 import { CopyableBadge, EntityBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
+import { CollapsibleSection } from "../../components/ui/collapsible-section";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
@@ -185,10 +186,9 @@ export function PhaseDetailRoute() {
         </div>
 
         {phase.description ? (
-          <div>
-            <span className="font-semibold text-[var(--text)]">Description:</span>
-            <FormattedText text={phase.description} className="plan-description mt-2" />
-          </div>
+          <CollapsibleSection title="Description">
+            <FormattedText text={phase.description} className="plan-description" />
+          </CollapsibleSection>
         ) : null}
         {phaseDecisions.length > 0 ? (
           <details className="group mt-4">
@@ -210,20 +210,23 @@ export function PhaseDetailRoute() {
 
       {handoffContent ? (
         <Card className="grid gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-bold text-[var(--text)]">Handoff</h2>
-            <button
-              type="button"
-              onClick={clearHandoff}
-              disabled={clearing}
-              className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-card)] disabled:opacity-60"
-            >
-              {clearing ? "Clearing…" : "Clear handoff"}
-            </button>
-          </div>
-          <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-5 py-5">
-            <FormattedText text={handoffContent} className="formatted-text max-w-none" />
-          </div>
+          <CollapsibleSection
+            title="Handoff"
+            actions={(
+              <button
+                type="button"
+                onClick={clearHandoff}
+                disabled={clearing}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-card)] disabled:opacity-60"
+              >
+                {clearing ? "Clearing…" : "Clear handoff"}
+              </button>
+            )}
+          >
+            <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-5 py-5">
+              <FormattedText text={handoffContent} className="formatted-text max-w-none" />
+            </div>
+          </CollapsibleSection>
         </Card>
       ) : null}
 
