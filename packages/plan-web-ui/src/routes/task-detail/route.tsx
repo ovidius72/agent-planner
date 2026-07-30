@@ -56,7 +56,7 @@ function ChecklistItemToggle({
         aria-label={`Toggle checklist item ${item.title}`}
       />
       <div className="min-w-0">
-        <span className="checklist-num">C{item.number}</span>{" "}
+        <span className="checklist-num">{item.number}</span>{" "}
         <span className={`text-sm ${optimisticChecked ? "text-[var(--text-muted)] line-through" : "font-medium text-[var(--text)]"}`}>
           {item.title}
         </span>

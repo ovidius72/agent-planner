@@ -456,54 +456,96 @@ textarea:disabled {
   }
   .status-card.status-card-future .status-card-icon { opacity: 0.6; }
 
-/* Compact status STEPPER (row of pills: [Planned] → [In Progress] → [Done]) */
+/* Horizontal status STEPPER: circle nodes connected by a line.
+   COMPLETED = green filled + check; CURRENT = status color + ring; PENDING = muted outline. */
 .status-stepper {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 0.6rem;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0.7rem 0.5rem 0.55rem;
+  border-radius: 0.7rem;
   background: color-mix(in srgb, var(--surface-elevated) 70%, transparent);
   border: 1px solid var(--border);
+  overflow-x: auto;
 }
-.status-stepper-arrow { opacity: 0.55; }
-.status-pill {
-  display: inline-flex;
+.status-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 9999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1.4;
-  white-space: nowrap;
-  border: 1px solid transparent;
+  gap: 0.35rem;
+  flex: 1 1 0;
+  min-width: 5.5rem;
 }
-.status-pill-icon { width: 0.82rem; height: 0.82rem; }
-/* REACHED = filled (solid status color, readable text) */
-.status-pill-reached.status-planned { background: var(--color-status-planned); color: #fff; }
-.status-pill-reached.status-in-progress { background: var(--color-status-in-progress); color: #fff; }
-.status-pill-reached.status-done { background: var(--color-status-done); color: #fff; }
-.status-pill-reached.status-blocked { background: var(--color-status-blocked); color: #fff; }
-.status-pill-reached.status-waiting { background: var(--color-status-waiting); color: #fff; }
-.status-pill-reached.status-deferred { background: var(--color-status-deferred); color: #fff; }
-.status-pill-reached.status-canceled { background: var(--color-status-canceled); color: #fff; }
-.status-pill-reached.status-rejected { background: var(--color-status-rejected); color: #fff; }
-.status-pill-reached.status-draft { background: var(--color-status-draft); color: #fff; }
-.status-pill-reached.status-discovery { background: var(--color-status-discovery); color: #fff; }
-/* PENDING = outlined (transparent, muted) */
-.status-pill-pending {
-  background: transparent;
-  border-color: var(--border-strong);
+.status-step-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+/* Node */
+.status-node {
+  position: relative;
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.status-node-icon { width: 1rem; height: 1rem; }
+/* COMPLETED */
+.status-step--completed .status-node {
+  background: var(--color-status-done);
+  border: 2px solid var(--color-status-done);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-done) 18%, transparent);
+}
+.status-step--completed .status-step-label { color: var(--color-status-done); }
+/* CURRENT — solid status color + ring + icon */
+.status-step--current .status-node {
+  background: var(--accent);
+  border: 2px solid var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 14px -2px var(--accent);
+}
+.status-step--current.status-in-progress .status-node { background: var(--color-status-in-progress); border-color: var(--color-status-in-progress); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-in-progress) 22%, transparent), 0 0 14px -2px var(--color-status-in-progress); }
+.status-step--current.status-blocked .status-node { background: var(--color-status-blocked); border-color: var(--color-status-blocked); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-blocked) 22%, transparent), 0 0 14px -2px var(--color-status-blocked); }
+.status-step--current.status-waiting .status-node { background: var(--color-status-waiting); border-color: var(--color-status-waiting); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-waiting) 22%, transparent), 0 0 14px -2px var(--color-status-waiting); }
+.status-step--current.status-deferred .status-node { background: var(--color-status-deferred); border-color: var(--color-status-deferred); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-deferred) 22%, transparent), 0 0 14px -2px var(--color-status-deferred); }
+.status-step--current.status-canceled .status-node { background: var(--color-status-canceled); border-color: var(--color-status-canceled); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-canceled) 22%, transparent), 0 0 14px -2px var(--color-status-canceled); }
+.status-step--current.status-rejected .status-node { background: var(--color-status-rejected); border-color: var(--color-status-rejected); box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-status-rejected) 22%, transparent), 0 0 14px -2px var(--color-status-rejected); }
+.status-step--current .status-step-label { color: var(--text); font-weight: 800; }
+/* PENDING — muted outline */
+.status-step--pending .status-node {
+  background: var(--surface);
+  border: 2px dashed var(--border-strong);
   color: var(--text-subtle);
 }
-/* CURRENT = ring highlight (on top of reached/pending) */
-.status-pill-current {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
-  border-color: var(--accent);
+.status-step--pending .status-step-label { color: var(--text-subtle); }
+/* Connector: line on the top row leading INTO this node (skipped for first). */
+.status-connector {
+  position: absolute;
+  top: 1rem;
+  left: calc(-50% + 1rem);
+  width: calc(100% - 2rem);
+  height: 2px;
+  transform: translateY(-1px);
+  z-index: 0;
 }
-.status-pill-current.status-pill-pending { color: var(--text); }
+.status-connector--traveled { background: var(--color-status-done); }
+.status-connector--pending { background: repeating-linear-gradient(90deg, var(--border-strong) 0 5px, transparent 5px 10px); }
+@media (max-width: 640px) {
+  .status-step { min-width: 4.2rem; }
+  .status-step-label { font-size: 0.62rem; }
+  .status-node { width: 1.7rem; height: 1.7rem; }
+  .status-node-icon { width: 0.85rem; height: 0.85rem; }
+  .status-connector { top: 0.85rem; left: calc(-50% + 0.85rem); width: calc(100% - 1.7rem); }
+}
 
 /* Per-task checklist item number badge (C1/C2/...) */
 .checklist-num {
