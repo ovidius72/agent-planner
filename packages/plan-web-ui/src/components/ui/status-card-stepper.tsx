@@ -49,76 +49,62 @@ const TERMINAL_NON_DONE = new Set(["canceled", "rejected"]);
 export interface StatusCardStepperProps {
   statusLog: StatusLogEntryLike[];
   currentStatus: string;
-  /** Canonical happy path (always shown). e.g. ["planned","in-progress","done"]. */
+  /** Canonical happy path, used to infer the next upcoming step. e.g. ["planned","in-progress","done"]. */
   backbone: string[];
 }
 
 /**
- * Horizontal status STEPPER: circle nodes connected by a line.
- *  - COMPLETED  = status reached and we've moved past it (or everything when the
- *                 task is done): solid GREEN node with a check, solid green connector.
- *  - CURRENT    = the active status (not done): solid node in its status color,
- *                 ring highlight, static status icon.
- *  - PENDING    = not yet reached: outlined muted node, dashed gray connector.
+ * Horizontal status STEPPER showing only the states the entity ACTUALLY
+ * traversed (from the statusLog), plus — when the current status is
+ * non-terminal — the immediate NEXT backbone step as an "upcoming" node.
  *
- * Intermediates (blocked, waiting, deferred, …) are inserted chronologically.
- * Terminal non-done (canceled/rejected) replace "done" when reached.
+ *  - COMPLETED  = a visited state we've moved past (or the current one when
+ *                 done/terminal): soft-tinted node with the status color.
+ *  - CURRENT    = the active non-terminal status: stronger tint + ring.
+ *  - PENDING    = the next upcoming backbone step (only one, only when
+ *                 non-terminal): muted dashed outline.
  *
- * When the statusLog is empty, "reached" is inferred from the backbone position
- * of currentStatus (everything up to and including it is reached) — so a "done"
- * task with no log still shows all steps completed.
+ * A phase that jumped Draft → Done shows only [Draft, Done], not the full
+ * backbone — untraversed intermediates are never displayed.
  */
 export function StatusCardStepper({ statusLog, currentStatus, backbone }: StatusCardStepperProps) {
-  // Build the chronological sequence of entered statuses.
-  const seq: string[] = [];
+  // Build the visited sequence (dedup consecutive).
+  const visited: string[] = [];
   if (statusLog.length === 0) {
-    seq.push(currentStatus);
-  } else {
-    const first = statusLog[0];
-    if (first) seq.push(first.fromStatus);
-    for (const entry of statusLog) seq.push(entry.toStatus);
-  }
-  const reached = new Set(seq);
-
-  // If the log is empty, infer reached from the backbone (passed-through stages).
-  if (statusLog.length === 0) {
+    // Infer visited from the backbone position of currentStatus.
     const idx = backbone.indexOf(currentStatus);
     if (idx >= 0) {
-      for (let i = 0; i <= idx; i++) reached.add(backbone[i]!);
+      for (let i = 0; i <= idx; i++) visited.push(backbone[i]!);
     } else {
-      reached.add(currentStatus);
+      visited.push(currentStatus);
+    }
+  } else {
+    const first = statusLog[0];
+    if (first) visited.push(first.fromStatus);
+    for (const entry of statusLog) {
+      if (visited[visited.length - 1] !== entry.toStatus) visited.push(entry.toStatus);
+    }
+  }
+  // Ensure the current status is the last visited entry.
+  if (visited[visited.length - 1] !== currentStatus) visited.push(currentStatus);
+  const visitedSet = new Set(visited);
+
+  const isTerminal = currentStatus === "done" || TERMINAL_NON_DONE.has(currentStatus);
+
+  // Append the immediate next backbone step as upcoming (only if non-terminal).
+  const display: string[] = [...visited];
+  if (!isTerminal) {
+    const idx = backbone.indexOf(currentStatus);
+    if (idx >= 0 && idx + 1 < backbone.length) {
+      const next = backbone[idx + 1]!;
+      if (!visitedSet.has(next)) display.push(next);
     }
   }
 
-  const hasTerminalNonDone = [...reached].some((s) => TERMINAL_NON_DONE.has(s));
-  const base = hasTerminalNonDone ? backbone.filter((s) => s !== "done") : [...backbone];
-
-  // Insert intermediates in chronological position.
-  const intermediates: string[] = [];
-  const seen = new Set<string>();
-  for (const s of seq) {
-    if (!base.includes(s) && !seen.has(s)) {
-      intermediates.push(s);
-      seen.add(s);
-    }
-  }
-  const display: string[] = [...base];
-  for (const inter of intermediates) {
-    const idx = seq.indexOf(inter);
-    const anchor = idx > 0 ? seq[idx - 1] : undefined;
-    const anchorIdx = anchor ? display.lastIndexOf(anchor) : -1;
-    if (anchorIdx >= 0) display.splice(anchorIdx + 1, 0, inter);
-    else display.unshift(inter);
-  }
-
-  const isDoneState = currentStatus === "done";
-
-  // Per-step phase: completed | current | pending.
   const phaseOf = (status: string): "completed" | "current" | "pending" => {
-    const isReached = reached.has(status);
-    if (isReached && (status !== currentStatus || isDoneState)) return "completed";
-    if (status === currentStatus && !isDoneState) return "current";
-    return "pending";
+    if (!visitedSet.has(status)) return "pending"; // upcoming next
+    if (status === currentStatus && !isTerminal) return "current";
+    return "completed";
   };
 
   const dateFor = (status: string): string => {
@@ -133,10 +119,10 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
       {display.map((status, idx) => {
         const phase = phaseOf(status);
         const Icon = STATUS_ICON[status] ?? Circle;
-        const isReached = reached.has(status);
+        const isReached = visitedSet.has(status);
         const date = dateFor(status);
         const title = date ? `${prettyStatus(status)} — ${formatCompactDate(date)}` : prettyStatus(status);
-        // Connector leading INTO this node (traveled if this step is reached).
+        // Connector leading INTO this node: traveled if this step was reached.
         const connectorState = idx === 0 ? null : isReached ? "traveled" : "pending";
         return (
           <li
@@ -153,6 +139,7 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
               <Icon className="status-node-icon" />
             </span>
             <span className="status-step-label">{prettyStatus(status)}</span>
+            {date ? <span className="status-step-date">{formatCompactDate(date)}</span> : null}
           </li>
         );
       })}
