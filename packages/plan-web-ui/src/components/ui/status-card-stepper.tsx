@@ -141,7 +141,7 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
         return (
           <li
             key={`${status}-${idx}`}
-            className={`status-step status-step--${phase} status-${status}`}
+            className={`status-step status-step--${phase}`}
             role="listitem"
             aria-current={phase === "current" ? "step" : undefined}
             style={{ "--step-color": `var(--color-status-${status})` } as CSSProperties}
