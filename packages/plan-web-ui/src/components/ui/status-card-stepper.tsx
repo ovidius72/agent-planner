@@ -1,7 +1,8 @@
 import {
-  Check, Circle, PlayCircle, OctagonAlert, PauseCircle, Ban, TimerReset,
+  Circle, PlayCircle, OctagonAlert, PauseCircle, Ban, TimerReset,
   CircleDashed, Search, ListTodo, CheckCircle2, MinusCircle,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 
 interface StatusLogEntryLike {
   id: string;
@@ -143,12 +144,13 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
             className={`status-step status-step--${phase} status-${status}`}
             role="listitem"
             aria-current={phase === "current" ? "step" : undefined}
+            style={{ "--step-color": `var(--color-status-${status})` } as CSSProperties}
           >
             {connectorState ? (
               <span className={`status-connector status-connector--${connectorState}`} aria-hidden="true" />
             ) : null}
             <span className="status-node" title={title}>
-              {phase === "completed" ? <Check className="status-node-icon" /> : <Icon className="status-node-icon" />}
+              <Icon className="status-node-icon" />
             </span>
             <span className="status-step-label">{prettyStatus(status)}</span>
           </li>
