@@ -18,6 +18,7 @@ import { FormattedText } from "../../components/ui/formatted-text";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
+import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { useShortcut } from "../../lib/shortcuts";
 import type { Feature, Phase, Task, ChecklistItem } from "../../lib/types";
 
@@ -104,6 +105,8 @@ export function TaskDetailRoute() {
         </div>
       </div>
 
+      <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} />
+
       <Card className="grid gap-4">
         {task.description ? <FormattedText text={task.description} className="plan-description" /> : null}
         {task.notes ? (
@@ -121,10 +124,7 @@ export function TaskDetailRoute() {
         ) : (
           <p className="mt-4 text-sm text-[var(--text-muted)]">No notes</p>
         )}
-        <div className="mt-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Status history</p>
-          <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} />
-        </div>
+        <StatusHistoryAccordion statusLog={task.statusLog ?? []} />
         {taskDecisions.length > 0 ? (
           <details className="group mt-4">
             <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">

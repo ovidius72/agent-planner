@@ -10,17 +10,25 @@ interface StatusLogEntryLike {
 }
 
 const STATUS_ICON: Record<string, typeof Circle> = {
-  "draft": CircleDashed,
-  "discovery": CircleDashed,
-  "planned": Circle,
+  draft: CircleDashed,
+  discovery: CircleDashed,
+  planned: Circle,
   "in-progress": Loader2,
-  "done": CheckCircle2,
-  "blocked": OctagonAlert,
-  "waiting": PauseCircle,
-  "deferred": TimerReset,
-  "canceled": Ban,
-  "rejected": Ban,
+  done: CheckCircle2,
+  blocked: OctagonAlert,
+  waiting: PauseCircle,
+  deferred: TimerReset,
+  canceled: Ban,
+  rejected: Ban,
 };
+
+function prettyStatus(status: string): string {
+  return status
+    .split(/[-\s]+/)
+    .filter(Boolean)
+    .map((w) => (w === "and" ? "and" : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
 
 function formatCompactDate(value: string | undefined): string {
   if (!value) return "";
@@ -31,44 +39,26 @@ function formatCompactDate(value: string | undefined): string {
   }
 }
 
-/** Terminal non-done statuses — when reached, the "done" card is dropped. */
 const TERMINAL_NON_DONE = new Set(["canceled", "rejected"]);
-
-function StatusCard({ status, date, reached, isCurrent }: { status: string; date?: string; reached: boolean; isCurrent: boolean }) {
-  const Icon = STATUS_ICON[status] ?? Circle;
-  const cls = `status-card status-${status} ${isCurrent ? "status-card-current" : ""} ${reached ? "status-card-reached" : "status-card-future"}`;
-  return (
-    <div className={cls} title={date ? `${status} — ${formatCompactDate(date)}` : status}>
-      <Icon className={`status-card-icon ${isCurrent && status === "in-progress" ? "animate-spin" : ""}`} />
-      <span className="status-card-label">{status}</span>
-      {reached && date ? (
-        <span className="status-card-time">{formatCompactDate(date)}</span>
-      ) : reached ? (
-        <span className="status-card-time status-card-time-initial">reached</span>
-      ) : (
-        <span className="status-card-time status-card-time-initial">pending</span>
-      )}
-    </div>
-  );
-}
 
 export interface StatusCardStepperProps {
   statusLog: StatusLogEntryLike[];
   currentStatus: string;
-  /** Canonical happy path to "done" (always shown). e.g. ["planned","in-progress","done"]. */
+  /** Canonical happy path (always shown). e.g. ["planned","in-progress","done"]. */
   backbone: string[];
 }
 
 /**
- * Always-expanded status stepper. Renders the canonical `backbone` path as a
- * row of cards (e.g. [planned] → [in-progress] → [done]); every card is always
- * visible. A card is FILLED (highlighted) once that state has been reached,
- * OUTLINED while pending/future. Intermediate visited statuses (blocked,
- * waiting, …) are inserted in chronological position. Terminal non-done
- * statuses (canceled/rejected) replace the "done" card when reached.
+ * Compact status STEPPER: a row of pills `[Planned] → [In Progress] → [Done]`.
+ * Each pill = icon + status label.
+ * - FILLED (solid) pill = status has been REACHED.
+ * - OUTLINED (empty) pill = status is PENDING (not yet reached).
+ * - The CURRENT status gets a ring.
+ * - Intermediate visited statuses (blocked, waiting, deferred, …) are inserted
+ *   in chronological position. Terminal non-done (canceled/rejected) replace
+ *   "done" when reached.
  */
 export function StatusCardStepper({ statusLog, currentStatus, backbone }: StatusCardStepperProps) {
-  // Visited sequence (chronological): initial fromStatus + each toStatus.
   const seq: string[] = [];
   if (statusLog.length === 0) {
     seq.push(currentStatus);
@@ -78,11 +68,10 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
     for (const entry of statusLog) seq.push(entry.toStatus);
   }
   const reached = new Set(seq);
-  // Drop "done" from the backbone if a terminal non-done was reached.
+
   const hasTerminalNonDone = [...reached].some((s) => TERMINAL_NON_DONE.has(s));
   const base = hasTerminalNonDone ? backbone.filter((s) => s !== "done") : [...backbone];
 
-  // Intermediates = visited statuses not in backbone, first-occurrence order.
   const intermediates: string[] = [];
   const seen = new Set<string>();
   for (const s of seq) {
@@ -92,8 +81,6 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
     }
   }
 
-  // Build display: backbone with each intermediate inserted after its anchor
-  // (the status immediately preceding its first occurrence in the log).
   const display: string[] = [...base];
   for (const inter of intermediates) {
     const idx = seq.indexOf(inter);
@@ -103,7 +90,6 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
     else display.unshift(inter);
   }
 
-  // Date when a status was entered: the toStatus entry date, else "".
   const dateFor = (status: string): string => {
     if (statusLog.length === 0) return "";
     if (status === statusLog[0]?.fromStatus) return statusLog[0]?.date ?? "";
@@ -112,14 +98,23 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone }: Status
   };
 
   return (
-    <div className="status-card-stepper">
+    <div className="status-stepper" role="list" aria-label="Status progress">
       {display.map((status, idx) => {
+        const Icon = STATUS_ICON[status] ?? Circle;
         const isReached = reached.has(status);
         const isCurrent = status === currentStatus;
+        const date = dateFor(status);
+        const cls = `status-pill ${isReached ? "status-pill-reached" : "status-pill-pending"} ${
+          isCurrent ? "status-pill-current" : ""
+        } status-${status}`;
+        const title = date ? `${prettyStatus(status)} — ${formatCompactDate(date)}` : prettyStatus(status);
         return (
-          <div key={`${status}-${idx}`} className="flex items-center gap-1.5 min-w-0">
-            {idx > 0 ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-subtle)]" /> : null}
-            <StatusCard status={status} date={dateFor(status)} reached={isReached} isCurrent={isCurrent} />
+          <div key={`${status}-${idx}`} className="flex items-center gap-1.5 min-w-0" role="listitem">
+            {idx > 0 ? <ChevronRight className="status-stepper-arrow h-3.5 w-3.5 shrink-0 text-[var(--text-subtle)]" /> : null}
+            <span className={cls} title={title} aria-current={isCurrent ? "step" : undefined}>
+              <Icon className={`status-pill-icon h-3.5 w-3.5 shrink-0 ${isCurrent && status === "in-progress" ? "animate-spin" : ""}`} />
+              {prettyStatus(status)}
+            </span>
           </div>
         );
       })}

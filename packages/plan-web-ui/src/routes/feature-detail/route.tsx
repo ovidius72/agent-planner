@@ -12,6 +12,7 @@ import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
+import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
@@ -88,7 +89,6 @@ export function FeatureDetailRoute() {
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
         {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
         <div className="mt-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Status history</p>
           <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -123,6 +123,7 @@ export function FeatureDetailRoute() {
           </div>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <StatusHistoryAccordion statusLog={feature.statusLog ?? []} />
       </Card>
 
       <Card className="grid gap-5">

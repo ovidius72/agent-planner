@@ -12,6 +12,7 @@ import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
+import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { clearPhaseHandoff } from "../../lib/api";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
@@ -106,10 +107,7 @@ export function PhaseDetailRoute() {
           {phase.title}
         </h2>
         {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
-        <div className="mt-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Status history</p>
-          <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "planned", "in-progress", "done"]} />
-        </div>
+        <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit phase</Button></Link>
           <Link to="tasks/new"><Button type="button" variant="primary" shortcut="create">Create task</Button></Link>
@@ -207,6 +205,7 @@ export function PhaseDetailRoute() {
           </details>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <StatusHistoryAccordion statusLog={phase.statusLog ?? []} />
       </Card>
 
       {handoffContent ? (

@@ -456,6 +456,55 @@ textarea:disabled {
   }
   .status-card.status-card-future .status-card-icon { opacity: 0.6; }
 
+/* Compact status STEPPER (row of pills: [Planned] → [In Progress] → [Done]) */
+.status-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--surface-elevated) 70%, transparent);
+  border: 1px solid var(--border);
+}
+.status-stepper-arrow { opacity: 0.55; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.status-pill-icon { width: 0.82rem; height: 0.82rem; }
+/* REACHED = filled (solid status color, readable text) */
+.status-pill-reached.status-planned { background: var(--color-status-planned); color: #fff; }
+.status-pill-reached.status-in-progress { background: var(--color-status-in-progress); color: #fff; }
+.status-pill-reached.status-done { background: var(--color-status-done); color: #fff; }
+.status-pill-reached.status-blocked { background: var(--color-status-blocked); color: #fff; }
+.status-pill-reached.status-waiting { background: var(--color-status-waiting); color: #fff; }
+.status-pill-reached.status-deferred { background: var(--color-status-deferred); color: #fff; }
+.status-pill-reached.status-canceled { background: var(--color-status-canceled); color: #fff; }
+.status-pill-reached.status-rejected { background: var(--color-status-rejected); color: #fff; }
+.status-pill-reached.status-draft { background: var(--color-status-draft); color: #fff; }
+.status-pill-reached.status-discovery { background: var(--color-status-discovery); color: #fff; }
+/* PENDING = outlined (transparent, muted) */
+.status-pill-pending {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-subtle);
+}
+/* CURRENT = ring highlight (on top of reached/pending) */
+.status-pill-current {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  border-color: var(--accent);
+}
+.status-pill-current.status-pill-pending { color: var(--text); }
+
 /* Per-task checklist item number badge (C1/C2/...) */
 .checklist-num {
   display: inline-flex;
