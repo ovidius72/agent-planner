@@ -164,7 +164,6 @@ export function TaskDetailRoute() {
         <div className="grid gap-3">
           <div>
             <h3 className="text-sm font-bold text-[var(--text)]">Steps ({checklist.length})</h3>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">Per-task checklist — agents tick steps via planner-task-checklist-toggle (C1/C2 or title), not by writing DONE in titles.</p>
           </div>
           {checklist.length ? (
             <div className="grid gap-2">
@@ -179,7 +178,7 @@ export function TaskDetailRoute() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-[var(--text-muted)] italic">No steps. Add implementation steps via <code className="text-[var(--text)]">/planner task update</code> (checklist) so they can be ticked individually.</p>
+            <p className="text-sm text-[var(--text-muted)] italic">No steps defined.</p>
           )}
         </div>
 
