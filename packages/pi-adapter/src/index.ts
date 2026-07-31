@@ -2928,10 +2928,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features;
+const resolvedFeature = features.find((feat) => formatFeatureRef(feat.number).toLowerCase() === params.featureId.trim().toLowerCase() || feat.shortId === params.featureId.trim() || feat.id === params.featureId.trim() || feat.name.toLowerCase() === params.featureId.trim().toLowerCase());
+      if (!resolvedFeature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
+      const featureId = resolvedFeature.id;
       let foundDoc: FeaturesDocument | undefined;
       try {
         foundDoc = await st.updateFeatures((doc) => {
-          const feature = doc.features.find((f) => f.id === params.featureId);
+          const feature = doc.features.find((f) => f.id === featureId);
           if (!feature) return doc; // not found: no-op, handled below
 
           if (params.name !== undefined) feature.name = params.name;
@@ -2962,7 +2966,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       } catch (e) {
         return { content: [{ type: "text", text: `Update failed: ${e}` }], details: {} };
       }
-      const feature = foundDoc?.features.find((f) => f.id === params.featureId);
+      const feature = foundDoc?.features.find((f) => f.id === featureId);
       if (!feature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
       await st.writeGenerated();
       return { content: [{ type: "text", text: `✅ Feature updated: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}` }], details: feature };
@@ -2980,21 +2984,22 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features;
+const resolvedFeature = features.find((feat) => formatFeatureRef(feat.number).toLowerCase() === params.featureId.trim().toLowerCase() || feat.shortId === params.featureId.trim() || feat.id === params.featureId.trim() || feat.name.toLowerCase() === params.featureId.trim().toLowerCase());
+      if (!resolvedFeature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
+      const featureId = resolvedFeature.id;
       let deleted = false;
       await st.updateFeatures((doc) => {
         const before = doc.features.length;
-        doc.features = doc.features.filter((f) => f.id !== params.featureId);
+        doc.features = doc.features.filter((f) => f.id !== featureId);
         if (doc.features.length !== before) deleted = true;
         return doc;
       });
-      if (!deleted) {
-        return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
-      }
 
       let cascadeCount = 0;
       if (params.cascade) {
         const phases = await st.loadAllPhases();
-        for (const phase of phases.filter((p) => p.featureId === params.featureId)) {
+        for (const phase of phases.filter((p) => p.featureId === featureId)) {
           await st.deletePhase(phase.id);
           cascadeCount += 1;
         }
@@ -3144,9 +3149,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const resolvedPhase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
+      if (!resolvedPhase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+      const phaseId = resolvedPhase.id;
       let phase: Phase;
       try {
-        phase = await st.loadPhase(params.phaseId);
+        phase = await st.loadPhase(phaseId);
       } catch {
         return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
       }
@@ -3198,18 +3207,22 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const resolvedPhase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
+      if (!resolvedPhase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+      const phaseId = resolvedPhase.id;
       let phase: Phase | undefined;
       try {
-        phase = await st.loadPhase(params.phaseId);
+        phase = await st.loadPhase(phaseId);
       } catch {
         return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
       }
-      await st.deletePhase(params.phaseId);
+      await st.deletePhase(phaseId);
       if (phase.featureId) {
         await st.updateFeatures((doc) => {
           const feature = doc.features.find((f) => f.id === phase!.featureId);
           if (feature) {
-            feature.phaseIds = feature.phaseIds.filter((pid) => pid !== params.phaseId);
+            feature.phaseIds = feature.phaseIds.filter((pid) => pid !== phaseId);
             feature.updatedAt = nowISO();
           }
           return doc;
@@ -3295,21 +3308,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      // Verify phase exists first (fast-fail before generating an id).
-      try {
-        await st.loadPhase(params.phaseId);
-      } catch {
-        return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
-      }
+      // Resolve the phase ref (accepts F00x/P00x, bare P00x, shortId, UUID, title).
+      const features = (await st.loadFeatures()).features;
+      const resolvedPhase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
+      if (!resolvedPhase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+      const phaseId = resolvedPhase.id;
       const shortName = clampSlug(params.shortName ?? params.title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
       const taskId = createTaskId();
       const shortId = createShortId(await st.assignedShortIds());
-      const priority = await st.nextPriority("task", params.phaseId);
+      const priority = await st.nextPriority("task", phaseId);
       const now = nowISO();
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
-      const existingPhase = await st.loadPhase(params.phaseId);
+      const existingPhase = await st.loadPhase(phaseId);
       const task: Task = {
-        id: taskId, phaseId: params.phaseId, number: await st.allocTaskNumber(), shortId, priority, shortName,
+        id: taskId, phaseId, number: await st.allocTaskNumber(), shortId, priority, shortName,
         title: params.title,
         status: initialStatus,
         description: params.description ?? "",
@@ -3328,7 +3340,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       };
       // Atomic read-modify-write on the phase file: serializes concurrent
       // task_create calls on the SAME phaseId (batch) so tasks don't get lost.
-      await st.updatePhase(params.phaseId, (phase) => {
+      await st.updatePhase(phaseId, (phase) => {
         phase.tasks.push(task);
         phase.taskIds.push(taskId);
         phase.updatedAt = now;
