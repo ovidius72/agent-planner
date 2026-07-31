@@ -84,14 +84,16 @@ import type { Task } from "./schema.js";
 // Extract optional feature/phase/task numbers from a composite ref.
 // Accepts 1+ digits so "t3" == "t003". Numbers are GLOBAL (post-migration).
 function parseTaskComposite(ref: string): { featureNum?: number | undefined; phaseNum?: number | undefined; taskNum?: number | undefined } {
-  const t = ref.match(/t0*(\d+)/);
-  const p = ref.match(/p0*(\d+)/);
-  const f = ref.match(/f0*(\d+)/);
-  return {
-    taskNum: t ? parseInt(t[1]!, 10) : undefined,
-    phaseNum: p ? parseInt(p[1]!, 10) : undefined,
-    featureNum: f ? parseInt(f[1]!, 10) : undefined,
-  };
+  // Anchored patterns only: composite refs (F00x/P00x/T00x, P00x(F00x)/T00x,
+  // P00x/T00x) and bare T00x. A 5-char shortId (e.g. "HT23X") or a title never
+  // matches these because they are anchored to the WHOLE string.
+  const composite = ref.match(/^f0*(\d+)\/p0*(\d+)\/t0*(\d+)$/);
+  if (composite) return { featureNum: parseInt(composite[1]!, 10), phaseNum: parseInt(composite[2]!, 10), taskNum: parseInt(composite[3]!, 10) };
+  const phaseTask = ref.match(/^p0*(\d+)(?:\(f0*(\d+)\))?\/t0*(\d+)$/);
+  if (phaseTask) return { phaseNum: parseInt(phaseTask[1]!, 10), featureNum: phaseTask[2] ? parseInt(phaseTask[2], 10) : undefined, taskNum: parseInt(phaseTask[3]!, 10) };
+  const bare = ref.match(/^t0*(\d+)$/);
+  if (bare) return { taskNum: parseInt(bare[1]!, 10) };
+  return {};
 }
 
 export function findTaskByRef(
@@ -106,6 +108,16 @@ export function findTaskByRef(
   for (const phase of phases) {
     const task = phase.tasks.find((t) => t.id.toLowerCase() === normalized);
     if (task) return { phase, task };
+  }
+
+  // 1b. ShortId (5-char) — check BEFORE composite so a shortId like "HT23X"
+  // or "T1234" is never misread as a numeric task ref (regexes are anchored now,
+  // but a 5-char ref can still look numeric). SHORT_ID_LENGTH is always 5.
+  if (normalized.length === 5) {
+    for (const phase of phases) {
+      const task = phase.tasks.find((t) => t.shortId && t.shortId.toLowerCase() === normalized);
+      if (task) return { phase, task };
+    }
   }
 
   // 2. Composite / short ref with a T segment

@@ -3366,14 +3366,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       // Find the phase hosting this task first.
-      const allPhases = await st.loadAllPhases();
-      const hostPhase = allPhases.find((p) => p.tasks.some((t) => t.id === params.taskId));
-      if (!hostPhase) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      const hostPhase = found.phase;
       const now = nowISO();
       let updatedTask: Task | undefined;
       try {
         const updatedPhase = await st.updatePhase(hostPhase.id, (phase) => {
-          const task = phase.tasks.find((t) => t.id === params.taskId);
+          const task = phase.tasks.find((t) => t.id === found.task.id);
           if (!task) return phase;
           if (params.title !== undefined) task.title = params.title;
           if (params.priority !== undefined) task.priority = params.priority;
@@ -3427,12 +3428,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const phases = await st.loadAllPhases();
-      const hostPhase = phases.find((p: Phase) => p.tasks.some((t: Task) => t.id === params.taskId));
-      if (!hostPhase) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      await st.updatePhase(hostPhase.id, (phase) => {
-        phase.tasks = phase.tasks.filter((t: Task) => t.id !== params.taskId);
-        phase.taskIds = phase.taskIds.filter((id: string) => id !== params.taskId);
+      const features = (await st.loadFeatures()).features;
+      const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      await st.updatePhase(found.phase.id, (phase) => {
+        phase.tasks = phase.tasks.filter((t: Task) => t.id !== found.task.id);
+        phase.taskIds = phase.taskIds.filter((id: string) => id !== found.task.id);
         phase.updatedAt = nowISO();
         return phase;
       });
@@ -3453,16 +3454,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const phases = await st.loadAllPhases();
-      const hostPhase = phases.find((p: Phase) => p.tasks.some((t: Task) => t.id === params.taskId));
-      const task = hostPhase?.tasks.find((t: Task) => t.id === params.taskId);
-      if (!task || !hostPhase) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      const task = found.task;
       if (task.status === "in-progress") return { content: [{ type: "text", text: `Task ${task.id} is already in-progress.` }], details: task };
       if (task.status === "done") return { content: [{ type: "text", text: `Task ${task.id} is done. Use task_update to reopen.` }], details: task };
       const now = nowISO();
       let startedTask: Task | undefined;
-      await st.updatePhase(hostPhase.id, (phase) => {
-        const t = phase.tasks.find((x) => x.id === params.taskId);
+      await st.updatePhase(found.phase.id, (phase) => {
+        const t = phase.tasks.find((x) => x.id === found.task.id);
         if (!t) return phase;
         applyTaskLifecycleDates(t, "in-progress", now);
         t.updatedAt = now;
@@ -3488,10 +3489,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const phases = await st.loadAllPhases();
-      const hostPhase = phases.find((p: Phase) => p.tasks.some((t: Task) => t.id === params.taskId));
-      const task = hostPhase?.tasks.find((t: Task) => t.id === params.taskId);
-      if (!task || !hostPhase) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      const task = found.task;
       if (task.status === "done") return { content: [{ type: "text", text: `Task ${task.id} is already done.` }], details: task };
       const unchecked = task.checklist.filter((item) => !item.checked);
       if (unchecked.length > 0 && !params.force) {
@@ -3502,8 +3503,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       const now = nowISO();
       let completedTask: Task | undefined;
-      await st.updatePhase(hostPhase.id, (phase) => {
-        const t = phase.tasks.find((x) => x.id === params.taskId);
+      await st.updatePhase(found.phase.id, (phase) => {
+        const t = phase.tasks.find((x) => x.id === found.task.id);
         if (!t) return phase;
         applyTaskLifecycleDates(t, "done", now);
         if (params.description_update) {
