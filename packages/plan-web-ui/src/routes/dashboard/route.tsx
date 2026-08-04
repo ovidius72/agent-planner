@@ -34,12 +34,12 @@ export function DashboardRoute() {
   return (
     <div className="grid grid-cols-1 gap-8">
       <Card className="grid grid-cols-1 gap-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-bold text-[var(--text)]">Project Goal</h2>
             {project.goal ? <FormattedText text={project.goal} className="mt-2 max-w-4xl" /> : <p className="mt-2 max-w-4xl text-sm text-[var(--text-muted)]">Add a project goal to define the main objective.</p>}
           </div>
-          <Button type="button" shortcut="edit" onClick={openEditProject} className="self-start">
+          <Button type="button" shortcut="edit" onClick={openEditProject} className="self-start md:self-center">
             <Pencil className="h-4 w-4" />
             Edit project
           </Button>

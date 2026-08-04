@@ -279,52 +279,51 @@ export function WorkTree({
           <p className="text-sm text-[var(--text-muted)]">Collapsible feature → phase → task tree. Click a feature or phase row to collapse/expand.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" onClick={() => tree.expandAll()}>
+          <Button type="button" variant="secondary" className="w-full sm:w-[12rem] justify-center" onClick={() => tree.expandAll()}>
             Expand all
           </Button>
-          <Button type="button" variant="secondary" onClick={() => tree.setTreeOpenMode("none")}>
+          <Button type="button" variant="secondary" className="w-full sm:w-[12rem] justify-center" onClick={() => tree.setTreeOpenMode("none")}>
             Collapse all
           </Button>
         </div>
       </div>
 
-      <div className="ap-search-sticky z-20" style={{ top: headerH }}>
-      <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
-      {tree.searchActive ? (
-        <p className="text-xs text-[var(--text-muted)]">
-          {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
-        </p>
-      ) : null}
-      <div className="grid grid-cols-1 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:rounded-[18px] sm:px-4 sm:py-3">
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+      <div className="ap-search-sticky z-20 grid gap-3" style={{ top: headerH }}>
+        <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
+        {tree.searchActive ? (
+          <p className="text-xs text-[var(--text-muted)]">
+            {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
+          </p>
+        ) : null}
+        <div className="grid grid-cols-2 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:grid-cols-3 sm:rounded-[18px] sm:px-4 sm:py-3 lg:grid-cols-5">
           <button
             type="button"
             onClick={() => tree.setHideDone((value) => !value)}
-            className={`status-chip transition ${tree.hideDone ? "status-done" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
+            className={`status-chip transition !h-11 !w-full !justify-center !px-4 !py-2 !text-sm ${tree.hideDone ? "status-done" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
           >
             Hide done
           </button>
           <button
             type="button"
             onClick={() => tree.setHidePlanned((value) => !value)}
-            className={`status-chip transition ${tree.hidePlanned ? "status-planned" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
+            className={`status-chip transition !h-11 !w-full !justify-center !px-4 !py-2 !text-sm ${tree.hidePlanned ? "status-planned" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
           >
             Hide planned
           </button>
           <button
             type="button"
             onClick={() => tree.setOnlyActiveBranches((value) => !value)}
-            className={`status-chip transition ${tree.onlyActiveBranches ? "status-in-progress" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
+            className={`status-chip transition !h-11 !w-full !justify-center !px-4 !py-2 !text-sm ${tree.onlyActiveBranches ? "status-in-progress" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
           >
             Only active
           </button>
-          <Button type="button" variant="secondary" className="!min-h-9 !px-3 !py-1 !text-xs sm:!min-h-11 sm:!px-4 sm:!py-2 sm:!text-sm" onClick={tree.resetFilters}>
+          <Button type="button" variant="secondary" className="!h-11 !w-full !justify-center !px-4 !py-2 !text-sm" onClick={tree.resetFilters}>
             Reset
           </Button>
           <Button
             type="button"
             variant="secondary"
-            className="!min-h-9 !px-3 !py-1 !text-xs sm:!min-h-11 sm:!px-4 sm:!py-2 sm:!text-sm"
+            className="!h-11 !w-full !justify-center !px-4 !py-2 !text-sm"
             disabled={repairing}
             onClick={async () => {
               setRepairing(true);
@@ -346,7 +345,6 @@ export function WorkTree({
           </Button>
           {repairMsg ? <span className="hidden text-xs text-[var(--text-muted)] sm:inline sm:truncate">{repairMsg}</span> : null}
         </div>
-      </div>
       </div>
 
       <div className="grid gap-3">

@@ -69,8 +69,9 @@ export interface StatusCardStepperProps {
  *  - PENDING    = the next upcoming backbone step (only one, only when
  *                 non-terminal): muted dashed outline.
  *
- * A phase that jumped Draft → Done shows only [Draft, Done], not the full
- * backbone — untraversed intermediates are never displayed.
+ * When statusLog is empty, the stepper only shows statuses that have an
+ * actual lifecycle timestamp (plus the current status), so phantom backbone
+ * states like Discovery / Planned do not appear.
  */
 export function StatusCardStepper({ statusLog, currentStatus, backbone, createdAt, updatedAt, startedAt, completedAt }: StatusCardStepperProps) {
   // Build the visited sequence (dedup consecutive).
@@ -96,22 +97,6 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone, createdA
 
   const isTerminal = currentStatus === "done" || TERMINAL_NON_DONE.has(currentStatus);
 
-  // Append the immediate next backbone step as upcoming (only if non-terminal).
-  const display: string[] = [...visited];
-  if (!isTerminal) {
-    const idx = backbone.indexOf(currentStatus);
-    if (idx >= 0 && idx + 1 < backbone.length) {
-      const next = backbone[idx + 1]!;
-      if (!visitedSet.has(next)) display.push(next);
-    }
-  }
-
-  const phaseOf = (status: string): "completed" | "current" | "pending" => {
-    if (!visitedSet.has(status)) return "pending"; // upcoming next
-    if (status === currentStatus && !isTerminal) return "current";
-    return "completed";
-  };
-
   const dateFor = (status: string): string => {
     if (statusLog.length > 0) {
       if (status === statusLog[0]?.fromStatus) return statusLog[0]?.date ?? "";
@@ -126,9 +111,29 @@ export function StatusCardStepper({ statusLog, currentStatus, backbone, createdA
     return "";
   };
 
+  // Append the immediate next backbone step as upcoming (only if non-terminal).
+  const display: string[] = [...visited];
+  if (!isTerminal) {
+    const idx = backbone.indexOf(currentStatus);
+    if (idx >= 0 && idx + 1 < backbone.length) {
+      const next = backbone[idx + 1]!;
+      if (!visitedSet.has(next)) display.push(next);
+    }
+  }
+
+  const visibleDisplay = statusLog.length === 0
+    ? display.filter((status, idx) => idx === 0 || status === currentStatus || Boolean(dateFor(status)))
+    : display;
+
+  const phaseOf = (status: string): "completed" | "current" | "pending" => {
+    if (!visitedSet.has(status)) return "pending"; // upcoming next
+    if (status === currentStatus && !isTerminal) return "current";
+    return "completed";
+  };
+
   return (
     <ol className="status-stepper" role="list" aria-label="Status progress">
-      {display.map((status, idx) => {
+      {visibleDisplay.map((status, idx) => {
         const phase = phaseOf(status);
         const Icon = STATUS_ICON[status] ?? Circle;
         const isReached = visitedSet.has(status);
