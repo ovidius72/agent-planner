@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { EntityPathBadge } from "../ui/badges";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
-import { formatSequence, recentHighlightDurationMs, type WorkTreeFeature } from "../../lib/dashboard-tree";
+import { formatSequence, type WorkTreeFeature } from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
