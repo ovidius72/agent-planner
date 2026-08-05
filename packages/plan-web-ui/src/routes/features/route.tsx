@@ -12,30 +12,31 @@ import { featureStatuses } from "../../lib/statuses";
 import type { Feature, Phase } from "../../lib/types";
 
 function buildCounts(phases: Phase[]) {
-  const phasesByFeature = new Map<string, number>();
-  const tasksByFeature = new Map<string, number>();
-  const phaseSummaryByFeature = new Map<string, ReturnType<typeof createEmptyStatusSummary>>();
-  const taskSummaryByFeature = new Map<string, ReturnType<typeof createEmptyStatusSummary>>();
-  const grouped = new Map<string, Phase[]>();
+  const phasesByFeature = new Map<string, Phase[]>();
 
   for (const phase of phases) {
     if (!phase.featureId) continue;
-    grouped.set(phase.featureId, [...(grouped.get(phase.featureId) ?? []), phase]);
+    phasesByFeature.set(phase.featureId, [...(phasesByFeature.get(phase.featureId) ?? []), phase]);
   }
 
-  for (const [featureId, featurePhases] of grouped) {
-    phasesByFeature.set(featureId, featurePhases.length);
-    tasksByFeature.set(featureId, featurePhases.reduce((total, phase) => total + phase.tasks.length, 0));
+  const phasesCountByFeature = new Map<string, number>();
+  const tasksCountByFeature = new Map<string, number>();
+  const phaseSummaryByFeature = new Map<string, ReturnType<typeof createEmptyStatusSummary>>();
+  const taskSummaryByFeature = new Map<string, ReturnType<typeof createEmptyStatusSummary>>();
+
+  for (const [featureId, featurePhases] of phasesByFeature) {
+    phasesCountByFeature.set(featureId, featurePhases.length);
+    tasksCountByFeature.set(featureId, featurePhases.reduce((total, phase) => total + phase.tasks.length, 0));
     phaseSummaryByFeature.set(featureId, summarizePhaseStatuses(featurePhases));
     taskSummaryByFeature.set(featureId, summarizeTaskStatuses(featurePhases.flatMap((phase) => phase.tasks)));
   }
 
-  return { phasesByFeature, tasksByFeature, phaseSummaryByFeature, taskSummaryByFeature };
+  return { phasesByFeature, phasesCountByFeature, tasksCountByFeature, phaseSummaryByFeature, taskSummaryByFeature };
 }
 
 export function FeaturesRoute() {
   const { features, phases } = useLoaderData() as { features: Feature[]; phases: Phase[] };
-  const { phasesByFeature, tasksByFeature, phaseSummaryByFeature, taskSummaryByFeature } = buildCounts(phases);
+  const { phasesByFeature, phasesCountByFeature, tasksCountByFeature, phaseSummaryByFeature, taskSummaryByFeature } = buildCounts(phases);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
@@ -80,8 +81,9 @@ export function FeaturesRoute() {
             <FeatureRow
               key={feature.id}
               feature={feature}
-              phasesCount={phasesByFeature.get(feature.id) ?? 0}
-              tasksCount={tasksByFeature.get(feature.id) ?? 0}
+              phases={phasesByFeature.get(feature.id)}
+              phasesCount={phasesCountByFeature.get(feature.id) ?? 0}
+              tasksCount={tasksCountByFeature.get(feature.id) ?? 0}
               phaseSummary={phaseSummaryByFeature.get(feature.id) ?? createEmptyStatusSummary()}
               taskSummary={taskSummaryByFeature.get(feature.id) ?? createEmptyStatusSummary()}
             />

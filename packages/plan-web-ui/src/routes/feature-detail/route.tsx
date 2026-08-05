@@ -7,17 +7,18 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority, formatTimeline } from "../../components/ui/detail-metadata";
-import { CopyableBadge, EntityBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
+import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
-import { StatusBadge } from "../../components/ui/status-badge";
+import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
+import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
 import type { Feature, Phase } from "../../lib/types";
 
 function countTasks(phases: Phase[]) {
@@ -52,6 +53,7 @@ export function FeatureDetailRoute() {
   const taskCount = countTasks(phases);
   const taskSummary = countTasksByStatus(phases);
   const currentPhase = findCurrentPhase(phases);
+  const featureDisplay = deriveFeatureDisplayFromPhases(phases);
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
@@ -86,7 +88,7 @@ export function FeatureDetailRoute() {
             <EntityPathBadge featureNum={feature.number} />
           </CopyableBadge>
           {feature.shortId ? <ShortIdBadge shortId={feature.shortId} /> : null}
-          <StatusBadge status={feature.status} />
+          <DisplayStatusBadge status={featureDisplay.displayStatus} breakdown={featureDisplay.breakdown} />
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
         {feature.description ? (

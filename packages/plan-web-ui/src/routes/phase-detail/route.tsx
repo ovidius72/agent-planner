@@ -12,13 +12,14 @@ import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
-import { StatusBadge } from "../../components/ui/status-badge";
+import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { clearPhaseHandoff } from "../../lib/api";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { taskStatuses } from "../../lib/statuses";
+import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
 import type { Feature, Phase } from "../../lib/types";
 
 function summarizeTasks(phase: Phase) {
@@ -43,6 +44,7 @@ export function PhaseDetailRoute() {
   const acceptedDecisions = phase.acceptedDecisions ?? [];
   const linkedRequirements = phase.linkedRequirements ?? [];
   const taskSummary = summarizeTasks(phase);
+  const phaseDisplay = derivePhaseDisplayFromTasks(phase.tasks);
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
@@ -104,7 +106,7 @@ export function PhaseDetailRoute() {
           </CopyableBadge>
           {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
           {handoffContent ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
-          <StatusBadge status={phase.status} />
+          <DisplayStatusBadge status={phaseDisplay.displayStatus} breakdown={phaseDisplay.breakdown} />
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
           {phase.title}

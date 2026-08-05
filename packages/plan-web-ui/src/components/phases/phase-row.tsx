@@ -2,9 +2,10 @@ import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Form, Link, useFetcher } from "react-router-dom";
 import { phaseStatuses } from "../../lib/statuses";
 import { formatStatusSummary, summarizeTaskStatuses } from "../../lib/status-summary";
+import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
 import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
-import { StatusBadge } from "../ui/status-badge";
+import { DisplayStatusBadge } from "../ui/status-badge";
 import { EntityBadge, HandoffBadge, ParentBadge } from "../ui/badges";
 
 export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
@@ -15,6 +16,7 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
   const isUpdatingStatus = statusFetcher.state !== "idle";
   const isDeleting = deleteFetcher.state !== "idle";
   const taskStatusText = formatStatusSummary(summarizeTaskStatuses(phase.tasks));
+  const display = derivePhaseDisplayFromTasks(phase.tasks);
 
   return (
     <div className="surface-card px-4 py-2">
@@ -25,7 +27,7 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
               <EntityBadge type="phase" number={phase.number} />
               <ParentBadge type="phase" featureNum={feature.number} />
               {phase.handoff ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
-              <span className="shrink-0"><StatusBadge status={status} /></span>
+              <span className="shrink-0"><DisplayStatusBadge status={display.displayStatus} breakdown={display.breakdown} /></span>
             </div>
             <Link to={`/features/${featureId}/phases/${phase.id}`} className="entity-link--phase min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline lg:w-auto lg:truncate">
               {phase.title}

@@ -4,7 +4,7 @@
  * Node-only planner code.
  */
 
-import type { TaskStatus, PhaseStatus } from "./types";
+import type { TaskStatus, PhaseStatus, Task, Phase } from "./types";
 
 export type WorkflowStatus =
   | "planned"
@@ -131,4 +131,14 @@ export function derivePhaseDisplay(tasks: { status: TaskStatus }[]): ParentDispl
 export function deriveFeatureDisplay(phases: { status: PhaseStatus }[]): ParentDisplay {
   const statuses = phases.map((p) => fromCanonicalStatus(p.status));
   return deriveParentDisplay(statuses);
+}
+
+/** Derive display status for a feature from full Phase objects (convenience). */
+export function deriveFeatureDisplayFromPhases(phases: Phase[]): ParentDisplay {
+  return deriveFeatureDisplay(phases);
+}
+
+/** Derive display status for a phase from full Task objects (convenience). */
+export function derivePhaseDisplayFromTasks(tasks: Task[]): ParentDisplay {
+  return derivePhaseDisplay(tasks);
 }

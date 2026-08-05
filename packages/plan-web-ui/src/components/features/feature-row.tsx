@@ -2,9 +2,10 @@ import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Form, Link, useFetcher } from "react-router-dom";
 import { featureStatuses } from "../../lib/statuses";
 import { formatStatusSummary, type StatusSummary } from "../../lib/status-summary";
-import type { Feature } from "../../lib/types";
+import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
+import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
-import { StatusBadge } from "../ui/status-badge";
+import { DisplayStatusBadge } from "../ui/status-badge";
 import { EntityBadge } from "../ui/badges";
 
 export interface FeatureActivitySummary {
@@ -17,6 +18,7 @@ export interface FeatureActivitySummary {
 
 export function FeatureRow({
   feature,
+  phases,
   phasesCount,
   tasksCount,
   phaseSummary,
@@ -24,6 +26,7 @@ export function FeatureRow({
   activity,
 }: {
   feature: Feature;
+  phases?: Phase[] | undefined;
   phasesCount: number;
   tasksCount: number;
   phaseSummary: StatusSummary;
@@ -38,6 +41,7 @@ export function FeatureRow({
   const isDeleting = deleteFetcher.state !== "idle";
   const phaseStatusText = formatStatusSummary(phaseSummary);
   const taskStatusText = formatStatusSummary(taskSummary);
+  const display = deriveFeatureDisplayFromPhases(phases ?? []);
 
   const shortDescription = feature.description || (activity
     ? `${activity.doneTasks}/${tasksCount} done · ${activity.remainingTasks} left${activity.blockedTasks ? ` · ${activity.blockedTasks} blocked` : ""}`
@@ -50,7 +54,7 @@ export function FeatureRow({
           <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
             <div className="flex items-center gap-2">
               <EntityBadge type="feature" number={feature.number} />
-              <span className="shrink-0"><StatusBadge status={status} /></span>
+              <span className="shrink-0"><DisplayStatusBadge status={display.displayStatus} breakdown={display.breakdown} /></span>
             </div>
             <Link to={`/features/${feature.id}`} className="entity-link--feature min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline lg:w-auto lg:truncate">
               {feature.name}
