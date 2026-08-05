@@ -6,9 +6,10 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
+import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
 import { CopyableBadge, EntityBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
-import { CollapsibleSection } from "../../components/ui/collapsible-section";
+import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
@@ -40,6 +41,7 @@ export function PhaseDetailRoute() {
   const { feature, phase } = useLoaderData() as { feature: Feature; phase: Phase };
   const phaseDecisions = phase.decisions ?? [];
   const acceptedDecisions = phase.acceptedDecisions ?? [];
+  const linkedRequirements = phase.linkedRequirements ?? [];
   const taskSummary = summarizeTasks(phase);
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
@@ -185,10 +187,50 @@ export function PhaseDetailRoute() {
           </CompactCard>
         </div>
 
+        <DetailMetadataGrid
+          items={[
+            { label: "Priority", value: formatPriority(phase.priority), visible: phase.priority > 0 },
+            { label: "Linked requirements", value: linkedRequirements.length, visible: linkedRequirements.length > 0, valueClassName: "text-2xl font-black" },
+            { label: "Risks", value: phase.risks.length, visible: phase.risks.length > 0, valueClassName: "text-2xl font-black" },
+            { label: "Open questions", value: phase.openQuestions.length, visible: phase.openQuestions.length > 0, valueClassName: "text-2xl font-black" },
+          ]}
+        />
+
+        {phase.notes ? (
+          <Accordion title="Notes" defaultOpen={false}>
+            <FormattedText text={phase.notes} className="plan-description" />
+          </Accordion>
+        ) : null}
+
+        <Accordion title="Linked requirements" count={linkedRequirements.length} defaultOpen={false}>
+          {linkedRequirements.length > 0 ? (
+            <div className="grid gap-3">
+              {linkedRequirements.map((requirement) => (
+                <div key={requirement.id} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusBadge status={requirement.status} />
+                        {requirement.macroTasks.length > 0 ? <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-subtle)]">{requirement.macroTasks.length} macro task{requirement.macroTasks.length === 1 ? "" : "s"}</span> : null}
+                      </div>
+                      <h3 className="mt-2 text-lg font-black tracking-tight text-[var(--text)] [overflow-wrap:anywhere]">{requirement.title}</h3>
+                      {requirement.description ? <p className="mt-2 text-sm text-[var(--text-muted)] [overflow-wrap:anywhere]">{requirement.description}</p> : null}
+                    </div>
+                    <Link to={`/requirements?q=${encodeURIComponent(requirement.title)}`} className="text-sm font-semibold text-[var(--accent)] hover:underline sm:shrink-0">
+                      Open in requirements →
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">No linked requirements yet.</p>
+          )}
+        </Accordion>
         {phase.description ? (
-          <CollapsibleSection title="Description">
+          <Accordion title="Description">
             <FormattedText text={phase.description} className="plan-description" />
-          </CollapsibleSection>
+          </Accordion>
         ) : null}
         {phaseDecisions.length > 0 ? (
           <details className="group mt-4">
@@ -210,7 +252,7 @@ export function PhaseDetailRoute() {
 
       {handoffContent ? (
         <Card className="grid gap-4">
-          <CollapsibleSection
+          <Accordion
             title="Handoff"
             actions={(
               <button
@@ -226,13 +268,13 @@ export function PhaseDetailRoute() {
             <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-5 py-5">
               <FormattedText text={handoffContent} className="formatted-text max-w-none" />
             </div>
-          </CollapsibleSection>
+          </Accordion>
         </Card>
       ) : null}
 
       <Card className="grid gap-5">
         <div>
-          <EntityBadge type="task" number={0} />
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks</p>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
             Filter this phase's tasks by name or status.
           </p>

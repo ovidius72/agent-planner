@@ -4,12 +4,12 @@
 Costruire la platform in modo incrementale, mantenendo il core indipendente dagli adapter e limitando il rischio durante lo sviluppo.
 
 ## Regola di processo obbligatoria
-Durante qualunque attività su questo progetto deve esistere una checklist aggiornata nel repository.
+Durante qualunque attività su questo progetto deve esistere uno stato planner aggiornato nel repository.
 
 Regole:
-- aggiornare la checklist mentre si lavora
-- segnare stato, blocchi e prossimi step
-- non considerare un'attività completa se la checklist non è stata aggiornata
+- aggiornare il planner mentre si lavora
+- segnare stato, blocchi e prossimi step nelle entità planner rilevanti
+- non considerare un'attività completa se il planner non è stato aggiornato
 
 ## Fase 0 — Foundation del repository
 Obiettivo:

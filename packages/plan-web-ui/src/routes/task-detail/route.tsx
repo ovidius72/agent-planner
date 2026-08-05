@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useRef } from "react";
 
 function formatDateTime(value: string): string {
@@ -13,9 +13,10 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
+import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
 import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
-import { CollapsibleSection } from "../../components/ui/collapsible-section";
+import { Accordion } from "../../components/ui/accordion";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
@@ -117,25 +118,15 @@ export function TaskDetailRoute() {
 
       <Card className="grid gap-4">
         {task.description ? (
-          <CollapsibleSection title="Description">
+          <Accordion title="Description">
             <FormattedText text={task.description} className="plan-description" />
-          </CollapsibleSection>
+          </Accordion>
         ) : null}
         {task.notes ? (
-          <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden">
-            <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">Notes</span>
-              </div>
-              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
-            </summary>
-            <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)]">
-              <FormattedText text={task.notes} />
-            </div>
-          </details>
-        ) : (
-          <p className="mt-4 text-sm text-[var(--text-muted)]">No notes</p>
-        )}
+          <Accordion title="Notes" defaultOpen={false}>
+            <FormattedText text={task.notes} />
+          </Accordion>
+        ) : null}
         <StatusHistoryAccordion statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} startedAt={task.startedAt} completedAt={task.completedAt} />
         {taskDecisions.length > 0 ? (
           <details className="group mt-4">
@@ -156,10 +147,17 @@ export function TaskDetailRoute() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Checklist items</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{checklist.length}</p></CompactCard>
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Subtasks</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{task.subtasks?.length ?? 0}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Started</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{task.startedAt ? formatDateTime(task.startedAt) : "—"}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Completed</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{task.completedAt ? formatDateTime(task.completedAt) : "—"}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{phase.title}</p></CompactCard>
         </div>
+
+        <DetailMetadataGrid
+          items={[
+            { label: "Priority", value: formatPriority(task.priority), visible: task.priority > 0 },
+            { label: "Short name", value: task.shortName, visible: Boolean(task.shortName) },
+            { label: "Started", value: formatDateTime(task.startedAt), visible: Boolean(task.startedAt) },
+            { label: "Completed", value: formatDateTime(task.completedAt), visible: Boolean(task.completedAt) },
+            { label: "Phase", value: phase.title },
+          ]}
+        />
 
         <div className="grid gap-3">
           <div>

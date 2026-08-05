@@ -3,6 +3,7 @@ import { Form, useNavigation, useRouteLoaderData } from "react-router-dom";
 import { ModalShell } from "../components/ui/modal-shell";
 import { ModalActions } from "../components/ui/modal-actions";
 import { Button } from "../components/ui/button";
+import { Accordion } from "../components/ui/accordion";
 import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
@@ -35,8 +36,12 @@ export function FeatureEditModalRoute() {
           </Select>
         </Field>
         <Field label="Priority"><Input type="number" name="priority" defaultValue={feature.priority ?? 0} min={0} /></Field>
-        <Field label="Work done"><Textarea name="workDone" defaultValue={feature.workDone} /></Field>
-        <Field label="Work remaining"><Textarea name="workRemaining" defaultValue={feature.workRemaining} /></Field>
+        <Accordion title="Planning notes" subtitle="Optional agent-maintained notes for progress tracking." defaultOpen={false} className="mt-0">
+          <div className="grid gap-4">
+            <Field label="Work done"><Textarea name="workDone" defaultValue={feature.workDone} /></Field>
+            <Field label="Work remaining"><Textarea name="workRemaining" defaultValue={feature.workRemaining} /></Field>
+          </div>
+        </Accordion>
         <ModalActions>
           <Button type="submit" variant="primary" disabled={submitting} shortcut="submit">{submitting ? "Saving…" : "Save feature"}</Button>
         </ModalActions>

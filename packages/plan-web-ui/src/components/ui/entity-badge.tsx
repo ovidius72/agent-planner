@@ -1,9 +1,10 @@
-import { GitBranch, Layers3, ListTodo } from "lucide-react";
+import { GitBranch, Layers3, ListTodo, ScrollText } from "lucide-react";
 
 const entityConfig = {
   feature: { label: "Feature", Icon: Layers3 },
   phase: { label: "Phase", Icon: GitBranch },
   task: { label: "Task", Icon: ListTodo },
+  requirement: { label: "Requirement", Icon: ScrollText },
 } as const;
 
 export function EntityBadge({ kind, label }: { kind: keyof typeof entityConfig; label?: string }) {

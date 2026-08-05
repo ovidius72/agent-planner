@@ -6,9 +6,10 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
+import { DetailMetadataGrid, formatPriority, formatTimeline } from "../../components/ui/detail-metadata";
 import { CopyableBadge, EntityBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
-import { CollapsibleSection } from "../../components/ui/collapsible-section";
+import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
@@ -89,9 +90,9 @@ export function FeatureDetailRoute() {
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
         {feature.description ? (
-          <CollapsibleSection title="Description">
+          <Accordion title="Description">
             <FormattedText text={feature.description} className="plan-description max-w-4xl" />
-          </CollapsibleSection>
+          </Accordion>
         ) : null}
         <div className="mt-4">
           <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} createdAt={feature.createdAt} updatedAt={feature.updatedAt} />
@@ -111,7 +112,7 @@ export function FeatureDetailRoute() {
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{phases.length}</p></CompactCard>
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{taskCount}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Window</p><p className="mt-2 text-sm font-semibold text-[var(--text)]">{feature.startDate || "Not set"} → {feature.endDate || "Not set"}</p></CompactCard>
+          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -121,11 +122,20 @@ export function FeatureDetailRoute() {
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Blocked</p><p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.blocked}</p></CompactCard>
         </div>
 
+        <DetailMetadataGrid
+          items={[
+            { label: "Priority", value: formatPriority(feature.priority), visible: feature.priority > 0 },
+            { label: "Timeline", value: formatTimeline(feature.startDate, feature.endDate), visible: Boolean(feature.startDate || feature.endDate) },
+          ]}
+        />
+
         {(feature.workDone || feature.workRemaining) ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {feature.workDone ? <div><span className="font-semibold text-[var(--text)]">Work done:</span><FormattedText text={feature.workDone} className="mt-2" /></div> : null}
-            {feature.workRemaining ? <div><span className="font-semibold text-[var(--text)]">Work remaining:</span><FormattedText text={feature.workRemaining} className="mt-2" /></div> : null}
-          </div>
+          <Accordion title="Planning notes" defaultOpen={false}>
+            <div className="grid gap-4 md:grid-cols-2">
+              {feature.workDone ? <div><span className="font-semibold text-[var(--text)]">Work done</span><FormattedText text={feature.workDone} className="mt-2" /></div> : null}
+              {feature.workRemaining ? <div><span className="font-semibold text-[var(--text)]">Work remaining</span><FormattedText text={feature.workRemaining} className="mt-2" /></div> : null}
+            </div>
+          </Accordion>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
         <StatusHistoryAccordion statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
@@ -133,8 +143,8 @@ export function FeatureDetailRoute() {
 
       <Card className="grid gap-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="mt-2 flex items-center gap-2">
-            <EntityBadge type="phase" number={0} />
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Filter this feature's phases by name or status.</p>
           </div>
           <Link to="phases/new"><Button type="button" variant="primary" shortcut="create">Create phase</Button></Link>

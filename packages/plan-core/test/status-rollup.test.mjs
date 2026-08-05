@@ -91,6 +91,18 @@ describe("status rollup — progress dominates; blocked only surfaces on zero pr
     assert.equal((await store.loadPhase(p.id)).status, "done");
   });
 
+  test("phase: done + deferred (no active work left) → deferred", async () => {
+    const { store, mkPhase, mkTask } = await setup();
+    const p = mkPhase(13);
+    await store.savePhase(p);
+    await store.updatePhase(p.id, (ph) => {
+      ph.tasks = [mkTask(ph.id, "done"), mkTask(ph.id, "deferred")];
+      return ph;
+    });
+    await store.syncStatuses();
+    assert.equal((await store.loadPhase(p.id)).status, "deferred");
+  });
+
   test("phase: planned + blocked (zero progress) → blocked (stall surfaces)", async () => {
     const { store, mkPhase, mkTask } = await setup();
     const p = mkPhase(5);
@@ -152,6 +164,19 @@ describe("status rollup — progress dominates; blocked only surfaces on zero pr
     await store.syncStatuses();
     const feat = (await store.loadFeatures()).features.find((f) => f.id === featId);
     assert.equal(feat.status, "done");
+  });
+
+  test("feature: one done phase + one deferred phase (no active work left) → deferred", async () => {
+    const { store, featId, mkPhase, mkTask } = await setup();
+    const a = mkPhase(14);
+    await store.savePhase(a);
+    await store.updatePhase(a.id, (ph) => { ph.tasks = [mkTask(ph.id, "done")]; return ph; });
+    const b = mkPhase(15);
+    await store.savePhase(b);
+    await store.updatePhase(b.id, (ph) => { ph.tasks = [mkTask(ph.id, "deferred")]; return ph; });
+    await store.syncStatuses();
+    const feat = (await store.loadFeatures()).features.find((f) => f.id === featId);
+    assert.equal(feat.status, "deferred");
   });
 
   test("feature: only a stalled (blocked) phase, zero progress → blocked (honest impediment)", async () => {

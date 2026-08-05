@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, Download, Home, Layers, Moon, ScrollText, Sun } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, Home, Layers, ListTodo, Moon, ScrollText, Sun } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { exportPlan } from "../../lib/api";
@@ -40,6 +40,7 @@ export function TopNav({
   const navItems = [
     { to: "/", label: "Dashboard", icon: Home },
     { to: "/features", label: "Features", icon: Layers },
+    { to: "/requirements", label: "Requirements", icon: ListTodo },
     { to: "/handoff", label: "Handoff", icon: ScrollText },
   ];
 
@@ -66,7 +67,7 @@ export function TopNav({
   }
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--surface-elevated)] backdrop-blur-xl backdrop-saturate-150">
+    <div className="relative z-20 overflow-visible border-b border-[var(--border)] bg-[var(--surface-elevated)] backdrop-blur-xl backdrop-saturate-150">
       <div className="page-container flex flex-col gap-3 py-2.5 md:flex-row md:items-center md:justify-between sm:gap-4 sm:py-3">
         <Link to="/" className="flex min-w-0 items-center gap-3">
           <div className="surface-card flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--accent)]">
@@ -124,7 +125,7 @@ export function TopNav({
             ))}
           </nav>
 
-          <div className="relative">
+          <div className="relative z-30">
             <button
               type="button"
               aria-haspopup="menu"
@@ -154,7 +155,7 @@ export function TopNav({
                     e.preventDefault();
                     items[next]?.focus();
                   }}
-                className="absolute right-0 z-[100] mt-2 min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl"
+                className="absolute right-0 top-full z-[200] mt-2 min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl"
               >
                 <button
                   type="button"

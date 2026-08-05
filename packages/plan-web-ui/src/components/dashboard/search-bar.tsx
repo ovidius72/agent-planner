@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { ElasticInput, type FieldConfig, type SuggestionItem, type ElasticInputAPI } from "elastic-input";
 import type { Feature, Phase } from "../../lib/types";
 
@@ -99,7 +99,11 @@ export function SearchBar({
   const apiRef = useRef<ElasticInputAPI | null>(null);
   const onKeyDown = useSearchKeyDown(apiRef);
 
-  const fields: FieldConfig[] = [
+  // STABLE references — ElasticInput has useEffect deps on `fields` and
+  // fetchSuggestions. If these are recreated every render, the effect fires on
+  // every keystroke, resetting the contentEditable. Memoize so they stay
+  // referentially identical across renders.
+  const fields: FieldConfig[] = useMemo(() => [
     { name: "feature", label: "Feature", type: "number", description: "Feature number, e.g. 1 (F001)" },
     { name: "phase", label: "Phase", type: "number", description: "Phase number, e.g. 2 (P002)" },
     { name: "task", label: "Task", type: "number", description: "Task number, e.g. 10 (T010). Comma-list supported." },
@@ -108,7 +112,7 @@ export function SearchBar({
     { name: "feature-status", label: "Feature status", type: "string", description: "Status of the feature" },
     { name: "phase-status", label: "Phase status", type: "string", description: "Status of the phase" },
     { name: "title", label: "Title", type: "string", description: "Substring match on title" },
-  ];
+  ], []);
 
   const data = useMemo(() => {
     const featureNums = [...new Set(features.map((f) => f.number))].sort((a, b) => a - b);
@@ -126,7 +130,7 @@ export function SearchBar({
     return { featureNums, phaseNums, taskNums, shortIds, titles };
   }, [features, phases]);
 
-  async function fetchSuggestions(field: string, partial: string): Promise<SuggestionItem[]> {
+  const fetchSuggestions = useCallback(async (field: string, partial: string): Promise<SuggestionItem[]> => {
     const p = partial.toLowerCase();
     if (field === "feature") {
       return data.featureNums.filter((n) => String(n).startsWith(partial)).slice(0, 20).map((n) => ({ text: String(n), label: `F${pad3(n)}` }));
@@ -147,20 +151,23 @@ export function SearchBar({
       return data.titles.filter((t) => t.toLowerCase().includes(p)).slice(0, 20).map((t) => ({ text: t, label: t.length > 44 ? t.slice(0, 44) + "…" : t }));
     }
     return [];
-  }
+  }, [data]);
+
+  const handleChange = useCallback((q: string) => onQuery(q), [onQuery]);
+  const inputRefCallback = useCallback((api: ElasticInputAPI | null) => {
+    apiRef.current = api;
+  }, []);
 
   return (
     <div className="search-bar">
       <ElasticInput
         fields={fields}
         value={query}
-        onChange={(q) => onQuery(q)}
-        onSearch={(q) => onQuery(q)}
+        onChange={handleChange}
+        onSearch={handleChange}
         fetchSuggestions={fetchSuggestions}
         onKeyDown={onKeyDown}
-        inputRef={(api) => {
-          apiRef.current = api;
-        }}
+        inputRef={inputRefCallback}
         placeholder="Search Work Tree… e.g. feature:1 id:UUXD1 title:auth status:in-progress"
       />
     </div>

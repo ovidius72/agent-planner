@@ -175,7 +175,9 @@ export const PhaseStatusLogEntrySchema = z.object({
 
 export const TaskSchema = z.object({
   id: z.string(),
-  phaseId: z.string(),
+  /** MUST be a phase UUID (not a ref like "P003"). Validated at the schema
+   *  layer so no adapter can persist an unresolved ref string. */
+  phaseId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "phaseId must be a UUID, not a ref string like P003"),
   /** Global project-wide task sequence (assigned once at creation from project.nextTaskNumber; stable, gaps on delete). Bare T00x is unambiguous. */
   number: z.number().int().nonnegative().default(0),
   shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),
@@ -213,7 +215,10 @@ export const HandoffHistoryEntrySchema = z.object({
 });
 export const PhaseSchema = z.object({
   id: z.string(),
-  featureId: z.string().optional(),
+  /** MUST be a feature UUID (not a ref like "F005"). Validated at the schema
+   *  layer so no adapter can persist an unresolved ref string. Optional only
+   *  for legacy pre-feature phases. */
+  featureId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "featureId must be a UUID, not a ref string like F005").optional(),
   /** Global project-wide phase sequence (assigned once at creation from project.nextPhaseNumber; stable, gaps on delete). Bare P00x is unambiguous. */
   number: z.number().int().positive(),
   shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),

@@ -247,6 +247,21 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(body);
   });
 
+  app.delete(route("/requirements/:id"), async (c) => {
+    const id = c.req.param("id");
+    let found = false;
+    const reqs = await store.updateRequirements((doc) => {
+      const next = doc.requirements.filter((requirement) => requirement.id !== id);
+      found = next.length !== doc.requirements.length;
+      return found ? { requirements: next } : doc;
+    });
+    if (!found) return c.json({ error: "not found" }, 404);
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "requirements-updated", data: reqs });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ deleted: id });
+  });
+
   // ── Features ─────────────────────────────────────────────────────
   app.get(route("/features"), async (c) => c.json((await store.loadFeatures()).features));
 
@@ -340,7 +355,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   // ── Phases ───────────────────────────────────────────────────────
   app.get(route("/phases"), async (c) => {
-    const allPhases = await store.loadAllPhases();
+    const allPhases = await store.loadAllPhasesWithRequirements();
     const featureId = c.req.query("featureId");
     if (featureId) return c.json(allPhases.filter((p) => p.featureId === featureId));
     return c.json(allPhases);
@@ -438,7 +453,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const id = c.req.param("id");
     if (!id) return c.json({ error: "id required" }, 400);
     try {
-      return c.json(await store.loadPhase(id));
+      return c.json(await store.loadPhaseWithRequirements(id));
     } catch {
       return c.json({ error: "phase not found" }, 404);
     }

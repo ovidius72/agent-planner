@@ -8,6 +8,7 @@ export async function action({ request }: { request: Request }) {
 
   await updateProject({
     ...current,
+    description: optionalString(formData, "description"),
     goal: optionalString(formData, "goal"),
   });
 

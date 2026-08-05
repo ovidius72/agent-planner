@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { Feature, HandoffSummary, Phase, PhaseHandoff, Project, Task } from "./types";
+import type { Feature, HandoffSummary, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -35,6 +35,7 @@ function normalizePhase(phase: Phase): Phase {
     completionCriteria: phase.completionCriteria ?? [],
     taskIds: phase.taskIds ?? [],
     tasks: (phase.tasks ?? []).map(normalizeTask),
+    linkedRequirements: phase.linkedRequirements ?? [],
     handoff: phase.handoff ?? "",
     handoffUpdatedAt: phase.handoffUpdatedAt ?? "",
   };
@@ -69,6 +70,15 @@ function normalizeProject(project: Project): Project {
       beforeTaskStart: project.workflowRules?.beforeTaskStart ?? [],
       afterPhaseComplete: project.workflowRules?.afterPhaseComplete ?? [],
     },
+  };
+}
+
+function normalizeRequirement(requirement: Requirement): Requirement {
+  return {
+    ...requirement,
+    description: requirement.description ?? "",
+    macroTasks: requirement.macroTasks ?? [],
+    linkedPhaseIds: requirement.linkedPhaseIds ?? [],
   };
 }
 
@@ -159,6 +169,37 @@ export async function updateFeature(feature: Feature): Promise<Feature> {
 
 export async function deleteFeature(featureId: string): Promise<{ deleted: string }> {
   return request(`/features/${featureId}`, { method: "DELETE" });
+}
+
+export async function getRequirements(): Promise<Requirement[]> {
+  return (await request<{ requirements: Requirement[] }>("/requirements")).requirements.map(normalizeRequirement);
+}
+
+export async function createRequirement(requirement: Pick<Requirement, "id" | "title" | "description" | "status" | "linkedPhaseIds">): Promise<Requirement> {
+  const now = new Date().toISOString();
+  return normalizeRequirement(await request("/requirements", {
+    method: "POST",
+    body: JSON.stringify({
+      ...requirement,
+      macroTasks: [],
+      createdAt: now,
+      updatedAt: now,
+    }),
+  }));
+}
+
+export async function updateRequirement(requirement: Requirement): Promise<Requirement> {
+  return normalizeRequirement(await request(`/requirements/${requirement.id}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      ...requirement,
+      updatedAt: new Date().toISOString(),
+    }),
+  }));
+}
+
+export async function deleteRequirement(requirementId: string): Promise<{ deleted: string }> {
+  return request(`/requirements/${requirementId}`, { method: "DELETE" });
 }
 
 export async function getPhases(featureId?: string): Promise<Phase[]> {

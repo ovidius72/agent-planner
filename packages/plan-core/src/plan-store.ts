@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CodebaseProfileSchema,
@@ -16,6 +16,7 @@ import {
   type Project,
   ProjectSchema,
   type RequirementsDocument,
+  type Requirement,
   RequirementsDocumentSchema,
   ResumeFocusSchema,
   ActivityLogSchema,
@@ -25,9 +26,35 @@ import {
   type ResumeFocus,
 } from "./schema.js";
 import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
+import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
 
 function nowISO(): string {
   return new Date().toISOString();
+}
+
+function resolveStoredFeatureId(
+  features: Array<Pick<Feature, "id" | "number" | "shortId" | "name">>,
+  ref?: string,
+): string | undefined {
+  const raw = ref?.trim();
+  if (!raw) return undefined;
+  const normalized = raw.toLowerCase();
+
+  const byId = features.find((feature) => feature.id.toLowerCase() === normalized);
+  if (byId) return byId.id;
+
+  const byNumber = normalized.match(/^f(\d+)$/)
+    ? features.find((feature) => feature.number === parseInt(normalized.slice(1), 10))
+    : undefined;
+  if (byNumber) return byNumber.id;
+
+  const byShortId = features.find((feature) => feature.shortId?.toLowerCase() === normalized);
+  if (byShortId) return byShortId.id;
+
+  const byExactName = features.find((feature) => feature.name.toLowerCase() === normalized);
+  if (byExactName) return byExactName.id;
+
+  return undefined;
 }
 
 export class PlanStoreError extends Error {
@@ -64,14 +91,53 @@ export function setWriteNotifyHook(hook: (() => void) | undefined): void {
   writeNotifyHook = hook;
 }
 
+const CROSS_PROCESS_LOCK_STALE_MS = 30_000;
+const CROSS_PROCESS_LOCK_RETRY_MS = 10;
+
+async function acquireCrossProcessLock(path: string): Promise<() => Promise<void>> {
+  const lockPath = `${path}.lock`;
+
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      return async () => {
+        await rm(lockPath, { recursive: true, force: true }).catch(() => {});
+      };
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err?.code !== "EEXIST") throw err;
+
+      try {
+        const info = await stat(lockPath);
+        if (Date.now() - info.mtimeMs > CROSS_PROCESS_LOCK_STALE_MS) {
+          await rm(lockPath, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        continue;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, CROSS_PROCESS_LOCK_RETRY_MS));
+    }
+  }
+}
+
 function withWriteLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
   const prev = writeLocks.get(path) ?? Promise.resolve();
   let release!: () => void;
   const next = new Promise<void>((resolve) => { release = resolve; });
-  writeLocks.set(path, prev.then(() => next));
-  return prev.then(fn).finally(() => {
+  const tail = prev.then(() => next);
+  writeLocks.set(path, tail);
+  return prev.then(async () => {
+    const releaseCrossProcess = await acquireCrossProcessLock(path);
+    try {
+      return await fn();
+    } finally {
+      await releaseCrossProcess();
+    }
+  }).finally(() => {
     release();
-    if (writeLocks.get(path) === prev.then(() => next)) writeLocks.delete(path);
+    if (writeLocks.get(path) === tail) writeLocks.delete(path);
   });
 }
 
@@ -79,10 +145,11 @@ export function withFeatureLock<T>(featureId: string, fn: () => Promise<T>): Pro
   const prev = featureLocks.get(featureId) ?? Promise.resolve();
   let release!: () => void;
   const next = new Promise<void>((resolve) => { release = resolve; });
-  featureLocks.set(featureId, prev.then(() => next));
+  const tail = prev.then(() => next);
+  featureLocks.set(featureId, tail);
   return prev.then(fn).finally(() => {
     release();
-    if (featureLocks.get(featureId) === prev.then(() => next)) featureLocks.delete(featureId);
+    if (featureLocks.get(featureId) === tail) featureLocks.delete(featureId);
   });
 }
 
@@ -149,6 +216,19 @@ export interface PhaseHandoffSummary {
   /** Full handoff content (phase.handoff) — lets the /handoff viewer render
    *  inline without a per-phase fetch. */
   content: string;
+}
+
+/** Summary of a phase file that exists on disk but no longer resolves to a
+ *  valid owning feature. Missing back-links alone do NOT make a phase orphan:
+ *  if `phase.featureId` still resolves to a known feature, repair can relink
+ *  it. */
+export interface OrphanPhaseSummary {
+  phaseId: string;
+  featureId?: string | undefined;
+  shortId?: string | undefined;
+  compositeRef: string;
+  title: string;
+  reason: string;
 }
 
 /** Extract the first meaningful line of a handoff: skip blank lines, strip a
@@ -429,7 +509,13 @@ export class PlanStore {
     const orphanPhases: Phase[] = [];
 
     for (const phase of phases) {
-      if (phase.featureId) {
+      const resolvedFeatureId = resolveStoredFeatureId(featuresDoc.features, phase.featureId);
+      if (resolvedFeatureId && resolvedFeatureId !== phase.featureId) {
+        phase.featureId = resolvedFeatureId;
+        changed = true;
+      }
+
+      if (phase.featureId && featuresDoc.features.some((feature) => feature.id === phase.featureId)) {
         const bucket = phasesByFeature.get(phase.featureId) ?? [];
         bucket.push(phase);
         phasesByFeature.set(phase.featureId, bucket);
@@ -721,15 +807,43 @@ export class PlanStore {
    * The counter never reuses a number — deletions leave gaps (by design:
    * stable references survive deletion).
    */
-  async allocFeatureNumber(): Promise<number> { return this.allocSeqNumber("nextFeatureNumber"); }
-  async allocPhaseNumber(): Promise<number> { return this.allocSeqNumber("nextPhaseNumber"); }
-  async allocTaskNumber(): Promise<number> { return this.allocSeqNumber("nextTaskNumber"); }
-  private async allocSeqNumber(key: "nextFeatureNumber" | "nextPhaseNumber" | "nextTaskNumber"): Promise<number> {
-    const project = await this.loadProject();
-    const n = project[key];
-    project[key] = n + 1;
-    await this.saveProject(project);
-    return n;
+  async allocFeatureNumber(): Promise<number> { return this.allocSeqNumber("nextFeatureNumber", "feature"); }
+  async allocPhaseNumber(): Promise<number> { return this.allocSeqNumber("nextPhaseNumber", "phase"); }
+  async allocTaskNumber(): Promise<number> { return this.allocSeqNumber("nextTaskNumber", "task"); }
+  /** Allocate a globally-unique sequence number. `atomicUpdateJson` already
+   *  serializes concurrent calls via `withWriteLock` on the project file, so
+   *  the read-modify-write is race-free in-process. The collision guard
+   *  additionally skips any candidate that already exists in the data (safety
+   *  net for cross-process races or manual edits) and persists the corrected
+   *  counter. */
+  private async allocSeqNumber(
+    key: "nextFeatureNumber" | "nextPhaseNumber" | "nextTaskNumber",
+    kind: "feature" | "phase" | "task",
+  ): Promise<number> {
+    // Load already-used numbers for this kind (best-effort read; the
+    // atomicUpdateJson below is the authoritative write).
+    const used = new Set<number>();
+    if (kind === "task") {
+      const phases = await this.loadAllPhases();
+      for (const p of phases) for (const t of p.tasks) used.add(t.number);
+    } else if (kind === "phase") {
+      const phases = await this.loadAllPhases();
+      for (const p of phases) used.add(p.number);
+    } else {
+      const feats = await this.loadRawFeatures();
+      for (const f of feats) used.add(f.number);
+    }
+
+    let allocated = 0;
+    await this.updateProject((project) => {
+      let candidate = project[key];
+      // Collision guard: skip any candidate that already exists.
+      while (used.has(candidate)) candidate++;
+      allocated = candidate;
+      project[key] = candidate + 1;
+      return project;
+    });
+    return allocated;
   }
 
 
@@ -784,7 +898,7 @@ export class PlanStore {
     const raws = await this.loadRawFeatures();
     const phases = await this.loadAllPhases();
     const features: Feature[] = raws.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
-    return this.normalizeFeaturesDocument({ features }).doc;
+    return this.normalizeStructureSnapshot({ features }, phases).features;
   }
 
   async loadCodebaseProfile(): Promise<CodebaseProfile | null> {
@@ -920,6 +1034,30 @@ export class PlanStore {
     }
   }
 
+  async linkedRequirementsForPhase(phaseId: string): Promise<Requirement[]> {
+    const requirements = await this.loadRequirements();
+    return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.includes(phaseId));
+  }
+
+  async loadPhaseWithRequirements(phaseId: string): Promise<Phase & { linkedRequirements: Requirement[] }> {
+    const [phase, linkedRequirements] = await Promise.all([
+      this.loadPhase(phaseId),
+      this.linkedRequirementsForPhase(phaseId),
+    ]);
+    return { ...phase, linkedRequirements };
+  }
+
+  async loadAllPhasesWithRequirements(): Promise<Array<Phase & { linkedRequirements: Requirement[] }>> {
+    const [phases, requirements] = await Promise.all([
+      this.loadAllPhases(),
+      this.loadRequirements(),
+    ]);
+    return phases.map((phase) => ({
+      ...phase,
+      linkedRequirements: requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.includes(phase.id)),
+    }));
+  }
+
   async loadAllPhases(): Promise<Phase[]> {
     const { readdir } = await import("node:fs/promises");
     let files: string[];
@@ -946,6 +1084,25 @@ export class PlanStore {
     });
   }
 
+  /** Derive the parent display snapshot for a phase from its tasks' canonical
+   *  statuses. Pure, non-persisting. */
+  async loadPhaseDisplay(phaseId: string): Promise<ParentDisplay> {
+    const phase = await this.loadPhase(phaseId);
+    const childStatuses: WorkflowStatus[] = phase.tasks.map((t) => fromCanonicalStatus(t.status));
+    return deriveParentDisplay(childStatuses);
+  }
+
+  /** Derive the parent display snapshot for a feature from its phases' DERIVED
+   *  canonical statuses (each phase status is derived from its tasks at read
+   *  time, then mapped via fromCanonicalStatus). Pure, non-persisting. */
+  async loadFeatureDisplay(featureId: string): Promise<ParentDisplay> {
+    const phases = await this.loadAllPhases();
+    const featurePhases = phases.filter((p) => p.featureId === featureId);
+    const childStatuses: WorkflowStatus[] = featurePhases.map((p) => fromCanonicalStatus(p.status));
+    return deriveParentDisplay(childStatuses);
+  }
+
+
   async loadAll(): Promise<PlanWorkspace> {
     const [manifest, project, requirements, phases] = await Promise.all([
       this.loadManifest(),
@@ -955,7 +1112,8 @@ export class PlanStore {
     ]);
     const rawFeatures = await this.loadRawFeatures();
     const features: Feature[] = rawFeatures.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
-    return { manifest, project, requirements, phases, features: { features } };
+    const normalized = this.normalizeStructureSnapshot({ features }, phases);
+    return { manifest, project, requirements, phases: normalized.phases, features: normalized.features };
   }
 
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
@@ -1199,6 +1357,7 @@ export class PlanStore {
   }> {
     return this.runAsBatch(async () => {
       const migrated = await this.migratePhaseIds();
+      await this.repairPhaseFeatureRefs();
       const backfill = await this.ensureShortIdsAndPriority();
       // Rebuild phase containment from each task's own phaseId. Heals plans
       // corrupted by the migrateToGlobalSequence index-mismatch bug (core
@@ -1208,6 +1367,26 @@ export class PlanStore {
       await this.writeGenerated();
       return { migrated, backfill, containment, integrity };
     });
+  }
+
+  private async repairPhaseFeatureRefs(): Promise<number> {
+    const features = await this.loadRawFeatures();
+    const phases = await this.loadAllPhases();
+    let changed = 0;
+
+    for (const phase of phases) {
+      const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
+      if (resolvedFeatureId && resolvedFeatureId !== phase.featureId) {
+        await this.savePhase({ ...phase, featureId: resolvedFeatureId });
+        changed += 1;
+      }
+    }
+
+    if (changed > 0) {
+      await this.updateFeatures((doc) => doc);
+    }
+
+    return changed;
   }
 
   /** Validate plan integrity: globally unique phase ids and resolvable feature.phaseIds. */
@@ -1247,15 +1426,25 @@ export class PlanStore {
     const meaningful = taskStatuses.filter((s) => s !== "rejected" && s !== "canceled");
     if (meaningful.length === 0) return "rejected";
     if (meaningful.every((s) => s === "done")) return "done";
-    // Lifecycle truth: any progress (active work OR partial completion) ⇒
-    // in-progress, until fully done. This is what prevents a single
-    // blocked/waiting/deferred task from poisoning the parent when there is
-    // substantial done or in-progress work (the long-standing rollup bug).
-    if (meaningful.some((s) => s === "in-progress") || meaningful.some((s) => s === "done")) return "in-progress";
+
+    const hasDone = meaningful.some((s) => s === "done");
+    const hasActive = meaningful.some((s) => s === "in-progress");
+    const hasPlanned = meaningful.some((s) => s === "planned");
+    const hasBlocked = meaningful.some((s) => s === "blocked");
+    const hasWaiting = meaningful.some((s) => s === "waiting");
+    const hasDeferred = meaningful.some((s) => s === "deferred");
+
+    if (hasActive) return "in-progress";
+    // If completed work exists and the ONLY remaining meaningful work is deferred,
+    // surface deferred instead of implying active execution.
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
+    // Partial completion with remaining planned/blocked/waiting work still means
+    // the phase has genuinely started and is not terminal yet.
+    if (hasDone) return "in-progress";
     // No progress at all ⇒ surface the stall / not-started state (blocked > waiting > deferred > planned).
-    if (meaningful.some((s) => s === "blocked")) return "blocked";
-    if (meaningful.some((s) => s === "waiting")) return "waiting";
-    if (meaningful.some((s) => s === "deferred")) return "deferred";
+    if (hasBlocked) return "blocked";
+    if (hasWaiting) return "waiting";
+    if (hasDeferred) return "deferred";
     return "planned";
   }
 
@@ -1268,14 +1457,22 @@ export class PlanStore {
     const meaningful = phaseStatuses.filter((s) => s !== "rejected" && s !== "canceled");
     if (meaningful.length === 0) return "rejected";
     if (meaningful.every((s) => s === "done")) return "done";
-    // Any progress (an active phase, or a partially-complete done phase) ⇒
-    // in-progress. Prevents a single stalled phase from poisoning the feature
-    // when other phases have done/in-progress work.
-    if (meaningful.some((s) => s === "discovery" || s === "in-progress") || meaningful.some((s) => s === "done")) return "in-progress";
+
+    const hasDone = meaningful.some((s) => s === "done");
+    const hasActive = meaningful.some((s) => s === "discovery" || s === "in-progress");
+    const hasPlanned = meaningful.some((s) => s === "planned");
+    const hasBlocked = meaningful.some((s) => s === "blocked");
+    const hasWaiting = meaningful.some((s) => s === "waiting");
+    const hasDeferred = meaningful.some((s) => s === "deferred");
+
+    if (hasActive) return "in-progress";
+    // Same rule as phases: done + deferred-only remainder is deferred, not active.
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
+    if (hasDone) return "in-progress";
     // No progress at all ⇒ surface the stall / not-started state.
-    if (meaningful.some((s) => s === "blocked")) return "blocked";
-    if (meaningful.some((s) => s === "waiting")) return "waiting";
-    if (meaningful.some((s) => s === "deferred")) return "deferred";
+    if (hasBlocked) return "blocked";
+    if (hasWaiting) return "waiting";
+    if (hasDeferred) return "deferred";
     return "planned";
   }
 
@@ -1440,7 +1637,19 @@ export class PlanStore {
   }
 
     async savePhase(phase: Phase): Promise<void> {
-    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(phase).phase);
+    const features = await this.loadRawFeatures();
+    const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
+    // Referential integrity: if a featureId is present but cannot be resolved
+    // to a known feature, REJECT — never persist an orphan phase.
+    if (phase.featureId && phase.featureId.trim() && !resolvedFeatureId) {
+      throw new PlanStoreError(
+        `Cannot save phase "${phase.title}": featureId "${phase.featureId}" does not match any existing feature. Use a valid feature UUID, F00x ref, or shortId.`,
+      );
+    }
+    const normalizedInput = resolvedFeatureId && resolvedFeatureId !== phase.featureId
+      ? { ...phase, featureId: resolvedFeatureId }
+      : phase;
+    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(normalizedInput).phase);
     await mkdir(this.phasesDir(), { recursive: true });
     await atomicWriteJson(this.phasePath(parsed.id), parsed);
     await this.touchManifest();
@@ -1451,6 +1660,7 @@ export class PlanStore {
    *  task_create / phase_update calls on the SAME phaseId so batch operations
    *  don't lose tasks (last-write-wins race condition). */
   async updatePhase(phaseId: string, updater: (phase: Phase) => Phase): Promise<Phase> {
+    const features = await this.loadRawFeatures();
     // Augment the raw (on-disk) phase with its DERIVED status before handing it
     // to the updater, so updaters that read 'phase.status' see the truth. The
     // returned object's 'status' is stripped by PhaseSchema.parse (status is
@@ -1458,7 +1668,17 @@ export class PlanStore {
     const raw = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (rawPhase) => {
       const current: Phase = { ...rawPhase, status: this.derivePhaseStatus(rawPhase.tasks) };
       const next = updater(current);
-      return this.normalizePhaseDocument(next).phase;
+      const resolvedFeatureId = resolveStoredFeatureId(features, next.featureId);
+      // Referential integrity: reject orphan featureId.
+      if (next.featureId && next.featureId.trim() && !resolvedFeatureId) {
+        throw new PlanStoreError(
+          `Cannot update phase: featureId "${next.featureId}" does not match any existing feature.`,
+        );
+      }
+      const normalizedInput = resolvedFeatureId && resolvedFeatureId !== next.featureId
+        ? { ...next, featureId: resolvedFeatureId }
+        : next;
+      return this.normalizePhaseDocument(normalizedInput).phase;
     });
     await this.maybeAutoSync();
     return { ...raw, status: this.derivePhaseStatus(raw.tasks) };
@@ -1572,6 +1792,53 @@ export class PlanStore {
     }
     out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return out;
+  }
+
+  async listOrphanPhases(): Promise<OrphanPhaseSummary[]> {
+    const phases = await this.loadAllPhases();
+    const featuresDoc = await this.loadFeatures();
+    const out: OrphanPhaseSummary[] = [];
+    for (const phase of phases) {
+      const resolvedFeatureId = resolveStoredFeatureId(featuresDoc.features, phase.featureId);
+      if (resolvedFeatureId) continue;
+      const reason = phase.featureId?.trim()
+        ? `feature not found: ${phase.featureId}`
+        : "missing featureId";
+      out.push({
+        phaseId: phase.id,
+        featureId: phase.featureId,
+        shortId: phase.shortId,
+        compositeRef: formatPhaseRef(phase.number),
+        title: phase.title,
+        reason,
+      });
+    }
+    out.sort((a, b) => a.compositeRef.localeCompare(b.compositeRef));
+    return out;
+  }
+
+  async cleanupOrphanPhases(): Promise<{ found: OrphanPhaseSummary[]; removed: OrphanPhaseSummary[] }> {
+    return this.runAsBatch(async () => {
+      const found = await this.listOrphanPhases();
+      if (found.length === 0) return { found, removed: [] };
+      const orphanIds = new Set(found.map((phase) => phase.phaseId));
+      for (const orphan of found) {
+        try {
+          await unlink(this.phasePath(orphan.phaseId));
+        } catch {
+          // already gone
+        }
+      }
+      await this.updateFeatures((doc) => {
+        for (const feature of doc.features) {
+          feature.phaseIds = feature.phaseIds.filter((id) => !orphanIds.has(id));
+        }
+        return doc;
+      });
+      await this.touchManifest();
+      await this.writeGenerated();
+      return { found, removed: found };
+    });
   }
 
   async deletePhase(phaseId: string): Promise<void> {

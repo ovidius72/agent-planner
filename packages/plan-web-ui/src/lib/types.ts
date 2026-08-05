@@ -1,6 +1,7 @@
 export type FeatureStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 export type PhaseStatus = "draft" | "discovery" | "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 export type TaskStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type RequirementStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 
 export interface AcceptedDecision {
   id: string;
@@ -92,6 +93,26 @@ export interface Task {
   updatedAt: string;
 }
 
+export interface MacroTask {
+  id: string;
+  title: string;
+  description: string;
+  status: RequirementStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Requirement {
+  id: string;
+  title: string;
+  description: string;
+  status: RequirementStatus;
+  macroTasks: MacroTask[];
+  linkedPhaseIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface HandoffHistoryEntry {
   file: string;
   clearedAt: string;
@@ -124,6 +145,7 @@ export interface Phase {
   completionCriteria: string[];
   taskIds: string[];
   tasks: Task[];
+  linkedRequirements?: Requirement[];
   handoff: string;
   handoffUpdatedAt: string;
   handoffReadAt?: string;

@@ -117,4 +117,4 @@ and short forms (`F00x`, `P00x`, `T00x`).
   always allowed regardless of task state.
 - Status changes to `blocked`/`canceled`/`rejected`/`deferred`/`waiting`
   require a `motivation`.
-- Keep CHECKLIST.md updated.
+- Keep the planner updated; do not rely on repository-level checklist/backlog files.

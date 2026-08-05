@@ -24,7 +24,7 @@ function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }
   if (uniqueTasks.length === 0) return null;
 
   return (
-    <div className="border-t border-[var(--border)] bg-[var(--surface-elevated)]/95 backdrop-blur-xl">
+    <div className="relative z-10 border-t border-[var(--border)] bg-[var(--surface-elevated)]/95 backdrop-blur-xl">
       <div className="page-container py-2.5">
         <div className="grid gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">In-progress tasks ({uniqueTasks.length})</span>
@@ -90,7 +90,7 @@ export function AppShell({ project, activeTasks, serverInfo }: { project: Projec
 
   return (
     <div className="page-shell">
-      <header className="sticky top-0 z-30">
+      <header className="sticky top-0 z-30 overflow-visible">
         <TopNav projectName={project?.name} projectRoot={project?.projectRoot} planRoot={project?.planRoot} liveStatus={liveStatus} />
         <ActiveTasksHeader activeTasks={activeTasks} />
       </header>

@@ -10,6 +10,32 @@ export const CROCKFORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const SHORT_ID_LENGTH = 5;
 export const SHORT_ID_PATTERN = /^[A-Z2-9]{5}$/;
 
+/** Loose UUID v4 regex (case-insensitive). Used for input sanity checks. */
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+/** Belt-and-suspenders validation: a resolved ref must be a real UUID and the
+ *  target must still exist in the store before we allocate numbers or write.
+ *  Used by adapter create tools (task_create, phase_create). */
+export async function validateResolvedTarget<T extends { id: string }>(
+  kind: "feature" | "phase",
+  resolvedId: string,
+  loader: () => Promise<T | undefined>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isUuid(resolvedId)) {
+    return { ok: false, error: `Resolved ${kind} id is not a valid UUID: ${resolvedId}` };
+  }
+  const target = await loader();
+  if (!target) {
+    return { ok: false, error: `Resolved ${kind} ${resolvedId} no longer exists. Refusing to create child.` };
+  }
+  return { ok: true };
+}
+
+
 /** Generate a globally-unique short id (5 chars, Crockford Base32, e.g. `UUXD1`-style
  *  but without 0/1/I/O). Retries until the id is not in `existing` (project-scoped
  *  collision guard). Throws only in the impossible saturation case (~50 retries). */

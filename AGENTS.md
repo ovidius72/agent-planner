@@ -4,17 +4,20 @@ Questo file definisce le regole fondamentali per chiunque lavori su questo proge
 
 ## Regole non negoziabili
 
-### 1. Mantieni sempre una checklist aggiornata
-È obbligatorio usare e aggiornare una checklist persistente nel repository durante il lavoro.
+### 1. Mantieni sempre il planner aggiornato
+È obbligatorio usare il planner come unica fonte di verità operativa durante il lavoro.
 
 Regole operative:
-- leggere la checklist prima di iniziare
-- aggiornare la checklist quando un'attività parte, cambia stato, si blocca o si conclude
-- annotare chiaramente i prossimi passi
+- leggere lo stato planner rilevante prima di iniziare
+- aggiornare il planner quando un'attività parte, cambia stato, si blocca o si conclude
+- annotare chiaramente prossimi passi, blocchi e decisioni nelle entità planner rilevanti
 - non lasciare lavoro implicito solo nella conversazione
 
-File di riferimento iniziale:
-- `CHECKLIST.md`
+Riferimenti iniziali:
+- `AGENTS.md`
+- `PROJECT.md`
+- `ROADMAP.md`
+- le entità planner rilevanti (`feature_get` / `phase_get` / `task_get` / `handoff_show`)
 
 ### 2. Rispetta rigorosamente il Lifecycle dei Task
 L'integrità del piano e la precisione della dashboard dipendono dalla sincronizzazione **immediata** tra l'attività dell'agente e lo stato dei task. L'aggiornamento del piano non è un'attività di "chiusura sessione", ma un prerequisito operativo.
@@ -135,7 +138,7 @@ Esempio ERRATO: "Procedo con il task bd6ed366"
 Documenti da leggere prima di modificare architettura o processo:
 - `PROJECT.md`
 - `ROADMAP.md`
-- `CHECKLIST.md`
+- le entità planner rilevanti della feature/fase/task coinvolta
 
 ### 11. Igiene Operativa (Zero Tolerance)
 
@@ -180,9 +183,9 @@ Regole operative:
 ## Comportamento atteso dagli agenti
 Quando inizi a lavorare:
 1. leggi `AGENTS.md`
-2. leggi `CHECKLIST.md`
+2. leggi le entità planner rilevanti (`feature_get` / `phase_get` / `task_get` / `handoff_show`)
 3. leggi i documenti rilevanti (`PROJECT.md`, `ROADMAP.md`)
-4. aggiorna la checklist prima e dopo cambi significativi
+4. aggiorna il planner prima e dopo cambi significativi
 5. se cambi una decisione architetturale, documentala esplicitamente
 
 ### Avvio del planner (solo su esplicita richiesta)
@@ -215,4 +218,4 @@ Regole:
 - usare solo il modello dati `.planner/`, le regole del planner e le domande utili alla discovery
 
 ## Regola finale
-Se svolgi lavoro senza aggiornare la checklist, stai violando il processo del progetto.
+Se svolgi lavoro senza aggiornare il planner, stai violando il processo del progetto.

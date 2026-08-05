@@ -21,30 +21,20 @@ async function setup() {
   return { store, feat, mkPhase, mkTask, now };
 }
 
-describe("reorder (priority-only) must not flip feature status", () => {
-  test("runBatch suspends autoSync: reorder keeps feature 'planned' (no in-progress task)", async () => {
+describe("reorder (priority-only) must not change derived feature status", () => {
+  test("runBatch: priority-only reorder preserves derived in-progress status", async () => {
     const { store, feat, mkPhase, mkTask } = await setup();
-    // Phase 1: fully done. Phase 2: fully planned. No in-progress task anywhere.
+    // Mixed feature: phase 1 done, phase 2 planned ⇒ derived in-progress.
     const p1 = mkPhase(1, "planned");
     const p2 = mkPhase(2, "planned");
     await store.savePhase(p1);
     await store.savePhase(p2);
-    await store.updatePhase(p1.id, (ph) => { ph.tasks = [mkTask(ph.id, "done")]; ph.status = "done"; return ph; });
+    await store.updatePhase(p1.id, (ph) => { ph.tasks = [mkTask(ph.id, "done")]; return ph; });
     await store.updatePhase(p2.id, (ph) => { ph.tasks = [mkTask(ph.id, "planned")]; return ph; });
 
-    // With autoSync ON, deriveFeatureStatus would set the feature to in-progress
-    // (phase 1 is done ⇒ "partially complete"). Simulate the pre-reorder state
-    // the user sees by forcing the feature back to "planned" with autoSync off.
-    store.enableAutoSync(true);
-    await store.syncStatuses(); // establishes the in-progress derivation
-    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "in-progress", "sanity: rollup makes it in-progress");
+    await store.syncStatuses();
+    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "in-progress", "sanity: mixed done+planned derives in-progress");
 
-    store.enableAutoSync(false);
-    await store.updateFeatures((doc) => { const f = doc.features.find((x) => x.id === feat.id); if (f) f.status = "planned"; return doc; });
-    store.enableAutoSync(true);
-    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "planned", "pre-reorder state is planned");
-
-    // Reorder (priority-only) wrapped in runBatch → autoSync suspended → status stays planned.
     await store.runBatch(async () => {
       await store.updateFeatures((doc) => {
         for (const f of doc.features) f.priority = (f.id === feat.id ? 10 : 20);
@@ -52,29 +42,27 @@ describe("reorder (priority-only) must not flip feature status", () => {
         return doc;
       });
     });
-    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "planned", "reorder did NOT flip status to in-progress");
+
+    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "in-progress", "priority-only reorder must not change derived status");
   });
 
-  test("WITHOUT runBatch: reorder triggers autoSync and flips to in-progress (the bug)", async () => {
+  test("without runBatch: priority-only update also preserves derived status", async () => {
     const { store, feat, mkPhase, mkTask } = await setup();
-    // Mixed feature: phase 1 done, phase 2 planned ⇒ rollup derives in-progress.
     const p1 = mkPhase(1, "planned");
     const p2 = mkPhase(2, "planned");
     await store.savePhase(p1);
     await store.savePhase(p2);
-    await store.updatePhase(p1.id, (ph) => { ph.tasks = [mkTask(ph.id, "done")]; ph.status = "done"; return ph; });
+    await store.updatePhase(p1.id, (ph) => { ph.tasks = [mkTask(ph.id, "done")]; return ph; });
     await store.updatePhase(p2.id, (ph) => { ph.tasks = [mkTask(ph.id, "planned")]; return ph; });
 
-    store.enableAutoSync(false);
-    await store.updateFeatures((doc) => { const f = doc.features.find((x) => x.id === feat.id); if (f) f.status = "planned"; return doc; });
-    store.enableAutoSync(true);
-    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "planned");
+    await store.syncStatuses();
+    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "in-progress");
 
-    // Same priority-only update, but NOT wrapped in runBatch → autoSync runs → flips.
     await store.updateFeatures((doc) => {
       for (const f of doc.features) f.priority = 10;
       return doc;
     });
-    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "in-progress", "without runBatch the bug reproduces");
+
+    assert.equal((await store.loadFeatures()).features.find((f) => f.id === feat.id)?.status, "in-progress", "priority-only update must not alter the derived status");
   });
 });

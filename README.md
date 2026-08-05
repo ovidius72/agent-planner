@@ -787,7 +787,6 @@ Important docs:
 ```text
 PROJECT.md
 ROADMAP.md
-CHECKLIST.md
 AGENTS.md
 plugins/README.md
 plugins/DECISIONS.md

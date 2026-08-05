@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -69,12 +69,48 @@ async function ensureWebStarted(): Promise<{ localUrl: string; lanUrl?: string |
 
 function findFeatureByRef(features: Feature[], ref: string): Feature | undefined {
   const normalized = ref.trim().toLowerCase();
-  return features.find((feature) => feature.id.toLowerCase() === normalized)
+  if (!normalized) return undefined;
+  const fMatch = normalized.match(/^f(\d+)$/);
+  if (fMatch) {
+    const n = parseInt(fMatch[1]!, 10);
+    const byNum = features.find((feature) => feature.number === n);
+    if (byNum) return byNum;
+  }
+  return features.find((feature) => feature.shortId?.toLowerCase() === normalized)
+    ?? features.find((feature) => feature.id.toLowerCase() === normalized)
     ?? features.find((feature) => feature.name.toLowerCase() === normalized)
     ?? features.find((feature) => feature.name.toLowerCase().includes(normalized));
 }
 
+function resolveFeatureRefStrict(features: Feature[], ref: string):
+  | { ok: true; feature: Feature }
+  | { ok: false; error: string } {
+  const raw = ref.trim();
+  if (!raw) return { ok: false, error: "Feature ref is required." };
+  const normalized = raw.toLowerCase();
+  const byNumber = normalized.match(/^f(\d+)$/)
+    ? features.find((feature) => feature.number === parseInt(normalized.slice(1), 10))
+    : undefined;
+  if (byNumber) return { ok: true, feature: byNumber };
 
+  const byShortId = features.find((feature) => feature.shortId?.toLowerCase() === normalized);
+  if (byShortId) return { ok: true, feature: byShortId };
+
+  const byId = features.find((feature) => feature.id.toLowerCase() === normalized);
+  if (byId) return { ok: true, feature: byId };
+
+  const exactName = features.filter((feature) => feature.name.toLowerCase() === normalized);
+  if (exactName.length === 1) return { ok: true, feature: exactName[0]! };
+  if (exactName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Multiple features have that exact name; use F00x, shortId, or UUID.` };
+
+  const partialName = features.filter((feature) => feature.name.toLowerCase().includes(normalized));
+  if (partialName.length === 1) return { ok: true, feature: partialName[0]! };
+  if (partialName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Matches: ${partialName.map((feature) => formatFeatureRef(feature.number)).join(", ")}. Use a specific F00x, shortId, or UUID.` };
+
+  return { ok: false, error: `Feature not found: ${raw}` };
+}
+/** Belt-and-suspenders validation: a resolved ref must be a real UUID and the target
+ *  must still exist in the store before we allocate numbers or write. */
 function featureNumberOfPhase(phase: Phase, features: Feature[]): number | undefined {
   return phase.featureId ? features.find((f) => f.id === phase.featureId)?.number : undefined;
 }
@@ -234,6 +270,32 @@ server.registerTool("planner-repair", {
   return text(`Repair done: renamed ${report.migrated.renamed}, repaired ${report.migrated.repaired} refs, inferred ${report.migrated.inferred}. Containment: ${report.containment.changed} phase files rewritten (${report.containment.tasks} tasks scanned, ${report.containment.orphan} orphan). Integrity: ${report.integrity.duplicatePhaseIds.length} duplicate, ${report.integrity.danglingPhaseIds.length} dangling.`, { report });
 });
 
+server.registerTool("planner-cleanup-orphan-phases", {
+  description: "Discover phase files that no longer resolve to a valid owning feature, and optionally delete them. Run once with confirm=false (default) to inspect, then rerun with confirm=true to remove them.",
+  inputSchema: {
+    confirm: z.boolean().optional().describe("Set true to actually delete the discovered orphan phase files. Default: false (dry-run/list only)."),
+  },
+}, async ({ confirm }) => {
+  const st = await requireStore();
+  const found = await st.listOrphanPhases();
+  if (!confirm) {
+    if (found.length === 0) return text("No orphan phases found.", { found: [] });
+    const lines = [
+      `Found ${found.length} orphan phase${found.length === 1 ? "" : "s"}.`,
+      ...found.map((phase) => `- ${phase.compositeRef}${phase.shortId ? ` · ${phase.shortId}` : ""} — ${phase.title} (${phase.reason})`),
+      "Rerun with confirm=true to delete these orphan phase files.",
+    ];
+    return text(lines.join("\n"), { found, confirmRequired: true });
+  }
+  const report = await st.cleanupOrphanPhases();
+  if (report.removed.length === 0) return text("No orphan phases found.", report);
+  const lines = [
+    `Removed ${report.removed.length} orphan phase${report.removed.length === 1 ? "" : "s"}.`,
+    ...report.removed.map((phase) => `- ${phase.compositeRef}${phase.shortId ? ` · ${phase.shortId}` : ""} — ${phase.title}`),
+  ];
+  return text(lines.join("\n"), report);
+});
+
 server.registerTool("planner-project-language", {
   description: "Persist preferred languages for plan content and chat.",
   inputSchema: {
@@ -387,11 +449,44 @@ server.registerTool("planner-feature-show", {
   }, async ({ feature: ref, full }) => {
   const st = await requireStore();
   const features = (await st.loadFeatures()).features;
-  const feature = findFeatureByRef(features, ref);
-  if (!feature) return text(`Feature not found: ${ref}`);
+  const resolvedFeature = resolveFeatureRefStrict(features, ref);
+  if (!resolvedFeature.ok) return text(resolvedFeature.error);
+  const feature = resolvedFeature.feature;
   const phases = (await st.loadAllPhases()).filter((phase) => phase.featureId === feature.id);
     const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases)`;
     return text(full ? `${summary}\n\n${feature.description || ""}` : summary);
+});
+
+server.registerTool("planner-feature-discuss", {
+  description: "Persist feature discovery/governance fields and mark the feature context as ready.",
+  inputSchema: {
+    feature: z.string().min(1).describe("Feature ref. Accepts F00x, shortId, UUID, or title."),
+    description: z.string().optional().describe("Current implementation state, scope, and goals for this feature."),
+    workDone: z.string().optional().describe("What is already implemented / decided."),
+    workRemaining: z.string().optional().describe("What still needs to be done."),
+    dependencies: z.array(z.string()).optional().describe("Cross-feature or external dependencies."),
+  },
+}, async ({ feature: ref, description, workDone, workRemaining, dependencies }) => {
+  const st = await requireStore();
+  const features = (await st.loadFeatures()).features;
+  const resolvedFeature = resolveFeatureRefStrict(features, ref);
+  if (!resolvedFeature.ok) return text(resolvedFeature.error);
+  const feature = resolvedFeature.feature;
+  const updated = await st.updateFeatures((doc) => {
+    const target = doc.features.find((entry) => entry.id === feature.id);
+    if (!target) return doc;
+    if (description !== undefined) target.description = description.trim();
+    if (workDone !== undefined) target.workDone = workDone.trim();
+    if (workRemaining !== undefined) target.workRemaining = workRemaining.trim();
+    if (dependencies !== undefined) target.dependsOn = dependencies.map((item) => item.trim()).filter(Boolean);
+    target.discussedAt = nowISO();
+    target.contextReady = true;
+    target.contextReadyReason = "Updated through planner-feature-discuss MCP tool.";
+    target.updatedAt = nowISO();
+    return doc;
+  });
+  const result = updated.features.find((entry) => entry.id === feature.id)!;
+  return writeAndSummarize(st, `✅ Feature discussed/updated: ${formatFeatureRef(result.number)} — ${result.name}${result.shortId ? ` · ${result.shortId}` : ""}`);
 });
 
 server.registerTool("planner-feature-update", {
@@ -410,8 +505,9 @@ server.registerTool("planner-feature-update", {
 }, async ({ feature: ref, ...updates }) => {
   const st = await requireStore();
   const features = (await st.loadFeatures()).features;
-  const feature = findFeatureByRef(features, ref);
-  if (!feature) return text(`Feature not found: ${ref}`);
+  const resolvedFeature = resolveFeatureRefStrict(features, ref);
+  if (!resolvedFeature.ok) return text(resolvedFeature.error);
+  const feature = resolvedFeature.feature;
   const updated = await st.updateFeatures((doc) => {
     const target = doc.features.find((entry) => entry.id === feature.id);
     if (!target) return doc;
@@ -439,8 +535,9 @@ server.registerTool("planner-feature-delete", {
 }, async ({ feature: ref, cascade }) => {
   const st = await requireStore();
   const features = (await st.loadFeatures()).features;
-  const feature = findFeatureByRef(features, ref);
-  if (!feature) return text(`Feature not found: ${ref}`);
+  const resolvedFeature = resolveFeatureRefStrict(features, ref);
+  if (!resolvedFeature.ok) return text(resolvedFeature.error);
+  const feature = resolvedFeature.feature;
   const phases = (await st.loadAllPhases()).filter((phase) => phase.featureId === feature.id);
   await st.updateFeatures((doc) => {
     doc.features = doc.features.filter((entry) => entry.id !== feature.id);
@@ -469,8 +566,17 @@ server.registerTool("planner-phase-add", {
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
   const featuresDoc = await st.loadFeatures();
-  const feature = featureRef ? findFeatureByRef(featuresDoc.features, featureRef) : featuresDoc.features[0];
-  if (featureRef && !feature) return text(`Feature not found: ${featureRef}`);
+  let feature: Feature | undefined;
+  if (featureRef) {
+    const resolvedFeature = resolveFeatureRefStrict(featuresDoc.features, featureRef);
+    if (!resolvedFeature.ok) return text(resolvedFeature.error);
+    const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
+    if (!featureValidation.ok) return text(featureValidation.error);
+    feature = resolvedFeature.feature;
+  } else {
+    feature = featuresDoc.features[0];
+  }
+  if (featureRef && !feature) return text(`Resolved feature ${featureRef} no longer exists. Refusing to create phase.`);
   const lockKey = feature?.id ?? "__unscoped__";
   let phase: Phase | undefined;
   await withFeatureLock(lockKey, async () => {
@@ -528,15 +634,20 @@ server.registerTool("planner-phase-add", {
 });
 
 server.registerTool("planner-phase-show", {
-  description: "Show a phase by id or name.",
+  description: "Show a phase by id or name, including derived linked requirements in the full view.",
     inputSchema: { phase: z.string().min(1).describe("Phase ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the phase description. Default: compact identity only (saves tokens).") },
   }, async ({ phase: ref, full }) => {
   const st = await requireStore();
     const features = (await st.loadFeatures()).features;
     const phase = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!phase) return text(`Phase not found: ${ref}`);
-    const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks)`;
-    return text(full ? `${summary}\n\n${phase.description || ""}` : summary);
+    const linkedRequirements = await st.linkedRequirementsForPhase(phase.id);
+    const reqCount = linkedRequirements.length;
+    const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
+    const requirementsBlock = reqCount > 0
+      ? `\n\nLinked requirements:\n${linkedRequirements.map((requirement) => `- ${requirement.title} (${requirement.status})`).join("\n")}`
+      : "";
+    return text(full ? `${summary}\n\n${phase.description || ""}${requirementsBlock}` : summary, { linkedRequirements });
 });
 
 server.registerTool("planner-phase-discuss", {
@@ -629,6 +740,10 @@ server.registerTool("planner-task-add", {
   const st = await requireStore();
   const found = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
+  const phaseValidation = await validateResolvedTarget("phase", found.id, () => st.loadPhase(found.id).catch(() => undefined));
+  if (!phaseValidation.ok) return text(phaseValidation.error);
+  const existingPhase = await st.loadPhase(found.id);
+  if (!existingPhase) return text(`Resolved phase ${found.id} no longer exists. Refusing to create task.`);
   const timestamp = nowISO();
   const taskId = createTaskId();
   const shortId = createShortId(await st.assignedShortIds());
