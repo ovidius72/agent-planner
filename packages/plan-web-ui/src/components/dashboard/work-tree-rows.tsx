@@ -120,10 +120,11 @@ export function FeatureTreeRow({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <DragHandle />
+              <EntityPathBadge featureNum={feature.number} featureId={feature.id} />
               <CopyableBadge
                 id={formatEntityPath({ featureNum: feature.number })}
               >
-                <EntityPathBadge featureNum={feature.number} />
+                <span className="sr-only">Copy feature path</span>
               </CopyableBadge>
               {feature.shortId ? <ShortIdBadge shortId={feature.shortId} /> : null}
               {hasActiveTask ? (
@@ -224,16 +225,19 @@ export function PhaseTreeRow({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <DragHandle />
+              <EntityPathBadge
+                featureNum={feature?.number}
+                phaseNum={phase.number}
+                featureId={feature.id}
+                phaseId={phase.id}
+              />
               <CopyableBadge
                 id={formatEntityPath({
                   featureNum: feature?.number,
                   phaseNum: phase.number,
                 })}
               >
-                <EntityPathBadge
-                  featureNum={feature?.number}
-                  phaseNum={phase.number}
-                />
+                <span className="sr-only">Copy phase path</span>
               </CopyableBadge>
               {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
               {phase.handoff ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
@@ -315,6 +319,14 @@ export function TaskTreeRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <DragHandle />
+          <EntityPathBadge
+            featureNum={feature?.number}
+            phaseNum={phase.number}
+            taskNum={task.number}
+            featureId={feature.id}
+            phaseId={phase.id}
+            taskId={task.id}
+          />
           <CopyableBadge
             id={formatEntityPath({
               featureNum: feature?.number,
@@ -322,11 +334,7 @@ export function TaskTreeRow({
               taskNum: task.number,
             })}
           >
-            <EntityPathBadge
-              featureNum={feature?.number}
-              phaseNum={phase.number}
-              taskNum={task.number}
-            />
+            <span className="sr-only">Copy task path</span>
           </CopyableBadge>
           {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
           {task.status === "in-progress" ? (

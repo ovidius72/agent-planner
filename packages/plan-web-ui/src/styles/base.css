@@ -242,6 +242,21 @@ a { color: inherit; text-decoration: none; }
   color: var(--color-entity-task);
   background: color-mix(in srgb, var(--color-entity-task) 14%, transparent);
 }
+.entity-path-seg--link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+.entity-path-seg--link:hover {
+  filter: brightness(1.15);
+}
+.entity-path-seg--link:active {
+  transform: translateY(1px);
+}
+.entity-path-seg--link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .entity-path-sep {
   display: inline-flex;
   align-items: center;

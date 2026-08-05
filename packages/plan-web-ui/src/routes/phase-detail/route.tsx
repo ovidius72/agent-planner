@@ -101,8 +101,9 @@ export function PhaseDetailRoute() {
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} featureId={feature.id} phaseId={phase.id} />
           <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number })}>
-            <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} />
+            <span className="sr-only">Copy phase path</span>
           </CopyableBadge>
           {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
           {handoffContent ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}

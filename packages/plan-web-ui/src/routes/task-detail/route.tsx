@@ -97,8 +97,9 @@ export function TaskDetailRoute() {
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} taskNum={task.number} featureId={feature.id} phaseId={phase.id} taskId={task.id} />
           <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number, taskNum: task.number })}>
-            <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} taskNum={task.number} />
+            <span className="sr-only">Copy task path</span>
           </CopyableBadge>
           {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
           <StatusBadge status={task.status} />

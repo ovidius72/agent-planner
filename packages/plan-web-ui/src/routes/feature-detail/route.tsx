@@ -84,8 +84,9 @@ export function FeatureDetailRoute() {
       <div className="min-w-0">
         <Breadcrumbs stacked items={[{ label: feature.name, kind: "Feature" }]} />
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          <EntityPathBadge featureNum={feature.number} featureId={feature.id} />
           <CopyableBadge id={formatEntityPath({ featureNum: feature.number })}>
-            <EntityPathBadge featureNum={feature.number} />
+            <span className="sr-only">Copy feature path</span>
           </CopyableBadge>
           {feature.shortId ? <ShortIdBadge shortId={feature.shortId} /> : null}
           <DisplayStatusBadge status={featureDisplay.displayStatus} breakdown={featureDisplay.breakdown} />
