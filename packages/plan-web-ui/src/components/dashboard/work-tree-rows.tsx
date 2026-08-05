@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CopyableBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
-import { StatusBadge } from "../ui/status-badge";
+import { StatusBadge, StatusCluster2 } from "../ui/status-badge";
 import { DragHandle, SortableItem } from "./sortable";
 import type { WorkTreeFeature, WorkTreePhase } from "../../lib/dashboard-tree";
 import type { Feature, Phase, Task } from "../../lib/types";
@@ -130,8 +130,9 @@ export function FeatureTreeRow({
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}
             </div>
-            <StatusCluster
-              status={feature.status}
+            <StatusCluster2
+              status={entry.display.displayStatus}
+              breakdown={entry.display.breakdown}
               doneTasks={doneTasks}
               totalTasks={totalTasks}
               recentlyChanged={recentlyChanged}
@@ -145,8 +146,9 @@ export function FeatureTreeRow({
             </Link>
           </div>
         </div>
-        <StatusCluster
-          status={feature.status}
+        <StatusCluster2
+          status={entry.display.displayStatus}
+          breakdown={entry.display.breakdown}
           doneTasks={doneTasks}
           totalTasks={totalTasks}
           recentlyChanged={recentlyChanged}
@@ -239,8 +241,9 @@ export function PhaseTreeRow({
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}
             </div>
-            <StatusCluster
-              status={phase.status}
+            <StatusCluster2
+              status={phaseEntry.display.displayStatus}
+              breakdown={phaseEntry.display.breakdown}
               doneTasks={doneTasks}
               totalTasks={totalTasks}
               recentlyChanged={recentlyChanged}
@@ -254,8 +257,9 @@ export function PhaseTreeRow({
             </Link>
           </div>
         </div>
-        <StatusCluster
-          status={phase.status}
+        <StatusCluster2
+          status={phaseEntry.display.displayStatus}
+          breakdown={phaseEntry.display.breakdown}
           doneTasks={doneTasks}
           totalTasks={totalTasks}
           recentlyChanged={recentlyChanged}

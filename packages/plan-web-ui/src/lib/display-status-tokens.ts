@@ -24,6 +24,17 @@ export type DisplayStatus =
   | "canceled"
   | "rejected";
 
+export interface StatusBreakdown {
+  planned: number;
+  inProgress: number;
+  waiting: number;
+  blocked: number;
+  deferred: number;
+  done: number;
+  canceled: number;
+  rejected: number;
+}
+
 export interface DisplayStatusToken {
   /** CSS custom property name for the status color. */
   colorVar: string;

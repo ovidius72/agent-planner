@@ -4,6 +4,8 @@
 
 import type { Feature, Phase, Task } from "./types";
 
+import { type ParentDisplay, derivePhaseDisplay, deriveFeatureDisplay } from "./derive-display";
+
 /** How long a freshly-updated node stays highlighted after a WS event. */
 export const recentHighlightDurationMs = 4200;
 
@@ -13,6 +15,7 @@ export interface WorkTreePhase {
   doneTasks: number;
   allTasks: Task[];
   hasActiveTask: boolean;
+  display: ParentDisplay;
 }
 
 export interface WorkTreeFeature {
@@ -22,6 +25,7 @@ export interface WorkTreeFeature {
   allPhases: WorkTreePhase[];
   hasActiveTask: boolean;
   isActive: boolean;
+  display: ParentDisplay;
 }
 
 export function countTasks(phases: Phase[]): number {
@@ -78,6 +82,7 @@ export function buildWorkTree(features: Feature[], phases: Phase[]): WorkTreeFea
           doneTasks: phase.tasks.filter((task) => task.status === "done").length,
           allTasks,
           hasActiveTask,
+          display: derivePhaseDisplay(allTasks),
         };
       });
 
@@ -95,6 +100,7 @@ export function buildWorkTree(features: Feature[], phases: Phase[]): WorkTreeFea
         allPhases: allPhases.sort((left, right) => (left.phase.priority ?? 0) - (right.phase.priority ?? 0) || left.phase.number - right.phase.number),
         hasActiveTask: allPhases.some((entry) => entry.hasActiveTask),
         isActive: hasActiveBranch,
+        display: deriveFeatureDisplay(allPhases.map((entry) => entry.phase)),
       };
     })
     .sort(
