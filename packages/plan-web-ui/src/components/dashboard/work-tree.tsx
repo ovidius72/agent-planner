@@ -7,12 +7,18 @@ import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { EntityPathBadge } from "../ui/badges";
 import { useDashboardTree } from "../../hooks/use-dashboard-tree";
-import { formatSequence, type WorkTreeFeature } from "../../lib/dashboard-tree";
+import {
+  formatSequence,
+  type WorkTreeFeature,
+  type WorkTreeSortConfig,
+  type WorkTreeSortKey,
+} from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
 import { SortableItem } from "./sortable";
 import { SearchBar } from "./search-bar";
+import { Select } from "../ui/select";
 
 /**
  * The collapsible feature → phase → task Work Tree, plus its filter bar
@@ -50,6 +56,49 @@ function applyOrder(tree: WorkTreeFeature[], pending: Record<string, string[]>):
       }),
     };
   });
+}
+
+const SORT_OPTIONS: { value: WorkTreeSortKey; label: string }[] = [
+  { value: "priority", label: "Priority" },
+  { value: "number", label: "Number" },
+  { value: "createdAt", label: "Created date" },
+  { value: "updatedAt", label: "Updated date" },
+  { value: "title", label: "Title" },
+  { value: "shortId", label: "Short ID" },
+  { value: "status", label: "Status" },
+  { value: "startedAt", label: "Started (tasks)" },
+  { value: "completedAt", label: "Completed (tasks)" },
+];
+
+function SortControl({ sort, onChange }: { sort: WorkTreeSortConfig; onChange: (sort: WorkTreeSortConfig) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <label htmlFor="work-tree-sort" className="hidden text-xs text-[var(--text-muted)] sm:inline">
+        Sort by
+      </label>
+      <Select
+        id="work-tree-sort"
+        value={sort.key}
+        onChange={(e) => onChange({ key: e.target.value as WorkTreeSortKey, direction: sort.direction })}
+        className="h-11 w-full min-w-[9rem] py-2 pr-8 text-sm sm:w-auto"
+      >
+        {SORT_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </Select>
+      <button
+        type="button"
+        onClick={() => onChange({ key: sort.key, direction: sort.direction === "asc" ? "desc" : "asc" })}
+        className="field-control inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+        aria-label={`Sort direction: ${sort.direction}`}
+        title={`Sort direction: ${sort.direction}`}
+      >
+        {sort.direction === "asc" ? "↑" : "↓"}
+      </button>
+    </div>
+  );
 }
 
 export function WorkTree({
@@ -290,11 +339,14 @@ export function WorkTree({
 
       <div className="ap-search-sticky z-20 grid gap-3" style={{ top: headerH }}>
         <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
-        {tree.searchActive ? (
-          <p className="text-xs text-[var(--text-muted)]">
-            {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
-          </p>
-        ) : null}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <SortControl sort={tree.sort} onChange={tree.setSort} />
+          {tree.searchActive ? (
+            <p className="text-xs text-[var(--text-muted)]">
+              {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
+            </p>
+          ) : null}
+        </div>
         <div className="grid grid-cols-2 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:grid-cols-3 sm:rounded-[18px] sm:px-4 sm:py-3 lg:grid-cols-5">
           <button
             type="button"

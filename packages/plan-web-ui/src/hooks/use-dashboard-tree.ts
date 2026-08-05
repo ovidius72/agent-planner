@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import {
   buildWorkTree,
   recentHighlightDurationMs,
+  DEFAULT_WORK_TREE_SORT,
+  type WorkTreeSortConfig,
   type PlannerWsMessage,
   type WorkTreeFeature,
 } from "../lib/dashboard-tree";
@@ -60,6 +62,8 @@ export interface DashboardTreeApi {
   matchedTaskIds: Set<string>;
   matchedFeatureIds: Set<string>;
   matchedPhaseIds: Set<string>;
+  sort: WorkTreeSortConfig;
+  setSort: Dispatch<SetStateAction<WorkTreeSortConfig>>;
 }
 
 /**
@@ -91,9 +95,24 @@ export function useDashboardTree({
   const hideDoneStorageKey = dashboardStorageKey(projectStorageScope, "hide-done");
   const hidePlannedStorageKey = dashboardStorageKey(projectStorageScope, "hide-planned");
   const onlyActiveBranchesStorageKey = dashboardStorageKey(projectStorageScope, "only-active-branches");
+  const workTreeSortStorageKey = dashboardStorageKey(projectStorageScope, "work-tree-sort");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const workTree = useMemo(() => buildWorkTree(features, phases), [features, phases]);
+  const [sort, setSort] = useState<WorkTreeSortConfig>(() => {
+    if (typeof window === "undefined") return DEFAULT_WORK_TREE_SORT;
+    try {
+      const stored = window.localStorage.getItem(workTreeSortStorageKey);
+      if (!stored) return DEFAULT_WORK_TREE_SORT;
+      const parsed = JSON.parse(stored) as Partial<WorkTreeSortConfig>;
+      if (parsed.key && parsed.direction) {
+        return { key: parsed.key, direction: parsed.direction } as WorkTreeSortConfig;
+      }
+    } catch {
+      // ignore malformed storage
+    }
+    return DEFAULT_WORK_TREE_SORT;
+  });
+  const workTree = useMemo(() => buildWorkTree(features, phases, sort), [features, phases, sort]);
 
   // ── Structured search (elastic-input) ───────────────────────────────────
   const searchFilters = useMemo(() => parseSearchQuery(searchQuery), [searchQuery]);
@@ -183,6 +202,7 @@ export function useDashboardTree({
   useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(hideDoneStorageKey, String(hideDone)); }, [hideDone, hideDoneStorageKey]);
   useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(hidePlannedStorageKey, String(hidePlanned)); }, [hidePlanned, hidePlannedStorageKey]);
   useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(onlyActiveBranchesStorageKey, String(onlyActiveBranches)); }, [onlyActiveBranches, onlyActiveBranchesStorageKey]);
+  useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(workTreeSortStorageKey, JSON.stringify(sort)); }, [sort, workTreeSortStorageKey]);
 
   // Clear pending highlight timers on unmount so we never setState after teardown.
   useEffect(() => {
@@ -393,6 +413,7 @@ export function useDashboardTree({
     setPhaseStatusFilters(allPhaseStatusValues);
     setTaskStatusFilters(allTaskStatusValues);
     setOnlyActiveBranches(false);
+    setSort(DEFAULT_WORK_TREE_SORT);
     setTreeOpenMode("all");
   };
 
@@ -440,5 +461,7 @@ export function useDashboardTree({
     matchedTaskIds,
     matchedFeatureIds,
     matchedPhaseIds,
+    sort,
+    setSort,
   };
 }
