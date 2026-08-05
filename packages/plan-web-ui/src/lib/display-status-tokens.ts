@@ -156,6 +156,37 @@ export function statusColorClass(status: DisplayStatus): string {
   return `status-${status}`;
 }
 
+/** CSS color value (using color-mix) for the status border accent. */
+export function statusBorderColor(status: DisplayStatus, opacity = 30): string {
+  return `color-mix(in srgb, var(${getDisplayToken(status).colorVar}) ${opacity}%, transparent)`;
+}
+
+/** CSS class name for the container surface treatment (e.g. "ap-status-surface-in-progress"), or empty. */
+export function statusSurfaceClass(status: DisplayStatus): string {
+  return `ap-status-surface ap-status-surface-${status}`;
+}
+
+/** CSS class name for the HEADER strip only (bg + border + pattern applied to
+ *  the inner header row, not the whole accordion wrapper). Used by
+ *  feature/phase outer containers so the status color lives on the header
+ *  rectangle, leaving the children's area with a normal background. */
+export function statusHeaderClass(status: DisplayStatus): string {
+  return `ap-status-header ap-status-header-${status}`;
+}
+
+/** Border-only CSS class (no background) — for outer accordion wrappers.
+ *  Colors the full accordion border subtly so the parent's status is
+ *  glanceable without overwhelming the children. */
+export function statusBorderClass(status: DisplayStatus): string {
+  return `ap-status-border ap-status-border-${status}`;
+}
+
+/** Narrow an arbitrary status string to a known DisplayStatus. Falls back to `planned`. */
+export function toDisplayStatus(status: string): DisplayStatus {
+  if (status in DISPLAY_STATUS_TOKENS) return status as DisplayStatus;
+  return "planned";
+}
+
 /**
  * Build an accessible aria-label / tooltip string from a breakdown.
  * Example: "Started · 1 done · 2 planned · 1 waiting"

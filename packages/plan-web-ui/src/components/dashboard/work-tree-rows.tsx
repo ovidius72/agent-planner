@@ -4,6 +4,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CopyableBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusBadge, StatusCluster2 } from "../ui/status-badge";
 import { DragHandle, SortableItem } from "./sortable";
+import { patternClass, statusBorderClass, statusBorderColor, statusHeaderClass, statusSurfaceClass, type DisplayStatus } from "../../lib/display-status-tokens";
 import type { WorkTreeFeature, WorkTreePhase } from "../../lib/dashboard-tree";
 import type { Feature, Phase, Task } from "../../lib/types";
 
@@ -93,13 +94,14 @@ export function FeatureTreeRow({
   highlightedTaskIds: Set<string> | undefined;
 }) {
   const { feature, totalTasks, doneTasks, allPhases, hasActiveTask } = entry;
+  const featureStatusNoPattern = "";
 
   return (
     <div
-      className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${hasActiveTask ? "ap-in-progress" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${statusBorderClass(entry.display.displayStatus)} ${hasActiveTask ? "ap-in-progress" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
     >
       <div
-        className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}
+        className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${statusHeaderClass(entry.display.displayStatus)} ${patternClass(entry.display.displayStatus)} ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}
       >
         <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
@@ -158,7 +160,10 @@ export function FeatureTreeRow({
       </div>
 
       {expanded && allPhases.length > 0 ? (
-        <div className="mt-2 ml-1.5 grid grid-cols-1 gap-2 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
+        <div
+          className="mt-2 ml-1.5 grid grid-cols-1 gap-2 border-l pl-3 sm:ml-4 sm:pl-4"
+          style={{ borderLeftColor: statusBorderColor(entry.display.displayStatus) }}
+        >
           <SortableContext items={allPhases.map((p) => p.phase.id)} strategy={verticalListSortingStrategy}>
             {allPhases.map((phaseEntry) => (
               <SortableItem key={phaseEntry.phase.id} id={phaseEntry.phase.id}>
@@ -198,13 +203,14 @@ export function PhaseTreeRow({
   highlightedTaskIds: Set<string> | undefined;
 }) {
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
+  const phaseStatusNoPattern = "";
 
   return (
     <div
-      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 rounded-[12px] p-3 transition-colors ${hasActiveTask ? "ap-in-progress" : ""} ${phase.status === "done" ? "opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 p-3 transition-colors ${statusBorderClass(phaseEntry.display.displayStatus)} ${hasActiveTask ? "ap-in-progress" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
     >
       <div
-        className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}
+        className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${statusHeaderClass(phaseEntry.display.displayStatus)} ${patternClass(phaseEntry.display.displayStatus)} ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}
       >
         <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
@@ -273,7 +279,10 @@ export function PhaseTreeRow({
 
       {expanded ? (
         allTasks.length > 0 ? (
-          <div className="ml-1.5 grid grid-cols-1 gap-1 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
+          <div
+            className="ml-1.5 grid grid-cols-1 gap-1 border-l pl-3 sm:ml-4 sm:pl-4"
+            style={{ borderLeftColor: statusBorderColor(phaseEntry.display.displayStatus) }}
+          >
             <SortableContext items={allTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               {allTasks.map((task) => (
                 <SortableItem key={task.id} id={task.id}>
@@ -314,7 +323,7 @@ export function TaskTreeRow({
   return (
     <div
       id={`task-row-${task.number}`}
-      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""} ${highlighted ? "ap-search-hit" : ""}`}
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${statusSurfaceClass(task.status as DisplayStatus)} ${task.status === "in-progress" ? "ap-in-progress" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""} ${highlighted ? "ap-search-hit" : ""}`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
