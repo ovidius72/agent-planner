@@ -11,11 +11,13 @@ import { CopyableBadge, EntityBadge, EntityPathBadge, HandoffBadge, ShortIdBadge
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
+import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { clearPhaseHandoff } from "../../lib/api";
+import { compareEntities, type WorkTreeSortConfig } from "../../lib/dashboard-tree";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { taskStatuses } from "../../lib/statuses";
@@ -45,17 +47,26 @@ export function PhaseDetailRoute() {
   const linkedRequirements = phase.linkedRequirements ?? [];
   const taskSummary = summarizeTasks(phase);
   const phaseDisplay = derivePhaseDisplayFromTasks(phase.tasks);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
+  const sortParam = searchParams.get("sort")?.trim() ?? "priority";
+  const dirParam = searchParams.get("dir")?.trim() ?? "asc";
+  const sort: WorkTreeSortConfig = {
+    key: sortParam === "priority" || sortParam === "number" || sortParam === "createdAt" || sortParam === "updatedAt" || sortParam === "title" || sortParam === "shortId" || sortParam === "status" || sortParam === "startedAt" || sortParam === "completedAt"
+      ? sortParam
+      : "priority",
+    direction: dirParam === "desc" ? "desc" : "asc",
+  };
+  const sortedTasks = useMemo(() => [...phase.tasks].sort((a, b) => compareEntities(a, b, sort.key, sort.direction)), [phase.tasks, sort]);
   const filteredTasks = useMemo(
     () =>
-      phase.tasks.filter(
+      sortedTasks.filter(
         (task) =>
           (!status || task.status === status) &&
           matchesListQuery(query, [task.title, task.id, task.description, task.shortName]),
       ),
-    [phase.tasks, query, status],
+    [sortedTasks, query, status],
   );
   const navigate = useNavigate();
   const deleteFormRef = useRef<HTMLFormElement>(null);
@@ -276,22 +287,29 @@ export function PhaseDetailRoute() {
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks</p>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Filter this phase's tasks by name or status.
+            Filter and sort this phase's tasks.
           </p>
         </div>
 
-        <ListFilters
-          query={query}
-          status={status}
-          statusOptions={taskStatuses}
-          placeholder="Search task title, id, or description"
-          clearTo={`/features/${feature.id}/phases/${phase.id}`}
-          resultsLabel={
-            filteredTasks.length === phase.tasks.length
-              ? `${phase.tasks.length} tasks`
-              : `${filteredTasks.length} of ${phase.tasks.length} tasks`
-          }
-        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
+            prev.set("sort", next.key);
+            prev.set("dir", next.direction);
+            return prev;
+          })} />
+          <ListFilters
+            query={query}
+            status={status}
+            statusOptions={taskStatuses}
+            placeholder="Search task title, id, or description"
+            clearTo={`/features/${feature.id}/phases/${phase.id}`}
+            resultsLabel={
+              filteredTasks.length === phase.tasks.length
+                ? `${phase.tasks.length} tasks`
+                : `${filteredTasks.length} of ${phase.tasks.length} tasks`
+            }
+          />
+        </div>
 
         <div className="grid gap-3">
           {phase.tasks.length === 0 ? (

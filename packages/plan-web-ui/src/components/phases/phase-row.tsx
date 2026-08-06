@@ -3,11 +3,11 @@ import { Form, Link, useFetcher } from "react-router-dom";
 import { phaseStatuses } from "../../lib/statuses";
 import { formatStatusSummary, summarizeTaskStatuses } from "../../lib/status-summary";
 import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
-import { statusSurfaceClass } from "../../lib/display-status-tokens";
 import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
 import { DisplayStatusBadge } from "../ui/status-badge";
 import { EntityBadge, HandoffBadge, ParentBadge } from "../ui/badges";
+import { StatusItem } from "../ui/status-item";
 
 export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
   const statusFetcher = useFetcher();
@@ -20,7 +20,7 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
   const display = derivePhaseDisplayFromTasks(phase.tasks);
 
   return (
-    <div className={`surface-card px-4 py-2 ${statusSurfaceClass(display.displayStatus)}`}>
+    <StatusItem variant="surface" status={display.displayStatus} className="px-4 py-2">
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,150px)_124px_44px_44px] lg:items-center">
         <div className="flex min-w-0 flex-col items-start gap-1 lg:contents">
           <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
@@ -84,6 +84,6 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
       </div>
 
       {phase.summary ? <div className="mt-1 min-w-0 break-words line-clamp-2 text-[11px] text-[var(--text-muted)]">{phase.summary}</div> : null}
-    </div>
+    </StatusItem>
   );
 }

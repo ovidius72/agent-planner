@@ -1,5 +1,13 @@
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Form, Link, useFetcher } from "react-router-dom";
+import { taskStatuses } from "../../lib/statuses";
+import { formatStatusSummary, summarizeSubtaskStatuses } from "../../lib/status-summary";
+import { toDisplayStatus } from "../../lib/display-status-tokens";
+import type { Task } from "../../lib/types";
+import { Button } from "../ui/button";
+import { StatusBadge } from "../ui/status-badge";
+import { EntityBadge } from "../ui/badges";
+import { StatusItem } from "../ui/status-item";
 
 function formatDateTime(value: string): string {
   try {
@@ -8,13 +16,6 @@ function formatDateTime(value: string): string {
     return value;
   }
 }
-import { taskStatuses } from "../../lib/statuses";
-import { formatStatusSummary, summarizeSubtaskStatuses } from "../../lib/status-summary";
-import { statusSurfaceClass } from "../../lib/display-status-tokens";
-import type { Task } from "../../lib/types";
-import { Button } from "../ui/button";
-import { StatusBadge } from "../ui/status-badge";
-import { EntityBadge } from "../ui/badges";
 
 export function TaskRow({ featureId, phaseId, task }: { featureId: string; phaseId: string; task: Task }) {
   const statusFetcher = useFetcher();
@@ -25,8 +26,10 @@ export function TaskRow({ featureId, phaseId, task }: { featureId: string; phase
   const isDeleting = deleteFetcher.state !== "idle";
   const subtaskStatusText = formatStatusSummary(summarizeSubtaskStatuses(task.subtasks));
 
+  const displayStatus = toDisplayStatus(status);
+
   return (
-    <div className={`surface-card px-4 py-2 ${statusSurfaceClass(status as import("../../lib/display-status-tokens").DisplayStatus)}`}>
+    <StatusItem variant="surface" status={displayStatus} className="px-4 py-2">
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,168px)_124px_44px_44px] lg:items-center">
         <div className="flex min-w-0 flex-col items-start gap-1 lg:contents">
           <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
@@ -92,6 +95,6 @@ export function TaskRow({ featureId, phaseId, task }: { featureId: string; phase
         {task.completedAt ? <span>Completed {formatDateTime(task.completedAt)}</span> : null}
       </div>
       {task.description ? <div className="mt-1 min-w-0 break-words line-clamp-2 text-[11px] text-[var(--text-muted)]">{task.description}</div> : null}
-    </div>
+    </StatusItem>
   );
 }

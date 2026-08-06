@@ -126,6 +126,8 @@ function compareEntities<T extends Feature | Phase | Task>(a: T, b: T, key: Work
   return direction === "desc" ? -cmp : cmp;
 }
 
+export { compareEntities };
+
 /**
  * Build the feature → phase → task tree from flat plan data.
  * Phases are grouped by featureId; tasks, phases, and features are sorted

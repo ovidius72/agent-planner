@@ -11,6 +11,7 @@ import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
+import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
@@ -19,6 +20,7 @@ import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
 import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
+import { compareEntities, type WorkTreeSortConfig } from "../../lib/dashboard-tree";
 import type { Feature, Phase } from "../../lib/types";
 
 function countTasks(phases: Phase[]) {
@@ -54,15 +56,24 @@ export function FeatureDetailRoute() {
   const taskSummary = countTasksByStatus(phases);
   const currentPhase = findCurrentPhase(phases);
   const featureDisplay = deriveFeatureDisplayFromPhases(phases);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
+  const sortParam = searchParams.get("sort")?.trim() ?? "priority";
+  const dirParam = searchParams.get("dir")?.trim() ?? "asc";
+  const sort: WorkTreeSortConfig = {
+    key: sortParam === "priority" || sortParam === "number" || sortParam === "createdAt" || sortParam === "updatedAt" || sortParam === "title" || sortParam === "shortId" || sortParam === "status" || sortParam === "startedAt" || sortParam === "completedAt"
+      ? sortParam
+      : "priority",
+    direction: dirParam === "desc" ? "desc" : "asc",
+  };
+  const sortedPhases = useMemo(() => [...phases].sort((a, b) => compareEntities(a, b, sort.key, sort.direction)), [phases, sort]);
   const filteredPhases = useMemo(
-    () => phases.filter((phase) => (
+    () => sortedPhases.filter((phase) => (
       (!status || phase.status === status)
       && matchesListQuery(query, [phase.title, phase.id, phase.summary, phase.description])
     )),
-    [phases, query, status],
+    [sortedPhases, query, status],
   );
   const navigate = useNavigate();
   const deleteFormRef = useRef<HTMLFormElement>(null);
@@ -148,19 +159,26 @@ export function FeatureDetailRoute() {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">Filter this feature's phases by name or status.</p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">Filter and sort this feature's phases.</p>
           </div>
           <Link to="phases/new"><Button type="button" variant="primary" shortcut="create">Create phase</Button></Link>
         </div>
 
-        <ListFilters
-          query={query}
-          status={status}
-          statusOptions={phaseStatuses}
-          placeholder="Search phase title, id, or summary"
-          clearTo={`/features/${feature.id}`}
-          resultsLabel={filteredPhases.length === phases.length ? `${phases.length} phases` : `${filteredPhases.length} of ${phases.length} phases`}
-        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
+            prev.set("sort", next.key);
+            prev.set("dir", next.direction);
+            return prev;
+          })} />
+          <ListFilters
+            query={query}
+            status={status}
+            statusOptions={phaseStatuses}
+            placeholder="Search phase title, id, or summary"
+            clearTo={`/features/${feature.id}`}
+            resultsLabel={filteredPhases.length === phases.length ? `${phases.length} phases` : `${filteredPhases.length} of ${phases.length} phases`}
+          />
+        </div>
 
         <div className="grid gap-3">
           {phases.length === 0 ? (
