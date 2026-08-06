@@ -125,6 +125,21 @@ List filters continue to operate on **canonical workflow status**; the display l
 
 ## Unreleased changes
 
+### MCP registry listing (F011)
+
+Prepared `@agent-plan/mcp` for the official MCP Registry (`registry.modelcontextprotocol.io`):
+
+- Added `mcpName`: `io.github.ovidius72/agent-plan` to `packages/plan-mcp/package.json`.
+- Added `packages/plan-mcp/server.json` registry manifest.
+- Included `server.json` in the npm package `files` array so it is published with the package.
+- Requires publishing `@agent-plan/mcp` to npm (already done via CI on `main`) and then running:
+  ```bash
+  cd packages/plan-mcp
+  npx mcp-publisher login github
+  npx mcp-publisher publish
+  ```
+  The publish step must be run by a maintainer authenticated with the `ovidius72` GitHub account.
+
 ### Core
 
 - Strict ref resolution in create tools: `task_create` / `phase_create` resolve and validate the target ref as a UUID before allocating sequence numbers or writing.

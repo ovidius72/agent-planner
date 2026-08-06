@@ -1,0 +1,15 @@
+{
+  "name": "io.github.ovidius72/agent-plan",
+  "version": "0.2.19-next.18",
+  "description": "MCP server for Agent Plan, exposing planner-* tools over stdio.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ovidius72/agent-planner.git"
+  },
+  "homepage": "https://github.com/ovidius72/agent-planner#readme",
+  "package": {
+    "type": "npm",
+    "name": "@agent-plan/mcp"
+  }
+}

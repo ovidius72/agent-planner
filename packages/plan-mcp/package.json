@@ -17,9 +17,11 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "dist/**/*.d.ts.map",
+    "server.json",
     "README.md",
     "LICENSE"
   ],
+  "mcpName": "io.github.ovidius72/agent-plan",
   "publishConfig": {
     "access": "public"
   },
