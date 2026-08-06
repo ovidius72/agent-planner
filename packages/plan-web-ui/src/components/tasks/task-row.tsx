@@ -10,6 +10,7 @@ function formatDateTime(value: string): string {
 }
 import { taskStatuses } from "../../lib/statuses";
 import { formatStatusSummary, summarizeSubtaskStatuses } from "../../lib/status-summary";
+import { statusSurfaceClass } from "../../lib/display-status-tokens";
 import type { Task } from "../../lib/types";
 import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
@@ -25,7 +26,7 @@ export function TaskRow({ featureId, phaseId, task }: { featureId: string; phase
   const subtaskStatusText = formatStatusSummary(summarizeSubtaskStatuses(task.subtasks));
 
   return (
-    <div className="surface-card px-4 py-2">
+    <div className={`surface-card px-4 py-2 ${statusSurfaceClass(status as import("../../lib/display-status-tokens").DisplayStatus)}`}>
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,168px)_124px_44px_44px] lg:items-center">
         <div className="flex min-w-0 flex-col items-start gap-1 lg:contents">
           <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">

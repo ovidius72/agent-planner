@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 /**
  * Display-status token mapping for the Web UI.
  *
@@ -46,6 +48,12 @@ export interface DisplayStatusToken {
   label: string;
   /** Short description for tooltips / aria-labels. */
   description: string;
+  /** Border style: "solid" | "dashed". */
+  borderStyle: "solid" | "dashed";
+  /** Background opacity for both header strip and surface (uniform). 0–100. */
+  bgOpacity: number;
+  /** Border opacity for the border accent. 0–100. */
+  borderOpacity: number;
 }
 
 export type StatusIcon =
@@ -74,6 +82,9 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     pattern: "",
     label: "Planned",
     description: "Not started",
+    borderStyle: "solid",
+    bgOpacity: 10,
+    borderOpacity: 30,
   },
   started: {
     colorVar: "--color-status-started",
@@ -81,6 +92,9 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     pattern: "dashed",
     label: "Started",
     description: "Begun but not active now",
+    borderStyle: "dashed",
+    bgOpacity: 10,
+    borderOpacity: 30,
   },
   "in-progress": {
     colorVar: "--color-status-in-progress",
@@ -88,13 +102,19 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     pattern: "pulse",
     label: "In progress",
     description: "Active now",
+    borderStyle: "solid",
+    bgOpacity: 12,
+    borderOpacity: 30,
   },
   waiting: {
     colorVar: "--color-status-waiting",
     icon: "clock",
-    pattern: "",
+    pattern: "dashed",
     label: "Waiting",
     description: "Waiting on a dependency",
+    borderStyle: "dashed",
+    bgOpacity: 10,
+    borderOpacity: 30,
   },
   blocked: {
     colorVar: "--color-status-blocked",
@@ -102,13 +122,19 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     pattern: "",
     label: "Blocked",
     description: "Impediment",
+    borderStyle: "solid",
+    bgOpacity: 12,
+    borderOpacity: 30,
   },
   deferred: {
     colorVar: "--color-status-deferred",
     icon: "pause",
-    pattern: "",
+    pattern: "dashed",
     label: "Deferred",
     description: "Postponed",
+    borderStyle: "dashed",
+    bgOpacity: 10,
+    borderOpacity: 30,
   },
   done: {
     colorVar: "--color-status-done",
@@ -116,13 +142,19 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     pattern: "",
     label: "Done",
     description: "Completed",
+    borderStyle: "solid",
+    bgOpacity: 14,
+    borderOpacity: 30,
   },
   closed: {
     colorVar: "--color-status-closed",
     icon: "check-mixed",
-    pattern: "stripe",
+    pattern: "",
     label: "Closed",
     description: "Closed with mixed outcomes",
+    borderStyle: "solid",
+    bgOpacity: 14,
+    borderOpacity: 30,
   },
   canceled: {
     colorVar: "--color-status-canceled",
@@ -130,6 +162,9 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     pattern: "hatch",
     label: "Canceled",
     description: "Canceled",
+    borderStyle: "solid",
+    bgOpacity: 8,
+    borderOpacity: 30,
   },
   rejected: {
     colorVar: "--color-status-rejected",
@@ -137,6 +172,9 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     pattern: "crosshatch",
     label: "Rejected",
     description: "Rejected",
+    borderStyle: "solid",
+    bgOpacity: 10,
+    borderOpacity: 30,
   },
 };
 
@@ -145,10 +183,47 @@ export function getDisplayToken(status: DisplayStatus): DisplayStatusToken {
   return DISPLAY_STATUS_TOKENS[status] ?? DISPLAY_STATUS_TOKENS.planned;
 }
 
-/** CSS class name for the pattern (e.g. "status-pattern-dashed"), or empty. */
+/** CSS color value (using color-mix) for the given token + role. */
+export function tokenColor(token: DisplayStatusToken, role: "bg" | "border", opacity?: number): string {
+  switch (role) {
+    case "bg":     return `color-mix(in srgb, var(${token.colorVar}) ${opacity ?? token.bgOpacity}%, transparent)`;
+    case "border": return `color-mix(in srgb, var(${token.colorVar}) ${opacity ?? token.borderOpacity}%, transparent)`;
+  }
+}
+
+/** Inline style for a "surface" container (task row, big card). */
+export function statusSurfaceStyle(status: DisplayStatus): CSSProperties {
+  const t = getDisplayToken(status);
+  return {
+    backgroundColor: tokenColor(t, "bg"),
+    borderStyle: t.borderStyle,
+    borderColor: tokenColor(t, "border"),
+    borderWidth: "1px",
+  };
+}
+
+/** Inline style for the inner HEADER strip on a row/accordion. */
+export function statusHeaderStyle(status: DisplayStatus): CSSProperties {
+  const t = getDisplayToken(status);
+  return {
+    backgroundColor: tokenColor(t, "bg"),
+    borderStyle: t.borderStyle,
+    borderColor: tokenColor(t, "border"),
+    borderWidth: "1px",
+  };
+}
+
+/** CSS class name for the pattern (e.g. "status-pattern-dashed"), or empty.
+ *  Returns BOTH a generic pattern class AND a per-status override so the
+ *  pattern colour matches the status colour even when the pattern itself
+ *  is shared (e.g. all "idle" states share `status-pattern-dashed`). */
 export function patternClass(status: DisplayStatus): string {
   const { pattern } = getDisplayToken(status);
-  return pattern ? `status-pattern-${pattern}` : "";
+  if (!pattern) return "";
+  if (pattern === "dashed") {
+    return `status-pattern-dashed status-pattern-dashed-${status}`;
+  }
+  return `status-pattern-${pattern}`;
 }
 
 /** CSS class name for the status color (e.g. "status-started"). */

@@ -6,7 +6,7 @@ import { StatusBadge } from "../ui/status-badge";
 import type { Feature, Phase } from "../../lib/types";
 
 /** A task counts as "new" if it was created within this window of "now". */
-const NEW_TASK_WINDOW_MS = 3 * 60 * 1000;
+const NEW_TASK_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function formatRelative(value: string): string {
   const ms = Date.now() - new Date(value).getTime();
@@ -49,10 +49,16 @@ export function NewAddedTasks({ features, phases }: { features: Feature[]; phase
       })))
       .filter((row) => {
         const created = new Date(row.createdAt).getTime();
-        return Number.isFinite(created) && now - created < NEW_TASK_WINDOW_MS && now - created >= 0;
+        return (
+          Number.isFinite(created) &&
+          now - created < NEW_TASK_WINDOW_MS &&
+          now - created >= 0 &&
+          row.task.status === "planned" &&
+          !row.task.startedAt
+        );
       })
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .slice(0, 20);
+      .slice(0, 10);
   }, [features, phases, now]);
 
   // Single timer at the soonest expiry so the card re-renders and stale rows
@@ -74,7 +80,7 @@ export function NewAddedTasks({ features, phases }: { features: Feature[]; phase
     <Card className="grid gap-4">
       <div>
         <h2 className="text-lg font-bold text-[var(--text)]">New Added Tasks</h2>
-        <p className="text-sm text-[var(--text-muted)]">Tasks created in the last 3 minutes.</p>
+        <p className="text-sm text-[var(--text-muted)]">Tasks created in the last 24 hours.</p>
       </div>
 
       <div className="grid gap-3">

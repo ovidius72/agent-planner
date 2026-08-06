@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { Accordion } from "./accordion";
 
 interface StatusLogEntryLike {
   id: string;
@@ -66,30 +66,32 @@ export interface StatusHistoryAccordionProps {
  * transitions (from → to, date, motivation). Uses the recorded statusLog; when
  * that is empty, transitions are inferred from the backbone progression of the
  * current status (so a "done" task always shows planned→in-progress→done).
+ *
+ * Implementation note: this wraps the shared {@link Accordion} primitive instead
+ * of re-implementing <details>/<summary>, keeping disclosure behavior and
+ * styling consistent across the app.
  */
 export function StatusHistoryAccordion({ statusLog, currentStatus, backbone, startedAt, completedAt }: StatusHistoryAccordionProps) {
   const transitions = buildTransitions(statusLog ?? [], currentStatus ?? "", backbone ?? [], startedAt, completedAt);
-  const open = transitions.length > 0;
   return (
-    <details className="group mt-4 border border-[var(--border)] rounded-lg overflow-hidden" open={open}>
-      <summary className="flex items-center justify-between p-3 cursor-pointer font-semibold text-[var(--text)] bg-[var(--surface-elevated)] hover:bg-[var(--surface-strong)] transition-colors select-none">
-        <span className="text-sm">Status history ({transitions.length})</span>
-        <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180 text-[var(--text-muted)]" />
-      </summary>
-      <div className="p-3 border-t border-[var(--border)] bg-[var(--surface)] grid gap-2.5">
-        {transitions.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)] italic">No status changes recorded.</p>
-        ) : (
-          transitions.map((entry, i) => (
-            <div key={i} className="text-sm flex flex-wrap items-center gap-2">
-              <span className="text-xs font-mono text-[var(--text-subtle)]">{formatCompactDate(entry.date)}</span>
-              <span className="font-semibold text-[var(--text-muted)]">{prettyStatus(entry.fromStatus)}</span>
-              <span className="text-[var(--text-subtle)]">→</span>
-              <span className="font-semibold text-[var(--text)]">{prettyStatus(entry.toStatus)}</span>
-            </div>
-          ))
-        )}
-      </div>
-    </details>
+    <Accordion
+      title="Status history"
+      count={transitions.length}
+      defaultOpen={transitions.length > 0}
+      contentClassName="grid gap-2.5"
+    >
+      {transitions.length === 0 ? (
+        <p className="text-sm text-[var(--text-muted)] italic">No status changes recorded.</p>
+      ) : (
+        transitions.map((entry, i) => (
+          <div key={i} className="text-sm flex flex-wrap items-center gap-2">
+            <span className="text-xs font-mono text-[var(--text-subtle)]">{formatCompactDate(entry.date)}</span>
+            <span className="font-semibold text-[var(--text-muted)]">{prettyStatus(entry.fromStatus)}</span>
+            <span className="text-[var(--text-subtle)]">→</span>
+            <span className="font-semibold text-[var(--text)]">{prettyStatus(entry.toStatus)}</span>
+          </div>
+        ))
+      )}
+    </Accordion>
   );
 }

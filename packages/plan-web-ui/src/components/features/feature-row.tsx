@@ -3,6 +3,7 @@ import { Form, Link, useFetcher } from "react-router-dom";
 import { featureStatuses } from "../../lib/statuses";
 import { formatStatusSummary, type StatusSummary } from "../../lib/status-summary";
 import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
+import { statusSurfaceClass } from "../../lib/display-status-tokens";
 import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
 import { DisplayStatusBadge } from "../ui/status-badge";
@@ -48,7 +49,7 @@ export function FeatureRow({
     : "");
 
   return (
-    <div className="surface-card px-4 py-2">
+    <div className={`surface-card px-4 py-2 ${statusSurfaceClass(display.displayStatus)}`}>
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,132px)_minmax(0,152px)_124px_44px_44px] xl:items-center">
         <div className="flex min-w-0 flex-col items-start gap-1 xl:contents">
           <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">

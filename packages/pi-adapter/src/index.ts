@@ -855,9 +855,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // ── Step 1: Enable gating ───────────────────────────────────────
     // No blocking prompt in session_start: ctx.ui.input()/select() do not
     // render for NPM-loaded ESM extensions during session_start (they hang
-    // until the safety-net timeout). The planner is always DISABLED at
-    // startup; the user enables it with '/planner load' (which also starts
-    // the web UI on LAN and triggers the resume summary showing the URL).
+    // until the safety-net timeout). Tracked upstream via planner task
+    // T151 · EBRST. The planner is always DISABLED at startup; the user
+    // enables it with '/planner load' (which also starts the web UI on LAN
+    // and triggers the resume summary showing the URL).
     let enablePlanner = false;
     if (exists) {
       ctx.ui.notify("Planner detected in this project. Run '/planner load' to enable the planner and start the web UI (LAN).", "info");

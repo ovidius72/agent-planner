@@ -130,18 +130,15 @@ export function TaskDetailRoute() {
         ) : null}
         <StatusHistoryAccordion statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} startedAt={task.startedAt} completedAt={task.completedAt} />
         {taskDecisions.length > 0 ? (
-          <details className="group mt-4">
-            <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
-              <span>Decisions ({taskDecisions.length})</span>
-            </summary>
-            <div className="mt-2 ml-4 space-y-2 border-l-2 border-[var(--border)] pl-4">
+          <Accordion title="Decisions" count={taskDecisions.length} defaultOpen={false}>
+            <div className="grid gap-2 border-l-2 border-[var(--border)] pl-4 ml-1">
               {taskDecisions.map((decision, idx) => (
                 <div key={idx} className="text-sm text-[var(--text-muted)]">
                   <FormattedText text={decision} />
                 </div>
               ))}
             </div>
-          </details>
+          </Accordion>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
 
@@ -182,20 +179,17 @@ export function TaskDetailRoute() {
         </div>
 
         {task.subtasks?.length ? (
-          <details className="surface-card px-4 py-4">
-            <summary className="cursor-pointer list-none text-sm font-bold text-[var(--text)]">Subtasks</summary>
-            <div className="mt-3 grid gap-2">
-              {task.subtasks.map((subtask) => (
-                <div key={subtask.id} className="surface-card flex items-center justify-between gap-4 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--text)]">{subtask.title}</p>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">{subtask.id}</p>
-                  </div>
-                  <StatusBadge status={subtask.status} />
+          <Accordion title="Subtasks" count={task.subtasks.length} defaultOpen={false} contentClassName="grid gap-2">
+            {task.subtasks.map((subtask) => (
+              <div key={subtask.id} className="surface-card flex items-center justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text)]">{subtask.title}</p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">{subtask.id}</p>
                 </div>
-              ))}
-            </div>
-          </details>
+                <StatusBadge status={subtask.status} />
+              </div>
+            ))}
+          </Accordion>
         ) : null}
       </Card>
       <Outlet />

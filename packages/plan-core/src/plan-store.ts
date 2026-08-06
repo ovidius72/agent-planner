@@ -1,5 +1,6 @@
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ZodError } from "zod";
 import {
   CodebaseProfileSchema,
   FeatureSchema,
@@ -57,10 +58,22 @@ function resolveStoredFeatureId(
   return undefined;
 }
 
+export interface PlanStoreErrorDetails {
+  path?: string;
+  operation?: string;
+  backupTried?: boolean;
+  backupFailed?: boolean;
+  jsonParseError?: { message: string; line?: number; column?: number };
+  validationErrors?: { path: string; message: string }[];
+  rawPreview?: string;
+  [key: string]: unknown;
+}
+
 export class PlanStoreError extends Error {
   constructor(
     message: string,
     public readonly cause?: unknown,
+    public readonly details?: PlanStoreErrorDetails,
   ) {
     super(message);
     this.name = "PlanStoreError";
@@ -400,18 +413,54 @@ export async function migrateToGlobalSequence(store: PlanStore): Promise<{ migra
 }
 
 async function readJson<T>(path: string, schema: { parse(v: unknown): T }): Promise<T> {
+  let backupTried = false;
+  let backupFailed = false;
+  let rawPreview: string | undefined;
+
   try {
     const raw = await readFile(path, "utf-8");
+    rawPreview = raw.slice(0, 240);
     return schema.parse(JSON.parse(raw));
   } catch (cause) {
     // Try the .bak backup before giving up (recover from external-write corruption).
+    backupTried = true;
     try {
       const bak = await readFile(`${path}.bak`, "utf-8");
+      rawPreview = bak.slice(0, 240);
       return schema.parse(JSON.parse(bak));
     } catch {
+      backupFailed = true;
       // fall through to original error
     }
-    throw new PlanStoreError(`read failed: ${path}`, cause);
+
+    const details: PlanStoreErrorDetails = {
+      path,
+      operation: "readJson",
+      backupTried,
+      backupFailed,
+    };
+    if (rawPreview != null) details.rawPreview = rawPreview;
+
+    if (cause instanceof SyntaxError) {
+      const match = cause.message.match(/position\s+(\d+)/i);
+      const position = match && match[1] ? Number.parseInt(match[1], 10) : undefined;
+      if (rawPreview != null && position != null && position >= 0) {
+        const upTo = rawPreview.slice(0, position);
+        const line = upTo.split("\n").length;
+        const lastNL = upTo.lastIndexOf("\n");
+        const column = position - (lastNL >= 0 ? lastNL : 0);
+        details.jsonParseError = { message: cause.message, line, column };
+      } else {
+        details.jsonParseError = { message: cause.message };
+      }
+    } else if (cause instanceof ZodError) {
+      details.validationErrors = cause.issues.slice(0, 8).map((issue) => ({
+        path: issue.path.map((p) => (typeof p === "number" ? `[${p}]` : String(p))).join("."),
+        message: issue.message,
+      }));
+    }
+
+    throw new PlanStoreError(`read failed: ${path}`, cause, details);
   }
 }
 

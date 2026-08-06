@@ -44,5 +44,8 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && node --test \"test/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "zod-to-json-schema": "^3.25.2"
   }
 }
