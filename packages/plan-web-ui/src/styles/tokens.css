@@ -7,7 +7,7 @@
   --color-status-blocked: #ef4444;
   --color-status-canceled: #94a3b8;
   /* Previously referenced but undefined — now defined. */
-  --color-status-waiting: #eab308;
+  --color-status-waiting: #64748b;
   --color-status-deferred: #8b5cf6;
   --color-status-rejected: #f43f5e;
   /* Parent-only derived display statuses (P039). */

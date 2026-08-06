@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router-dom";
 import { AppShell } from "../components/layout/app-shell";
 import { getActiveTasks, getProject, getUiConfig, type ActiveTaskSummary, type UiConfig } from "../lib/api";
+import { useAnimatedFavicon } from "../hooks/use-animated-favicon";
 import { ShortcutProvider } from "../lib/shortcuts";
 import { LiveSyncBridge } from "./live-sync";
 
@@ -24,6 +25,8 @@ export function RootRoute() {
   useEffect(() => {
     document.title = project?.name?.trim() ? `${project.name} · Agent Plan` : "Agent Plan";
   }, [project?.name]);
+
+  useAnimatedFavicon(activeTasks.length > 0);
 
   return (
     <ShortcutProvider shortcuts={uiConfig.shortcuts}>

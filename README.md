@@ -69,6 +69,14 @@ The core planning model lives outside Pi, Claude Code, or any other harness. Ada
 
 ---
 
+## Documentation
+
+- [`docs/setup-claude-code.md`](./docs/setup-claude-code.md) — Claude Code MCP + slash-command setup.
+- [`docs/setup-codex.md`](./docs/setup-codex.md) — Codex MCP alignment and public planner schema.
+- [`docs/setup-zed.md`](./docs/setup-zed.md) — Zed MCP setup (custom context server, no extension required).
+- [`docs/planner-schema.json`](./docs/planner-schema.json) — public JSON schema for the `.planner/` workspace (generated from `@agent-plan/core` Zod schemas).
+- [`AGENTS.md`](./AGENTS.md) — operational rules for agents working on Agent Plan itself.
+
 ## Plugins
 
 Agent Plan is distributed to AI coding harnesses through a **self-hosted plugin marketplace**. Plugins are static bundles (JSON + Markdown + shell scripts) living in the top-level `plugins/` directory, separate from the npm packages in `packages/`.

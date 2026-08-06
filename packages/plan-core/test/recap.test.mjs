@@ -77,14 +77,15 @@ describe("buildRecap — pending handoff", () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }], handoff: "# Resume context\nNext: finish X" });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
     assert.ok(r.includes("Pending phase handoffs (1)"), "handoff section");
-    assert.ok(r.includes("/planner handoff show <ref>"), "pi show cmd");
-    assert.ok(r.includes("/planner handoff clear <ref>"), "pi clear cmd");
+    assert.ok(r.includes("Do you want to resume from P001(F001)?"), "specific resume CTA");
+    assert.ok(r.includes("/planner handoff show P001(F001)"), "pi show cmd with ref");
+    assert.ok(!r.includes("/planner handoff show <ref>"), "no generic placeholder");
   });
   test("handoff section (mcp)", async () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }], handoff: "# ctx" });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
-    assert.ok(r.includes("planner-handoff-show <ref>"), "mcp show cmd");
-    assert.ok(r.includes("planner-handoff-clear <ref>"), "mcp clear cmd");
+    assert.ok(r.includes("planner-handoff-show P001(F001)"), "mcp show cmd with ref");
+    assert.ok(!r.includes("planner-handoff-show <ref>"), "no generic placeholder");
   });
 });
 

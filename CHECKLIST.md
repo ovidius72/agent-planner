@@ -100,6 +100,7 @@ List filters continue to operate on **canonical workflow status**; the display l
 - Derived display-status layer applied to Work Tree, detail headers, and list rows.
 - New `DisplayStatusBadge` primitive with icon + pattern + breakdown tooltip.
 - Responsive mobile layout preserved; filter semantics unchanged.
+- **Work Tree sort selector**: single global control (sort key + asc/desc) applied to features, phases, and tasks simultaneously. Supported keys: priority, number, created date, updated date, title, short ID, status, startedAt (tasks), completedAt (tasks). State persisted per project in `localStorage`. Default remains `priority` asc.
 
 ### Tests
 

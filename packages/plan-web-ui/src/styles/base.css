@@ -54,10 +54,13 @@ a { color: inherit; text-decoration: none; }
 
 .surface-card {
   background: var(--surface-strong);
-  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   backdrop-filter: blur(14px) saturate(130%);
   -webkit-backdrop-filter: blur(14px) saturate(130%);
+  /* No base border — cards rely on the surface tint + shadow for separation.
+     When status colour is needed, .ap-status-header-* (header strip) or
+     .ap-status-surface-* (full task row) applies the coloured border on the
+     specific element that needs it, leaving the rest of the card borderless. */
   box-shadow: var(--shadow-card);
 }
 
@@ -119,9 +122,27 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ── Accessible pattern classes (distinguishable without hue) ── */
-/* `started` — dashed border signals "begun but idle". */
+/* Dashed border — generic for "idle / not active" states. Per-status
+   overrides (below) provide the proper colour. */
 .status-pattern-dashed {
-  border: 1.5px dashed color-mix(in srgb, var(--color-status-started) 70%, transparent);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-started) 70%, transparent);
+}
+.status-pattern-dashed-planned {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-planned) 65%, transparent);
+}
+.status-pattern-dashed-started {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-started) 70%, transparent);
+}
+.status-pattern-dashed-waiting {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-waiting) 70%, transparent);
+}
+.status-pattern-dashed-deferred {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-deferred) 70%, transparent);
 }
 /* `in-progress` — subtle pulse to signal "active now". */
 @keyframes ap-status-pulse {
@@ -131,28 +152,42 @@ a { color: inherit; text-decoration: none; }
 .status-pattern-pulse {
   animation: ap-status-pulse 2s ease-in-out infinite;
 }
-/* `closed` — vertical stripe pattern signals "mixed terminal". */
+/* `closed` — wide, low-intensity stripe pattern signals "mixed terminal".
+   Reduced opacity + wider bands so the title/content stay readable. */
 .status-pattern-stripe {
   background-image: repeating-linear-gradient(
     135deg,
-    transparent 0 4px,
-    color-mix(in srgb, var(--color-status-closed) 18%, transparent) 4px 8px
+    transparent 0 10px,
+    color-mix(in srgb, var(--color-status-closed) 8%, transparent) 10px 20px
   );
 }
-/* `canceled` — diagonal hatch signals "voided". */
+/* `canceled` — diagonal hatch signals "voided". Wider bands + lower opacity. */
 .status-pattern-hatch {
   background-image: repeating-linear-gradient(
     45deg,
-    transparent 0 3px,
-    color-mix(in srgb, var(--color-status-canceled) 16%, transparent) 3px 6px
+    transparent 0 8px,
+    color-mix(in srgb, var(--color-status-canceled) 8%, transparent) 8px 16px
   );
 }
-/* `rejected` — cross-hatch signals "rejected". */
+/* `rejected` — cross-hatch signals "rejected". Reduced intensity so the
+   status badge text remains readable on patterned backgrounds. */
 .status-pattern-crosshatch {
   background-image:
-    repeating-linear-gradient( 45deg, transparent 0 3px, color-mix(in srgb, var(--color-status-rejected) 14%, transparent) 3px 6px),
-    repeating-linear-gradient(-45deg, transparent 0 3px, color-mix(in srgb, var(--color-status-rejected) 14%, transparent) 3px 6px);
+    repeating-linear-gradient( 45deg, transparent 0 4px, color-mix(in srgb, var(--color-status-rejected) 8%, transparent) 4px 8px),
+    repeating-linear-gradient(-45deg, transparent 0 4px, color-mix(in srgb, var(--color-status-rejected) 8%, transparent) 4px 8px);
 }
+
+/* Status visual treatments are now applied INLINE by `<StatusItem>`,
+   which reads from the central `DISPLAY_STATUS_TOKENS` map (see
+   `lib/display-status-tokens.ts`). No per-state CSS overrides are needed
+   here. The only CSS classes related to status visuals are the *pattern*
+   classes (`.status-pattern-*`), which are intentionally generic and
+   shared across states.
+
+   If you need to tweak a specific state's appearance, change the values in
+   `DISPLAY_STATUS_TOKENS` rather than adding a new CSS rule. */
+
+/* Pattern-stripping helper — currently unused but kept for completeness. */
 
 @media (prefers-reduced-motion: reduce) {
   .status-pattern-pulse { animation: none; }
@@ -344,16 +379,15 @@ textarea:disabled {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
 
-/* ── In-progress emphasis: animated background glow + pinging dot ── */
+/* ── In-progress emphasis: animated outer glow only (no inset border, since
+   the status-header element already draws the 1px border — an additional
+   inset ring would create a visible double-border). ── */
 @keyframes ap-progress-glow {
   0%, 100% {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--color-status-in-progress) 30%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-in-progress) 0%, transparent);
   }
   50% {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--color-status-in-progress) 60%, transparent),
-      0 0 22px -4px color-mix(in srgb, var(--color-status-in-progress) 26%, transparent);
+    box-shadow: 0 0 18px -2px color-mix(in srgb, var(--color-status-in-progress) 28%, transparent);
   }
 }
 
@@ -361,6 +395,10 @@ textarea:disabled {
   animation: ap-progress-glow 2.6s ease-in-out infinite;
   background: color-mix(in srgb, var(--color-status-in-progress) 7%, transparent);
 }
+
+/* Old version had a double-border issue: .ap-status-header-in-progress
+   added its own inset box-shadow on top of the outer .ap-in-progress shadow.
+   Header keeps only the border + animated outer glow; no inset shadow. */
 
 @keyframes ap-dot-ping {
   0% { transform: scale(1); opacity: 0.85; }

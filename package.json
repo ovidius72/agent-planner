@@ -23,6 +23,7 @@
     "clean": "tsc -b --clean",
     "build:web-ui": "pnpm --filter @agent-plan/web-ui build",
     "build:pi-adapter": "pnpm build:web-ui && bash scripts/copy-web-ui.sh && pnpm --filter @agent-plan/pi-adapter build",
+    "build:schema": "pnpm --filter @agent-plan/core build && node scripts/generate-planner-schema.cjs",
     "dev:web": "pnpm --filter @agent-plan/web-ui dev",
     "dev:server": "node packages/plan-server/dist/cli.js",
     "release:validate": "pnpm build && pnpm check",
@@ -35,7 +36,8 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "zod-to-json-schema": "^3.25.2"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

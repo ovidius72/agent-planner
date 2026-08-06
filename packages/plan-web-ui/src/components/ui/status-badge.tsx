@@ -17,6 +17,7 @@ import {
   getDisplayToken,
   patternClass,
   statusColorClass,
+  toDisplayStatus,
   buildBreakdownLabel,
   type StatusBreakdown,
 } from "../../lib/display-status-tokens";
@@ -40,9 +41,22 @@ export function StatusIcon({ status, className = "" }: { status: string; classNa
   return <Icon className={`h-4 w-4 shrink-0 ${className}`.trim()} aria-hidden="true" />;
 }
 
-/** Canonical workflow status chip. Kept for leaf entities and legacy callers. */
+/** Canonical workflow status chip. Kept for leaf entities and legacy callers.
+ *  Now renders the same icon + label + pattern as DisplayStatusBadge so a leaf
+ *  task with `deferred` looks identical to a parent phase with `deferred`. */
 export function StatusBadge({ status }: { status: string }) {
-  return <span className={`status-chip ${statusColorClass(status as DisplayStatus)}`}>{status}</span>;
+  const displayStatus = toDisplayStatus(status);
+  const token = getDisplayToken(displayStatus);
+  return (
+    <span
+      className={`status-chip ${statusColorClass(displayStatus)} ${patternClass(displayStatus)}`}
+      title={token.description}
+      aria-label={token.description}
+    >
+      <StatusIcon status={displayStatus} className="h-3.5 w-3.5" />
+      <span>{token.label}</span>
+    </span>
+  );
 }
 
 interface DisplayStatusBadgeProps {

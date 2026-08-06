@@ -236,18 +236,15 @@ export function PhaseDetailRoute() {
           </Accordion>
         ) : null}
         {phaseDecisions.length > 0 ? (
-          <details className="group mt-4">
-            <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
-              <span>Decisions ({phaseDecisions.length})</span>
-            </summary>
-            <div className="mt-2 ml-4 space-y-2 border-l-2 border-[var(--border)] pl-4">
+          <Accordion title="Decisions" count={phaseDecisions.length} defaultOpen={false}>
+            <div className="grid gap-2 border-l-2 border-[var(--border)] pl-4 ml-1">
               {phaseDecisions.map((decision, idx) => (
                 <div key={idx} className="text-sm text-[var(--text-muted)]">
                   <FormattedText text={decision} />
                 </div>
               ))}
             </div>
-          </details>
+          </Accordion>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
         <StatusHistoryAccordion statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
