@@ -3494,6 +3494,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task Create",
     description: "Add a task to a phase with a RICH description. REQUIRED: description must include code references (file:line), what already exists vs what needs to be built, specific structs/traits/systems to modify, concrete implementation steps, and edge cases to handle. The description is the execution context for agents; one-liners cause misalignment. Status defaults to planned.",
     parameters: Type.Object({
+      featureId: Type.String({ description: "Feature ID the phase belongs to (required)" }),
       phaseId: Type.String({ description: "Phase ID the task belongs to" }),
       title: Type.String({ description: "Task title" }),
       description: Type.String({ description: "REQUIRED — execution context: code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner. Prefix with 'design-only' for pre-implementation design tasks.", minLength: 50 }),
@@ -3504,10 +3505,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      // Resolve the phase ref (accepts F00x/P00x, bare P00x, shortId, UUID, title).
+      if (!params.featureId?.trim()) return { content: [{ type: "text", text: "featureId is required: a task must belong to a feature." }], details: {} };
       const features = (await st.loadFeatures()).features;
+      const resolvedFeature = resolveFeatureRefStrict(features, params.featureId.trim());
+      if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
+      const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
+      if (!featureValidation.ok) return { content: [{ type: "text", text: featureValidation.error }], details: {} };
+      const feature = resolvedFeature.feature;
+      const existingFeature = features.find((f) => f.id === feature.id);
+      if (!existingFeature) return { content: [{ type: "text", text: `Resolved feature ${feature.id} no longer exists. Refusing to create task.` }], details: {} };
+      // Resolve the phase ref (accepts F00x/P00x, bare P00x, shortId, UUID, title).
       const resolvedPhase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
       if (!resolvedPhase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+      if (resolvedPhase.featureId !== feature.id) return { content: [{ type: "text", text: `Phase ${formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features))} does not belong to feature ${formatFeatureRef(feature.number)}. Refusing to create task.` }], details: {} };
       const phaseId = resolvedPhase.id;
       const phaseValidation = await validateResolvedTarget("phase", phaseId, () => st.loadPhase(phaseId).catch(() => undefined));
       if (!phaseValidation.ok) return { content: [{ type: "text", text: phaseValidation.error }], details: {} };
