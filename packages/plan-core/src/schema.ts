@@ -207,7 +207,7 @@ export const TaskSchema = z.object({
 }));
 
 export const HandoffHistoryEntrySchema = z.object({
-  /** Relative path under .planner/handoff-archive/ (e.g. <phaseId>-<ISO>.md). */
+  /** Relative path under .planner/.local/handoff-archive/ (e.g. <phaseId>-<ISO>.md). */
   file: z.string().default(""),
   clearedAt: TimestampSchema,
   /** Why the handoff was cleared: "task-started" | "phase-done" | "manual" | "superseded" | "imported". */
@@ -255,7 +255,7 @@ export const PhaseSchema = z.object({
    *  completes — so a restart between read and resume does not lose context. */
   handoffReadAt: z.string().default(""),
   /** Metadata for recently-cleared handoffs (newest-first, capped at 5). The
-   *  full content lives as .md files in .planner/handoff-archive/ (gitignored);
+   *  full content lives as .md files in .planner/.local/handoff-archive/ (gitignored);
    *  this array only holds the pointer + clear reason + timestamp, so the phase
    *  JSON stays lean and the archive is recoverable. */
   handoffHistory: z.array(HandoffHistoryEntrySchema).default([]),

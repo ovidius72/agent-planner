@@ -434,8 +434,8 @@ async function buildHandoffMarkdown(
     ".planner/features/",
     currentPhase ? `.planner/phases/${currentPhase.id}.json` : "",
     latestPhaseUpdate && latestPhaseUpdate.id !== currentPhase?.id ? `.planner/phases/${latestPhaseUpdate.id}.json` : "",
-    ".planner/resume.json",
-    ".planner/generated/PLAN.md",
+    ".planner/.local/resume.json",
+    ".planner/.local/generated/PLAN.md",
   ].filter(Boolean);
 
   const recentActivityLines = recentActivity.length > 0
@@ -501,7 +501,7 @@ async function buildHandoffMarkdown(
     ...recentActivityLines,
     "",
     "## Reminder",
-    "- This handoff is KEPT until a task in this phase starts (then auto-archived to .planner/handoff-archive/) or the phase completes. No need to clear it manually.",
+    "- This handoff is KEPT until a task in this phase starts (then auto-archived to .planner/.local/handoff-archive/) or the phase completes. No need to clear it manually.",
   ].join("\n");
 }
 
@@ -2084,7 +2084,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // Other phases' handoffs are left untouched (informational, non-blocking).
         if ((phase!.handoff ?? "") !== "") {
           await st.clearPhaseHandoff(phase!.id, "task-started").catch(() => {});
-          ctx.ui.notify("📦 Archived handoff for this phase (task started) — recover via /planner handoff list + .planner/handoff-archive/.", "info");
+          ctx.ui.notify("📦 Archived handoff for this phase (task started) — recover via /planner handoff list + .planner/.local/handoff-archive/.", "info");
         }
         const _otherHandoffs = (await st.listHandoffs()).filter((h) => h.phaseId !== phase!.id);
         if (_otherHandoffs.length > 0) {
@@ -2689,7 +2689,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_render",
     label: "Plan Render",
-    description: "Regenerate all generated markdown views in .planner/generated/. Call after any data change to keep docs in sync.",
+    description: "Regenerate all generated markdown views in .planner/.local/generated/. Call after any data change to keep docs in sync.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -2915,7 +2915,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
       await st.clearPhaseHandoff(r.phase.id, "manual");
-      return { content: [{ type: "text", text: `✅ Cleared handoff on ${r.compositeRef} (handoffUpdatedAt preserved as audit; archived to .planner/handoff-archive/).` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
+      return { content: [{ type: "text", text: `✅ Cleared handoff on ${r.compositeRef} (handoffUpdatedAt preserved as audit; archived to .planner/.local/handoff-archive/).` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
     },
   });
 

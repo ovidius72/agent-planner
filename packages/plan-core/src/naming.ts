@@ -37,9 +37,29 @@ export async function validateResolvedTarget<T extends { id: string }>(
 
 
 /** Generate a globally-unique short id (5 chars, Crockford Base32, e.g. `UUXD1`-style
- *  but without 0/1/I/O). Retries until the id is not in `existing` (project-scoped
- *  collision guard). Throws only in the impossible saturation case (~50 retries). */
-export function createShortId(existing: Set<string> = new Set()): string {
+ *  but without 0/1/I/O). If `seed` is provided, the id is derived deterministically
+ *  from a stable hash of the seed so two worktrees starting from the same commit
+ *  produce identical shortIds for the same entity. Retries until the id is not in
+ *  `existing` (project-scoped collision guard). Throws only in the impossible
+ *  saturation case (~50 retries). */
+export function createShortId(existing: Set<string> = new Set(), seed?: string): string {
+  if (seed) {
+    // Stable string hash -> Crockford encoding.
+    let hash = 0;
+    for (const c of seed) {
+      hash = ((hash << 5) - hash + c.charCodeAt(0)) | 0;
+    }
+    const base = Math.abs(hash);
+    for (let offset = 0; offset < 64; offset += 1) {
+      let id = "";
+      let value = base + offset;
+      for (let i = 0; i < SHORT_ID_LENGTH; i += 1) {
+        id = CROCKFORD_ALPHABET[value % CROCKFORD_ALPHABET.length] + id;
+        value = Math.floor(value / CROCKFORD_ALPHABET.length);
+      }
+      if (!existing.has(id)) return id;
+    }
+  }
   const max = CROCKFORD_ALPHABET.length;
   for (let attempt = 0; attempt < 64; attempt += 1) {
     let id = "";

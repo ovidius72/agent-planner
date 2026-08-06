@@ -1,6 +1,6 @@
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { ZodError } from "zod";
+import { basename, dirname, join } from "node:path";
+import { z, ZodError } from "zod";
 import {
   CodebaseProfileSchema,
   FeatureSchema,
@@ -21,6 +21,7 @@ import {
   RequirementsDocumentSchema,
   ResumeFocusSchema,
   ActivityLogSchema,
+  TimestampSchema,
   type ActivityEntry,
   type ActivityLog,
   type CodebaseProfile,
@@ -166,14 +167,27 @@ export function withFeatureLock<T>(featureId: string, fn: () => Promise<T>): Pro
   });
 }
 
-async function atomicWriteText(path: string, raw: string): Promise<void> {
+async function atomicWriteText(path: string, raw: string, root?: string): Promise<void> {
   return withWriteLock(path, async () => {
     writeBusyHook?.(true);
-    const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
+    const localRoot = root ? join(root, ".local") : undefined;
+    const tmpDir = localRoot ? join(localRoot, "tmp") : dirname(path);
+    const backupsRoot = localRoot ? join(localRoot, "backups") : dirname(path);
+    const rel = localRoot && path.startsWith(localRoot)
+      ? path.slice(localRoot.length).replace(/^\//, "")
+      : root && path.startsWith(root)
+        ? path.slice(root.length).replace(/^\//, "")
+        : basename(path);
+    const backupRel = rel ? rel + ".bak" : basename(path) + ".bak";
+    const backupPath = join(backupsRoot, backupRel);
+    const tmpName = rel ? rel.replace(/[/\\]/g, "--") + `.tmp.${process.pid}.${Date.now()}` : `${basename(path)}.tmp.${process.pid}.${Date.now()}`;
+    const tmp = join(tmpDir, tmpName);
     try {
+      await mkdir(tmpDir, { recursive: true });
       await writeFile(tmp, raw, "utf-8");
       try {
-        await copyFile(path, `${path}.bak`);
+        await mkdir(dirname(backupPath), { recursive: true });
+        await copyFile(path, backupPath);
       } catch {}
       await rename(tmp, path);
       writeNotifyHook?.();
@@ -186,11 +200,11 @@ async function atomicWriteText(path: string, raw: string): Promise<void> {
   });
 }
 
-async function atomicWriteJson(path: string, data: unknown): Promise<void> {
-  return atomicWriteText(path, JSON.stringify(data, null, 2));
+async function atomicWriteJson(path: string, data: unknown, root?: string): Promise<void> {
+  return atomicWriteText(path, JSON.stringify(data, null, 2), root);
 }
 
-async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T }, updater: (data: T) => T): Promise<T> {
+async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T }, updater: (data: T) => T, root?: string): Promise<T> {
   // NOTE: write the file INLINE here, do NOT call atomicWriteJson/atomicWriteText,
   // because those re-acquire withWriteLock(path) — and we already hold it (below).
   // Re-entrant locking is not supported, so calling them would deadlock.
@@ -199,10 +213,24 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
     const updated = updater(current);
     const parsed = schema.parse(updated);
     writeBusyHook?.(true);
-    const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
+    const localRoot = root ? join(root, ".local") : undefined;
+    const tmpDir = localRoot ? join(localRoot, "tmp") : dirname(path);
+    const backupsRoot = localRoot ? join(localRoot, "backups") : dirname(path);
+    const rel = localRoot && path.startsWith(localRoot)
+      ? path.slice(localRoot.length).replace(/^\//, "")
+      : root && path.startsWith(root)
+        ? path.slice(root.length).replace(/^\//, "")
+        : basename(path);
+    const backupPath = join(backupsRoot, rel + ".bak");
+    const tmpName = rel ? rel.replace(/[/\\]/g, "--") + `.tmp.${process.pid}.${Date.now()}` : `${basename(path)}.tmp.${process.pid}.${Date.now()}`;
+    const tmp = join(tmpDir, tmpName);
     try {
+      await mkdir(tmpDir, { recursive: true });
       await writeFile(tmp, JSON.stringify(parsed, null, 2), "utf-8");
-      try { await copyFile(path, `${path}.bak`); } catch {}
+      try {
+        await mkdir(dirname(backupPath), { recursive: true });
+        await copyFile(path, backupPath);
+      } catch {}
       await rename(tmp, path);
       writeNotifyHook?.();
     } catch (cause) {
@@ -707,7 +735,7 @@ export class PlanStore {
     }
     await mkdir(this.featuresDir(), { recursive: true });
     for (const feat of legacy.features) {
-      await atomicWriteJson(this.featurePath(feat.id), feat);
+      await atomicWriteJson(this.featurePath(feat.id), feat, this.root);
     }
     await unlink(this.featuresPath()).catch(() => {});
   }
@@ -718,17 +746,80 @@ export class PlanStore {
     return join(this.phasesDir(), `${phaseId}.json`);
   }
   private generatedDir(): string {
-    return join(this.root, "generated");
+    return join(this.localRoot(), "generated");
   }
   private codebasePath(): string {
     return join(this.root, "codebase.json");
   }
   private resumePath(): string {
-    return join(this.root, "resume.json");
+    return join(this.localRoot(), "resume.json");
   }
   private activityPath(): string {
-    return join(this.root, "activity.json");
+    return join(this.localRoot(), "activity.json");
   }
+  private localRoot(): string {
+    return join(this.root, ".local");
+  }
+  private timestampPath(): string {
+    return join(this.localRoot(), "timestamp.json");
+  }
+  private backupsDir(): string {
+    return join(this.localRoot(), "backups");
+  }
+  private tmpDir(): string {
+    return join(this.localRoot(), "tmp");
+  }
+  private handoffArchiveDir(): string {
+    return join(this.localRoot(), "handoff-archive");
+  }
+
+  /** One-time migration for plans created before .planner/.local/ existed.
+   *  Moves a legacy root-level file into .local/ if the legacy file exists and
+   *  the .local/ counterpart does not. Safe to call on every load. */
+  private async migrateLegacyLocalFile(oldPath: string, newPath: string): Promise<void> {
+    try {
+      await access(oldPath);
+    } catch {
+      return;
+    }
+    try {
+      await access(newPath);
+      return;
+    } catch {}
+    await mkdir(dirname(newPath), { recursive: true });
+    await rename(oldPath, newPath);
+  }
+
+  private async migrateLegacyGeneratedDir(): Promise<void> {
+    const oldDir = join(this.root, "generated");
+    const newDir = this.generatedDir();
+    try {
+      await access(oldDir);
+    } catch {
+      return;
+    }
+    try {
+      await access(newDir);
+      return;
+    } catch {}
+    await rename(oldDir, newDir);
+  }
+
+  private async migrateLegacyHandoffArchive(): Promise<void> {
+    const oldDir = join(this.root, "handoff-archive");
+    const newDir = this.handoffArchiveDir();
+    try {
+      await access(oldDir);
+    } catch {
+      return;
+    }
+    try {
+      await access(newDir);
+      return;
+    } catch {}
+    await rename(oldDir, newDir);
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────
 
   async init(projectName: string): Promise<void> {
@@ -739,7 +830,11 @@ export class PlanStore {
     await mkdir(this.root, { recursive: true });
     await mkdir(this.phasesDir(), { recursive: true });
     await mkdir(this.featuresDir(), { recursive: true });
+    await mkdir(this.localRoot(), { recursive: true });
+    await mkdir(this.backupsDir(), { recursive: true });
+    await mkdir(this.tmpDir(), { recursive: true });
     await mkdir(join(this.generatedDir(), "phases"), { recursive: true });
+    await mkdir(this.handoffArchiveDir(), { recursive: true });
     await mkdir(join(this.root, "schema"), { recursive: true });
     await mkdir(join(this.root, "adapters"), { recursive: true });
 
@@ -751,7 +846,8 @@ export class PlanStore {
       updatedAt: nowISO(),
     };
 
-    await atomicWriteJson(this.manifestPath(), manifest);
+    await atomicWriteJson(this.manifestPath(), manifest, this.root);
+    await atomicWriteJson(this.timestampPath(), { updatedAt: manifest.updatedAt }, this.root);
     await this.saveProject({
       name: projectName,
       goal: "",
@@ -802,7 +898,7 @@ export class PlanStore {
       "- `project.json` — scope, rules, stack, tools",
       "- `requirements.json` — requirements and macro-tasks",
       "- `phases/` — one JSON file per phase",
-      "- `generated/` — auto-generated markdown views",
+      "- `generated/` — auto-generated markdown views (under `.local/`)",
       "- `schema/plan.schema.json` — JSON Schema for tooling",
     ].join("\n");
     await writeFile(join(this.root, "README.md"), readme, "utf-8");
@@ -816,13 +912,8 @@ export class PlanStore {
     await writeFile(
       join(this.root, ".gitignore"),
       [
-        "# Agent Plan transient/derived files — do not track",
-        "*.bak",
-        "*.tmp.*",
-        "resume.json",
-        "resume.*.json",
-        "generated/",
-        "handoff-archive/",
+        "# Agent Plan transient/derived/session-local files — do not track",
+        ".local/",
         "",
       ].join("\n"),
       "utf-8",
@@ -841,7 +932,21 @@ export class PlanStore {
   // ── Loaders ──────────────────────────────────────────────────────────
 
   async loadManifest(): Promise<Manifest> {
-    return readJson(this.manifestPath(), ManifestSchema);
+    const manifest = await readJson(this.manifestPath(), ManifestSchema);
+    try {
+      const timestamp = await readJson(this.timestampPath(), z.object({ updatedAt: TimestampSchema }));
+      manifest.updatedAt = timestamp.updatedAt;
+    } catch {
+      // Legacy plan without .local/timestamp.json: bootstrap from manifest.updatedAt
+      // and create the timestamp file so subsequent writes stay in .local/.
+      try {
+        await mkdir(this.localRoot(), { recursive: true });
+        await atomicWriteJson(this.timestampPath(), { updatedAt: manifest.updatedAt }, this.root);
+      } catch {
+        // ignore bootstrap failure
+      }
+    }
+    return manifest;
   }
 
   async loadProject(): Promise<Project> {
@@ -960,11 +1065,12 @@ export class PlanStore {
 
   async saveCodebaseProfile(profile: CodebaseProfile): Promise<void> {
     const parsed = CodebaseProfileSchema.parse(profile);
-    await atomicWriteJson(this.codebasePath(), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.codebasePath(), parsed, this.root);
+    await this.touchTimestamp();
   }
 
   async loadResume(): Promise<ResumeFocus | null> {
+    await this.migrateLegacyLocalFile(join(this.root, "resume.json"), this.resumePath());
     try {
       return await readJson(this.resumePath(), ResumeFocusSchema);
     } catch {
@@ -985,8 +1091,8 @@ export class PlanStore {
         : (resume.nextStepsUpdatedAt || existing?.nextStepsUpdatedAt || nowISO()),
     };
     const parsed = ResumeFocusSchema.parse(withTs);
-    await atomicWriteJson(this.resumePath(), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.resumePath(), parsed, this.root);
+    await this.touchTimestamp();
   }
 
   /**
@@ -1033,6 +1139,7 @@ export class PlanStore {
   }
 
   async loadActivityLog(): Promise<ActivityLog> {
+    await this.migrateLegacyLocalFile(join(this.root, "activity.json"), this.activityPath());
     try {
       return await readJson(this.activityPath(), ActivityLogSchema);
     } catch {
@@ -1047,8 +1154,8 @@ export class PlanStore {
     log.entries.push(entry);
     // Cap to last 200 entries
     if (log.entries.length > 200) log.entries = log.entries.slice(-200);
-    await atomicWriteJson(this.activityPath(), { entries: log.entries });
-    await this.touchManifest();
+    await atomicWriteJson(this.activityPath(), { entries: log.entries }, this.root);
+    await this.touchTimestamp();
     return entry;
   }
 
@@ -1335,7 +1442,7 @@ export class PlanStore {
       );
       sortedFeatures.forEach((f, index) => {
         if (!f.shortId) {
-          f.shortId = createShortId(existing);
+          f.shortId = createShortId(existing, `feature:${f.number}:${f.id}`);
           existing.add(f.shortId);
           shortIdsAssigned += 1;
           featuresDirty = true;
@@ -1352,7 +1459,7 @@ export class PlanStore {
       for (const phase of phases) {
         let phaseDirty = false;
         if (!phase.shortId) {
-          phase.shortId = createShortId(existing);
+          phase.shortId = createShortId(existing, `phase:${phase.number}:${phase.id}`);
           existing.add(phase.shortId);
           shortIdsAssigned += 1;
           phaseDirty = true;
@@ -1366,7 +1473,7 @@ export class PlanStore {
         );
         sortedTasks.forEach((t, index) => {
           if (!t.shortId) {
-            t.shortId = createShortId(existing);
+            t.shortId = createShortId(existing, `task:${t.number}:${t.id}`);
             existing.add(t.shortId);
             shortIdsAssigned += 1;
             phaseDirty = true;
@@ -1605,7 +1712,7 @@ export class PlanStore {
   // ── Savers ───────────────────────────────────────────────────────────
 
   async updateProject(updater: (p: Project) => Project): Promise<Project> {
-    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, updater);
+    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, updater, this.root);
     await this.maybeAutoSync();
     return updated;
   }
@@ -1623,15 +1730,15 @@ export class PlanStore {
   }
 
   async updateRequirements(updater: (r: RequirementsDocument) => RequirementsDocument): Promise<RequirementsDocument> {
-    const updated = await atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater);
+    const updated = await atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater, this.root);
     await this.maybeAutoSync();
     return updated;
   }
 
   async saveProject(project: Project): Promise<void> {
     const parsed = ProjectSchema.parse(project);
-    await atomicWriteJson(this.projectPath(), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.projectPath(), parsed, this.root);
+    await this.touchTimestamp();
     await this.maybeAutoSync();
   }
 
@@ -1640,7 +1747,7 @@ export class PlanStore {
       await this.migrateLegacy();
       await this.saveFeaturesRaw(features);
     });
-    await this.touchManifest();
+    await this.touchTimestamp();
     await this.maybeAutoSync();
   }
 
@@ -1650,7 +1757,7 @@ export class PlanStore {
     await mkdir(this.featuresDir(), { recursive: true });
     const wantIds = new Set(parsed.features.map((f) => f.id));
     for (const feat of parsed.features) {
-      await atomicWriteJson(this.featurePath(feat.id), feat);
+      await atomicWriteJson(this.featurePath(feat.id), feat, this.root);
     }
     // Orphan reconcile: remove feature files no longer in the document.
     try {
@@ -1673,16 +1780,16 @@ export class PlanStore {
       await this.migrateLegacy();
       await mkdir(this.featuresDir(), { recursive: true });
       const parsed = FeatureSchema.parse(feature);
-      await atomicWriteJson(this.featurePath(parsed.id), parsed);
+      await atomicWriteJson(this.featurePath(parsed.id), parsed, this.root);
     });
-    await this.touchManifest();
+    await this.touchTimestamp();
     await this.maybeAutoSync();
   }
 
   async saveRequirements(reqs: RequirementsDocument): Promise<void> {
     const parsed = RequirementsDocumentSchema.parse(reqs);
-    await atomicWriteJson(this.requirementsPath(), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.requirementsPath(), parsed, this.root);
+    await this.touchTimestamp();
   }
 
     async savePhase(phase: Phase): Promise<void> {
@@ -1700,8 +1807,8 @@ export class PlanStore {
       : phase;
     const parsed = PhaseSchema.parse(this.normalizePhaseDocument(normalizedInput).phase);
     await mkdir(this.phasesDir(), { recursive: true });
-    await atomicWriteJson(this.phasePath(parsed.id), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.phasePath(parsed.id), parsed, this.root);
+    await this.touchTimestamp();
     await this.maybeAutoSync();
   }
 
@@ -1747,12 +1854,6 @@ export class PlanStore {
     await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: text, handoffUpdatedAt: now }));
   }
 
-  /** Directory where cleared handoff content is archived as .md files
-   *  (gitignored). Keeps the phase JSON lean while making past handoffs
-   *  recoverable + human-readable. */
-  private handoffArchiveDir(): string {
-    return join(this.root, "handoff-archive");
-  }
 
   /** Mark the phase handoff as read/acknowledged on recap (sets handoffReadAt).
    *  Does NOT clear the handoff — content is kept until a task starts or the
@@ -1800,6 +1901,7 @@ export class PlanStore {
    *  left unchanged as an audit trail. If the handoff is empty, this is a no-op.
    *  reason: "task-started" | "phase-done" | "manual" | "superseded" | "imported". */
   async clearPhaseHandoff(phaseId: string, reason = "manual"): Promise<void> {
+    await this.migrateLegacyHandoffArchive();
     const phase = await this.loadPhase(phaseId).catch(() => null);
     if (!phase || phase.handoff === "") return; // nothing to archive
     const clearedAt = nowISO();
@@ -1808,13 +1910,16 @@ export class PlanStore {
     await mkdir(archiveDir, { recursive: true }).catch(() => {});
     const fileName = `${phaseId}-${safeTs}.md`;
     const filePath = join(archiveDir, fileName);
-    await atomicWriteText(filePath, phase.handoff);
+    await atomicWriteText(filePath, phase.handoff, this.root);
     const entry = { file: `handoff-archive/${fileName}`, clearedAt, reason };
     // Cap history at 5: prepend new entry, drop oldest (and delete its file).
     const trimmed = [entry, ...(phase.handoffHistory ?? [])].slice(0, 5);
     const dropped = (phase.handoffHistory ?? []).slice(4); // entries beyond index 4 after prepend
     for (const d of dropped) {
-      if (d?.file) await unlink(join(this.root, d.file)).catch(() => {});
+      if (!d?.file) continue;
+      // Legacy entries used `.planner/handoff-archive/...`; new entries use `.planner/.local/handoff-archive/...`.
+      await unlink(join(this.handoffArchiveDir(), basename(d.file))).catch(() => {});
+      await unlink(join(this.root, d.file)).catch(() => {});
     }
     await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffHistory: trimmed }));
   }
@@ -1884,7 +1989,7 @@ export class PlanStore {
         }
         return doc;
       });
-      await this.touchManifest();
+      await this.touchTimestamp();
       await this.writeGenerated();
       return { found, removed: found };
     });
@@ -1896,7 +2001,7 @@ export class PlanStore {
     } catch {
       // already gone
     }
-    await this.touchManifest();
+    await this.touchTimestamp();
   }
 
   // ── Workspace-level operations ─────────────────────────────────────
@@ -1913,8 +2018,10 @@ export class PlanStore {
 
   // ── Markdown generation ────────────────────────────────────────────
 
-  /** Load all data, render markdown, and write into generated/. */
+  /** Load all data, render markdown, and write into generated/. Skips files
+   *  whose content is unchanged to avoid unnecessary backup churn. */
   async writeGenerated(): Promise<string[]> {
+    await this.migrateLegacyGeneratedDir();
     const { PlanRenderer } = await import("./renderer.js");
     const plan = await this.loadAll();
     const renderer = new PlanRenderer();
@@ -1931,6 +2038,12 @@ export class PlanStore {
       if (dir !== genDir) {
         await mkdir(dir, { recursive: true });
       }
+      try {
+        const existing = await readFile(fullPath, "utf-8");
+        if (existing === content) continue;
+      } catch {
+        // file does not exist yet — write it
+      }
       await writeFile(fullPath, content, "utf-8");
       written.push(relPath);
     }
@@ -1940,14 +2053,12 @@ export class PlanStore {
 
   // ── Touch ────────────────────────────────────────────────────────────
 
-  /** Update manifest.updatedAt to reflect a change. */
-  private async touchManifest(): Promise<void> {
+  /** Update .local/timestamp.json to reflect a change. */
+  private async touchTimestamp(): Promise<void> {
     try {
-      const m = await this.loadManifest();
-      m.updatedAt = nowISO();
-      await atomicWriteJson(this.manifestPath(), m);
+      await atomicWriteJson(this.timestampPath(), { updatedAt: nowISO() }, this.root);
     } catch {
-      // if manifest doesn't exist yet, skip
+      // if .local/ doesn't exist yet, skip
     }
   }
 }

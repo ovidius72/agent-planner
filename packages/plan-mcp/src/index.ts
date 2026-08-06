@@ -993,7 +993,7 @@ server.registerTool("planner-task-start", {
   let handoffNotice = "";
   if ((found.phase.handoff ?? "") !== "") {
     await st.clearPhaseHandoff(found.phase.id, "task-started").catch(() => {});
-    handoffNotice = "📦 Archived handoff for this phase (task started) — recover via planner-handoff-list + .planner/handoff-archive/.\n";
+    handoffNotice = "📦 Archived handoff for this phase (task started) — recover via planner-handoff-list + .planner/.local/handoff-archive/.\n";
   }
   const _otherHandoffs = allHandoffs.filter((h) => h.phaseId !== found.phase.id);
   if (_otherHandoffs.length > 0) {
@@ -1125,7 +1125,7 @@ server.registerTool("planner-handoff-clear", {
   const r = await resolvePhaseForHandoff(st, phaseRef);
   if (!r.ok) return text(`❌ ${r.error}`);
   await st.clearPhaseHandoff(r.phase.id, "manual");
-  return text(`✅ Cleared handoff on ${r.compositeRef} (handoffUpdatedAt preserved as audit; archived to .planner/handoff-archive/).`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
+  return text(`✅ Cleared handoff on ${r.compositeRef} (handoffUpdatedAt preserved as audit; archived to .planner/.local/handoff-archive/).`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
 server.registerTool("planner-web", {
