@@ -1104,16 +1104,35 @@ server.registerTool("planner-handoff-show", {
 });
 
 server.registerTool("planner-handoff-write", {
-  description: "Write/refresh the entity-scoped handoff on a phase. Pass content (markdown). phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase.",
+  description: "Write/refresh the entity-scoped handoff on a phase. Pass content (markdown) AND a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring'). The title becomes the H1 / first line shown in handoff lists; generic titles like 'Handoff' or 'Canonical handoff' are REJECTED. phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase.",
   inputSchema: {
     phaseRef: z.string().optional().describe("Phase ref. Default: current in-progress phase."),
+    title: z.string().min(3).optional().describe("Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). REQUIRED if your markdown's first heading is generic. Example: 'P049 — featureId validation: tests + adapter wiring'."),
     content: z.string().min(1).describe("Handoff text (markdown)."),
   },
-}, async ({ phaseRef, content }) => {
+}, async ({ phaseRef, title, content }) => {
   const st = await requireStore();
+  let body = content.trim();
+  const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
+  const isGeneric = !firstHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(firstHeadingText);
+  if (!title && isGeneric) {
+    return text("❌ Generic handoff title. Provide a meaningful `title` (or start your markdown with a descriptive H1) summarizing the work — e.g. 'P049 — featureId validation: tests + adapter wiring'. Generic titles like 'Handoff' or 'Canonical handoff' are not accepted.");
+  }
+  if (title && title.trim()) {
+    const t = title.trim();
+    const lines = body.split(/\r?\n/);
+    const firstIdx = lines.findIndex((l) => l.trim().length > 0);
+    if (firstIdx !== -1 && /^#+\s/.test(lines[firstIdx] ?? "")) {
+      lines[firstIdx] = `# ${t}`;
+      body = lines.join("\n");
+    } else {
+      body = `# ${t}\n\n${body}`;
+    }
+  }
   const r = await resolvePhaseForHandoff(st, phaseRef);
   if (!r.ok) return text(`❌ ${r.error}`);
-  await st.setPhaseHandoff(r.phase.id, content);
+  await st.setPhaseHandoff(r.phase.id, body);
   return text(`✅ Wrote handoff on ${r.compositeRef}.`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
@@ -1121,6 +1140,7 @@ server.registerTool("planner-handoff-prepare", {
   description: "Return instructions for the agent to prepare a canonical handoff, then call planner-handoff-write (entity-scoped, phase.handoff).",
 }, async () => text([
   "Prepare the canonical session handoff and write it on the current in-progress phase with planner-handoff-write (omit phaseRef to target the in-progress phase).",
+  "Pass a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring') — it becomes the H1 / first line in handoff lists. Generic titles like 'Handoff' or 'Canonical handoff' are REJECTED.",
   "Required sections: Created at, Updated at, Reason, Current focus, What was being done, How to resume, Files touched, Blockers, Next steps, Recent decisions, Reminder.",
   "Stored on the phase.handoff field (entity-scoped). .planner/HANDOFF.md is deprecated.",
 ].join("\n")));

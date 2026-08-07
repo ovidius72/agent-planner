@@ -321,6 +321,7 @@ async function buildHandoffMarkdown(
     nextSteps?: string[];
     blockers?: string[];
     extraSections?: Array<{ heading: string; body: string }>;
+    title?: string;
   },
 ): Promise<string> {
   const [plan, resume, activity] = await Promise.all([
@@ -464,7 +465,7 @@ async function buildHandoffMarkdown(
     : [];
 
   return [
-    "# Handoff",
+    `# ${overrides?.title?.trim() || `Handoff — ${reason}`}`,
     "",
     `Created at: ${createdAt}`,
     `Updated at: ${updatedAt}`,
@@ -2239,6 +2240,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const handoffs = await st.listHandoffs();
         await capturedPi.sendUserMessage(
           "Prepare the canonical session handoff now and write it on the phase the user explicitly identifies as the one just worked on in this session, using the `handoff_write` tool (entity-scoped, stored on phase.handoff — .planner/HANDOFF.md is deprecated).\n\n" +
+          "Pass a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring') — it becomes the H1 / first line in handoff lists. Generic titles like 'Handoff' or 'Canonical handoff' are REJECTED.\n\n" +
           "WARNING: Do not default to 'current in-progress phase' or a stale resume pointer. If the user just completed P058, write the handoff on P058 (or its continuation P061), not on P031 just because P031 is marked in-progress or has an existing handoff.\n\n" +
           "The handoff MUST be a structured markdown document containing at minimum:\n" +
           "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
@@ -2774,6 +2776,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "DEPRECATED — writes to the entity-scoped phase.handoff (not .planner/HANDOFF.md). Prefer handoff_write. Write or refresh the canonical phase handoff. Capture full design context, not just operational resume steps: pass extraSections with locked decisions, architecture (with file:line refs), mode/state flows, plugin/API contracts, data mappings, files touched, and known gaps so a resuming agent doesn't re-discover decisions already made. IMPORTANT: write the handoff on the phase the user explicitly identifies as the one just worked on in this session; do not default to a stale 'current phase' pointer or an existing handoff on a different phase.",
     parameters: Type.Object({
       reason: Type.Optional(Type.String({ description: "Why the handoff is being written" })),
+      title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). Example: 'P049 — featureId validation: tests + adapter wiring'." })),
       whatWasBeingDone: Type.Optional(Type.String({ description: "Optional override for the current work summary" })),
       howToResume: Type.Optional(Type.String({ description: "Optional override for resume instructions" })),
       extraSections: Type.Optional(Type.Array(
@@ -2788,6 +2791,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const markdown = await buildHandoffMarkdown(st, params.reason?.trim() || "manual tool handoff", {
+        ...(params.title?.trim() ? { title: params.title.trim() } : {}),
         ...(params.whatWasBeingDone?.trim() ? { whatWasBeingDone: params.whatWasBeingDone.trim() } : {}),
         ...(params.howToResume?.trim() ? { howToResume: params.howToResume.trim() } : {}),
         ...(params.extraSections && params.extraSections.length > 0
@@ -2890,17 +2894,40 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_write",
     label: "Handoff Write",
-    description: "Write/refresh the entity-scoped handoff on a phase. Pass content (or markdown_content). phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase. IMPORTANT: defaulting to 'current in-progress phase' is a fallback only; write the handoff on the phase the user explicitly identifies as the one just worked on in this session, and do not update an existing handoff on a different phase unless the user confirms.",
+    description: "Write/refresh the entity-scoped handoff on a phase. Pass content (or markdown_content) AND a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring'). The title becomes the H1 and the first line shown in handoff lists; generic titles like 'Handoff' or 'Canonical handoff' are REJECTED. phaseRef optional (default: current in-progress phase). IMPORTANT: defaulting to 'current in-progress phase' is a fallback only; write the handoff on the phase the user explicitly identifies as the one just worked on in this session, and do not update an existing handoff on a different phase unless the user confirms.",
     parameters: Type.Object({
       phaseRef: Type.Optional(Type.String({ description: "Phase ref. Default: current in-progress phase." })),
+      title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). REQUIRED if your markdown's first heading is generic. Example: 'P049 — featureId validation: tests + adapter wiring'." })),
       content: Type.Optional(Type.String({ description: "Handoff text (plain)." })),
       markdown_content: Type.Optional(Type.String({ description: "Handoff text (markdown). Preferred over content." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const body = (params.markdown_content ?? params.content ?? "").trim();
+      let body = (params.markdown_content ?? params.content ?? "").trim();
       if (!body) return { content: [{ type: "text", text: "❌ Provide the handoff text (content or markdown_content)." }], details: { error: "empty text" } };
+      const title = params.title?.trim();
+      // Derive the current first non-empty line (H1) of the supplied body.
+      const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+      const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
+      const isGeneric = !firstHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(firstHeadingText);
+      if (!title && isGeneric) {
+        return {
+          content: [{ type: "text", text: "❌ Generic handoff title. Provide a meaningful `title` (or start your markdown with a descriptive H1) summarizing the work — e.g. 'P049 — featureId validation: tests + adapter wiring'. Generic titles like 'Handoff' or 'Canonical handoff' are not accepted." }],
+          details: { error: "generic title", firstHeadingText },
+        };
+      }
+      // Normalize: if a title is provided, replace or prepend the H1 so the first line is the title.
+      if (title) {
+        const lines = body.split(/\r?\n/);
+        const firstIdx = lines.findIndex((l) => l.trim().length > 0);
+        if (firstIdx !== -1 && /^#+\s/.test(lines[firstIdx] ?? "")) {
+          lines[firstIdx] = `# ${title}`;
+          body = lines.join("\n");
+        } else {
+          body = `# ${title}\n\n${body}`;
+        }
+      }
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
       await st.setPhaseHandoff(r.phase.id, body);
