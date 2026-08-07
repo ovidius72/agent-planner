@@ -4,6 +4,7 @@ export * from "./schema.js";
 export * from "./checklist.js";
 export * from "./recap.js";
 export * from "./display-status.js";
+export * from "./task-context.js";
 export { PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, type PhaseHandoffSummary, type OrphanPhaseSummary } from "./plan-store.js";
 export { PlanRenderer } from "./renderer.js";
 export { ExportService } from "./export-service.js";

@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -1031,7 +1031,9 @@ server.registerTool("planner-task-start", {
   await st.syncTaskStatusRollup(found.phase.id);
   const features = (await st.loadFeatures()).features;
   const t = updatedTask ?? found.task;
-  return writeAndSummarize(st, `${handoffNotice}✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}`);
+  const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
+  const phaseContext = buildPhaseContextBlock(found.phase, parentFeature);
+  return writeAndSummarize(st, `${handoffNotice}✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}`);
 });
 
 server.registerTool("planner-task-complete", {

@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -3699,7 +3699,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       });
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      return { content: [{ type: "text", text: `✅ Task started: ${startedTask.id} — ${startedTask.title} (in-progress)` }], details: startedTask };
+      const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
+      const phaseContext = buildPhaseContextBlock(found.phase, parentFeature);
+      return { content: [{ type: "text", text: `✅ Task started: ${startedTask.id} — ${startedTask.title} (in-progress)${phaseContext}` }], details: startedTask };
     },
   });
 
