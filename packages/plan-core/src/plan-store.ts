@@ -1796,7 +1796,12 @@ export class PlanStore {
     const features = await this.loadRawFeatures();
     const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
     // Referential integrity: if a featureId is present but cannot be resolved
-    // to a known feature, REJECT — never persist an orphan phase.
+    // to a known feature, REJECT — never persist an orphan featureId.
+    // NOTE: a missing/empty featureId is intentionally ALLOWED here so that
+    // legacy migrations, repair, and feature-delete (unlink) can persist phases
+    // without a feature yet. The hard "featureId required" gate lives at the
+    // adapter boundary (Pi phase_create/task_create and MCP planner-phase-add/
+    // planner-task-add), which is where user-facing creation happens.
     if (phase.featureId && phase.featureId.trim() && !resolvedFeatureId) {
       throw new PlanStoreError(
         `Cannot save phase "${phase.title}": featureId "${phase.featureId}" does not match any existing feature. Use a valid feature UUID, F00x ref, or shortId.`,

@@ -6,7 +6,7 @@ import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
 import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
 import { DisplayStatusBadge } from "../ui/status-badge";
-import { EntityBadge, HandoffBadge, ParentBadge } from "../ui/badges";
+import { CopyableBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
 
 export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
@@ -23,14 +23,17 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
     <StatusItem variant="surface" status={display.displayStatus} className="px-4 py-2">
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,150px)_124px_44px_44px] lg:items-center">
         <div className="flex min-w-0 flex-col items-start gap-1 lg:contents">
-          <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
+          <div className="flex min-w-0 flex-col items-start gap-1">
             <div className="flex items-center gap-2">
-              <EntityBadge type="phase" number={phase.number} />
-              <ParentBadge type="phase" featureNum={feature.number} />
+              <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} featureId={feature.id} phaseId={phase.id} />
+              <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number })}>
+                <span className="sr-only">Copy phase path</span>
+              </CopyableBadge>
+              {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
               {phase.handoff ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
               <span className="shrink-0"><DisplayStatusBadge status={display.displayStatus} breakdown={display.breakdown} /></span>
             </div>
-            <Link to={`/features/${featureId}/phases/${phase.id}`} className="entity-link--phase min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline lg:w-auto lg:truncate">
+            <Link to={`/features/${featureId}/phases/${phase.id}`} className="entity-link--phase min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline [overflow-wrap:anywhere]">
               {phase.title}
             </Link>
           </div>

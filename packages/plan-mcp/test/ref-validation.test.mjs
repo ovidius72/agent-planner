@@ -130,6 +130,28 @@ describe("plan-mcp strict ref validation", () => {
     }
   });
 
+  test("planner-phase-add rejects missing feature ref", async () => {
+    const { plannerRoot, st } = await setup();
+    const before = await st.loadAllPhases();
+    const session = await startClient(plannerRoot);
+    try {
+      const result = await session.client.callTool({
+        name: "planner-phase-add",
+        arguments: {
+          title: "Phase Without Feature",
+          description: "src/example.ts:90 this phase should not be created because no parent feature was supplied.",
+        },
+      });
+      const text = toolText(result);
+      assert.match(text, /featureId.*required|feature.*required|parent feature.*required|Feature ref.*required|must.*feature/i);
+      const after = await st.loadAllPhases();
+      assert.equal(after.length, before.length);
+      assert.equal(after.find((entry) => entry.title === "Phase Without Feature"), undefined);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("planner-phase-add rejects unresolved feature refs and does not persist a phase", async () => {
     const { plannerRoot, st } = await setup();
     const before = await st.loadAllPhases();
@@ -290,6 +312,7 @@ describe("plan-mcp strict ref validation", () => {
       const result = await session.client.callTool({
         name: "planner-task-add",
         arguments: {
+          feature: "F001",
           phase: "P999",
           title: "Orphan Task",
           description: "src/example.ts:50 this task should not be created because the parent phase P999 does not exist.",
@@ -312,6 +335,7 @@ describe("plan-mcp strict ref validation", () => {
       const result = await session.client.callTool({
         name: "planner-task-add",
         arguments: {
+          feature: "F001",
           phase: "P001",
           title: "Linked Task",
           description: "src/example.ts:60 this task should be created by resolving the human P001 ref to the stored phase UUID.",
@@ -322,6 +346,78 @@ describe("plan-mcp strict ref validation", () => {
       const created = stored.tasks.find((task) => task.title === "Linked Task");
       assert.ok(created);
       assert.equal(created.phaseId, phase.id);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("planner-task-add rejects missing feature ref", async () => {
+    const { plannerRoot, st, phase } = await setup();
+    const before = await st.loadProject();
+    const session = await startClient(plannerRoot);
+    try {
+      const result = await session.client.callTool({
+        name: "planner-task-add",
+        arguments: {
+          phase: "P001",
+          title: "Task Without Feature",
+          description: "src/example.ts:61 this task should not be created because no parent feature was supplied.",
+        },
+      });
+      assert.match(toolText(result), /feature is required|feature.*required|must belong to a feature/i);
+      const after = await st.loadProject();
+      assert.equal(after.nextTaskNumber, before.nextTaskNumber);
+      const stored = await st.loadPhase(phase.id);
+      assert.equal(stored.tasks.some((task) => task.title === "Task Without Feature"), false);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("planner-task-add rejects feature/phase mismatch (phase belongs to another feature)", async () => {
+    const { plannerRoot, st, phase } = await setup();
+    const before = await st.loadProject();
+    const session = await startClient(plannerRoot);
+    try {
+      // P001 belongs to F001 (featureA). Passing F002 should be rejected.
+      const result = await session.client.callTool({
+        name: "planner-task-add",
+        arguments: {
+          feature: "F002",
+          phase: "P001",
+          title: "Mismatched Task",
+          description: "src/example.ts:62 this task should not be created because P001 does not belong to F002.",
+        },
+      });
+      assert.match(toolText(result), /does not belong to feature|does not belong/i);
+      const after = await st.loadProject();
+      assert.equal(after.nextTaskNumber, before.nextTaskNumber);
+      const stored = await st.loadPhase(phase.id);
+      assert.equal(stored.tasks.some((task) => task.title === "Mismatched Task"), false);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("planner-task-add rejects unresolved feature ref and does not allocate a number", async () => {
+    const { plannerRoot, st, phase } = await setup();
+    const before = await st.loadProject();
+    const session = await startClient(plannerRoot);
+    try {
+      const result = await session.client.callTool({
+        name: "planner-task-add",
+        arguments: {
+          feature: "F999",
+          phase: "P001",
+          title: "Orphan Feature Task",
+          description: "src/example.ts:63 this task should not be created because the parent feature F999 does not exist.",
+        },
+      });
+      assert.equal(toolText(result), "Feature not found: F999");
+      const after = await st.loadProject();
+      assert.equal(after.nextTaskNumber, before.nextTaskNumber);
+      const stored = await st.loadPhase(phase.id);
+      assert.equal(stored.tasks.some((task) => task.title === "Orphan Feature Task"), false);
     } finally {
       await session.close();
     }
@@ -362,6 +458,7 @@ describe("plan-mcp strict ref validation", () => {
       const result = await session.client.callTool({
         name: "planner-task-add",
         arguments: {
+          feature: "F001",
           phase: "P001",
           title: "Race Task",
           description: "src/example.ts:80 this task must fail because the resolved phase P001 disappears before the write.",
@@ -384,6 +481,7 @@ describe("plan-mcp strict ref validation", () => {
         await session.client.callTool({
           name: "planner-task-add",
           arguments: {
+            feature: "F001",
             phase: "P001",
             title: `Parallel Task ${index + 1}`,
             description: `src/example.ts:${100 + index} create a task through MCP and assert the global numbering stays monotonic across writes.`,

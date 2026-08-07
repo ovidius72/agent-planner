@@ -6,7 +6,7 @@ import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
 import type { Feature, Phase } from "../../lib/types";
 import { Button } from "../ui/button";
 import { DisplayStatusBadge } from "../ui/status-badge";
-import { EntityBadge } from "../ui/badges";
+import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
 
 export interface FeatureActivitySummary {
@@ -52,12 +52,16 @@ export function FeatureRow({
     <StatusItem variant="surface" status={display.displayStatus} className="px-4 py-2">
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,132px)_minmax(0,152px)_124px_44px_44px] xl:items-center">
         <div className="flex min-w-0 flex-col items-start gap-1 xl:contents">
-          <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
+          <div className="flex min-w-0 flex-col items-start gap-1">
             <div className="flex items-center gap-2">
-              <EntityBadge type="feature" number={feature.number} />
+              <EntityPathBadge featureNum={feature.number} featureId={feature.id} />
+              <CopyableBadge id={formatEntityPath({ featureNum: feature.number })}>
+                <span className="sr-only">Copy feature path</span>
+              </CopyableBadge>
+              {feature.shortId ? <ShortIdBadge shortId={feature.shortId} /> : null}
               <span className="shrink-0"><DisplayStatusBadge status={display.displayStatus} breakdown={display.breakdown} /></span>
             </div>
-            <Link to={`/features/${feature.id}`} className="entity-link--feature min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline lg:w-auto lg:truncate">
+            <Link to={`/features/${feature.id}`} className="entity-link--feature min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline [overflow-wrap:anywhere]">
               {feature.name}
             </Link>
           </div>

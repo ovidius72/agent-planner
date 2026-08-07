@@ -4,6 +4,7 @@ import { Form, Link, useNavigation, useRouteLoaderData } from "react-router-dom"
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Field } from "../components/ui/field";
+import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useShortcut } from "../lib/shortcuts";
 import type { Project } from "../lib/types";
@@ -29,6 +30,14 @@ export function ProjectEditRoute() {
         </div>
 
         <Form ref={formRef} method="post" className="grid gap-4">
+          <Field label="Project name">
+            <Input
+              name="name"
+              defaultValue={project.name}
+              placeholder="Project name"
+              required
+            />
+          </Field>
           <Field label="Short description">
             <Textarea
               name="description"

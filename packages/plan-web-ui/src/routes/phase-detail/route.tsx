@@ -5,9 +5,10 @@ import { TaskRow } from "../../components/tasks/task-row";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
-import { CopyableBadge, EntityBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
+import { HandoffBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
@@ -112,13 +113,16 @@ export function PhaseDetailRoute() {
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} featureId={feature.id} phaseId={phase.id} />
-          <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number })}>
-            <span className="sr-only">Copy phase path</span>
-          </CopyableBadge>
-          {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
+        <DetailEntityBar
+          featureNum={feature.number}
+          phaseNum={phase.number}
+          featureId={feature.id}
+          phaseId={phase.id}
+          shortId={phase.shortId}
+        >
           {handoffContent ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
           <DisplayStatusBadge status={phaseDisplay.displayStatus} breakdown={phaseDisplay.breakdown} />
+        </DetailEntityBar>
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
           {phase.title}
@@ -316,7 +320,7 @@ export function PhaseDetailRoute() {
             <Card className="p-4 text-sm text-[var(--text-muted)]">No tasks yet. <Link to="tasks/new" className="font-semibold text-[var(--accent)] hover:underline">Add a task</Link></Card>
           ) : filteredTasks.length > 0 ? (
             filteredTasks.map((task) => (
-              <TaskRow key={task.id} featureId={feature.id} phaseId={phase.id} task={task} />
+              <TaskRow key={task.id} featureId={feature.id} featureNum={feature.number} phaseId={phase.id} phaseNum={phase.number} task={task} />
             ))
           ) : (
             <Card className="p-4 text-sm text-[var(--text-muted)]">

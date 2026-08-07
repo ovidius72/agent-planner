@@ -36,6 +36,7 @@ import {
 } from "../../lib/display-status-tokens";
 
 export interface StatusItemProps {
+  id?: string;
   status: DisplayStatus;
   variant?: "header" | "surface";
   className?: string;
@@ -47,6 +48,7 @@ export interface StatusItemProps {
 }
 
 export function StatusItem({
+  id,
   status,
   variant = "header",
   className,
@@ -68,6 +70,7 @@ export function StatusItem({
     .join(" ");
   return (
     <div
+      id={id}
       className={composedClassName}
       style={baseStyle}
       aria-label={ariaLabel}

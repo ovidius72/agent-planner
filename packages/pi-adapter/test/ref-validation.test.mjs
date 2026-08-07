@@ -234,6 +234,7 @@ describe("pi-adapter strict ref validation", () => {
     const beforePhases = await st.loadAllPhases();
 
     const result = await tools.get("task_create").execute("id", {
+      featureId: "F001",
       phaseId: "P999",
       title: "Orphan Task",
       description: "src/example.ts:50 this task should not be created because the parent phase P999 does not exist.",
@@ -250,6 +251,7 @@ describe("pi-adapter strict ref validation", () => {
   test("task_create resolves human phase ref P001 to the internal phase id", async () => {
     const { root, st, phase } = await setup();
     const result = await tools.get("task_create").execute("id", {
+      featureId: "F001",
       phaseId: "P001",
       title: "Linked Task",
       description: "src/example.ts:60 this task should be created by resolving the human P001 ref to the stored phase UUID.",
@@ -260,6 +262,51 @@ describe("pi-adapter strict ref validation", () => {
     const created = stored.tasks.find((task) => task.title === "Linked Task");
     assert.ok(created);
     assert.equal(created.phaseId, phase.id);
+  });
+
+  test("task_create rejects missing featureId", async () => {
+    const { root, st, phase } = await setup();
+    const before = await st.loadProject();
+    const result = await tools.get("task_create").execute("id", {
+      phaseId: "P001",
+      title: "Task Without Feature",
+      description: "src/example.ts:61 this task should not be created because no featureId was supplied.",
+    }, undefined, undefined, makeCtx(root));
+    assert.match(toolText(result), /featureId is required|must belong to a feature/i);
+    const after = await st.loadProject();
+    assert.equal(after.nextTaskNumber, before.nextTaskNumber);
+    const stored = await st.loadPhase(phase.id);
+    assert.equal(stored.tasks.some((task) => task.title === "Task Without Feature"), false);
+  });
+
+  test("task_create rejects feature/phase mismatch (phase belongs to another feature)", async () => {
+    const { root, st, phase } = await setup();
+    const before = await st.loadProject();
+    // P001 belongs to F001 (featureA). Passing F002 should be rejected.
+    const result = await tools.get("task_create").execute("id", {
+      featureId: "F002",
+      phaseId: "P001",
+      title: "Mismatched Task",
+      description: "src/example.ts:62 this task should not be created because P001 does not belong to F002.",
+    }, undefined, undefined, makeCtx(root));
+    assert.match(toolText(result), /does not belong to feature/i);
+    const after = await st.loadProject();
+    assert.equal(after.nextTaskNumber, before.nextTaskNumber);
+    const stored = await st.loadPhase(phase.id);
+    assert.equal(stored.tasks.some((task) => task.title === "Mismatched Task"), false);
+  });
+
+  test("task_create returns a composite ref (F00x/P00x/T00x) instead of a raw UUID", async () => {
+    const { root } = await setup();
+    const result = await tools.get("task_create").execute("id", {
+      featureId: "F001",
+      phaseId: "P001",
+      title: "Composite Ref Task",
+      description: "src/example.ts:63 this task should be reported with a composite ref, not a raw UUID.",
+    }, undefined, undefined, makeCtx(root));
+    const text = toolText(result);
+    assert.match(text, /Task created: P001\(F001\)\/T\d+/);
+    assert.doesNotMatch(text, /Task created: [0-9a-f]{8}-/);
   });
 
   test("phase_create rejects orphan feature refs and does not allocate a number", async () => {
@@ -289,6 +336,7 @@ describe("pi-adapter strict ref validation", () => {
     await rm(join(root, ".planner", "phases", phase.id + ".json"), { force: true });
 
     const result = await tools.get("task_create").execute("id", {
+      featureId: "F001",
       phaseId: "P001",
       title: "Race Task",
       description: "src/example.ts:80 this task must fail because the resolved phase P001 disappears before the write.",
@@ -303,6 +351,7 @@ describe("pi-adapter strict ref validation", () => {
   test("task_create assigns unique global task numbers under parallel calls", async () => {
     const { root, st, phase } = await setup();
     await Promise.all(Array.from({ length: 8 }, (_, index) => tools.get("task_create").execute("id", {
+      featureId: "F001",
       phaseId: "P001",
       title: `Parallel Task ${index + 1}`,
       description: `src/example.ts:${100 + index} create a task in parallel and assert the global numbering stays unique across concurrent calls.`,

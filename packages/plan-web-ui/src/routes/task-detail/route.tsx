@@ -9,12 +9,12 @@ function formatDateTime(value: string): string {
   }
 }
 import { Form, Link, Outlet, useFetcher, useLoaderData, useNavigate } from "react-router-dom";
+import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
-import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
@@ -97,12 +97,17 @@ export function TaskDetailRoute() {
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} taskNum={task.number} featureId={feature.id} phaseId={phase.id} taskId={task.id} />
-          <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number, taskNum: task.number })}>
-            <span className="sr-only">Copy task path</span>
-          </CopyableBadge>
-          {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
+        <DetailEntityBar
+          featureNum={feature.number}
+          phaseNum={phase.number}
+          taskNum={task.number}
+          featureId={feature.id}
+          phaseId={phase.id}
+          taskId={task.id}
+          shortId={task.shortId}
+        >
           <StatusBadge status={task.status} />
+        </DetailEntityBar>
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{task.title}</h2>
         <div className="mt-4 flex flex-wrap items-center gap-2">

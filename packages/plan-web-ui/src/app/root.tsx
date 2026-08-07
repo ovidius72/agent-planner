@@ -23,8 +23,17 @@ export function RootRoute() {
   };
 
   useEffect(() => {
-    document.title = project?.name?.trim() ? `${project.name} · Agent Plan` : "Agent Plan";
-  }, [project?.name]);
+    const name = project?.name?.trim();
+    const folder = project?.projectRoot?.trim()
+      ? project.projectRoot.replace(/\\/g, "/").split("/").filter(Boolean).pop()
+      : "";
+    const showFolder = folder && folder !== name;
+    document.title = name
+      ? showFolder
+        ? `${folder} · ${name}`
+        : `${name} · Agent Plan`
+      : "Agent Plan";
+  }, [project?.name, project?.projectRoot]);
 
   useAnimatedFavicon(activeTasks.length > 0);
 

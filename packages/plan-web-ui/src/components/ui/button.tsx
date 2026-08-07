@@ -17,7 +17,7 @@ export function Button({ variant = "secondary", className = "", children, shortc
       className={`inline-flex min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-[12px] border px-3 py-1.5 text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-11 sm:rounded-[14px] sm:px-4 sm:py-2 sm:gap-2 ${variantClass[variant]} ${className}`}
       {...props}
     >
-      <span>{children}</span>
+      <span className="inline-flex items-center gap-1.5 sm:gap-2">{children}</span>
       {shortcut ? <ShortcutHint shortcut={shortcut} /> : null}
     </button>
   );

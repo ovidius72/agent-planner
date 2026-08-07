@@ -2238,7 +2238,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!capturedPi) { ctx.ui.notify("Agent bridge unavailable; use /planner handoff write for an auto-generated handoff.", "warning"); return; }
         const handoffs = await st.listHandoffs();
         await capturedPi.sendUserMessage(
-          "Prepare the canonical session handoff now and write it on the current in-progress phase using the `handoff_write` tool (entity-scoped, stored on phase.handoff — .planner/HANDOFF.md is deprecated).\n\n" +
+          "Prepare the canonical session handoff now and write it on the phase the user explicitly identifies as the one just worked on in this session, using the `handoff_write` tool (entity-scoped, stored on phase.handoff — .planner/HANDOFF.md is deprecated).\n\n" +
+          "WARNING: Do not default to 'current in-progress phase' or a stale resume pointer. If the user just completed P058, write the handoff on P058 (or its continuation P061), not on P031 just because P031 is marked in-progress or has an existing handoff.\n\n" +
           "The handoff MUST be a structured markdown document containing at minimum:\n" +
           "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
           "- `Reason:` why this handoff is being written\n" +
@@ -2770,7 +2771,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_write_handoff",
     label: "Plan Write Handoff",
-    description: "DEPRECATED — writes to the entity-scoped phase.handoff (not .planner/HANDOFF.md). Prefer handoff_write. Write or refresh the canonical phase handoff. Capture full design context, not just operational resume steps: pass extraSections with locked decisions, architecture (with file:line refs), mode/state flows, plugin/API contracts, data mappings, files touched, and known gaps so a resuming agent doesn't re-discover decisions already made.",
+    description: "DEPRECATED — writes to the entity-scoped phase.handoff (not .planner/HANDOFF.md). Prefer handoff_write. Write or refresh the canonical phase handoff. Capture full design context, not just operational resume steps: pass extraSections with locked decisions, architecture (with file:line refs), mode/state flows, plugin/API contracts, data mappings, files touched, and known gaps so a resuming agent doesn't re-discover decisions already made. IMPORTANT: write the handoff on the phase the user explicitly identifies as the one just worked on in this session; do not default to a stale 'current phase' pointer or an existing handoff on a different phase.",
     parameters: Type.Object({
       reason: Type.Optional(Type.String({ description: "Why the handoff is being written" })),
       whatWasBeingDone: Type.Optional(Type.String({ description: "Optional override for the current work summary" })),
@@ -2827,6 +2828,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   // Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
   // UUID | title; omitted -> current in-progress phase (phase.status, or the
   // phase containing an in-progress task). Returns the phase + its composite ref.
+  // NOTE: callers must NOT treat the resolved phase as a directive; it is a
+  // fallback pointer that may be stale if the agent worked on a different
+  // workstream in this session.
   async function resolvePhaseForHandoff(
     st: PlanStore,
     ref: string | undefined,
@@ -2886,7 +2890,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_write",
     label: "Handoff Write",
-    description: "Write/refresh the entity-scoped handoff on a phase. Pass content (or markdown_content). phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase.",
+    description: "Write/refresh the entity-scoped handoff on a phase. Pass content (or markdown_content). phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase. IMPORTANT: defaulting to 'current in-progress phase' is a fallback only; write the handoff on the phase the user explicitly identifies as the one just worked on in this session, and do not update an existing handoff on a different phase unless the user confirms.",
     parameters: Type.Object({
       phaseRef: Type.Optional(Type.String({ description: "Phase ref. Default: current in-progress phase." })),
       content: Type.Optional(Type.String({ description: "Handoff text (plain)." })),
@@ -3494,6 +3498,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     label: "Task Create",
     description: "Add a task to a phase with a RICH description. REQUIRED: description must include code references (file:line), what already exists vs what needs to be built, specific structs/traits/systems to modify, concrete implementation steps, and edge cases to handle. The description is the execution context for agents; one-liners cause misalignment. Status defaults to planned.",
     parameters: Type.Object({
+      featureId: Type.String({ description: "Feature ID the phase belongs to (required)" }),
       phaseId: Type.String({ description: "Phase ID the task belongs to" }),
       title: Type.String({ description: "Task title" }),
       description: Type.String({ description: "REQUIRED — execution context: code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner. Prefix with 'design-only' for pre-implementation design tasks.", minLength: 50 }),
@@ -3504,10 +3509,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      // Resolve the phase ref (accepts F00x/P00x, bare P00x, shortId, UUID, title).
+      if (!params.featureId?.trim()) return { content: [{ type: "text", text: "featureId is required: a task must belong to a feature." }], details: {} };
       const features = (await st.loadFeatures()).features;
+      const resolvedFeature = resolveFeatureRefStrict(features, params.featureId.trim());
+      if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
+      const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
+      if (!featureValidation.ok) return { content: [{ type: "text", text: featureValidation.error }], details: {} };
+      const feature = resolvedFeature.feature;
+      const existingFeature = features.find((f) => f.id === feature.id);
+      if (!existingFeature) return { content: [{ type: "text", text: `Resolved feature ${feature.id} no longer exists. Refusing to create task.` }], details: {} };
+      // Resolve the phase ref (accepts F00x/P00x, bare P00x, shortId, UUID, title).
       const resolvedPhase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
       if (!resolvedPhase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+      if (resolvedPhase.featureId !== feature.id) return { content: [{ type: "text", text: `Phase ${formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features))} does not belong to feature ${formatFeatureRef(feature.number)}. Refusing to create task.` }], details: {} };
       const phaseId = resolvedPhase.id;
       const phaseValidation = await validateResolvedTarget("phase", phaseId, () => st.loadPhase(phaseId).catch(() => undefined));
       if (!phaseValidation.ok) return { content: [{ type: "text", text: phaseValidation.error }], details: {} };
@@ -3546,7 +3560,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return phase;
       });
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Task created: ${taskId}` }], details: task };
+      const taskRef = `${formatPhaseRef(resolvedPhase.number, feature.number)}/T${String(task.number).padStart(3, "0")}`;
+      return { content: [{ type: "text", text: `Task created: ${taskRef} — ${task.title}${task.shortId ? ` · ${task.shortId}` : ""}` }], details: task };
     },
   });
 
@@ -4094,15 +4109,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         openQuestions.length ? "Open questions:" : "",
         ...openQuestions.map((question) => `- ${question}`),
         "",
-        "Resume focus:",
-        currentFeatureRef ? `  current feature: ${currentFeatureRef} — ${currentFeature?.name}` : "  current feature: (none)",
-        currentPhaseRef ? `  current phase: ${currentPhaseRef} — ${currentPhase?.title}` : "  current phase: (none)",
-        currentTaskRef ? `  current task: ${currentTaskRef} — ${currentTask?.title}` : "  current task: (none)",
+        "Resume focus (stale/fallback pointer — may not match the phase you actually worked on in this session):",
+        currentFeatureRef ? `  current feature pointer: ${currentFeatureRef} — ${currentFeature?.name}` : "  current feature pointer: (none)",
+        currentPhaseRef ? `  current phase pointer: ${currentPhaseRef} — ${currentPhase?.title}` : "  current phase pointer: (none)",
+        currentTaskRef ? `  current task pointer: ${currentTaskRef} — ${currentTask?.title}` : "  current task pointer: (none)",
         inProgressTaskLines.length ? `  in-progress tasks: ${inProgressTaskLines.join("; ")}` : "  in-progress tasks: (none)",
         resume.blockers.length ? `  blockers: ${resume.blockers.join("; ")}` : "  blockers: (none)",
         handoffs.length === 0 && resume.nextSteps.length
           ? `  next step: ${resume.nextSteps[0]}${resume.nextStepsUpdatedAt ? ` (updated ${resume.nextStepsUpdatedAt})` : ""}`
           : "",
+        "",
+        "CRITICAL: The 'Resume focus' pointers above are persisted across sessions. They are NOT necessarily the phase you worked on right now. When asked to write a handoff, use the phase the user explicitly identifies as the one just completed in this session, not a stale pointer.",
         "",
         "Phase overview:",
         `  counts: ${phaseCountsSummary}`,
@@ -4113,9 +4130,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         recentActivity.length ? "Recent activity:" : "",
         ...recentActivity.map((entry) => `- ${entry.at} [${entry.type}] ${entry.ref}: ${entry.summary}`),
         "",
-        handoffs.length > 0 ? `Pending phase handoffs (${handoffs.length}):` : "",
+        handoffs.length > 0 ? "Pending phase handoffs (entity-scoped; may be on a stale phase — validate before treating as current focus):" : "",
         ...handoffs.map((handoff, index) => `  [${index + 1}] ${handoff.compositeRef} — ${handoff.updatedAt} — "${handoff.firstLine}"`),
-        handoffs.length > 0 ? "Use handoff show <ref>; if no task is active, treat the handoff target as a candidate to validate, not the current focus." : "",
+        handoffs.length > 0 ? "Use handoff show <ref> for context. A pending handoff is a candidate to validate; do not default to it as the current focus unless it matches the phase you actually worked on in this session." : "",
         "",
         `Language: content=${project.contentLanguage || "(not set)"}; chat=${project.chatLanguage || "(not set)"}`,
         "Planner discuss mode is Agent Plan only: ignore GSD workflows unless the user explicitly asks for GSD.",

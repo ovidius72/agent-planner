@@ -405,6 +405,12 @@ textarea:disabled {
   75%, 100% { transform: scale(2.6); opacity: 0; }
 }
 
+.status-item {
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
 .ap-progress-dot {
   position: relative;
   display: inline-block;

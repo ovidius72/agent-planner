@@ -6,7 +6,7 @@ import { toDisplayStatus } from "../../lib/display-status-tokens";
 import type { Task } from "../../lib/types";
 import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
-import { EntityBadge } from "../ui/badges";
+import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
 
 function formatDateTime(value: string): string {
@@ -17,7 +17,7 @@ function formatDateTime(value: string): string {
   }
 }
 
-export function TaskRow({ featureId, phaseId, task }: { featureId: string; phaseId: string; task: Task }) {
+export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { featureId: string; featureNum?: number; phaseId: string; phaseNum?: number; task: Task }) {
   const statusFetcher = useFetcher();
   const deleteFetcher = useFetcher();
   const optimisticStatus = statusFetcher.formData?.get("status") as Task["status"] | null;
@@ -32,12 +32,16 @@ export function TaskRow({ featureId, phaseId, task }: { featureId: string; phase
     <StatusItem variant="surface" status={displayStatus} className="px-4 py-2">
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,168px)_124px_44px_44px] lg:items-center">
         <div className="flex min-w-0 flex-col items-start gap-1 lg:contents">
-          <div className="flex min-w-0 flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
+          <div className="flex min-w-0 flex-col items-start gap-1">
             <div className="flex items-center gap-2">
-              <EntityBadge type="task" number={task.number} />
+              <EntityPathBadge featureNum={featureNum} phaseNum={phaseNum} taskNum={task.number} featureId={featureId} phaseId={phaseId} taskId={task.id} />
+              <CopyableBadge id={formatEntityPath({ featureNum, phaseNum, taskNum: task.number })}>
+                <span className="sr-only">Copy task path</span>
+              </CopyableBadge>
+              {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
               <span className="shrink-0"><StatusBadge status={status} /></span>
             </div>
-            <Link to={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}`} className="entity-link--task min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline lg:w-auto lg:truncate">
+            <Link to={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}`} className="entity-link--task min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline [overflow-wrap:anywhere]">
               {task.title}
             </Link>
           </div>

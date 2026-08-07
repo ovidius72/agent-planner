@@ -26,7 +26,7 @@ async function setup() {
 }
 
 describe("P004 resume flow — auto-clear-on-done", () => {
-  test("syncStatuses auto-clears handoff when phase transitions to done (returns composite ref)", async () => {
+  test("syncTaskStatusRollup auto-clears handoff when phase transitions to done (returns composite ref)", async () => {
     const { store, mkPhase, mkTask } = await setup();
     const p = mkPhase(1, "planned");
     await store.savePhase(p);
@@ -38,8 +38,8 @@ describe("P004 resume flow — auto-clear-on-done", () => {
       for (const t of ph.tasks) { t.status = "done"; t.completedAt = nowISO(); t.startedAt = nowISO(); }
       return ph;
     });
-    const cleared = await store.syncStatuses();
-    assert.deepEqual(cleared, ["P001(F001)"]);
+    const cleared = await store.syncTaskStatusRollup(p.id);
+    assert.equal(cleared, "P001(F001)");
 
     const ph = await store.loadPhase(p.id);
     assert.equal(ph.status, "done");
@@ -73,26 +73,26 @@ describe("P004 resume flow — auto-clear-on-done", () => {
     await store.updatePhase(p.id, (ph) => { ph.tasks = [mkTask(ph.id)]; return ph; });
     await store.setPhaseHandoff(p.id, "# will be cleared");
     await store.updatePhase(p.id, (ph) => { for (const t of ph.tasks) { t.status = "done"; t.completedAt = nowISO(); t.startedAt = nowISO(); } return ph; });
-    await store.syncStatuses();
+    await store.syncTaskStatusRollup(p.id);
     assert.equal((await store.loadPhase(p.id)).handoff, "");
 
     // reopen: one task back to planned
     await store.updatePhase(p.id, (ph) => { ph.tasks[0].status = "planned"; return ph; });
-    const cleared = await store.syncStatuses();
-    assert.deepEqual(cleared, []);
+    const cleared = await store.syncTaskStatusRollup(p.id);
+    assert.equal(cleared, null);
     const ph = await store.loadPhase(p.id);
     assert.notEqual(ph.status, "done");
     assert.equal(ph.handoff, "", "handoff stays empty after reopen (not restored)");
   });
 
-  test("no-transition (planned phase with handoff) survives syncStatuses", async () => {
+  test("no-transition (planned phase with handoff) survives syncTaskStatusRollup", async () => {
     const { store, mkPhase, mkTask } = await setup();
     const p = mkPhase(4, "planned");
     await store.savePhase(p);
     await store.updatePhase(p.id, (ph) => { ph.tasks = [mkTask(ph.id)]; return ph; });
     await store.setPhaseHandoff(p.id, "# keep me");
-    const cleared = await store.syncStatuses();
-    assert.deepEqual(cleared, []);
+    const cleared = await store.syncTaskStatusRollup(p.id);
+    assert.equal(cleared, null);
     assert.equal((await store.loadPhase(p.id)).handoff, "# keep me");
   });
 });

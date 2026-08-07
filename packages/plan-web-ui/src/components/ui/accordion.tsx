@@ -47,7 +47,7 @@ export function Accordion({
   children,
 }: AccordionProps) {
   return (
-    <details className={cx("group mt-4 overflow-hidden rounded-lg border border-[var(--border)]", className)} open={defaultOpen}>
+    <details className={cx("group mt-4 overflow-hidden rounded-[10px] border border-[var(--border)]", className)} open={defaultOpen}>
       <summary className={cx("flex min-w-0 list-none cursor-pointer items-start justify-between gap-3 bg-[var(--surface-elevated)] p-4 text-left text-[var(--text)] transition-colors select-none hover:bg-[var(--surface-strong)] [&::-webkit-details-marker]:hidden", summaryClassName)}>
         <div className="flex min-w-0 flex-1 items-start gap-3">
           {leading ? <div className="shrink-0 pt-0.5">{leading}</div> : null}

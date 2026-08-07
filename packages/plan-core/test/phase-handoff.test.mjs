@@ -18,11 +18,11 @@ async function setup() {
   const now = new Date().toISOString();
   const feat = FeatureSchema.parse({ id: createFeatureId(), number: 1, name: "Feat One", status: "planned", createdAt: now, updatedAt: now });
   await store.saveFeature(feat);
-  const mkPhase = (number, featureId) =>
-    PhaseSchema.parse({ id: createPhaseId(), number, featureId, slug: `phase-${number}`, title: `Phase ${number}`, status: "draft", createdAt: now, updatedAt: now });
-  const p1 = mkPhase(1, undefined); // orphan
-  const p2 = mkPhase(2, feat.id); // linked
-  const p3 = mkPhase(3, feat.id); // linked
+  const mkPhase = (number) =>
+    PhaseSchema.parse({ id: createPhaseId(), number, featureId: feat.id, slug: `phase-${number}`, title: `Phase ${number}`, status: "draft", createdAt: now, updatedAt: now });
+  const p1 = mkPhase(1);
+  const p2 = mkPhase(2);
+  const p3 = mkPhase(3);
   await store.savePhase(p1);
   await store.savePhase(p2);
   await store.savePhase(p3);
@@ -30,6 +30,30 @@ async function setup() {
 }
 
 describe("PlanStore phase-scoped handoff", () => {
+  test("core savePhase allows an orphan phase (missing featureId) — validation is adapter-boundary", async () => {
+    const root = await mkdtemp(join(tmpdir(), "handoff-orphan-"));
+    dirs.push(root);
+    const store = new PlanStore(join(root, ".planner"));
+    await store.init("orphan test");
+    const now = new Date().toISOString();
+    const phase = {
+      id: createPhaseId(),
+      number: 1,
+      featureId: undefined,
+      slug: "orphan",
+      title: "Orphan Phase",
+      tasks: [],
+      taskIds: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    // Core intentionally allows missing featureId (migration/repair/unlink path).
+    // The "featureId required" gate is enforced by the adapters (Pi/MCP).
+    await store.savePhase(phase);
+    const loaded = await store.loadPhase(phase.id);
+    assert.equal(loaded.featureId, undefined);
+  });
+
   test("getPhaseHandoff returns \"\" by default (zod backfill)", async () => {
     const { store, phases } = await setup();
     assert.equal(await store.getPhaseHandoff(phases.p1.id), "");
@@ -73,7 +97,8 @@ describe("PlanStore phase-scoped handoff", () => {
     assert.equal(list.length, 2);
     const e1 = list.find((x) => x.phaseId === phases.p1.id);
     const e2 = list.find((x) => x.phaseId === phases.p2.id);
-    assert.equal(e1.compositeRef, "P001", "orphan ref has no (F00x)");
+    // Both phases now belong to F001, so both compositeRefs include (F001).
+    assert.equal(e1.compositeRef, "P001(F001)", "linked ref includes parent feature");
     assert.equal(e2.compositeRef, "P002(F001)", "linked ref includes parent feature");
     assert.equal(e1.firstLine, "Orphan work", "leading # header stripped");
     assert.equal(e2.firstLine, "Linked phase plain first line.");

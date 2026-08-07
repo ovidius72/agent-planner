@@ -20,13 +20,13 @@ async function makeStore() {
 
 const now = new Date().toISOString();
 
-test("savePhase rejects non-UUID featureId ref string", async () => {
+test("savePhase rejects non-UUID featureId ref string that matches no feature", async () => {
   const { store, root } = await makeStore();
   try {
     const phase = {
       id: createPhaseId(),
       number: 1,
-      featureId: "F005", // ref string, not UUID
+      featureId: "F005", // ref string with no matching feature
       slug: "p",
       title: "P",
       tasks: [],
@@ -70,6 +70,28 @@ test("savePhase resolves F00x ref to UUID before persisting", async () => {
     await store.savePhase(phase);
     const loaded = await store.loadPhase(phase.id);
     assert.equal(loaded.featureId, feature.id);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("savePhase allows missing featureId at core level (migration/repair/unlink path)", async () => {
+  const { store, root } = await makeStore();
+  try {
+    const phase = {
+      id: createPhaseId(),
+      number: 1,
+      featureId: undefined,
+      slug: "p",
+      title: "P",
+      tasks: [],
+      taskIds: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.savePhase(phase);
+    const loaded = await store.loadPhase(phase.id);
+    assert.equal(loaded.featureId, undefined);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

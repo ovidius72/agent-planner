@@ -5,9 +5,9 @@ import { PhaseRow } from "../../components/phases/phase-row";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority, formatTimeline } from "../../components/ui/detail-metadata";
-import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
@@ -95,12 +95,13 @@ export function FeatureDetailRoute() {
       <div className="min-w-0">
         <Breadcrumbs stacked items={[{ label: feature.name, kind: "Feature" }]} />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <EntityPathBadge featureNum={feature.number} featureId={feature.id} />
-          <CopyableBadge id={formatEntityPath({ featureNum: feature.number })}>
-            <span className="sr-only">Copy feature path</span>
-          </CopyableBadge>
-          {feature.shortId ? <ShortIdBadge shortId={feature.shortId} /> : null}
+        <DetailEntityBar
+          featureNum={feature.number}
+          featureId={feature.id}
+          shortId={feature.shortId}
+        >
           <DisplayStatusBadge status={featureDisplay.displayStatus} breakdown={featureDisplay.breakdown} />
+        </DetailEntityBar>
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
         {feature.description ? (

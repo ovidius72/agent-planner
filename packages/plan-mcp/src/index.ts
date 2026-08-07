@@ -556,27 +556,23 @@ server.registerTool("planner-feature-delete", {
 });
 
 server.registerTool("planner-phase-add", {
-  description: "Create a phase with a rich description. REQUIRED: description must include code references (file:line), current implementation state, dependencies, specific files/systems to modify, and behaviors to preserve. The description is the primary context for future agents; one-liners cause misalignment.",
+  description: "Create a phase linked to a feature with a rich description. REQUIRED: feature ref and description. The description must include code references (file:line), current implementation state, dependencies, specific files/systems to modify, and behaviors to preserve. The description is the primary context for future agents; one-liners cause misalignment.",
   inputSchema: {
     title: z.string().min(1),
-    feature: z.string().optional().describe("Feature ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."),
+    feature: z.string().min(1).optional().describe("Feature ref (required). Accepts F00x/P00x/T00x composite, bare F00x (global), 5-char shortId, UUID, or title."),
     summary: z.string().optional().describe("One-line summary of the phase"),
     description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner."),
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
+  if (!featureRef?.trim()) return text("feature is required: a phase must belong to a feature.");
   const featuresDoc = await st.loadFeatures();
-  let feature: Feature | undefined;
-  if (featureRef) {
-    const resolvedFeature = resolveFeatureRefStrict(featuresDoc.features, featureRef);
-    if (!resolvedFeature.ok) return text(resolvedFeature.error);
-    const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
-    if (!featureValidation.ok) return text(featureValidation.error);
-    feature = resolvedFeature.feature;
-  } else {
-    feature = featuresDoc.features[0];
-  }
-  if (featureRef && !feature) return text(`Resolved feature ${featureRef} no longer exists. Refusing to create phase.`);
+  const resolvedFeature = resolveFeatureRefStrict(featuresDoc.features, featureRef);
+  if (!resolvedFeature.ok) return text(resolvedFeature.error);
+  const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
+  if (!featureValidation.ok) return text(featureValidation.error);
+  const feature = resolvedFeature.feature;
+  if (!feature) return text(`Resolved feature ${featureRef} no longer exists. Refusing to create phase.`);
   const lockKey = feature?.id ?? "__unscoped__";
   let phase: Phase | undefined;
   await withFeatureLock(lockKey, async () => {
@@ -731,15 +727,25 @@ server.registerTool("planner-phase-delete", {
 server.registerTool("planner-task-add", {
   description: "Create a task with a rich description. REQUIRED: description must include code references (file:line), what already exists vs what needs to be built, specific structs/traits/systems to modify, concrete implementation steps, and edge cases to handle. The description is the execution context for agents; one-liners cause misalignment.",
   inputSchema: {
+    feature: z.string().min(1).optional().describe("Feature ref the task's phase belongs to. Accepts F00x/P00x/T00x composite, bare F00x (global), 5-char shortId, UUID, or title. REQUIRED."),
     phase: z.string().min(1).describe("Phase ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."),
     title: z.string().min(1),
     description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner."),
     checklist: z.array(z.string()).optional(),
   },
-}, async ({ phase: ref, title, description, checklist }) => {
+}, async ({ feature: featureRef, phase: ref, title, description, checklist }) => {
   const st = await requireStore();
-  const found = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  const features = (await st.loadFeatures()).features;
+  if (!featureRef?.trim()) return text("feature is required: a task must belong to a feature.");
+  const resolvedFeature = resolveFeatureRefStrict(features, featureRef);
+  if (!resolvedFeature.ok) return text(resolvedFeature.error);
+  const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
+  if (!featureValidation.ok) return text(featureValidation.error);
+  const feature = resolvedFeature.feature;
+  if (!feature) return text(`Resolved feature ${featureRef} no longer exists. Refusing to create task.`);
+  const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
+  if (found.featureId !== feature.id) return text(`Phase ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} does not belong to feature ${formatFeatureRef(feature.number)}. Refusing to create task.`);
   const phaseValidation = await validateResolvedTarget("phase", found.id, () => st.loadPhase(found.id).catch(() => undefined));
   if (!phaseValidation.ok) return text(phaseValidation.error);
   const existingPhase = await st.loadPhase(found.id);
@@ -776,8 +782,8 @@ server.registerTool("planner-task-add", {
     entry.updatedAt = timestamp;
     return entry;
   });
-  const features = (await st.loadFeatures()).features;
-  return writeAndSummarize(st, `✅ Task created: ${taskCompositeRef(task, found, features)} — ${task.title} (planned)${task.shortId ? ` · ${task.shortId}` : ""}`);
+  const finalFeatures = (await st.loadFeatures()).features;
+  return writeAndSummarize(st, `✅ Task created: ${taskCompositeRef(task, found, finalFeatures)} — ${task.title} (planned)${task.shortId ? ` · ${task.shortId}` : ""}`);
 });
 
 server.registerTool("planner-task-show", {

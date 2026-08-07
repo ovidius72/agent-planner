@@ -31,6 +31,8 @@ export interface DashboardTreeApi {
   treeOpenMode: TreeOpenMode;
   setTreeOpenMode: (mode: TreeOpenMode) => void;
   expandAll: () => void;
+  collapseAll: () => void;
+  isAllExpanded: boolean;
   expandedFeatureIds: string[];
   expandedPhaseIds: string[];
   setExpandedFeatureIds: Dispatch<SetStateAction<string[]>>;
@@ -347,6 +349,21 @@ export function useDashboardTree({
     setExpandedPhaseIds(displayedWorkTree.flatMap(({ allPhases }) => allPhases.map(({ phase }) => phase.id)));
   };
 
+  const collapseAll = () => {
+    setTreeOpenMode("smart");
+    setExpandedFeatureIds([]);
+    setExpandedPhaseIds([]);
+  };
+
+  const isAllExpanded = useMemo(() => {
+    const visibleFeatureIds = new Set(displayedWorkTree.map(({ feature }) => feature.id));
+    const visiblePhaseIds = new Set(displayedWorkTree.flatMap(({ allPhases }) => allPhases.map(({ phase }) => phase.id)));
+    if (visibleFeatureIds.size === 0) return false;
+    const allFeaturesExpanded = Array.from(visibleFeatureIds).every((id) => expandedFeatureIds.includes(id));
+    const allPhasesExpanded = Array.from(visiblePhaseIds).every((id) => expandedPhaseIds.includes(id));
+    return allFeaturesExpanded && allPhasesExpanded;
+  }, [displayedWorkTree, expandedFeatureIds, expandedPhaseIds]);
+
   // ── Live updates: highlight + auto-expand nodes touched by WS events ───
   useEffect(() => {
     const markRecent = (kind: "feature" | "phase" | "task", ids: Array<string | undefined>) => {
@@ -430,6 +447,8 @@ export function useDashboardTree({
     treeOpenMode,
     setTreeOpenMode,
     expandAll,
+    collapseAll,
+    isAllExpanded,
     expandedFeatureIds,
     expandedPhaseIds,
     setExpandedFeatureIds,

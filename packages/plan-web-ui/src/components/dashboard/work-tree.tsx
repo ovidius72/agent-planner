@@ -58,6 +58,33 @@ function applyOrder(tree: WorkTreeFeature[], pending: Record<string, string[]>):
 }
 
 
+function ToolbarButton({
+  active = false,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex h-8 min-h-8 w-full items-center justify-center rounded-[10px] border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+        active
+          ? "border-transparent bg-[var(--accent)] text-white"
+          : "border-[var(--border)] bg-[var(--surface-card)] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+      } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function WorkTree({
   features,
   phases,
@@ -189,8 +216,10 @@ export function WorkTree({
     if (tree.onlyActiveBranches) tree.setOnlyActiveBranches(false);
     if (tree.hideDone) tree.setHideDone(false);
     if (tree.searchQuery) tree.setSearchQuery("");
-    tree.setTreeOpenMode("all");
-    // 2. ensure feature + phase expanded so the row renders
+    // Switch to smart mode so per-node expansions are honored and not overwritten
+    // by a global "expand all" sync effect.
+    tree.setTreeOpenMode("smart");
+    // 2. ensure only the feature + phase containing the task are expanded
     if (p.featureId) {
       const fid = p.featureId;
       if (!tree.expandedFeatureIds.includes(fid)) {
@@ -284,14 +313,6 @@ export function WorkTree({
           <h2 className="text-lg font-bold text-[var(--text)]">Work Tree</h2>
           <p className="text-sm text-[var(--text-muted)]">Collapsible feature → phase → task tree. Click a feature or phase row to collapse/expand.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" className="w-full sm:w-[12rem] justify-center" onClick={() => tree.expandAll()}>
-            Expand all
-          </Button>
-          <Button type="button" variant="secondary" className="w-full sm:w-[12rem] justify-center" onClick={() => tree.setTreeOpenMode("none")}>
-            Collapse all
-          </Button>
-        </div>
       </div>
 
       <div className="ap-search-sticky z-20 grid gap-3" style={{ top: headerH }}>
@@ -304,35 +325,23 @@ export function WorkTree({
             </p>
           ) : null}
         </div>
-        <div className="grid grid-cols-2 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:grid-cols-3 sm:rounded-[18px] sm:px-4 sm:py-3 lg:grid-cols-5">
-          <button
-            type="button"
-            onClick={() => tree.setHideDone((value) => !value)}
-            className={`status-chip transition !h-11 !w-full !justify-center !px-4 !py-2 !text-sm ${tree.hideDone ? "status-done" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-          >
+        <div className="grid grid-cols-2 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:grid-cols-3 sm:rounded-[18px] sm:px-4 sm:py-3 lg:grid-cols-6">
+          <ToolbarButton active={tree.isAllExpanded} onClick={() => tree.isAllExpanded ? tree.collapseAll() : tree.expandAll()}>
+            {tree.isAllExpanded ? "Collapse all" : "Expand all"}
+          </ToolbarButton>
+          <ToolbarButton active={tree.hideDone} onClick={() => tree.setHideDone((value) => !value)}>
             Hide done
-          </button>
-          <button
-            type="button"
-            onClick={() => tree.setHidePlanned((value) => !value)}
-            className={`status-chip transition !h-11 !w-full !justify-center !px-4 !py-2 !text-sm ${tree.hidePlanned ? "status-planned" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-          >
+          </ToolbarButton>
+          <ToolbarButton active={tree.hidePlanned} onClick={() => tree.setHidePlanned((value) => !value)}>
             Hide planned
-          </button>
-          <button
-            type="button"
-            onClick={() => tree.setOnlyActiveBranches((value) => !value)}
-            className={`status-chip transition !h-11 !w-full !justify-center !px-4 !py-2 !text-sm ${tree.onlyActiveBranches ? "status-in-progress" : "border border-[var(--border)] bg-transparent text-[var(--text-muted)]"}`}
-          >
+          </ToolbarButton>
+          <ToolbarButton active={tree.onlyActiveBranches} onClick={() => tree.setOnlyActiveBranches((value) => !value)}>
             Only active
-          </button>
-          <Button type="button" variant="secondary" className="!h-11 !w-full !justify-center !px-4 !py-2 !text-sm" onClick={tree.resetFilters}>
+          </ToolbarButton>
+          <ToolbarButton onClick={tree.resetFilters}>
             Reset
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            className="!h-11 !w-full !justify-center !px-4 !py-2 !text-sm"
+          </ToolbarButton>
+          <ToolbarButton
             disabled={repairing}
             onClick={async () => {
               setRepairing(true);
@@ -351,7 +360,7 @@ export function WorkTree({
             }}
           >
             {repairing ? "Repairing…" : "Repair"}
-          </Button>
+          </ToolbarButton>
           {repairMsg ? <span className="hidden text-xs text-[var(--text-muted)] sm:inline sm:truncate">{repairMsg}</span> : null}
         </div>
       </div>
