@@ -1,6 +1,19 @@
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { z, ZodError } from "zod";
+
+/** Canonical `.planner/.gitignore` content (P042 spec): ignore the `.local/`
+ *  transient root, legacy `*.bak` crash backups, `*.tmp.*` atomic-write temp
+ *  files, and the legacy root-level `generated/` dir (now under `.local/`).
+ *  Shared by `init()` and `ensureGitignore()` so the two never drift. */
+const PLANNER_GITIGNORE = [
+  "# Agent Plan transient/derived/session-local files — do not track",
+  ".local/",
+  "*.bak",
+  "*.tmp.*",
+  "generated/",
+  "",
+].join("\n");
 import {
   CodebaseProfileSchema,
   FeatureSchema,
@@ -909,15 +922,29 @@ export class PlanStore {
     // - resume.json: per-session resume focus + the machine-local guard-bypass
     //   timestamp (guardBypassUntil must NOT leak into git/other clones)
     // - generated/: auto-regenerated markdown views (derived from JSON; churn)
-    await writeFile(
-      join(this.root, ".gitignore"),
-      [
-        "# Agent Plan transient/derived/session-local files — do not track",
-        ".local/",
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
+    await writeFile(join(this.root, ".gitignore"), PLANNER_GITIGNORE, "utf-8");
+  }
+
+  /** Idempotently ensure `.planner/.gitignore` ignores `.local/` (and the
+   *  canonical transient/derived patterns). Projects initialized before the
+   *  `.local/` move either have no `.planner/.gitignore` or one with stale
+   *  root-level patterns. This upgrades them safely on load and on repair.
+   *  Returns true if the file was (re)written. Safe to call on every load. */
+  async ensureGitignore(): Promise<boolean> {
+    const gi = join(this.root, ".gitignore");
+    try {
+      const existing = await readFile(gi, "utf8").catch(() => null);
+      // Up to date iff it contains all canonical patterns (P042 spec):
+      // .local/ (transients), *.bak (crash backups), *.tmp.* (atomic-write
+      // temp files), generated/ (legacy dir).
+      if (existing != null && existing.includes(".local/") && existing.includes("*.bak") && existing.includes("*.tmp.*") && existing.includes("generated/")) {
+        return false;
+      }
+      await writeFile(gi, PLANNER_GITIGNORE, "utf-8");
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async exists(): Promise<boolean> {
@@ -932,6 +959,9 @@ export class PlanStore {
   // ── Loaders ──────────────────────────────────────────────────────────
 
   async loadManifest(): Promise<Manifest> {
+    // Ensure the .planner/.gitignore ignores transients (P042). Idempotent;
+    // upgrades plans initialized before the .local/ move. Runs on every load.
+    await this.ensureGitignore().catch(() => {});
     const manifest = await readJson(this.manifestPath(), ManifestSchema);
     try {
       const timestamp = await readJson(this.timestampPath(), z.object({ updatedAt: TimestampSchema }));
@@ -1512,6 +1542,9 @@ export class PlanStore {
     integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
   }> {
     return this.runAsBatch(async () => {
+      // Ensure the .planner/.gitignore ignores transients (P042). Idempotent;
+      // upgrades plans initialized before the .local/ move.
+      await this.ensureGitignore().catch(() => {});
       const migrated = await this.migratePhaseIds();
       await this.repairPhaseFeatureRefs();
       const backfill = await this.ensureShortIdsAndPriority();
