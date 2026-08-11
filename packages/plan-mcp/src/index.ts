@@ -1037,19 +1037,22 @@ server.registerTool("planner-task-start", {
       recommendedTaskId: selection.candidate?.task.id,
     });
   }
-  // Auto-archive the handoff on THIS task's phase (reason: task-started) — the
-  // agent is now actively working, so the captured context is consumed. Other
-  // phases' handoffs are left untouched (informational, non-blocking).
-  const allHandoffs = await st.listHandoffs();
-  let handoffNotice = "";
-  if ((found.phase.handoff ?? "") !== "") {
-    await st.clearPhaseHandoff(found.phase.id, "task-started").catch(() => {});
-    handoffNotice = "📦 Archived handoff for this phase (task started) — recover via planner-handoff-list + .planner/.local/handoff-archive/.\n";
-  }
-  const _otherHandoffs = allHandoffs.filter((h) => h.phaseId !== found.phase.id);
-  if (_otherHandoffs.length > 0) {
-    handoffNotice += `ℹ️  ${_otherHandoffs.length} other phase handoff(s) pending — review with planner-handoff-list if relevant.\n`;
-  }
+  // Assemble the mandatory parent context before changing task lifecycle state.
+  const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
+  const [phaseWithRequirements, featureRequirements] = await Promise.all([
+    st.loadPhaseWithRequirements(found.phase.id),
+    parentFeature ? st.linkedRequirementsForFeature(parentFeature.id) : Promise.resolve([]),
+  ]);
+  const phaseContext = buildPhaseContextBlock(
+    phaseWithRequirements,
+    parentFeature,
+    phaseWithRequirements.linkedRequirements ?? [],
+    featureRequirements,
+  );
+
+  // A pending handoff is context, not a lock: task start RETAINS it. It is
+  // archived only when the phase completes (auto) or the user explicitly
+  // clears it.
   const timestamp = nowISO();
 
   let updatedTask: Task | undefined;
@@ -1078,10 +1081,7 @@ server.registerTool("planner-task-start", {
     await st.setWorkDeviationState(selection.deviation.id, "active", timestamp);
   }
   const t = updatedTask ?? found.task;
-  const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
-  const phaseWithRequirements = await st.loadPhaseWithRequirements(found.phase.id);
-  const phaseContext = buildPhaseContextBlock(phaseWithRequirements, parentFeature, phaseWithRequirements.linkedRequirements ?? []);
-  return writeAndSummarize(st, `${handoffNotice}✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}`);
+  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}`);
 });
 
 server.registerTool("planner-task-complete", {

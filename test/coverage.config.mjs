@@ -31,6 +31,17 @@
  *   unit        — line% 44.68/44.73/44.95 · branch% 72.65/73.11/73.14 · func% 59.80×5 → 44/72/59
  *   integration — line% 60.90 · branch% 66.92 · func% 65.37                              → 60/66/65
  *   all         — line% 45.05 · branch% 74.36 · func% 61.01                              → 45/74/61
+ *
+ * Re-derived 2026-08-11 (P056 lands the Pi host harness, which executes big
+ * chunks of the 487-branch pi-adapter; V8 counts branches only in executed
+ * code, so newly-measured adapter branches dilute the % even as absolute
+ * hits rise — floors below reflect the new honest minimum):
+ *   unit        — line% 68.14/68.18 · branch% 72.99/73.19 · func% 75.27               → 68/72/75
+ *   all         — line% 68.18/68.20 · branch% 72.81/73.26 · func% 75.37/76.27         → 68/72/75
+ *
+ * Re-derived again 2026-08-11 (T242 lands Pi mutation/handoff tests):
+ *   unit        — line% 79.29/79.48/79.57 · branch% 72.72/72.74/72.88 · func% 77.79/78.06/78.15 → 79/72/77
+ *   all         — line% 79.31×3            · branch% 72.85×3            · func% 77.88×3         → 79/72/77
  */
 
 export const COVERAGE = {
@@ -56,8 +67,8 @@ export const COVERAGE = {
   gate: { lines: 80, functions: 80, branches: 70 },
   /** Baseline gates per scope — floor of real measured minima (see derivation above). */
   baseline: {
-    all: { lines: 45, functions: 61, branches: 74 },
-    unit: { lines: 44, functions: 59, branches: 72 },
+    all: { lines: 79, functions: 77, branches: 72 },
+    unit: { lines: 79, functions: 77, branches: 72 },
     integration: { lines: 60, functions: 65, branches: 66 },
   },
 };

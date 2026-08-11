@@ -18,11 +18,34 @@ export function buildPhaseContextBlock(
   phase: Phase,
   feature: Feature | undefined,
   linkedRequirements: Requirement[] = [],
+  featureRequirements: Requirement[] = [],
 ): string {
   const lines: string[] = [];
   const phaseRef = formatPhaseRef(phase.number, feature?.number);
-  lines.push(`\n📋 Phase context — read this BEFORE touching code:`);
-  lines.push(`Phase ${phaseRef} — ${phase.title}`);
+  const requirementsBlock = (label: string, requirements: Requirement[], empty: string) => {
+    lines.push(`\n${label} (${requirements.length}):`);
+    if (requirements.length === 0) {
+      lines.push(`  - ${empty}`);
+    } else {
+      for (const requirement of requirements) {
+        lines.push(`  - ${requirement.title}${requirement.description?.trim() ? ` — ${requirement.description.trim()}` : ""}`);
+      }
+    }
+  };
+
+  lines.push(`\n📋 Task context — read this BEFORE touching code:`);
+  if (feature) {
+    lines.push(`Feature F${String(feature.number).padStart(3, "0")} — ${feature.name}`);
+    if (feature.description && feature.description.trim()) {
+      lines.push(`\nFeature description:\n${feature.description.trim()}`);
+    }
+    requirementsBlock("Feature linked requirements", featureRequirements, "None linked to this feature.");
+  } else {
+    lines.push("Feature context: no parent feature linked to this phase.");
+    requirementsBlock("Feature linked requirements", [], "None linked to this feature.");
+  }
+
+  lines.push(`\nPhase ${phaseRef} — ${phase.title}`);
   if (phase.summary && phase.summary.trim()) {
     lines.push(`Summary: ${phase.summary.trim()}`);
   }
@@ -43,21 +66,7 @@ export function buildPhaseContextBlock(
   bullet("Decisions", phase.decisions);
   bullet("Completion criteria", phase.completionCriteria);
 
-  lines.push(`\nLinked requirements (${linkedRequirements.length}):`);
-  if (linkedRequirements.length === 0) {
-    lines.push("  - None linked to this phase.");
-  } else {
-    for (const requirement of linkedRequirements) {
-      lines.push(`  - ${requirement.title}${requirement.description?.trim() ? ` — ${requirement.description.trim()}` : ""}`);
-    }
-  }
-
-  if (feature) {
-    lines.push(`\nFeature F${String(feature.number).padStart(3, "0")} — ${feature.name}`);
-    if (feature.description && feature.description.trim()) {
-      lines.push(`\nFeature description:\n${feature.description.trim()}`);
-    }
-  }
+  requirementsBlock("Phase linked requirements", linkedRequirements, "None linked to this phase.");
   lines.push(`\n(End of phase context. Now proceed with the task.)`);
   return lines.join("\n");
 }

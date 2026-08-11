@@ -150,6 +150,15 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "stop", label: "stop", description: "Disable planner and shut down the web UI" },
 ];
 
+/** A completed nested command followed by a space is now receiving free-form
+ * arguments (entity refs, titles, etc.), not another command completion. */
+function hasPlannerCommandArgument(prefix: string): boolean {
+  const normalized = prefix.trimStart().toLowerCase();
+  return PLANNER_COMMAND_COMPLETIONS.some((item) =>
+    normalized.startsWith(`${item.value.toLowerCase()} `),
+  );
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────
 
 function nowISO(): string {
@@ -214,7 +223,7 @@ function normalizeLanguagePref(value: string | undefined): string {
 }
 
 
-async function ensureProjectLanguagePreferences(st: PlanStore): Promise<Project> {
+async function ensureProjectLanguagePreferences(st: PlanStore, persist = true): Promise<Project> {
   const project = await st.loadProject();
   const contentLanguage = normalizeLanguagePref(project.contentLanguage);
   const chatLanguage = normalizeLanguagePref(project.chatLanguage);
@@ -223,7 +232,7 @@ async function ensureProjectLanguagePreferences(st: PlanStore): Promise<Project>
     if (project.contentLanguage !== contentLanguage || project.chatLanguage !== chatLanguage) {
       project.contentLanguage = contentLanguage;
       project.chatLanguage = chatLanguage;
-      await st.saveProject(project);
+      if (persist) await st.saveProject(project);
     }
     return project;
   }
@@ -232,7 +241,7 @@ async function ensureProjectLanguagePreferences(st: PlanStore): Promise<Project>
     const fallback = contentLanguage || chatLanguage;
     project.contentLanguage = contentLanguage || fallback;
     project.chatLanguage = chatLanguage || fallback;
-    await st.saveProject(project);
+    if (persist) await st.saveProject(project);
     return project;
   }
 
@@ -731,6 +740,9 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
   if (server) return;
   const host = visibility === "lan" ? "0.0.0.0" : "127.0.0.1";
   const port = await pickProjectPort(ctx, requestedPort);
+  // A started server must be reflected in the next context block; the cache
+  // may hold a stale "Web UI: not running" block from a stop+prompt pair.
+  contextBlockDirty = true;
   try {
     server = await serve({
       port,
@@ -742,24 +754,25 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
       isBusy: () => planBusy,
     });
   } catch (e) {
-    // EADDRINUSE or other listen failure: retry on a random free port.
-    if (e instanceof Error && /EADDRINUSE|EACCES|EADDRNOTAVAIL/.test(e.message)) {
-      try {
-        server = await serve({
-          port: 0,
-          host,
-          planRoot: resolvePlanRoot(ctx.cwd),
-          staticDir: resolveStaticDir(),
-          quiet: true,
-          uiConfig: readUiConfig(ctx),
-          isBusy: () => planBusy,
-        });
-        ctx.ui.notify(`Planner web server: port ${port} busy (another planner instance on this project?), started on ${server?.url ?? "?"} instead.`, "info");
-      } catch (e2) {
-        ctx.ui.notify(`Failed to start web server (also retry failed): ${e2 instanceof Error ? e2.message : String(e2)}`, "error");
-      }
-    } else {
-      ctx.ui.notify(`Failed to start web server: ${e instanceof Error ? e.message : String(e)}`, "error");
+    // Any listen failure at startup is potentially transient — EADDRINUSE from
+    // a racy port scan (another process grabbed the port between our check and
+    // bind), EMFILE/ENFILE under heavy load, EAGAIN, etc. Retry ONCE on a random
+    // free port (port 0) so a planner load never silently ends up with no server.
+    // serve() throws here only during startup binding/serving setup; if the retry
+    // also fails, surface the error to the user.
+    try {
+      server = await serve({
+        port: 0,
+        host,
+        planRoot: resolvePlanRoot(ctx.cwd),
+        staticDir: resolveStaticDir(),
+        quiet: true,
+        uiConfig: readUiConfig(ctx),
+        isBusy: () => planBusy,
+      });
+      ctx.ui.notify(`Planner web server: port ${port} unavailable (${e instanceof Error ? e.message : String(e)}), started on ${server?.url ?? "?"} instead.`, "info");
+    } catch (e2) {
+      ctx.ui.notify(`Failed to start web server (also retry failed): ${e2 instanceof Error ? e2.message : String(e2)}`, "error");
     }
   }
   if (server) {
@@ -788,12 +801,26 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
   }
 }
 
+function disablePlannerSession(): void {
+  plannerSessionEnabled = false;
+  startupResumePromptPending = false;
+  startupResumeSummaryPending = false;
+  startupResumeSummaryText = "";
+  if (startupResumeSummaryTimer) clearTimeout(startupResumeSummaryTimer);
+  startupResumeSummaryTimer = null;
+  contextBlockCache = "";
+  contextBlockDirty = true;
+}
+
 async function stopServer(): Promise<void> {
   if (server) {
     await server.close();
     server = null;
   }
   capturedPi?.appendEntry("plan-web-state", { running: false });
+  // The cached context block embeds the web UI address; after stop it must
+  // not keep claiming the dashboard is running (T241 — context invalidation).
+  contextBlockDirty = true;
 }
 
 // ─── Extension factory ──────────────────────────────────────────────────
@@ -816,6 +843,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
         const argPrefix = match[2];
         const prefix = argPrefix === undefined ? match[1]! : argPrefix;
+        if (argPrefix !== undefined && hasPlannerCommandArgument(argPrefix)) {
+          return null;
+        }
         const normalized = (argPrefix ?? "").trimStart().toLowerCase();
         const items = PLANNER_COMMAND_COMPLETIONS
           .filter((item) => !normalized || item.value.startsWith(normalized))
@@ -1040,8 +1070,44 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // ── Planner handler (reusable from multiple commands) ──────────
 
+  const plannerInteractionCancelled = Symbol("planner-interaction-cancelled");
+
+  /**
+   * Pi returns `undefined` when Escape closes an input/editor/select. Treat
+   * that as a transaction-wide cancellation, not as an omitted optional
+   * field: interactive planner commands must never keep prompting or write a
+   * partial edit after Escape.
+   */
+  function withCancellablePlannerUi(ctx: ExtensionContext): ExtensionContext {
+    const cancellableCtx = Object.create(ctx) as ExtensionContext;
+    const ui = new Proxy(ctx.ui, {
+      get(target, property, receiver) {
+        const member = Reflect.get(target, property, receiver);
+        if (typeof member !== "function") return member;
+        if (property === "input" || property === "editor" || property === "select") {
+          return async (...args: unknown[]) => {
+            const result = await member.apply(target, args);
+            if (result === undefined || result === null) throw plannerInteractionCancelled;
+            return result;
+          };
+        }
+        return member.bind(target);
+      },
+    });
+    Object.defineProperty(cancellableCtx, "ui", { value: ui, enumerable: true });
+    return cancellableCtx;
+  }
+
   async function handlePlanner(args: string, ctx: ExtensionContext): Promise<void> {
-    await withPlanBusy(() => runPlanner(args, ctx));
+    try {
+      await withPlanBusy(() => runPlanner(args, withCancellablePlannerUi(ctx)));
+    } catch (error) {
+      if (error === plannerInteractionCancelled) {
+        ctx.ui.notify("Cancelled — no changes saved.", "info");
+        return;
+      }
+      throw error;
+    }
   }
 
   async function runPlanner(args: string, ctx: ExtensionContext): Promise<void> {
@@ -1113,6 +1179,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return;
         }
         const oldProject = await st.loadProject();
+        // Collect the replacement metadata before deleting the existing plan;
+        // Escape must leave the old project intact.
+        const name = await ctx.ui.input(`Project title [${oldProject.name}]`);
+        if (!name?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
+        const description = await ctx.ui.input(`Short project description [${oldProject.description || ""}]`);
         ctx.ui.notify("Resetting project... all current plan data will be lost.", "warning");
         
         if (server) {
@@ -1122,10 +1193,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
         await rm(st.root, { recursive: true, force: true });
 
-        const name = await ctx.ui.input(`Project title [${oldProject.name}]`);
-        if (!name?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
-        const description = await ctx.ui.input(`Short project description [${oldProject.description || ""}]`);
-        
         await st.init(name.trim());
         const project = await st.loadProject();
         project.description = description?.trim() ?? oldProject.description;
@@ -1274,22 +1341,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       return { ok: false, error: `Feature not found: ${raw}` };
     }
 
-    function findPhaseByRef(phases: Phase[], ref: string): Phase | null {
-      const normalized = ref.trim().toLowerCase();
-      if (!normalized) return null;
-      const pMatch = normalized.match(/^p(\d+)$/);
-      if (pMatch) {
-        const n = parseInt(pMatch[1]!, 10);
-        const byNum = phases.find((p) => p.number === n);
-        if (byNum) return byNum;
-      }
-      return phases.find((phase) => phase.shortId && phase.shortId.toLowerCase() === normalized)
-        ?? phases.find((phase) => phase.id.toLowerCase() === normalized)
-        ?? phases.find((phase) => phase.title.toLowerCase() === normalized)
-        ?? phases.find((phase) => phase.title.toLowerCase().includes(normalized))
-        ?? null;
-    }
-
 
     function profile_packageManager(pkg: CodebaseProfile["packageJson"], lockfile: string): string {
       if (pkg?.packageManager) return pkg.packageManager;
@@ -1300,7 +1351,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       return "";
     }
 
-    async function scanCodebase(): Promise<CodebaseProfile> {
+    async function scanCodebase(persist = true): Promise<CodebaseProfile> {
       const root = ctx.cwd;
       const rootFiles: { path: string; kind: string }[] = [];
       const directories: string[] = [];
@@ -1371,7 +1422,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         tree,
         ambient,
       };
-      await st.saveCodebaseProfile(profile);
+      if (persist) await st.saveCodebaseProfile(profile);
       return profile;
     }
 
@@ -1384,8 +1435,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return;
       }
       if (b === "discuss") {
-        const project = await ensureProjectLanguagePreferences(st);
-        const profile = await scanCodebase();
+        const project = await ensureProjectLanguagePreferences(st, false);
+        const profile = await scanCodebase(false);
         ctx.ui.notify(`Codebase scanned: ${profile.directories.length} dirs, ${profile.rootFiles.length} root files${profile.packageJson?.name ? `, pkg ${profile.packageJson.name}` : ""}.`, "info");
 
         ctx.ui.notify("Opening text editors for the initial project profile. These will serve as the foundation for the agent's deep discovery process.", "info");
@@ -1428,6 +1479,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         };
 
         await st.saveProject(draftProject);
+        await st.saveCodebaseProfile(profile);
         await st.writeGenerated();
 
         ctx.ui.notify("Initial profile saved. The agent will now take over as Lead Architect to conduct discovery.", "info");
@@ -1689,6 +1741,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
         const feature = await pickFeature();
         if (!feature) { ctx.ui.notify("Phase creation cancelled: no feature selected.", "warning"); return; }
+        // This belongs to the creation transaction: Escape before the phase
+        // is persisted cancels the whole command rather than creating a phase
+        // and only then abandoning the follow-up question.
+        const startDiscuss = await ctx.ui.input("Start phase discuss now? Type yes to continue");
         let phase: Phase | undefined;
         await withFeatureLock(feature.id, async () => {
           const phases = await st.loadAllPhases();
@@ -1721,7 +1777,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         });
         if (!phase) return;
           ctx.ui.notify(`Phase created: ${formatPhaseRef(phase.number, feature.number)} — ${title}${phase.shortId ? ` · ${phase.shortId}` : ""} (feature ${feature.name})`, "info");
-        const startDiscuss = await ctx.ui.input("Start phase discuss now? Type yes to continue");
         if (isYes(startDiscuss)) {
           await handlePlanner(`phase discuss ${phase.id}`, ctx);
         }
@@ -1730,7 +1785,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (b === "discuss") {
         let phase: Phase | null = null;
         if (subArgs.trim()) {
-          phase = findPhaseByRef(await st.loadAllPhases(), subArgs.trim());
+          phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim()) ?? null;
         }
         if (!phase) {
           phase = await pickPhase();
@@ -1741,9 +1796,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`Phase is already "${phase.status}". Re-discuss works best on draft/discovery/planned phases.`, "info");
         }
 
-        phase.status = "discovery";
-        phase.updatedAt = nowISO();
-        await st.savePhase(phase);
         ctx.ui.notify(`Discovery for ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))}…`, "info");
 
         // ── Recap: give full context before planning tasks ──
@@ -1814,7 +1866,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (b === "show") {
         let phase: Phase | null = null;
         if (subArgs.trim()) {
-          phase = await st.loadPhase(subArgs.trim()).catch(() => null);
+          phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim()) ?? null;
         }
         if (!phase) {
           phase = await pickPhase();
@@ -1837,7 +1889,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (b === "delete") {
         let phase: Phase | null = null;
         if (subArgs.trim()) {
-          phase = await st.loadPhase(subArgs.trim()).catch(() => null);
+          phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim()) ?? null;
         }
         if (!phase) {
           phase = await pickPhase();
@@ -1855,7 +1907,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (b === "update") {
         let phase: Phase | null = null;
         if (subArgs.trim()) {
-          phase = await st.loadPhase(subArgs.trim()).catch(() => null);
+          phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim()) ?? null;
         }
         if (!phase) {
           phase = await pickPhase();
@@ -1911,6 +1963,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!phase) { ctx.ui.notify("Aborted", "warning"); return; }
         const title = await ctx.ui.input(`Task title (for "${phase.title}")`);
         if (!title?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
+        // Keep the optional follow-up inside the creation transaction so
+        // Escape can still cancel before a task is persisted.
+        const startDiscuss = await ctx.ui.input("Start task discuss now? Type yes to continue");
         const shortName = clampSlug(title, 30, `task-${Date.now().toString(36)}`);
         const taskNum = await st.allocTaskNumber();
         const taskId = createTaskId();
@@ -1936,7 +1991,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.savePhase(phase);
         await st.writeGenerated();
         ctx.ui.notify(`Task created: ${taskId} — ${title}`, "info");
-        const startDiscuss = await ctx.ui.input("Start task discuss now? Type yes to continue");
         if (isYes(startDiscuss)) {
           await handlePlanner(`task discuss ${taskId}`, ctx);
         }
@@ -2001,7 +2055,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (b === "delete") {
         let phase: Phase | null = null;
         if (subArgs.trim()) {
-          phase = await st.loadPhase(subArgs.trim()).catch(() => null);
+          phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim()) ?? null;
         }
         if (!phase) {
           phase = await pickPhase();
@@ -2027,7 +2081,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (b === "update") {
         let phase: Phase | null = null;
         if (subArgs.trim()) {
-          phase = await st.loadPhase(subArgs.trim()).catch(() => null);
+          phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, subArgs.trim()) ?? null;
         }
         if (!phase) {
           phase = await pickPhase();
@@ -2084,17 +2138,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
         }
-        // Auto-archive the handoff on THIS task's phase (reason: task-started) —
-        // the agent is now actively working, so the captured context is consumed.
-        // Other phases' handoffs are left untouched (informational, non-blocking).
-        if ((phase!.handoff ?? "") !== "") {
-          await st.clearPhaseHandoff(phase!.id, "task-started").catch(() => {});
-          ctx.ui.notify("📦 Archived handoff for this phase (task started) — recover via /planner handoff list + .planner/.local/handoff-archive/.", "info");
-        }
-        const _otherHandoffs = (await st.listHandoffs()).filter((h) => h.phaseId !== phase!.id);
-        if (_otherHandoffs.length > 0) {
-          ctx.ui.notify(`ℹ️  ${_otherHandoffs.length} other phase handoff(s) pending — review with /planner handoff list if relevant.`, "info");
-        }
+        // A pending handoff is context, not a lock: task start RETAINS it.
+        // It is archived only when the phase completes (auto) or the user
+        // explicitly clears it.
         const now = nowISO();
         // Record status change in the incremental statusLog.
         const prevStatus = task.status;
@@ -2388,6 +2434,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startupResumeSummaryPending = false;
         startupResumeSummaryTimer = null;
       }, 60000);
+      // Safety timeout must not keep the Node process alive on its own
+      // (relevant for test hosts that load this entrypoint). Inside Pi the
+      // process is long-lived, so unref is a no-op there.
+      startupResumeSummaryTimer.unref?.();
       // Build the recap and embed it in the trigger content. The trigger
       // message is the channel that reliably reaches the agent on a triggered
       // turn (before_agent_start's systemPrompt injection is NOT applied to
@@ -2410,7 +2460,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
 
     if (a === "stop" || a === "disable") {
-      plannerSessionEnabled = false;
+      disablePlannerSession();
       await stopServer().catch(() => {});
       try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
       ctx.ui.notify("Planner stopped. Web UI shut down. Run '/planner load' to re-enable.", "info");
@@ -2425,6 +2475,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Grouped planner command. Use /planner <TAB> for subcommands or /planner to open the menu.",
     getArgumentCompletions: (prefix) => {
       const normalized = prefix.trim().toLowerCase();
+      // Once a complete command path is followed by whitespace, the remaining
+      // text is a free-form human ref/title. Returning the fallback menu here
+      // lets Pi select `init` and replace input such as `feature update F001`.
+      if (hasPlannerCommandArgument(prefix)) return null;
+
       const filtered = PLANNER_COMMAND_COMPLETIONS.filter((item) => item.value.startsWith(normalized));
       return filtered.length > 0 ? filtered : PLANNER_COMMAND_COMPLETIONS;
     },
@@ -3008,7 +3063,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "feature_get",
       label: "Feature Get",
-      description: "Show a feature. Compact identity by default (saves tokens); pass full=true to include the description.",
+      description: "Show a feature. Compact identity by default (saves tokens); pass full=true to include the description and derived linked requirements.",
       parameters: Type.Object({
         featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name" }),
         full: Type.Optional(Type.Boolean({ description: "If true, include the feature description. Default: compact identity only." })),
@@ -3018,11 +3073,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
         const features = (await st.loadFeatures()).features;
         const ref = params.featureId.trim();
-        const feature = features.find((f) => formatFeatureRef(f.number) === ref || f.shortId === ref || f.id === ref || f.name.toLowerCase() === ref.toLowerCase());
-        if (!feature) return { content: [{ type: "text", text: `Feature not found: ${ref}` }], details: {} };
+        const resolvedFeature = resolveFeatureRefStrict(features, ref);
+        if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
+        const feature = resolvedFeature.feature;
         const phases = (await st.loadAllPhases()).filter((p) => p.featureId === feature.id);
-        const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases)`;
-        return { content: [{ type: "text", text: params.full ? `${summary}\n\n${feature.description || ""}` : summary }], details: {} };
+        const linkedRequirements = await st.linkedRequirementsForFeature(feature.id);
+        const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases${linkedRequirements.length ? `; ${linkedRequirements.length} linked requirement${linkedRequirements.length === 1 ? "" : "s"}` : ""})`;
+        const requirementsBlock = linkedRequirements.length > 0
+          ? `\n\nLinked requirements:\n${linkedRequirements.map((requirement) => `- ${requirement.title} (${requirement.status})`).join("\n")}`
+          : "\n\nLinked requirements:\n- None linked to this feature.";
+        return { content: [{ type: "text", text: params.full ? `${summary}\n\n${feature.description || ""}${requirementsBlock}` : summary }], details: { linkedRequirements } };
       },
     });
 
@@ -3144,6 +3204,28 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const resolvedFeature = resolveFeatureRefStrict(features, params.featureId);
       if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
       const featureId = resolvedFeature.feature.id;
+      const mutableFields = [
+        "name",
+        "description",
+        "status",
+        "startDate",
+        "endDate",
+        "workDone",
+        "workRemaining",
+        "priority",
+        "acceptedDecisions",
+      ] as const;
+      const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
+      if (receivedFields.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: "Not updated — no mutable fields were received. No planner data was changed. If you attempted a large description, it may have exceeded the tool payload limit.",
+          }],
+          details: { updated: false, reason: "no-mutable-fields" },
+        };
+      }
+
       let foundDoc: FeaturesDocument | undefined;
       try {
         foundDoc = await st.updateFeatures((doc) => {
@@ -3181,7 +3263,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const feature = foundDoc?.features.find((f) => f.id === featureId);
       if (!feature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `✅ Feature updated: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}` }], details: feature };
+      return {
+        content: [{
+          type: "text",
+          text: `✅ Feature updated: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`,
+        }],
+        details: { ...feature, updated: true, updatedFields: receivedFields },
+      };
     },
   });
 
@@ -3428,6 +3516,72 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "decision_record",
+    label: "Decision Record",
+    description: "Record a user-agreed decision on both a feature and one of its phases. This is planner metadata work, not a code edit. The decision is appended without overwriting existing history.",
+    parameters: Type.Object({
+      featureId: Type.String({ description: "Parent feature ref: F00x, shortId, UUID, or name" }),
+      phaseId: Type.String({ description: "Active phase ref: P00x, shortId, UUID, or title" }),
+      title: Type.String({ minLength: 1, description: "Short human-readable decision title" }),
+      decision: Type.String({ minLength: 1, description: "The agreed decision" }),
+      rationale: Type.String({ minLength: 1, description: "Why the decision was made" }),
+      implementationNotes: Type.String({ minLength: 1, description: "Concrete follow-up or preservation notes" }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const resolvedFeature = resolveFeatureRefStrict(features, params.featureId);
+      if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
+      const resolvedPhase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId);
+      if (!resolvedPhase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+      if (resolvedPhase.featureId !== resolvedFeature.feature.id) {
+        return { content: [{ type: "text", text: `Phase ${formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features))} does not belong to feature ${formatFeatureRef(resolvedFeature.feature.number)}.` }], details: {} };
+      }
+      const acceptedAt = nowISO();
+      const acceptedDecision: AcceptedDecision = {
+        id: crypto.randomUUID(),
+        title: params.title.trim(),
+        decision: params.decision.trim(),
+        rationale: params.rationale.trim(),
+        implementationNotes: params.implementationNotes.trim(),
+        acceptedAt,
+      };
+      await withFeatureLock(resolvedFeature.feature.id, async () => {
+        let featureWritten = false;
+        try {
+          await st.updateFeatures((doc) => {
+            const feature = doc.features.find((entry) => entry.id === resolvedFeature.feature.id);
+            if (!feature) throw new Error(`Resolved feature no longer exists: ${resolvedFeature.feature.id}`);
+            feature.acceptedDecisions = [...(feature.acceptedDecisions ?? []), acceptedDecision];
+            feature.updatedAt = acceptedAt;
+            return doc;
+          });
+          featureWritten = true;
+          await st.updatePhase(resolvedPhase.id, (phase) => {
+            phase.acceptedDecisions = [...(phase.acceptedDecisions ?? []), acceptedDecision];
+            phase.updatedAt = acceptedAt;
+            return phase;
+          });
+        } catch (error) {
+          // Best-effort compensation keeps a failed dual-write from reporting
+          // success with a decision persisted only on the feature.
+          if (featureWritten) {
+            await st.updateFeatures((doc) => {
+              const feature = doc.features.find((entry) => entry.id === resolvedFeature.feature.id);
+              if (feature) feature.acceptedDecisions = (feature.acceptedDecisions ?? []).filter((entry) => entry.id !== acceptedDecision.id);
+              return doc;
+            }).catch(() => {});
+          }
+          throw error;
+        }
+      });
+      await st.writeGenerated();
+      return { content: [{ type: "text", text: `✅ Decision recorded on ${formatFeatureRef(resolvedFeature.feature.number)} and ${formatPhaseRef(resolvedPhase.number, resolvedFeature.feature.number)}: ${acceptedDecision.title}` }], details: acceptedDecision };
+    },
+  });
+
+  pi.registerTool({
     name: "phase_delete",
     label: "Phase Delete",
     description: "Delete a phase. Its tasks are deleted with it (cascade). Unlinks the phase from its feature.",
@@ -3628,6 +3782,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const hostPhase = found.phase;
       const now = nowISO();
       let updatedTask: Task | undefined;
+      // Validate the motivation requirement for restrictive status transitions,
+      // mirroring the MCP adapter and the /planner task update command
+      // (AGENTS.md rule 8 — rejected writes must leave the files unchanged).
+      if (
+        params.status !== undefined &&
+        params.status !== found.task.status &&
+        needsMotivation(found.task.status, params.status)
+      ) {
+        if (!params.motivation || !params.motivation.trim()) {
+          return {
+            content: [{ type: "text", text: `Status transition "${found.task.status} → ${params.status}" requires a motivation. Provide the "motivation" parameter with a detailed explanation of why this change is needed.` }],
+            details: {},
+          };
+        }
+      }
       try {
         const updatedPhase = await st.updatePhase(hostPhase.id, (phase) => {
           const task = phase.tasks.find((t) => t.id === found.task.id);
@@ -3754,7 +3923,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_start",
     label: "Task Start",
-    description: "Set a task to in-progress. BEFORE calling, read task_get(full=true) and phase_get(full=true) for its parent phase, including linked requirements. Continue an already in-progress task; otherwise select ready work by feature → phase → task priority (lower number first), respecting dependencies and blocked/waiting states. Sets startedAt automatically and returns a phase/requirements briefing.",
+    description: "Set a task to in-progress. BEFORE calling, read feature_get(full=true) for the parent feature and its linked requirements, then phase_get(full=true) for the parent phase and its linked requirements, then task_get(full=true). Continue an already in-progress task; otherwise select ready work by feature → phase → task priority (lower number first), respecting dependencies and blocked/waiting states. Sets startedAt automatically and returns the ordered feature/phase requirements briefing.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
     }),
@@ -3773,6 +3942,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const recommended = selection.candidate ? ` Start ${selection.candidate.task.id} instead, or record a user-approved task_deviation first.` : "";
         return { content: [{ type: "text", text: `Task start denied: ${selection.reason}.${recommended}` }], details: selection };
       }
+      // Assemble the mandatory parent context before changing task lifecycle state.
+      // The output order is feature + its requirements, then phase + its requirements.
+      const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
+      const [phaseWithRequirements, featureRequirements] = await Promise.all([
+        st.loadPhaseWithRequirements(found.phase.id),
+        parentFeature ? st.linkedRequirementsForFeature(parentFeature.id) : Promise.resolve([]),
+      ]);
+      const phaseContext = buildPhaseContextBlock(
+        phaseWithRequirements,
+        parentFeature,
+        phaseWithRequirements.linkedRequirements ?? [],
+        featureRequirements,
+      );
       const now = nowISO();
       let startedTask: Task | undefined;
       await st.updatePhase(found.phase.id, (phase) => {
@@ -3790,9 +3972,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
-      const phaseWithRequirements = await st.loadPhaseWithRequirements(found.phase.id);
-      const phaseContext = buildPhaseContextBlock(phaseWithRequirements, parentFeature, phaseWithRequirements.linkedRequirements ?? []);
       return { content: [{ type: "text", text: `✅ Task started: ${startedTask.id} — ${startedTask.title} (in-progress)${phaseContext}` }], details: startedTask };
     },
   });
@@ -4009,7 +4188,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Disable the planner for this project and stop the web dashboard. Alias: planner-disable. Planner operations are NOT code edits.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, _ctx) {
-      plannerSessionEnabled = false;
+      disablePlannerSession();
       await stopServer().catch(() => {});
       try { capturedPi?.appendEntry("plan-web-state", { running: false }); } catch {}
       return { content: [{ type: "text", text: "Planner disabled. Web UI shut down. Run /planner load or planner-load to re-enable." }], details: { disabled: true, webRunning: false } };
@@ -4183,7 +4362,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "",
         "Operational rules:",
         "- Handoffs are context, not locks. Read the relevant handoff with handoff show <ref> before resuming.",
-        "- BEFORE work: read task_get(full=true) and phase_get(full=true), including linked requirements; then task_start before any code edit/write. AFTER finishing a task: task_complete.",
+        "- BEFORE work: read feature_get(full=true) for the parent feature and its linked requirements, then phase_get(full=true) for the parent phase and its linked requirements, then task_get(full=true); only then call task_start before any code edit/write. AFTER finishing a task: task_complete.",
+        "- Record every new decision or user-agreed modification in both the relevant feature and phase before treating the discussion as complete.",
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
         "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Prefer shortId or F00x/P00x/T00x refs. Find via feature_list / phase_list / task_list; read one entity via *_get(full=true).",

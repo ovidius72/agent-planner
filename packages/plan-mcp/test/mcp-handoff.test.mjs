@@ -117,6 +117,26 @@ test("planner-handoff-write with confirmed=true writes the handoff and can be re
   }
 });
 
+test("planner-task-start retains a pending handoff", async () => {
+  const session = await startMcpFixture({ name: "t243-task-start-retention" });
+  try {
+    await callTool(session, "planner-handoff-write", {
+      phaseRef: "P001",
+      title: "P001 — MCP retention handoff",
+      content: "MCP task start must keep this handoff.",
+      confirmed: true,
+    });
+
+    await callTool(session, "planner-task-start", { task: "T001" });
+    const phase = (await session.store.loadAllPhases())[0];
+    assert.equal(phase.tasks[0].status, "in-progress");
+    assert.match(phase.handoff, /MCP task start must keep this handoff\./);
+    assert.equal(phase.handoffHistory.length, 0, "MCP task start does not archive the handoff");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 test("planner-handoff-write rejects writing to a done phase", async () => {
   const session = await startMcpFixture({ name: "t238-write-done" });
   try {

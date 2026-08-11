@@ -18,12 +18,21 @@ test("buildPhaseContextBlock includes linked requirement details", () => {
     { title: "Priority protocol", description: "" },
   ]);
 
-  assert.match(output, /Linked requirements \(2\):/);
+  assert.match(output, /Phase linked requirements \(2\):/);
   assert.match(output, /Canonical links — Store UUID phase IDs\./);
   assert.match(output, /Priority protocol/);
   assert.match(output, /Phase description/);
+  assert.ok(output.indexOf("Feature F003") < output.indexOf("Phase P007"), "feature context precedes phase context");
+});
+
+test("buildPhaseContextBlock puts feature requirements before phase context", () => {
+  const output = buildPhaseContextBlock(phase, feature, [{ title: "Phase requirement", description: "" }], [{ title: "Feature requirement", description: "" }]);
+  assert.ok(output.indexOf("Feature requirement") < output.indexOf("Phase P007"));
+  assert.ok(output.indexOf("Phase P007") < output.indexOf("Phase requirement"));
 });
 
 test("buildPhaseContextBlock explicitly reports phases without requirements", () => {
-  assert.match(buildPhaseContextBlock(phase, feature), /Linked requirements \(0\):\n  - None linked to this phase\./);
+  const output = buildPhaseContextBlock(phase, feature);
+  assert.match(output, /Feature linked requirements \(0\):\n  - None linked to this feature\./);
+  assert.match(output, /Phase linked requirements \(0\):\n  - None linked to this phase\./);
 });

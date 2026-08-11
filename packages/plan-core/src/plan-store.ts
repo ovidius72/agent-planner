@@ -1242,6 +1242,13 @@ export class PlanStore {
     return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.includes(phaseId));
   }
 
+  /** Requirements linked to any phase belonging to a feature, deduplicated by ID. */
+  async linkedRequirementsForFeature(featureId: string): Promise<Requirement[]> {
+    const [phases, requirements] = await Promise.all([this.loadAllPhases(), this.loadRequirements()]);
+    const phaseIds = new Set(phases.filter((phase) => phase.featureId === featureId).map((phase) => phase.id));
+    return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.some((phaseId) => phaseIds.has(phaseId)));
+  }
+
   async loadPhaseWithRequirements(phaseId: string): Promise<Phase & { linkedRequirements: Requirement[] }> {
     const [phase, linkedRequirements] = await Promise.all([
       this.loadPhase(phaseId),

@@ -1,6 +1,6 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import planPiExtension from "../dist/index.js";
@@ -160,6 +160,37 @@ describe("pi-adapter strict ref validation", () => {
     assert.match(toolText(result), /^Ambiguous feature ref: Auth\./);
     const features = (await st.loadFeatures()).features;
     assert.deepEqual(features.map((feature) => feature.name), ["Auth API", "Auth UI"]);
+  });
+
+  test("feature_update rejects a fieldless payload without writing", async () => {
+    const { root, st, featureA } = await setup();
+    const featurePath = join(root, ".planner", "features", `${featureA.id}.json`);
+    const beforeBytes = await readFile(featurePath);
+    const before = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
+
+    const result = await tools.get("feature_update").execute("id", { featureId: "F001" }, undefined, undefined, makeCtx(root));
+
+    assert.match(toolText(result), /^Not updated — no mutable fields were received\./);
+    assert.equal(result.details.updated, false);
+    assert.equal(result.details.reason, "no-mutable-fields");
+    assert.deepEqual(await readFile(featurePath), beforeBytes, "fieldless update leaves feature JSON byte-identical");
+    const after = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
+    assert.equal(after?.updatedAt, before?.updatedAt, "fieldless update does not change updatedAt");
+  });
+
+  test("feature_update resolves F00x once and mutates only that feature", async () => {
+    const { root, st, featureA, featureB } = await setup();
+    const result = await tools.get("feature_update").execute("id", {
+      featureId: "F001",
+      description: "Updated through the F001 human reference.",
+    }, undefined, undefined, makeCtx(root));
+
+    assert.match(toolText(result), /✅ Feature updated: F001/);
+    assert.match(toolText(result), /Fields saved: description\./);
+    assert.deepEqual(result.details.updatedFields, ["description"]);
+    const features = (await st.loadFeatures()).features;
+    assert.equal(features.find((feature) => feature.id === featureA.id)?.description, "Updated through the F001 human reference.");
+    assert.notEqual(features.find((feature) => feature.id === featureB.id)?.description, "Updated through the F001 human reference.");
   });
 
   test("feature_discuss updates governance fields and marks context ready", async () => {
@@ -376,7 +407,10 @@ describe("pi-adapter strict ref validation", () => {
     assert.match(toolText(recorded), /Approved deviation/);
     let project = await st.loadProject();
     assert.equal(project.workDeviations.at(-1)?.resumeTaskId, taskId);
-    assert.match(toolText(await tools.get("task_start").execute("id", { taskId: temporaryId }, undefined, undefined, ctx)), /Task started/);
+    const started = await tools.get("task_start").execute("id", { taskId: temporaryId }, undefined, undefined, ctx);
+    const startedText = toolText(started);
+    assert.match(startedText, /Task started/);
+    assert.ok(startedText.indexOf("Feature F001") < startedText.indexOf("Phase P001"), "task start briefs feature before phase");
     project = await st.loadProject();
     assert.equal(project.workDeviations.at(-1)?.state, "active");
     assert.match(toolText(await tools.get("task_complete").execute("id", { taskId: temporaryId }, undefined, undefined, ctx)), /Task completed/);

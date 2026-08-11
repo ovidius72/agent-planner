@@ -98,9 +98,9 @@ test("buildReport aggregates coverage and preserves test summary (schemaVersion 
   assert.equal(r.coverage.branches, 50);
   // baseline thresholds from test/coverage.config.mjs for unit scope
   assert.equal(r.thresholdMode, "baseline");
-  assert.equal(r.coverage.thresholds.lines, 44);
-  assert.equal(r.coverage.met.lines, true);
-  assert.equal(r.coverage.met.functions, true); // 66.67 ≥ 59
+  assert.equal(r.coverage.thresholds.lines, 79);
+  assert.equal(r.coverage.met.lines, true); // 85.71 ≥ 79
+  assert.equal(r.coverage.met.functions, false); // 66.67 < 77 → honestly red
   assert.equal(r.coverage.met.branches, false); // 50 < 72 → honestly red
 });
 
