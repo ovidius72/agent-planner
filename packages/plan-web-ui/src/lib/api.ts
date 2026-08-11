@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { Feature, HandoffSummary, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
+import type { ArchivedHandoffSummary, Feature, HandoffSummary, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -248,6 +248,11 @@ export async function listHandoffs(): Promise<HandoffSummary[]> {
   return r.handoffs ?? [];
 }
 
+export async function listArchivedHandoffs(): Promise<ArchivedHandoffSummary[]> {
+  const r = await request<{ archived: ArchivedHandoffSummary[] }>("/handoffs/archive");
+  return r.archived ?? [];
+}
+
 export async function getPhaseHandoff(phaseId: string): Promise<PhaseHandoff> {
   return request(`/phases/${phaseId}/handoff`);
 }
@@ -272,6 +277,8 @@ export async function exportPlan(full = false): Promise<ExportReport> {
 export interface RepairReport {
   migrated: { renamed: number; repaired: number; inferred: number };
   backfill: { shortIdsAssigned: number; prioritiesAssigned: number; duplicateShortIds: string[] };
+  containment: { changed: number; tasks: number; orphan: number };
+  handoffs: { archived: number };
   integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
 }
 

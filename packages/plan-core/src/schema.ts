@@ -87,6 +87,23 @@ export const AcceptedDecisionSchema = z.object({
   acceptedAt: TimestampSchema,
 });
 
+export const WorkDeviationSchema = z.object({
+  id: z.string().min(1),
+  /** Task the priority selector recommended when the deviation was approved. */
+  recommendedTaskId: z.string().min(1),
+  /** Task intentionally chosen instead of the recommendation. */
+  temporaryTaskId: z.string().min(1),
+  /** Task to surface explicitly after the temporary work is resolved. */
+  resumeTaskId: z.string().min(1),
+  reason: z.string().default(""),
+  requestedBy: z.enum(["agent", "user"]).default("agent"),
+  approvedBy: z.string().default("user"),
+  state: z.enum(["approved", "active", "resolved", "canceled"]).default("approved"),
+  createdAt: TimestampSchema,
+  activatedAt: z.string().default(""),
+  resolvedAt: z.string().default(""),
+});
+
 export const ProjectSchema = z.object({
   name: z.string().min(1),
   goal: z.string().default(""),
@@ -106,6 +123,8 @@ export const ProjectSchema = z.object({
   nextFeatureNumber: z.number().int().positive().default(1),
   nextPhaseNumber: z.number().int().positive().default(1),
   nextTaskNumber: z.number().int().positive().default(1),
+  /** Ordered history of approved temporary work deviations; active entries form a resumable stack. */
+  workDeviations: z.array(WorkDeviationSchema).default([]),
 });
 
 export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
@@ -343,6 +362,7 @@ export type Manifest = z.infer<typeof ManifestSchema>;
 export type WorkflowRules = z.infer<typeof WorkflowRulesSchema>;
 export type AcceptedDecision = z.infer<typeof AcceptedDecisionSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
+export type WorkDeviation = z.infer<typeof WorkDeviationSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
 export type StatusLogEntry = z.infer<typeof StatusLogEntrySchema>;

@@ -234,8 +234,8 @@ export function PhaseDetailRoute() {
                       <h3 className="mt-2 text-lg font-black tracking-tight text-[var(--text)] [overflow-wrap:anywhere]">{requirement.title}</h3>
                       {requirement.description ? <p className="mt-2 text-sm text-[var(--text-muted)] [overflow-wrap:anywhere]">{requirement.description}</p> : null}
                     </div>
-                    <Link to={`/requirements?q=${encodeURIComponent(requirement.title)}`} className="text-sm font-semibold text-[var(--accent)] hover:underline sm:shrink-0">
-                      Open in requirements →
+                    <Link to={`/requirements#phase-${phase.id}`} className="text-sm font-semibold text-[var(--accent)] hover:underline sm:shrink-0">
+                      Open phase requirements →
                     </Link>
                   </div>
                 </div>

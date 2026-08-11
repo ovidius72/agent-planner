@@ -164,6 +164,17 @@ export interface HandoffSummary {
   content: string;
 }
 
+export interface ArchivedHandoffSummary {
+  phaseId: string;
+  featureId?: string | undefined;
+  compositeRef: string;
+  file: string;
+  archivedAt: string;
+  reason: string;
+  firstLine: string;
+  content: string;
+}
+
 export interface PhaseHandoff {
   content: string;
   updatedAt: string;

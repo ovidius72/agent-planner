@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, recommendNextTask } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -140,7 +140,8 @@ const server = new McpServer({
 });
 
 // Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
-// UUID | title; omitted -> current in-progress phase.
+// UUID | title. A write target is always explicit; never guess from the
+// first in-progress phase or a stale resume pointer.
 type PhaseHandoffResolve =
   | { ok: true; phase: Phase; compositeRef: string }
   | { ok: false; error: string };
@@ -151,16 +152,13 @@ async function resolvePhaseForHandoff(st: PlanStore, ref: string | undefined): P
   let phase: Phase | undefined;
   if (ref && ref.trim()) {
     phase = findPhaseByRef(phases, features, ref.trim());
-  } else {
-    phase = phases.find((p) => p.status === "in-progress")
-      ?? phases.find((p) => p.tasks.some((t) => t.status === "in-progress"));
   }
   if (!phase) {
     return {
       ok: false,
       error: ref && ref.trim()
         ? `Phase not found: "${ref.trim()}". Use P00x, P00x(F00x), UUID, or title.`
-        : "No in-progress phase. Specify a phaseRef (P00x or P00x(F00x)).",
+        : "A phaseRef is required. First identify the exact feature and phase with the user, then pass P00x or P00x(F00x).",
     };
   }
   const feat = phase.featureId ? features.find((f) => f.id === phase.featureId) : undefined;
@@ -267,7 +265,7 @@ server.registerTool("planner-repair", {
 }, async () => {
   const st = await requireStore();
   const report = await st.repair();
-  return text(`Repair done: renamed ${report.migrated.renamed}, repaired ${report.migrated.repaired} refs, inferred ${report.migrated.inferred}. Containment: ${report.containment.changed} phase files rewritten (${report.containment.tasks} tasks scanned, ${report.containment.orphan} orphan). Integrity: ${report.integrity.duplicatePhaseIds.length} duplicate, ${report.integrity.danglingPhaseIds.length} dangling.`, { report });
+  return text(`Repair done: renamed ${report.migrated.renamed}, repaired ${report.migrated.repaired} refs, inferred ${report.migrated.inferred}. Containment: ${report.containment.changed} phase files rewritten (${report.containment.tasks} tasks scanned, ${report.containment.orphan} orphan). Handoffs: archived ${report.handoffs.archived} stale completed/canceled handoff(s). Integrity: ${report.integrity.duplicatePhaseIds.length} duplicate, ${report.integrity.danglingPhaseIds.length} dangling.`, { report });
 });
 
 server.registerTool("planner-cleanup-orphan-phases", {
@@ -984,14 +982,61 @@ server.registerTool("planner-task-delete", {
     return writeAndSummarize(st, `Task deleted: ${taskCompositeRef(found.task, found.phase, tdFeatures)}${found.task.shortId ? ` · ${found.task.shortId}` : ""}`, { deleted: found.task.id });
 });
 
+server.registerTool("planner-task-recommend", {
+  description: "Return the harness-agnostic recommended task: continue one active task, otherwise choose ready work by feature → phase → task priority. Reports dependency, availability, and approved deviation/resume context without starting or blocking work.",
+  inputSchema: {},
+}, async () => {
+  const st = await requireStore();
+  const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+  const result = recommendNextTask(features.features, phases, project.workDeviations);
+  if (!result.candidate) return text(`No task recommendation: ${result.reason}`, { kind: result.kind, reason: result.reason, activeTaskIds: result.activeCandidates?.map((candidate) => candidate.task.id) ?? [] });
+  const { candidate } = result;
+  const ref = taskCompositeRef(candidate.task, candidate.phase, features.features);
+  return text(`Recommended (${result.kind}): ${ref} — ${candidate.task.title}\n${result.reason}${result.deviation ? `\nDeviation: ${result.deviation.id}; resume target ${result.deviation.resumeTaskId}.` : ""}`, {
+    kind: result.kind, taskId: candidate.task.id, phaseId: candidate.phase.id, featureId: candidate.feature?.id, deviation: result.deviation,
+  });
+});
+
+server.registerTool("planner-task-deviation", {
+  description: "Record a user-approved temporary task deviation. It preserves the recommended/resume task and never starts, pauses, or blocks work; use normal lifecycle tools for those transitions.",
+  inputSchema: { temporary_task: z.string().min(1), resume_task: z.string().min(1).optional(), reason: z.string().min(1) },
+}, async ({ temporary_task, resume_task, reason }) => {
+  const st = await requireStore();
+  const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+  const temporary = findTaskByRef(phases, features.features, temporary_task);
+  if (!temporary) return text(`Task not found: ${temporary_task}`);
+  const selected = recommendNextTask(features.features, phases, project.workDeviations);
+  const resume = resume_task ? findTaskByRef(phases, features.features, resume_task) : selected.candidate;
+  if (!resume) return text(`No resume task is available. Provide resume_task explicitly. ${selected.reason}`);
+  if (temporary.task.id === resume.task.id) return text("A temporary task must differ from its resume target.");
+  if (temporary.task.status !== "planned") return text(`Temporary task is not startable: ${temporary.task.status}.`);
+  const timestamp = nowISO();
+  const record = { id: crypto.randomUUID(), recommendedTaskId: selected.candidate?.task.id ?? resume.task.id, temporaryTaskId: temporary.task.id, resumeTaskId: resume.task.id, reason, requestedBy: "user" as const, approvedBy: "user", state: "approved" as const, createdAt: timestamp, activatedAt: "", resolvedAt: "" };
+  await st.addWorkDeviation(record);
+  return writeAndSummarize(st, `✅ Approved deviation: ${taskCompositeRef(temporary.task, temporary.phase, features.features)} temporarily overrides ${taskCompositeRef(resume.task, resume.phase, features.features)}. Resume target retained.`, { deviation: record });
+});
+
 server.registerTool("planner-task-start", {
-  description: "Set a task to in-progress.",
+  description: "Set a task to in-progress. BEFORE calling, use planner-task-show with full=true and planner-phase-show with full=true for the parent phase, including linked requirements. Continue an already in-progress task; otherwise select ready work by feature → phase → task priority (lower number first), respecting dependencies and blocked/waiting states. Returns a phase/requirements briefing.",
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
   const st = await requireStore();
 
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  const features = (await st.loadFeatures()).features;
+  const found = findTaskByRef(await st.loadAllPhases(), features, ref);
   if (!found) return text(`Task not found: ${ref}`);
+  if (found.task.status === "in-progress") return text(`Task ${found.task.id} is already in-progress.`);
+  if (found.task.status === "done") return text(`Task ${found.task.id} is done. Use planner-task-update to reopen.`);
+  const project = await st.loadProject();
+  const selection = recommendNextTask(features, await st.loadAllPhases(), project.workDeviations);
+  if (!selection.candidate || selection.candidate.task.id !== found.task.id) {
+    const recommended = selection.candidate ? ` Start ${selection.candidate.task.id} instead, or record a user-approved planner-task-deviation first.` : "";
+    return text(`Task start denied: ${selection.reason}.${recommended}`, {
+      kind: selection.kind,
+      reason: selection.reason,
+      recommendedTaskId: selection.candidate?.task.id,
+    });
+  }
   // Auto-archive the handoff on THIS task's phase (reason: task-started) — the
   // agent is now actively working, so the captured context is consumed. Other
   // phases' handoffs are left untouched (informational, non-blocking).
@@ -1029,10 +1074,13 @@ server.registerTool("planner-task-start", {
     return phase;
   });
   await st.syncTaskStatusRollup(found.phase.id);
-  const features = (await st.loadFeatures()).features;
+  if (selection.deviation?.temporaryTaskId === found.task.id && selection.deviation.state === "approved") {
+    await st.setWorkDeviationState(selection.deviation.id, "active", timestamp);
+  }
   const t = updatedTask ?? found.task;
   const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
-  const phaseContext = buildPhaseContextBlock(found.phase, parentFeature);
+  const phaseWithRequirements = await st.loadPhaseWithRequirements(found.phase.id);
+  const phaseContext = buildPhaseContextBlock(phaseWithRequirements, parentFeature, phaseWithRequirements.linkedRequirements ?? []);
   return writeAndSummarize(st, `${handoffNotice}✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}`);
 });
 
@@ -1076,6 +1124,10 @@ server.registerTool("planner-task-complete", {
     return phase;
   });
   const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
+  const completedDeviation = (await st.loadProject()).workDeviations
+    .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === found.task.id)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resolved", timestamp);
   const features = (await st.loadFeatures()).features;
   const t = updatedTask ?? found.task;
   return writeAndSummarize(st, `✅ Task completed: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (done)${t.shortId ? ` · ${t.shortId}` : ""}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}`);
@@ -1092,8 +1144,8 @@ server.registerTool("planner-handoff-list", {
 });
 
 server.registerTool("planner-handoff-show", {
-  description: "Read the entity-scoped handoff of a phase. phaseRef accepts P00x, P00x(F00x), UUID, or title. Omit to target the current in-progress phase.",
-  inputSchema: { phaseRef: z.string().optional().describe("Phase ref: P00x | P00x(F00x) | UUID | title. Default: current in-progress phase.") },
+  description: "Read the entity-scoped handoff of a phase. phaseRef is required; never infer a phase from in-progress status or stale context.",
+  inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title. Ask the user when ambiguous.") },
 }, async ({ phaseRef }) => {
   const st = await requireStore();
   const r = await resolvePhaseForHandoff(st, phaseRef);
@@ -1104,13 +1156,14 @@ server.registerTool("planner-handoff-show", {
 });
 
 server.registerTool("planner-handoff-write", {
-  description: "Write/refresh the entity-scoped handoff on a phase. Pass content (markdown) AND a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring'). The title becomes the H1 / first line shown in handoff lists; generic titles like 'Handoff' or 'Canonical handoff' are REJECTED. phaseRef optional (default: current in-progress phase). Captures design context for a resuming agent on that phase.",
+  description: "Write/refresh the entity-scoped handoff on a phase. phaseRef is required and must be the exact phase selected with the user. Never guess from in-progress status or stale context; completed/canceled phases reject new handoffs. Pass content (markdown) and a meaningful title.",
   inputSchema: {
-    phaseRef: z.string().optional().describe("Phase ref. Default: current in-progress phase."),
+    phaseRef: z.string().min(1).describe("Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title."),
     title: z.string().min(3).optional().describe("Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). REQUIRED if your markdown's first heading is generic. Example: 'P049 — featureId validation: tests + adapter wiring'."),
+    confirmed: z.boolean().describe("Set true only after the user explicitly confirms the proposed feature+phase target."),
     content: z.string().min(1).describe("Handoff text (markdown)."),
   },
-}, async ({ phaseRef, title, content }) => {
+}, async ({ phaseRef, title, confirmed, content }) => {
   const st = await requireStore();
   let body = content.trim();
   const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
@@ -1132,22 +1185,24 @@ server.registerTool("planner-handoff-write", {
   }
   const r = await resolvePhaseForHandoff(st, phaseRef);
   if (!r.ok) return text(`❌ ${r.error}`);
+  if (!confirmed) return text(`Proposal only: I would write this handoff on ${r.compositeRef}. Ask the user to confirm this exact feature/phase, then retry with confirmed=true.`, { phaseRef: r.compositeRef, confirmationRequired: true });
   await st.setPhaseHandoff(r.phase.id, body);
   return text(`✅ Wrote handoff on ${r.compositeRef}.`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
 server.registerTool("planner-handoff-prepare", {
-  description: "Return instructions for the agent to prepare a canonical handoff, then call planner-handoff-write (entity-scoped, phase.handoff).",
+  description: "Prepare a canonical handoff proposal. Do not write until the agent has identified the exact feature+phase from the conversation and the user has confirmed that target.",
 }, async () => text([
-  "Prepare the canonical session handoff and write it on the current in-progress phase with planner-handoff-write (omit phaseRef to target the in-progress phase).",
-  "Pass a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring') — it becomes the H1 / first line in handoff lists. Generic titles like 'Handoff' or 'Canonical handoff' are REJECTED.",
-  "Required sections: Created at, Updated at, Reason, Current focus, What was being done, How to resume, Files touched, Blockers, Next steps, Recent decisions, Reminder.",
-  "Stored on the phase.handoff field (entity-scoped). .planner/HANDOFF.md is deprecated.",
+  "First identify the exact feature and phase actually discussed/worked on in this session. Do not use the first in-progress phase and do not target a phase that just became done.",
+  "Before calling planner-handoff-write, tell the user: 'I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?' Wait for explicit confirmation.",
+  "After confirmation, call planner-handoff-write with that exact phaseRef. If the phase is done/canceled, do not write an operational handoff.",
+  "Pass a meaningful title. Required sections: Created at, Updated at, Reason, Current focus, What was being done, How to resume, Files touched, Blockers, Next steps, Recent decisions, Reminder.",
+  "Stored on phase.handoff; .planner/HANDOFF.md is deprecated.",
 ].join("\n")));
 
 server.registerTool("planner-handoff-clear", {
-  description: "Clear the entity-scoped handoff of a phase (sets handoff to empty, keeps handoffUpdatedAt as an audit trail). phaseRef optional (default: current in-progress phase).",
-  inputSchema: { phaseRef: z.string().optional().describe("Phase ref. Default: current in-progress phase.") },
+  description: "Clear/archive the entity-scoped handoff of a phase. phaseRef is required; never infer a phase automatically.",
+  inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title.") },
 }, async ({ phaseRef }) => {
   const st = await requireStore();
   const r = await resolvePhaseForHandoff(st, phaseRef);

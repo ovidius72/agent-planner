@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { DisplayStatusBadge } from "../ui/status-badge";
 import { CopyableBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
+import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
 
 export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
   const statusFetcher = useFetcher();
@@ -31,6 +32,11 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
               </CopyableBadge>
               {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
               {phase.handoff ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
+              <PhaseRequirementLink
+                phaseId={phase.id}
+                phaseTitle={phase.title}
+                count={phase.linkedRequirements?.length ?? 0}
+              />
               <span className="shrink-0"><DisplayStatusBadge status={display.displayStatus} breakdown={display.breakdown} /></span>
             </div>
             <Link to={`/features/${featureId}/phases/${phase.id}`} className="entity-link--phase min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline [overflow-wrap:anywhere]">

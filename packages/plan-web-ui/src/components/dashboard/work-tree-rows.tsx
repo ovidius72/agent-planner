@@ -14,6 +14,7 @@ import {
 import { StatusBadge, StatusCluster2 } from "../ui/status-badge";
 import { StatusItem } from "../ui/status-item";
 import { DragHandle, SortableItem } from "./sortable";
+import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
 import {
   statusBorderColor,
   type DisplayStatus,
@@ -284,6 +285,11 @@ export function PhaseTreeRow({
                   updatedAt={phase.handoffUpdatedAt}
                 />
               ) : null}
+              <PhaseRequirementLink
+                phaseId={phase.id}
+                phaseTitle={phase.title}
+                count={phase.linkedRequirements?.length ?? 0}
+              />
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}

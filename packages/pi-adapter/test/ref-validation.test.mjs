@@ -364,4 +364,24 @@ describe("pi-adapter strict ref validation", () => {
     assert.equal(new Set(numbers).size, 8);
     assert.deepEqual(numbers, [2, 3, 4, 5, 6, 7, 8, 9]);
   });
+
+  test("task recommendation and approved deviation retain an explicit resume target", async () => {
+    const { root, st, phase, taskId } = await setup();
+    const temporaryId = createTaskId();
+    await st.updatePhase(phase.id, (stored) => ({ ...stored, tasks: [...stored.tasks, { ...stored.tasks[0], id: temporaryId, phaseId: phase.id, number: 2, title: "Temporary task", shortName: "temporary-task", priority: 20 }], taskIds: [...stored.taskIds, temporaryId] }));
+    const ctx = makeCtx(root);
+    assert.match(toolText(await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx)), /Recommended \(priority\): P001\(F001\)\/T002/);
+    assert.match(toolText(await tools.get("task_start").execute("id", { taskId }, undefined, undefined, ctx)), /Task start denied/);
+    const recorded = await tools.get("task_deviation").execute("id", { temporary_task: temporaryId, resume_task: taskId, reason: "Approved urgent work" }, undefined, undefined, ctx);
+    assert.match(toolText(recorded), /Approved deviation/);
+    let project = await st.loadProject();
+    assert.equal(project.workDeviations.at(-1)?.resumeTaskId, taskId);
+    assert.match(toolText(await tools.get("task_start").execute("id", { taskId: temporaryId }, undefined, undefined, ctx)), /Task started/);
+    project = await st.loadProject();
+    assert.equal(project.workDeviations.at(-1)?.state, "active");
+    assert.match(toolText(await tools.get("task_complete").execute("id", { taskId: temporaryId }, undefined, undefined, ctx)), /Task completed/);
+    project = await st.loadProject();
+    assert.equal(project.workDeviations.at(-1)?.state, "resolved");
+    assert.match(toolText(await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx)), /Recommended \(resume\): P001\(F001\)\/T001/);
+  });
 });

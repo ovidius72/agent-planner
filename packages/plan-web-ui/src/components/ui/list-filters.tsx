@@ -13,16 +13,17 @@ export function ListFilters({
   resultsLabel,
 }: {
   query: string;
-  status: string;
-  statusOptions: Array<{ value: string; label: string }>;
+  status?: string;
+  statusOptions?: Array<{ value: string; label: string }>;
   placeholder: string;
   clearTo: string;
   resultsLabel: string;
 }) {
   const submit = useSubmit();
+  const showsStatusFilter = (statusOptions?.length ?? 0) > 0;
 
   return (
-    <Form method="get" className="surface-card grid gap-3 p-3 md:grid-cols-[minmax(0,1fr)_200px_auto_auto] md:items-end sm:p-4">
+    <Form method="get" className={`surface-card grid gap-3 p-3 md:items-end sm:p-4 ${showsStatusFilter ? "md:grid-cols-[minmax(0,1fr)_200px_auto_auto]" : "md:grid-cols-[minmax(0,1fr)_auto_auto]"}`}>
       <div>
         <label htmlFor="list-filter-query" className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
           Name
@@ -37,27 +38,29 @@ export function ListFilters({
         />
       </div>
 
-      <div>
-        <label htmlFor="list-filter-status" className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
-          Status
-        </label>
-        <div className="relative">
-          <Select id="list-filter-status" name="status" defaultValue={status} className="min-h-9 appearance-none py-2 sm:min-h-11 sm:py-2.5 pr-8">
-            <option value="">All statuses</option>
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </Select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+      {showsStatusFilter ? (
+        <div>
+          <label htmlFor="list-filter-status" className="mb-1 block text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">
+            Status
+          </label>
+          <div className="relative">
+            <Select id="list-filter-status" name="status" defaultValue={status} className="min-h-9 appearance-none py-2 sm:min-h-11 sm:py-2.5 pr-8">
+              <option value="">All statuses</option>
+              {statusOptions?.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <Button type="submit" variant="secondary">Apply filters</Button>
       <Link to={clearTo} className="inline-flex min-h-9 items-center justify-center rounded-[12px] px-3 text-sm font-semibold text-[var(--text-muted)] transition hover:bg-[var(--accent-soft)] hover:text-[var(--text)] sm:min-h-11 sm:rounded-[14px]">
         Clear
       </Link>
 
-      <div className="text-sm text-[var(--text-muted)] md:col-span-4">{resultsLabel}</div>
+      <div className={`text-sm text-[var(--text-muted)] ${showsStatusFilter ? "md:col-span-4" : "md:col-span-3"}`}>{resultsLabel}</div>
     </Form>
   );
 }

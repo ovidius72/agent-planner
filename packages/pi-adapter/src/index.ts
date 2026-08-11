@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, recommendNextTask } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -136,9 +136,9 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "task checklist-toggle", label: "task checklist-toggle", description: "Tick/untick a step: /planner task checklist-toggle <T00x> <C{n}|title> [on|off]" },
   { value: "handoff list", label: "handoff list", description: "List phases with a handoff" },
   { value: "handoff prepare", label: "handoff prepare", description: "Tell the agent to write the handoff (legacy file-based)" },
-  { value: "handoff show", label: "handoff show [P00x]", description: "Show a phase handoff (default: in-progress phase)" },
-  { value: "handoff write", label: "handoff write [P00x]", description: "Write a phase handoff (default: in-progress phase)" },
-  { value: "handoff clear", label: "handoff clear [P00x]", description: "Clear a phase handoff (default: in-progress phase)" },
+  { value: "handoff show", label: "handoff show [P00x]", description: "Show a phase handoff (phase ref required)" },
+  { value: "handoff write", label: "handoff write [P00x]", description: "Write a phase handoff after confirmation (phase ref required)" },
+  { value: "handoff clear", label: "handoff clear [P00x]", description: "Archive a phase handoff (phase ref required)" },
   { value: "web start", label: "web start", description: "Start the web UI" },
   { value: "web stop", label: "web stop", description: "Stop the web UI" },
   { value: "web status", label: "web status", description: "Show web UI status" },
@@ -322,6 +322,8 @@ async function buildHandoffMarkdown(
     blockers?: string[];
     extraSections?: Array<{ heading: string; body: string }>;
     title?: string;
+    /** Explicit phase selected for this handoff; never infer it from resume state. */
+    phaseId?: string;
   },
 ): Promise<string> {
   const [plan, resume, activity] = await Promise.all([
@@ -337,7 +339,8 @@ async function buildHandoffMarkdown(
   const latestTaskUpdate = [...allTasks].sort((left, right) => right.task.updatedAt.localeCompare(left.task.updatedAt))[0] ?? null;
   const latestPhaseUpdate = [...plan.phases].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
   const latestFeatureUpdate = [...plan.features.features].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
-  const currentPhase = plan.phases.find((phase) => phase.id === resume.currentPhaseId)
+  const currentPhase = (overrides?.phaseId ? plan.phases.find((phase) => phase.id === overrides.phaseId) : undefined)
+    ?? plan.phases.find((phase) => phase.id === resume.currentPhaseId)
     ?? plan.phases.find((phase) => phase.tasks.some((task) => resume.inProgressTaskIds.includes(task.id)))
     ?? plan.phases.find((phase) => phase.status === "in-progress")
     ?? nonTerminalTasks[0]?.phase
@@ -1087,7 +1090,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
     const SUB_HELP = "Available: init, show, repair, cleanup-orphans, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, stop\n" +
       "Try: /planner <TAB>  |  /planner feature list  |  /planner task start  |  /planner cleanup-orphans\n" +
-      "Handoff actions: /planner handoff list | show [P00x] | write [P00x] | clear [P00x] | prepare";
+      "Handoff actions: /planner handoff list | show P00x | write P00x | clear P00x | prepare (prepare proposes a target and asks for confirmation)";
 
     if (!a) {
       const action = await ctx.ui.select("Planner action", PLANNER_MENU_ACTIONS);
@@ -2057,6 +2060,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         task.updatedAt = now;
         phase.updatedAt = now;
         await st.savePhase(phase);
+        await st.syncTaskStatusRollup(phase.id);
         await st.writeGenerated();
           ctx.ui.notify(`Task updated: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (${task.status})${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
@@ -2107,6 +2111,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         task.updatedAt = now;
         phase!.updatedAt = now;
         await st.savePhase(phase!);
+        await st.syncTaskStatusRollup(phase!.id);
         await st.writeGenerated();
           ctx.ui.notify(`✅ Task started: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (in-progress)${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
@@ -2152,9 +2157,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         applyTaskLifecycleDates(task, "done", now);
         task.updatedAt = now;
         phase!.updatedAt = now;
-        await st.savePhase(phase!);
+        const clearedRef = await st.syncTaskStatusRollup(phase!.id);
         await st.writeGenerated();
-          ctx.ui.notify(`✅ Task completed: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (done)${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
+          ctx.ui.notify(`✅ Task completed: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (done)${task.shortId ? ` · ${task.shortId}` : ""}${clearedRef ? ` — phase handoff archived (${clearedRef})` : ""}`, "info");
         return;
       }
       // checklist-add <T00x> <title>  /  checklist-remove <T00x> <C{n}|title>  /  checklist-toggle <T00x> <C{n}|title> [on|off]
@@ -2231,31 +2236,26 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!r.ok) { ctx.ui.notify(r.error, "warning"); return; }
         const text = await ctx.ui.input(`Handoff text for ${r.compositeRef}`);
         if (!text?.trim()) { ctx.ui.notify("No text provided; nothing written.", "info"); return; }
+        const confirmed = await ctx.ui.confirm(`Write this handoff on ${r.compositeRef}?`, "Write handoff");
+        if (!confirmed) { ctx.ui.notify("Handoff write cancelled.", "info"); return; }
         await st.setPhaseHandoff(r.phase.id, text);
         ctx.ui.notify(`Wrote handoff on ${r.compositeRef}`, "info");
         return;
       }
       if (action === "prepare") {
         if (!capturedPi) { ctx.ui.notify("Agent bridge unavailable; use /planner handoff write for an auto-generated handoff.", "warning"); return; }
-        const handoffs = await st.listHandoffs();
         await capturedPi.sendUserMessage(
-          "Prepare the canonical session handoff now and write it on the phase the user explicitly identifies as the one just worked on in this session, using the `handoff_write` tool (entity-scoped, stored on phase.handoff — .planner/HANDOFF.md is deprecated).\n\n" +
-          "Pass a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring') — it becomes the H1 / first line in handoff lists. Generic titles like 'Handoff' or 'Canonical handoff' are REJECTED.\n\n" +
-          "WARNING: Do not default to 'current in-progress phase' or a stale resume pointer. If the user just completed P058, write the handoff on P058 (or its continuation P061), not on P031 just because P031 is marked in-progress or has an existing handoff.\n\n" +
-          "The handoff MUST be a structured markdown document containing at minimum:\n" +
+          "Prepare a canonical session handoff proposal. Do not write anything yet. First identify from this conversation and the latest planner lifecycle events the exact feature and phase where the decisions/work belong. Never use the first in-progress phase or a stale resume pointer as a target.\n\n" +
+          "If the last phase was just completed, do not create an operational handoff for it; its existing handoff must have been archived by the phase-done lifecycle. If another non-done phase is the real continuation, identify that phase explicitly.\n\n" +
+          "Before calling `handoff_write`, tell the user exactly: `I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?` Wait for an explicit confirmation. Only after confirmation call `handoff_write` with that exact phaseRef. If the target is ambiguous, ask the user to identify the feature and phase instead of guessing.\n\n" +
+          "After confirmation, the handoff MUST contain at minimum:\n" +
           "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
           "- `Reason:` why this handoff is being written\n" +
-          "- `## Current focus`: the current feature (id + name + status), phase (id + title + status) and task (id + title + status). Derive them from the plan data.\n" +
-          "- `## What was being done`: a concrete 3–10 line narrative of the work in progress, based on our conversation and the current task notes/description.\n" +
-          "- `## How to resume`: explicit, ordered steps to pick the work back up (next command / tool / file to open / build to run).\n" +
-          "- `## Files touched`: explicit file paths modified during this session.\n" +
-          "- `## Blockers`: any open blockers, or `None recorded`.\n" +
-          "- `## Next steps`: the immediate next steps.\n" +
-          "- `## Recent decisions`: accepted decisions made this session, if any.\n" +
-          "- `## Reminder`: note that when the work is fully resumed, the agent should clear the phase handoff using `handoff_clear`.\n\n" +
-          "The handoff is stored on the phase.handoff field of the current in-progress phase (entity-scoped). " +
-          (handoffs.length > 0 ? "A previous phase handoff exists; refresh its `Updated at` and merge/replace stale sections. " : "") +
-          "Once written, confirm to me with a one-line summary."
+          "- `## Current focus`: feature, phase and task refs/titles/statuses derived from the confirmed target\n" +
+          "- `## What was being done`: the concrete decisions/work from this session\n" +
+          "- `## How to resume`: explicit ordered steps\n" +
+          "- `## Files touched`, `## Blockers`, `## Next steps`, and `## Recent decisions`\n" +
+          "Pass a meaningful title beginning with the confirmed phase ref. Generic titles are rejected. Handoffs are stored on phase.handoff; `.planner/HANDOFF.md` is deprecated."
         );
         ctx.ui.notify("Instructing the agent to prepare the phase handoff…", "info");
         return;
@@ -2313,7 +2313,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const m = report.migrated;
       const dup = report.integrity.duplicatePhaseIds.length;
       const dang = report.integrity.danglingPhaseIds.length;
-      ctx.ui.notify(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}. Integrity: ${dup} duplicate, ${dang} dangling.`, "info");
+      ctx.ui.notify(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}, archived ${report.handoffs.archived} stale handoff(s). Integrity: ${dup} duplicate, ${dang} dangling.`, "info");
       return;
     }
 
@@ -2717,6 +2717,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         `Repair complete.`,
         `Migration: renamed=${m.renamed}, repaired=${m.repaired} refs, inferred=${m.inferred}.`,
         `Containment: ${c.changed} phase file${c.changed === 1 ? "" : "s"} rewritten (tasks regrouped by their own phaseId), ${c.tasks} tasks scanned, ${c.orphan} orphan.`,
+        `Handoffs: archived=${report.handoffs.archived} stale completed/canceled handoff(s).`,
         `Integrity: duplicatePhaseIds=${report.integrity.duplicatePhaseIds.length}, danglingPhaseIds=${report.integrity.danglingPhaseIds.length}.`,
       ];
       if (report.integrity.danglingPhaseIds.length) lines.push("Dangling: " + report.integrity.danglingPhaseIds.join(", "));
@@ -2773,8 +2774,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_write_handoff",
     label: "Plan Write Handoff",
-    description: "DEPRECATED — writes to the entity-scoped phase.handoff (not .planner/HANDOFF.md). Prefer handoff_write. Write or refresh the canonical phase handoff. Capture full design context, not just operational resume steps: pass extraSections with locked decisions, architecture (with file:line refs), mode/state flows, plugin/API contracts, data mappings, files touched, and known gaps so a resuming agent doesn't re-discover decisions already made. IMPORTANT: write the handoff on the phase the user explicitly identifies as the one just worked on in this session; do not default to a stale 'current phase' pointer or an existing handoff on a different phase.",
+    description: "DEPRECATED — writes to the entity-scoped phase.handoff (not .planner/HANDOFF.md). Prefer handoff_write. phaseRef is required and must be the exact phase confirmed with the user; never infer a target from current status or resume pointers. Completed/canceled phases reject new handoffs.",
     parameters: Type.Object({
+      phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }),
+      confirmed: Type.Boolean({ description: "Set true only after the user explicitly confirms the proposed feature+phase target." }),
       reason: Type.Optional(Type.String({ description: "Why the handoff is being written" })),
       title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). Example: 'P049 — featureId validation: tests + adapter wiring'." })),
       whatWasBeingDone: Type.Optional(Type.String({ description: "Optional override for the current work summary" })),
@@ -2790,7 +2793,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const resolved = await resolvePhaseForHandoff(st, params.phaseRef);
+      if (!resolved.ok) return { content: [{ type: "text", text: `⚠️ plan_write_handoff is deprecated (writes to phase.handoff, not .planner/HANDOFF.md). ${resolved.error}` }], details: { deprecated: true, error: resolved.error } };
+      if (!params.confirmed) return { content: [{ type: "text", text: `Proposal only: I would write this handoff on ${resolved.compositeRef}. Ask the user to confirm this exact feature/phase, then retry with confirmed=true.` }], details: { deprecated: true, phaseRef: resolved.compositeRef, confirmationRequired: true } };
       const markdown = await buildHandoffMarkdown(st, params.reason?.trim() || "manual tool handoff", {
+        phaseId: resolved.phase.id,
         ...(params.title?.trim() ? { title: params.title.trim() } : {}),
         ...(params.whatWasBeingDone?.trim() ? { whatWasBeingDone: params.whatWasBeingDone.trim() } : {}),
         ...(params.howToResume?.trim() ? { howToResume: params.howToResume.trim() } : {}),
@@ -2802,22 +2809,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             }
           : {}),
       });
-      const r = await resolvePhaseForHandoff(st, undefined);
-      if (!r.ok) return { content: [{ type: "text", text: `⚠️ plan_write_handoff is deprecated (writes to phase.handoff, not .planner/HANDOFF.md). ${r.error}` }], details: { deprecated: true, error: r.error } };
-      await st.setPhaseHandoff(r.phase.id, markdown);
-      return { content: [{ type: "text", text: `⚠️ plan_write_handoff is deprecated — wrote handoff on ${r.compositeRef} (phase.handoff field) instead of .planner/HANDOFF.md. Prefer the handoff_write tool.` }], details: { deprecated: true, phaseRef: r.compositeRef, phaseId: r.phase.id } };
+      await st.setPhaseHandoff(resolved.phase.id, markdown);
+      return { content: [{ type: "text", text: `⚠️ plan_write_handoff is deprecated — wrote handoff on ${resolved.compositeRef} (phase.handoff field) instead of .planner/HANDOFF.md. Prefer the handoff_write tool.` }], details: { deprecated: true, phaseRef: resolved.compositeRef, phaseId: resolved.phase.id } };
     },
   });
 
   pi.registerTool({
     name: "plan_delete_handoff",
     label: "Plan Delete Handoff",
-    description: "DEPRECATED — clears the entity-scoped handoff of the current in-progress phase. Prefer handoff_clear.",
-    parameters: Type.Object({}),
-    async execute(_id, _params, _signal, _onUpdate, ctx) {
+    description: "DEPRECATED — clears/archives the entity-scoped handoff of a phase. phaseRef is required. Prefer handoff_clear.",
+    parameters: Type.Object({ phaseRef: Type.String({ description: "Exact phase ref: P00x | P00x(F00x) | UUID | title." }) }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const r = await resolvePhaseForHandoff(st, undefined);
+      const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `⚠️ plan_delete_handoff is deprecated — use handoff_clear. ${r.error}` }], details: { deprecated: true, error: r.error } };
       await st.clearPhaseHandoff(r.phase.id, "manual");
       return { content: [{ type: "text", text: `⚠️ plan_delete_handoff is deprecated — cleared handoff on ${r.compositeRef} (phase.handoff). Prefer handoff_clear.` }], details: { deprecated: true, phaseRef: r.compositeRef, phaseId: r.phase.id } };
@@ -2830,11 +2835,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     | { ok: false; error: string };
 
   // Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
-  // UUID | title; omitted -> current in-progress phase (phase.status, or the
-  // phase containing an in-progress task). Returns the phase + its composite ref.
-  // NOTE: callers must NOT treat the resolved phase as a directive; it is a
-  // fallback pointer that may be stale if the agent worked on a different
-  // workstream in this session.
+  // UUID | title. A write target is always explicit: never guess from the
+  // first in-progress phase or a stale resume pointer.
   async function resolvePhaseForHandoff(
     st: PlanStore,
     ref: string | undefined,
@@ -2844,16 +2846,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     let phase: Phase | undefined;
     if (ref && ref.trim()) {
       phase = findPhaseByRef(phases, features, ref.trim());
-    } else {
-      phase = phases.find((p) => p.status === "in-progress")
-        ?? phases.find((p) => p.tasks.some((t) => t.status === "in-progress"));
     }
     if (!phase) {
       return {
         ok: false,
         error: ref && ref.trim()
           ? `Phase not found: "${ref.trim()}". Use P00x, P00x(F00x), UUID, or title.`
-          : "No in-progress phase. Specify a phaseRef (P00x or P00x(F00x)).",
+          : "A phaseRef is required. First identify the exact feature and phase with the user, then pass P00x or P00x(F00x).",
       };
     }
     const feat = phase.featureId ? features.find((f) => f.id === phase.featureId) : undefined;
@@ -2878,8 +2877,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_show",
     label: "Handoff Show",
-    description: "Read the entity-scoped handoff of a phase. phaseRef accepts P00x, P00x(F00x), UUID, or title. Omit to target the current in-progress phase.",
-    parameters: Type.Object({ phaseRef: Type.Optional(Type.String({ description: "Phase ref: P00x | P00x(F00x) | UUID | title. Default: current in-progress phase." })) }),
+    description: "Read the entity-scoped handoff of a phase. phaseRef is required and accepts P00x, P00x(F00x), UUID, or title. Never infer a phase automatically.",
+    parameters: Type.Object({ phaseRef: Type.String({ description: "Exact phase ref: P00x | P00x(F00x) | UUID | title. Ask the user when the target is ambiguous." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -2894,10 +2893,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_write",
     label: "Handoff Write",
-    description: "Write/refresh the entity-scoped handoff on a phase. Pass content (or markdown_content) AND a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring'). The title becomes the H1 and the first line shown in handoff lists; generic titles like 'Handoff' or 'Canonical handoff' are REJECTED. phaseRef optional (default: current in-progress phase). IMPORTANT: defaulting to 'current in-progress phase' is a fallback only; write the handoff on the phase the user explicitly identifies as the one just worked on in this session, and do not update an existing handoff on a different phase unless the user confirms.",
+    description: "Write/refresh the entity-scoped handoff on a phase. phaseRef is required and must be the exact phase selected with the user. Pass content (or markdown_content) AND a meaningful `title` summarizing the work (e.g. 'P049 — featureId validation: tests + adapter wiring'). Never guess the phase from in-progress status or stale context. Completed/canceled phases reject new handoffs.",
     parameters: Type.Object({
-      phaseRef: Type.Optional(Type.String({ description: "Phase ref. Default: current in-progress phase." })),
+      phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }),
       title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). REQUIRED if your markdown's first heading is generic. Example: 'P049 — featureId validation: tests + adapter wiring'." })),
+      confirmed: Type.Boolean({ description: "Set true only after the user explicitly confirms the proposed feature+phase target." }),
       content: Type.Optional(Type.String({ description: "Handoff text (plain)." })),
       markdown_content: Type.Optional(Type.String({ description: "Handoff text (markdown). Preferred over content." })),
     }),
@@ -2930,6 +2930,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
+      if (!params.confirmed) {
+        return { content: [{ type: "text", text: `Proposal only: I would write this handoff on ${r.compositeRef}. Ask the user to confirm this exact feature/phase, then retry with confirmed=true.` }], details: { phaseRef: r.compositeRef, confirmationRequired: true } };
+      }
       await st.setPhaseHandoff(r.phase.id, body);
       return { content: [{ type: "text", text: `✅ Wrote handoff on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id } };
     },
@@ -2938,8 +2941,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_clear",
     label: "Handoff Clear",
-    description: "Clear the entity-scoped handoff of a phase (sets handoff to empty, keeps handoffUpdatedAt as an audit trail). phaseRef optional (default: current in-progress phase).",
-    parameters: Type.Object({ phaseRef: Type.Optional(Type.String({ description: "Phase ref. Default: current in-progress phase." })) }),
+    description: "Clear the entity-scoped handoff of a phase (archives it and keeps handoffUpdatedAt as an audit trail). phaseRef is required; never infer a phase automatically.",
+    parameters: Type.Object({ phaseRef: Type.String({ description: "Exact phase ref: P00x | P00x(F00x) | UUID | title." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -3666,6 +3669,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return { content: [{ type: "text", text: `Update failed: ${e}` }], details: {} };
       }
       if (!updatedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      await st.syncTaskStatusRollup(found.phase.id);
       await st.writeGenerated();
       return { content: [{ type: "text", text: `Task updated: ${updatedTask.id} (${updatedTask.status})` }], details: updatedTask };
     },
@@ -3698,9 +3702,59 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   // ── task start / complete tools ──────────────────────────────────
 
   pi.registerTool({
+    name: "task_recommend",
+    label: "Task Recommend",
+    description: "Return the recommended next task without starting work: continue one active task, otherwise choose ready work by feature → phase → task priority. Reports approved deviation/resume context and never blocks an explicit user choice.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+      const result = recommendNextTask(features.features, phases, project.workDeviations);
+      if (!result.candidate) return { content: [{ type: "text", text: `No task recommendation: ${result.reason}` }], details: result };
+      const { candidate } = result;
+      const reference = `${formatPhaseRef(candidate.phase.number, featureNumberOfPhase(candidate.phase, features.features))}/T${String(candidate.task.number).padStart(3, "0")}`;
+      return {
+        content: [{ type: "text", text: `Recommended (${result.kind}): ${reference} — ${candidate.task.title}\n${result.reason}${result.deviation ? `\nDeviation: ${result.deviation.id}; resume target ${result.deviation.resumeTaskId}.` : ""}` }],
+        details: result,
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "task_deviation",
+    label: "Task Deviation",
+    description: "Record a user-approved temporary task deviation. It preserves the recommended/resume task but never starts, pauses, or blocks work; use normal task lifecycle tools for those transitions.",
+    parameters: Type.Object({
+      temporary_task: Type.String({ description: "Temporary task ref" }),
+      resume_task: Type.Optional(Type.String({ description: "Task to resume; defaults to the current recommendation" })),
+      reason: Type.String({ description: "Why this approved temporary deviation is needed" }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+      const temporary = findTaskByRef(phases, features.features, params.temporary_task.trim());
+      if (!temporary) return { content: [{ type: "text", text: `Task not found: ${params.temporary_task}` }], details: {} };
+      const selected = recommendNextTask(features.features, phases, project.workDeviations);
+      const resume = params.resume_task ? findTaskByRef(phases, features.features, params.resume_task.trim()) : selected.candidate;
+      if (!resume) return { content: [{ type: "text", text: `No resume task is available. Provide resume_task explicitly. ${selected.reason}` }], details: selected };
+      if (temporary.task.id === resume.task.id) return { content: [{ type: "text", text: "A temporary task must differ from its resume target." }], details: {} };
+      if (temporary.task.status !== "planned") return { content: [{ type: "text", text: `Temporary task is not startable: ${temporary.task.status}.` }], details: {} };
+      const timestamp = nowISO();
+      const record = { id: crypto.randomUUID(), recommendedTaskId: selected.candidate?.task.id ?? resume.task.id, temporaryTaskId: temporary.task.id, resumeTaskId: resume.task.id, reason: params.reason, requestedBy: "user" as const, approvedBy: "user", state: "approved" as const, createdAt: timestamp, activatedAt: "", resolvedAt: "" };
+      await st.addWorkDeviation(record);
+      await st.writeGenerated();
+      const tempRef = `${formatPhaseRef(temporary.phase.number, featureNumberOfPhase(temporary.phase, features.features))}/T${String(temporary.task.number).padStart(3, "0")}`;
+      const resumeRef = `${formatPhaseRef(resume.phase.number, featureNumberOfPhase(resume.phase, features.features))}/T${String(resume.task.number).padStart(3, "0")}`;
+      return { content: [{ type: "text", text: `✅ Approved deviation: ${tempRef} temporarily overrides ${resumeRef}. Resume target retained.` }], details: { deviation: record } };
+    },
+  });
+
+  pi.registerTool({
     name: "task_start",
     label: "Task Start",
-    description: "Set a task to in-progress. Use this BEFORE starting implementation work on any task. Sets startedAt timestamp automatically.",
+    description: "Set a task to in-progress. BEFORE calling, read task_get(full=true) and phase_get(full=true) for its parent phase, including linked requirements. Continue an already in-progress task; otherwise select ready work by feature → phase → task priority (lower number first), respecting dependencies and blocked/waiting states. Sets startedAt automatically and returns a phase/requirements briefing.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
     }),
@@ -3713,6 +3767,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const task = found.task;
       if (task.status === "in-progress") return { content: [{ type: "text", text: `Task ${task.id} is already in-progress.` }], details: task };
       if (task.status === "done") return { content: [{ type: "text", text: `Task ${task.id} is done. Use task_update to reopen.` }], details: task };
+      const project = await st.loadProject();
+      const selection = recommendNextTask(features, await st.loadAllPhases(), project.workDeviations);
+      if (!selection.candidate || selection.candidate.task.id !== task.id) {
+        const recommended = selection.candidate ? ` Start ${selection.candidate.task.id} instead, or record a user-approved task_deviation first.` : "";
+        return { content: [{ type: "text", text: `Task start denied: ${selection.reason}.${recommended}` }], details: selection };
+      }
       const now = nowISO();
       let startedTask: Task | undefined;
       await st.updatePhase(found.phase.id, (phase) => {
@@ -3724,10 +3784,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         startedTask = t;
         return phase;
       });
+      await st.syncTaskStatusRollup(found.phase.id);
+      if (selection.deviation?.temporaryTaskId === task.id && selection.deviation.state === "approved") {
+        await st.setWorkDeviationState(selection.deviation.id, "active", now);
+      }
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
       const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
-      const phaseContext = buildPhaseContextBlock(found.phase, parentFeature);
+      const phaseWithRequirements = await st.loadPhaseWithRequirements(found.phase.id);
+      const phaseContext = buildPhaseContextBlock(phaseWithRequirements, parentFeature, phaseWithRequirements.linkedRequirements ?? []);
       return { content: [{ type: "text", text: `✅ Task started: ${startedTask.id} — ${startedTask.title} (in-progress)${phaseContext}` }], details: startedTask };
     },
   });
@@ -3771,9 +3836,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         completedTask = t;
         return phase;
       });
+      const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
+      const completedDeviation = (await st.loadProject()).workDeviations
+        .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === task.id)
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+      if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resolved", now);
       await st.writeGenerated();
       if (!completedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      return { content: [{ type: "text", text: `✅ Task completed: ${completedTask.id} — ${completedTask.title} (done)` }], details: completedTask };
+      return { content: [{ type: "text", text: `✅ Task completed: ${completedTask.id} — ${completedTask.title} (done)${clearedRef ? ` — phase handoff archived (${clearedRef})` : ""}` }], details: completedTask };
     },
   });
 
@@ -4113,10 +4183,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "",
         "Operational rules:",
         "- Handoffs are context, not locks. Read the relevant handoff with handoff show <ref> before resuming.",
-        "- BEFORE any code edit/write: task_start. AFTER finishing a task: task_complete.",
+        "- BEFORE work: read task_get(full=true) and phase_get(full=true), including linked requirements; then task_start before any code edit/write. AFTER finishing a task: task_complete.",
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
-        "- Prefer shortId or F00x/P00x/T00x refs. Find via feature_list / phase_list / task_list; read one entity via *_get(full=true).",
+        "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Prefer shortId or F00x/P00x/T00x refs. Find via feature_list / phase_list / task_list; read one entity via *_get(full=true).",
         "- If edit/write guard blocks you, start the right task or use an explicit bypass.",
         "",
         `Goal: ${project.goal || "(not set)"}`,

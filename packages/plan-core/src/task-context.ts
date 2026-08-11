@@ -1,4 +1,4 @@
-import type { Feature, Phase } from "./schema.js";
+import type { Feature, Phase, Requirement } from "./schema.js";
 import { formatPhaseRef } from "./naming.js";
 
 /**
@@ -17,6 +17,7 @@ import { formatPhaseRef } from "./naming.js";
 export function buildPhaseContextBlock(
   phase: Phase,
   feature: Feature | undefined,
+  linkedRequirements: Requirement[] = [],
 ): string {
   const lines: string[] = [];
   const phaseRef = formatPhaseRef(phase.number, feature?.number);
@@ -41,6 +42,15 @@ export function buildPhaseContextBlock(
   bullet("Open questions", phase.openQuestions);
   bullet("Decisions", phase.decisions);
   bullet("Completion criteria", phase.completionCriteria);
+
+  lines.push(`\nLinked requirements (${linkedRequirements.length}):`);
+  if (linkedRequirements.length === 0) {
+    lines.push("  - None linked to this phase.");
+  } else {
+    for (const requirement of linkedRequirements) {
+      lines.push(`  - ${requirement.title}${requirement.description?.trim() ? ` — ${requirement.description.trim()}` : ""}`);
+    }
+  }
 
   if (feature) {
     lines.push(`\nFeature F${String(feature.number).padStart(3, "0")} — ${feature.name}`);

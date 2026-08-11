@@ -7,7 +7,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -18,6 +18,28 @@ let watcherHubRef: { current: WsHub | null } = { current: null };
 
 function nowISO(): string {
   return new Date().toISOString();
+}
+
+/** Resolve requirement phase refs before persistence so requirements never dangle. */
+async function resolveRequirementPhaseIds(
+  store: PlanStore,
+  linkedPhaseIds: unknown,
+): Promise<{ linkedPhaseIds: string[] } | { error: string }> {
+  if (!Array.isArray(linkedPhaseIds) || linkedPhaseIds.length === 0) {
+    return { error: "linkedPhaseIds must contain at least one phase" };
+  }
+
+  const refs = linkedPhaseIds.map((entry) => typeof entry === "string" ? entry.trim() : "");
+  if (refs.some((ref) => !ref)) {
+    return { error: "linkedPhaseIds must contain non-empty phase references" };
+  }
+
+  const [phases, featuresDocument] = await Promise.all([store.loadAllPhases(), store.loadFeatures()]);
+  const resolved = refs.map((ref) => findPhaseByRef(phases, featuresDocument.features, ref));
+  const missing = resolved.findIndex((phase) => !phase);
+  if (missing !== -1) return { error: `linked phase not found: ${refs[missing]}` };
+
+  return { linkedPhaseIds: [...new Set(resolved.map((phase) => phase!.id))] };
 }
 
 function nextTaskNumber(phase: Phase): number {
@@ -222,21 +244,27 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   app.post(route("/requirements"), async (c) => {
     const body = await c.req.json<Requirement>();
-    const reqs = await store.updateRequirements((doc) => { doc.requirements.push(body); return doc; });
+    const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds);
+    if ("error" in links) return c.json({ error: links.error }, 400);
+    const requirement = { ...body, linkedPhaseIds: links.linkedPhaseIds };
+    const reqs = await store.updateRequirements((doc) => { doc.requirements.push(requirement); return doc; });
     await store.writeGenerated();
     hub()?.broadcast({ type: "requirements-updated", data: reqs });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
-    return c.json(body, 201);
+    return c.json(requirement, 201);
   });
 
   app.put(route("/requirements/:id"), async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json<Requirement>();
+    const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds);
+    if ("error" in links) return c.json({ error: links.error }, 400);
+    const requirement = { ...body, linkedPhaseIds: links.linkedPhaseIds };
     let found = false;
     const reqs = await store.updateRequirements((doc) => {
       const idx = doc.requirements.findIndex((r) => r.id === id);
       if (idx === -1) return doc;
-      doc.requirements[idx] = body;
+      doc.requirements[idx] = requirement;
       found = true;
       return doc;
     });
@@ -244,7 +272,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     await store.writeGenerated();
     hub()?.broadcast({ type: "requirements-updated", data: reqs });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
-    return c.json(body);
+    return c.json(requirement);
   });
 
   app.delete(route("/requirements/:id"), async (c) => {
@@ -860,6 +888,11 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.get(route("/handoffs"), async (c) => {
     const list = await store.listHandoffs();
     return c.json({ handoffs: list });
+  });
+
+  app.get(route("/handoffs/archive"), async (c) => {
+    const archived = await store.listArchivedHandoffs();
+    return c.json({ archived });
   });
 
   app.get(route("/phases/:id/handoff"), async (c) => {

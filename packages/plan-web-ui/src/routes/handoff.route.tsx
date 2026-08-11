@@ -72,8 +72,11 @@ export function HandoffRoute() {
     return (
       <Card className="grid gap-4">
         <div>
-          <h1 className="text-lg font-bold text-[var(--text)]">Phase handoffs</h1>
-          <p className="text-sm text-[var(--text-muted)]">Entity-scoped handoffs written on phases (<code>phase.handoff</code>).</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h1 className="text-lg font-bold text-[var(--text)]">Phase handoffs</h1>
+            <Link to="/handoff/archive" className="text-sm text-[var(--accent)] underline-offset-2 hover:underline">View archive →</Link>
+          </div>
+          <p className="text-sm text-[var(--text-muted)]">Pending entity-scoped handoffs on non-completed phases.</p>
         </div>
         {error ? <p className="rounded-[12px] border border-[var(--danger-soft)] bg-[var(--danger-soft)]/50 px-3 py-2 text-sm text-[var(--color-status-blocked)]">{error}</p> : null}
         <p className="py-8 text-center text-sm text-[var(--text-muted)]">No pending phase handoffs.</p>
@@ -84,9 +87,12 @@ export function HandoffRoute() {
   return (
     <div className="grid gap-4">
       <div>
-        <h1 className="text-lg font-bold text-[var(--text)]">Phase handoffs</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="text-lg font-bold text-[var(--text)]">Phase handoffs</h1>
+          <Link to="/handoff/archive" className="text-sm text-[var(--accent)] underline-offset-2 hover:underline">View archive →</Link>
+        </div>
         <p className="text-sm text-[var(--text-muted)]">
-          Entity-scoped handoffs written on phases (<code>phase.handoff</code>). {handoffs.length} pending.
+          Pending entity-scoped handoffs on non-completed phases. {handoffs.length} pending.
         </p>
       </div>
       {error ? <p className="rounded-[12px] border border-[var(--danger-soft)] bg-[var(--danger-soft)]/50 px-3 py-2 text-sm text-[var(--color-status-blocked)]">{error}</p> : null}

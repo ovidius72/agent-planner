@@ -39,6 +39,7 @@ import {
   type ActivityLog,
   type CodebaseProfile,
   type ResumeFocus,
+  type WorkDeviation,
 } from "./schema.js";
 import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
@@ -256,7 +257,8 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
   });
 }
 
-/** Summary of a phase that has a non-empty handoff, for the listHandoffs() API. */
+/** Summary of a phase that has a non-empty pending handoff, for the
+ * listHandoffs() API. Completed/canceled phases are never returned here. */
 export interface PhaseHandoffSummary {
   phaseId: string;
   /** Owning feature id (for deep-linking to the phase-detail route). */
@@ -269,6 +271,20 @@ export interface PhaseHandoffSummary {
   firstLine: string;
   /** Full handoff content (phase.handoff) — lets the /handoff viewer render
    *  inline without a per-phase fetch. */
+  content: string;
+}
+
+/** Summary of an archived handoff. The content remains recoverable under
+ * `.planner/.local/handoff-archive/` but is not part of the active handoff
+ * list. */
+export interface ArchivedPhaseHandoffSummary {
+  phaseId: string;
+  featureId?: string | undefined;
+  compositeRef: string;
+  file: string;
+  archivedAt: string;
+  reason: string;
+  firstLine: string;
   content: string;
 }
 
@@ -883,6 +899,7 @@ export class PlanStore {
       nextFeatureNumber: 1,
       nextPhaseNumber: 1,
       nextTaskNumber: 1,
+      workDeviations: [],
     });
     await this.saveRequirements({ requirements: [] });
     await this.saveFeatures({ features: [] });
@@ -1340,9 +1357,7 @@ export class PlanStore {
         task.phaseId = newId;
       }
       await this.savePhase(phase);
-      try {
-        await unlink(this.phasePath(oldId));
-      } catch {}
+      await this.unlinkPhaseFiles(oldId);
       renamed += 1;
     }
 
@@ -1539,6 +1554,7 @@ export class PlanStore {
     migrated: { renamed: number; repaired: number; inferred: number };
     backfill: { shortIdsAssigned: number; prioritiesAssigned: number; duplicateShortIds: string[] };
     containment: { changed: number; tasks: number; orphan: number };
+    handoffs: { archived: number };
     integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
   }> {
     return this.runAsBatch(async () => {
@@ -1552,9 +1568,10 @@ export class PlanStore {
       // corrupted by the migrateToGlobalSequence index-mismatch bug (core
       // <0.2.19-next.7). Lossless + idempotent — safe to run every repair.
       const containment = await this.rebuildContainment();
+      const handoffs = { archived: await this.archiveStaleHandoffs() };
       const integrity = await this.validateIntegrity();
       await this.writeGenerated();
-      return { migrated, backfill, containment, integrity };
+      return { migrated, backfill, containment, handoffs, integrity };
     });
   }
 
@@ -1750,6 +1767,27 @@ export class PlanStore {
     return updated;
   }
 
+  /** Persist an explicitly approved work deviation without coupling it to a harness. */
+  async addWorkDeviation(deviation: WorkDeviation): Promise<Project> {
+    return this.updateProject((project) => ({
+      ...project,
+      workDeviations: [...project.workDeviations, deviation],
+    }));
+  }
+
+  /** Mark an approved/active deviation as resolved or canceled while retaining its audit record. */
+  async setWorkDeviationState(id: string, state: "active" | "resolved" | "canceled", timestamp = nowISO()): Promise<Project> {
+    return this.updateProject((project) => ({
+      ...project,
+      workDeviations: project.workDeviations.map((deviation) => deviation.id !== id ? deviation : {
+        ...deviation,
+        state,
+        activatedAt: state === "active" ? timestamp : deviation.activatedAt,
+        resolvedAt: state === "resolved" || state === "canceled" ? timestamp : deviation.resolvedAt,
+      }),
+    }));
+  }
+
   async updateFeatures(updater: (f: FeaturesDocument) => FeaturesDocument): Promise<FeaturesDocument> {
     const updated = await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
@@ -1885,11 +1923,20 @@ export class PlanStore {
     return (await this.loadPhase(phaseId)).handoff;
   }
 
-  /** Set the handoff text for a phase + stamp handoffUpdatedAt. Atomic per-file
-   *  update via updatePhase (so the web UI refreshes via maybeAutoSync). */
+  /** Set the handoff text for a phase + stamp handoffUpdatedAt. A completed or
+   * canceled phase cannot receive a new operational handoff. Replacing an
+   * existing handoff archives the previous content as `superseded` first. */
   async setPhaseHandoff(phaseId: string, text: string): Promise<void> {
+    const phase = await this.loadPhase(phaseId);
+    const normalized = text.trim();
+    if (phase.status === "done" || phase.status === "canceled") {
+      throw new PlanStoreError(`Cannot write a handoff on ${phase.status} phase ${phaseId}; completed phases have no pending handoff.`);
+    }
+    if (phase.handoff && normalized && phase.handoff !== normalized) {
+      await this.clearPhaseHandoff(phaseId, "superseded");
+    }
     const now = new Date().toISOString();
-    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoff: text, handoffUpdatedAt: now }));
+    await this.updatePhase(phaseId, (current) => ({ ...current, handoff: normalized, handoffUpdatedAt: now }));
   }
 
 
@@ -1916,8 +1963,10 @@ export class PlanStore {
       return { imported: false };
     }
     const phases = await this.loadAllPhases();
-    const target = phases.find((p) => p.status === "in-progress") ?? phases[0] ?? null;
-    if (!target) return { imported: false }; // no phases yet — leave file for a later run
+    const target = phases.find((p) => p.status === "in-progress")
+      ?? phases.find((p) => p.status !== "done" && p.status !== "canceled")
+      ?? null;
+    if (!target) return { imported: false }; // no non-completed phase — leave file for a later run
     if ((target.handoff ?? "") === "") {
       await this.setPhaseHandoff(target.id, content + "\n\n<!-- imported from legacy .planner/HANDOFF.md -->\n");
       await this.updatePhase(target.id, (p) => ({
@@ -1962,16 +2011,40 @@ export class PlanStore {
     await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffHistory: trimmed }));
   }
 
-  /** List all phases that have a non-empty handoff, newest first, with a
-   *  human-readable composite ref (P00x or P00x(F00x)) and a first-line excerpt. */
+  /** Archive stale handoffs left on phases that are already completed/canceled.
+   * Idempotent: only non-empty phase.handoff values are moved. */
+  private async archiveStaleHandoffs(): Promise<number> {
+    const phases = await this.loadAllPhases();
+    let archived = 0;
+    for (const phase of phases) {
+      if ((phase.status === "done" || phase.status === "canceled") && phase.handoff) {
+        await this.clearPhaseHandoff(phase.id, "phase-done");
+        archived += 1;
+      }
+    }
+    return archived;
+  }
+
+  /** Public maintenance operation for retroactively archiving stale handoffs. */
+  async cleanupStaleHandoffs(): Promise<number> {
+    return this.runAsBatch(() => this.archiveStaleHandoffs());
+  }
+
+  /** List only active/pending phase handoffs, newest first. Completed,
+   * canceled, and orphaned phases are intentionally excluded. Any legacy stale
+   * handoff found on a completed/canceled phase is archived before returning,
+   * so callers (including /handoff) also repair old plans automatically. */
   async listHandoffs(): Promise<PhaseHandoffSummary[]> {
+    await this.archiveStaleHandoffs();
     const phases = await this.loadAllPhases();
     const features = await this.loadFeatures();
+    const featureIds = new Set(features.features.map((f) => f.id));
     const featureNumber = new Map<string, number>();
     for (const f of features.features) featureNumber.set(f.id, f.number);
     const out: PhaseHandoffSummary[] = [];
     for (const p of phases) {
-      if (!p.handoff) continue;
+      if (!p.handoff || p.status === "done" || p.status === "canceled") continue;
+      if (p.featureId && !featureIds.has(p.featureId)) continue;
       const fnum = p.featureId ? featureNumber.get(p.featureId) : undefined;
       out.push({
         phaseId: p.id,
@@ -1983,6 +2056,38 @@ export class PlanStore {
       });
     }
     out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return out;
+  }
+
+  /** List recoverable archived handoffs from phase.handoffHistory. Archived
+   * entries are never returned by listHandoffs() and are safe to show on a
+   * dedicated history page. */
+  async listArchivedHandoffs(): Promise<ArchivedPhaseHandoffSummary[]> {
+    const phases = await this.loadAllPhases();
+    const features = await this.loadFeatures();
+    const featureNumber = new Map<string, number>();
+    for (const f of features.features) featureNumber.set(f.id, f.number);
+    const out: ArchivedPhaseHandoffSummary[] = [];
+    for (const phase of phases) {
+      const fnum = phase.featureId ? featureNumber.get(phase.featureId) : undefined;
+      for (const entry of phase.handoffHistory ?? []) {
+        if (!entry.file) continue;
+        const localPath = join(this.localRoot(), entry.file);
+        const legacyPath = join(this.root, entry.file);
+        const content = await readFile(localPath, "utf-8").catch(() => readFile(legacyPath, "utf-8").catch(() => ""));
+        out.push({
+          phaseId: phase.id,
+          featureId: phase.featureId,
+          compositeRef: formatPhaseRef(phase.number, fnum),
+          file: entry.file,
+          archivedAt: entry.clearedAt,
+          reason: entry.reason,
+          firstLine: handoffFirstLine(content),
+          content,
+        });
+      }
+    }
+    out.sort((a, b) => b.archivedAt.localeCompare(a.archivedAt));
     return out;
   }
 
@@ -2015,11 +2120,7 @@ export class PlanStore {
       if (found.length === 0) return { found, removed: [] };
       const orphanIds = new Set(found.map((phase) => phase.phaseId));
       for (const orphan of found) {
-        try {
-          await unlink(this.phasePath(orphan.phaseId));
-        } catch {
-          // already gone
-        }
+        await this.unlinkPhaseFiles(orphan.phaseId);
       }
       await this.updateFeatures((doc) => {
         for (const feature of doc.features) {
@@ -2034,12 +2135,20 @@ export class PlanStore {
   }
 
   async deletePhase(phaseId: string): Promise<void> {
-    try {
-      await unlink(this.phasePath(phaseId));
-    } catch {
-      // already gone
-    }
+    await this.unlinkPhaseFiles(phaseId);
     await this.touchTimestamp();
+  }
+
+  /** Remove a phase file AND its inline .bak backup. atomicUpdateJson (used by
+   *  updatePhase without root) writes the backup inline at phases/<id>.json.bak,
+   *  and readJson falls back to `${path}.bak` on a missing main file — so a
+   *  delete that leaves the .bak behind would RESURRECT the deleted phase on
+   *  the next read. Feature backups (written with root) live under
+   *  .local/backups/ and are never read by readJson, so only the inline .bak
+   *  needs removing here. */
+  private async unlinkPhaseFiles(phaseId: string): Promise<void> {
+    await unlink(this.phasePath(phaseId)).catch(() => {});
+    await unlink(`${this.phasePath(phaseId)}.bak`).catch(() => {});
   }
 
   // ── Workspace-level operations ─────────────────────────────────────

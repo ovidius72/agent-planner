@@ -11,6 +11,9 @@ build
 coverage
 *.lcov
 
+# Generated test/coverage reports (reports/<scope>/ emitted by scripts/test-all.mjs)
+reports/
+
 # OS / editor
 .DS_Store
 Thumbs.db

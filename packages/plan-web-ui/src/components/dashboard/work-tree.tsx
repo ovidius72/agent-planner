@@ -351,7 +351,7 @@ export function WorkTree({
                 const m = report.migrated;
                 const dup = report.integrity.duplicatePhaseIds.length;
                 const dang = report.integrity.danglingPhaseIds.length;
-                setRepairMsg(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}. Integrity: ${dup} duplicate, ${dang} dangling.`);
+                setRepairMsg(`Repair done: renamed ${m.renamed}, repaired ${m.repaired} refs, inferred ${m.inferred}, archived ${report.handoffs.archived} stale handoff(s). Integrity: ${dup} duplicate, ${dang} dangling.`);
               } catch (e) {
                 setRepairMsg(`Repair failed: ${e instanceof Error ? e.message : String(e)}`);
               } finally {

@@ -473,6 +473,30 @@ describe("plan-mcp strict ref validation", () => {
     }
   });
 
+  test("planner-task-recommend and planner-task-deviation retain an explicit resume target", async () => {
+    const { plannerRoot, st, phase } = await setup();
+    const temporaryId = createTaskId();
+    const resumeId = phase.tasks[0].id;
+    await st.updatePhase(phase.id, (stored) => ({ ...stored, tasks: [...stored.tasks, { ...stored.tasks[0], id: temporaryId, phaseId: phase.id, number: 2, title: "Temporary task", shortName: "temporary-task", priority: 20 }], taskIds: [...stored.taskIds, temporaryId] }));
+    const session = await startClient(plannerRoot);
+    try {
+      const initial = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
+      assert.match(toolText(initial), /Recommended \(priority\): P001\(F001\)\/T002/);
+      assert.match(toolText(await session.client.callTool({ name: "planner-task-start", arguments: { task: resumeId } })), /Task start denied/);
+      const recorded = await session.client.callTool({ name: "planner-task-deviation", arguments: { temporary_task: temporaryId, resume_task: resumeId, reason: "Approved urgent work" } });
+      assert.match(toolText(recorded), /Approved deviation/);
+      assert.equal((await st.loadProject()).workDeviations.at(-1)?.resumeTaskId, resumeId);
+      assert.match(toolText(await session.client.callTool({ name: "planner-task-start", arguments: { task: temporaryId } })), /Task started/);
+      assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "active");
+      assert.match(toolText(await session.client.callTool({ name: "planner-task-complete", arguments: { task: temporaryId } })), /Task completed/);
+      assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "resolved");
+      const resumed = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
+      assert.match(toolText(resumed), /Recommended \(resume\): P001\(F001\)\/T001/);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("planner-task-add uses the global task sequence from repeated MCP writes", async () => {
     const { plannerRoot, st, phase } = await setup();
     const session = await startClient(plannerRoot);
