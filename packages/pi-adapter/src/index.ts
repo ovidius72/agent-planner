@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, recommendNextTask } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -3937,11 +3937,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (task.status === "in-progress") return { content: [{ type: "text", text: `Task ${task.id} is already in-progress.` }], details: task };
       if (task.status === "done") return { content: [{ type: "text", text: `Task ${task.id} is done. Use task_update to reopen.` }], details: task };
       const project = await st.loadProject();
-      const selection = recommendNextTask(features, await st.loadAllPhases(), project.workDeviations);
-      if (!selection.candidate || selection.candidate.task.id !== task.id) {
-        const recommended = selection.candidate ? ` Start ${selection.candidate.task.id} instead, or record a user-approved task_deviation first.` : "";
-        return { content: [{ type: "text", text: `Task start denied: ${selection.reason}.${recommended}` }], details: selection };
-      }
+      const phases = await st.loadAllPhases();
+      const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
+      if (!eligibility.eligible) return { content: [{ type: "text", text: `Task start denied: ${eligibility.reason}` }], details: eligibility };
+      const selection = recommendNextTask(features, phases, project.workDeviations);
       // Assemble the mandatory parent context before changing task lifecycle state.
       // The output order is feature + its requirements, then phase + its requirements.
       const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
@@ -3955,6 +3954,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phaseWithRequirements.linkedRequirements ?? [],
         featureRequirements,
       );
+      const advisory = selection.kind === "conflict"
+        ? `\n\n⚠️ ${selection.reason} Explicit task request honored; reconcile active work before relying on automatic recommendations.`
+        : selection.candidate && selection.candidate.task.id !== task.id
+          ? selection.kind === "active"
+            ? `\n\n⚠️ Active-task advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} is already in progress. Explicit task request honored.`
+            : `\n\n⚠️ Priority advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} is the automatic recommendation. Explicit task request honored.`
+          : "";
       const now = nowISO();
       let startedTask: Task | undefined;
       await st.updatePhase(found.phase.id, (phase) => {
@@ -3967,12 +3973,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return phase;
       });
       await st.syncTaskStatusRollup(found.phase.id);
-      if (selection.deviation?.temporaryTaskId === task.id && selection.deviation.state === "approved") {
-        await st.setWorkDeviationState(selection.deviation.id, "active", now);
-      }
+      const approvedDeviation = project.workDeviations.find((deviation) =>
+        deviation.temporaryTaskId === task.id && deviation.state === "approved",
+      );
+      if (approvedDeviation) await st.setWorkDeviationState(approvedDeviation.id, "active", now);
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      return { content: [{ type: "text", text: `✅ Task started: ${startedTask.id} — ${startedTask.title} (in-progress)${phaseContext}` }], details: startedTask };
+      return { content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}` }], details: startedTask };
     },
   });
 

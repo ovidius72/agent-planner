@@ -402,7 +402,6 @@ describe("pi-adapter strict ref validation", () => {
     await st.updatePhase(phase.id, (stored) => ({ ...stored, tasks: [...stored.tasks, { ...stored.tasks[0], id: temporaryId, phaseId: phase.id, number: 2, title: "Temporary task", shortName: "temporary-task", priority: 20 }], taskIds: [...stored.taskIds, temporaryId] }));
     const ctx = makeCtx(root);
     assert.match(toolText(await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx)), /Recommended \(priority\): P001\(F001\)\/T002/);
-    assert.match(toolText(await tools.get("task_start").execute("id", { taskId }, undefined, undefined, ctx)), /Task start denied/);
     const recorded = await tools.get("task_deviation").execute("id", { temporary_task: temporaryId, resume_task: taskId, reason: "Approved urgent work" }, undefined, undefined, ctx);
     assert.match(toolText(recorded), /Approved deviation/);
     let project = await st.loadProject();

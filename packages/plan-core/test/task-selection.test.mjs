@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recommendNextTask } from "../dist/index.js";
+import { checkExplicitTaskStart, recommendNextTask } from "../dist/index.js";
 
 const NOW = "2026-08-10T00:00:00.000Z";
 const feature = (number, priority = 10, status = "planned") => ({ id: `feature-${number}`, number, priority, status });
@@ -34,6 +34,25 @@ test("returns one active task, but reports an unsafe multiple-active conflict", 
   const conflict = recommendation(features, phases);
   assert.equal(conflict.kind, "conflict");
   assert.equal(conflict.activeCandidates.length, 2);
+});
+
+test("explicit starts preserve readiness gates but do not enforce priority or single-active selection", () => {
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [
+    task("priority", 1, 1), task("explicit", 2, 2), task("blocked", 3, 3, "blocked"), task("dependent", 4, 4, "planned", ["priority"]),
+  ])];
+
+  assert.equal(checkExplicitTaskStart(features, phases, "explicit").eligible, true, "a lower-priority explicit task is valid");
+  phases[0].tasks.find((item) => item.id === "priority").status = "in-progress";
+  assert.equal(checkExplicitTaskStart(features, phases, "explicit").eligible, true, "an explicit task remains valid with another active task");
+  assert.equal(checkExplicitTaskStart(features, phases, "blocked").eligible, false, "blocked work stays unavailable");
+  assert.equal(checkExplicitTaskStart(features, phases, "dependent").eligible, false, "unfinished dependencies still block an explicit start");
+});
+
+test("approved deviations preserve their waiting-task exception", () => {
+  const features = [feature(1, 10, "waiting")];
+  const phases = [phase("p", "feature-1", 1, 1, [task("resume", 1), task("temporary", 2, 2, "waiting", ["unfinished"])], "waiting")];
+  assert.equal(checkExplicitTaskStart(features, phases, "temporary", [deviation("temporary", "resume")]).eligible, true);
 });
 
 test("excludes unavailable work and waits for completed dependencies", () => {

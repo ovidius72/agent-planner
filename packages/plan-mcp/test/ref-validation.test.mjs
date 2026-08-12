@@ -482,7 +482,6 @@ describe("plan-mcp strict ref validation", () => {
     try {
       const initial = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
       assert.match(toolText(initial), /Recommended \(priority\): P001\(F001\)\/T002/);
-      assert.match(toolText(await session.client.callTool({ name: "planner-task-start", arguments: { task: resumeId } })), /Task start denied/);
       const recorded = await session.client.callTool({ name: "planner-task-deviation", arguments: { temporary_task: temporaryId, resume_task: resumeId, reason: "Approved urgent work" } });
       assert.match(toolText(recorded), /Approved deviation/);
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.resumeTaskId, resumeId);

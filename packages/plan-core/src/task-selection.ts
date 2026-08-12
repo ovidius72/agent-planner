@@ -18,11 +18,54 @@ export interface TaskRecommendation {
   reason: string;
 }
 
+/** Whether a user-explicit task start is valid, independent of priority advice. */
+export interface ExplicitTaskStartEligibility {
+  eligible: boolean;
+  reason: string;
+}
+
 const unavailable = new Set(["blocked", "waiting", "deferred", "canceled", "rejected"]);
+const hardUnavailable = new Set(["blocked", "deferred", "canceled", "rejected"]);
 const terminal = new Set(["done", "canceled", "rejected"]);
 
 const priority = (entity: { priority?: number; number: number }) => entity.priority && entity.priority > 0 ? entity.priority : Number.MAX_SAFE_INTEGER;
 const compare = <T extends { priority?: number; number: number }>(a: T, b: T) => priority(a) - priority(b) || a.number - b.number;
+
+/**
+ * Validate an explicitly requested task start. Priority and existing active
+ * work remain advisory for explicit user choices; availability and dependency
+ * invariants remain mandatory.
+ */
+export function checkExplicitTaskStart(
+  features: Feature[],
+  phases: Phase[],
+  taskId: string,
+  deviations: WorkDeviation[] = [],
+): ExplicitTaskStartEligibility {
+  const featureById = new Map(features.map((feature) => [feature.id, feature]));
+  const candidates = phases.flatMap((phase) => phase.tasks.map((task) => ({ feature: phase.featureId ? featureById.get(phase.featureId) : undefined, phase, task })));
+  const candidate = candidates.find(({ task }) => task.id === taskId);
+  if (!candidate) return { eligible: false, reason: "Requested task no longer exists." };
+
+  const isTemporaryOverride = deviations.some((deviation) =>
+    (deviation.state === "approved" || deviation.state === "active")
+    && deviation.temporaryTaskId === taskId,
+  );
+  const startableStatus = candidate.task.status === "planned"
+    || (candidate.task.status === "waiting" && isTemporaryOverride);
+  if (!startableStatus) return { eligible: false, reason: `Task is not startable from ${candidate.task.status}.` };
+  const parentHasHardBlock = hardUnavailable.has(candidate.phase.status)
+    || (candidate.feature && hardUnavailable.has(candidate.feature.status));
+  if (parentHasHardBlock || (!isTemporaryOverride && (unavailable.has(candidate.phase.status) || (candidate.feature && unavailable.has(candidate.feature.status))))) {
+    return { eligible: false, reason: "Task belongs to an unavailable phase or feature." };
+  }
+
+  const taskById = new Map(candidates.map((entry) => [entry.task.id, entry]));
+  if (!isTemporaryOverride && !candidate.task.dependsOn.every((id) => taskById.get(id)?.task.status === "done")) {
+    return { eligible: false, reason: "Task dependencies are not complete." };
+  }
+  return { eligible: true, reason: "Explicit task request is startable." };
+}
 
 /**
  * Pure, harness-agnostic work selector. It never mutates plan state: adapters

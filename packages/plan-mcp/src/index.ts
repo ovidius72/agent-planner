@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, recommendNextTask } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -641,7 +641,18 @@ server.registerTool("planner-phase-show", {
     const requirementsBlock = reqCount > 0
       ? `\n\nLinked requirements:\n${linkedRequirements.map((requirement) => `- ${requirement.title} (${requirement.status})`).join("\n")}`
       : "";
-    return text(full ? `${summary}\n\n${phase.description || ""}${requirementsBlock}` : summary, { linkedRequirements });
+    return text(full ? `${summary}\n\n${phase.description || ""}${requirementsBlock}` : summary, {
+      phase: {
+        ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)),
+        shortId: phase.shortId,
+        title: phase.title,
+        summary: phase.summary,
+        status: phase.status,
+        taskCount: phase.tasks.length,
+        ...(full ? { description: phase.description } : {}),
+      },
+      linkedRequirements,
+    });
 });
 
 server.registerTool("planner-phase-discuss", {
@@ -1028,15 +1039,10 @@ server.registerTool("planner-task-start", {
   if (found.task.status === "in-progress") return text(`Task ${found.task.id} is already in-progress.`);
   if (found.task.status === "done") return text(`Task ${found.task.id} is done. Use planner-task-update to reopen.`);
   const project = await st.loadProject();
-  const selection = recommendNextTask(features, await st.loadAllPhases(), project.workDeviations);
-  if (!selection.candidate || selection.candidate.task.id !== found.task.id) {
-    const recommended = selection.candidate ? ` Start ${selection.candidate.task.id} instead, or record a user-approved planner-task-deviation first.` : "";
-    return text(`Task start denied: ${selection.reason}.${recommended}`, {
-      kind: selection.kind,
-      reason: selection.reason,
-      recommendedTaskId: selection.candidate?.task.id,
-    });
-  }
+  const phases = await st.loadAllPhases();
+  const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
+  if (!eligibility.eligible) return text(`Task start denied: ${eligibility.reason}`, { reason: eligibility.reason });
+  const selection = recommendNextTask(features, phases, project.workDeviations);
   // Assemble the mandatory parent context before changing task lifecycle state.
   const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
   const [phaseWithRequirements, featureRequirements] = await Promise.all([
@@ -1053,6 +1059,13 @@ server.registerTool("planner-task-start", {
   // A pending handoff is context, not a lock: task start RETAINS it. It is
   // archived only when the phase completes (auto) or the user explicitly
   // clears it.
+  const advisory = selection.kind === "conflict"
+    ? `\n\n⚠️ ${selection.reason} Explicit task request honored; reconcile active work before relying on automatic recommendations.`
+    : selection.candidate && selection.candidate.task.id !== found.task.id
+      ? selection.kind === "active"
+        ? `\n\n⚠️ Active-task advisory: ${taskCompositeRef(selection.candidate.task, selection.candidate.phase, features)} is already in progress. Explicit task request honored.`
+        : `\n\n⚠️ Priority advisory: ${taskCompositeRef(selection.candidate.task, selection.candidate.phase, features)} is the automatic recommendation. Explicit task request honored.`
+      : "";
   const timestamp = nowISO();
 
   let updatedTask: Task | undefined;
@@ -1077,11 +1090,12 @@ server.registerTool("planner-task-start", {
     return phase;
   });
   await st.syncTaskStatusRollup(found.phase.id);
-  if (selection.deviation?.temporaryTaskId === found.task.id && selection.deviation.state === "approved") {
-    await st.setWorkDeviationState(selection.deviation.id, "active", timestamp);
-  }
+  const approvedDeviation = project.workDeviations.find((deviation) =>
+    deviation.temporaryTaskId === found.task.id && deviation.state === "approved",
+  );
+  if (approvedDeviation) await st.setWorkDeviationState(approvedDeviation.id, "active", timestamp);
   const t = updatedTask ?? found.task;
-  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}`);
+  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}`);
 });
 
 server.registerTool("planner-task-complete", {

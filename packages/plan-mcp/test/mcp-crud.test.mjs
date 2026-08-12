@@ -296,21 +296,60 @@ test("list filters and priority (reorder) updates are visible through reads", as
 
 // ── Linked requirements (MCP-visible surface) ──────────────────────────────
 
-test("linked requirements surface through planner-phase-show structured content", async () => {
+test("planner-phase-show gives structured-content clients the full phase read model", async () => {
   const session = await startMcpFixture({ name: "t237-requirements" });
   try {
+    const storedPhase = (await session.store.loadAllPhases())[0];
     const shown = await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     assert.match(toolText(shown), /1 linked requirement/);
     const structured = toolStructured(shown);
+    assert.deepEqual(structured.phase, {
+      ref: "P001(F001)",
+      shortId: storedPhase.shortId,
+      title: storedPhase.title,
+      summary: storedPhase.summary,
+      status: storedPhase.status,
+      taskCount: storedPhase.tasks.length,
+      description: storedPhase.description,
+    }, "Claude-style structured-content consumers receive the phase title and detailed description");
     assert.ok(Array.isArray(structured.linkedRequirements), "phase-show exposes linkedRequirements");
     assert.equal(structured.linkedRequirements.length, 1);
     assert.equal(structured.linkedRequirements[0].title, "Users can authenticate");
-    const seedPhaseId = (await session.store.loadAllPhases())[0].id;
-    assert.deepEqual(structured.linkedRequirements[0].linkedPhaseIds, [seedPhaseId], "structured link points at the seed phase");
+    assert.deepEqual(structured.linkedRequirements[0].linkedPhaseIds, [storedPhase.id], "structured link points at the seed phase");
 
-    // phase-show without full still reports the link count compactly
+    // Compact reads stay compact but still identify the phase structurally.
     const compact = await callTool(session, "planner-phase-show", { phase: "P001" });
     assert.match(toolText(compact), /1 linked requirement/);
+    assert.equal(toolStructured(compact).phase.description, undefined);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-start honors explicit priority overrides and multiple active tasks", async () => {
+  const session = await startMcpFixture({ name: "t281-explicit-start" });
+  try {
+    for (const title of ["Explicit lower-priority task", "Explicit task after an active-work conflict"]) {
+      await callTool(session, "planner-task-add", {
+        feature: "F001",
+        phase: "P001",
+        title,
+        description: "src/task-start.ts:1 start this user-selected task despite a different automatic priority recommendation.",
+      });
+    }
+
+    const priorityOverride = await callTool(session, "planner-task-start", { task: "T002" });
+    assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
+    assert.match(toolText(priorityOverride), /Priority advisory/);
+
+    const secondActive = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.match(toolText(secondActive), /✅ Task started: P001\(F001\)\/T001/);
+    assert.match(toolText(secondActive), /Active-task advisory.*Explicit task request honored/i);
+
+    const multiActive = await callTool(session, "planner-task-start", { task: "T003" });
+    assert.match(toolText(multiActive), /✅ Task started: P001\(F001\)\/T003/);
+    assert.match(toolText(multiActive), /active-work conflict.*Explicit task request honored/i);
+    assert.deepEqual((await session.store.loadAllPhases())[0].tasks.map((task) => task.status), ["in-progress", "in-progress", "in-progress"]);
   } finally {
     await closeMcpFixture(session);
   }

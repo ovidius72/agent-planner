@@ -174,6 +174,35 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     }
   });
 
+  test("explicit task starts bypass priority and multi-active advice without bypassing lifecycle tools", async () => {
+    const host = await createPiHost({ name: "t281-explicit-start", seed: "minimal" });
+    try {
+      for (const title of ["Explicit lower-priority task", "Explicit task after an active-work conflict"]) {
+        await host.runTool("task_create", {
+          featureId: "F001",
+          phaseId: "P001",
+          title,
+          description: "src/task-start.ts:1 start this user-selected task despite a different automatic priority recommendation.",
+        });
+      }
+
+      const priorityOverride = await host.runTool("task_start", { taskId: "T002" });
+      assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
+      assert.match(toolText(priorityOverride), /Priority advisory/);
+
+      const secondActive = await host.runTool("task_start", { taskId: "T001" });
+      assert.match(toolText(secondActive), /✅ Task started: P001\(F001\)\/T001/);
+      assert.match(toolText(secondActive), /Active-task advisory.*Explicit task request honored/i);
+
+      const multiActive = await host.runTool("task_start", { taskId: "T003" });
+      assert.match(toolText(multiActive), /✅ Task started: P001\(F001\)\/T003/);
+      assert.match(toolText(multiActive), /active-work conflict.*Explicit task request honored/i);
+      assert.deepEqual((await host.store.loadAllPhases())[0].tasks.map((task) => task.status), ["in-progress", "in-progress", "in-progress"]);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
   test("checklist add/toggle/remove and task priority (reorder)", async () => {
     const host = await createPiHost({ name: "t242-checklist", seed: "minimal" });
     try {
