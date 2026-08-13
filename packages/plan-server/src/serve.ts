@@ -610,7 +610,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         if (!phaseToFeature.has(phaseId)) phaseToFeature.set(phaseId, feature.id);
       }
     }
-    const activeTasksMap = new Map<string, { id: string; number: number; title: string; phaseId: string; phaseNumber: number; featureId: string; featureNumber: number; status: string }>();
+    const activeTasksMap = new Map<string, { id: string; number: number; shortId?: string; title: string; phaseId: string; phaseNumber: number; featureId: string; featureNumber: number; status: string }>();
     for (const phase of phases) {
       for (const task of phase.tasks) {
         if (task.status === "in-progress") {
@@ -619,6 +619,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
           activeTasksMap.set(task.id, {
             id: task.id,
             number: task.number,
+            shortId: task.shortId,
             title: task.title,
             phaseId: phase.id,
             phaseNumber: phase.number,

@@ -274,6 +274,7 @@ test("task delete + /tasks/active reflects in-progress only", async () => {
   assert.equal(tasks.body[0].id, active.body.id);
   assert.equal(tasks.body[0].featureNumber, 1);
   assert.equal(tasks.body[0].phaseNumber, 1);
+  assert.equal(tasks.body[0].shortId, active.body.shortId, "active header can render the task shortId");
 
   // complete → leaves active list
   await request(fx, `/tasks/${active.body.id}`, put({ phaseId: phase.id, status: "done" }));

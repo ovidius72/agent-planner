@@ -131,6 +131,7 @@ export interface UiConfig {
 export interface ActiveTaskSummary {
   id: string;
   number: number;
+  shortId?: string;
   title: string;
   phaseId: string;
   phaseNumber: number;
