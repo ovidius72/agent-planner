@@ -1,5 +1,6 @@
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import { z, ZodError } from "zod";
 
 /** Canonical `.planner/.gitignore` content (P042 spec): ignore the `.local/`
@@ -122,8 +123,54 @@ export function setWriteNotifyHook(hook: (() => void) | undefined): void {
 const CROSS_PROCESS_LOCK_STALE_MS = 30_000;
 const CROSS_PROCESS_LOCK_RETRY_MS = 10;
 
+/** Allocation registry is deliberately outside the versioned plan. Git worktrees
+ * share their common git dir, so reservations are serialized across branches
+ * without rewriting project.json or unrelated planner entities. */
+const AllocationKindSchema = z.enum(["feature", "phase", "task"]);
+const AllocationRegistrySchema = z.object({
+  version: z.literal(1),
+  projectId: z.string().min(1),
+  allocations: z.array(z.object({
+    kind: AllocationKindSchema,
+    entityId: z.string().min(1),
+    number: z.number().int().positive(),
+    shortId: z.string().regex(/^[A-Z2-9]{5}$/),
+  })).default([]),
+});
+type AllocationKind = z.infer<typeof AllocationKindSchema>;
+type Allocation = z.infer<typeof AllocationRegistrySchema>["allocations"][number];
+
+async function gitCommonDirFor(planRoot: string): Promise<string | undefined> {
+  let current = resolve(planRoot);
+  for (;;) {
+    const dotGit = join(current, ".git");
+    try {
+      const info = await stat(dotGit);
+      if (info.isDirectory()) return dotGit;
+      const pointer = await readFile(dotGit, "utf8");
+      const match = pointer.match(/^gitdir:\s*(.+)\s*$/m);
+      if (!match?.[1]) return undefined;
+      const worktreeGitDir = resolve(current, match[1]);
+      const commonDirRef = await readFile(join(worktreeGitDir, "commondir"), "utf8").catch(() => "");
+      return commonDirRef.trim() ? resolve(worktreeGitDir, commonDirRef.trim()) : worktreeGitDir;
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return undefined;
+      current = parent;
+    }
+  }
+}
+
+async function writeRegistry(path: string, registry: z.infer<typeof AllocationRegistrySchema>): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
+  await writeFile(tmp, JSON.stringify(registry, null, 2), "utf8");
+  await rename(tmp, path);
+}
+
 async function acquireCrossProcessLock(path: string): Promise<() => Promise<void>> {
   const lockPath = `${path}.lock`;
+  await mkdir(dirname(lockPath), { recursive: true });
 
   for (;;) {
     try {
@@ -975,25 +1022,12 @@ export class PlanStore {
 
   // ── Loaders ──────────────────────────────────────────────────────────
 
+  /** Read-only manifest load. Upgrading legacy `.local` state is explicit
+   * maintenance (`repair`), never an incidental side effect of opening a plan. */
   async loadManifest(): Promise<Manifest> {
-    // Ensure the .planner/.gitignore ignores transients (P042). Idempotent;
-    // upgrades plans initialized before the .local/ move. Runs on every load.
-    await this.ensureGitignore().catch(() => {});
     const manifest = await readJson(this.manifestPath(), ManifestSchema);
-    try {
-      const timestamp = await readJson(this.timestampPath(), z.object({ updatedAt: TimestampSchema }));
-      manifest.updatedAt = timestamp.updatedAt;
-    } catch {
-      // Legacy plan without .local/timestamp.json: bootstrap from manifest.updatedAt
-      // and create the timestamp file so subsequent writes stay in .local/.
-      try {
-        await mkdir(this.localRoot(), { recursive: true });
-        await atomicWriteJson(this.timestampPath(), { updatedAt: manifest.updatedAt }, this.root);
-      } catch {
-        // ignore bootstrap failure
-      }
-    }
-    return manifest;
+    const timestamp = await readJson(this.timestampPath(), z.object({ updatedAt: TimestampSchema })).catch(() => undefined);
+    return timestamp ? { ...manifest, updatedAt: timestamp.updatedAt } : manifest;
   }
 
   async loadProject(): Promise<Project> {
@@ -1001,50 +1035,61 @@ export class PlanStore {
   }
 
   /**
-   * Allocate the next global sequence number for a feature/phase/task.
-   * Reads the monotonic counter from project.json, increments it, persists,
-   * and returns the allocated number. MUST be called within withFeatureLock
-   * (adapters create entities inside a lock) so the counter is race-free.
-   * The counter never reuses a number — deletions leave gaps (by design:
-   * stable references survive deletion).
+   * Reserve immutable human identifiers without touching tracked `project.json`.
+   * Worktrees in the same clone share `.git/agent-plan/allocations`, guarded by
+   * the same cross-process lock used for atomic writes. The registry reserves
+   * numbers/short IDs before an entity file is written, so parallel branches
+   * cannot allocate the same F/P/T or shortId. Existing entities are never
+   * rewritten; cross-clone coordination requires a shared allocator service.
    */
-  async allocFeatureNumber(): Promise<number> { return this.allocSeqNumber("nextFeatureNumber", "feature"); }
-  async allocPhaseNumber(): Promise<number> { return this.allocSeqNumber("nextPhaseNumber", "phase"); }
-  async allocTaskNumber(): Promise<number> { return this.allocSeqNumber("nextTaskNumber", "task"); }
-  /** Allocate a globally-unique sequence number. `atomicUpdateJson` already
-   *  serializes concurrent calls via `withWriteLock` on the project file, so
-   *  the read-modify-write is race-free in-process. The collision guard
-   *  additionally skips any candidate that already exists in the data (safety
-   *  net for cross-process races or manual edits) and persists the corrected
-   *  counter. */
-  private async allocSeqNumber(
-    key: "nextFeatureNumber" | "nextPhaseNumber" | "nextTaskNumber",
-    kind: "feature" | "phase" | "task",
-  ): Promise<number> {
-    // Load already-used numbers for this kind (best-effort read; the
-    // atomicUpdateJson below is the authoritative write).
-    const used = new Set<number>();
-    if (kind === "task") {
-      const phases = await this.loadAllPhases();
-      for (const p of phases) for (const t of p.tasks) used.add(t.number);
-    } else if (kind === "phase") {
-      const phases = await this.loadAllPhases();
-      for (const p of phases) used.add(p.number);
-    } else {
-      const feats = await this.loadRawFeatures();
-      for (const f of feats) used.add(f.number);
-    }
+  async allocateEntityIdentity(kind: AllocationKind, entityId: string): Promise<{ number: number; shortId: string }> {
+    const project = await this.loadProject();
+    const manifest = await this.loadManifest();
+    const commonGitDir = await gitCommonDirFor(this.root);
+    const registryPath = commonGitDir
+      ? join(commonGitDir, "agent-plan", "allocations", `${manifest.projectId}.json`)
+      : join(this.localRoot(), "allocations", `${manifest.projectId}.json`);
 
-    let allocated = 0;
-    await this.updateProject((project) => {
-      let candidate = project[key];
-      // Collision guard: skip any candidate that already exists.
-      while (used.has(candidate)) candidate++;
-      allocated = candidate;
-      project[key] = candidate + 1;
-      return project;
+    return withWriteLock(registryPath, async () => {
+      const registry = AllocationRegistrySchema.parse(await readFile(registryPath, "utf8")
+        .then(JSON.parse)
+        .catch(() => ({ version: 1, projectId: manifest.projectId, allocations: [] })));
+      if (registry.projectId !== manifest.projectId) throw new PlanStoreError(`allocation registry project mismatch: ${registryPath}`);
+      const prior = registry.allocations.find((entry) => entry.kind === kind && entry.entityId === entityId);
+      if (prior) return { number: prior.number, shortId: prior.shortId };
+
+      const phases = await this.loadAllPhases();
+      const features = (await this.loadFeatures()).features;
+      const canonical = kind === "feature"
+        ? features.map((feature) => ({ number: feature.number, shortId: feature.shortId }))
+        : kind === "phase"
+          ? phases.map((phase) => ({ number: phase.number, shortId: phase.shortId }))
+          : phases.flatMap((phase) => phase.tasks.map((task) => ({ number: task.number, shortId: task.shortId })));
+      const usedNumbers = new Set([...canonical.map((entry) => entry.number), ...registry.allocations.filter((entry) => entry.kind === kind).map((entry) => entry.number)]);
+      const counter = kind === "feature" ? project.nextFeatureNumber : kind === "phase" ? project.nextPhaseNumber : project.nextTaskNumber;
+      let number = Math.max(1, counter);
+      while (usedNumbers.has(number)) number += 1;
+
+      const allShortIds = new Set<string>([
+        ...features.map((feature) => feature.shortId),
+        ...phases.flatMap((phase) => [phase.shortId, ...phase.tasks.map((task) => task.shortId)]),
+        ...registry.allocations.map((entry) => entry.shortId),
+      ].filter(Boolean));
+      const allocation: Allocation = { kind, entityId, number, shortId: createShortId(allShortIds, `${kind}:${entityId}`) };
+      registry.allocations.push(allocation);
+      await writeRegistry(registryPath, registry);
+      return { number: allocation.number, shortId: allocation.shortId };
     });
-    return allocated;
+  }
+
+  /** Compatibility helpers. New callers should allocate the number and shortId
+   * together with allocateEntityIdentity so reservation cannot be split. */
+  async allocFeatureNumber(): Promise<number> { return this.allocateLegacyNumber("feature"); }
+  async allocPhaseNumber(): Promise<number> { return this.allocateLegacyNumber("phase"); }
+  async allocTaskNumber(): Promise<number> { return this.allocateLegacyNumber("task"); }
+  private async allocateLegacyNumber(kind: AllocationKind): Promise<number> {
+    const id = `legacy-${kind}-${randomUUID()}`;
+    return (await this.allocateEntityIdentity(kind, id)).number;
   }
 
 

@@ -299,14 +299,14 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!name) return c.json({ error: "name required" }, 400);
 
     const features = await store.loadFeatures();
-    const number = features.features.length + 1;
-    const shortId = createShortId(await store.assignedShortIds());
+    const id = createFeatureId();
+    const identity = await store.allocateEntityIdentity("feature", id);
     const priority = await store.nextPriority("feature");
     const now = nowISO();
     const feature: Feature = {
-      id: createFeatureId(),
-      number,
-      shortId,
+      id,
+      number: identity.number,
+      shortId: identity.shortId,
       priority,
       name,
       description: body.description ?? "",
@@ -413,16 +413,16 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     let phase: Phase | undefined;
     await withFeatureLock(featureId, async () => {
       const allPhases = await store.loadAllPhases();
-      const number = allPhases.filter((p) => p.featureId === featureId).length + 1;
       const slug = normalizeSlug(title);
-      const shortId = createShortId(await store.assignedShortIds());
+      const id = createPhaseId();
+      const identity = await store.allocateEntityIdentity("phase", id);
       const priority = await store.nextPriority("phase", featureId);
       const now = nowISO();
       phase = {
-        id: createPhaseId(),
+        id,
         featureId,
-        number,
-        shortId,
+        number: identity.number,
+        shortId: identity.shortId,
         priority,
         slug,
         title,
@@ -547,19 +547,18 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       }
     }
     const now = nowISO();
-    const taskNumber = nextTaskNumber(phase);
     const shortName = normalizeSlug(title).trim() || `task-${Date.now().toString(36)}`;
     const initialStatus = body.status ?? "planned";
-    const shortId = createShortId(await store.assignedShortIds());
-    const priority = await store.nextPriority("task", phase.id);
     const taskId = createTaskId();
+    const identity = await store.allocateEntityIdentity("task", taskId);
+    const priority = await store.nextPriority("task", phase.id);
     const checklistItems = (body.checklist ?? []).map((s) => s.trim()).filter((s) => s.length > 0)
       .map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), number: index + 1, title: item, checked: false }));
     const task: Task = {
       id: taskId,
       phaseId: phase.id,
-      number: taskNumber,
-      shortId,
+      number: identity.number,
+      shortId: identity.shortId,
       priority,
       shortName,
       title,
@@ -1031,13 +1030,8 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
     throw new Error(`.planner/ not found at: ${planRoot}. Run plan-init first.`);
   }
 
-  // Self-heal stale/legacy persisted statuses before the UI reads them.
-  await store.syncStatuses();
-  // Backfill missing shortIds (globally-unique 5-char) + priorities so the
-  // Web UI always shows short IDs even before the adapter's first-turn init
-  // runs. Idempotent: only assigns MISSING shortIds/priorities, never
-  // overwrites existing ones.
-  await store.ensureShortIdsAndPriority().catch(() => null);
+  // Startup is deliberately read-only: automatic migration/backfill would
+  // rewrite canonical entities outside the feature currently being worked on.
 
   // Shared mutable reference — routes see the hub after it's created
   const hubRef: { current: WsHub | null } = { current: null };

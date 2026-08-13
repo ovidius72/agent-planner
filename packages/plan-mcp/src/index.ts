@@ -5,10 +5,10 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, migrateToGlobalSequence, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -37,16 +37,10 @@ function store(): PlanStore {
 async function requireStore(): Promise<PlanStore> {
   const st = store();
   if (!(await st.exists())) throw new Error(`No .planner/ found at ${st.root}. Use planner-init first.`);
-  // One-time idempotent backfill of shortId + priority (safe, best-effort).
-  if (!planBackfillDone) {
-    planBackfillDone = true;
-    await st.ensureShortIdsAndPriority().catch(() => {});
-    await migrateToGlobalSequence(st).catch(() => {});
-  }
+  // Opening a plan is read-only. Global migrations/backfills are explicit
+  // maintenance commands; running them here rewrites unrelated feature files.
   return st;
 }
-
-let planBackfillDone = false;
 
 // In-process web server handle, managed by the planner-web tool and planner-load.
 // Lives as long as this MCP stdio process (i.e. the host session). Null when not running.
@@ -410,12 +404,13 @@ server.registerTool("planner-feature-add", {
   const timestamp = nowISO();
   const effectiveStatus = status ?? "planned";
   const existingFeatures = (await st.loadFeatures()).features;
-  const shortId = createShortId(await st.assignedShortIds());
+  const id = createFeatureId();
+  const identity = await st.allocateEntityIdentity("feature", id);
   const priority = await st.nextPriority("feature");
   const feature: Feature = {
-    id: createFeatureId(),
-    number: await st.allocFeatureNumber(),
-    shortId,
+    id,
+    number: identity.number,
+    shortId: identity.shortId,
     priority,
     name: name.trim(),
     description: description?.trim() ?? "",
@@ -577,12 +572,13 @@ server.registerTool("planner-phase-add", {
     const phases = await st.loadAllPhases();
     const featurePhases = feature ? phases.filter((phase) => phase.featureId === feature.id) : phases;
     const timestamp = nowISO();
-    const shortId = createShortId(await st.assignedShortIds());
+    const id = createPhaseId();
+    const identity = await st.allocateEntityIdentity("phase", id);
     const priority = await st.nextPriority("phase", feature?.id);
     phase = {
-      id: createPhaseId(),
-      number: await st.allocPhaseNumber(),
-      shortId,
+      id,
+      number: identity.number,
+      shortId: identity.shortId,
       priority,
       slug: normalizeSlug(title),
       title: title.trim(),
@@ -761,13 +757,13 @@ server.registerTool("planner-task-add", {
   if (!existingPhase) return text(`Resolved phase ${found.id} no longer exists. Refusing to create task.`);
   const timestamp = nowISO();
   const taskId = createTaskId();
-  const shortId = createShortId(await st.assignedShortIds());
+  const identity = await st.allocateEntityIdentity("task", taskId);
   const priority = await st.nextPriority("task", found.id);
   const task: Task = {
     id: taskId,
     phaseId: found.id,
-    number: await st.allocTaskNumber(),
-    shortId,
+    number: identity.number,
+    shortId: identity.shortId,
     priority,
     shortName: clampSlug(title, 30, `task-${Date.now().toString(36)}`),
     title: title.trim(),

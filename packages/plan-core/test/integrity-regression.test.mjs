@@ -134,11 +134,25 @@ describe("plan-core integrity regression coverage", () => {
     assert.deepEqual(reloadedFeature?.phaseIds, [linkedPhase.id]);
   });
 
-  test("allocTaskNumber is atomic under parallel calls", async () => {
-    const { st } = await setup();
-    const numbers = await Promise.all(Array.from({ length: 24 }, () => st.allocTaskNumber()));
-    const sorted = [...numbers].sort((a, b) => a - b);
-    assert.equal(new Set(numbers).size, 24);
-    assert.deepEqual(sorted, Array.from({ length: 24 }, (_, index) => index + 1));
+  test("ordinary loads are read-only and do not rewrite a legacy planner gitignore", async () => {
+    const { plannerRoot, st } = await setup();
+    const gitignore = join(plannerRoot, ".gitignore");
+    await writeFile(gitignore, "legacy-pattern\n", "utf8");
+    const before = await readFile(gitignore, "utf8");
+    await st.loadAll();
+    assert.equal(await readFile(gitignore, "utf8"), before);
+  });
+
+  test("allocateEntityIdentity is atomic across planner instances and does not rewrite project counters", async () => {
+    const { plannerRoot, st } = await setup();
+    const before = await readFile(join(plannerRoot, "project.json"), "utf8");
+    const other = new PlanStore(plannerRoot);
+    const identities = await Promise.all(Array.from({ length: 24 }, (_, index) =>
+      (index % 2 === 0 ? st : other).allocateEntityIdentity("task", `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`),
+    ));
+    assert.equal(new Set(identities.map((identity) => identity.number)).size, 24);
+    assert.equal(new Set(identities.map((identity) => identity.shortId)).size, 24);
+    assert.deepEqual([...identities.map((identity) => identity.number)].sort((a, b) => a - b), Array.from({ length: 24 }, (_, index) => index + 1));
+    assert.equal(await readFile(join(plannerRoot, "project.json"), "utf8"), before, "allocation registry is outside tracked project.json");
   });
 });

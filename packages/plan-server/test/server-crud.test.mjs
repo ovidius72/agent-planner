@@ -151,10 +151,10 @@ test("phase create validation: title and featureId required, governance gate on 
 
 // ── Task CRUD + composite refs ─────────────────────────────────────────────
 
-test("task create: 201 with composite label T001(P001/F001), checklist transform", async () => {
+test("task create: 201 with global composite label and checklist transform", async () => {
   const fx = await startServerFixture({ name: "t233-task-create" });
   const feature = (await request(fx, "/features")).body[0];
-  // fresh phase → task numbering starts at 1, composite refs are stable
+  // The fixture already has T001; a task in a new phase receives global T002.
   const phase = await request(fx, "/phases", { ...json({ title: "Clean", featureId: feature.id }), expectStatus: 201 });
 
   const t1 = await request(fx, `/phases/${phase.body.id}/tasks`, {
@@ -165,17 +165,17 @@ test("task create: 201 with composite label T001(P001/F001), checklist transform
     }),
     expectStatus: 201,
   });
-  assert.equal(t1.body.number, 1);
+  assert.equal(t1.body.number, 2);
   const pnum = String(phase.body.number).padStart(3, "0");
-  assert.equal(t1.body.label, `T001(P${pnum}/F001) - Write tests`, "normalized composite label");
+  assert.equal(t1.body.label, `T002(P${pnum}/F001) - Write tests`, "normalized composite label");
   assert.equal(t1.body.checklist.length, 2, "empty/whitespace items filtered, titles trimmed");
   assert.deepEqual(t1.body.checklist.map((c) => c.title), ["Add route", "Write tests"]);
   assert.equal(t1.body.checklist[0].number, 1);
   assert.equal(t1.body.checklist[0].checked, false);
 
   const t2 = await request(fx, `/phases/${phase.body.id}/tasks`, { ...json({ title: "Run them" }), expectStatus: 201 });
-  assert.equal(t2.body.number, 2);
-  assert.equal(t2.body.label, `T002(P${pnum}/F001) - Run them`);
+  assert.equal(t2.body.number, 3);
+  assert.equal(t2.body.label, `T003(P${pnum}/F001) - Run them`);
 });
 
 test("task create validation: title/phase/status governance", async () => {

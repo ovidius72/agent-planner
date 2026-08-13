@@ -11,8 +11,8 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createShortId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -1551,13 +1551,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return;
         }
         const now = nowISO();
-        const featureNumber = await st.allocFeatureNumber();
-        const shortId = createShortId(await st.assignedShortIds());
+        const id = createFeatureId();
+        const identity = await st.allocateEntityIdentity("feature", id);
         const priority = await st.nextPriority("feature");
         const feature: Feature = {
-          id: createFeatureId(),
-          number: featureNumber,
-          shortId,
+          id,
+          number: identity.number,
+          shortId: identity.shortId,
           priority,
           name: nameInput.trim(),
           description: description?.trim() ?? "",
@@ -1749,13 +1749,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await withFeatureLock(feature.id, async () => {
           const phases = await st.loadAllPhases();
           const featurePhases = phases.filter((p) => p.featureId === feature.id);
-          const number = await st.allocPhaseNumber();
           const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
           const id = createPhaseId();
-          const shortId = createShortId(await st.assignedShortIds());
+          const identity = await st.allocateEntityIdentity("phase", id);
           const priority = await st.nextPriority("phase", feature.id);
           phase = {
-            id, number, shortId, priority, slug, title, featureId: feature.id, status: "draft", discussedAt: "", contextReady: false, contextReadyReason: "", summary: "", description: "", notes: "",
+            id, number: identity.number, shortId: identity.shortId, priority, slug, title, featureId: feature.id, status: "draft", discussedAt: "", contextReady: false, contextReadyReason: "", summary: "", description: "", notes: "",
             goals: [], nonGoals: [], dependencies: [], dependsOn: [], risks: [],
             openQuestions: [], decisions: [], acceptedDecisions: [], completionCriteria: [], taskIds: [], tasks: [],
             createdAt: nowISO(), updatedAt: nowISO(),
@@ -1967,13 +1966,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // Escape can still cancel before a task is persisted.
         const startDiscuss = await ctx.ui.input("Start task discuss now? Type yes to continue");
         const shortName = clampSlug(title, 30, `task-${Date.now().toString(36)}`);
-        const taskNum = await st.allocTaskNumber();
         const taskId = createTaskId();
-        const shortId = createShortId(await st.assignedShortIds());
+        const identity = await st.allocateEntityIdentity("task", taskId);
         const priority = await st.nextPriority("task", phase.id);
         const now = nowISO();
         const task: Task = {
-          id: taskId, phaseId: phase.id, number: taskNum, shortId, priority, shortName,
+          id: taskId, phaseId: phase.id, number: identity.number, shortId: identity.shortId, priority, shortName,
           title: title.trim(), status: "planned",
           description: "",
           notes: "",
@@ -3101,12 +3099,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const now = nowISO();
       const status = (params.status as Feature["status"] | undefined) ?? "planned";
       const currentFeatures = (await st.loadFeatures()).features;
-      const shortId = createShortId(await st.assignedShortIds());
+      const id = createFeatureId();
+      const identity = await st.allocateEntityIdentity("feature", id);
       const priority = await st.nextPriority("feature");
       const feature: Feature = {
-        id: createFeatureId(),
-        number: await st.allocFeatureNumber(),
-        shortId,
+        id,
+        number: identity.number,
+        shortId: identity.shortId,
         priority,
         name: params.name,
         description: params.description ?? "",
@@ -3389,13 +3388,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!existingFeature) return { content: [{ type: "text", text: `Resolved feature ${featureId} no longer exists. Refusing to create phase.` }], details: {} };
       let phase: Phase | undefined;
       await withFeatureLock(featureId, async () => {
-        const number = await st.allocPhaseNumber();
         const id = createPhaseId();
-        const shortId = createShortId(await st.assignedShortIds());
+        const identity = await st.allocateEntityIdentity("phase", id);
         const priority = await st.nextPriority("phase", featureId);
         const now = nowISO();
         phase = {
-          id, number, shortId, priority, slug: normalizeSlug(params.title), title: params.title,
+          id, number: identity.number, shortId: identity.shortId, priority, slug: normalizeSlug(params.title), title: params.title,
           featureId,
           status: (params.status as Phase["status"] | undefined) ?? "draft",
           discussedAt: "",
@@ -3713,12 +3711,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!existingPhase) return { content: [{ type: "text", text: `Resolved phase ${phaseId} no longer exists. Refusing to create task.` }], details: {} };
       const shortName = clampSlug(params.shortName ?? params.title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
       const taskId = createTaskId();
-      const shortId = createShortId(await st.assignedShortIds());
+      const identity = await st.allocateEntityIdentity("task", taskId);
       const priority = await st.nextPriority("task", phaseId);
       const now = nowISO();
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
       const task: Task = {
-        id: taskId, phaseId, number: await st.allocTaskNumber(), shortId, priority, shortName,
+        id: taskId, phaseId, number: identity.number, shortId: identity.shortId, priority, shortName,
         title: params.title,
         status: initialStatus,
         description: params.description ?? "",
@@ -4210,15 +4208,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     if (!(await st.exists())) return;
 
     try {
-      // Heavy one-time-per-session init: migration, language prefs, status
-      // healing, and a fresh resume. These write/scan the whole plan and would
-      // add seconds of latency on every turn if run unconditionally.
+      // Session initialization must not mutate canonical planner entities.
+      // Migrations/backfills/repairs are explicit tools; resume is `.local`.
       if (!plannerHeavyInitDone) {
-        await migrateToUuids(st);
-        await migrateToGlobalSequence(st).catch(() => null);
-        await st.ensureShortIdsAndPriority().catch(() => null);
-        await ensureProjectLanguagePreferences(st).catch(() => null);
-        await maybeHealStatuses(st, ctx);
         await st.refreshResume();
         plannerHeavyInitDone = true;
       }
