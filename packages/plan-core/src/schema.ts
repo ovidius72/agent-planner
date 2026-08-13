@@ -269,9 +269,9 @@ export const PhaseSchema = z.object({
   handoff: z.string().default(""),
   handoffUpdatedAt: z.string().default(""),
   /** When the handoff was last read/acknowledged on recap (ISO). Non-empty means
-   *  the agent has seen it; the recap won't re-prompt every turn. The handoff
-   *  content is KEPT until a task in the phase starts (auto-clear) or the phase
-   *  completes — so a restart between read and resume does not lose context. */
+   *  the agent has seen it; the recap won't re-prompt every turn. Reading is
+   *  non-mutating: content remains until every task is done/canceled, a later
+   *  handoff supersedes it, or the user explicitly clears it. */
   handoffReadAt: z.string().default(""),
   /** Metadata for recently-cleared handoffs (newest-first, capped at 5). The
    *  full content lives as .md files in .planner/.local/handoff-archive/ (gitignored);

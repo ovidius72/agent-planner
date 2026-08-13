@@ -1631,6 +1631,13 @@ export class PlanStore {
     return { duplicatePhaseIds, danglingPhaseIds, duplicateShortIds };
   }
 
+  /** A handoff remains active while any task needs work. Its automatic end-of-
+   * phase lifecycle is deliberately narrower than canonical display status:
+   * every task must be done or canceled (not merely derived "rejected"). */
+  private hasCompletedHandoffLifecycle(tasks: Task[]): boolean {
+    return tasks.length > 0 && tasks.every((task) => task.status === "done" || task.status === "canceled");
+  }
+
   private derivePhaseStatus(tasks: Task[]): Phase["status"] {
     if (tasks.length === 0) return "draft";
 
@@ -1696,14 +1703,13 @@ export class PlanStore {
     return [];
   }
 
-  /** Auto-clear a phase's handoff when its DERIVED status is done. Status itself
-   *  is no longer persisted (derived on read), so the only remaining side effect
-   *  of a task→done transition is clearing a stale handoff on a completed phase.
-   *  Returns the composite ref of the phase if its handoff was cleared, else null. */
+  /** Auto-clear a phase's handoff only when every task is terminal as done or
+   *  canceled. This covers an all-canceled phase too, whose legacy canonical
+   *  derived status is "rejected". Returns the composite ref when cleared. */
   async syncTaskStatusRollup(phaseId: string): Promise<string | null> {
     const phase = await this.loadPhase(phaseId);
     let cleared: string | null = null;
-    if (phase.status === "done" && phase.handoff !== "") {
+    if (this.hasCompletedHandoffLifecycle(phase.tasks) && phase.handoff !== "") {
       await this.clearPhaseHandoff(phaseId, "phase-done");
       const features = await this.loadFeatures();
       const feature = features.features.find((f) => f.id === phase.featureId);
@@ -1948,8 +1954,7 @@ export class PlanStore {
 
 
   /** Mark the phase handoff as read/acknowledged on recap (sets handoffReadAt).
-   *  Does NOT clear the handoff — content is kept until a task starts or the
-   *  phase completes, so a restart between read and resume does not lose it. */
+   *  Does NOT clear it: read/load/show are non-mutating resume operations. */
   async markHandoffRead(phaseId: string): Promise<void> {
     await this.updatePhase(phaseId, (phase) => ({ ...phase, handoffReadAt: nowISO() }));
   }
@@ -1993,7 +1998,7 @@ export class PlanStore {
    *  metadata entry { file, clearedAt, reason } is prepended to handoffHistory
    *  (capped at 5; oldest file is deleted when trimmed). handoffUpdatedAt is
    *  left unchanged as an audit trail. If the handoff is empty, this is a no-op.
-   *  reason: "task-started" | "phase-done" | "manual" | "superseded" | "imported". */
+   *  reason: "phase-done" | "manual" | "superseded" | "imported". */
   async clearPhaseHandoff(phaseId: string, reason = "manual"): Promise<void> {
     await this.migrateLegacyHandoffArchive();
     const phase = await this.loadPhase(phaseId).catch(() => null);
@@ -2018,13 +2023,13 @@ export class PlanStore {
     await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffHistory: trimmed }));
   }
 
-  /** Archive stale handoffs left on phases that are already completed/canceled.
-   * Idempotent: only non-empty phase.handoff values are moved. */
+  /** Archive stale handoffs only after every task in their phase is done or
+   * canceled. Idempotent: only non-empty phase.handoff values are moved. */
   private async archiveStaleHandoffs(): Promise<number> {
     const phases = await this.loadAllPhases();
     let archived = 0;
     for (const phase of phases) {
-      if ((phase.status === "done" || phase.status === "canceled") && phase.handoff) {
+      if (this.hasCompletedHandoffLifecycle(phase.tasks) && phase.handoff) {
         await this.clearPhaseHandoff(phase.id, "phase-done");
         archived += 1;
       }
@@ -2037,10 +2042,8 @@ export class PlanStore {
     return this.runAsBatch(() => this.archiveStaleHandoffs());
   }
 
-  /** List only active/pending phase handoffs, newest first. Completed,
-   * canceled, and orphaned phases are intentionally excluded. Any legacy stale
-   * handoff found on a completed/canceled phase is archived before returning,
-   * so callers (including /handoff) also repair old plans automatically. */
+  /** List only active/pending phase handoffs, newest first. Handoffs from
+   * phases where every task is done/canceled are archived before returning. */
   async listHandoffs(): Promise<PhaseHandoffSummary[]> {
     await this.archiveStaleHandoffs();
     const phases = await this.loadAllPhases();

@@ -262,27 +262,34 @@ test("task completion rollup and active-task summaries", async () => {
 test("recap context and generated/export operations", async () => {
   const session = await startMcpFixture({ name: "t239-recap-export" });
   try {
-    // Test planner-load which should include web URL and recap
-    // First start web server
-    await callTool(session, "planner-web", { action: "start" });
-    await waitForServer(200);
-    
-    // Now test planner-load
+    // Write resume context before load. Loading it must remain read-only:
+    // neither show nor clear is implicitly called by the MCP tool.
+    await callTool(session, "planner-handoff-write", {
+      phaseRef: "P001",
+      content: "# P001 — recap retention\n\nKeep this until an allowed lifecycle event.",
+      confirmed: true,
+    });
+    const phaseBeforeLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
+    assert.ok(phaseBeforeLoad?.handoff, "fixture has a pending handoff before planner-load");
+
+    // planner-load must start web and return a complete recap. The URL must be
+    // its last non-empty line, which Codex can present verbatim.
     const loadResult = await callTool(session, "planner-load", {});
     const loadText = toolText(loadResult);
-    
-    // Should contain project state, active task, pending handoff, web URL
-    // Check for the Web UI line
-    assert.match(loadText, /Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
-    
-    // Test that we can get a recap even without starting web explicitly
-    // (planner-load should start it internally)
-    await callTool(session, "planner-web", { action: "stop" }); // Stop it first
-    
+    const loadLines = loadText.trim().split("\n");
+    assert.match(loadLines.at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
+    const phaseAfterLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
+    assert.equal(phaseAfterLoad?.handoff, phaseBeforeLoad.handoff, "planner-load retains pending handoff");
+    assert.equal(phaseAfterLoad?.handoffHistory.length, 0, "planner-load does not archive handoff context");
+
+    // Test that a later load works after an explicit stop.
+    await callTool(session, "planner-web", { action: "stop" });
     const loadResult2 = await callTool(session, "planner-load", {});
     const loadText2 = toolText(loadResult2);
-    assert.match(loadText2, /Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
-    
+    assert.match(loadText2.trim().split("\n").at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
+    const phaseAfterSecondLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
+    assert.equal(phaseAfterSecondLoad?.handoff, phaseBeforeLoad.handoff, "repeated planner-load retains handoff too");
+
     // planner-export: real tool contract — writes .planner/EXPORT.md and
     // returns a summary of the full Markdown report.
     const exportResult = await callTool(session, "planner-export", { full: true });

@@ -66,6 +66,20 @@ describe("PlanStore phase-scoped handoff", () => {
     assert.equal(await store.getPhaseHandoff(phases.p2.id), text);
   });
 
+  test("replacing a handoff archives the prior version and keeps only the newest active", async () => {
+    const { store, phases } = await setup();
+    await store.setPhaseHandoff(phases.p1.id, "# Earlier\n\nOriginal context.");
+    await store.setPhaseHandoff(phases.p1.id, "# Latest\n\nUpdated context incorporates the original.");
+    const phase = await store.loadPhase(phases.p1.id);
+    assert.equal(phase.handoff, "# Latest\n\nUpdated context incorporates the original.");
+    assert.equal(phase.handoffHistory[0].reason, "superseded");
+    const archived = await store.listArchivedHandoffs();
+    assert.equal(archived.length, 1);
+    assert.match(archived[0].content ?? "", /Original context/);
+    const active = await store.listHandoffs();
+    assert.deepEqual(active.map((handoff) => handoff.phaseId), [phases.p1.id]);
+  });
+
   test("listHandoffs excludes cleared handoffs", async () => {
     const { store, phases } = await setup();
     await store.setPhaseHandoff(phases.p1.id, "hello");

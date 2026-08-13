@@ -99,8 +99,8 @@ export const coreSurfaces = [
   { id: "core.clearPhaseHandoff", kind: "method", name: "PlanStore.clearPhaseHandoff", description: "Clear phase.handoff, archive copy to .local/handoff-archive/, keep audit timestamps.", anchor: "packages/plan-core/src/plan-store.ts:1969" },
   { id: "core.markHandoffRead", kind: "method", name: "PlanStore.markHandoffRead", description: "Set phase.handoffReadAt.", anchor: "packages/plan-core/src/plan-store.ts:1925", coverage: { phase: "P053", reason: "covered by core domain validation scenarios (P053)" } },
   { id: "core.listHandoffs", kind: "method", name: "PlanStore.listHandoffs", description: "Phases with non-empty handoff (composite ref, first line, updatedAt).", anchor: "packages/plan-core/src/plan-store.ts:2016" },
-  { id: "core.listArchivedHandoffs", kind: "method", name: "PlanStore.listArchivedHandoffs", description: "Archived handoffs (auto-archived on done / manual clear).", anchor: "packages/plan-core/src/plan-store.ts:2044" },
-  { id: "core.cleanupStaleHandoffs", kind: "method", name: "PlanStore.cleanupStaleHandoffs", description: "Auto-archive handoffs on phases that became done/canceled.", anchor: "packages/plan-core/src/plan-store.ts:2008" },
+  { id: "core.listArchivedHandoffs", kind: "method", name: "PlanStore.listArchivedHandoffs", description: "Archived handoffs (all phase tasks done/canceled, replacement, or manual clear).", anchor: "packages/plan-core/src/plan-store.ts:2044" },
+  { id: "core.cleanupStaleHandoffs", kind: "method", name: "PlanStore.cleanupStaleHandoffs", description: "Auto-archive handoffs when every phase task is done/canceled.", anchor: "packages/plan-core/src/plan-store.ts:2008" },
   { id: "core.importLegacyHandoffFile", kind: "method", name: "PlanStore.importLegacyHandoffFile", description: "One-time import of deprecated .planner/HANDOFF.md.", anchor: "packages/plan-core/src/plan-store.ts:1936", coverage: { phase: "P053", reason: "covered by core domain validation scenarios (P053)" } },
 
   // ── Resume / guard ─────────────────────────────────────────────────

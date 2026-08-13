@@ -145,15 +145,15 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
       lines.push(
         "",
         italian
-          ? `→ Vuoi riprendere da ${top.compositeRef}? Leggi l'handoff con ${handoffShowCmd} ${top.compositeRef} e avvia il primo task pertinente. L'handoff è MANTENUTO finché un task della fase non parte (auto-archiviato) o la fase non si conclude — non serve cancellarlo a mano.`
-          : `→ Do you want to resume from ${top.compositeRef}? Read the handoff with ${handoffShowCmd} ${top.compositeRef} and start the first relevant task. It is KEPT until a task in that phase starts (then auto-archived) or the phase completes — no need to clear it manually.`,
+          ? `→ Vuoi riprendere da ${top.compositeRef}? Leggi l'handoff con ${handoffShowCmd} ${top.compositeRef} e avvia il primo task pertinente. L'handoff resta attivo finché tutti i task della fase non sono done/canceled, viene sostituito da un nuovo handoff, oppure viene cancellato esplicitamente.`
+          : `→ Do you want to resume from ${top.compositeRef}? Read the handoff with ${handoffShowCmd} ${top.compositeRef} and start the first relevant task. It stays active until every phase task is done/canceled, a new handoff replaces it, or it is explicitly cleared.`,
       );
     } else {
       lines.push(
         "",
         italian
-          ? `→ Scegli da quale fase ripartire. Il più recente è [1] ${top.compositeRef} — leggilo con ${handoffShowCmd} ${top.compositeRef} e avvia il primo task pertinente. Ogni handoff è MANTENUTO finché un task della fase non parte (auto-archiviato) o la fase non si conclude — non serve cancellarlo a mano.`
-          : `→ Choose which phase to resume from. The most recent is [1] ${top.compositeRef} — read it with ${handoffShowCmd} ${top.compositeRef} and start the first relevant task. Each handoff is KEPT until a task in that phase starts (then auto-archived) or the phase completes — no need to clear it manually.`,
+          ? `→ Scegli da quale fase ripartire. Il più recente è [1] ${top.compositeRef} — leggilo con ${handoffShowCmd} ${top.compositeRef} e avvia il primo task pertinente. Ogni handoff resta attivo finché tutti i task della fase non sono done/canceled, viene sostituito da un nuovo handoff, oppure viene cancellato esplicitamente.`
+          : `→ Choose which phase to resume from. The most recent is [1] ${top.compositeRef} — read it with ${handoffShowCmd} ${top.compositeRef} and start the first relevant task. Each handoff stays active until every phase task is done/canceled, a new handoff replaces it, or it is explicitly cleared.`,
       );
     }
   } else if (planComplete) {
@@ -172,12 +172,14 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     );
   }
 
+  lines.push("", italian ? "Pronto a riprendere?" : "Ready to resume?");
+
+  // Keep this as the final line: harnesses such as Codex display MCP results
+  // compactly, so callers can preserve the dashboard address verbatim.
   if (web.localUrl) {
     lines.push("", italian ? "## Web UI" : "## Web UI", `🌐 Web UI: ${web.localUrl}${web.lanUrl ? " (LAN: " + web.lanUrl + ")" : ""}${web.port ? " (port " + web.port + ")" : ""}`);
   } else {
     lines.push("", italian ? "## Web UI" : "## Web UI", `🌐 Web UI: ${italian ? "non attiva — avvia con /planner load" : "not running — start with /planner load"}`);
   }
-
-  lines.push("", italian ? "Pronto a riprendere?" : "Ready to resume?");
   return lines.join("\n");
 }

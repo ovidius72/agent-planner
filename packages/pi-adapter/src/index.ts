@@ -514,7 +514,7 @@ async function buildHandoffMarkdown(
     ...recentActivityLines,
     "",
     "## Reminder",
-    "- This handoff is KEPT until a task in this phase starts (then auto-archived to .planner/.local/handoff-archive/) or the phase completes. No need to clear it manually.",
+    "- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
   ].join("\n");
 }
 
@@ -904,8 +904,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const handoffs = await st.listHandoffs().catch(() => []);
       if (handoffs.length > 0) {
         ctx.ui.notify(`ℹ️  ${handoffs.length} phase handoff(s) pending — review with /planner handoff list.`, "info");
-        // Mark each handoff as read (recap presented). Do NOT clear — content is
-        // kept until a task in the phase starts (auto-archived) or phase completes.
+        // Mark each handoff as read (recap presented). Do NOT clear — reading/load
+        // is non-mutating; only phase completion, replacement, or explicit clear archives it.
         for (const h of handoffs) await st.markHandoffRead(h.phaseId).catch(() => {});
       }
     }

@@ -11,9 +11,8 @@
  *    handoffHistory entry, listArchivedHandoffs returns the content, and
  *    listHandoffs excludes completed phases; history is capped at 5 entries
  *    (oldest file deleted)
- *  - canceled-work contract: an all-canceled phase derives "rejected" and its
- *    handoff is NOT auto-cleared by syncTaskStatusRollup (pinned — see
- *    enforcement note below; do not "fix" core without a product decision)
+ *  - canceled-work contract: an all-canceled phase derives legacy "rejected"
+ *    but its handoff IS auto-cleared because every task is terminal
  *  - repair end-to-end: one repair() call heals a stale handoff on a done
  *    phase (archived), backfills missing shortIds, and keeps integrity clean;
  *    second run is a no-op (idempotent); orphan phase files are removed by
@@ -22,12 +21,6 @@
  *    file and resume.json all survive reopen()/restart
  *  - resume refresh: refreshResume reflects current phase / in-progress task
  *    ids / blockers after status transitions
- *
- * Enforcement note (potential follow-up, NOT fixed here):
- *  - AGENTS.md states no stale active handoff should remain after cancellation,
- *    but an all-canceled phase derives "rejected" (not "canceled"), so neither
- *    syncTaskStatusRollup (clears only on "done") nor archiveStaleHandoffs
- *    (checks done|canceled) archives it. Pinned as current behavior.
  */
 
 import { test, after } from "node:test";
@@ -233,7 +226,7 @@ test("handoff archival: history is capped at 5 and the oldest file is deleted", 
   assert.match(archived[0].content ?? "", /# Handoff 5/);
 });
 
-test("handoff: all-canceled phase derives rejected and its handoff is NOT auto-cleared (pinned)", async () => {
+test("handoff: all-canceled phase derives rejected but auto-archives its handoff", async () => {
   const { store, featureId, phaseId } = await fixture("handoff-canceled");
   const taskId = createTaskId();
   await store.savePhase({
@@ -249,9 +242,11 @@ test("handoff: all-canceled phase derives rejected and its handoff is NOT auto-c
   const phase = (await store.loadAllPhases()).find((p) => p.id === phaseId);
   assert.equal(phase.status, "rejected", "all-canceled derives rejected, not canceled");
   const cleared = await store.syncTaskStatusRollup(phaseId);
-  assert.equal(cleared, null, "no auto-clear on rejected phase");
-  assert.equal((await store.loadAllPhases()).find((p) => p.id === phaseId).handoff, "# Pending\n\nstill here");
-  assert.equal((await store.listHandoffs()).length, 1, "handoff still listed as active (pinned gap)");
+  assert.equal(cleared, formatPhaseRef(1, 1), "all-terminal canceled work clears the handoff");
+  const after = (await store.loadAllPhases()).find((p) => p.id === phaseId);
+  assert.equal(after.handoff, "");
+  assert.equal(after.handoffHistory[0].reason, "phase-done");
+  assert.equal((await store.listHandoffs()).length, 0, "no active handoff remains after all tasks are canceled");
 });
 
 // ────────────────────────────────────────────────────────────────────────────

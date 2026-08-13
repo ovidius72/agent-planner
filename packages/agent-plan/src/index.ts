@@ -148,9 +148,9 @@ Route common commands as follows:
 
 - \`init\` → call \`planner-init\`; if required fields are missing, ask for a concise project name first
 - \`show\` → call \`planner-show\`
-- \`reload\` → call \`planner-load\`, then present the returned recap to the user (state, active task, pending handoff, web URL)
-- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present the recap to the user **in this reply only**. If a pending handoff is included in the result, read it, summarize it to the user, then call \`planner-handoff-clear\` to remove it. End **this recap reply** with a prominent final line showing the web URL, e.g. \`🌐 Web UI: <url>\`. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
-- \`recap\` → call \`planner-load\` (same as \`load\`: returns the recap + handoff + web URL); present it to the user
+- \`reload\` → call \`planner-load\`, then present the returned recap verbatim to the user (state, active task, pending handoff, web URL). Do not read, clear, or otherwise mutate a handoff.
+- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present that recap **verbatim and in this reply only**, ending with its final \`🌐 Web UI: <url>\` line. Pending handoffs are read-only context: do **not** call \`planner-handoff-show\` or \`planner-handoff-clear\` during \`load\`/\`recap\`. A handoff is archived only when every task in its phase is \`done\`/\`canceled\`, when a new handoff replaces it, or after an explicit user \`handoff clear\` request. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
+- \`recap\` → call \`planner-load\` (same as \`load\`) and present its returned recap verbatim; do not mutate handoffs
 - \`disable\` → call \`planner-disable\`
 - \`repair\` → call \`planner-repair\`
 - \`bypass\` → call \`planner-authorize-bypass\` (default 15 min); only when the user authorizes proceeding without a task
