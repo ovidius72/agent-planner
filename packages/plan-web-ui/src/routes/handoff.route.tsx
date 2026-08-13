@@ -39,7 +39,11 @@ export function HandoffRoute() {
       setHandoffs((current) => current.filter((entry) => entry.phaseId !== handoff.phaseId));
       listHandoffs().then(setHandoffs).catch(() => {});
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Response
+        ? await err.text().catch(() => "")
+        : err instanceof Error
+          ? err.message
+          : String(err);
       setError(message || `Failed to clear handoff for ${handoff.compositeRef}.`);
     } finally {
       setDeletingPhaseId(null);

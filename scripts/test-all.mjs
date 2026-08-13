@@ -91,6 +91,17 @@ async function build() {
   console.log("[test-all] build OK");
 }
 
+async function runWebUiComponentTests() {
+  if (scope === "integration") return 0;
+  console.log("[test-all] running Web UI component tests …");
+  const child = spawn("pnpm", ["--filter", "@agent-plan/web-ui", "exec", "vitest", "run"], {
+    cwd: root,
+    stdio: ["ignore", "inherit", "inherit"],
+    shell: false,
+  });
+  return await new Promise((resolve) => child.on("close", resolve));
+}
+
 async function main() {
   if (!noBuild) await build();
 
@@ -130,6 +141,7 @@ async function main() {
     { cwd: root, stdio: ["ignore", "inherit", "inherit"], env },
   );
   const code = await new Promise((resolve) => child.on("close", resolve));
+  const webUiCode = await runWebUiComponentTests();
 
   // Reports are generated even on failure (CI inspects what broke); the
   // original exit code is preserved.
@@ -144,9 +156,10 @@ async function main() {
     console.error(`[test-all] report generation failed: ${err.message}`);
   }
 
-  if (code !== 0) {
-    console.error(`[test-all] FAILED (exit ${code})${gate ? "" : " — run with --gate in CI to enforce final thresholds"}`);
-    process.exit(code ?? 1);
+  if (code !== 0 || webUiCode !== 0) {
+    const exitCode = code !== 0 ? code : webUiCode;
+    console.error(`[test-all] FAILED (exit ${exitCode})${gate ? "" : " — run with --gate in CI to enforce final thresholds"}`);
+    process.exit(exitCode ?? 1);
   }
   console.log("[test-all] OK");
 }

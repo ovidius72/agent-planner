@@ -70,7 +70,7 @@ export function ModalShell({ title, description, children }: { title: string; de
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto p-4 md:p-6">
-      <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => navigate(-1)} aria-label="Close modal" tabIndex={-1} />
+      <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => navigate(-1)} aria-hidden="true" tabIndex={-1} />
       <div className="relative z-10 flex min-h-full items-start justify-center">
         <div
           ref={panelRef}
