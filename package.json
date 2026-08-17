@@ -24,6 +24,9 @@
     "test": "node scripts/test-all.mjs",
     "test:unit": "node scripts/test-all.mjs unit",
     "test:integration": "node scripts/test-all.mjs integration",
+    "test:e2e": "pnpm build && playwright test",
+    "test:e2e:ui": "pnpm build && playwright test --ui",
+    "test:e2e:install": "playwright install chromium",
     "test:coverage": "node scripts/test-all.mjs --gate",
     "test:matrix": "node --test test/matrix-consistency.test.mjs",
     "build:web-ui": "pnpm --filter @agent-plan/web-ui build",
@@ -40,6 +43,7 @@
     "release:next": "node scripts/release-next.cjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^25.0.0",
     "typescript": "^5.8.0",
     "zod-to-json-schema": "^3.25.2"

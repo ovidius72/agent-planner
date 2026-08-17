@@ -14,6 +14,10 @@ coverage
 # Generated test/coverage reports (reports/<scope>/ emitted by scripts/test-all.mjs)
 reports/
 
+# Playwright failure diagnostics
+playwright-report/
+test-results/
+
 # OS / editor
 .DS_Store
 Thumbs.db

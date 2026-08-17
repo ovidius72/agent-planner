@@ -111,6 +111,7 @@ export function TopNav({
                 key={item.to}
                 to={item.to}
                 end={item.to === "/"}
+                aria-label={item.label}
                 className={({ isActive }) =>
                   `inline-flex min-h-9 items-center gap-2 rounded-[12px] border px-2.5 py-1.5 text-sm font-semibold transition sm:min-h-11 sm:rounded-[14px] sm:px-3 sm:py-2 sm:px-4 ${
                     isActive
@@ -130,6 +131,7 @@ export function TopNav({
               type="button"
               aria-haspopup="menu"
               aria-expanded={exportOpen}
+              aria-label="Export"
               onClick={() => setExportOpen((open) => !open)}
               className="inline-flex min-h-9 items-center gap-2 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-2.5 py-1.5 text-sm font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)] sm:min-h-11 sm:rounded-[14px] sm:px-3 sm:py-2 sm:px-4"
             >
