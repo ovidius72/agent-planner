@@ -42,6 +42,10 @@ export const ResumeFocusSchema = z.object({
   currentPhaseId: z.string().default(""),
   inProgressTaskIds: z.array(z.string().min(1)).default([]),
   nextSteps: z.array(z.string().min(1)).default([]),
+  /** When `nextSteps` last changed (free-text can go stale; the recap surfaces
+   *  this so staleness is visible). Preserved across refreshResume (which keeps
+   *  existing nextSteps); bumped only when saveResume receives new nextSteps. */
+  nextStepsUpdatedAt: z.string().default(""),
   blockers: z.array(z.string().min(1)).default([]),
   notes: z.string().default(""),
   lastSessionSummary: z.string().default(""),
@@ -83,6 +87,23 @@ export const AcceptedDecisionSchema = z.object({
   acceptedAt: TimestampSchema,
 });
 
+export const WorkDeviationSchema = z.object({
+  id: z.string().min(1),
+  /** Task the priority selector recommended when the deviation was approved. */
+  recommendedTaskId: z.string().min(1),
+  /** Task intentionally chosen instead of the recommendation. */
+  temporaryTaskId: z.string().min(1),
+  /** Task to surface explicitly after the temporary work is resolved. */
+  resumeTaskId: z.string().min(1),
+  reason: z.string().default(""),
+  requestedBy: z.enum(["agent", "user"]).default("agent"),
+  approvedBy: z.string().default("user"),
+  state: z.enum(["approved", "active", "resolved", "canceled"]).default("approved"),
+  createdAt: TimestampSchema,
+  activatedAt: z.string().default(""),
+  resolvedAt: z.string().default(""),
+});
+
 export const ProjectSchema = z.object({
   name: z.string().min(1),
   goal: z.string().default(""),
@@ -98,6 +119,12 @@ export const ProjectSchema = z.object({
   chatLanguage: z.string().default(""),
   workflowRules: WorkflowRulesSchema,
   acceptedDecisions: z.array(AcceptedDecisionSchema).default([]),
+  /** Monotonic global sequence counters — assigned at creation, never reused (gaps on delete). */
+  nextFeatureNumber: z.number().int().positive().default(1),
+  nextPhaseNumber: z.number().int().positive().default(1),
+  nextTaskNumber: z.number().int().positive().default(1),
+  /** Ordered history of approved temporary work deviations; active entries form a resumable stack. */
+  workDeviations: z.array(WorkDeviationSchema).default([]),
 });
 
 export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
@@ -117,6 +144,10 @@ export const SubtaskSchema = z.object({
 
 export const ChecklistItemSchema = z.object({
   id: z.string().min(1),
+  /** Per-task 1-based position, displayed as C{number} (C1, C2, ...). Default 0
+   *  so legacy on-disk items without a number still parse; the TaskSchema
+   *  transform overwrites it with the real index+1. */
+  number: z.number().int().nonnegative().default(0),
   title: z.string().min(1),
   checked: z.boolean().default(false),
 });
@@ -150,10 +181,26 @@ export const StatusLogEntrySchema = z.object({
   description: z.string().default(""),
 });
 
+/** Like StatusLogEntrySchema but for the DERIVED PHASE status, which includes
+ *  the "draft" and "discovery" lifecycle states absent from TaskStatus. */
+export const PhaseStatusLogEntrySchema = z.object({
+  id: z.string().min(1),
+  date: TimestampSchema,
+  fromStatus: PhaseStatusSchema,
+  toStatus: PhaseStatusSchema,
+  title: z.string().min(1),
+  description: z.string().default(""),
+});
+
 export const TaskSchema = z.object({
   id: z.string(),
-  phaseId: z.string(),
+  /** MUST be a phase UUID (not a ref like "P003"). Validated at the schema
+   *  layer so no adapter can persist an unresolved ref string. */
+  phaseId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "phaseId must be a UUID, not a ref string like P003"),
+  /** Global project-wide task sequence (assigned once at creation from project.nextTaskNumber; stable, gaps on delete). Bare T00x is unambiguous. */
   number: z.number().int().nonnegative().default(0),
+  shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),
+  priority: z.number().int().nonnegative().default(0),
   shortName: SlugSchema,
   title: z.string().min(1),
   status: TaskStatusSchema,
@@ -173,18 +220,33 @@ export const TaskSchema = z.object({
   ...task,
   checklist: task.checklist
     .map((item, index) => typeof item === "string"
-      ? { id: createChecklistItemId(task.id, index + 1, item), title: item.trim(), checked: false }
-      : { ...item, id: item.id || createChecklistItemId(task.id, index + 1, item.title), title: item.title.trim(), checked: item.checked ?? false })
+      ? { id: createChecklistItemId(task.id, index + 1, item), number: index + 1, title: item.trim(), checked: false }
+      : { ...item, id: item.id || createChecklistItemId(task.id, index + 1, item.title), number: index + 1, title: item.title.trim(), checked: item.checked ?? false })
     .filter((item) => item.title.length > 0),
 }));
 
+export const HandoffHistoryEntrySchema = z.object({
+  /** Relative path under .planner/.local/handoff-archive/ (e.g. <phaseId>-<ISO>.md). */
+  file: z.string().default(""),
+  clearedAt: TimestampSchema,
+  /** Why the handoff was cleared: "task-started" | "phase-done" | "manual" | "superseded" | "imported". */
+  reason: z.string().default(""),
+});
 export const PhaseSchema = z.object({
   id: z.string(),
-  featureId: z.string().optional(),
+  /** MUST be a feature UUID (not a ref like "F005"). Validated at the schema
+   *  layer so no adapter can persist an unresolved ref string. Optional only
+   *  for legacy pre-feature phases. */
+  featureId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "featureId must be a UUID, not a ref string like F005").optional(),
+  /** Global project-wide phase sequence (assigned once at creation from project.nextPhaseNumber; stable, gaps on delete). Bare P00x is unambiguous. */
   number: z.number().int().positive(),
+  shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),
+  priority: z.number().int().nonnegative().default(0),
   slug: SlugSchema,
   title: z.string().min(1),
-  status: PhaseStatusSchema,
+  // NOTE: `status` is intentionally ABSENT from the schema — it is a DERIVED
+  // value (computed from child tasks at read time) and is never persisted.
+  // The runtime `Phase` type re-adds it as a non-optional field (see below).
   discussedAt: z.string().default(""),
   contextReady: z.boolean().default(false),
   contextReadyReason: z.string().default(""),
@@ -204,14 +266,32 @@ export const PhaseSchema = z.object({
   tasks: z.array(TaskSchema).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  handoff: z.string().default(""),
+  handoffUpdatedAt: z.string().default(""),
+  /** When the handoff was last read/acknowledged on recap (ISO). Non-empty means
+   *  the agent has seen it; the recap won't re-prompt every turn. Reading is
+   *  non-mutating: content remains until every task is done/canceled, a later
+   *  handoff supersedes it, or the user explicitly clears it. */
+  handoffReadAt: z.string().default(""),
+  /** Metadata for recently-cleared handoffs (newest-first, capped at 5). The
+   *  full content lives as .md files in .planner/.local/handoff-archive/ (gitignored);
+   *  this array only holds the pointer + clear reason + timestamp, so the phase
+   *  JSON stays lean and the archive is recoverable. */
+  handoffHistory: z.array(HandoffHistoryEntrySchema).default([]),
+  /** Chronological audit trail of the DERIVED status (planned/in-progress/blocked/done/...). Appended ONLY when the derived status changes during a rollup; `status` itself is NOT persisted (still computed from child tasks at read time). Empty = no transition recorded yet (treated as "planned"). */
+  statusLog: z.array(PhaseStatusLogEntrySchema).default([]),
 });
 
 export const FeatureSchema = z.object({
   id: z.string(),
+  /** Global project-wide feature sequence (assigned once at creation from project.nextFeatureNumber; stable, gaps on delete). */
   number: z.number().int().nonnegative().default(0),
+  shortId: z.string().regex(/^(|[A-Z2-9]{5})$/).default(""),
+  priority: z.number().int().nonnegative().default(0),
   name: z.string().min(1),
   description: z.string().default(""),
-  status: FeatureStatusSchema,
+  // NOTE: `status` is intentionally ABSENT — it is DERIVED from child phases
+  // at read time and never persisted. The runtime `Feature` type re-adds it.
   discussedAt: z.string().default(""),
   contextReady: z.boolean().default(false),
   contextReadyReason: z.string().default(""),
@@ -222,6 +302,8 @@ export const FeatureSchema = z.object({
   acceptedDecisions: z.array(AcceptedDecisionSchema).default([]),
   phaseIds: z.array(z.string().min(1)).default([]),
   dependsOn: z.array(z.string().min(1)).default([]),
+  /** Chronological audit trail of the DERIVED status (computed from child phases at read time). Appended ONLY when the derived status changes during a rollup; `status` itself is NOT persisted. Empty = no transition recorded yet (treated as "planned"). */
+  statusLog: z.array(StatusLogEntrySchema).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 });
@@ -270,8 +352,8 @@ export type ActivityEntry = z.infer<typeof ActivityEntrySchema>;
 export type ActivityLog = z.infer<typeof ActivityLogSchema>;
 export type ResumeFocus = z.infer<typeof ResumeFocusSchema>;
 export type FeatureStatus = z.infer<typeof FeatureStatusSchema>;
-export type Feature = z.infer<typeof FeatureSchema>;
-export type FeaturesDocument = z.infer<typeof FeaturesDocumentSchema>;
+export type Feature = z.infer<typeof FeatureSchema> & { status: FeatureStatus };
+export type FeaturesDocument = { features: Feature[] };
 export type PhaseStatus = z.infer<typeof PhaseStatusSchema>;
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 export type RequirementStatus = z.infer<typeof RequirementStatusSchema>;
@@ -280,12 +362,14 @@ export type Manifest = z.infer<typeof ManifestSchema>;
 export type WorkflowRules = z.infer<typeof WorkflowRulesSchema>;
 export type AcceptedDecision = z.infer<typeof AcceptedDecisionSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
+export type WorkDeviation = z.infer<typeof WorkDeviationSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
 export type StatusLogEntry = z.infer<typeof StatusLogEntrySchema>;
+export type PhaseStatusLogEntry = z.infer<typeof PhaseStatusLogEntrySchema>;
 export type Task = z.infer<typeof TaskSchema>;
-export type Phase = z.infer<typeof PhaseSchema>;
+export type Phase = z.infer<typeof PhaseSchema> & { status: PhaseStatus };
 export type MacroTask = z.infer<typeof MacroTaskSchema>;
 export type Requirement = z.infer<typeof RequirementSchema>;
 export type RequirementsDocument = z.infer<typeof RequirementsDocumentSchema>;
-export type PlanWorkspace = z.infer<typeof PlanWorkspaceSchema>;
+export type PlanWorkspace = Omit<z.infer<typeof PlanWorkspaceSchema>, "phases" | "features"> & { phases: Phase[]; features: FeaturesDocument };

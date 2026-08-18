@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import {
   buildWorkTree,
   recentHighlightDurationMs,
+  DEFAULT_WORK_TREE_SORT,
+  type WorkTreeSortConfig,
   type PlannerWsMessage,
   type WorkTreeFeature,
 } from "../lib/dashboard-tree";
@@ -19,6 +21,7 @@ import {
   writeStoredArray,
 } from "../lib/dashboard-storage";
 import type { Feature, FeatureStatus, Phase, PhaseStatus, TaskStatus } from "../lib/types";
+import { isSearchActive, matchTask, parseSearchQuery, buildTaskHay } from "../lib/task-search";
 
 export type TreeOpenMode = "smart" | "all" | "none";
 
@@ -28,13 +31,18 @@ export interface DashboardTreeApi {
   treeOpenMode: TreeOpenMode;
   setTreeOpenMode: (mode: TreeOpenMode) => void;
   expandAll: () => void;
+  collapseAll: () => void;
+  isAllExpanded: boolean;
   expandedFeatureIds: string[];
   expandedPhaseIds: string[];
+  setExpandedFeatureIds: Dispatch<SetStateAction<string[]>>;
+  setExpandedPhaseIds: Dispatch<SetStateAction<string[]>>;
   toggleExpandedFeature: (featureId: string) => void;
   toggleExpandedPhase: (phaseId: string) => void;
   recentFeatureIds: string[];
   recentPhaseIds: string[];
   recentTaskIds: string[];
+  setRecentTaskIds: Dispatch<SetStateAction<string[]>>;
   showAllFeatures: boolean;
   setShowAllFeatures: Dispatch<SetStateAction<boolean>>;
   featureStatusFilters: FeatureStatus[];
@@ -50,6 +58,14 @@ export interface DashboardTreeApi {
   toggleFeatureStatusFilter: (value: FeatureStatus) => void;
   togglePhaseStatusFilter: (value: PhaseStatus) => void;
   toggleTaskStatusFilter: (value: TaskStatus) => void;
+  searchQuery: string;
+  setSearchQuery: Dispatch<SetStateAction<string>>;
+  searchActive: boolean;
+  matchedTaskIds: Set<string>;
+  matchedFeatureIds: Set<string>;
+  matchedPhaseIds: Set<string>;
+  sort: WorkTreeSortConfig;
+  setSort: Dispatch<SetStateAction<WorkTreeSortConfig>>;
 }
 
 /**
@@ -81,8 +97,61 @@ export function useDashboardTree({
   const hideDoneStorageKey = dashboardStorageKey(projectStorageScope, "hide-done");
   const hidePlannedStorageKey = dashboardStorageKey(projectStorageScope, "hide-planned");
   const onlyActiveBranchesStorageKey = dashboardStorageKey(projectStorageScope, "only-active-branches");
+  const workTreeSortStorageKey = dashboardStorageKey(projectStorageScope, "work-tree-sort");
 
-  const workTree = useMemo(() => buildWorkTree(features, phases), [features, phases]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sort, setSort] = useState<WorkTreeSortConfig>(() => {
+    if (typeof window === "undefined") return DEFAULT_WORK_TREE_SORT;
+    try {
+      const stored = window.localStorage.getItem(workTreeSortStorageKey);
+      if (!stored) return DEFAULT_WORK_TREE_SORT;
+      const parsed = JSON.parse(stored) as Partial<WorkTreeSortConfig>;
+      if (parsed.key && parsed.direction) {
+        return { key: parsed.key, direction: parsed.direction } as WorkTreeSortConfig;
+      }
+    } catch {
+      // ignore malformed storage
+    }
+    return DEFAULT_WORK_TREE_SORT;
+  });
+  const workTree = useMemo(() => buildWorkTree(features, phases, sort), [features, phases, sort]);
+
+  // ── Structured search (elastic-input) ───────────────────────────────────
+  const searchFilters = useMemo(() => parseSearchQuery(searchQuery), [searchQuery]);
+  const searchActive = isSearchActive(searchFilters);
+  // Precompute the free-text haystack per task once per data change (not per
+  // keystroke) so large plans (1000+ tasks) stay responsive. Only needed when
+  // a text filter is active; structured-only filters skip the hay.
+  const hayByTaskId = useMemo(() => {
+    if (!searchActive || !searchFilters.text) return null;
+    const map = new Map<string, string>();
+    for (const entry of workTree) {
+      for (const pe of entry.allPhases) {
+        for (const t of pe.allTasks) {
+          map.set(t.id, buildTaskHay({ feature: entry.feature, phase: pe.phase, task: t }));
+        }
+      }
+    }
+    return map;
+  }, [searchActive, searchFilters.text, workTree]);
+  const { matchedTaskIds, matchedFeatureIds, matchedPhaseIds } = useMemo(() => {
+    const taskIds = new Set<string>();
+    const featureIds = new Set<string>();
+    const phaseIds = new Set<string>();
+    if (!searchActive) return { matchedTaskIds: taskIds, matchedFeatureIds: featureIds, matchedPhaseIds: phaseIds };
+    for (const entry of workTree) {
+      for (const pe of entry.allPhases) {
+        for (const t of pe.allTasks) {
+          if (matchTask(searchFilters, { feature: entry.feature, phase: pe.phase, task: t }, hayByTaskId?.get(t.id))) {
+            taskIds.add(t.id);
+            featureIds.add(entry.feature.id);
+            phaseIds.add(pe.phase.id);
+          }
+        }
+      }
+    }
+    return { matchedTaskIds: taskIds, matchedFeatureIds: featureIds, matchedPhaseIds: phaseIds };
+  }, [searchActive, searchFilters, workTree, hayByTaskId]);
 
   const [showAllFeatures, setShowAllFeatures] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -135,6 +204,7 @@ export function useDashboardTree({
   useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(hideDoneStorageKey, String(hideDone)); }, [hideDone, hideDoneStorageKey]);
   useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(hidePlannedStorageKey, String(hidePlanned)); }, [hidePlanned, hidePlannedStorageKey]);
   useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(onlyActiveBranchesStorageKey, String(onlyActiveBranches)); }, [onlyActiveBranches, onlyActiveBranchesStorageKey]);
+  useEffect(() => { if (typeof window === "undefined") return; window.localStorage.setItem(workTreeSortStorageKey, JSON.stringify(sort)); }, [sort, workTreeSortStorageKey]);
 
   // Clear pending highlight timers on unmount so we never setState after teardown.
   useEffect(() => {
@@ -168,6 +238,26 @@ export function useDashboardTree({
 
   // ── The filtered, active-only-pruned tree actually rendered ────────────
   const displayedWorkTree = useMemo<WorkTreeFeature[]>(() => {
+    // Search overrides status filters: show only branches containing matched tasks.
+    if (searchActive) {
+      return workTree
+        .filter((entry) => matchesStatus(entry.feature.status, effectiveFeatureStatusFilters))
+        .map((entry) => ({
+          ...entry,
+          allPhases: entry.allPhases
+            .filter((phaseEntry) => matchesStatus(phaseEntry.phase.status, effectivePhaseStatusFilters))
+            .map((phaseEntry) => ({
+              ...phaseEntry,
+              allTasks: phaseEntry.allTasks.filter((task) =>
+                matchedTaskIds.has(task.id) &&
+                matchesStatus(task.status, effectiveTaskStatusFilters),
+              ),
+            }))
+            .filter((phaseEntry) => phaseEntry.allTasks.length > 0),
+        }))
+        .filter((entry) => entry.allPhases.length > 0);
+    }
+
     const activeOnly = !showAllFeatures || onlyActiveBranches;
     const base = showAllFeatures ? workTree : workTree.filter((entry) => entry.isActive);
 
@@ -195,7 +285,7 @@ export function useDashboardTree({
         if (activeOnly) return hasActiveTask || allPhases.some((phaseEntry) => phaseEntry.hasActiveTask);
         return allPhases.length > 0 || showAllFeatures;
       });
-  }, [effectiveFeatureStatusFilters, effectivePhaseStatusFilters, effectiveTaskStatusFilters, onlyActiveBranches, showAllFeatures, workTree]);
+  }, [searchActive, matchedTaskIds, workTree, effectiveFeatureStatusFilters, effectivePhaseStatusFilters, effectiveTaskStatusFilters, onlyActiveBranches, showAllFeatures]);
 
   // ── Sync expansion state with the open mode ────────────────────────────
   useEffect(() => {
@@ -225,6 +315,17 @@ export function useDashboardTree({
     setExpandedPhaseIds((current) => current.filter((id) => validPhaseIds.has(id)));
   }, [displayedWorkTree, treeOpenMode]);
 
+  // ── Search-driven expansion ────────────────────────────────────────────
+  // When a search is active, expand exactly the matched feature/phase branches
+  // once. The view layer no longer force-expands matched nodes, so the user can
+  // collapse them manually and “Collapse all” actually works during a search.
+  useEffect(() => {
+    if (!searchActive) return;
+    setTreeOpenMode("smart");
+    setExpandedFeatureIds(Array.from(matchedFeatureIds));
+    setExpandedPhaseIds(Array.from(matchedPhaseIds));
+  }, [searchActive, matchedFeatureIds, matchedPhaseIds]);
+
   const toggleExpandedFeature = (featureId: string) => {
     setTreeOpenMode("smart");
     setExpandedFeatureIds((current) => (current.includes(featureId)
@@ -247,6 +348,21 @@ export function useDashboardTree({
     setExpandedFeatureIds(displayedWorkTree.map(({ feature }) => feature.id));
     setExpandedPhaseIds(displayedWorkTree.flatMap(({ allPhases }) => allPhases.map(({ phase }) => phase.id)));
   };
+
+  const collapseAll = () => {
+    setTreeOpenMode("smart");
+    setExpandedFeatureIds([]);
+    setExpandedPhaseIds([]);
+  };
+
+  const isAllExpanded = useMemo(() => {
+    const visibleFeatureIds = new Set(displayedWorkTree.map(({ feature }) => feature.id));
+    const visiblePhaseIds = new Set(displayedWorkTree.flatMap(({ allPhases }) => allPhases.map(({ phase }) => phase.id)));
+    if (visibleFeatureIds.size === 0) return false;
+    const allFeaturesExpanded = Array.from(visibleFeatureIds).every((id) => expandedFeatureIds.includes(id));
+    const allPhasesExpanded = Array.from(visiblePhaseIds).every((id) => expandedPhaseIds.includes(id));
+    return allFeaturesExpanded && allPhasesExpanded;
+  }, [displayedWorkTree, expandedFeatureIds, expandedPhaseIds]);
 
   // ── Live updates: highlight + auto-expand nodes touched by WS events ───
   useEffect(() => {
@@ -306,6 +422,7 @@ export function useDashboardTree({
   }, []);
 
   const resetFilters = () => {
+    setSearchQuery("");
     setShowAllFeatures(true);
     setHideDone(false);
     setHidePlanned(false);
@@ -313,6 +430,7 @@ export function useDashboardTree({
     setPhaseStatusFilters(allPhaseStatusValues);
     setTaskStatusFilters(allTaskStatusValues);
     setOnlyActiveBranches(false);
+    setSort(DEFAULT_WORK_TREE_SORT);
     setTreeOpenMode("all");
   };
 
@@ -329,13 +447,18 @@ export function useDashboardTree({
     treeOpenMode,
     setTreeOpenMode,
     expandAll,
+    collapseAll,
+    isAllExpanded,
     expandedFeatureIds,
     expandedPhaseIds,
+    setExpandedFeatureIds,
+    setExpandedPhaseIds,
     toggleExpandedFeature,
     toggleExpandedPhase,
     recentFeatureIds,
     recentPhaseIds,
     recentTaskIds,
+    setRecentTaskIds,
     showAllFeatures,
     setShowAllFeatures,
     featureStatusFilters,
@@ -351,5 +474,13 @@ export function useDashboardTree({
     toggleFeatureStatusFilter,
     togglePhaseStatusFilter,
     toggleTaskStatusFilter,
+    searchQuery,
+    setSearchQuery,
+    searchActive,
+    matchedTaskIds,
+    matchedFeatureIds,
+    matchedPhaseIds,
+    sort,
+    setSort,
   };
 }

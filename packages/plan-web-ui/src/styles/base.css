@@ -54,10 +54,13 @@ a { color: inherit; text-decoration: none; }
 
 .surface-card {
   background: var(--surface-strong);
-  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   backdrop-filter: blur(14px) saturate(130%);
   -webkit-backdrop-filter: blur(14px) saturate(130%);
+  /* No base border — cards rely on the surface tint + shadow for separation.
+     When status colour is needed, .ap-status-header-* (header strip) or
+     .ap-status-surface-* (full task row) applies the coloured border on the
+     specific element that needs it, leaving the rest of the card borderless. */
   box-shadow: var(--shadow-card);
 }
 
@@ -106,6 +109,90 @@ a { color: inherit; text-decoration: none; }
 .status-deferred { background: color-mix(in srgb, var(--color-status-deferred) 12%, transparent); color: var(--color-status-deferred); }
 .status-waiting { background: color-mix(in srgb, var(--color-status-waiting) 12%, transparent); color: var(--color-status-waiting); }
 
+/* ── Parent-only derived display statuses (P039) ── */
+/* `started`: begun but no active child now; remainder is mixed. */
+.status-started {
+  background: color-mix(in srgb, var(--color-status-started) 10%, transparent);
+  color: var(--color-status-started);
+}
+/* `closed`: all children terminal but with mixed outcomes. */
+.status-closed {
+  background: color-mix(in srgb, var(--color-status-closed) 12%, transparent);
+  color: var(--color-status-closed);
+}
+
+/* ── Accessible pattern classes (distinguishable without hue) ── */
+/* Dashed border — generic for "idle / not active" states. Per-status
+   overrides (below) provide the proper colour. */
+.status-pattern-dashed {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-started) 70%, transparent);
+}
+.status-pattern-dashed-planned {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-planned) 65%, transparent);
+}
+.status-pattern-dashed-started {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-started) 70%, transparent);
+}
+.status-pattern-dashed-waiting {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-waiting) 70%, transparent);
+}
+.status-pattern-dashed-deferred {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-deferred) 70%, transparent);
+}
+/* `in-progress` — subtle pulse to signal "active now". */
+@keyframes ap-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-in-progress) 40%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-in-progress) 12%, transparent); }
+}
+.status-pattern-pulse {
+  animation: ap-status-pulse 2s ease-in-out infinite;
+}
+/* `closed` — wide, low-intensity stripe pattern signals "mixed terminal".
+   Reduced opacity + wider bands so the title/content stay readable. */
+.status-pattern-stripe {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 10px,
+    color-mix(in srgb, var(--color-status-closed) 8%, transparent) 10px 20px
+  );
+}
+/* `canceled` — diagonal hatch signals "voided". Wider bands + lower opacity. */
+.status-pattern-hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 8px,
+    color-mix(in srgb, var(--color-status-canceled) 8%, transparent) 8px 16px
+  );
+}
+/* `rejected` — cross-hatch signals "rejected". Reduced intensity so the
+   status badge text remains readable on patterned backgrounds. */
+.status-pattern-crosshatch {
+  background-image:
+    repeating-linear-gradient( 45deg, transparent 0 4px, color-mix(in srgb, var(--color-status-rejected) 8%, transparent) 4px 8px),
+    repeating-linear-gradient(-45deg, transparent 0 4px, color-mix(in srgb, var(--color-status-rejected) 8%, transparent) 4px 8px);
+}
+
+/* Status visual treatments are now applied INLINE by `<StatusItem>`,
+   which reads from the central `DISPLAY_STATUS_TOKENS` map (see
+   `lib/display-status-tokens.ts`). No per-state CSS overrides are needed
+   here. The only CSS classes related to status visuals are the *pattern*
+   classes (`.status-pattern-*`), which are intentionally generic and
+   shared across states.
+
+   If you need to tweak a specific state's appearance, change the values in
+   `DISPLAY_STATUS_TOKENS` rather than adding a new CSS rule. */
+
+/* Pattern-stripping helper — currently unused but kept for completeness. */
+
+@media (prefers-reduced-motion: reduce) {
+  .status-pattern-pulse { animation: none; }
+}
+
 .plan-description {
   background: var(--surface-elevated);
   border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
@@ -141,6 +228,11 @@ a { color: inherit; text-decoration: none; }
 .entity-badge--task {
   color: var(--color-entity-task);
   background: color-mix(in srgb, var(--color-entity-task) 14%, transparent);
+}
+
+.entity-badge--requirement {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .entity-link--feature {
@@ -185,6 +277,21 @@ a { color: inherit; text-decoration: none; }
   color: var(--color-entity-task);
   background: color-mix(in srgb, var(--color-entity-task) 14%, transparent);
 }
+.entity-path-seg--link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+.entity-path-seg--link:hover {
+  filter: brightness(1.15);
+}
+.entity-path-seg--link:active {
+  transform: translateY(1px);
+}
+.entity-path-seg--link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .entity-path-sep {
   display: inline-flex;
   align-items: center;
@@ -220,6 +327,34 @@ a { color: inherit; text-decoration: none; }
   opacity: 1;
 }
 
+/* ── Handoff badge (phase has a pending entity-scoped handoff) ── */
+.handoff-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  line-height: 1.1;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.handoff-badge:hover {
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-color: var(--accent);
+}
+.handoff-badge svg {
+  flex: none;
+}
+.handoff-badge__label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   :root { font-size: 106.25%; }
 }
@@ -244,16 +379,15 @@ textarea:disabled {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
 
-/* ── In-progress emphasis: animated background glow + pinging dot ── */
+/* ── In-progress emphasis: animated outer glow only (no inset border, since
+   the status-header element already draws the 1px border — an additional
+   inset ring would create a visible double-border). ── */
 @keyframes ap-progress-glow {
   0%, 100% {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--color-status-in-progress) 30%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-in-progress) 0%, transparent);
   }
   50% {
-    box-shadow:
-      inset 0 0 0 1px color-mix(in srgb, var(--color-status-in-progress) 60%, transparent),
-      0 0 22px -4px color-mix(in srgb, var(--color-status-in-progress) 26%, transparent);
+    box-shadow: 0 0 18px -2px color-mix(in srgb, var(--color-status-in-progress) 28%, transparent);
   }
 }
 
@@ -262,9 +396,19 @@ textarea:disabled {
   background: color-mix(in srgb, var(--color-status-in-progress) 7%, transparent);
 }
 
+/* Old version had a double-border issue: .ap-status-header-in-progress
+   added its own inset box-shadow on top of the outer .ap-in-progress shadow.
+   Header keeps only the border + animated outer glow; no inset shadow. */
+
 @keyframes ap-dot-ping {
   0% { transform: scale(1); opacity: 0.85; }
   75%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+.status-item {
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
 }
 
 .ap-progress-dot {
@@ -300,4 +444,241 @@ textarea:disabled {
 @media (prefers-reduced-motion: reduce) {
   .ap-in-progress { animation: none; }
   .ap-progress-dot::after { animation: none; opacity: 0; }
+}
+
+/* Short global id pill (Crockford 5-char, e.g. "UUXD1"). Compact, neutral,
+   copyable via CopyableBadge. Sits next to the composite F00x/P00x/T00x. */
+.short-id-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Drag-and-drop reorder handle (Work Tree). Inline grip icon; only visible on
+   hover/focus to keep the tree calm. Tap target >= 32px (mobile-safe). */
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  color: var(--text-subtle);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0.6;
+  transition: opacity .12s, background .12s, color .12s, border-color .12s;
+}
+.drag-handle:hover,
+.drag-handle:focus-visible {
+  opacity: 1;
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-color: var(--border);
+}
+.drag-handle:active { cursor: grabbing; }
+.ap-sortable--dragging { opacity: .55; outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 12px; }
+
+/* Floating drag preview (DragOverlay) — a clean clone that follows the cursor
+   while the original row stays faded in place. */
+.ap-drag-overlay { box-shadow: 0 12px 32px -8px rgba(0,0,0,.40); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 12px; cursor: grabbing; background: var(--surface-elevated); }
+
+/* elastic-input placeholder alignment: the placeholder box is already
+   positioned at the editor's text line, so only horizontal padding is needed
+   (a top padding pushes the text too low). */
+.search-bar .ei-placeholder { padding: 0 12px; }
+
+/* Sticky Work Tree search + filter bar: stays pinned below the header while
+   the page scrolls. top offset is set inline from the measured <header> height. */
+.ap-search-sticky {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  background: var(--surface-elevated);
+  backdrop-filter: saturate(180%) blur(10px);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* StatusCardStepper — chronological status history as filled cards */
+.status-card-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.status-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-strong);
+  padding: 0.3rem 0.5rem;
+  min-width: 0;
+  background: var(--surface);
+  opacity: 0.75;
+}
+.status-card.status-card-current {
+  opacity: 1;
+  border-width: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent);
+}
+.status-card-icon { width: 0.9rem; height: 0.9rem; flex-shrink: 0; }
+.status-card-label { font-size: 0.7rem; font-weight: 700; text-transform: capitalize; white-space: nowrap; }
+.status-card-time { font-size: 0.62rem; font-weight: 500; opacity: 0.8; white-space: nowrap; }
+.status-card-time-initial { font-style: italic; opacity: 0.6; }
+/* Reuse the .status-* color classes (bg tint + colored text) on filled cards */
+.status-card.status-draft, .status-card.status-discovery, .status-card.status-planned,
+.status-card.status-in-progress, .status-card.status-done, .status-card.status-blocked,
+.status-card.status-canceled, .status-card.status-rejected, .status-card.status-deferred,
+.status-card.status-waiting {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  border-color: color-mix(in srgb, currentColor 40%, var(--border-strong));
+}
+.status-card.status-in-progress { background: color-mix(in srgb, var(--color-status-in-progress) 14%, transparent); color: var(--color-status-in-progress); }
+.status-card.status-done { background: color-mix(in srgb, var(--color-status-done) 16%, transparent); color: var(--color-status-done); }
+.status-card.status-blocked { background: color-mix(in srgb, var(--color-status-blocked) 16%, transparent); color: var(--color-status-blocked); }
+.status-card.status-planned { background: color-mix(in srgb, var(--color-status-planned) 14%, transparent); color: var(--color-status-planned); }
+.status-card.status-draft { background: color-mix(in srgb, var(--color-status-draft) 14%, transparent); color: var(--color-status-draft); }
+.status-card.status-discovery { background: color-mix(in srgb, var(--color-status-discovery) 14%, transparent); color: var(--color-status-discovery); }
+.status-card.status-canceled { background: color-mix(in srgb, var(--color-status-canceled) 14%, transparent); color: var(--color-status-canceled); }
+.status-card.status-rejected { background: color-mix(in srgb, var(--color-status-rejected) 14%, transparent); color: var(--color-status-rejected); }
+.status-card.status-deferred { background: color-mix(in srgb, var(--color-status-deferred) 14%, transparent); color: var(--color-status-deferred); }
+.status-card.status-waiting { background: color-mix(in srgb, var(--color-status-waiting) 14%, transparent); color: var(--color-status-waiting); }
+
+  /* Future (not-yet-reached) cards: outlined + muted, override per-status fill */
+  .status-card.status-card-future {
+    background: transparent !important;
+    border-style: dashed !important;
+    border-color: var(--border-strong) !important;
+    color: var(--text-subtle) !important;
+    opacity: 0.55;
+  }
+  .status-card.status-card-future .status-card-icon { opacity: 0.6; }
+
+/* Horizontal status STEPPER: circle nodes connected by a line.
+   Each step uses its OWN status color (CSS var --step-color set inline).
+   COMPLETED/CURRENT = filled with step color; CURRENT adds a ring;
+   PENDING = muted dashed outline. */
+.status-stepper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0.9rem 1rem 0.7rem;
+  overflow-x: auto;
+}
+.status-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1 1 0;
+  min-width: 5.5rem;
+}
+.status-step-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.status-step-date {
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.2;
+  margin-top: 0.1rem;
+}
+.status-step--current .status-step-date { color: var(--text-muted); }
+/* Node */
+.status-node {
+  position: relative;
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.status-node-icon { width: 1rem; height: 1rem; }
+/* COMPLETED = no background fill, just colored border + icon */
+.status-step--completed .status-node {
+  background: transparent;
+  border: 2px solid color-mix(in srgb, var(--step-color) 45%, transparent);
+  color: color-mix(in srgb, var(--step-color) 70%, var(--text));
+}
+.status-step--completed .status-step-label { color: color-mix(in srgb, var(--step-color) 70%, var(--text)); }
+/* CURRENT = no background fill, solid border + ring highlight */
+.status-step--current .status-node {
+  background: transparent;
+  border: 2px solid var(--step-color);
+  color: var(--step-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--step-color) 16%, transparent);
+}
+.status-step--current .status-step-label { color: var(--text); font-weight: 800; }
+/* PENDING = muted dashed outline, icon in a faint step color */
+.status-step--pending .status-node {
+  background: var(--surface);
+  border: 2px dashed var(--border-strong);
+  color: color-mix(in srgb, var(--step-color) 45%, var(--text-subtle));
+}
+.status-step--pending .status-step-label { color: var(--text-subtle); }
+/* Connector: line on the top row leading INTO this node (skipped for first). */
+.status-connector {
+  position: absolute;
+  top: 1rem;
+  left: calc(-50% + 1rem);
+  width: calc(100% - 2rem);
+  height: 2px;
+  transform: translateY(-1px);
+  z-index: 0;
+}
+.status-connector--traveled { background: color-mix(in srgb, var(--step-color) 50%, transparent); }
+.status-connector--pending { background: repeating-linear-gradient(90deg, var(--border-strong) 0 5px, transparent 5px 10px); }
+@media (max-width: 640px) {
+  .status-step { min-width: 4.2rem; }
+  .status-step-label { font-size: 0.62rem; }
+  .status-node { width: 1.7rem; height: 1.7rem; }
+  .status-node-icon { width: 0.85rem; height: 0.85rem; }
+  .status-connector { top: 0.85rem; left: calc(-50% + 0.85rem); width: calc(100% - 1.7rem); }
+}
+
+/* Per-task checklist item number badge (C1/C2/...) */
+.checklist-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--text-subtle) 12%, transparent);
+  color: var(--text-subtle);
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-right: 0.15rem;
 }

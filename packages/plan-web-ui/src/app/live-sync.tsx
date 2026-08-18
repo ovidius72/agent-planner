@@ -137,6 +137,8 @@ export function LiveSyncBridge() {
             case "requirements-updated":
             case "plan-rendered":
             case "file-changed":
+            case "handoffUpdated":
+            case "handoffCleared":
               scheduleRevalidate();
               break;
             default:

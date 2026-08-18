@@ -1,36 +1,46 @@
 import { useEffect } from "react";
 import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router-dom";
 import { AppShell } from "../components/layout/app-shell";
-import { getActiveTasks, getHandoff, getProject, getUiConfig, type ActiveTaskSummary, type UiConfig } from "../lib/api";
+import { getActiveTasks, getProject, getUiConfig, type ActiveTaskSummary, type UiConfig } from "../lib/api";
+import { useAnimatedFavicon } from "../hooks/use-animated-favicon";
 import { ShortcutProvider } from "../lib/shortcuts";
 import { LiveSyncBridge } from "./live-sync";
 
 export async function loader() {
-  const [project, uiConfig, activeTasks, handoff] = await Promise.all([
+  const [project, uiConfig, activeTasks] = await Promise.all([
     getProject(),
     getUiConfig(),
     getActiveTasks(),
-    getHandoff(),
   ]);
-  return { project, uiConfig, activeTasks, handoff };
+  return { project, uiConfig, activeTasks };
 }
 
 export function RootRoute() {
-  const { project, uiConfig, activeTasks, handoff } = useLoaderData() as {
+  const { project, uiConfig, activeTasks } = useLoaderData() as {
     project: Awaited<ReturnType<typeof getProject>>;
     uiConfig: UiConfig;
     activeTasks: ActiveTaskSummary[];
-    handoff: Awaited<ReturnType<typeof getHandoff>>;
   };
 
   useEffect(() => {
-    document.title = project?.name?.trim() ? `${project.name} · Agent Plan` : "Agent Plan";
-  }, [project?.name]);
+    const projectName = project?.name?.trim();
+    const projectRoot = project?.projectRoot?.trim();
+    const folder = projectRoot ? projectRoot.split(/[/\\]/).filter(Boolean).pop() : undefined;
+    if (!projectName) {
+      document.title = "Agent Plan";
+    } else if (folder && folder !== projectName) {
+      document.title = `${projectName} · ${folder}`;
+    } else {
+      document.title = `${projectName} · Agent Plan`;
+    }
+  }, [project?.name, project?.projectRoot]);
+
+  useAnimatedFavicon(activeTasks.length > 0);
 
   return (
     <ShortcutProvider shortcuts={uiConfig.shortcuts}>
       <LiveSyncBridge />
-      <AppShell project={project} activeTasks={activeTasks} handoffExists={handoff.exists} serverInfo={uiConfig.server} />
+      <AppShell project={project} activeTasks={activeTasks} serverInfo={uiConfig.server} />
     </ShortcutProvider>
   );
 }
@@ -81,7 +91,7 @@ export function RootErrorBoundary() {
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="inline-flex min-h-11 items-center rounded-[14px] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              className="inline-flex min-h-9 items-center whitespace-nowrap rounded-[12px] bg-[var(--accent)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 sm:min-h-11 sm:rounded-[14px] sm:px-4 sm:py-2"
             >
               Reload page
             </button>

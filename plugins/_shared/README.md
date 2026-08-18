@@ -12,6 +12,8 @@ future harnesses.
   to MCP tools). Consumed by `skills/planner/SKILL.md` in each plugin.
 - `notify-session-start.sh.in` — template for the SessionStart notification
   script. Consumed by `scripts/notify-session-start.sh` in each plugin.
+- `guard-pre-tool-use.sh.in` — template for the PreToolUse write-guard script.
+  Consumed by `scripts/guard-pre-tool-use.sh` in each plugin.
 
 ## Placeholders
 
@@ -21,7 +23,9 @@ substitutes per harness (e.g. `Claude Code` / `/planner load`).
 ## Sync
 
 ```
-node scripts/sync-plugins.sh
+pnpm plugins:sync     # or: node scripts/sync-plugins.cjs
 ```
 
 Regenerates derived files in every plugin directory under `plugins/`.
+`pnpm plugins:check` is the CI drift guard (fails if a derived file is out of
+sync with its template).

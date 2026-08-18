@@ -11,6 +11,15 @@ export function optionalString(formData: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+export function optionalNumber(formData: FormData, key: string): number {
+  const value = formData.get(key);
+  if (typeof value !== "string") return 0;
+  const trimmed = value.trim();
+  if (trimmed === "") return 0;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function stringList(formData: FormData, key: string): string[] {
   return optionalString(formData, key)
     .split("\n")

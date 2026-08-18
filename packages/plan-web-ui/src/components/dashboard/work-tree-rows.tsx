@@ -1,7 +1,24 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { CopyableBadge, EntityPathBadge, formatEntityPath } from "../ui/badges";
-import { StatusBadge } from "../ui/status-badge";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import {
+  CopyableBadge,
+  EntityPathBadge,
+  HandoffBadge,
+  ShortIdBadge,
+  formatEntityPath,
+} from "../ui/badges";
+import { StatusBadge, StatusCluster2 } from "../ui/status-badge";
+import { StatusItem } from "../ui/status-item";
+import { DragHandle, SortableItem } from "./sortable";
+import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
+import {
+  statusBorderColor,
+  type DisplayStatus,
+} from "../../lib/display-status-tokens";
 import type { WorkTreeFeature, WorkTreePhase } from "../../lib/dashboard-tree";
 import type { Feature, Phase, Task } from "../../lib/types";
 
@@ -78,6 +95,7 @@ export function FeatureTreeRow({
   onTogglePhase,
   isPhaseRecentlyChanged,
   isTaskRecentlyChanged,
+  highlightedTaskIds,
 }: {
   entry: WorkTreeFeature;
   expanded: boolean;
@@ -87,20 +105,27 @@ export function FeatureTreeRow({
   onTogglePhase: (phaseId: string) => void;
   isPhaseRecentlyChanged: (phaseId: string) => boolean;
   isTaskRecentlyChanged: (taskId: string) => boolean;
+  highlightedTaskIds: Set<string> | undefined;
 }) {
   const { feature, totalTasks, doneTasks, allPhases, hasActiveTask } = entry;
 
   return (
     <div
-      className={`surface-card min-w-0 px-3 py-3 transition-colors sm:px-4 ${feature.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border-[color:var(--color-status-in-progress)]/40 bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_7%,transparent)]" : ""} ${feature.status === "done" ? "!opacity-70 !bg-[color:color-mix(in_srgb,var(--color-status-done)_10%,transparent)] !border-[color:color-mix(in_srgb,var(--color-status-done)_35%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`surface-card min-w-0 rounded-[10px] px-3 py-3 transition-colors sm:px-4 ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
     >
-      <div
-        className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}
+      <StatusItem
+        status={entry.display.displayStatus}
+        variant="header"
+        className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,transparent)]" : ""}`}
       >
         <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
             type="button"
-            onClick={onToggle}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
             className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-subtle)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
             aria-label={
               expanded
@@ -115,17 +140,26 @@ export function FeatureTreeRow({
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
+              <DragHandle />
+              <EntityPathBadge
+                featureNum={feature.number}
+                featureId={feature.id}
+              />
               <CopyableBadge
                 id={formatEntityPath({ featureNum: feature.number })}
               >
-                <EntityPathBadge featureNum={feature.number} />
+                <span className="sr-only">Copy feature path</span>
               </CopyableBadge>
+              {feature.shortId ? (
+                <ShortIdBadge shortId={feature.shortId} />
+              ) : null}
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}
             </div>
-            <StatusCluster
-              status={feature.status}
+            <StatusCluster2
+              status={entry.display.displayStatus}
+              breakdown={entry.display.breakdown}
               doneTasks={doneTasks}
               totalTasks={totalTasks}
               recentlyChanged={recentlyChanged}
@@ -139,28 +173,39 @@ export function FeatureTreeRow({
             </Link>
           </div>
         </div>
-        <StatusCluster
-          status={feature.status}
+        <StatusCluster2
+          status={entry.display.displayStatus}
+          breakdown={entry.display.breakdown}
           doneTasks={doneTasks}
           totalTasks={totalTasks}
           recentlyChanged={recentlyChanged}
           className="hidden shrink-0 items-center gap-2 sm:flex"
         />
-      </div>
+      </StatusItem>
 
       {expanded && allPhases.length > 0 ? (
-        <div className="mt-2 ml-1.5 grid grid-cols-1 gap-2 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
-          {allPhases.map((phaseEntry) => (
-            <PhaseTreeRow
-              key={phaseEntry.phase.id}
-              feature={feature}
-              phaseEntry={phaseEntry}
-              expanded={isPhaseExpanded(phaseEntry.phase.id)}
-              recentlyChanged={isPhaseRecentlyChanged(phaseEntry.phase.id)}
-              onToggle={() => onTogglePhase(phaseEntry.phase.id)}
-              isTaskRecentlyChanged={isTaskRecentlyChanged}
-            />
-          ))}
+        <div
+          className="mt-2 ml-1.5 grid grid-cols-1 gap-2 border-l pl-3 sm:ml-4 sm:pl-4"
+          style={{ borderLeftColor: statusBorderColor(entry.display.displayStatus) }}
+        >
+          <SortableContext
+            items={allPhases.map((p) => p.phase.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {allPhases.map((phaseEntry) => (
+              <SortableItem key={phaseEntry.phase.id} id={phaseEntry.phase.id}>
+                <PhaseTreeRow
+                  feature={feature}
+                  phaseEntry={phaseEntry}
+                  expanded={isPhaseExpanded(phaseEntry.phase.id)}
+                  recentlyChanged={isPhaseRecentlyChanged(phaseEntry.phase.id)}
+                  onToggle={() => onTogglePhase(phaseEntry.phase.id)}
+                  isTaskRecentlyChanged={isTaskRecentlyChanged}
+                  highlightedTaskIds={highlightedTaskIds}
+                />
+              </SortableItem>
+            ))}
+          </SortableContext>
         </div>
       ) : null}
     </div>
@@ -174,6 +219,7 @@ export function PhaseTreeRow({
   recentlyChanged,
   onToggle,
   isTaskRecentlyChanged,
+  highlightedTaskIds,
 }: {
   feature: Feature;
   phaseEntry: WorkTreePhase;
@@ -181,20 +227,28 @@ export function PhaseTreeRow({
   recentlyChanged: boolean;
   onToggle: () => void;
   isTaskRecentlyChanged: (taskId: string) => boolean;
+  highlightedTaskIds: Set<string> | undefined;
 }) {
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
+  const phaseStatusNoPattern = "";
 
   return (
     <div
-      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 rounded-[12px] p-3 transition-colors ${phase.status === "in-progress" ? "ap-in-progress" : hasActiveTask ? "border border-[color:color-mix(in_srgb,var(--color-status-in-progress)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--color-status-in-progress)_6%,transparent)]" : ""} ${phase.status === "done" ? "opacity-70 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+      className={`work-tree-row grid min-w-0 grid-cols-1 gap-2 rounded-[10px] p-3 transition-colors ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
     >
-      <div
+      <StatusItem
+        status={phaseEntry.display.displayStatus}
+        variant="header"
         className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-1 py-1 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,transparent)]" : ""}`}
       >
         <div className="flex min-w-0 items-start gap-2 sm:flex-1">
           <button
             type="button"
-            onClick={onToggle}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
             className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--text-subtle)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
             aria-label={
               expanded
@@ -209,23 +263,40 @@ export function PhaseTreeRow({
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
+              <DragHandle />
+              <EntityPathBadge
+                featureNum={feature?.number}
+                phaseNum={phase.number}
+                featureId={feature.id}
+                phaseId={phase.id}
+              />
               <CopyableBadge
                 id={formatEntityPath({
                   featureNum: feature?.number,
                   phaseNum: phase.number,
                 })}
               >
-                <EntityPathBadge
-                  featureNum={feature?.number}
-                  phaseNum={phase.number}
-                />
+                <span className="sr-only">Copy phase path</span>
               </CopyableBadge>
+              {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
+              {phase.handoff ? (
+                <HandoffBadge
+                  phaseId={phase.id}
+                  updatedAt={phase.handoffUpdatedAt}
+                />
+              ) : null}
+              <PhaseRequirementLink
+                phaseId={phase.id}
+                phaseTitle={phase.title}
+                count={phase.linkedRequirements?.length ?? 0}
+              />
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}
             </div>
-            <StatusCluster
-              status={phase.status}
+            <StatusCluster2
+              status={phaseEntry.display.displayStatus}
+              breakdown={phaseEntry.display.breakdown}
               doneTasks={doneTasks}
               totalTasks={totalTasks}
               recentlyChanged={recentlyChanged}
@@ -239,27 +310,42 @@ export function PhaseTreeRow({
             </Link>
           </div>
         </div>
-        <StatusCluster
-          status={phase.status}
+        <StatusCluster2
+          status={phaseEntry.display.displayStatus}
+          breakdown={phaseEntry.display.breakdown}
           doneTasks={doneTasks}
           totalTasks={totalTasks}
           recentlyChanged={recentlyChanged}
           className="hidden shrink-0 items-center gap-2 sm:flex"
         />
-      </div>
+      </StatusItem>
 
       {expanded ? (
         allTasks.length > 0 ? (
-          <div className="ml-1.5 grid grid-cols-1 gap-1 border-l border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
-            {allTasks.map((task) => (
-              <TaskTreeRow
-                key={task.id}
-                feature={feature}
-                phase={phase}
-                task={task}
-                recentlyChanged={isTaskRecentlyChanged(task.id)}
-              />
-            ))}
+          <div
+            className="ml-1.5 grid grid-cols-1 gap-1 border-l pl-3 sm:ml-4 sm:pl-4"
+            style={{
+              borderLeftColor: statusBorderColor(
+                phaseEntry.display.displayStatus,
+              ),
+            }}
+          >
+            <SortableContext
+              items={allTasks.map((t) => t.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {allTasks.map((task) => (
+                <SortableItem key={task.id} id={task.id}>
+                  <TaskTreeRow
+                    feature={feature}
+                    phase={phase}
+                    task={task}
+                    recentlyChanged={isTaskRecentlyChanged(task.id)}
+                    highlighted={highlightedTaskIds?.has(task.id)}
+                  />
+                </SortableItem>
+              ))}
+            </SortableContext>
           </div>
         ) : (
           <p className="ml-1.5 text-xs italic text-[var(--text-subtle)] sm:ml-4">
@@ -276,18 +362,32 @@ export function TaskTreeRow({
   phase,
   task,
   recentlyChanged,
+  highlighted,
 }: {
   feature: Feature;
   phase: Phase;
   task: Task;
   recentlyChanged: boolean;
+  highlighted: boolean | undefined;
 }) {
   return (
-    <div
-      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${task.status === "in-progress" ? "ap-in-progress" : ""} ${task.status === "done" ? "opacity-60 bg-[color:color-mix(in_srgb,var(--color-status-done)_6%,transparent)] text-[var(--text-muted)]" : ""} ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""}`}
+    <StatusItem
+      id={`task-row-${task.number}`}
+      status={task.status as DisplayStatus}
+      variant="surface"
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[10px] px-2 py-2 transition-colors hover:bg-[var(--accent-soft)] sm:flex-row sm:items-start sm:justify-between sm:gap-3 ${recentlyChanged ? "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_55%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]" : ""} ${highlighted ? "ap-search-hit" : ""}`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
+          <DragHandle />
+          <EntityPathBadge
+            featureNum={feature?.number}
+            phaseNum={phase.number}
+            taskNum={task.number}
+            featureId={feature.id}
+            phaseId={phase.id}
+            taskId={task.id}
+          />
           <CopyableBadge
             id={formatEntityPath({
               featureNum: feature?.number,
@@ -295,12 +395,9 @@ export function TaskTreeRow({
               taskNum: task.number,
             })}
           >
-            <EntityPathBadge
-              featureNum={feature?.number}
-              phaseNum={phase.number}
-              taskNum={task.number}
-            />
+            <span className="sr-only">Copy task path</span>
           </CopyableBadge>
+          {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
           {task.status === "in-progress" ? (
             <span aria-hidden="true" className="ap-progress-dot" />
           ) : null}
@@ -322,6 +419,6 @@ export function TaskTreeRow({
         recentlyChanged={recentlyChanged}
         className="hidden shrink-0 items-center gap-2 sm:flex"
       />
-    </div>
+    </StatusItem>
   );
 }

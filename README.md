@@ -44,7 +44,7 @@ my-project/
     phases/
       <phase-id>.json
     resume.json
-    HANDOFF.md
+    handoff-archive/
     generated/
       PLAN.md
       features/
@@ -68,6 +68,14 @@ Requirements currently exist as internal/project seed data and are not exposed a
 The core planning model lives outside Pi, Claude Code, or any other harness. Adapters should call shared planning logic rather than owning business rules.
 
 ---
+
+## Documentation
+
+- [`docs/setup-claude-code.md`](./docs/setup-claude-code.md) — Claude Code MCP + slash-command setup.
+- [`docs/setup-codex.md`](./docs/setup-codex.md) — Codex MCP alignment and public planner schema.
+- [`docs/setup-zed.md`](./docs/setup-zed.md) — Zed MCP setup (custom context server, no extension required).
+- [`docs/planner-schema.json`](./docs/planner-schema.json) — public JSON schema for the `.planner/` workspace (generated from `@agent-plan/core` Zod schemas).
+- [`AGENTS.md`](./AGENTS.md) — operational rules for agents working on Agent Plan itself.
 
 ## Plugins
 
@@ -232,6 +240,7 @@ Claude Code supports a slash command `/planner ...` that routes natural command 
 
 ### Phases
 
+- `/planner phase list` — List phases
 - `/planner phase add <title>` — Add a phase
 - `/planner phase show <id>` — Show a phase
 - `/planner phase discuss <id>` — Discuss a phase
@@ -240,6 +249,7 @@ Claude Code supports a slash command `/planner ...` that routes natural command 
 
 ### Tasks
 
+- `/planner task list` — List tasks
 - `/planner task add <title>` — Add a task
 - `/planner task show <id>` — Show a task
 - `/planner task discuss <id>` — Discuss a task
@@ -250,6 +260,7 @@ Claude Code supports a slash command `/planner ...` that routes natural command 
 
 ### Handoff
 
+- `/planner handoff list` — List phases with a handoff
 - `/planner handoff prepare` — Tell the agent to create/update the handoff
 - `/planner handoff show` — Show the current handoff
 - `/planner handoff write` — Write handoff from planner data
@@ -282,7 +293,6 @@ Current Phase 1 tools include:
 - `planner-load`
 - `planner-disable`
 - `planner-web`
-- `planner-export`
 
 ### Project
 
@@ -299,6 +309,7 @@ Current Phase 1 tools include:
 
 ### Phases
 
+- `planner-phase-list`
 - `planner-phase-add`
 - `planner-phase-show`
 - `planner-phase-discuss`
@@ -307,7 +318,11 @@ Current Phase 1 tools include:
 
 ### Tasks
 
+- `planner-task-list`
 - `planner-task-add`
+- `planner-task-checklist-add` (append one step; next C{n}, stable id)
+- `planner-task-checklist-remove` (remove one step by C{n}/id/title; renumber C1..Cn)
+- `planner-task-checklist-toggle` (tick/untick a step by C{n}/id/title; no list rewrite)
 - `planner-task-show`
 - `planner-task-discuss`
 - `planner-task-update`
@@ -317,6 +332,7 @@ Current Phase 1 tools include:
 
 ### Handoff
 
+- `planner-handoff-list`
 - `planner-handoff-prepare`
 - `planner-handoff-show`
 - `planner-handoff-write`
@@ -333,7 +349,7 @@ Current Phase 1 tools include:
 
 Requirements are intentionally not exposed as `planner-requirement-*` in Phase 1.
 
-The current Phase 1 count is **32** public `planner-*` tools.
+The current Phase 1 count is **38** public `planner-*` tools.
 
 ---
 
@@ -501,6 +517,7 @@ Pi exposes Agent Plan as one grouped command:
 
 ### Phases
 
+- `/planner phase list` — List phases
 - `/planner phase add` — Add a phase
 - `/planner phase show` — Show a phase
 - `/planner phase discuss` — Discuss a phase
@@ -509,6 +526,7 @@ Pi exposes Agent Plan as one grouped command:
 
 ### Tasks
 
+- `/planner task list` — List tasks
 - `/planner task add` — Add a task
 - `/planner task show` — Show a task
 - `/planner task discuss` — Discuss a task
@@ -519,6 +537,7 @@ Pi exposes Agent Plan as one grouped command:
 
 ### Handoff
 
+- `/planner handoff list` — List phases with a handoff
 - `/planner handoff prepare` — Tell the agent to create/update the handoff
 - `/planner handoff show` — Show the current handoff
 - `/planner handoff write` — Write handoff directly from planner data
@@ -621,28 +640,33 @@ At Pi session start, orphan `.bak` and `*.tmp.*` files are also cleaned up async
 
 ## Handoff workflow
 
-Agent Plan supports a canonical session handoff file:
+Handoffs are **entity-scoped**: each phase carries its own `phase.handoff`
+field (stored inline in the phase JSON), not a standalone file. The legacy
+`.planner/HANDOFF.md` is deprecated. The last 5 cleared handoffs per phase
+are archived under `.planner/handoff-archive/` for recovery.
 
-```text
-.planner/HANDOFF.md
-```
+Slash commands (`/planner handoff ...`):
 
-Claude Code tools:
-
-```text
-/planner handoff prepare
-/planner handoff show
-/planner handoff clear
-```
+- `/planner handoff list` — list phases with a non-empty `phase.handoff`
+- `/planner handoff show <P00x>` — read a phase handoff (omit ref → current in-progress phase)
+- `/planner handoff write` — write/refresh the phase handoff (capture design context)
+- `/planner handoff prepare` — tell the agent to create/update the handoff
+- `/planner handoff clear <P00x>` — delete a phase handoff
 
 MCP tools:
 
-- `planner-handoff-prepare`
+- `planner-handoff-list`
 - `planner-handoff-show`
 - `planner-handoff-write`
+- `planner-handoff-prepare`
 - `planner-handoff-clear`
 
-The handoff should describe current focus, work in progress, resume steps, files touched, blockers, next steps, and recent decisions.
+Lifecycle: a handoff is auto-cleared when its phase transitions to `done`;
+on resume it is a previous-session hint to validate against the current plan
+state, not a lock — `task_start` is never blocked by a pending handoff.
+
+The handoff should describe current focus, work in progress, resume steps,
+files touched, blockers, next steps, and recent decisions.
 
 ---
 
@@ -771,7 +795,6 @@ Important docs:
 ```text
 PROJECT.md
 ROADMAP.md
-CHECKLIST.md
 AGENTS.md
 plugins/README.md
 plugins/DECISIONS.md
@@ -808,7 +831,7 @@ Smoke test MCP tools locally:
 node packages/agent-plan/dist/index.js mcp
 ```
 
-For automated MCP smoke testing, use the MCP SDK client to call `listTools`; the expected Phase 1 count is currently 32 public `planner-*` tools.
+For automated MCP smoke testing, use the MCP SDK client to call `listTools`; the expected Phase 1 count is currently 38 public `planner-*` tools.
 
 ### Runtime implementation notes
 
@@ -983,6 +1006,29 @@ git switch develop && git pull && git merge origin/main && git push
 ```
 
 See `AGENTS.md` §12 (Branching & Release) for the full rules.
+
+### Prerelease (`next`) channel
+
+For day-to-day iteration, the repo also publishes a `next` npm dist-tag from
+the `next` branch:
+
+```bash
+pnpm release:next              # bump the prerelease counter (0.2.19-next.10 -> 0.2.19-next.11)
+pnpm release:next -- --dry-run  # preview only
+```
+
+`scripts/release-next.cjs` increments the `-next.N` prerelease counter on the
+current branch and pushes; `publish.yml` publishes the result to npm with the
+`next` dist-tag. Install it with:
+
+```bash
+npm i @agent-plan/core@next
+```
+
+The plugin (`plugins/claude-code/.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json`) is **not** bumped by `release:next` — it
+follows the stable `main` release track only, so the marketplace plugin
+version advances on `pnpm release` (stable), not on prereleases.
 
 ### Install the published CLI
 

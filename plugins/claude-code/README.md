@@ -32,12 +32,17 @@ Or add the repo as a local marketplace:
 ## What it bundles
 
 - **MCP server** (`.mcp.json`): `@agent-plan/mcp` via `npx -y @agent-plan/mcp`,
-  exposing the `planner-*` and `plan_*`/`feature_*`/`phase_*`/`task_*` tools.
+  exposing the 35 `planner-*` tools.
 - **`/planner` skill** (`skills/planner/SKILL.md`): routes `/planner`
   subcommands to the MCP tools.
 - **SessionStart hook** (`hooks/hooks.json` → `scripts/notify-session-start.sh`):
   prints a **non-blocking** notification that the planner is available. It does
   NOT start the planner or the web.
+- **PreToolUse write guard** (`hooks/hooks.json` → `scripts/guard-pre-tool-use.sh`):
+  blocks `Edit`/`Write` when a `.planner/` exists, tasks exist, and no task is
+  `in-progress`, unless a temporary bypass is authorized. `bash` stays free so
+  `git pull`, build, and test always work. Delegates to
+  `agent-plan guard pre-tool-use` (via `npx -y agent-plan`).
 
 ## Behavior
 
@@ -57,12 +62,13 @@ Or add the repo as a local marketplace:
 
 ```
 plugins/claude-code/
-├── .claude-plugin/plugin.json     # plugin manifest
-├── .mcp.json                       # @agent-plan/mcp stdio server
-├── skills/planner/SKILL.md         # /planner routing (derived from _shared/)
-├── hooks/hooks.json                # SessionStart non-blocking notify
-├── scripts/notify-session-start.sh # derived from _shared/
-└── README.md                       # this file
+├── .claude-plugin/plugin.json      # plugin manifest
+├── .mcp.json                        # @agent-plan/mcp stdio server
+├── skills/planner/SKILL.md          # /planner routing (derived from _shared/)
+├── hooks/hooks.json                 # SessionStart notify + PreToolUse write guard
+├── scripts/notify-session-start.sh  # derived from _shared/
+├── scripts/guard-pre-tool-use.sh    # derived from _shared/ (delegates to agent-plan guard)
+└── README.md                        # this file
 ```
 
 ## Plan root

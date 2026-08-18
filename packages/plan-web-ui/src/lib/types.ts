@@ -1,6 +1,7 @@
 export type FeatureStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 export type PhaseStatus = "draft" | "discovery" | "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 export type TaskStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type RequirementStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 
 export interface AcceptedDecision {
   id: string;
@@ -14,6 +15,8 @@ export interface AcceptedDecision {
 export interface Feature {
   id: string;
   number: number;
+  shortId: string;
+  priority: number;
   name: string;
   description: string;
   status: FeatureStatus;
@@ -27,6 +30,7 @@ export interface Feature {
   acceptedDecisions: AcceptedDecision[];
   phaseIds: string[];
   dependsOn: string[];
+  statusLog: StatusLogEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +46,7 @@ export interface Subtask {
 
 export interface ChecklistItem {
   id: string;
+  number: number;
   title: string;
   checked: boolean;
 }
@@ -55,10 +60,22 @@ export interface StatusLogEntry {
   description: string;
 }
 
+/** Like StatusLogEntry but for the DERIVED PHASE status (includes draft/discovery). */
+export interface PhaseStatusLogEntry {
+  id: string;
+  date: string;
+  fromStatus: PhaseStatus;
+  toStatus: PhaseStatus;
+  title: string;
+  description: string;
+}
+
 export interface Task {
   id: string;
   phaseId: string;
   number: number;
+  shortId: string;
+  priority: number;
   shortName: string;
   title: string;
   status: TaskStatus;
@@ -76,10 +93,38 @@ export interface Task {
   updatedAt: string;
 }
 
+export interface MacroTask {
+  id: string;
+  title: string;
+  description: string;
+  status: RequirementStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Requirement {
+  id: string;
+  title: string;
+  description: string;
+  status: RequirementStatus;
+  macroTasks: MacroTask[];
+  linkedPhaseIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HandoffHistoryEntry {
+  file: string;
+  clearedAt: string;
+  reason: string;
+}
+
 export interface Phase {
   id: string;
   featureId?: string;
   number: number;
+  shortId: string;
+  priority: number;
   slug: string;
   title: string;
   status: PhaseStatus;
@@ -100,14 +145,38 @@ export interface Phase {
   completionCriteria: string[];
   taskIds: string[];
   tasks: Task[];
+  linkedRequirements?: Requirement[];
+  handoff: string;
+  handoffUpdatedAt: string;
+  handoffReadAt?: string;
+  handoffHistory?: HandoffHistoryEntry[];
+  statusLog: PhaseStatusLogEntry[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface HandoffDocument {
-  exists: boolean;
+export interface HandoffSummary {
+  phaseId: string;
+  featureId?: string | undefined;
+  compositeRef: string;
+  updatedAt: string;
+  firstLine: string;
   content: string;
-  createdAt: string;
+}
+
+export interface ArchivedHandoffSummary {
+  phaseId: string;
+  featureId?: string | undefined;
+  compositeRef: string;
+  file: string;
+  archivedAt: string;
+  reason: string;
+  firstLine: string;
+  content: string;
+}
+
+export interface PhaseHandoff {
+  content: string;
   updatedAt: string;
 }
 

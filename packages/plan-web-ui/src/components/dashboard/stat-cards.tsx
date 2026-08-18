@@ -1,6 +1,7 @@
 import { BarChart3, CheckCircle2, Layers, ListTodo } from "lucide-react";
 import type { Feature, Phase } from "../../lib/types";
 import { countDoneTasks, countTasks } from "../../lib/dashboard-tree";
+import { deriveFeatureDisplay, derivePhaseDisplay } from "../../lib/derive-display";
 import { StatCard } from "./stat-card";
 
 function completionValueClassName(completion: number): string {
@@ -10,9 +11,19 @@ function completionValueClassName(completion: number): string {
 }
 
 export function StatCards({ features, phases }: { features: Feature[]; phases: Phase[] }) {
-  const doneFeatures = features.filter((feature) => feature.status === "done").length;
+  const phasesByFeature = new Map<string, Phase[]>();
+  for (const phase of phases) {
+    if (!phase.featureId) continue;
+    phasesByFeature.set(phase.featureId, [...(phasesByFeature.get(phase.featureId) ?? []), phase]);
+  }
+
+  const doneFeatures = features.filter((feature) => {
+    const featurePhases = phasesByFeature.get(feature.id) ?? [];
+    return deriveFeatureDisplay(featurePhases).displayStatus === "done";
+  }).length;
   const remainingFeatures = Math.max(features.length - doneFeatures, 0);
-  const donePhases = phases.filter((phase) => phase.status === "done").length;
+
+  const donePhases = phases.filter((phase) => derivePhaseDisplay(phase.tasks).displayStatus === "done").length;
   const remainingPhases = Math.max(phases.length - donePhases, 0);
   const totalTasks = countTasks(phases);
   const doneTasks = countDoneTasks(phases);

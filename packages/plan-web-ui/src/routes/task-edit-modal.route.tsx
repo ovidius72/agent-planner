@@ -33,6 +33,7 @@ export function TaskEditModalRoute() {
             {taskStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
+        <Field label="Priority"><Input type="number" name="priority" defaultValue={task.priority ?? 0} min={0} /></Field>
         <Field label="Description"><Textarea name="description" defaultValue={task.description} /></Field>
         <Field label="Checklist (one per line)"><Textarea name="checklist" defaultValue={joinLines(task.checklist)} /></Field>
         <ModalActions>

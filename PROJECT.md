@@ -19,9 +19,9 @@ La platform deve permettere di:
 
 ### 0. Regola di esecuzione del progetto
 Chiunque lavori su questo progetto deve:
-- mantenere una checklist di lavoro aggiornata
-- aggiornare la checklist durante lo svolgimento delle attività, non solo alla fine
-- rendere espliciti stato, prossimi passi e blocchi
+- mantenere aggiornato il planner del progetto
+- sincronizzare task, phase, feature e handoff durante lo svolgimento delle attività, non solo alla fine
+- rendere espliciti stato, prossimi passi e blocchi nel planner
 - trattare questa regola come obbligatoria per agenti e umani
 
 ### 1. Inizializzazione piano
@@ -195,12 +195,12 @@ Decisione: il progetto viene sviluppato fuori da `~/.pi`, nella cartella:
 Decisione: partire subito con un monorepo/workspace minimale, con package separati ma un solo repository.
 
 ### K. Disciplina di esecuzione
-Decisione: ogni lavorazione deve mantenere e aggiornare una checklist persistente nel repository.
+Decisione: ogni lavorazione deve mantenere il planner aggiornato come unica fonte di verità operativa.
 
 Implicazioni:
-- ogni agente deve leggere la checklist all'inizio del lavoro
-- ogni agente deve aggiornare la checklist quando completa, avvia o blocca un'attività
-- la checklist è parte del processo, non documentazione opzionale
+- ogni agente deve leggere le entità planner rilevanti all'inizio del lavoro
+- ogni agente deve aggiornare il planner quando completa, avvia o blocca un'attività
+- backlog e stato operativo devono vivere nel planner, non in documenti markdown separati
 
 ## Architettura target
 

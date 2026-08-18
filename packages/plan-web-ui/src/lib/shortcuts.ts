@@ -14,9 +14,9 @@ export type ShortcutAction = "create" | "edit" | "delete" | "submit";
 export type ShortcutTarget = ShortcutAction | ShortcutSpec;
 
 export const defaultShortcuts: Record<ShortcutAction, ShortcutSpec> = {
-  create: { key: "n", meta: true, ctrl: true },
-  edit: { key: "e", meta: true, ctrl: true },
-  delete: { key: "d", meta: true, ctrl: true },
+  create: { key: "n", primary: true },
+  edit: { key: "e", primary: true },
+  delete: { key: "d", primary: true },
   submit: { key: "Enter", primary: true },
 };
 

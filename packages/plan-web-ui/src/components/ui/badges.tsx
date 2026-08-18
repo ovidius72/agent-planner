@@ -1,12 +1,22 @@
-import React, { useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export type EntityType = "feature" | "phase" | "task";
 
 const TYPE_COLORS: Record<EntityType, { soft: string; strong: string }> = {
-  feature: { soft: "rgba(139, 92, 246, 0.16)", strong: "var(--color-entity-feature)" },
-  phase: { soft: "rgba(6, 182, 212, 0.16)", strong: "var(--color-entity-phase)" },
-  task: { soft: "rgba(16, 185, 129, 0.16)", strong: "var(--color-entity-task)" },
+  feature: {
+    soft: "rgba(139, 92, 246, 0.16)",
+    strong: "var(--color-entity-feature)",
+  },
+  phase: {
+    soft: "rgba(6, 182, 212, 0.16)",
+    strong: "var(--color-entity-phase)",
+  },
+  task: {
+    soft: "rgba(16, 185, 129, 0.16)",
+    strong: "var(--color-entity-task)",
+  },
 };
 
 function formatSeq(n: number | undefined): string {
@@ -57,7 +67,13 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function EntityBadge({ type, number }: { type: EntityType; number?: number | undefined }) {
+export function EntityBadge({
+  type,
+  number,
+}: {
+  type: EntityType;
+  number?: number | undefined;
+}) {
   const color = TYPE_COLORS[type] || TYPE_COLORS.task;
   const soft = color?.soft || "transparent";
   const strong = color?.strong || "inherit";
@@ -69,7 +85,8 @@ export function EntityBadge({ type, number }: { type: EntityType; number?: numbe
         color: strong,
       }}
     >
-      {(type ? type.charAt(0).toUpperCase() : "?")}{formatSeq(number)}
+      {type ? type.charAt(0).toUpperCase() : "?"}
+      {formatSeq(number)}
     </span>
   );
 }
@@ -91,7 +108,9 @@ export function ParentBadge({
     if (featureNum === undefined) return null;
     return (
       <div className="shrink-0 inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
-        <span className="px-2 py-1 text-[var(--text-muted)]">F{formatSeq(featureNum)}</span>
+        <span className="px-2 py-1 text-[var(--text-muted)]">
+          F{formatSeq(featureNum)}
+        </span>
       </div>
     );
   }
@@ -101,11 +120,15 @@ export function ParentBadge({
     if (phaseNum === undefined) return null;
     return (
       <div className="shrink-0 inline-flex items-stretch font-mono text-[10.5px] font-semibold rounded-md overflow-hidden border border-[var(--border)] bg-[var(--surface-elevated)]">
-        <span className="px-2 py-1 text-[var(--text-muted)]">P{formatSeq(phaseNum)}</span>
+        <span className="px-2 py-1 text-[var(--text-muted)]">
+          P{formatSeq(phaseNum)}
+        </span>
         {featureNum !== undefined && (
           <>
             <span className="w-[1px] bg-[var(--border)]" />
-            <span className="px-2 py-1 text-[var(--text-subtle)]">F{formatSeq(featureNum)}</span>
+            <span className="px-2 py-1 text-[var(--text-subtle)]">
+              F{formatSeq(featureNum)}
+            </span>
           </>
         )}
       </div>
@@ -120,31 +143,89 @@ export function ParentBadge({
  * color-coded by group (feature=purple, phase=cyan, task=green). Used in the
  * Work Tree so the full identifier is easy to scan and type. The title sits
  * below this badge on its own (wrapping) line.
+ *
+ * Pass `featureId`, `phaseId`, and/or `taskId` to make the corresponding
+ * segment a clickable link to that entity's detail page.
  */
 export function EntityPathBadge({
   featureNum,
   phaseNum,
   taskNum,
+  featureId,
+  phaseId,
+  taskId,
 }: {
   featureNum?: number | undefined;
   phaseNum?: number | undefined;
   taskNum?: number | undefined;
+  featureId?: string | undefined;
+  phaseId?: string | undefined;
+  taskId?: string | undefined;
 }) {
+  const FeatureSegment = featureId
+    ? ({ children }: { children: ReactNode }) => (
+        <Link
+          to={`/features/${featureId}`}
+          className="entity-path-seg entity-path-seg--feature entity-path-seg--link"
+        >
+          {children}
+        </Link>
+      )
+    : ({ children }: { children: ReactNode }) => (
+        <span className="entity-path-seg entity-path-seg--feature">
+          {children}
+        </span>
+      );
+
+  const PhaseSegment = phaseId
+    ? ({ children }: { children: ReactNode }) => (
+        <Link
+          to={`/features/${featureId}/phases/${phaseId}`}
+          className="entity-path-seg entity-path-seg--phase entity-path-seg--link"
+        >
+          {children}
+        </Link>
+      )
+    : ({ children }: { children: ReactNode }) => (
+        <span className="entity-path-seg entity-path-seg--phase">
+          {children}
+        </span>
+      );
+
+  const TaskSegment = taskId
+    ? ({ children }: { children: ReactNode }) => (
+        <Link
+          to={`/features/${featureId}/phases/${phaseId}/tasks/${taskId}`}
+          className="entity-path-seg entity-path-seg--task entity-path-seg--link"
+        >
+          {children}
+        </Link>
+      )
+    : ({ children }: { children: ReactNode }) => (
+        <span className="entity-path-seg entity-path-seg--task">
+          {children}
+        </span>
+      );
+
   return (
     <span className="entity-path-badge">
       {featureNum !== undefined ? (
-        <span className="entity-path-seg entity-path-seg--feature">F{formatSeq(featureNum)}</span>
+        <FeatureSegment>F{formatSeq(featureNum)}</FeatureSegment>
       ) : null}
       {phaseNum !== undefined ? (
         <>
-          <span className="entity-path-sep" aria-hidden="true">/</span>
-          <span className="entity-path-seg entity-path-seg--phase">P{formatSeq(phaseNum)}</span>
+          <span className="entity-path-sep" aria-hidden="true">
+            /
+          </span>
+          <PhaseSegment>P{formatSeq(phaseNum)}</PhaseSegment>
         </>
       ) : null}
       {taskNum !== undefined ? (
         <>
-          <span className="entity-path-sep" aria-hidden="true">/</span>
-          <span className="entity-path-seg entity-path-seg--task">T{formatSeq(taskNum)}</span>
+          <span className="entity-path-sep" aria-hidden="true">
+            /
+          </span>
+          <TaskSegment>T{formatSeq(taskNum)}</TaskSegment>
         </>
       ) : null}
     </span>
@@ -157,7 +238,13 @@ export function EntityPathBadge({
  * transient check on success. Sibling of a navigation link — never nested
  * inside an <a>.
  */
-export function CopyableBadge({ id, children }: { id: string; children: ReactNode }) {
+export function CopyableBadge({
+  id,
+  children,
+}: {
+  id: string;
+  children: ReactNode;
+}) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -176,8 +263,60 @@ export function CopyableBadge({ id, children }: { id: string; children: ReactNod
     >
       {children}
       <span className="copyable-id__icon" aria-hidden="true">
-        {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+        {copied ? (
+          <Check className="h-3 w-3 text-emerald-500" />
+        ) : (
+          <Copy className="h-3 w-3" />
+        )}
       </span>
     </button>
+  );
+}
+
+/** Compact, copyable short id pill (e.g. "UUXD1"). Globally unique within a
+ *  project (Crockford 5-char). Shown alongside the composite F00x/P00x/T00x
+ *  badge so both the per-parent number and the global short id are visible. */
+export function ShortIdBadge({ shortId }: { shortId: string }) {
+  return (
+    <CopyableBadge id={shortId}>
+      <span className="short-id-badge">{shortId}</span>
+    </CopyableBadge>
+  );
+}
+
+/** Indicator that a phase has a pending entity-scoped handoff (phase.handoff).
+ *  Small document icon + tooltip. Links to the /handoff viewer. */
+export function HandoffBadge({
+  phaseId,
+  updatedAt,
+}: {
+  phaseId: string;
+  updatedAt?: string | undefined;
+}) {
+  const title = `Phase handoff pending${updatedAt ? ` · updated ${new Date(updatedAt).toLocaleString()}` : ""}`;
+  return (
+    <a
+      href={`/handoff#${phaseId}`}
+      className="handoff-badge flex items-center gap-1 ml-2 shrink-0"
+      title={title}
+      aria-label={title}
+    >
+      <svg
+        viewBox="0 0 16 16"
+        width="14"
+        height="14"
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 2h5l3 3v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+        <path d="M9 2v3h3" />
+        <path d="M5.5 8h5M5.5 10.5h5" />
+      </svg>
+      <span className="handoff-badge__label">handoff</span>
+    </a>
   );
 }

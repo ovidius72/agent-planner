@@ -1,9 +1,11 @@
-import { Link, useLoaderData, useNavigate, useRouteLoaderData } from "react-router-dom";
+import { useLoaderData, useNavigate, useRouteLoaderData } from "react-router-dom";
+import { Pencil } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { AiConsolidatedContext } from "../../components/dashboard/ai-consolidated-context";
 import { LatestCompletedTasks } from "../../components/dashboard/latest-completed-tasks";
+import { NewAddedTasks } from "../../components/dashboard/new-added-tasks";
 import { StatCards } from "../../components/dashboard/stat-cards";
 import { WorkTree } from "../../components/dashboard/work-tree";
 import { useShortcut } from "../../lib/shortcuts";
@@ -32,15 +34,14 @@ export function DashboardRoute() {
   return (
     <div className="grid grid-cols-1 gap-8">
       <Card className="grid grid-cols-1 gap-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-[var(--text)]">Project Goal</h2>
-            {project.goal ? <FormattedText text={project.goal} className="mt-2 max-w-4xl" /> : <p className="mt-2 max-w-4xl text-sm text-[var(--text-muted)]">Add a project goal to define the main objective.</p>}
-          </div>
-          <Link to="/project/edit">
-            <Button type="button" shortcut="edit">Edit project</Button>
-          </Link>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="min-w-0 text-lg font-bold text-[var(--text)]">Project Goal</h2>
+          <Button type="button" shortcut="edit" onClick={openEditProject} className="shrink-0">
+            <Pencil className="h-4 w-4" />
+            Edit project
+          </Button>
         </div>
+        {project.goal ? <FormattedText text={project.goal} className="max-w-4xl" /> : <p className="max-w-4xl text-sm text-[var(--text-muted)]">Add a project goal to define the main objective.</p>}
       </Card>
 
       <AiConsolidatedContext project={project} />
@@ -55,6 +56,7 @@ export function DashboardRoute() {
       />
 
       <LatestCompletedTasks features={features} phases={phases} />
+      <NewAddedTasks features={features} phases={phases} />
     </div>
   );
 }

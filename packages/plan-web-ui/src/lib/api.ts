@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { Feature, HandoffDocument, Phase, Project, Task } from "./types";
+import type { ArchivedHandoffSummary, Feature, HandoffSummary, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -35,6 +35,9 @@ function normalizePhase(phase: Phase): Phase {
     completionCriteria: phase.completionCriteria ?? [],
     taskIds: phase.taskIds ?? [],
     tasks: (phase.tasks ?? []).map(normalizeTask),
+    linkedRequirements: phase.linkedRequirements ?? [],
+    handoff: phase.handoff ?? "",
+    handoffUpdatedAt: phase.handoffUpdatedAt ?? "",
   };
 }
 
@@ -67,6 +70,15 @@ function normalizeProject(project: Project): Project {
       beforeTaskStart: project.workflowRules?.beforeTaskStart ?? [],
       afterPhaseComplete: project.workflowRules?.afterPhaseComplete ?? [],
     },
+  };
+}
+
+function normalizeRequirement(requirement: Requirement): Requirement {
+  return {
+    ...requirement,
+    description: requirement.description ?? "",
+    macroTasks: requirement.macroTasks ?? [],
+    linkedPhaseIds: requirement.linkedPhaseIds ?? [],
   };
 }
 
@@ -119,6 +131,7 @@ export interface UiConfig {
 export interface ActiveTaskSummary {
   id: string;
   number: number;
+  shortId?: string;
   title: string;
   phaseId: string;
   phaseNumber: number;
@@ -159,6 +172,37 @@ export async function deleteFeature(featureId: string): Promise<{ deleted: strin
   return request(`/features/${featureId}`, { method: "DELETE" });
 }
 
+export async function getRequirements(): Promise<Requirement[]> {
+  return (await request<{ requirements: Requirement[] }>("/requirements")).requirements.map(normalizeRequirement);
+}
+
+export async function createRequirement(requirement: Pick<Requirement, "id" | "title" | "description" | "status" | "linkedPhaseIds">): Promise<Requirement> {
+  const now = new Date().toISOString();
+  return normalizeRequirement(await request("/requirements", {
+    method: "POST",
+    body: JSON.stringify({
+      ...requirement,
+      macroTasks: [],
+      createdAt: now,
+      updatedAt: now,
+    }),
+  }));
+}
+
+export async function updateRequirement(requirement: Requirement): Promise<Requirement> {
+  return normalizeRequirement(await request(`/requirements/${requirement.id}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      ...requirement,
+      updatedAt: new Date().toISOString(),
+    }),
+  }));
+}
+
+export async function deleteRequirement(requirementId: string): Promise<{ deleted: string }> {
+  return request(`/requirements/${requirementId}`, { method: "DELETE" });
+}
+
 export async function getPhases(featureId?: string): Promise<Phase[]> {
   const query = featureId ? `?featureId=${encodeURIComponent(featureId)}` : "";
   return (await request<Phase[]>(`/phases${query}`)).map(normalizePhase);
@@ -180,7 +224,7 @@ export async function deletePhase(phaseId: string): Promise<{ deleted: string }>
   return request(`/phases/${phaseId}`, { method: "DELETE" });
 }
 
-export async function createTask(phaseId: string, payload: { title: string; description?: string; status?: Task["status"] }): Promise<Task> {
+export async function createTask(phaseId: string, payload: { title: string; description?: string; status?: Task["status"]; checklist?: string[] }): Promise<Task> {
   return normalizeTask(await request(`/phases/${phaseId}/tasks`, { method: "POST", body: JSON.stringify(payload) }));
 }
 
@@ -200,12 +244,26 @@ export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
   return request("/tasks/active");
 }
 
-export async function getHandoff(): Promise<HandoffDocument> {
-  return request("/handoff");
+export async function listHandoffs(): Promise<HandoffSummary[]> {
+  const r = await request<{ handoffs: HandoffSummary[] }>("/handoffs");
+  return r.handoffs ?? [];
 }
 
-export async function deleteHandoff(): Promise<{ deleted: boolean }> {
-  return request("/handoff", { method: "DELETE" });
+export async function listArchivedHandoffs(): Promise<ArchivedHandoffSummary[]> {
+  const r = await request<{ archived: ArchivedHandoffSummary[] }>("/handoffs/archive");
+  return r.archived ?? [];
+}
+
+export async function getPhaseHandoff(phaseId: string): Promise<PhaseHandoff> {
+  return request(`/phases/${phaseId}/handoff`);
+}
+
+export async function setPhaseHandoff(phaseId: string, content: string): Promise<PhaseHandoff | { cleared: boolean }> {
+  return request(`/phases/${phaseId}/handoff`, { method: "PUT", body: JSON.stringify({ content }) });
+}
+
+export async function clearPhaseHandoff(phaseId: string): Promise<{ cleared: boolean }> {
+  return request(`/phases/${phaseId}/handoff`, { method: "DELETE" });
 }
 
 export interface ExportReport {
@@ -219,7 +277,10 @@ export async function exportPlan(full = false): Promise<ExportReport> {
 
 export interface RepairReport {
   migrated: { renamed: number; repaired: number; inferred: number };
-  integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };
+  backfill: { shortIdsAssigned: number; prioritiesAssigned: number; duplicateShortIds: string[] };
+  containment: { changed: number; tasks: number; orphan: number };
+  handoffs: { archived: number };
+  integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
 }
 
 export async function repairPlan(): Promise<RepairReport> {
@@ -228,4 +289,15 @@ export async function repairPlan(): Promise<RepairReport> {
 
 export async function getIntegrity(): Promise<RepairReport["integrity"]> {
   return request("/integrity");
+}
+
+export type ReorderKind = "feature" | "phase" | "task";
+
+export async function reorder(
+  kind: ReorderKind,
+  movedId: string,
+  beforeId: string | null,
+  afterId: string | null,
+): Promise<{ ok: boolean; kind: ReorderKind; movedId: string }> {
+  return request("/reorder", { method: "POST", body: JSON.stringify({ kind, movedId, beforeId, afterId }) });
 }

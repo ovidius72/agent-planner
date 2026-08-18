@@ -1,0 +1,907 @@
+{
+  "$ref": "definitions/PlanWorkspace",
+  "definitions": {
+    "PlanWorkspace": {
+      "type": "object",
+      "properties": {
+        "manifest": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "projectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "projectName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "$ref": "1/createdAt"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "projectId",
+            "projectName",
+            "createdAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        },
+        "project": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "goal": {
+              "type": "string",
+              "default": ""
+            },
+            "description": {
+              "type": "string",
+              "default": ""
+            },
+            "webPort": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535,
+              "default": 0
+            },
+            "scope": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            },
+            "outOfScope": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            },
+            "decisions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            },
+            "globalRules": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            },
+            "technologies": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": []
+            },
+            "contentLanguage": {
+              "type": "string",
+              "default": ""
+            },
+            "chatLanguage": {
+              "type": "string",
+              "default": ""
+            },
+            "workflowRules": {
+              "type": "object",
+              "properties": {
+                "beforePhaseStart": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "default": []
+                },
+                "beforeTaskStart": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "default": []
+                },
+                "afterPhaseComplete": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "default": []
+                }
+              },
+              "additionalProperties": false
+            },
+            "acceptedDecisions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "decision": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "implementationNotes": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "acceptedAt": {
+                    "$ref": "6/manifest/properties/createdAt"
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "acceptedAt"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "nextFeatureNumber": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "default": 1
+            },
+            "nextPhaseNumber": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "default": 1
+            },
+            "nextTaskNumber": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "default": 1
+            }
+          },
+          "required": [
+            "name",
+            "workflowRules"
+          ],
+          "additionalProperties": false
+        },
+        "features": {
+          "type": "object",
+          "properties": {
+            "features": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "number": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0
+                  },
+                  "shortId": {
+                    "type": "string",
+                    "pattern": "^(|[A-Z2-9]{5})$",
+                    "default": ""
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "discussedAt": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "contextReady": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "contextReadyReason": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "workDone": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "workRemaining": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "acceptedDecisions": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "7/project/properties/acceptedDecisions/items"
+                    },
+                    "default": []
+                  },
+                  "phaseIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "default": []
+                  },
+                  "dependsOn": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "default": []
+                  },
+                  "statusLog": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "date": {
+                          "$ref": "9/manifest/properties/createdAt"
+                        },
+                        "fromStatus": {
+                          "type": "string",
+                          "enum": [
+                            "planned",
+                            "in-progress",
+                            "done",
+                            "blocked",
+                            "canceled",
+                            "rejected",
+                            "deferred",
+                            "waiting"
+                          ]
+                        },
+                        "toStatus": {
+                          "$ref": "1/fromStatus"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "type": "string",
+                          "default": ""
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "date",
+                        "fromStatus",
+                        "toStatus",
+                        "title"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "default": []
+                  },
+                  "createdAt": {
+                    "$ref": "6/manifest/properties/createdAt"
+                  },
+                  "updatedAt": {
+                    "$ref": "6/manifest/properties/createdAt"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "features"
+          ],
+          "additionalProperties": false
+        },
+        "requirements": {
+          "type": "object",
+          "properties": {
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "planned",
+                      "in-progress",
+                      "done",
+                      "blocked",
+                      "canceled",
+                      "rejected",
+                      "deferred",
+                      "waiting"
+                    ]
+                  },
+                  "macroTasks": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^MT-\\d{3}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "status": {
+                          "$ref": "4/status"
+                        },
+                        "createdAt": {
+                          "$ref": "9/manifest/properties/createdAt"
+                        },
+                        "updatedAt": {
+                          "$ref": "9/manifest/properties/createdAt"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "status",
+                        "createdAt",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "default": []
+                  },
+                  "linkedPhaseIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "default": []
+                  },
+                  "createdAt": {
+                    "$ref": "6/manifest/properties/createdAt"
+                  },
+                  "updatedAt": {
+                    "$ref": "6/manifest/properties/createdAt"
+                  }
+                },
+                "required": [
+                  "id",
+                  "title",
+                  "status",
+                  "createdAt",
+                  "updatedAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "requirements"
+          ],
+          "additionalProperties": false
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "featureId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "number": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "shortId": {
+                "type": "string",
+                "pattern": "^(|[A-Z2-9]{5})$",
+                "default": ""
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0
+              },
+              "slug": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "discussedAt": {
+                "type": "string",
+                "default": ""
+              },
+              "contextReady": {
+                "type": "boolean",
+                "default": false
+              },
+              "contextReadyReason": {
+                "type": "string",
+                "default": ""
+              },
+              "summary": {
+                "type": "string",
+                "default": ""
+              },
+              "description": {
+                "type": "string",
+                "default": ""
+              },
+              "notes": {
+                "type": "string",
+                "default": ""
+              },
+              "goals": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "nonGoals": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "dependencies": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "dependsOn": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "risks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "openQuestions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "decisions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "acceptedDecisions": {
+                "type": "array",
+                "items": {
+                  "$ref": "5/project/properties/acceptedDecisions/items"
+                },
+                "default": []
+              },
+              "completionCriteria": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "taskIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": []
+              },
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "phaseId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "number": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "default": 0
+                    },
+                    "shortId": {
+                      "type": "string",
+                      "pattern": "^(|[A-Z2-9]{5})$",
+                      "default": ""
+                    },
+                    "priority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "default": 0
+                    },
+                    "shortName": {
+                      "$ref": "4/slug"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "$ref": "7/features/properties/features/items/properties/statusLog/items/properties/fromStatus"
+                    },
+                    "description": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "notes": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "statusLog": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "8/features/properties/features/items/properties/statusLog/items"
+                      },
+                      "default": []
+                    },
+                    "decisions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "default": []
+                    },
+                    "acceptedDecisions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "8/project/properties/acceptedDecisions/items"
+                      },
+                      "default": []
+                    },
+                    "checklist": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "number": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "default": 0
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "checked": {
+                                "type": "boolean",
+                                "default": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "default": []
+                    },
+                    "subtasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "planned",
+                              "in-progress",
+                              "done",
+                              "blocked",
+                              "canceled",
+                              "rejected",
+                              "deferred",
+                              "waiting"
+                            ]
+                          },
+                          "description": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "createdAt": {
+                            "$ref": "10/manifest/properties/createdAt"
+                          },
+                          "updatedAt": {
+                            "$ref": "10/manifest/properties/createdAt"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "status",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": []
+                    },
+                    "dependsOn": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "default": []
+                    },
+                    "startedAt": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "createdAt": {
+                      "$ref": "7/manifest/properties/createdAt"
+                    },
+                    "updatedAt": {
+                      "$ref": "7/manifest/properties/createdAt"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "phaseId",
+                    "shortName",
+                    "title",
+                    "status",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": []
+              },
+              "createdAt": {
+                "$ref": "4/manifest/properties/createdAt"
+              },
+              "updatedAt": {
+                "$ref": "4/manifest/properties/createdAt"
+              },
+              "handoff": {
+                "type": "string",
+                "default": ""
+              },
+              "handoffUpdatedAt": {
+                "type": "string",
+                "default": ""
+              },
+              "handoffReadAt": {
+                "type": "string",
+                "default": ""
+              },
+              "handoffHistory": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "file": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "clearedAt": {
+                      "$ref": "7/manifest/properties/createdAt"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "default": ""
+                    }
+                  },
+                  "required": [
+                    "clearedAt"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": []
+              },
+              "statusLog": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "date": {
+                      "$ref": "7/manifest/properties/createdAt"
+                    },
+                    "fromStatus": {
+                      "type": "string",
+                      "enum": [
+                        "draft",
+                        "discovery",
+                        "planned",
+                        "in-progress",
+                        "done",
+                        "blocked",
+                        "canceled",
+                        "rejected",
+                        "deferred",
+                        "waiting"
+                      ]
+                    },
+                    "toStatus": {
+                      "$ref": "1/fromStatus"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": {
+                      "type": "string",
+                      "default": ""
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "date",
+                    "fromStatus",
+                    "toStatus",
+                    "title"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": []
+              }
+            },
+            "required": [
+              "id",
+              "number",
+              "slug",
+              "title",
+              "createdAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "manifest",
+        "project",
+        "features",
+        "requirements",
+        "phases"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Plan .planner/ Workspace Schema",
+  "description": "Public JSON schema for the Agent Plan .planner/ directory."
+}

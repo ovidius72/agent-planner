@@ -6,6 +6,13 @@
   --color-status-done: #22c55e;
   --color-status-blocked: #ef4444;
   --color-status-canceled: #94a3b8;
+  /* Previously referenced but undefined — now defined. */
+  --color-status-waiting: #64748b;
+  --color-status-deferred: #8b5cf6;
+  --color-status-rejected: #f43f5e;
+  /* Parent-only derived display statuses (P039). */
+  --color-status-started: #6366f1;
+  --color-status-closed: #0d9488;
 }
 
 :root {

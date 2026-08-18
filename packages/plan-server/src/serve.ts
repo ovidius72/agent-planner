@@ -7,7 +7,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createTaskId, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -18,6 +18,28 @@ let watcherHubRef: { current: WsHub | null } = { current: null };
 
 function nowISO(): string {
   return new Date().toISOString();
+}
+
+/** Resolve requirement phase refs before persistence so requirements never dangle. */
+async function resolveRequirementPhaseIds(
+  store: PlanStore,
+  linkedPhaseIds: unknown,
+): Promise<{ linkedPhaseIds: string[] } | { error: string }> {
+  if (!Array.isArray(linkedPhaseIds) || linkedPhaseIds.length === 0) {
+    return { error: "linkedPhaseIds must contain at least one phase" };
+  }
+
+  const refs = linkedPhaseIds.map((entry) => typeof entry === "string" ? entry.trim() : "");
+  if (refs.some((ref) => !ref)) {
+    return { error: "linkedPhaseIds must contain non-empty phase references" };
+  }
+
+  const [phases, featuresDocument] = await Promise.all([store.loadAllPhases(), store.loadFeatures()]);
+  const resolved = refs.map((ref) => findPhaseByRef(phases, featuresDocument.features, ref));
+  const missing = resolved.findIndex((phase) => !phase);
+  if (missing !== -1) return { error: `linked phase not found: ${refs[missing]}` };
+
+  return { linkedPhaseIds: [...new Set(resolved.map((phase) => phase!.id))] };
 }
 
 function nextTaskNumber(phase: Phase): number {
@@ -222,21 +244,27 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   app.post(route("/requirements"), async (c) => {
     const body = await c.req.json<Requirement>();
-    const reqs = await store.updateRequirements((doc) => { doc.requirements.push(body); return doc; });
+    const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds);
+    if ("error" in links) return c.json({ error: links.error }, 400);
+    const requirement = { ...body, linkedPhaseIds: links.linkedPhaseIds };
+    const reqs = await store.updateRequirements((doc) => { doc.requirements.push(requirement); return doc; });
     await store.writeGenerated();
     hub()?.broadcast({ type: "requirements-updated", data: reqs });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
-    return c.json(body, 201);
+    return c.json(requirement, 201);
   });
 
   app.put(route("/requirements/:id"), async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json<Requirement>();
+    const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds);
+    if ("error" in links) return c.json({ error: links.error }, 400);
+    const requirement = { ...body, linkedPhaseIds: links.linkedPhaseIds };
     let found = false;
     const reqs = await store.updateRequirements((doc) => {
       const idx = doc.requirements.findIndex((r) => r.id === id);
       if (idx === -1) return doc;
-      doc.requirements[idx] = body;
+      doc.requirements[idx] = requirement;
       found = true;
       return doc;
     });
@@ -244,7 +272,22 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     await store.writeGenerated();
     hub()?.broadcast({ type: "requirements-updated", data: reqs });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
-    return c.json(body);
+    return c.json(requirement);
+  });
+
+  app.delete(route("/requirements/:id"), async (c) => {
+    const id = c.req.param("id");
+    let found = false;
+    const reqs = await store.updateRequirements((doc) => {
+      const next = doc.requirements.filter((requirement) => requirement.id !== id);
+      found = next.length !== doc.requirements.length;
+      return found ? { requirements: next } : doc;
+    });
+    if (!found) return c.json({ error: "not found" }, 404);
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "requirements-updated", data: reqs });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ deleted: id });
   });
 
   // ── Features ─────────────────────────────────────────────────────
@@ -256,11 +299,15 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!name) return c.json({ error: "name required" }, 400);
 
     const features = await store.loadFeatures();
-    const number = features.features.length + 1;
+    const id = createFeatureId();
+    const identity = await store.allocateEntityIdentity("feature", id);
+    const priority = await store.nextPriority("feature");
     const now = nowISO();
     const feature: Feature = {
-      id: createFeatureId(),
-      number,
+      id,
+      number: identity.number,
+      shortId: identity.shortId,
+      priority,
       name,
       description: body.description ?? "",
       status: "planned",
@@ -273,6 +320,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       workRemaining: "",
       acceptedDecisions: [],
       phaseIds: [], dependsOn: [],
+      statusLog: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -335,7 +383,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   // ── Phases ───────────────────────────────────────────────────────
   app.get(route("/phases"), async (c) => {
-    const allPhases = await store.loadAllPhases();
+    const allPhases = await store.loadAllPhasesWithRequirements();
     const featureId = c.req.query("featureId");
     if (featureId) return c.json(allPhases.filter((p) => p.featureId === featureId));
     return c.json(allPhases);
@@ -365,13 +413,17 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     let phase: Phase | undefined;
     await withFeatureLock(featureId, async () => {
       const allPhases = await store.loadAllPhases();
-      const number = allPhases.filter((p) => p.featureId === featureId).length + 1;
       const slug = normalizeSlug(title);
+      const id = createPhaseId();
+      const identity = await store.allocateEntityIdentity("phase", id);
+      const priority = await store.nextPriority("phase", featureId);
       const now = nowISO();
       phase = {
-        id: createPhaseId(),
+        id,
         featureId,
-        number,
+        number: identity.number,
+        shortId: identity.shortId,
+        priority,
         slug,
         title,
         status: "draft",
@@ -394,6 +446,11 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         dependsOn: [],
         createdAt: now,
         updatedAt: now,
+        handoff: "",
+        handoffUpdatedAt: "",
+          handoffReadAt: "",
+          handoffHistory: [],
+          statusLog: [],
       };
 
       await store.savePhase(phase);
@@ -424,7 +481,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const id = c.req.param("id");
     if (!id) return c.json({ error: "id required" }, 400);
     try {
-      return c.json(await store.loadPhase(id));
+      return c.json(await store.loadPhaseWithRequirements(id));
     } catch {
       return c.json({ error: "phase not found" }, 404);
     }
@@ -476,7 +533,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.post(route("/phases/:phaseId/tasks"), async (c) => {
     const phaseId = c.req.param("phaseId");
     if (!phaseId) return c.json({ error: "phaseId required" }, 400);
-    const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"] }>();
+    const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"]; checklist?: string[] }>();
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title required" }, 400);
 
@@ -490,13 +547,19 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       }
     }
     const now = nowISO();
-    const taskNumber = nextTaskNumber(phase);
     const shortName = normalizeSlug(title).trim() || `task-${Date.now().toString(36)}`;
     const initialStatus = body.status ?? "planned";
+    const taskId = createTaskId();
+    const identity = await store.allocateEntityIdentity("task", taskId);
+    const priority = await store.nextPriority("task", phase.id);
+    const checklistItems = (body.checklist ?? []).map((s) => s.trim()).filter((s) => s.length > 0)
+      .map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), number: index + 1, title: item, checked: false }));
     const task: Task = {
-      id: createTaskId(),
+      id: taskId,
       phaseId: phase.id,
-      number: taskNumber,
+      number: identity.number,
+      shortId: identity.shortId,
+      priority,
       shortName,
       title,
       status: initialStatus,
@@ -505,7 +568,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       statusLog: [],
       decisions: [],
       acceptedDecisions: [],
-      checklist: [],
+      checklist: checklistItems,
       subtasks: [],
       dependsOn: [],
       startedAt: initialStatus === "in-progress" || initialStatus === "done" ? now : "",
@@ -546,7 +609,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         if (!phaseToFeature.has(phaseId)) phaseToFeature.set(phaseId, feature.id);
       }
     }
-    const activeTasksMap = new Map<string, { id: string; number: number; title: string; phaseId: string; phaseNumber: number; featureId: string; featureNumber: number; status: string }>();
+    const activeTasksMap = new Map<string, { id: string; number: number; shortId?: string; title: string; phaseId: string; phaseNumber: number; featureId: string; featureNumber: number; status: string }>();
     for (const phase of phases) {
       for (const task of phase.tasks) {
         if (task.status === "in-progress") {
@@ -555,6 +618,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
           activeTasksMap.set(task.id, {
             id: task.id,
             number: task.number,
+            shortId: task.shortId,
             title: task.title,
             phaseId: phase.id,
             phaseNumber: phase.number,
@@ -697,6 +761,122 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(report);
   });
 
+  // ── Reorder (priority) ───────────────────────────────────────────
+  app.post(route("/reorder"), async (c) => {
+    // Midpoint-insert reorder: only the moved item's priority changes (when
+    // the gap between its new neighbours allows it). When the gap is exhausted
+    // (≤1, e.g. all-zero defaults or tight spacing), the segment is reindexed
+    // with GAP. Keeps priority as int (no schema migration) and minimises the
+    // set of changed items per drag.
+    const body = await c.req.json<{ kind: "feature" | "phase" | "task"; movedId: string; beforeId: string | null; afterId: string | null }>();
+    const { kind, movedId, beforeId, afterId } = body;
+    if (!movedId) return c.json({ error: "movedId required" }, 400);
+    const GAP = 10;
+
+    // Reindex a list in-place: reconstruct the desired order (moved removed +
+    // reinserted between beforeId and afterId) then assign (i+1)*GAP.
+    const reindexList = (all: { id: string; priority: number; number: number }[]) => {
+      const sorted = [...all].sort((a, b) => a.priority - b.priority || a.number - b.number);
+      const moved = sorted.find((x) => x.id === movedId);
+      const withoutMoved = sorted.filter((x) => x.id !== movedId);
+      let insertIdx: number;
+      if (beforeId) {
+        const bi = withoutMoved.findIndex((x) => x.id === beforeId);
+        insertIdx = bi === -1 ? withoutMoved.length : bi + 1;
+      } else {
+        insertIdx = 0;
+      }
+      if (moved) withoutMoved.splice(insertIdx, 0, moved);
+      withoutMoved.forEach((item, i) => { item.priority = (i + 1) * GAP; });
+    };
+
+    if (kind === "feature") {
+      // Priority-only: suspend status rollup so reordering never flips a
+      // partially-done feature to in-progress (priority ≠ status).
+      await store.runBatch(async () => {
+        await store.updateFeatures((doc) => {
+          const moved = doc.features.find((x) => x.id === movedId);
+          if (!moved) return doc;
+          const before = beforeId ? doc.features.find((x) => x.id === beforeId) : null;
+          const after = afterId ? doc.features.find((x) => x.id === afterId) : null;
+          const beforeP = before ? before.priority : 0;
+          const maxP = doc.features.reduce((m, f) => Math.max(m, f.priority), 0);
+          const afterP = after ? after.priority : (maxP + GAP);
+          if (afterP - beforeP > 1) {
+            moved.priority = Math.floor((beforeP + afterP) / 2);
+          } else {
+            reindexList(doc.features);
+          }
+          doc.features.sort((a, b) => a.priority - b.priority || a.number - b.number);
+          return doc;
+        });
+      });
+      hub()?.broadcast({ type: "features-updated", data: { action: "reordered" } });
+    } else if (kind === "phase") {
+      const phases = await store.loadAllPhases();
+      const moved = phases.find((p) => p.id === movedId);
+      if (!moved) return c.json({ error: "moved phase not found" }, 404);
+      const siblings = phases.filter((p) => p.featureId === moved.featureId);
+      const before = beforeId ? siblings.find((p) => p.id === beforeId) : null;
+      const after = afterId ? siblings.find((p) => p.id === afterId) : null;
+      const beforeP = before ? before.priority : 0;
+      const maxP = siblings.reduce((m, p) => Math.max(m, p.priority), 0);
+      const afterP = after ? after.priority : (maxP + GAP);
+      await store.runBatch(async () => {
+        if (afterP - beforeP > 1) {
+          await store.updatePhase(movedId, (entry) => { entry.priority = Math.floor((beforeP + afterP) / 2); return entry; });
+        } else {
+          // Reindex all siblings (each phase is a separate file)
+          const sorted = [...siblings].sort((a, b) => a.priority - b.priority || a.number - b.number);
+          const withoutMoved = sorted.filter((x) => x.id !== movedId);
+          let insertIdx: number;
+          if (beforeId) {
+            const bi = withoutMoved.findIndex((x) => x.id === beforeId);
+            insertIdx = bi === -1 ? withoutMoved.length : bi + 1;
+          } else {
+            insertIdx = 0;
+          }
+          const movedEntry = sorted.find((x) => x.id === movedId);
+          if (movedEntry) withoutMoved.splice(insertIdx, 0, movedEntry);
+          for (const [i, p] of withoutMoved.entries()) {
+            await store.updatePhase(p.id, (entry) => { entry.priority = (i + 1) * GAP; return entry; });
+          }
+        }
+      });
+      hub()?.broadcast({ type: "phases-updated", data: { action: "reordered" } });
+    } else if (kind === "task") {
+      const allPhases = await store.loadAllPhases();
+      const host = allPhases.find((p) => p.tasks.some((t) => t.id === movedId));
+      if (host) {
+        await store.runBatch(async () => {
+          await store.updatePhase(host.id, (phase) => {
+            const moved = phase.tasks.find((x) => x.id === movedId);
+            if (!moved) return phase;
+            const before = beforeId ? phase.tasks.find((x) => x.id === beforeId) : null;
+            const after = afterId ? phase.tasks.find((x) => x.id === afterId) : null;
+            const beforeP = before ? before.priority : 0;
+            const maxP = phase.tasks.reduce((m, t) => Math.max(m, t.priority), 0);
+            const afterP = after ? after.priority : (maxP + GAP);
+            if (afterP - beforeP > 1) {
+              moved.priority = Math.floor((beforeP + afterP) / 2);
+            } else {
+              reindexList(phase.tasks);
+            }
+            phase.tasks.sort((a, b) => a.priority - b.priority || a.number - b.number);
+            phase.taskIds = phase.tasks.map((t) => t.id);
+            return phase;
+          });
+        });
+        hub()?.broadcast({ type: "phases-updated", data: { action: "reordered", phaseId: host.id, featureId: host.featureId } });
+      }
+    } else {
+      return c.json({ error: "invalid kind" }, 400);
+    }
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ ok: true, kind, movedId });
+  });
+
   // ── Render ───────────────────────────────────────────────────────
   app.post(route("/render"), async (c) => {
     const files = await store.writeGenerated();
@@ -704,20 +884,58 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json({ files });
   });
 
-  // ── Handoff ──────────────────────────────────────────────────────
-  app.get(route("/handoff"), async (c) => {
-    const handoff = await store.loadHandoff();
-    return c.json({
-      exists: Boolean(handoff),
-      content: handoff?.content ?? "",
-      createdAt: handoff?.createdAt ?? "",
-      updatedAt: handoff?.updatedAt ?? "",
-    });
+  // ── Handoff (entity-scoped, phase.handoff) ────────────────────
+  app.get(route("/handoffs"), async (c) => {
+    const list = await store.listHandoffs();
+    return c.json({ handoffs: list });
   });
 
-  app.delete(route("/handoff"), async (c) => {
-    await store.deleteHandoff();
-    return c.json({ deleted: true });
+  app.get(route("/handoffs/archive"), async (c) => {
+    const archived = await store.listArchivedHandoffs();
+    return c.json({ archived });
+  });
+
+  app.get(route("/phases/:id/handoff"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const phase = await store.loadPhase(id).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
+    const content = await store.getPhaseHandoff(id);
+    return c.json({ content, updatedAt: phase.handoffUpdatedAt ?? "" });
+  });
+
+  app.put(route("/phases/:id/handoff"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const phase = await store.loadPhase(id).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
+    const body = await c.req.json<{ content: string }>().catch(() => ({ content: "" }));
+    const content = (body?.content ?? "").trim();
+    if (!content) {
+      // empty PUT = clear equivalent
+      await store.clearPhaseHandoff(id);
+      hub()?.broadcast({ type: "handoffCleared", data: { phaseId: id } });
+      hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: phase.featureId ?? "" } });
+      hub()?.broadcast({ type: "plan-rendered", data: {} });
+      return c.json({ cleared: true });
+    }
+    await store.setPhaseHandoff(id, content);
+    hub()?.broadcast({ type: "handoffUpdated", data: { phaseId: id } });
+    hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: phase.featureId ?? "" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ content, updatedAt: (await store.loadPhase(id)).handoffUpdatedAt ?? "" });
+  });
+
+  app.delete(route("/phases/:id/handoff"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const phase = await store.loadPhase(id).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
+    await store.clearPhaseHandoff(id);
+    hub()?.broadcast({ type: "handoffCleared", data: { phaseId: id } });
+    hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: phase.featureId ?? "" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ cleared: true });
   });
 
   // ── Health ───────────────────────────────────────────────────────
@@ -812,8 +1030,8 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
     throw new Error(`.planner/ not found at: ${planRoot}. Run plan-init first.`);
   }
 
-  // Self-heal stale/legacy persisted statuses before the UI reads them.
-  await store.syncStatuses();
+  // Startup is deliberately read-only: automatic migration/backfill would
+  // rewrite canonical entities outside the feature currently being worked on.
 
   // Shared mutable reference — routes see the hub after it's created
   const hubRef: { current: WsHub | null } = { current: null };

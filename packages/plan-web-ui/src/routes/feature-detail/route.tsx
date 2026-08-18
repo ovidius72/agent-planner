@@ -5,15 +5,22 @@ import { PhaseRow } from "../../components/phases/phase-row";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { CompactCard } from "../../components/ui/compact-card";
-import { CopyableBadge, EntityBadge, EntityPathBadge, formatEntityPath } from "../../components/ui/badges";
+import { DetailMetadataGrid, formatPriority, formatTimeline } from "../../components/ui/detail-metadata";
 import { FormattedText } from "../../components/ui/formatted-text";
+import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
+import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
-import { StatusBadge } from "../../components/ui/status-badge";
+import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
+import { StatusCardStepper } from "../../components/ui/status-card-stepper";
+import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
+import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
+import { compareEntities, type WorkTreeSortConfig } from "../../lib/dashboard-tree";
 import type { Feature, Phase } from "../../lib/types";
 
 function countTasks(phases: Phase[]) {
@@ -48,15 +55,25 @@ export function FeatureDetailRoute() {
   const taskCount = countTasks(phases);
   const taskSummary = countTasksByStatus(phases);
   const currentPhase = findCurrentPhase(phases);
-  const [searchParams] = useSearchParams();
+  const featureDisplay = deriveFeatureDisplayFromPhases(phases);
+  const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
+  const sortParam = searchParams.get("sort")?.trim() ?? "priority";
+  const dirParam = searchParams.get("dir")?.trim() ?? "asc";
+  const sort: WorkTreeSortConfig = {
+    key: sortParam === "priority" || sortParam === "number" || sortParam === "createdAt" || sortParam === "updatedAt" || sortParam === "title" || sortParam === "shortId" || sortParam === "status" || sortParam === "startedAt" || sortParam === "completedAt"
+      ? sortParam
+      : "priority",
+    direction: dirParam === "desc" ? "desc" : "asc",
+  };
+  const sortedPhases = useMemo(() => [...phases].sort((a, b) => compareEntities(a, b, sort.key, sort.direction)), [phases, sort]);
   const filteredPhases = useMemo(
-    () => phases.filter((phase) => (
+    () => sortedPhases.filter((phase) => (
       (!status || phase.status === status)
       && matchesListQuery(query, [phase.title, phase.id, phase.summary, phase.description])
     )),
-    [phases, query, status],
+    [sortedPhases, query, status],
   );
   const navigate = useNavigate();
   const deleteFormRef = useRef<HTMLFormElement>(null);
@@ -76,15 +93,25 @@ export function FeatureDetailRoute() {
       </Link>
 
       <div className="min-w-0">
-        <Breadcrumbs items={[{ label: "Features", to: "/features" }, { label: feature.name }]} />
+        <Breadcrumbs stacked items={[{ label: feature.name, kind: "Feature" }]} />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <CopyableBadge id={formatEntityPath({ featureNum: feature.number })}>
-            <EntityPathBadge featureNum={feature.number} />
-          </CopyableBadge>
-          <StatusBadge status={feature.status} />
+        <DetailEntityBar
+          featureNum={feature.number}
+          featureId={feature.id}
+          shortId={feature.shortId}
+        >
+          <DisplayStatusBadge status={featureDisplay.displayStatus} breakdown={featureDisplay.breakdown} />
+        </DetailEntityBar>
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
-        {feature.description ? <FormattedText text={feature.description} className="plan-description mt-3 max-w-4xl" /> : null}
+        {feature.description ? (
+          <Accordion title="Description">
+            <FormattedText text={feature.description} className="plan-description max-w-4xl" />
+          </Accordion>
+        ) : null}
+        <div className="mt-4">
+          <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} createdAt={feature.createdAt} updatedAt={feature.updatedAt} />
+        </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>
           <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/delete`} className="inline-flex" onSubmit={(event) => {
@@ -100,7 +127,7 @@ export function FeatureDetailRoute() {
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{phases.length}</p></CompactCard>
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{taskCount}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Window</p><p className="mt-2 text-sm font-semibold text-[var(--text)]">{feature.startDate || "Not set"} → {feature.endDate || "Not set"}</p></CompactCard>
+          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -110,35 +137,54 @@ export function FeatureDetailRoute() {
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Blocked</p><p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.blocked}</p></CompactCard>
         </div>
 
+        <DetailMetadataGrid
+          items={[
+            { label: "Priority", value: formatPriority(feature.priority), visible: feature.priority > 0 },
+            { label: "Timeline", value: formatTimeline(feature.startDate, feature.endDate), visible: Boolean(feature.startDate || feature.endDate) },
+          ]}
+        />
+
         {(feature.workDone || feature.workRemaining) ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {feature.workDone ? <div><span className="font-semibold text-[var(--text)]">Work done:</span><FormattedText text={feature.workDone} className="mt-2" /></div> : null}
-            {feature.workRemaining ? <div><span className="font-semibold text-[var(--text)]">Work remaining:</span><FormattedText text={feature.workRemaining} className="mt-2" /></div> : null}
-          </div>
+          <Accordion title="Planning notes" defaultOpen={false}>
+            <div className="grid gap-4 md:grid-cols-2">
+              {feature.workDone ? <div><span className="font-semibold text-[var(--text)]">Work done</span><FormattedText text={feature.workDone} className="mt-2" /></div> : null}
+              {feature.workRemaining ? <div><span className="font-semibold text-[var(--text)]">Work remaining</span><FormattedText text={feature.workRemaining} className="mt-2" /></div> : null}
+            </div>
+          </Accordion>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <StatusHistoryAccordion statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
       </Card>
 
       <Card className="grid gap-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="mt-2 flex items-center gap-2">
-            <EntityBadge type="phase" number={0} />
-            <p className="mt-2 text-sm text-[var(--text-muted)]">Filter this feature's phases by name or status.</p>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">Filter and sort this feature's phases.</p>
           </div>
           <Link to="phases/new"><Button type="button" variant="primary" shortcut="create">Create phase</Button></Link>
         </div>
 
-        <ListFilters
-          query={query}
-          status={status}
-          statusOptions={phaseStatuses}
-          placeholder="Search phase title, id, or summary"
-          clearTo={`/features/${feature.id}`}
-          resultsLabel={filteredPhases.length === phases.length ? `${phases.length} phases` : `${filteredPhases.length} of ${phases.length} phases`}
-        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
+            prev.set("sort", next.key);
+            prev.set("dir", next.direction);
+            return prev;
+          })} />
+          <ListFilters
+            query={query}
+            status={status}
+            statusOptions={phaseStatuses}
+            placeholder="Search phase title, id, or summary"
+            clearTo={`/features/${feature.id}`}
+            resultsLabel={filteredPhases.length === phases.length ? `${phases.length} phases` : `${filteredPhases.length} of ${phases.length} phases`}
+          />
+        </div>
 
         <div className="grid gap-3">
-          {filteredPhases.length > 0 ? filteredPhases.map((phase) => <PhaseRow key={phase.id} featureId={feature.id} feature={feature} phase={phase} />) : <Card className="p-4 text-sm text-[var(--text-muted)]">No phases match the current filters.</Card>}
+          {phases.length === 0 ? (
+            <Card className="p-4 text-sm text-[var(--text-muted)]">No phases yet. <Link to={`/features/${feature.id}/phases/new`} className="font-semibold text-[var(--accent)] hover:underline">Add a phase</Link></Card>
+          ) : filteredPhases.length > 0 ? filteredPhases.map((phase) => <PhaseRow key={phase.id} featureId={feature.id} feature={feature} phase={phase} />) : <Card className="p-4 text-sm text-[var(--text-muted)]">No phases match the current filters.</Card>}
         </div>
       </Card>
       <Outlet />

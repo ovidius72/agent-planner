@@ -1,6 +1,6 @@
 import { redirect } from "react-router-dom";
 import { getTask, updateTask } from "../lib/api";
-import { optionalString, requiredParam, requiredString, stringList } from "../lib/forms";
+import { optionalNumber, optionalString, requiredParam, requiredString, stringList } from "../lib/forms";
 import type { ChecklistItem, TaskStatus } from "../lib/types";
 
 function mergeChecklist(current: ChecklistItem[], nextTitles: string[]): ChecklistItem[] {
@@ -11,8 +11,9 @@ function mergeChecklist(current: ChecklistItem[], nextTitles: string[]): Checkli
     const normalized = title.trim().toLowerCase();
     const existing = byId.get(current[index]?.id ?? "") ?? byTitle.get(normalized);
     return existing
-      ? { ...existing, title: title.trim() }
+      ? { ...existing, number: index + 1, title: title.trim() }
       : { id: `check-${index + 1}-${normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item"}`,
+          number: index + 1,
           title: title.trim(),
           checked: false };
   });
@@ -30,6 +31,7 @@ export async function action({ request, params }: { request: Request; params: Re
     phaseId,
     title: requiredString(formData, "title"),
     status: requiredString(formData, "status") as TaskStatus,
+    priority: optionalNumber(formData, "priority"),
     description: optionalString(formData, "description"),
     checklist: mergeChecklist(current.checklist, stringList(formData, "checklist")),
   });

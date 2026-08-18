@@ -22,6 +22,7 @@ export function TaskCreateModalRoute() {
       <Form ref={formRef} method="post" className="grid gap-4">
         <Field label="Task title"><Input name="title" placeholder="Custom fetcher integration" required /></Field>
         <Field label="Description"><Textarea name="description" placeholder="Initial task context" /></Field>
+        <Field label="Checklist (one per line)"><Textarea name="checklist" placeholder={"Step one\nStep two\nStep three"} /></Field>
         <Field label="Status">
           <Select name="status" defaultValue="planned">
             {taskStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

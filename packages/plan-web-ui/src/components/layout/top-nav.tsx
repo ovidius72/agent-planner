@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, Download, FileText, Home, Layers, Moon, Sun } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, Home, Layers, ListTodo, Moon, ScrollText, Sun } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { exportPlan } from "../../lib/api";
@@ -15,7 +15,7 @@ function LiveStatusBadge({ liveStatus }: { liveStatus: LiveStatus }) {
         : { label: "Connecting…", className: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400", dotClassName: "bg-sky-500 animate-pulse" };
 
   return (
-    <span className={`inline-flex min-h-11 items-center gap-2 rounded-[14px] border px-3 py-2 text-sm font-semibold ${config.className}`}>
+    <span className={`inline-flex min-h-9 items-center gap-2 rounded-[12px] border px-2.5 py-1.5 text-sm font-semibold sm:min-h-11 sm:rounded-[14px] sm:px-3 sm:py-2 ${config.className}`}>
       <span className={`h-2.5 w-2.5 rounded-full ${config.dotClassName}`} />
       <span className="hidden sm:inline">{config.label}</span>
     </span>
@@ -26,13 +26,11 @@ export function TopNav({
   projectName,
   projectRoot,
   planRoot,
-  handoffExists,
   liveStatus,
 }: {
   projectName: string | undefined;
   projectRoot: string | undefined;
   planRoot: string | undefined;
-  handoffExists: boolean;
   liveStatus: LiveStatus;
 }) {
   const { theme, toggleTheme } = useTheme();
@@ -42,7 +40,8 @@ export function TopNav({
   const navItems = [
     { to: "/", label: "Dashboard", icon: Home },
     { to: "/features", label: "Features", icon: Layers },
-    ...(handoffExists ? [{ to: "/handoff", label: "Handoff", icon: FileText }] : []),
+    { to: "/requirements", label: "Requirements", icon: ListTodo },
+    { to: "/handoff", label: "Handoff", icon: ScrollText },
   ];
 
   async function downloadExport(full: boolean) {
@@ -68,7 +67,7 @@ export function TopNav({
   }
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--surface-elevated)] backdrop-blur-xl backdrop-saturate-150">
+    <div className="relative z-20 overflow-visible border-b border-[var(--border)] bg-[var(--surface-elevated)] backdrop-blur-xl backdrop-saturate-150">
       <div className="page-container flex flex-col gap-3 py-2.5 md:flex-row md:items-center md:justify-between sm:gap-4 sm:py-3">
         <Link to="/" className="flex min-w-0 items-center gap-3">
           <div className="surface-card flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--accent)]">
@@ -77,7 +76,6 @@ export function TopNav({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <div className="truncate text-sm font-black tracking-tight">{projectName ?? "Agent Plan"}</div>
-              {planRoot ? <span className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-subtle)]">.planner/</span> : null}
             </div>
             {projectRoot ? (
               <div className="flex items-center gap-2">
@@ -113,8 +111,9 @@ export function TopNav({
                 key={item.to}
                 to={item.to}
                 end={item.to === "/"}
+                aria-label={item.label}
                 className={({ isActive }) =>
-                  `inline-flex min-h-11 items-center gap-2 rounded-[14px] border px-3 py-2 text-sm font-semibold transition sm:px-4 ${
+                  `inline-flex min-h-9 items-center gap-2 rounded-[12px] border px-2.5 py-1.5 text-sm font-semibold transition sm:min-h-11 sm:rounded-[14px] sm:px-3 sm:py-2 sm:px-4 ${
                     isActive
                       ? "border-transparent bg-[var(--accent-soft)] text-[var(--accent)]"
                       : "border-transparent text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
@@ -127,13 +126,14 @@ export function TopNav({
             ))}
           </nav>
 
-          <div className="relative">
+          <div className="relative z-30">
             <button
               type="button"
               aria-haspopup="menu"
               aria-expanded={exportOpen}
+              aria-label="Export"
               onClick={() => setExportOpen((open) => !open)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)] sm:px-4"
+              className="inline-flex min-h-9 items-center gap-2 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-2.5 py-1.5 text-sm font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)] sm:min-h-11 sm:rounded-[14px] sm:px-3 sm:py-2 sm:px-4"
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Export</span>
@@ -142,7 +142,22 @@ export function TopNav({
             {exportOpen ? (
               <div
                 role="menu"
-                className="absolute right-0 z-50 mt-2 min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl"
+                  onKeyDown={(e) => {
+                    const items = Array.from(
+                      e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]"),
+                    ).filter((el) => !el.hasAttribute("disabled"));
+                    if (items.length === 0) return;
+                    const idx = items.indexOf(document.activeElement as HTMLElement);
+                    let next = idx;
+                    if (e.key === "ArrowDown") next = idx === -1 ? 0 : (idx + 1) % items.length;
+                    else if (e.key === "ArrowUp") next = idx === -1 ? items.length - 1 : (idx - 1 + items.length) % items.length;
+                    else if (e.key === "Home") next = 0;
+                    else if (e.key === "End") next = items.length - 1;
+                    else return;
+                    e.preventDefault();
+                    items[next]?.focus();
+                  }}
+                className="absolute right-0 top-full z-[200] mt-2 min-w-44 overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] p-1 shadow-xl"
               >
                 <button
                   type="button"
@@ -171,7 +186,9 @@ export function TopNav({
           <button
             type="button"
             onClick={toggleTheme}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--text-muted)] transition hover:text-[var(--text)]"
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--text-muted)] transition hover:text-[var(--text)] sm:h-11 sm:w-11 sm:rounded-[14px]"
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>

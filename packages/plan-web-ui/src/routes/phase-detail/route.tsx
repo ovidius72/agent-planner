@@ -1,19 +1,28 @@
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Form, Link, Outlet, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
 import { TaskRow } from "../../components/tasks/task-row";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { CompactCard } from "../../components/ui/compact-card";
-import { CopyableBadge, EntityBadge, EntityPathBadge, formatEntityPath } from "../../components/ui/badges";
+import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
+import { HandoffBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
+import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
+import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
-import { StatusBadge } from "../../components/ui/status-badge";
+import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
+import { StatusCardStepper } from "../../components/ui/status-card-stepper";
+import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
+import { clearPhaseHandoff } from "../../lib/api";
+import { compareEntities, type WorkTreeSortConfig } from "../../lib/dashboard-tree";
 import { matchesListQuery } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { taskStatuses } from "../../lib/statuses";
+import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
 import type { Feature, Phase } from "../../lib/types";
 
 function summarizeTasks(phase: Phase) {
@@ -36,26 +45,52 @@ export function PhaseDetailRoute() {
   const { feature, phase } = useLoaderData() as { feature: Feature; phase: Phase };
   const phaseDecisions = phase.decisions ?? [];
   const acceptedDecisions = phase.acceptedDecisions ?? [];
+  const linkedRequirements = phase.linkedRequirements ?? [];
   const taskSummary = summarizeTasks(phase);
-  const [searchParams] = useSearchParams();
+  const phaseDisplay = derivePhaseDisplayFromTasks(phase.tasks);
+  const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
+  const sortParam = searchParams.get("sort")?.trim() ?? "priority";
+  const dirParam = searchParams.get("dir")?.trim() ?? "asc";
+  const sort: WorkTreeSortConfig = {
+    key: sortParam === "priority" || sortParam === "number" || sortParam === "createdAt" || sortParam === "updatedAt" || sortParam === "title" || sortParam === "shortId" || sortParam === "status" || sortParam === "startedAt" || sortParam === "completedAt"
+      ? sortParam
+      : "priority",
+    direction: dirParam === "desc" ? "desc" : "asc",
+  };
+  const sortedTasks = useMemo(() => [...phase.tasks].sort((a, b) => compareEntities(a, b, sort.key, sort.direction)), [phase.tasks, sort]);
   const filteredTasks = useMemo(
     () =>
-      phase.tasks.filter(
+      sortedTasks.filter(
         (task) =>
           (!status || task.status === status) &&
           matchesListQuery(query, [task.title, task.id, task.description, task.shortName]),
       ),
-    [phase.tasks, query, status],
+    [sortedTasks, query, status],
   );
   const navigate = useNavigate();
   const deleteFormRef = useRef<HTMLFormElement>(null);
+  // Local handoff state so Clear updates the UI without a full route refetch.
+  const [handoffContent, setHandoffContent] = useState<string>(phase.handoff ?? "");
+  const [clearing, setClearing] = useState(false);
   const openEdit = useCallback(() => navigate("edit"), [navigate]);
   const openCreateTask = useCallback(() => navigate("tasks/new"), [navigate]);
   const deletePhase = useCallback(() => {
     deleteFormRef.current?.requestSubmit();
   }, []);
+  const clearHandoff = useCallback(async () => {
+    if (!window.confirm("Clear this phase's handoff?")) return;
+    setClearing(true);
+    try {
+      await clearPhaseHandoff(phase.id);
+      setHandoffContent("");
+    } catch {
+      // keep content on failure
+    } finally {
+      setClearing(false);
+    }
+  }, [phase.id]);
   useShortcut("edit", openEdit);
   useShortcut("create", openCreateTask);
   useShortcut("delete", deletePhase);
@@ -71,22 +106,29 @@ export function PhaseDetailRoute() {
 
       <div className="min-w-0">
         <Breadcrumbs
+          stacked
           items={[
-            { label: "Features", to: "/features" },
-            { label: feature.name, to: `/features/${feature.id}` },
-            { label: phase.title },
+            { label: feature.name, to: `/features/${feature.id}`, kind: "Feature" },
+            { label: phase.title, kind: "Phase" },
           ]}
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <CopyableBadge id={formatEntityPath({ featureNum: feature.number, phaseNum: phase.number })}>
-            <EntityPathBadge featureNum={feature.number} phaseNum={phase.number} />
-          </CopyableBadge>
-          <StatusBadge status={phase.status} />
+        <DetailEntityBar
+          featureNum={feature.number}
+          phaseNum={phase.number}
+          featureId={feature.id}
+          phaseId={phase.id}
+          shortId={phase.shortId}
+        >
+          {handoffContent ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
+          <DisplayStatusBadge status={phaseDisplay.displayStatus} breakdown={phaseDisplay.breakdown} />
+        </DetailEntityBar>
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
           {phase.title}
         </h2>
         {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
+        <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} createdAt={phase.createdAt} updatedAt={phase.updatedAt} />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit phase</Button></Link>
           <Link to="tasks/new"><Button type="button" variant="primary" shortcut="create">Create task</Button></Link>
@@ -163,54 +205,122 @@ export function PhaseDetailRoute() {
           </CompactCard>
         </div>
 
+        <DetailMetadataGrid
+          items={[
+            { label: "Priority", value: formatPriority(phase.priority), visible: phase.priority > 0 },
+            { label: "Linked requirements", value: linkedRequirements.length, visible: linkedRequirements.length > 0, valueClassName: "text-2xl font-black" },
+            { label: "Risks", value: phase.risks.length, visible: phase.risks.length > 0, valueClassName: "text-2xl font-black" },
+            { label: "Open questions", value: phase.openQuestions.length, visible: phase.openQuestions.length > 0, valueClassName: "text-2xl font-black" },
+          ]}
+        />
+
+        {phase.notes ? (
+          <Accordion title="Notes" defaultOpen={false}>
+            <FormattedText text={phase.notes} className="plan-description" />
+          </Accordion>
+        ) : null}
+
+        <Accordion title="Linked requirements" count={linkedRequirements.length} defaultOpen={false}>
+          {linkedRequirements.length > 0 ? (
+            <div className="grid gap-3">
+              {linkedRequirements.map((requirement) => (
+                <div key={requirement.id} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusBadge status={requirement.status} />
+                        {requirement.macroTasks.length > 0 ? <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-subtle)]">{requirement.macroTasks.length} macro task{requirement.macroTasks.length === 1 ? "" : "s"}</span> : null}
+                      </div>
+                      <h3 className="mt-2 text-lg font-black tracking-tight text-[var(--text)] [overflow-wrap:anywhere]">{requirement.title}</h3>
+                      {requirement.description ? <p className="mt-2 text-sm text-[var(--text-muted)] [overflow-wrap:anywhere]">{requirement.description}</p> : null}
+                    </div>
+                    <Link to={`/requirements#phase-${phase.id}`} className="text-sm font-semibold text-[var(--accent)] hover:underline sm:shrink-0">
+                      Open phase requirements →
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">No linked requirements yet.</p>
+          )}
+        </Accordion>
         {phase.description ? (
-          <div>
-            <span className="font-semibold text-[var(--text)]">Description:</span>
-            <FormattedText text={phase.description} className="plan-description mt-2" />
-          </div>
+          <Accordion title="Description">
+            <FormattedText text={phase.description} className="plan-description" />
+          </Accordion>
         ) : null}
         {phaseDecisions.length > 0 ? (
-          <details className="group mt-4">
-            <summary className="flex items-center gap-2 cursor-pointer font-semibold text-[var(--text)] select-none">
-              <span>Decisions ({phaseDecisions.length})</span>
-            </summary>
-            <div className="mt-2 ml-4 space-y-2 border-l-2 border-[var(--border)] pl-4">
+          <Accordion title="Decisions" count={phaseDecisions.length} defaultOpen={false}>
+            <div className="grid gap-2 border-l-2 border-[var(--border)] pl-4 ml-1">
               {phaseDecisions.map((decision, idx) => (
                 <div key={idx} className="text-sm text-[var(--text-muted)]">
                   <FormattedText text={decision} />
                 </div>
               ))}
             </div>
-          </details>
+          </Accordion>
         ) : null}
         {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <StatusHistoryAccordion statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
       </Card>
+
+      {handoffContent ? (
+        <Card className="grid gap-4">
+          <Accordion
+            title="Handoff"
+            actions={(
+              <button
+                type="button"
+                onClick={clearHandoff}
+                disabled={clearing}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-card)] disabled:opacity-60"
+              >
+                {clearing ? "Clearing…" : "Clear handoff"}
+              </button>
+            )}
+          >
+            <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-5 py-5">
+              <FormattedText text={handoffContent} className="formatted-text max-w-none" />
+            </div>
+          </Accordion>
+        </Card>
+      ) : null}
 
       <Card className="grid gap-5">
         <div>
-          <EntityBadge type="task" number={0} />
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks</p>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Filter this phase's tasks by name or status.
+            Filter and sort this phase's tasks.
           </p>
         </div>
 
-        <ListFilters
-          query={query}
-          status={status}
-          statusOptions={taskStatuses}
-          placeholder="Search task title, id, or description"
-          clearTo={`/features/${feature.id}/phases/${phase.id}`}
-          resultsLabel={
-            filteredTasks.length === phase.tasks.length
-              ? `${phase.tasks.length} tasks`
-              : `${filteredTasks.length} of ${phase.tasks.length} tasks`
-          }
-        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
+            prev.set("sort", next.key);
+            prev.set("dir", next.direction);
+            return prev;
+          })} />
+          <ListFilters
+            query={query}
+            status={status}
+            statusOptions={taskStatuses}
+            placeholder="Search task title, id, or description"
+            clearTo={`/features/${feature.id}/phases/${phase.id}`}
+            resultsLabel={
+              filteredTasks.length === phase.tasks.length
+                ? `${phase.tasks.length} tasks`
+                : `${filteredTasks.length} of ${phase.tasks.length} tasks`
+            }
+          />
+        </div>
 
         <div className="grid gap-3">
-          {filteredTasks.length > 0 ? (
+          {phase.tasks.length === 0 ? (
+            <Card className="p-4 text-sm text-[var(--text-muted)]">No tasks yet. <Link to="tasks/new" className="font-semibold text-[var(--accent)] hover:underline">Add a task</Link></Card>
+          ) : filteredTasks.length > 0 ? (
             filteredTasks.map((task) => (
-              <TaskRow key={task.id} featureId={feature.id} phaseId={phase.id} task={task} />
+              <TaskRow key={task.id} featureId={feature.id} featureNum={feature.number} phaseId={phase.id} phaseNum={phase.number} task={task} />
             ))
           ) : (
             <Card className="p-4 text-sm text-[var(--text-muted)]">

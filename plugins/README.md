@@ -9,7 +9,7 @@ libraries live in `packages/` and are published to npm; plugins reference them.
 
 | Plugin | Harness | Status | Install |
 |---|---|---|---|
-| `claude-code/` | Claude Code | scaffold | `/plugin marketplace add ovidius72/agent-planner` → `/plugin install agent-plan@agent-plan-marketplace` |
+| `claude-code/` | Claude Code | ready | `/plugin marketplace add ovidius72/agent-planner` → `/plugin install agent-plan@agent-plan-marketplace` |
 | `codex/` | Codex | planned (TBD) | TBD — Codex extension API |
 | `_shared/` | — | shared templates | consumed by plugins at build/sync time |
 
@@ -66,7 +66,13 @@ claude --plugin-dir ./plugins/claude-code --debug
 
 ## Syncing shared content
 
-`scripts/sync-plugins.sh` (planned) regenerates each plugin's
-`skills/planner/SKILL.md` and `scripts/notify-session-start.sh` from the
-templates in `_shared/`, so the `/planner` command routing and the
-SessionStart notification have a single source of truth across harnesses.
+`scripts/sync-plugins.cjs` regenerates each plugin's
+`skills/planner/SKILL.md`, `scripts/notify-session-start.sh`, and
+`scripts/guard-pre-tool-use.sh` from the templates in `_shared/`, so the
+`/planner` command routing, the SessionStart notification, and the PreToolUse
+guard have a single source of truth across harnesses.
+
+```
+pnpm plugins:sync     # regenerate derived files
+pnpm plugins:check     # CI drift guard (fails if derived files are out of sync)
+```

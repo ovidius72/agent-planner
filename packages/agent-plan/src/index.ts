@@ -25,19 +25,21 @@ function usage(): string {
     "  agent-plan mcp",
     "  agent-plan init [project name] [--yes]",
     "  agent-plan setup claude-code [--user|--project] [--force] [--local]",
+    "  agent-plan setup codex      [--user|--project] [--force] [--local]",
     "  agent-plan export [--full]",
     "",
     "Commands:",
     "  mcp                         Start the stdio MCP server.",
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
-    "  guard pre-tool-use          Claude Code hook: block Edit/Write unless a task is in-progress or a bypass is authorized (bash stays free).",
+    "  setup codex                 Add Agent Plan to Codex / Copilot CLI (project .codex/mcp.json by default, user scope with --user).",
+    "  guard pre-tool-use          Claude Code hook: block Edit/Write unless a task is in-progress or a bypass is authorized (bash stays free).",,
     "",
     "Options:",
     "  --yes, -y                   Accept defaults / initialize when needed.",
     "  --force                     Overwrite existing agent-plan MCP config entry.",
     "  --local                     Write config pointing to this built local CLI instead of npx agent-plan.",
-    "  --user                      Install MCP and /planner command at Claude Code user scope.",
+    "  --user                      Install MCP and /planner command at Claude Code or Codex user scope.",,
     "  --project                   Install MCP and /planner command in the current project (default).",
   ].join("\n");
 }
@@ -146,9 +148,9 @@ Route common commands as follows:
 
 - \`init\` → call \`planner-init\`; if required fields are missing, ask for a concise project name first
 - \`show\` → call \`planner-show\`
-- \`reload\` → call \`planner-load\`, then present the returned recap to the user (state, active task, pending handoff, web URL)
-- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present the recap to the user **in this reply only**. If a pending handoff is included in the result, read it, summarize it to the user, then call \`planner-handoff-clear\` to remove it. End **this recap reply** with a prominent final line showing the web URL, e.g. \`🌐 Web UI: <url>\`. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
-- \`recap\` → call \`planner-load\` (same as \`load\`: returns the recap + handoff + web URL); present it to the user
+- \`reload\` → call \`planner-load\`, then present the returned recap verbatim to the user (state, active task, pending handoff, web URL). Do not read, clear, or otherwise mutate a handoff.
+- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present that recap **verbatim and in this reply only**, ending with its final \`🌐 Web UI: <url>\` line. Pending handoffs are read-only context: do **not** call \`planner-handoff-show\` or \`planner-handoff-clear\` during \`load\`/\`recap\`. A handoff is archived only when every task in its phase is \`done\`/\`canceled\`, when a new handoff replaces it, or after an explicit user \`handoff clear\` request. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
+- \`recap\` → call \`planner-load\` (same as \`load\`) and present its returned recap verbatim; do not mutate handoffs
 - \`disable\` → call \`planner-disable\`
 - \`repair\` → call \`planner-repair\`
 - \`bypass\` → call \`planner-authorize-bypass\` (default 15 min); only when the user authorizes proceeding without a task
@@ -309,6 +311,33 @@ async function setupClaudeCode(flags: CliFlags): Promise<void> {
   console.log(flags.local ? "Mode: local built CLI" : "Mode: npx agent-plan mcp");
 }
 
+async function setupCodex(flags: CliFlags): Promise<void> {
+  const scope = flags.user ? "user" : "project";
+  const baseDir = scope === "user" ? join(homedir(), ".codex") : join(process.cwd(), ".codex");
+  const settingsPath = join(baseDir, "mcp.json");
+  await mkdir(baseDir, { recursive: true });
+
+  const settings = await readJsonFile(settingsPath);
+  const currentMcpServers = settings.mcpServers;
+  const mcpServers: Record<string, unknown> =
+    currentMcpServers && typeof currentMcpServers === "object" && !Array.isArray(currentMcpServers)
+      ? { ...(currentMcpServers as Record<string, unknown>) }
+      : {};
+
+  if (mcpServers["agent-plan"] && !flags.force) {
+    throw new Error(`Codex already has mcpServers.agent-plan in ${settingsPath}. Re-run with --force to overwrite.`);
+  }
+
+  mcpServers["agent-plan"] = defaultMcpConfig(flags);
+  settings.mcpServers = mcpServers;
+  await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
+  console.log(`Configured Codex MCP server in ${settingsPath}`);
+  if (!existsSync(plannerRoot())) {
+    console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
+  }
+  console.log(flags.local ? "Mode: local built CLI" : "Mode: npx agent-plan mcp");
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
@@ -408,6 +437,11 @@ async function main(): Promise<void> {
 
   if (command === "setup" && subcommand === "claude-code") {
     await setupClaudeCode(flags);
+    return;
+  }
+
+  if (command === "setup" && subcommand === "codex") {
+    await setupCodex(flags);
     return;
   }
 

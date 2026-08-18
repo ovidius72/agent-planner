@@ -4,6 +4,7 @@ import { Form, Link, useNavigation, useRouteLoaderData } from "react-router-dom"
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Field } from "../components/ui/field";
+import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useShortcut } from "../lib/shortcuts";
 import type { Project } from "../lib/types";
@@ -24,11 +25,26 @@ export function ProjectEditRoute() {
 
       <Card className="grid gap-5">
         <div>
-          <h2 className="text-xl font-black tracking-tight text-[var(--text)]">Edit project goal</h2>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">Define the main objective of the project. This long-form goal appears in the Project Goal card on the dashboard.</p>
+          <h2 className="text-xl font-black tracking-tight text-[var(--text)]">Edit project overview</h2>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">Update the short dashboard summary and the longer project goal without changing the rest of the project metadata.</p>
         </div>
 
         <Form ref={formRef} method="post" className="grid gap-4">
+          <Field label="Project name">
+            <Input
+              name="name"
+              defaultValue={project.name}
+              placeholder="Project name"
+              required
+            />
+          </Field>
+          <Field label="Short description">
+            <Textarea
+              name="description"
+              defaultValue={project.description}
+              placeholder="Summarize the project in a few lines for the dashboard overview"
+            />
+          </Field>
           <Field label="Project goal">
             <Textarea
               name="goal"
@@ -41,7 +57,7 @@ export function ProjectEditRoute() {
               <Button type="button" variant="ghost">Cancel</Button>
             </Link>
             <Button type="submit" variant="primary" disabled={submitting} shortcut="submit">
-              {submitting ? "Saving…" : "Save goal"}
+              {submitting ? "Saving…" : "Save project overview"}
             </Button>
           </div>
         </Form>

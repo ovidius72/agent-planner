@@ -25,6 +25,7 @@ const HARNESSES = [
     targets: [
       { from: "planner-skill.md.in", to: "skills/planner/SKILL.md", mode: 0o644 },
       { from: "notify-session-start.sh.in", to: "scripts/notify-session-start.sh", mode: 0o755 },
+      { from: "guard-pre-tool-use.sh.in", to: "scripts/guard-pre-tool-use.sh", mode: 0o755 },
     ],
   },
 ];

@@ -1,5 +1,20 @@
-import { access, copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { z, ZodError } from "zod";
+
+/** Canonical `.planner/.gitignore` content (P042 spec): ignore the `.local/`
+ *  transient root, legacy `*.bak` crash backups, `*.tmp.*` atomic-write temp
+ *  files, and the legacy root-level `generated/` dir (now under `.local/`).
+ *  Shared by `init()` and `ensureGitignore()` so the two never drift. */
+const PLANNER_GITIGNORE = [
+  "# Agent Plan transient/derived/session-local files — do not track",
+  ".local/",
+  "*.bak",
+  "*.tmp.*",
+  "generated/",
+  "",
+].join("\n");
 import {
   CodebaseProfileSchema,
   FeatureSchema,
@@ -16,24 +31,65 @@ import {
   type Project,
   ProjectSchema,
   type RequirementsDocument,
+  type Requirement,
   RequirementsDocumentSchema,
   ResumeFocusSchema,
   ActivityLogSchema,
+  TimestampSchema,
   type ActivityEntry,
   type ActivityLog,
   type CodebaseProfile,
   type ResumeFocus,
+  type WorkDeviation,
 } from "./schema.js";
-import { createFeatureId, createPhaseId, createRequirementId, createTaskId, isLegacyPhaseId } from "./naming.js";
+import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
+import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
 
 function nowISO(): string {
   return new Date().toISOString();
+}
+
+function resolveStoredFeatureId(
+  features: Array<Pick<Feature, "id" | "number" | "shortId" | "name">>,
+  ref?: string,
+): string | undefined {
+  const raw = ref?.trim();
+  if (!raw) return undefined;
+  const normalized = raw.toLowerCase();
+
+  const byId = features.find((feature) => feature.id.toLowerCase() === normalized);
+  if (byId) return byId.id;
+
+  const byNumber = normalized.match(/^f(\d+)$/)
+    ? features.find((feature) => feature.number === parseInt(normalized.slice(1), 10))
+    : undefined;
+  if (byNumber) return byNumber.id;
+
+  const byShortId = features.find((feature) => feature.shortId?.toLowerCase() === normalized);
+  if (byShortId) return byShortId.id;
+
+  const byExactName = features.find((feature) => feature.name.toLowerCase() === normalized);
+  if (byExactName) return byExactName.id;
+
+  return undefined;
+}
+
+export interface PlanStoreErrorDetails {
+  path?: string;
+  operation?: string;
+  backupTried?: boolean;
+  backupFailed?: boolean;
+  jsonParseError?: { message: string; line?: number; column?: number };
+  validationErrors?: { path: string; message: string }[];
+  rawPreview?: string;
+  [key: string]: unknown;
 }
 
 export class PlanStoreError extends Error {
   constructor(
     message: string,
     public readonly cause?: unknown,
+    public readonly details?: PlanStoreErrorDetails,
   ) {
     super(message);
     this.name = "PlanStoreError";
@@ -64,14 +120,99 @@ export function setWriteNotifyHook(hook: (() => void) | undefined): void {
   writeNotifyHook = hook;
 }
 
+const CROSS_PROCESS_LOCK_STALE_MS = 30_000;
+const CROSS_PROCESS_LOCK_RETRY_MS = 10;
+
+/** Allocation registry is deliberately outside the versioned plan. Git worktrees
+ * share their common git dir, so reservations are serialized across branches
+ * without rewriting project.json or unrelated planner entities. */
+const AllocationKindSchema = z.enum(["feature", "phase", "task"]);
+const AllocationRegistrySchema = z.object({
+  version: z.literal(1),
+  projectId: z.string().min(1),
+  allocations: z.array(z.object({
+    kind: AllocationKindSchema,
+    entityId: z.string().min(1),
+    number: z.number().int().positive(),
+    shortId: z.string().regex(/^[A-Z2-9]{5}$/),
+  })).default([]),
+});
+type AllocationKind = z.infer<typeof AllocationKindSchema>;
+type Allocation = z.infer<typeof AllocationRegistrySchema>["allocations"][number];
+
+async function gitCommonDirFor(planRoot: string): Promise<string | undefined> {
+  let current = resolve(planRoot);
+  for (;;) {
+    const dotGit = join(current, ".git");
+    try {
+      const info = await stat(dotGit);
+      if (info.isDirectory()) return dotGit;
+      const pointer = await readFile(dotGit, "utf8");
+      const match = pointer.match(/^gitdir:\s*(.+)\s*$/m);
+      if (!match?.[1]) return undefined;
+      const worktreeGitDir = resolve(current, match[1]);
+      const commonDirRef = await readFile(join(worktreeGitDir, "commondir"), "utf8").catch(() => "");
+      return commonDirRef.trim() ? resolve(worktreeGitDir, commonDirRef.trim()) : worktreeGitDir;
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return undefined;
+      current = parent;
+    }
+  }
+}
+
+async function writeRegistry(path: string, registry: z.infer<typeof AllocationRegistrySchema>): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
+  await writeFile(tmp, JSON.stringify(registry, null, 2), "utf8");
+  await rename(tmp, path);
+}
+
+async function acquireCrossProcessLock(path: string): Promise<() => Promise<void>> {
+  const lockPath = `${path}.lock`;
+  await mkdir(dirname(lockPath), { recursive: true });
+
+  for (;;) {
+    try {
+      await mkdir(lockPath);
+      return async () => {
+        await rm(lockPath, { recursive: true, force: true }).catch(() => {});
+      };
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err?.code !== "EEXIST") throw err;
+
+      try {
+        const info = await stat(lockPath);
+        if (Date.now() - info.mtimeMs > CROSS_PROCESS_LOCK_STALE_MS) {
+          await rm(lockPath, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        continue;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, CROSS_PROCESS_LOCK_RETRY_MS));
+    }
+  }
+}
+
 function withWriteLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
   const prev = writeLocks.get(path) ?? Promise.resolve();
   let release!: () => void;
   const next = new Promise<void>((resolve) => { release = resolve; });
-  writeLocks.set(path, prev.then(() => next));
-  return prev.then(fn).finally(() => {
+  const tail = prev.then(() => next);
+  writeLocks.set(path, tail);
+  return prev.then(async () => {
+    const releaseCrossProcess = await acquireCrossProcessLock(path);
+    try {
+      return await fn();
+    } finally {
+      await releaseCrossProcess();
+    }
+  }).finally(() => {
     release();
-    if (writeLocks.get(path) === prev.then(() => next)) writeLocks.delete(path);
+    if (writeLocks.get(path) === tail) writeLocks.delete(path);
   });
 }
 
@@ -79,21 +220,35 @@ export function withFeatureLock<T>(featureId: string, fn: () => Promise<T>): Pro
   const prev = featureLocks.get(featureId) ?? Promise.resolve();
   let release!: () => void;
   const next = new Promise<void>((resolve) => { release = resolve; });
-  featureLocks.set(featureId, prev.then(() => next));
+  const tail = prev.then(() => next);
+  featureLocks.set(featureId, tail);
   return prev.then(fn).finally(() => {
     release();
-    if (featureLocks.get(featureId) === prev.then(() => next)) featureLocks.delete(featureId);
+    if (featureLocks.get(featureId) === tail) featureLocks.delete(featureId);
   });
 }
 
-async function atomicWriteText(path: string, raw: string): Promise<void> {
+async function atomicWriteText(path: string, raw: string, root?: string): Promise<void> {
   return withWriteLock(path, async () => {
     writeBusyHook?.(true);
-    const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
+    const localRoot = root ? join(root, ".local") : undefined;
+    const tmpDir = localRoot ? join(localRoot, "tmp") : dirname(path);
+    const backupsRoot = localRoot ? join(localRoot, "backups") : dirname(path);
+    const rel = localRoot && path.startsWith(localRoot)
+      ? path.slice(localRoot.length).replace(/^\//, "")
+      : root && path.startsWith(root)
+        ? path.slice(root.length).replace(/^\//, "")
+        : basename(path);
+    const backupRel = rel ? rel + ".bak" : basename(path) + ".bak";
+    const backupPath = join(backupsRoot, backupRel);
+    const tmpName = rel ? rel.replace(/[/\\]/g, "--") + `.tmp.${process.pid}.${Date.now()}` : `${basename(path)}.tmp.${process.pid}.${Date.now()}`;
+    const tmp = join(tmpDir, tmpName);
     try {
+      await mkdir(tmpDir, { recursive: true });
       await writeFile(tmp, raw, "utf-8");
       try {
-        await copyFile(path, `${path}.bak`);
+        await mkdir(dirname(backupPath), { recursive: true });
+        await copyFile(path, backupPath);
       } catch {}
       await rename(tmp, path);
       writeNotifyHook?.();
@@ -106,11 +261,11 @@ async function atomicWriteText(path: string, raw: string): Promise<void> {
   });
 }
 
-async function atomicWriteJson(path: string, data: unknown): Promise<void> {
-  return atomicWriteText(path, JSON.stringify(data, null, 2));
+async function atomicWriteJson(path: string, data: unknown, root?: string): Promise<void> {
+  return atomicWriteText(path, JSON.stringify(data, null, 2), root);
 }
 
-async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T }, updater: (data: T) => T): Promise<T> {
+async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T }, updater: (data: T) => T, root?: string): Promise<T> {
   // NOTE: write the file INLINE here, do NOT call atomicWriteJson/atomicWriteText,
   // because those re-acquire withWriteLock(path) — and we already hold it (below).
   // Re-entrant locking is not supported, so calling them would deadlock.
@@ -119,10 +274,24 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
     const updated = updater(current);
     const parsed = schema.parse(updated);
     writeBusyHook?.(true);
-    const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
+    const localRoot = root ? join(root, ".local") : undefined;
+    const tmpDir = localRoot ? join(localRoot, "tmp") : dirname(path);
+    const backupsRoot = localRoot ? join(localRoot, "backups") : dirname(path);
+    const rel = localRoot && path.startsWith(localRoot)
+      ? path.slice(localRoot.length).replace(/^\//, "")
+      : root && path.startsWith(root)
+        ? path.slice(root.length).replace(/^\//, "")
+        : basename(path);
+    const backupPath = join(backupsRoot, rel + ".bak");
+    const tmpName = rel ? rel.replace(/[/\\]/g, "--") + `.tmp.${process.pid}.${Date.now()}` : `${basename(path)}.tmp.${process.pid}.${Date.now()}`;
+    const tmp = join(tmpDir, tmpName);
     try {
+      await mkdir(tmpDir, { recursive: true });
       await writeFile(tmp, JSON.stringify(parsed, null, 2), "utf-8");
-      try { await copyFile(path, `${path}.bak`); } catch {}
+      try {
+        await mkdir(dirname(backupPath), { recursive: true });
+        await copyFile(path, backupPath);
+      } catch {}
       await rename(tmp, path);
       writeNotifyHook?.();
     } catch (cause) {
@@ -133,6 +302,57 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
     }
     return parsed;
   });
+}
+
+/** Summary of a phase that has a non-empty pending handoff, for the
+ * listHandoffs() API. Completed/canceled phases are never returned here. */
+export interface PhaseHandoffSummary {
+  phaseId: string;
+  /** Owning feature id (for deep-linking to the phase-detail route). */
+  featureId?: string | undefined;
+  /** Human-readable composite ref, e.g. `P003` or `P003(F002)`. */
+  compositeRef: string;
+  /** handoffUpdatedAt (falls back to phase.updatedAt if unset). */
+  updatedAt: string;
+  /** First non-empty line of the handoff, leading markdown headers stripped, ~80 chars. */
+  firstLine: string;
+  /** Full handoff content (phase.handoff) — lets the /handoff viewer render
+   *  inline without a per-phase fetch. */
+  content: string;
+}
+
+/** Summary of an archived handoff. The content remains recoverable under
+ * `.planner/.local/handoff-archive/` but is not part of the active handoff
+ * list. */
+export interface ArchivedPhaseHandoffSummary {
+  phaseId: string;
+  featureId?: string | undefined;
+  compositeRef: string;
+  file: string;
+  archivedAt: string;
+  reason: string;
+  firstLine: string;
+  content: string;
+}
+
+/** Summary of a phase file that exists on disk but no longer resolves to a
+ *  valid owning feature. Missing back-links alone do NOT make a phase orphan:
+ *  if `phase.featureId` still resolves to a known feature, repair can relink
+ *  it. */
+export interface OrphanPhaseSummary {
+  phaseId: string;
+  featureId?: string | undefined;
+  shortId?: string | undefined;
+  compositeRef: string;
+  title: string;
+  reason: string;
+}
+
+/** Extract the first meaningful line of a handoff: skip blank lines, strip a
+ *  leading markdown header (#), trim, and truncate to ~80 chars. */
+function handoffFirstLine(text: string): string {
+  const line = text.trim().split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  return line.replace(/^#+\s*/, "").trim().slice(0, 80);
 }
 
 export async function migrateToUuids(store: PlanStore): Promise<void> {
@@ -207,24 +427,156 @@ export async function migrateToUuids(store: PlanStore): Promise<void> {
   });
 }
 
+/**
+ * One-time idempotent migration to GLOBAL F/P/T numbering.
+ *
+ * Legacy plans assign Phase.number per-feature and Task.number per-phase, so
+ * every feature has a P001 and every phase has a T001 (ambiguous in chat/handoffs).
+ * This renumbers ALL features/phases/tasks by `createdAt` asc (stable tiebreak by
+ * id) into a single project-wide 1..N sequence and sets the monotonic project
+ * counters (nextFeatureNumber/nextPhaseNumber/nextTaskNumber).
+ *
+ * Idempotent: if no duplicate phase/task/feature numbers exist across the
+ * project, the plan is already global → no renumber writes happen (only the
+ * counters are ensured, in case project.json predates them). MUST run before
+ * ensureStructureOrdering (which no longer renumbers — numbers are stable).
+ */
+export async function migrateToGlobalSequence(store: PlanStore): Promise<{ migrated: boolean; phases: number; tasks: number; features: number }> {
+  return store.runBatchForMigration(async () => {
+    const ws = await store.loadAll();
+    const phases = ws.phases;
+    const features = ws.features.features;
+    const project = ws.project;
+
+    const allTasks: { phase: Phase; task: Task }[] = [];
+    for (const phase of phases) for (const task of phase.tasks) allTasks.push({ phase, task });
+
+    const hasDupes = (nums: number[]) => new Set(nums).size !== nums.length;
+    const phaseDupes = hasDupes(phases.map((p) => p.number));
+    const taskDupes = hasDupes(allTasks.map((x) => x.task.number));
+    const featureDupes = hasDupes(features.map((f) => f.number));
+
+    const maxP = phases.reduce((m, p) => Math.max(m, p.number), 0);
+    const maxT = allTasks.reduce((m, x) => Math.max(m, x.task.number), 0);
+    const maxF = features.reduce((m, f) => Math.max(m, f.number), 0);
+
+    if (!phaseDupes && !taskDupes && !featureDupes) {
+      // Already global. Ensure counters are set (project.json may predate them).
+      let changed = false;
+      if (project.nextPhaseNumber <= maxP) { project.nextPhaseNumber = maxP + 1; changed = true; }
+      if (project.nextTaskNumber <= maxT) { project.nextTaskNumber = maxT + 1; changed = true; }
+      if (project.nextFeatureNumber <= maxF) { project.nextFeatureNumber = maxF + 1; changed = true; }
+      if (changed) await store.saveProject(project);
+      return { migrated: false, phases: phases.length, tasks: allTasks.length, features: features.length };
+    }
+
+    const renumber = <T extends { number: number; createdAt: string; id: string }>(arr: T[]): T[] =>
+      arr
+        .slice()
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+        .map((x, i) => ({ ...x, number: i + 1 }));
+
+    const newFeatures = renumber(features);
+    const newPhases = renumber(phases);
+    const numberedTasks = renumber(allTasks.map((x) => x.task));
+
+    // Reassemble renumbered tasks into their phases, keyed by the task's OWN
+    // phaseId (source of truth). NOTE: do NOT pair `numberedTasks[i]` with
+    // `allTasks[i]!.phase.id` — the two arrays are in DIFFERENT orders
+    // (numberedTasks is sorted by createdAt, allTasks is in phase-iteration
+    // order), so a positional index would file each task under the wrong phase.
+    const phaseIdByTaskId = new Map(allTasks.map((x) => [x.task.id, x.phase.id]));
+    const newPhaseIds = new Set(newPhases.map((p) => p.id));
+    const tasksByPhase = new Map<string, Task[]>();
+    for (const t of numberedTasks) {
+      // Prefer the task's own phaseId when it points to a real phase; otherwise
+      // fall back to the phase the task was loaded from (handles legacy tasks
+      // with empty/stale phaseId without losing them).
+      const pid = (t.phaseId && newPhaseIds.has(t.phaseId)) ? t.phaseId : (phaseIdByTaskId.get(t.id) ?? "");
+      const bucket = tasksByPhase.get(pid) ?? [];
+      bucket.push(t);
+      tasksByPhase.set(pid, bucket);
+    }
+    const finalPhases = newPhases.map((p) => {
+      const tasks = tasksByPhase.get(p.id) ?? [];
+      const order = new Map(tasks.map((t) => [t.id, t]));
+      const ordered: Task[] = p.taskIds.map((id) => order.get(id)).filter((t): t is Task => Boolean(t));
+      for (const t of tasks.sort((a, b) => a.number - b.number)) if (!ordered.includes(t)) ordered.push(t);
+      return { ...p, tasks: ordered, taskIds: ordered.map((t) => t.id) };
+    });
+
+    await store.saveFeatures({ features: newFeatures });
+    for (const p of finalPhases) await store.savePhase(p);
+    project.nextFeatureNumber = newFeatures.length + 1;
+    project.nextPhaseNumber = newPhases.length + 1;
+    project.nextTaskNumber = numberedTasks.length + 1;
+    await store.saveProject(project);
+    await store.writeGenerated();
+    return { migrated: true, phases: newPhases.length, tasks: numberedTasks.length, features: newFeatures.length };
+  });
+}
+
 async function readJson<T>(path: string, schema: { parse(v: unknown): T }): Promise<T> {
+  let backupTried = false;
+  let backupFailed = false;
+  let rawPreview: string | undefined;
+
   try {
     const raw = await readFile(path, "utf-8");
+    rawPreview = raw.slice(0, 240);
     return schema.parse(JSON.parse(raw));
   } catch (cause) {
     // Try the .bak backup before giving up (recover from external-write corruption).
+    backupTried = true;
     try {
       const bak = await readFile(`${path}.bak`, "utf-8");
+      rawPreview = bak.slice(0, 240);
       return schema.parse(JSON.parse(bak));
     } catch {
+      backupFailed = true;
       // fall through to original error
     }
-    throw new PlanStoreError(`read failed: ${path}`, cause);
+
+    const details: PlanStoreErrorDetails = {
+      path,
+      operation: "readJson",
+      backupTried,
+      backupFailed,
+    };
+    if (rawPreview != null) details.rawPreview = rawPreview;
+
+    if (cause instanceof SyntaxError) {
+      const match = cause.message.match(/position\s+(\d+)/i);
+      const position = match && match[1] ? Number.parseInt(match[1], 10) : undefined;
+      if (rawPreview != null && position != null && position >= 0) {
+        const upTo = rawPreview.slice(0, position);
+        const line = upTo.split("\n").length;
+        const lastNL = upTo.lastIndexOf("\n");
+        const column = position - (lastNL >= 0 ? lastNL : 0);
+        details.jsonParseError = { message: cause.message, line, column };
+      } else {
+        details.jsonParseError = { message: cause.message };
+      }
+    } else if (cause instanceof ZodError) {
+      details.validationErrors = cause.issues.slice(0, 8).map((issue) => ({
+        path: issue.path.map((p) => (typeof p === "number" ? `[${p}]` : String(p))).join("."),
+        message: issue.message,
+      }));
+    }
+
+    throw new PlanStoreError(`read failed: ${path}`, cause, details);
   }
 }
 
 
 // ─── PlanStore ──────────────────────────────────────────────────────────
+
+// Raw (on-disk) shapes: the schema-inferred objects WITHOUT the derived `status`
+// field. `Phase`/`Feature` (runtime) re-add `status` (derived from children at
+// read time). The schema parse strips any persisted `status`, so the file never
+// stores it — status is always recomputed on load.
+type RawPhase = Omit<Phase, "status">;
+type RawFeature = Omit<Feature, "status">;
 
 export class PlanStore {
   public readonly root: string;
@@ -266,37 +618,30 @@ export class PlanStore {
     return this.runAsBatch(fn);
   }
 
+  /** Public batch wrapper: suspend autoSync (status rollup) for a sequence of
+   *  writes. Use for priority-only reorders so they don't recompute phase/feature
+   *  status (a reorder must not flip a partially-done feature to in-progress). */
+  async runBatch<T>(fn: () => Promise<T>): Promise<T> {
+    return this.runAsBatch(fn);
+  }
+
   private async maybeAutoSync(): Promise<void> {
-    if (!this.autoSync || this.syncGuard || this.batchInProgress) return;
-    try {
-      this.syncGuard = true;
-      await this.syncStatuses();
-    } finally {
-      this.syncGuard = false;
-    }
+    // No-op: status is derived on read, so there is nothing to sync after a
+    // save. Kept so existing save* call sites compile unchanged.
   }
 
   private normalizeTasks(tasks: Task[]): { tasks: Task[]; changed: boolean } {
-    let changed = false;
-    const normalized = tasks.map((task, index) => {
-      const nextNumber = index + 1;
-      if (task.number !== nextNumber) changed = true;
-      return { ...task, number: nextNumber };
-    });
-    return { tasks: normalized, changed };
+    // Numbers are a STABLE global sequence (assigned once at create from project.nextTaskNumber).
+    // Do NOT renumber here — renumbering would break references after deletions.
+    return { tasks, changed: false };
   }
 
   private normalizeFeaturesDocument(doc: FeaturesDocument): { doc: FeaturesDocument; changed: boolean } {
-    let changed = false;
-    const normalized = doc.features.map((feature, index) => {
-      const nextNumber = index + 1;
-      if (feature.number !== nextNumber) changed = true;
-      return { ...feature, number: nextNumber };
-    });
-    return { doc: { features: normalized }, changed };
+    // Numbers are a STABLE global sequence (assigned once at create from project.nextFeatureNumber).
+    return { doc, changed: false };
   }
 
-  private normalizePhaseDocument(phase: Phase): { phase: Phase; changed: boolean } {
+  private normalizePhaseDocument(phase: RawPhase): { phase: RawPhase; changed: boolean } {
     const { tasks, changed } = this.normalizeTasks(phase.tasks);
     const nextTaskIds = tasks.map((task) => task.id);
     const taskIdsChanged = nextTaskIds.length !== phase.taskIds.length || nextTaskIds.some((id, index) => id !== phase.taskIds[index]);
@@ -317,7 +662,13 @@ export class PlanStore {
     const orphanPhases: Phase[] = [];
 
     for (const phase of phases) {
-      if (phase.featureId) {
+      const resolvedFeatureId = resolveStoredFeatureId(featuresDoc.features, phase.featureId);
+      if (resolvedFeatureId && resolvedFeatureId !== phase.featureId) {
+        phase.featureId = resolvedFeatureId;
+        changed = true;
+      }
+
+      if (phase.featureId && featuresDoc.features.some((feature) => feature.id === phase.featureId)) {
         const bucket = phasesByFeature.get(phase.featureId) ?? [];
         bucket.push(phase);
         phasesByFeature.set(phase.featureId, bucket);
@@ -326,10 +677,7 @@ export class PlanStore {
       }
     }
 
-    const normalizedFeatures = featuresDoc.features.map((feature, featureIndex) => {
-      const nextFeatureNumber = featureIndex + 1;
-      if (feature.number !== nextFeatureNumber) changed = true;
-
+    const normalizedFeatures = featuresDoc.features.map((feature) => {
       const linked = feature.phaseIds.map((id) => phaseById.get(id)).filter((phase): phase is Phase => Boolean(phase));
       const linkedIds = new Set(linked.map((phase) => phase.id));
       const inferred = (phasesByFeature.get(feature.id) ?? []).filter((phase) => !linkedIds.has(phase.id));
@@ -339,12 +687,7 @@ export class PlanStore {
         changed = true;
       }
 
-      orderedPhases.forEach((phase, index) => {
-        const nextPhaseNumber = index + 1;
-        if (phase.number !== nextPhaseNumber) {
-          phase.number = nextPhaseNumber;
-          changed = true;
-        }
+      orderedPhases.forEach((phase) => {
         const normalizedPhase = this.normalizePhaseDocument(phase);
         if (normalizedPhase.changed) {
           phase.tasks = normalizedPhase.phase.tasks;
@@ -355,17 +698,11 @@ export class PlanStore {
 
       return {
         ...feature,
-        number: nextFeatureNumber,
         phaseIds: normalizedPhaseIds,
       };
     });
 
-    orphanPhases.forEach((phase, index) => {
-      const nextPhaseNumber = index + 1;
-      if (phase.number !== nextPhaseNumber) {
-        phase.number = nextPhaseNumber;
-        changed = true;
-      }
+    orphanPhases.forEach((phase) => {
       const normalizedPhase = this.normalizePhaseDocument(phase);
       if (normalizedPhase.changed) {
         phase.tasks = normalizedPhase.phase.tasks;
@@ -382,8 +719,8 @@ export class PlanStore {
   }
 
   async ensureStructureOrdering(): Promise<{ changed: boolean }> {
-    return this.runAsBatch(async () => {
-      const featuresDoc = await readJson(this.featuresPath(), FeaturesDocumentSchema).catch(() => ({ features: [] }));
+    const result = await this.runAsBatch(async () => {
+      const featuresDoc = await this.loadFeatures();
       const phases = await this.loadAllPhases();
       const normalized = this.normalizeStructureSnapshot(featuresDoc, phases);
       if (!normalized.changed) return { changed: false };
@@ -392,6 +729,47 @@ export class PlanStore {
         await this.savePhase(phase);
       }
       return { changed: true };
+    });
+    // One-time import of a legacy file-based HANDOFF.md (pre-F004) into the
+    // entity-scoped phase.handoff. Idempotent — renames the file to .bak.
+    await this.importLegacyHandoffFile().catch(() => {});
+    return result;
+  }
+
+  /** Rebuild each phase's `tasks` + `taskIds` from the task's OWN `phaseId`
+   *  (source of truth). Heals plans where tasks got filed into the wrong phase
+   *  file (e.g. the migrateToGlobalSequence index-mismatch bug, @agent-plan/core
+   *  <0.2.19-next.7). Deterministic, lossless, idempotent: groups every task by
+   *  its phaseId, preserves each phase's existing taskIds order, appends orphan
+   *  tasks (whose phaseId dangles or is empty) by number. Writes a phase file
+   *  only when its task set actually changed. */
+  async rebuildContainment(): Promise<{ changed: number; tasks: number; orphan: number }> {
+    return this.runAsBatch(async () => {
+      const phases = await this.loadAllPhases();
+      const phaseById = new Map(phases.map((p) => [p.id, p]));
+      const allTasks: { task: Task; fromPhaseId: string }[] = [];
+      for (const p of phases) for (const t of p.tasks) allTasks.push({ task: t, fromPhaseId: p.id });
+      const grouped = new Map<string, Task[]>();
+      let orphan = 0;
+      for (const { task, fromPhaseId } of allTasks) {
+        const pid = (task.phaseId && phaseById.has(task.phaseId)) ? task.phaseId : fromPhaseId;
+        if (!phaseById.has(pid)) orphan++;
+        const bucket = grouped.get(pid) ?? [];
+        bucket.push(task);
+        grouped.set(pid, bucket);
+      }
+      let changed = 0;
+      for (const p of phases) {
+        const tasks = grouped.get(p.id) ?? [];
+        const byId = new Map(tasks.map((t) => [t.id, t]));
+        const ordered: Task[] = p.taskIds.map((id) => byId.get(id)).filter((t): t is Task => Boolean(t));
+        for (const t of tasks.slice().sort((a, b) => a.number - b.number)) if (!ordered.some((o) => o.id === t.id)) ordered.push(t);
+        const same = ordered.length === p.tasks.length && ordered.every((t, i) => t.id === p.tasks[i]?.id);
+        if (same) continue;
+        await this.savePhase({ ...p, tasks: ordered, taskIds: ordered.map((t) => t.id) });
+        changed++;
+      }
+      return { changed, tasks: allTasks.length, orphan };
     });
   }
 
@@ -409,6 +787,34 @@ export class PlanStore {
   private featuresPath(): string {
     return join(this.root, "features.json");
   }
+  private featuresDir(): string {
+    return join(this.root, "features");
+  }
+  private featurePath(featureId: string): string {
+    return join(this.featuresDir(), `${featureId}.json`);
+  }
+  private withFeaturesLock<T>(fn: () => Promise<T>): Promise<T> {
+    // Sentinel-keyed mutex (the features dir path) serializing all feature
+    // mutations so read-modify-write via updateFeatures is race-free and the
+    // one-time legacy→per-file migration never interleaves with a writer.
+    return withWriteLock(this.featuresDir(), fn);
+  }
+  /** Idempotent one-time migration: if a legacy features.json exists, split it
+   *  into features/<id>.json (one per feature) and remove the legacy file.
+   *  Must be called under withFeaturesLock. Crash-safe: re-run overwrites. */
+  private async migrateLegacy(): Promise<void> {
+    let legacy: { features: RawFeature[] };
+    try {
+      legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+    } catch {
+      return; // no legacy features.json (already migrated or fresh project)
+    }
+    await mkdir(this.featuresDir(), { recursive: true });
+    for (const feat of legacy.features) {
+      await atomicWriteJson(this.featurePath(feat.id), feat, this.root);
+    }
+    await unlink(this.featuresPath()).catch(() => {});
+  }
   private phasesDir(): string {
     return join(this.root, "phases");
   }
@@ -416,19 +822,78 @@ export class PlanStore {
     return join(this.phasesDir(), `${phaseId}.json`);
   }
   private generatedDir(): string {
-    return join(this.root, "generated");
+    return join(this.localRoot(), "generated");
   }
   private codebasePath(): string {
     return join(this.root, "codebase.json");
   }
   private resumePath(): string {
-    return join(this.root, "resume.json");
+    return join(this.localRoot(), "resume.json");
   }
   private activityPath(): string {
-    return join(this.root, "activity.json");
+    return join(this.localRoot(), "activity.json");
   }
-  private handoffPath(): string {
-    return join(this.root, "HANDOFF.md");
+  private localRoot(): string {
+    return join(this.root, ".local");
+  }
+  private timestampPath(): string {
+    return join(this.localRoot(), "timestamp.json");
+  }
+  private backupsDir(): string {
+    return join(this.localRoot(), "backups");
+  }
+  private tmpDir(): string {
+    return join(this.localRoot(), "tmp");
+  }
+  private handoffArchiveDir(): string {
+    return join(this.localRoot(), "handoff-archive");
+  }
+
+  /** One-time migration for plans created before .planner/.local/ existed.
+   *  Moves a legacy root-level file into .local/ if the legacy file exists and
+   *  the .local/ counterpart does not. Safe to call on every load. */
+  private async migrateLegacyLocalFile(oldPath: string, newPath: string): Promise<void> {
+    try {
+      await access(oldPath);
+    } catch {
+      return;
+    }
+    try {
+      await access(newPath);
+      return;
+    } catch {}
+    await mkdir(dirname(newPath), { recursive: true });
+    await rename(oldPath, newPath);
+  }
+
+  private async migrateLegacyGeneratedDir(): Promise<void> {
+    const oldDir = join(this.root, "generated");
+    const newDir = this.generatedDir();
+    try {
+      await access(oldDir);
+    } catch {
+      return;
+    }
+    try {
+      await access(newDir);
+      return;
+    } catch {}
+    await rename(oldDir, newDir);
+  }
+
+  private async migrateLegacyHandoffArchive(): Promise<void> {
+    const oldDir = join(this.root, "handoff-archive");
+    const newDir = this.handoffArchiveDir();
+    try {
+      await access(oldDir);
+    } catch {
+      return;
+    }
+    try {
+      await access(newDir);
+      return;
+    } catch {}
+    await rename(oldDir, newDir);
   }
 
   // ── Init ─────────────────────────────────────────────────────────────
@@ -440,7 +905,12 @@ export class PlanStore {
 
     await mkdir(this.root, { recursive: true });
     await mkdir(this.phasesDir(), { recursive: true });
+    await mkdir(this.featuresDir(), { recursive: true });
+    await mkdir(this.localRoot(), { recursive: true });
+    await mkdir(this.backupsDir(), { recursive: true });
+    await mkdir(this.tmpDir(), { recursive: true });
     await mkdir(join(this.generatedDir(), "phases"), { recursive: true });
+    await mkdir(this.handoffArchiveDir(), { recursive: true });
     await mkdir(join(this.root, "schema"), { recursive: true });
     await mkdir(join(this.root, "adapters"), { recursive: true });
 
@@ -452,7 +922,8 @@ export class PlanStore {
       updatedAt: nowISO(),
     };
 
-    await atomicWriteJson(this.manifestPath(), manifest);
+    await atomicWriteJson(this.manifestPath(), manifest, this.root);
+    await atomicWriteJson(this.timestampPath(), { updatedAt: manifest.updatedAt }, this.root);
     await this.saveProject({
       name: projectName,
       goal: "",
@@ -472,6 +943,10 @@ export class PlanStore {
         beforeTaskStart: [],
         afterPhaseComplete: [],
       },
+      nextFeatureNumber: 1,
+      nextPhaseNumber: 1,
+      nextTaskNumber: 1,
+      workDeviations: [],
     });
     await this.saveRequirements({ requirements: [] });
     await this.saveFeatures({ features: [] });
@@ -480,6 +955,7 @@ export class PlanStore {
       currentPhaseId: "",
       inProgressTaskIds: [],
       nextSteps: ["Run /planner project discuss to bootstrap discovery"],
+      nextStepsUpdatedAt: nowISO(),
       blockers: [],
       notes: "Project initialized. Awaiting discovery.",
       lastSessionSummary: "",
@@ -499,23 +975,40 @@ export class PlanStore {
       "- `project.json` — scope, rules, stack, tools",
       "- `requirements.json` — requirements and macro-tasks",
       "- `phases/` — one JSON file per phase",
-      "- `generated/` — auto-generated markdown views",
+      "- `generated/` — auto-generated markdown views (under `.local/`)",
       "- `schema/plan.schema.json` — JSON Schema for tooling",
     ].join("\n");
     await writeFile(join(this.root, "README.md"), readme, "utf-8");
 
-    // Write a .gitignore inside .planner/ so transient backup/tmp files are
+    // Write a .gitignore inside .planner/ so transient/derived files are
     // not tracked by the host project's git. Git respects nested .gitignore.
-    await writeFile(
-      join(this.root, ".gitignore"),
-      [
-        "# Agent Plan transient files — do not track",
-        "*.bak",
-        "*.tmp.*",
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
+    // - *.bak/*.tmp.*: crash backups from atomic writes
+    // - resume.json: per-session resume focus + the machine-local guard-bypass
+    //   timestamp (guardBypassUntil must NOT leak into git/other clones)
+    // - generated/: auto-regenerated markdown views (derived from JSON; churn)
+    await writeFile(join(this.root, ".gitignore"), PLANNER_GITIGNORE, "utf-8");
+  }
+
+  /** Idempotently ensure `.planner/.gitignore` ignores `.local/` (and the
+   *  canonical transient/derived patterns). Projects initialized before the
+   *  `.local/` move either have no `.planner/.gitignore` or one with stale
+   *  root-level patterns. This upgrades them safely on load and on repair.
+   *  Returns true if the file was (re)written. Safe to call on every load. */
+  async ensureGitignore(): Promise<boolean> {
+    const gi = join(this.root, ".gitignore");
+    try {
+      const existing = await readFile(gi, "utf8").catch(() => null);
+      // Up to date iff it contains all canonical patterns (P042 spec):
+      // .local/ (transients), *.bak (crash backups), *.tmp.* (atomic-write
+      // temp files), generated/ (legacy dir).
+      if (existing != null && existing.includes(".local/") && existing.includes("*.bak") && existing.includes("*.tmp.*") && existing.includes("generated/")) {
+        return false;
+      }
+      await writeFile(gi, PLANNER_GITIGNORE, "utf-8");
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async exists(): Promise<boolean> {
@@ -529,28 +1022,129 @@ export class PlanStore {
 
   // ── Loaders ──────────────────────────────────────────────────────────
 
+  /** Read-only manifest load. Upgrading legacy `.local` state is explicit
+   * maintenance (`repair`), never an incidental side effect of opening a plan. */
   async loadManifest(): Promise<Manifest> {
-    return readJson(this.manifestPath(), ManifestSchema);
+    const manifest = await readJson(this.manifestPath(), ManifestSchema);
+    const timestamp = await readJson(this.timestampPath(), z.object({ updatedAt: TimestampSchema })).catch(() => undefined);
+    return timestamp ? { ...manifest, updatedAt: timestamp.updatedAt } : manifest;
   }
 
   async loadProject(): Promise<Project> {
     return readJson(this.projectPath(), ProjectSchema);
   }
 
+  /**
+   * Reserve immutable human identifiers without touching tracked `project.json`.
+   * Worktrees in the same clone share `.git/agent-plan/allocations`, guarded by
+   * the same cross-process lock used for atomic writes. The registry reserves
+   * numbers/short IDs before an entity file is written, so parallel branches
+   * cannot allocate the same F/P/T or shortId. Existing entities are never
+   * rewritten; cross-clone coordination requires a shared allocator service.
+   */
+  async allocateEntityIdentity(kind: AllocationKind, entityId: string): Promise<{ number: number; shortId: string }> {
+    const project = await this.loadProject();
+    const manifest = await this.loadManifest();
+    const commonGitDir = await gitCommonDirFor(this.root);
+    const registryPath = commonGitDir
+      ? join(commonGitDir, "agent-plan", "allocations", `${manifest.projectId}.json`)
+      : join(this.localRoot(), "allocations", `${manifest.projectId}.json`);
+
+    return withWriteLock(registryPath, async () => {
+      const registry = AllocationRegistrySchema.parse(await readFile(registryPath, "utf8")
+        .then(JSON.parse)
+        .catch(() => ({ version: 1, projectId: manifest.projectId, allocations: [] })));
+      if (registry.projectId !== manifest.projectId) throw new PlanStoreError(`allocation registry project mismatch: ${registryPath}`);
+      const prior = registry.allocations.find((entry) => entry.kind === kind && entry.entityId === entityId);
+      if (prior) return { number: prior.number, shortId: prior.shortId };
+
+      const phases = await this.loadAllPhases();
+      const features = (await this.loadFeatures()).features;
+      const canonical = kind === "feature"
+        ? features.map((feature) => ({ number: feature.number, shortId: feature.shortId }))
+        : kind === "phase"
+          ? phases.map((phase) => ({ number: phase.number, shortId: phase.shortId }))
+          : phases.flatMap((phase) => phase.tasks.map((task) => ({ number: task.number, shortId: task.shortId })));
+      const usedNumbers = new Set([...canonical.map((entry) => entry.number), ...registry.allocations.filter((entry) => entry.kind === kind).map((entry) => entry.number)]);
+      const counter = kind === "feature" ? project.nextFeatureNumber : kind === "phase" ? project.nextPhaseNumber : project.nextTaskNumber;
+      let number = Math.max(1, counter);
+      while (usedNumbers.has(number)) number += 1;
+
+      const allShortIds = new Set<string>([
+        ...features.map((feature) => feature.shortId),
+        ...phases.flatMap((phase) => [phase.shortId, ...phase.tasks.map((task) => task.shortId)]),
+        ...registry.allocations.map((entry) => entry.shortId),
+      ].filter(Boolean));
+      const allocation: Allocation = { kind, entityId, number, shortId: createShortId(allShortIds, `${kind}:${entityId}`) };
+      registry.allocations.push(allocation);
+      await writeRegistry(registryPath, registry);
+      return { number: allocation.number, shortId: allocation.shortId };
+    });
+  }
+
+  /** Compatibility helpers. New callers should allocate the number and shortId
+   * together with allocateEntityIdentity so reservation cannot be split. */
+  async allocFeatureNumber(): Promise<number> { return this.allocateLegacyNumber("feature"); }
+  async allocPhaseNumber(): Promise<number> { return this.allocateLegacyNumber("phase"); }
+  async allocTaskNumber(): Promise<number> { return this.allocateLegacyNumber("task"); }
+  private async allocateLegacyNumber(kind: AllocationKind): Promise<number> {
+    const id = `legacy-${kind}-${randomUUID()}`;
+    return (await this.allocateEntityIdentity(kind, id)).number;
+  }
+
 
 
   async loadPhase(phaseId: string): Promise<Phase> {
-    const phase = await readJson(this.phasePath(phaseId), PhaseSchema);
-    return this.normalizePhaseDocument(phase).phase;
+    const raw = await readJson(this.phasePath(phaseId), PhaseSchema);
+    const normalized = this.normalizePhaseDocument(raw).phase;
+    return { ...normalized, status: this.derivePhaseStatus(normalized.tasks) };
+  }
+
+  /** Read raw feature files WITHOUT the derived `status` field. Used
+   *  internally so loadFeatures/loadAll can derive status from phases without
+   *  double-loading. */
+  private async loadRawFeatures(): Promise<RawFeature[]> {
+    let jsonFiles: string[] = [];
+    try {
+      const all = await readdir(this.featuresDir());
+      jsonFiles = all.filter((f) => f.endsWith(".json"));
+    } catch {
+      // features/ absent → fall through to legacy single-file layout
+    }
+    if (jsonFiles.length > 0) {
+      const out: RawFeature[] = [];
+      for (const f of jsonFiles) {
+        const id = f.replace(/\.json$/, "");
+        try {
+          out.push(await readJson(this.featurePath(id), FeatureSchema));
+        } catch (err) {
+          // Skip an invalid feature file rather than failing the whole load.
+          console.warn(`[plan-store] skipping invalid feature file ${f}:`, err);
+        }
+      }
+      // Deterministic order: sort by the persisted `number` (creation order)
+      // so callers that renumber by index (normalizeFeaturesDocument) and
+      // callers that keep persisted numbers (loadAll) agree, regardless of the
+      // filesystem readdir order. Tiebreak by id for full determinism.
+      out.sort((a, b) => (a.number - b.number) || a.id.localeCompare(b.id));
+      return out;
+    }
+    // Legacy: single features.json (pre-migration read; migration writes on first write op).
+    try {
+      const legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+      const legacyFeatures = legacy.features;
+      legacyFeatures.sort((a, b) => (a.number - b.number) || a.id.localeCompare(b.id));
+      return legacyFeatures;
+    } catch {
+      return [];
+    }
   }
 
   async loadFeatures(): Promise<FeaturesDocument> {
-    try {
-      const features = await readJson(this.featuresPath(), FeaturesDocumentSchema);
-      return this.normalizeFeaturesDocument(features).doc;
-    } catch {
-      return { features: [] };
-    }
+    const raws = await this.loadRawFeatures();
+    const phases = await this.loadAllPhases();
+    const features: Feature[] = raws.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
+    return this.normalizeStructureSnapshot({ features }, phases).features;
   }
 
   async loadCodebaseProfile(): Promise<CodebaseProfile | null> {
@@ -563,11 +1157,12 @@ export class PlanStore {
 
   async saveCodebaseProfile(profile: CodebaseProfile): Promise<void> {
     const parsed = CodebaseProfileSchema.parse(profile);
-    await atomicWriteJson(this.codebasePath(), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.codebasePath(), parsed, this.root);
+    await this.touchTimestamp();
   }
 
   async loadResume(): Promise<ResumeFocus | null> {
+    await this.migrateLegacyLocalFile(join(this.root, "resume.json"), this.resumePath());
     try {
       return await readJson(this.resumePath(), ResumeFocusSchema);
     } catch {
@@ -576,9 +1171,20 @@ export class PlanStore {
   }
 
   async saveResume(resume: ResumeFocus): Promise<void> {
-    const parsed = ResumeFocusSchema.parse(resume);
-    await atomicWriteJson(this.resumePath(), parsed);
-    await this.touchManifest();
+    // Track when `nextSteps` actually change (free-text can go stale; the recap
+    // surfaces nextStepsUpdatedAt so staleness is visible). Preserved when
+    // refreshResume keeps existing nextSteps; bumped only on a real change.
+    const existing = await this.loadResume().catch(() => null);
+    const nextStepsChanged = JSON.stringify(existing?.nextSteps ?? []) !== JSON.stringify(resume.nextSteps ?? []);
+    const withTs: ResumeFocus = {
+      ...resume,
+      nextStepsUpdatedAt: nextStepsChanged
+        ? nowISO()
+        : (resume.nextStepsUpdatedAt || existing?.nextStepsUpdatedAt || nowISO()),
+    };
+    const parsed = ResumeFocusSchema.parse(withTs);
+    await atomicWriteJson(this.resumePath(), parsed, this.root);
+    await this.touchTimestamp();
   }
 
   /**
@@ -593,6 +1199,7 @@ export class PlanStore {
       currentPhaseId: "",
       inProgressTaskIds: [],
       nextSteps: [],
+      nextStepsUpdatedAt: "",
       blockers: [],
       notes: "",
       lastSessionSummary: "",
@@ -624,50 +1231,12 @@ export class PlanStore {
   }
 
   async loadActivityLog(): Promise<ActivityLog> {
+    await this.migrateLegacyLocalFile(join(this.root, "activity.json"), this.activityPath());
     try {
       return await readJson(this.activityPath(), ActivityLogSchema);
     } catch {
       return { entries: [] };
     }
-  }
-
-  async handoffExists(): Promise<boolean> {
-    try {
-      await access(this.handoffPath());
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async loadHandoff(): Promise<{ content: string; createdAt: string; updatedAt: string } | null> {
-    try {
-      const [content, info] = await Promise.all([
-        readFile(this.handoffPath(), "utf-8"),
-        stat(this.handoffPath()),
-      ]);
-      const createdAt = content.match(/^Created at:\s*(.+)$/m)?.[1]?.trim() ?? info.birthtime.toISOString();
-      const updatedAt = content.match(/^Updated at:\s*(.+)$/m)?.[1]?.trim() ?? info.mtime.toISOString();
-      return {
-        content,
-        createdAt,
-        updatedAt,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  async saveHandoff(content: string): Promise<void> {
-    await atomicWriteText(this.handoffPath(), content);
-    await this.touchManifest();
-  }
-
-  async deleteHandoff(): Promise<void> {
-    try {
-      await unlink(this.handoffPath());
-    } catch {}
-    await this.touchManifest();
   }
 
   async appendActivity(type: string, ref: string, summary: string): Promise<ActivityEntry> {
@@ -677,8 +1246,8 @@ export class PlanStore {
     log.entries.push(entry);
     // Cap to last 200 entries
     if (log.entries.length > 200) log.entries = log.entries.slice(-200);
-    await atomicWriteJson(this.activityPath(), { entries: log.entries });
-    await this.touchManifest();
+    await atomicWriteJson(this.activityPath(), { entries: log.entries }, this.root);
+    await this.touchTimestamp();
     return entry;
   }
 
@@ -695,6 +1264,7 @@ export class PlanStore {
       currentPhaseId: inProgressPhases[0]?.id ?? existing?.currentPhaseId ?? "",
       inProgressTaskIds: inProgressTasks.map((t) => t.id),
       nextSteps: existing?.nextSteps ?? [],
+      nextStepsUpdatedAt: existing?.nextStepsUpdatedAt ?? "",
       blockers: blockedTasks.map((t) => `${t.id}: ${t.title}`),
       notes: notes ?? existing?.notes ?? "",
       lastSessionSummary: lastSessionSummary ?? existing?.lastSessionSummary ?? "",
@@ -710,6 +1280,37 @@ export class PlanStore {
     } catch {
       return { requirements: [] };
     }
+  }
+
+  async linkedRequirementsForPhase(phaseId: string): Promise<Requirement[]> {
+    const requirements = await this.loadRequirements();
+    return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.includes(phaseId));
+  }
+
+  /** Requirements linked to any phase belonging to a feature, deduplicated by ID. */
+  async linkedRequirementsForFeature(featureId: string): Promise<Requirement[]> {
+    const [phases, requirements] = await Promise.all([this.loadAllPhases(), this.loadRequirements()]);
+    const phaseIds = new Set(phases.filter((phase) => phase.featureId === featureId).map((phase) => phase.id));
+    return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.some((phaseId) => phaseIds.has(phaseId)));
+  }
+
+  async loadPhaseWithRequirements(phaseId: string): Promise<Phase & { linkedRequirements: Requirement[] }> {
+    const [phase, linkedRequirements] = await Promise.all([
+      this.loadPhase(phaseId),
+      this.linkedRequirementsForPhase(phaseId),
+    ]);
+    return { ...phase, linkedRequirements };
+  }
+
+  async loadAllPhasesWithRequirements(): Promise<Array<Phase & { linkedRequirements: Requirement[] }>> {
+    const [phases, requirements] = await Promise.all([
+      this.loadAllPhases(),
+      this.loadRequirements(),
+    ]);
+    return phases.map((phase) => ({
+      ...phase,
+      linkedRequirements: requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.includes(phase.id)),
+    }));
   }
 
   async loadAllPhases(): Promise<Phase[]> {
@@ -738,15 +1339,36 @@ export class PlanStore {
     });
   }
 
+  /** Derive the parent display snapshot for a phase from its tasks' canonical
+   *  statuses. Pure, non-persisting. */
+  async loadPhaseDisplay(phaseId: string): Promise<ParentDisplay> {
+    const phase = await this.loadPhase(phaseId);
+    const childStatuses: WorkflowStatus[] = phase.tasks.map((t) => fromCanonicalStatus(t.status));
+    return deriveParentDisplay(childStatuses);
+  }
+
+  /** Derive the parent display snapshot for a feature from its phases' DERIVED
+   *  canonical statuses (each phase status is derived from its tasks at read
+   *  time, then mapped via fromCanonicalStatus). Pure, non-persisting. */
+  async loadFeatureDisplay(featureId: string): Promise<ParentDisplay> {
+    const phases = await this.loadAllPhases();
+    const featurePhases = phases.filter((p) => p.featureId === featureId);
+    const childStatuses: WorkflowStatus[] = featurePhases.map((p) => fromCanonicalStatus(p.status));
+    return deriveParentDisplay(childStatuses);
+  }
+
+
   async loadAll(): Promise<PlanWorkspace> {
-    const [manifest, project, features, requirements, phases] = await Promise.all([
+    const [manifest, project, requirements, phases] = await Promise.all([
       this.loadManifest(),
       this.loadProject(),
-      this.loadFeatures(),
       this.loadRequirements(),
       this.loadAllPhases(),
     ]);
-    return PlanWorkspaceSchema.parse({ manifest, project, features, requirements, phases });
+    const rawFeatures = await this.loadRawFeatures();
+    const features: Feature[] = rawFeatures.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
+    const normalized = this.normalizeStructureSnapshot({ features }, phases);
+    return { manifest, project, requirements, phases: normalized.phases, features: normalized.features };
   }
 
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
@@ -787,9 +1409,7 @@ export class PlanStore {
         task.phaseId = newId;
       }
       await this.savePhase(phase);
-      try {
-        await unlink(this.phasePath(oldId));
-      } catch {}
+      await this.unlinkPhaseFiles(oldId);
       renamed += 1;
     }
 
@@ -850,21 +1470,185 @@ export class PlanStore {
     return { removed };
   }
 
-  /** Repair dangling references and report integrity. One-shot maintenance op. */
-  async repair(): Promise<{
-    migrated: { renamed: number; repaired: number; inferred: number };
-    integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[] };
+  /** All non-empty shortIds currently assigned in the project (features + phases + tasks).
+   *  Read-only; used by createShortId collision guard during entity creation. */
+  async assignedShortIds(): Promise<Set<string>> {
+    const features = await this.loadFeatures();
+    const phases = await this.loadAllPhases();
+    const ids = new Set<string>();
+    for (const f of features.features) if (f.shortId) ids.add(f.shortId);
+    for (const p of phases) {
+      if (p.shortId) ids.add(p.shortId);
+      for (const t of p.tasks) if (t.shortId) ids.add(t.shortId);
+    }
+    return ids;
+  }
+
+  /** Next priority (>=1) for a new entity within its scope.
+   *  - feature: max priority among features + 1
+   *  - phase: max priority among phases of parentId (featureId) + 1
+   *  - task: max priority among tasks of parentId (phaseId) + 1 */
+  async nextPriority(kind: "feature" | "phase" | "task", parentId?: string): Promise<number> {
+    if (kind === "feature") {
+      const features = await this.loadFeatures();
+      const max = features.features.reduce((m, f) => Math.max(m, f.priority ?? 0), 0);
+      return max + 1;
+    }
+    if (kind === "phase") {
+      const phases = await this.loadAllPhases();
+      const siblings = phases.filter((p) => p.featureId === parentId);
+      const max = siblings.reduce((m, p) => Math.max(m, p.priority ?? 0), 0);
+      return max + 1;
+    }
+    // task
+    const phase = parentId ? await this.loadPhase(parentId).catch(() => undefined) : undefined;
+    const tasks = phase?.tasks ?? [];
+    const max = tasks.reduce((m, t) => Math.max(m, t.priority ?? 0), 0);
+    return max + 1;
+  }
+
+  /** Idempotent backfill of shortId (globally-unique 5-char Crockford) and priority
+   *  (per-scope display order). Assigns missing shortIds and priorities; never overwrites
+   *  existing non-empty shortIds or non-zero priorities. Safe to run at startup. */
+  async ensureShortIdsAndPriority(): Promise<{
+    shortIdsAssigned: number;
+    prioritiesAssigned: number;
+    duplicateShortIds: string[];
   }> {
     return this.runAsBatch(async () => {
-      const migrated = await this.migratePhaseIds();
-      const integrity = await this.validateIntegrity();
-      await this.writeGenerated();
-      return { migrated, integrity };
+      const featuresDoc = await this.loadFeatures();
+      const phases = await this.loadAllPhases();
+      const existing = new Set<string>();
+      for (const f of featuresDoc.features) if (f.shortId) existing.add(f.shortId);
+      for (const p of phases) {
+        if (p.shortId) existing.add(p.shortId);
+        for (const t of p.tasks) if (t.shortId) existing.add(t.shortId);
+      }
+
+      let shortIdsAssigned = 0;
+      let prioritiesAssigned = 0;
+      let featuresDirty = false;
+
+      // Priority is left to reorder (midpoint-insert); ensureShortIds only
+      // backfills shortIds. New items keep priority 0 until first drag reindex.
+      const assignPriority = (current: number, _index: number): number => current;
+
+      // Features: shortId + priority (project scope)
+      const sortedFeatures = [...featuresDoc.features].sort(
+        (a, b) => a.number - b.number || a.createdAt.localeCompare(b.createdAt),
+      );
+      sortedFeatures.forEach((f, index) => {
+        if (!f.shortId) {
+          f.shortId = createShortId(existing, `feature:${f.number}:${f.id}`);
+          existing.add(f.shortId);
+          shortIdsAssigned += 1;
+          featuresDirty = true;
+        }
+        const nextP = assignPriority(f.priority ?? 0, index);
+        if (nextP !== f.priority) { f.priority = nextP; featuresDirty = true; }
+      });
+      if (featuresDirty) {
+        featuresDoc.features.sort((a, b) => a.priority - b.priority || a.number - b.number);
+        await this.saveFeatures(featuresDoc);
+      }
+
+      // Phases + tasks
+      for (const phase of phases) {
+        let phaseDirty = false;
+        if (!phase.shortId) {
+          phase.shortId = createShortId(existing, `phase:${phase.number}:${phase.id}`);
+          existing.add(phase.shortId);
+          shortIdsAssigned += 1;
+          phaseDirty = true;
+        }
+        const phaseIndex = phase.number - 1; // stable pre-migration order
+        const nextPP = assignPriority(phase.priority ?? 0, phaseIndex < 0 ? 0 : phaseIndex);
+        if (nextPP !== phase.priority) { phase.priority = nextPP; phaseDirty = true; }
+
+        const sortedTasks = [...phase.tasks].sort(
+          (a, b) => a.number - b.number || a.createdAt.localeCompare(b.createdAt),
+        );
+        sortedTasks.forEach((t, index) => {
+          if (!t.shortId) {
+            t.shortId = createShortId(existing, `task:${t.number}:${t.id}`);
+            existing.add(t.shortId);
+            shortIdsAssigned += 1;
+            phaseDirty = true;
+          }
+          const nextTP = assignPriority(t.priority ?? 0, index);
+          if (nextTP !== t.priority) { t.priority = nextTP; phaseDirty = true; }
+        });
+        if (phaseDirty) {
+          phase.tasks.sort((a, b) => a.priority - b.priority || a.number - b.number);
+          phase.taskIds = phase.tasks.map((t) => t.id);
+          phase.updatedAt = nowISO();
+          await this.savePhase(phase);
+        }
+      }
+
+      // Duplicate shortId report (across all entities)
+      const allShortIds: string[] = [];
+      for (const f of featuresDoc.features) if (f.shortId) allShortIds.push(f.shortId);
+      for (const ph of phases) {
+        if (ph.shortId) allShortIds.push(ph.shortId);
+        for (const t of ph.tasks) if (t.shortId) allShortIds.push(t.shortId);
+      }
+      const counts = new Map<string, number>();
+      for (const id of allShortIds) counts.set(id, (counts.get(id) ?? 0) + 1);
+      const duplicateShortIds = [...counts.entries()].filter(([, c]) => c > 1).map(([id]) => id);
+
+      return { shortIdsAssigned, prioritiesAssigned, duplicateShortIds };
     });
   }
 
+  /** Repair dangling references and report integrity. One-shot maintenance op. */
+  async repair(): Promise<{
+    migrated: { renamed: number; repaired: number; inferred: number };
+    backfill: { shortIdsAssigned: number; prioritiesAssigned: number; duplicateShortIds: string[] };
+    containment: { changed: number; tasks: number; orphan: number };
+    handoffs: { archived: number };
+    integrity: { duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] };
+  }> {
+    return this.runAsBatch(async () => {
+      // Ensure the .planner/.gitignore ignores transients (P042). Idempotent;
+      // upgrades plans initialized before the .local/ move.
+      await this.ensureGitignore().catch(() => {});
+      const migrated = await this.migratePhaseIds();
+      await this.repairPhaseFeatureRefs();
+      const backfill = await this.ensureShortIdsAndPriority();
+      // Rebuild phase containment from each task's own phaseId. Heals plans
+      // corrupted by the migrateToGlobalSequence index-mismatch bug (core
+      // <0.2.19-next.7). Lossless + idempotent — safe to run every repair.
+      const containment = await this.rebuildContainment();
+      const handoffs = { archived: await this.archiveStaleHandoffs() };
+      const integrity = await this.validateIntegrity();
+      await this.writeGenerated();
+      return { migrated, backfill, containment, handoffs, integrity };
+    });
+  }
+
+  private async repairPhaseFeatureRefs(): Promise<number> {
+    const features = await this.loadRawFeatures();
+    const phases = await this.loadAllPhases();
+    let changed = 0;
+
+    for (const phase of phases) {
+      const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
+      if (resolvedFeatureId && resolvedFeatureId !== phase.featureId) {
+        await this.savePhase({ ...phase, featureId: resolvedFeatureId });
+        changed += 1;
+      }
+    }
+
+    if (changed > 0) {
+      await this.updateFeatures((doc) => doc);
+    }
+
+    return changed;
+  }
+
   /** Validate plan integrity: globally unique phase ids and resolvable feature.phaseIds. */
-  async validateIntegrity(): Promise<{ duplicatePhaseIds: string[]; danglingPhaseIds: string[] }> {
+  async validateIntegrity(): Promise<{ duplicatePhaseIds: string[]; danglingPhaseIds: string[]; duplicateShortIds: string[] }> {
     const phases = await this.loadAllPhases();
     const features = await this.loadFeatures();
     const seen = new Map<string, number>();
@@ -879,148 +1663,286 @@ export class PlanStore {
         if (!knownPhaseIds.has(ref)) danglingPhaseIds.push(`${feature.id} -> ${ref}`);
       }
     }
-    return { duplicatePhaseIds, danglingPhaseIds };
+    // Duplicate shortIds across all entities
+    const allShortIds: string[] = [];
+    for (const f of features.features) if (f.shortId) allShortIds.push(f.shortId);
+    for (const ph of phases) {
+      if (ph.shortId) allShortIds.push(ph.shortId);
+      for (const t of ph.tasks) if (t.shortId) allShortIds.push(t.shortId);
+    }
+    const sidCounts = new Map<string, number>();
+    for (const id of allShortIds) sidCounts.set(id, (sidCounts.get(id) ?? 0) + 1);
+    const duplicateShortIds = [...sidCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id);
+    return { duplicatePhaseIds, danglingPhaseIds, duplicateShortIds };
   }
 
-  private derivePhaseStatus(phase: Phase): Phase["status"] {
-    if (phase.tasks.length === 0) return phase.status;
+  /** A handoff remains active while any task needs work. Its automatic end-of-
+   * phase lifecycle is deliberately narrower than canonical display status:
+   * every task must be done or canceled (not merely derived "rejected"). */
+  private hasCompletedHandoffLifecycle(tasks: Task[]): boolean {
+    return tasks.length > 0 && tasks.every((task) => task.status === "done" || task.status === "canceled");
+  }
 
-    const taskStatuses = phase.tasks.map((task) => task.status);
-    const allRejectedOrCanceled = taskStatuses.every((status) => status === "rejected" || status === "canceled");
-    const anyBlocked = taskStatuses.some((status) => status === "blocked");
-    const anyInProgress = taskStatuses.some((status) => status === "in-progress");
-    const anyWaiting = taskStatuses.some((status) => status === "waiting");
-    const anyDeferred = taskStatuses.some((status) => status === "deferred");
-    const anyPlanned = taskStatuses.some((status) => status === "planned");
-    const anyDone = taskStatuses.some((status) => status === "done");
+  private derivePhaseStatus(tasks: Task[]): Phase["status"] {
+    if (tasks.length === 0) return "draft";
 
-    if (allRejectedOrCanceled) return "rejected";
-    if (anyBlocked) return "blocked";
-    if (anyInProgress) return "in-progress";
-    if (anyWaiting) return "waiting";
-    if (anyDeferred) return "deferred";
-    if (anyPlanned) return "planned";
-    if (anyDone) return "done";
+    const taskStatuses = tasks.map((task) => task.status);
+    // Ignore rejected/canceled tasks (void) when deriving progress.
+    const meaningful = taskStatuses.filter((s) => s !== "rejected" && s !== "canceled");
+    if (meaningful.length === 0) return "rejected";
+    if (meaningful.every((s) => s === "done")) return "done";
+
+    const hasDone = meaningful.some((s) => s === "done");
+    const hasActive = meaningful.some((s) => s === "in-progress");
+    const hasPlanned = meaningful.some((s) => s === "planned");
+    const hasBlocked = meaningful.some((s) => s === "blocked");
+    const hasWaiting = meaningful.some((s) => s === "waiting");
+    const hasDeferred = meaningful.some((s) => s === "deferred");
+
+    if (hasActive) return "in-progress";
+    // If completed work exists and the ONLY remaining meaningful work is deferred,
+    // surface deferred instead of implying active execution.
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
+    // Partial completion with remaining planned/blocked/waiting work still means
+    // the phase has genuinely started and is not terminal yet.
+    if (hasDone) return "in-progress";
+    // No progress at all ⇒ surface the stall / not-started state (blocked > waiting > deferred > planned).
+    if (hasBlocked) return "blocked";
+    if (hasWaiting) return "waiting";
+    if (hasDeferred) return "deferred";
     return "planned";
   }
 
-  private deriveFeatureStatus(featureId: string, currentStatus: Feature["status"], phases: Phase[]): Feature["status"] {
+  private deriveFeatureStatus(featureId: string, phases: Phase[]): Feature["status"] {
     const featurePhases = phases.filter((phase) => phase.featureId === featureId);
-    if (featurePhases.length === 0) return currentStatus;
+    if (featurePhases.length === 0) return "planned";
 
     const phaseStatuses = featurePhases.map((phase) => phase.status);
-    const allRejectedOrCanceled = phaseStatuses.every((status) => status === "rejected" || status === "canceled");
-    const anyBlocked = phaseStatuses.some((status) => status === "blocked");
-    const anyActive = phaseStatuses.some((status) => status === "discovery" || status === "in-progress");
-    const anyWaiting = phaseStatuses.some((status) => status === "waiting");
-    const anyDeferred = phaseStatuses.some((status) => status === "deferred");
-    const anyPlannedLike = phaseStatuses.some((status) => status === "draft" || status === "planned");
-    const anyDone = phaseStatuses.every((status) => status === "done");
+    // Ignore rejected/canceled phases when deriving progress.
+    const meaningful = phaseStatuses.filter((s) => s !== "rejected" && s !== "canceled");
+    if (meaningful.length === 0) return "rejected";
+    if (meaningful.every((s) => s === "done")) return "done";
 
-    if (allRejectedOrCanceled) return "rejected";
-    if (anyBlocked) return "blocked";
-    if (anyActive) return "in-progress";
-    if (anyWaiting) return "waiting";
-    if (anyDeferred) return "deferred";
-    if (anyPlannedLike) return "planned";
-    if (anyDone) return "done";
+    const hasDone = meaningful.some((s) => s === "done");
+    const hasActive = meaningful.some((s) => s === "discovery" || s === "in-progress");
+    const hasPlanned = meaningful.some((s) => s === "planned");
+    const hasBlocked = meaningful.some((s) => s === "blocked");
+    const hasWaiting = meaningful.some((s) => s === "waiting");
+    const hasDeferred = meaningful.some((s) => s === "deferred");
+
+    if (hasActive) return "in-progress";
+    // Same rule as phases: done + deferred-only remainder is deferred, not active.
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
+    if (hasDone) return "in-progress";
+    // No progress at all ⇒ surface the stall / not-started state.
+    if (hasBlocked) return "blocked";
+    if (hasWaiting) return "waiting";
+    if (hasDeferred) return "deferred";
     return "planned";
   }
 
-  async syncStatuses(): Promise<void> {
-    // Run as a batch so the internal saveFeatures + N savePhase calls do not
-    // re-trigger syncStatuses on every write (O(N^2) on large planners).
-    await this.runAsBatch(async () => {
-      await this.migratePhaseIds();
-      const workspace = await this.loadAll();
-      const { phases, features } = workspace;
+  async syncStatuses(): Promise<string[]> {
+    // No-op: phase/feature status is now DERIVED at read time (never persisted),
+    // so there is nothing to sync. Kept for backward compatibility with callers
+    // (serve.ts, adapters) that invoke it after mutations.
+    return [];
+  }
 
-      // 1. Update Phase statuses based on tasks
-      for (const phase of phases) {
-        phase.status = this.derivePhaseStatus(phase);
+  /** Auto-clear a phase's handoff only when every task is terminal as done or
+   *  canceled. This covers an all-canceled phase too, whose legacy canonical
+   *  derived status is "rejected". Returns the composite ref when cleared. */
+  async syncTaskStatusRollup(phaseId: string): Promise<string | null> {
+    const phase = await this.loadPhase(phaseId);
+    let cleared: string | null = null;
+    if (this.hasCompletedHandoffLifecycle(phase.tasks) && phase.handoff !== "") {
+      await this.clearPhaseHandoff(phaseId, "phase-done");
+      const features = await this.loadFeatures();
+      const feature = features.features.find((f) => f.id === phase.featureId);
+      cleared = formatPhaseRef(phase.number, feature?.number);
+    }
+    // Append a statusLog entry to the phase when its DERIVED status changed
+    // (audit trail; status itself is NOT persisted). Idempotent: only appends
+    // when the new derived status differs from the last recorded toStatus.
+    await this.#appendPhaseStatusLog(phaseId);
+    // Roll up to the parent feature's statusLog too.
+    if (phase.featureId) await this.#appendFeatureStatusLog(phase.featureId);
+    await this.refreshResume();
+    return cleared;
+  }
+
+  /** Append a PhaseStatusLogEntry to the phase when its derived status changed
+   *  vs. the last recorded toStatus (baseline "draft" when empty, matching the
+   *  phase-creation literal). Idempotent across repeated reads of the same state. */
+  async #appendPhaseStatusLog(phaseId: string): Promise<void> {
+    await this.updatePhase(phaseId, (p) => {
+      const last = p.statusLog.at(-1)?.toStatus ?? "draft";
+      if (p.status !== last) {
+        p.statusLog = [...p.statusLog, {
+          id: createStatusLogEntryId(),
+          date: nowISO(),
+          fromStatus: last as Phase["status"],
+          toStatus: p.status,
+          title: `${last} → ${p.status}`,
+          description: "",
+        }];
       }
-
-      // 2. Update Feature statuses based on phases
-      for (const feature of features.features) {
-        feature.status = this.deriveFeatureStatus(feature.id, feature.status, phases);
-      }
-
-      // 3. Save everything
-      await this.saveFeatures(features);
-      for (const phase of phases) {
-        await this.savePhase(phase);
-      }
-
-      // 4. Refresh resume focus so a subentrating agent sees current state
-      await this.refreshResume();
+      return p;
     });
   }
 
-  /** Optimized rollup: syncs only the affected phase and its parent feature.
-   *  Drastically reduces write operations and 'busy' window for task updates. */
-  async syncTaskStatusRollup(phaseId: string): Promise<void> {
-    const phase = await this.loadPhase(phaseId);
-    phase.status = this.derivePhaseStatus(phase);
-    await this.savePhase(phase);
-
-    if (phase.featureId) {
-      const featuresDoc = await this.loadFeatures();
-      const feature = featuresDoc.features.find((f) => f.id === phase.featureId);
-      if (feature) {
-        // To derive feature status, we still need the statuses of all its phases
-        const allPhases = await this.loadAllPhases();
-        feature.status = this.deriveFeatureStatus(feature.id, feature.status, allPhases);
-        await this.saveFeatures(featuresDoc);
-      }
+  /** Append a StatusLogEntry to the feature when its derived status changed
+   *  vs. the last recorded toStatus (baseline "planned" when empty, matching
+   *  the feature-creation/empty-phases derivation). Idempotent. */
+  async #appendFeatureStatusLog(featureId: string): Promise<void> {
+    const features = await this.loadFeatures();
+    const feature = features.features.find((f) => f.id === featureId);
+    if (!feature) return;
+    const last = feature.statusLog.at(-1)?.toStatus ?? "planned";
+    if (feature.status !== last) {
+      await this.updateFeatures((doc) => {
+        const target = doc.features.find((f) => f.id === featureId);
+        if (target && target.statusLog.at(-1)?.toStatus !== feature.status) {
+          const baseline = target.statusLog.at(-1)?.toStatus ?? "planned";
+          target.statusLog = [...target.statusLog, {
+            id: createStatusLogEntryId(),
+            date: nowISO(),
+            fromStatus: baseline as Task["status"],
+            toStatus: feature.status as Task["status"],
+            title: `${baseline} → ${feature.status}`,
+            description: "",
+          }];
+        }
+        return doc;
+      });
     }
-    await this.refreshResume();
   }
 
   // ── Savers ───────────────────────────────────────────────────────────
 
   async updateProject(updater: (p: Project) => Project): Promise<Project> {
-    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, updater);
+    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, updater, this.root);
     await this.maybeAutoSync();
     return updated;
   }
 
+  /** Persist an explicitly approved work deviation without coupling it to a harness. */
+  async addWorkDeviation(deviation: WorkDeviation): Promise<Project> {
+    return this.updateProject((project) => ({
+      ...project,
+      workDeviations: [...project.workDeviations, deviation],
+    }));
+  }
+
+  /** Mark an approved/active deviation as resolved or canceled while retaining its audit record. */
+  async setWorkDeviationState(id: string, state: "active" | "resolved" | "canceled", timestamp = nowISO()): Promise<Project> {
+    return this.updateProject((project) => ({
+      ...project,
+      workDeviations: project.workDeviations.map((deviation) => deviation.id !== id ? deviation : {
+        ...deviation,
+        state,
+        activatedAt: state === "active" ? timestamp : deviation.activatedAt,
+        resolvedAt: state === "resolved" || state === "canceled" ? timestamp : deviation.resolvedAt,
+      }),
+    }));
+  }
+
   async updateFeatures(updater: (f: FeaturesDocument) => FeaturesDocument): Promise<FeaturesDocument> {
-    const updated = await atomicUpdateJson(this.featuresPath(), FeaturesDocumentSchema, (current) => this.normalizeFeaturesDocument(updater(current)).doc);
+    const updated = await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      const current = await this.loadFeatures();
+      const upd = this.normalizeFeaturesDocument(updater(current)).doc;
+      await this.saveFeaturesRaw(upd);
+      return upd;
+    });
     await this.maybeAutoSync();
     return updated;
   }
 
   async updateRequirements(updater: (r: RequirementsDocument) => RequirementsDocument): Promise<RequirementsDocument> {
-    const updated = await atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater);
+    const updated = await atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater, this.root);
     await this.maybeAutoSync();
     return updated;
   }
 
   async saveProject(project: Project): Promise<void> {
     const parsed = ProjectSchema.parse(project);
-    await atomicWriteJson(this.projectPath(), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.projectPath(), parsed, this.root);
+    await this.touchTimestamp();
     await this.maybeAutoSync();
   }
 
   async saveFeatures(features: FeaturesDocument): Promise<void> {
+    await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      await this.saveFeaturesRaw(features);
+    });
+    await this.touchTimestamp();
+    await this.maybeAutoSync();
+  }
+
+  /** Per-file write of all features + orphan reconcile. No lock (caller holds withFeaturesLock). */
+  private async saveFeaturesRaw(features: FeaturesDocument): Promise<void> {
     const parsed = FeaturesDocumentSchema.parse(this.normalizeFeaturesDocument(features).doc);
-    await atomicWriteJson(this.featuresPath(), parsed);
-    await this.touchManifest();
+    await mkdir(this.featuresDir(), { recursive: true });
+    const wantIds = new Set(parsed.features.map((f) => f.id));
+    for (const feat of parsed.features) {
+      await atomicWriteJson(this.featurePath(feat.id), feat, this.root);
+    }
+    // Orphan reconcile: remove feature files no longer in the document.
+    try {
+      const files = await readdir(this.featuresDir());
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const id = f.replace(/\.json$/, "");
+        if (!wantIds.has(id)) {
+          await unlink(this.featurePath(id)).catch(() => {});
+        }
+      }
+    } catch {
+      // dir absent — nothing to reconcile
+    }
+  }
+
+  /** Granular single-feature write (per-file lock; parallel-safe across features). */
+  async saveFeature(feature: Feature): Promise<void> {
+    await this.withFeaturesLock(async () => {
+      await this.migrateLegacy();
+      await mkdir(this.featuresDir(), { recursive: true });
+      const parsed = FeatureSchema.parse(feature);
+      await atomicWriteJson(this.featurePath(parsed.id), parsed, this.root);
+    });
+    await this.touchTimestamp();
     await this.maybeAutoSync();
   }
 
   async saveRequirements(reqs: RequirementsDocument): Promise<void> {
     const parsed = RequirementsDocumentSchema.parse(reqs);
-    await atomicWriteJson(this.requirementsPath(), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.requirementsPath(), parsed, this.root);
+    await this.touchTimestamp();
   }
 
     async savePhase(phase: Phase): Promise<void> {
-    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(phase).phase);
+    const features = await this.loadRawFeatures();
+    const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
+    // Referential integrity: if a featureId is present but cannot be resolved
+    // to a known feature, REJECT — never persist an orphan featureId.
+    // NOTE: a missing/empty featureId is intentionally ALLOWED here so that
+    // legacy migrations, repair, and feature-delete (unlink) can persist phases
+    // without a feature yet. The hard "featureId required" gate lives at the
+    // adapter boundary (Pi phase_create/task_create and MCP planner-phase-add/
+    // planner-task-add), which is where user-facing creation happens.
+    if (phase.featureId && phase.featureId.trim() && !resolvedFeatureId) {
+      throw new PlanStoreError(
+        `Cannot save phase "${phase.title}": featureId "${phase.featureId}" does not match any existing feature. Use a valid feature UUID, F00x ref, or shortId.`,
+      );
+    }
+    const normalizedInput = resolvedFeatureId && resolvedFeatureId !== phase.featureId
+      ? { ...phase, featureId: resolvedFeatureId }
+      : phase;
+    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(normalizedInput).phase);
     await mkdir(this.phasesDir(), { recursive: true });
-    await atomicWriteJson(this.phasePath(parsed.id), parsed);
-    await this.touchManifest();
+    await atomicWriteJson(this.phasePath(parsed.id), parsed, this.root);
+    await this.touchTimestamp();
     await this.maybeAutoSync();
   }
 
@@ -1028,18 +1950,260 @@ export class PlanStore {
    *  task_create / phase_update calls on the SAME phaseId so batch operations
    *  don't lose tasks (last-write-wins race condition). */
   async updatePhase(phaseId: string, updater: (phase: Phase) => Phase): Promise<Phase> {
-    const updated = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (phase) => this.normalizePhaseDocument(updater(phase)).phase);
+    const features = await this.loadRawFeatures();
+    // Augment the raw (on-disk) phase with its DERIVED status before handing it
+    // to the updater, so updaters that read 'phase.status' see the truth. The
+    // returned object's 'status' is stripped by PhaseSchema.parse (status is
+    // not persisted); the return value is re-derived for the caller.
+    const raw = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (rawPhase) => {
+      const current: Phase = { ...rawPhase, status: this.derivePhaseStatus(rawPhase.tasks) };
+      const next = updater(current);
+      const resolvedFeatureId = resolveStoredFeatureId(features, next.featureId);
+      // Referential integrity: reject orphan featureId.
+      if (next.featureId && next.featureId.trim() && !resolvedFeatureId) {
+        throw new PlanStoreError(
+          `Cannot update phase: featureId "${next.featureId}" does not match any existing feature.`,
+        );
+      }
+      const normalizedInput = resolvedFeatureId && resolvedFeatureId !== next.featureId
+        ? { ...next, featureId: resolvedFeatureId }
+        : next;
+      return this.normalizePhaseDocument(normalizedInput).phase;
+    });
     await this.maybeAutoSync();
-    return updated;
+    return { ...raw, status: this.derivePhaseStatus(raw.tasks) };
+  }
+
+  // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────
+
+  /** Get the handoff text for a phase ("" if none). Throws if phase missing. */
+  async getPhaseHandoff(phaseId: string): Promise<string> {
+    return (await this.loadPhase(phaseId)).handoff;
+  }
+
+  /** Set the handoff text for a phase + stamp handoffUpdatedAt. A completed or
+   * canceled phase cannot receive a new operational handoff. Replacing an
+   * existing handoff archives the previous content as `superseded` first. */
+  async setPhaseHandoff(phaseId: string, text: string): Promise<void> {
+    const phase = await this.loadPhase(phaseId);
+    const normalized = text.trim();
+    if (phase.status === "done" || phase.status === "canceled") {
+      throw new PlanStoreError(`Cannot write a handoff on ${phase.status} phase ${phaseId}; completed phases have no pending handoff.`);
+    }
+    if (phase.handoff && normalized && phase.handoff !== normalized) {
+      await this.clearPhaseHandoff(phaseId, "superseded");
+    }
+    const now = new Date().toISOString();
+    await this.updatePhase(phaseId, (current) => ({ ...current, handoff: normalized, handoffUpdatedAt: now }));
+  }
+
+
+  /** Mark the phase handoff as read/acknowledged on recap (sets handoffReadAt).
+   *  Does NOT clear it: read/load/show are non-mutating resume operations. */
+  async markHandoffRead(phaseId: string): Promise<void> {
+    await this.updatePhase(phaseId, (phase) => ({ ...phase, handoffReadAt: nowISO() }));
+  }
+
+  /** One-time import of a legacy .planner/HANDOFF.md file (file-based handoff
+   *  from before F004) into the entity-scoped phase.handoff. Idempotent: if the
+   *  file is absent or empty, no-op. If it exists + non-empty + the target phase
+   *  has no handoff, writes the content onto the current in-progress phase (or
+   *  the first phase if none in-progress) with an "imported" handoffHistory entry,
+   *  then renames the file to HANDOFF.md.bak so it won't re-import. If the target
+   *  already has a handoff, the entity-scoped one wins and the file is just .bak'd. */
+  async importLegacyHandoffFile(): Promise<{ imported: boolean; phaseRef?: string }> {
+    const filePath = join(this.root, "HANDOFF.md");
+    const content = await readFile(filePath, "utf-8").catch(() => null);
+    if (content === null) return { imported: false };
+    if (content.trim() === "") {
+      await rename(filePath, filePath + ".bak").catch(() => {});
+      return { imported: false };
+    }
+    const phases = await this.loadAllPhases();
+    const target = phases.find((p) => p.status === "in-progress")
+      ?? phases.find((p) => p.status !== "done" && p.status !== "canceled")
+      ?? null;
+    if (!target) return { imported: false }; // no non-completed phase — leave file for a later run
+    if ((target.handoff ?? "") === "") {
+      await this.setPhaseHandoff(target.id, content + "\n\n<!-- imported from legacy .planner/HANDOFF.md -->\n");
+      await this.updatePhase(target.id, (p) => ({
+        ...p,
+        handoffHistory: [{ file: "(legacy HANDOFF.md)", clearedAt: nowISO(), reason: "imported" }, ...(p.handoffHistory ?? [])].slice(0, 5),
+      }));
+    }
+    await rename(filePath, filePath + ".bak").catch(() => {});
+    const features = await this.loadFeatures();
+    const feat = features.features.find((f) => f.id === target.featureId);
+    return { imported: true, phaseRef: formatPhaseRef(target.number, feat?.number) };
+  }
+
+
+  /** Clear the handoff for a phase, archiving its content first. The handoff
+   *  markdown is written to .planner/handoff-archive/<phaseId>-<ISO>.md and a
+   *  metadata entry { file, clearedAt, reason } is prepended to handoffHistory
+   *  (capped at 5; oldest file is deleted when trimmed). handoffUpdatedAt is
+   *  left unchanged as an audit trail. If the handoff is empty, this is a no-op.
+   *  reason: "phase-done" | "manual" | "superseded" | "imported". */
+  async clearPhaseHandoff(phaseId: string, reason = "manual"): Promise<void> {
+    await this.migrateLegacyHandoffArchive();
+    const phase = await this.loadPhase(phaseId).catch(() => null);
+    if (!phase || phase.handoff === "") return; // nothing to archive
+    const clearedAt = nowISO();
+    const safeTs = clearedAt.replace(/[:.]/g, "-");
+    const archiveDir = this.handoffArchiveDir();
+    await mkdir(archiveDir, { recursive: true }).catch(() => {});
+    const fileName = `${phaseId}-${safeTs}.md`;
+    const filePath = join(archiveDir, fileName);
+    await atomicWriteText(filePath, phase.handoff, this.root);
+    const entry = { file: `handoff-archive/${fileName}`, clearedAt, reason };
+    // Cap history at 5: prepend new entry, drop oldest (and delete its file).
+    const trimmed = [entry, ...(phase.handoffHistory ?? [])].slice(0, 5);
+    const dropped = (phase.handoffHistory ?? []).slice(4); // entries beyond index 4 after prepend
+    for (const d of dropped) {
+      if (!d?.file) continue;
+      // Legacy entries used `.planner/handoff-archive/...`; new entries use `.planner/.local/handoff-archive/...`.
+      await unlink(join(this.handoffArchiveDir(), basename(d.file))).catch(() => {});
+      await unlink(join(this.root, d.file)).catch(() => {});
+    }
+    await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffHistory: trimmed }));
+  }
+
+  /** Archive stale handoffs only after every task in their phase is done or
+   * canceled. Idempotent: only non-empty phase.handoff values are moved. */
+  private async archiveStaleHandoffs(): Promise<number> {
+    const phases = await this.loadAllPhases();
+    let archived = 0;
+    for (const phase of phases) {
+      if (this.hasCompletedHandoffLifecycle(phase.tasks) && phase.handoff) {
+        await this.clearPhaseHandoff(phase.id, "phase-done");
+        archived += 1;
+      }
+    }
+    return archived;
+  }
+
+  /** Public maintenance operation for retroactively archiving stale handoffs. */
+  async cleanupStaleHandoffs(): Promise<number> {
+    return this.runAsBatch(() => this.archiveStaleHandoffs());
+  }
+
+  /** List only active/pending phase handoffs, newest first. Handoffs from
+   * phases where every task is done/canceled are archived before returning. */
+  async listHandoffs(): Promise<PhaseHandoffSummary[]> {
+    await this.archiveStaleHandoffs();
+    const phases = await this.loadAllPhases();
+    const features = await this.loadFeatures();
+    const featureIds = new Set(features.features.map((f) => f.id));
+    const featureNumber = new Map<string, number>();
+    for (const f of features.features) featureNumber.set(f.id, f.number);
+    const out: PhaseHandoffSummary[] = [];
+    for (const p of phases) {
+      if (!p.handoff || p.status === "done" || p.status === "canceled") continue;
+      if (p.featureId && !featureIds.has(p.featureId)) continue;
+      const fnum = p.featureId ? featureNumber.get(p.featureId) : undefined;
+      out.push({
+        phaseId: p.id,
+        featureId: p.featureId,
+        compositeRef: formatPhaseRef(p.number, fnum),
+        updatedAt: p.handoffUpdatedAt || p.updatedAt,
+        firstLine: handoffFirstLine(p.handoff),
+        content: p.handoff,
+      });
+    }
+    out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return out;
+  }
+
+  /** List recoverable archived handoffs from phase.handoffHistory. Archived
+   * entries are never returned by listHandoffs() and are safe to show on a
+   * dedicated history page. */
+  async listArchivedHandoffs(): Promise<ArchivedPhaseHandoffSummary[]> {
+    const phases = await this.loadAllPhases();
+    const features = await this.loadFeatures();
+    const featureNumber = new Map<string, number>();
+    for (const f of features.features) featureNumber.set(f.id, f.number);
+    const out: ArchivedPhaseHandoffSummary[] = [];
+    for (const phase of phases) {
+      const fnum = phase.featureId ? featureNumber.get(phase.featureId) : undefined;
+      for (const entry of phase.handoffHistory ?? []) {
+        if (!entry.file) continue;
+        const localPath = join(this.localRoot(), entry.file);
+        const legacyPath = join(this.root, entry.file);
+        const content = await readFile(localPath, "utf-8").catch(() => readFile(legacyPath, "utf-8").catch(() => ""));
+        out.push({
+          phaseId: phase.id,
+          featureId: phase.featureId,
+          compositeRef: formatPhaseRef(phase.number, fnum),
+          file: entry.file,
+          archivedAt: entry.clearedAt,
+          reason: entry.reason,
+          firstLine: handoffFirstLine(content),
+          content,
+        });
+      }
+    }
+    out.sort((a, b) => b.archivedAt.localeCompare(a.archivedAt));
+    return out;
+  }
+
+  async listOrphanPhases(): Promise<OrphanPhaseSummary[]> {
+    const phases = await this.loadAllPhases();
+    const featuresDoc = await this.loadFeatures();
+    const out: OrphanPhaseSummary[] = [];
+    for (const phase of phases) {
+      const resolvedFeatureId = resolveStoredFeatureId(featuresDoc.features, phase.featureId);
+      if (resolvedFeatureId) continue;
+      const reason = phase.featureId?.trim()
+        ? `feature not found: ${phase.featureId}`
+        : "missing featureId";
+      out.push({
+        phaseId: phase.id,
+        featureId: phase.featureId,
+        shortId: phase.shortId,
+        compositeRef: formatPhaseRef(phase.number),
+        title: phase.title,
+        reason,
+      });
+    }
+    out.sort((a, b) => a.compositeRef.localeCompare(b.compositeRef));
+    return out;
+  }
+
+  async cleanupOrphanPhases(): Promise<{ found: OrphanPhaseSummary[]; removed: OrphanPhaseSummary[] }> {
+    return this.runAsBatch(async () => {
+      const found = await this.listOrphanPhases();
+      if (found.length === 0) return { found, removed: [] };
+      const orphanIds = new Set(found.map((phase) => phase.phaseId));
+      for (const orphan of found) {
+        await this.unlinkPhaseFiles(orphan.phaseId);
+      }
+      await this.updateFeatures((doc) => {
+        for (const feature of doc.features) {
+          feature.phaseIds = feature.phaseIds.filter((id) => !orphanIds.has(id));
+        }
+        return doc;
+      });
+      await this.touchTimestamp();
+      await this.writeGenerated();
+      return { found, removed: found };
+    });
   }
 
   async deletePhase(phaseId: string): Promise<void> {
-    try {
-      await unlink(this.phasePath(phaseId));
-    } catch {
-      // already gone
-    }
-    await this.touchManifest();
+    await this.unlinkPhaseFiles(phaseId);
+    await this.touchTimestamp();
+  }
+
+  /** Remove a phase file AND its inline .bak backup. atomicUpdateJson (used by
+   *  updatePhase without root) writes the backup inline at phases/<id>.json.bak,
+   *  and readJson falls back to `${path}.bak` on a missing main file — so a
+   *  delete that leaves the .bak behind would RESURRECT the deleted phase on
+   *  the next read. Feature backups (written with root) live under
+   *  .local/backups/ and are never read by readJson, so only the inline .bak
+   *  needs removing here. */
+  private async unlinkPhaseFiles(phaseId: string): Promise<void> {
+    await unlink(this.phasePath(phaseId)).catch(() => {});
+    await unlink(`${this.phasePath(phaseId)}.bak`).catch(() => {});
   }
 
   // ── Workspace-level operations ─────────────────────────────────────
@@ -1056,8 +2220,10 @@ export class PlanStore {
 
   // ── Markdown generation ────────────────────────────────────────────
 
-  /** Load all data, render markdown, and write into generated/. */
+  /** Load all data, render markdown, and write into generated/. Skips files
+   *  whose content is unchanged to avoid unnecessary backup churn. */
   async writeGenerated(): Promise<string[]> {
+    await this.migrateLegacyGeneratedDir();
     const { PlanRenderer } = await import("./renderer.js");
     const plan = await this.loadAll();
     const renderer = new PlanRenderer();
@@ -1074,6 +2240,12 @@ export class PlanStore {
       if (dir !== genDir) {
         await mkdir(dir, { recursive: true });
       }
+      try {
+        const existing = await readFile(fullPath, "utf-8");
+        if (existing === content) continue;
+      } catch {
+        // file does not exist yet — write it
+      }
       await writeFile(fullPath, content, "utf-8");
       written.push(relPath);
     }
@@ -1083,14 +2255,12 @@ export class PlanStore {
 
   // ── Touch ────────────────────────────────────────────────────────────
 
-  /** Update manifest.updatedAt to reflect a change. */
-  private async touchManifest(): Promise<void> {
+  /** Update .local/timestamp.json to reflect a change. */
+  private async touchTimestamp(): Promise<void> {
     try {
-      const m = await this.loadManifest();
-      m.updatedAt = nowISO();
-      await atomicWriteJson(this.manifestPath(), m);
+      await atomicWriteJson(this.timestampPath(), { updatedAt: nowISO() }, this.root);
     } catch {
-      // if manifest doesn't exist yet, skip
+      // if .local/ doesn't exist yet, skip
     }
   }
 }
