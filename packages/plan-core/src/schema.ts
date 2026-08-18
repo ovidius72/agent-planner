@@ -205,6 +205,8 @@ export const TaskSchema = z.object({
   title: z.string().min(1),
   status: TaskStatusSchema,
   description: z.string().default(""),
+  /** Updated only when this task's description changes; distinct from entity updatedAt. */
+  descriptionUpdatedAt: z.string().default(""),
   notes: z.string().default(""),
   statusLog: z.array(StatusLogEntrySchema).default([]),
   decisions: z.array(z.string().min(1)).default([]),
@@ -252,6 +254,8 @@ export const PhaseSchema = z.object({
   contextReadyReason: z.string().default(""),
   summary: z.string().default(""),
   description: z.string().default(""),
+  /** Updated only when this phase's description changes; distinct from entity updatedAt. */
+  descriptionUpdatedAt: z.string().default(""),
   notes: z.string().default(""),
   goals: z.array(z.string().min(1)).default([]),
   nonGoals: z.array(z.string().min(1)).default([]),
@@ -290,6 +294,8 @@ export const FeatureSchema = z.object({
   priority: z.number().int().nonnegative().default(0),
   name: z.string().min(1),
   description: z.string().default(""),
+  /** Updated only when this feature's description changes; distinct from entity updatedAt. */
+  descriptionUpdatedAt: z.string().default(""),
   // NOTE: `status` is intentionally ABSENT — it is DERIVED from child phases
   // at read time and never persisted. The runtime `Feature` type re-adds it.
   discussedAt: z.string().default(""),

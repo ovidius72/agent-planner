@@ -633,25 +633,49 @@ export class PlanStore {
   private normalizeTasks(tasks: Task[]): { tasks: Task[]; changed: boolean } {
     // Numbers are a STABLE global sequence (assigned once at create from project.nextTaskNumber).
     // Do NOT renumber here — renumbering would break references after deletions.
-    return { tasks, changed: false };
+    const normalized = tasks.map((task) => task.description && !task.descriptionUpdatedAt
+      ? { ...task, descriptionUpdatedAt: task.createdAt }
+      : task);
+    return { tasks: normalized, changed: normalized.some((task, index) => task !== tasks[index]) };
+  }
+
+  /** Stamp description edits independently from generic entity mutations.
+   * Legacy entities cannot reveal their historical description-edit time, so
+   * their creation time is the earliest truthful fallback. */
+  private stampDescriptionUpdatedAt<T extends { description: string; descriptionUpdatedAt: string; createdAt: string }>(
+    entity: T,
+    previousDescription: string | undefined,
+    timestamp: string,
+  ): T {
+    if (!entity.description) return { ...entity, descriptionUpdatedAt: "" };
+    if (previousDescription === undefined || previousDescription !== entity.description) {
+      return { ...entity, descriptionUpdatedAt: timestamp };
+    }
+    return entity.descriptionUpdatedAt ? entity : { ...entity, descriptionUpdatedAt: entity.createdAt };
   }
 
   private normalizeFeaturesDocument(doc: FeaturesDocument): { doc: FeaturesDocument; changed: boolean } {
     // Numbers are a STABLE global sequence (assigned once at create from project.nextFeatureNumber).
-    return { doc, changed: false };
+    const features = doc.features.map((feature) => feature.description && !feature.descriptionUpdatedAt
+      ? { ...feature, descriptionUpdatedAt: feature.createdAt }
+      : feature);
+    return { doc: { ...doc, features }, changed: features.some((feature, index) => feature !== doc.features[index]) };
   }
 
   private normalizePhaseDocument(phase: RawPhase): { phase: RawPhase; changed: boolean } {
     const { tasks, changed } = this.normalizeTasks(phase.tasks);
     const nextTaskIds = tasks.map((task) => task.id);
     const taskIdsChanged = nextTaskIds.length !== phase.taskIds.length || nextTaskIds.some((id, index) => id !== phase.taskIds[index]);
+    const descriptionUpdatedAt = phase.description && !phase.descriptionUpdatedAt ? phase.createdAt : phase.descriptionUpdatedAt;
+    const descriptionTimestampChanged = descriptionUpdatedAt !== phase.descriptionUpdatedAt;
     return {
       phase: {
         ...phase,
+        descriptionUpdatedAt,
         tasks,
         taskIds: nextTaskIds,
       },
-      changed: changed || taskIdsChanged,
+      changed: changed || taskIdsChanged || descriptionTimestampChanged,
     };
   }
 
@@ -1144,7 +1168,10 @@ export class PlanStore {
     const raws = await this.loadRawFeatures();
     const phases = await this.loadAllPhases();
     const features: Feature[] = raws.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
-    return this.normalizeStructureSnapshot({ features }, phases).features;
+    // Keep legacy feature descriptions displayable without rewriting on read.
+    // Phase/task reads already apply the equivalent creation-date fallback.
+    const normalizedFeatures = this.normalizeFeaturesDocument({ features }).doc.features;
+    return this.normalizeStructureSnapshot({ features: normalizedFeatures }, phases).features;
   }
 
   async loadCodebaseProfile(): Promise<CodebaseProfile | null> {
@@ -1850,7 +1877,15 @@ export class PlanStore {
     const updated = await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
       const current = await this.loadFeatures();
-      const upd = this.normalizeFeaturesDocument(updater(current)).doc;
+      // Updaters commonly mutate `current` in place, so snapshot descriptions
+      // before invoking them rather than comparing object references afterward.
+      const previousDescriptions = new Map(current.features.map((feature) => [feature.id, feature.description]));
+      const timestamp = nowISO();
+      const candidate = updater(current);
+      const stamped: FeaturesDocument = {
+        features: candidate.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), timestamp)),
+      };
+      const upd = this.normalizeFeaturesDocument(stamped).doc;
       await this.saveFeaturesRaw(upd);
       return upd;
     });
@@ -1874,7 +1909,11 @@ export class PlanStore {
   async saveFeatures(features: FeaturesDocument): Promise<void> {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
-      await this.saveFeaturesRaw(features);
+      const previousDescriptions = new Map((await this.loadRawFeatures()).map((feature) => [feature.id, feature.description]));
+      const timestamp = nowISO();
+      await this.saveFeaturesRaw({
+        features: features.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), timestamp)),
+      });
     });
     await this.touchTimestamp();
     await this.maybeAutoSync();
@@ -1907,8 +1946,9 @@ export class PlanStore {
   async saveFeature(feature: Feature): Promise<void> {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
+      const previous = await readJson(this.featurePath(feature.id), FeatureSchema).catch(() => null);
       await mkdir(this.featuresDir(), { recursive: true });
-      const parsed = FeatureSchema.parse(feature);
+      const parsed = FeatureSchema.parse(this.stampDescriptionUpdatedAt(feature, previous?.description, nowISO()));
       await atomicWriteJson(this.featurePath(parsed.id), parsed, this.root);
     });
     await this.touchTimestamp();
@@ -1922,6 +1962,8 @@ export class PlanStore {
   }
 
     async savePhase(phase: Phase): Promise<void> {
+    const previous = await this.loadPhase(phase.id).catch(() => null);
+    const timestamp = nowISO();
     const features = await this.loadRawFeatures();
     const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
     // Referential integrity: if a featureId is present but cannot be resolved
@@ -1939,7 +1981,10 @@ export class PlanStore {
     const normalizedInput = resolvedFeatureId && resolvedFeatureId !== phase.featureId
       ? { ...phase, featureId: resolvedFeatureId }
       : phase;
-    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(normalizedInput).phase);
+    const previousTaskDescriptions = new Map((previous?.tasks ?? []).map((task) => [task.id, task.description]));
+    const timestamped = this.stampDescriptionUpdatedAt(normalizedInput, previous?.description, timestamp);
+    timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), timestamp));
+    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(timestamped).phase);
     await mkdir(this.phasesDir(), { recursive: true });
     await atomicWriteJson(this.phasePath(parsed.id), parsed, this.root);
     await this.touchTimestamp();
@@ -1957,17 +2002,23 @@ export class PlanStore {
     // not persisted); the return value is re-derived for the caller.
     const raw = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (rawPhase) => {
       const current: Phase = { ...rawPhase, status: this.derivePhaseStatus(rawPhase.tasks) };
+      // The updater may mutate `current`, therefore snapshot descriptions first.
+      const previousDescription = current.description;
+      const previousTaskDescriptions = new Map(current.tasks.map((task) => [task.id, task.description]));
+      const timestamp = nowISO();
       const next = updater(current);
-      const resolvedFeatureId = resolveStoredFeatureId(features, next.featureId);
+      const timestamped = this.stampDescriptionUpdatedAt(next, previousDescription, timestamp);
+      timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), timestamp));
+      const resolvedFeatureId = resolveStoredFeatureId(features, timestamped.featureId);
       // Referential integrity: reject orphan featureId.
-      if (next.featureId && next.featureId.trim() && !resolvedFeatureId) {
+      if (timestamped.featureId && timestamped.featureId.trim() && !resolvedFeatureId) {
         throw new PlanStoreError(
-          `Cannot update phase: featureId "${next.featureId}" does not match any existing feature.`,
+          `Cannot update phase: featureId "${timestamped.featureId}" does not match any existing feature.`,
         );
       }
-      const normalizedInput = resolvedFeatureId && resolvedFeatureId !== next.featureId
-        ? { ...next, featureId: resolvedFeatureId }
-        : next;
+      const normalizedInput = resolvedFeatureId && resolvedFeatureId !== timestamped.featureId
+        ? { ...timestamped, featureId: resolvedFeatureId }
+        : timestamped;
       return this.normalizePhaseDocument(normalizedInput).phase;
     });
     await this.maybeAutoSync();

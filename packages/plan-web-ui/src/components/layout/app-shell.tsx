@@ -9,7 +9,7 @@ import type { Project } from "../../lib/types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
-function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }) {
+export function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSummary[] }) {
     const navigate = useNavigate();
     const uniqueTasks = useMemo(() => {
       const seen = new Set();

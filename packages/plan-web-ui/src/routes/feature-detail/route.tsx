@@ -8,6 +8,7 @@ import { Card } from "../../components/ui/card";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority, formatTimeline } from "../../components/ui/detail-metadata";
+import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { ListFilters } from "../../components/ui/list-filters";
@@ -105,7 +106,7 @@ export function FeatureDetailRoute() {
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
         {feature.description ? (
-          <Accordion title="Description">
+          <Accordion title={<><span>Description</span><LastUpdated value={feature.descriptionUpdatedAt} /></>}>
             <FormattedText text={feature.description} className="plan-description max-w-4xl" />
           </Accordion>
         ) : null}
@@ -139,6 +140,7 @@ export function FeatureDetailRoute() {
 
         <DetailMetadataGrid
           items={[
+            { label: "Entity last updated", value: formatDateTime(feature.updatedAt), visible: Boolean(feature.updatedAt) },
             { label: "Priority", value: formatPriority(feature.priority), visible: feature.priority > 0 },
             { label: "Timeline", value: formatTimeline(feature.startDate, feature.endDate), visible: Boolean(feature.startDate || feature.endDate) },
           ]}

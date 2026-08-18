@@ -8,6 +8,7 @@ import { Card } from "../../components/ui/card";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
+import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { HandoffBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
@@ -207,6 +208,7 @@ export function PhaseDetailRoute() {
 
         <DetailMetadataGrid
           items={[
+            { label: "Entity last updated", value: formatDateTime(phase.updatedAt), visible: Boolean(phase.updatedAt) },
             { label: "Priority", value: formatPriority(phase.priority), visible: phase.priority > 0 },
             { label: "Linked requirements", value: linkedRequirements.length, visible: linkedRequirements.length > 0, valueClassName: "text-2xl font-black" },
             { label: "Risks", value: phase.risks.length, visible: phase.risks.length > 0, valueClassName: "text-2xl font-black" },
@@ -246,7 +248,7 @@ export function PhaseDetailRoute() {
           )}
         </Accordion>
         {phase.description ? (
-          <Accordion title="Description">
+          <Accordion title={<><span>Description</span><LastUpdated value={phase.descriptionUpdatedAt} /></>}>
             <FormattedText text={phase.description} className="plan-description" />
           </Accordion>
         ) : null}

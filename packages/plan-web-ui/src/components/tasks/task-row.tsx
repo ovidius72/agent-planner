@@ -8,14 +8,7 @@ import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
-
-function formatDateTime(value: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
+import { LastUpdated, formatDateTime } from "../ui/last-updated";
 
 export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { featureId: string; featureNum?: number; phaseId: string; phaseNum?: number; task: Task }) {
   const statusFetcher = useFetcher();
@@ -95,6 +88,7 @@ export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { fe
       </div>
 
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--text-subtle)]">
+        <LastUpdated value={task.updatedAt} />
         {task.startedAt ? <span>Started {formatDateTime(task.startedAt)}</span> : null}
         {task.completedAt ? <span>Completed {formatDateTime(task.completedAt)}</span> : null}
       </div>

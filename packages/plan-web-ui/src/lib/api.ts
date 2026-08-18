@@ -15,6 +15,7 @@ function normalizeTask(task: Task): Task {
     subtasks: task.subtasks ?? [],
     startedAt: task.startedAt ?? "",
     completedAt: task.completedAt ?? "",
+    descriptionUpdatedAt: task.descriptionUpdatedAt ?? "",
   };
 }
 
@@ -38,6 +39,7 @@ function normalizePhase(phase: Phase): Phase {
     linkedRequirements: phase.linkedRequirements ?? [],
     handoff: phase.handoff ?? "",
     handoffUpdatedAt: phase.handoffUpdatedAt ?? "",
+    descriptionUpdatedAt: phase.descriptionUpdatedAt ?? "",
   };
 }
 
@@ -50,6 +52,7 @@ function normalizeFeature(feature: Feature): Feature {
     contextReadyReason: feature.contextReadyReason ?? "",
     acceptedDecisions: feature.acceptedDecisions ?? [],
     phaseIds: feature.phaseIds ?? [],
+    descriptionUpdatedAt: feature.descriptionUpdatedAt ?? "",
   };
 }
 
