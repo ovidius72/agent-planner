@@ -13,6 +13,7 @@ import {
 } from "../ui/badges";
 import { StatusBadge, StatusCluster2 } from "../ui/status-badge";
 import { StatusItem } from "../ui/status-item";
+import { LastUpdated } from "../ui/last-updated";
 import { DragHandle, SortableItem } from "./sortable";
 import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
 import {
@@ -171,6 +172,7 @@ export function FeatureTreeRow({
             >
               {feature.name}
             </Link>
+            <LastUpdated value={feature.updatedAt} className="mt-1 block" />
           </div>
         </div>
         <StatusCluster2
@@ -308,6 +310,7 @@ export function PhaseTreeRow({
             >
               {phase.title}
             </Link>
+            <LastUpdated value={phase.updatedAt} className="mt-1 block" />
           </div>
         </div>
         <StatusCluster2
@@ -413,6 +416,7 @@ export function TaskTreeRow({
         >
           {task.title}
         </Link>
+        <LastUpdated value={task.updatedAt} className="mt-1 block" />
       </div>
       <StatusCluster
         status={task.status}

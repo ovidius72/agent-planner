@@ -19,6 +19,7 @@ export interface Feature {
   priority: number;
   name: string;
   description: string;
+  descriptionUpdatedAt: string;
   status: FeatureStatus;
   discussedAt: string;
   contextReady: boolean;
@@ -80,6 +81,7 @@ export interface Task {
   title: string;
   status: TaskStatus;
   description: string;
+  descriptionUpdatedAt: string;
   notes: string;
   statusLog: StatusLogEntry[];
   decisions: string[];
@@ -133,6 +135,7 @@ export interface Phase {
   contextReadyReason: string;
   summary: string;
   description: string;
+  descriptionUpdatedAt: string;
   notes: string;
   goals: string[];
   nonGoals: string[];

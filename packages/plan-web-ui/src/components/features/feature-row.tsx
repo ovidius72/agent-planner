@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { DisplayStatusBadge } from "../ui/status-badge";
 import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
+import { LastUpdated } from "../ui/last-updated";
 
 export interface FeatureActivitySummary {
   currentPhase: string | undefined;
@@ -126,6 +127,9 @@ export function FeatureRow({
         </deleteFetcher.Form>
       </div>
 
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <LastUpdated value={feature.updatedAt} />
+      </div>
       {shortDescription ? <div className="mt-1 min-w-0 break-words line-clamp-2 text-[11px] text-[var(--text-muted)]">{shortDescription}</div> : null}
     </StatusItem>
   );
