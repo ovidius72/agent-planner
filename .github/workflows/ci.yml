@@ -40,3 +40,6 @@ jobs:
 
       - name: Typecheck
         run: pnpm check
+
+      - name: Test (unit + integration, coverage gate)
+        run: pnpm test

@@ -18,11 +18,11 @@ async function makePlan({ featStatus = "planned", phaseStatus = "planned", tasks
   await store.saveFeature(feat);
   const phase = PhaseSchema.parse({ id: createPhaseId(), number: 1, featureId: feat.id, slug: "phase-1", title: "Phase 1", status: phaseStatus, createdAt: now, updatedAt: now });
   await store.savePhase(phase);
-  const taskObjs = tasks.map((t, i) => ({ id: createTaskId(), number: i + 1, phaseId: phase.id, title: `task ${i + 1}`, shortName: `t${i + 1}`, status: t.status, createdAt: now, updatedAt: now }));
+  const taskObjs = tasks.map((t, i) => ({ id: createTaskId(), number: i + 1, phaseId: phase.id, title: `task ${i + 1}`, shortName: `t${i + 1}`, status: t.status, pauseSnapshot: t.pauseSnapshot ?? null, createdAt: now, updatedAt: now }));
   await store.updatePhase(phase.id, (ph) => { ph.tasks = taskObjs; return ph; });
   if (handoff) await store.setPhaseHandoff(phase.id, handoff);
   if (nextSteps.length) await store.saveResume({ updatedAt: now, currentPhaseId: phase.id, inProgressTaskIds: [], nextSteps, blockers: [], notes: "", lastSessionSummary: "", guardBypassUntil: "" });
-  return { store, feat, phase };
+  return { store, feat, phase, tasks: taskObjs };
 }
 
 describe("buildRecap — plan complete", () => {
@@ -69,6 +69,48 @@ describe("buildRecap — active task", () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "planned" }] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
     assert.ok(r.includes("Current focus: F01 — Feat One / P001(F001) — Phase 1 / T01 — task 1 (in-progress)"), "focus line with composite IDs");
+  });
+});
+
+describe("buildRecap — pending task resume", () => {
+  test("standalone paused work is surfaced with its complete checkpoint", async () => {
+    const snapshot = {
+      id: "snapshot-standalone", reason: "User interrupted the task", whatWasBeingDone: "Editing the parser",
+      resumeLocation: "src/parser.ts:44", howToResume: "Finish parseResult and run parser tests",
+      relatedTaskId: "", pausedAt: "2026-08-10T02:00:00.000Z", pausedBy: "test",
+    };
+    const { store } = await makePlan({ tasks: [{ status: "paused", pauseSnapshot: snapshot }] });
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.match(r, /Current focus: paused task to resume — P001\(F001\)\/T01 — task 1/);
+    assert.match(r, /Paused tasks \(1\)/);
+    assert.match(r, /Why: User interrupted the task/);
+    assert.match(r, /Checkpoint: Editing the parser/);
+    assert.match(r, /Resume from: src\/parser\.ts:44/);
+    assert.match(r, /How: Finish parseResult and run parser tests/);
+  });
+
+  test("task checkpoint takes precedence and includes exact resume instructions", async () => {
+    const now = "2026-08-10T01:00:00.000Z";
+    const snapshot = {
+      id: "snapshot-1", reason: "Temporary prerequisite", whatWasBeingDone: "Implementing the selector",
+      resumeLocation: "src/selector.ts:20", howToResume: "Finish the branch and rerun tests",
+      relatedTaskId: "temporary", pausedAt: now, pausedBy: "test",
+    };
+    const { store, tasks } = await makePlan({ tasks: [{ status: "paused", pauseSnapshot: snapshot }, { status: "done" }] });
+    await store.addWorkDeviation({
+      id: "deviation-1", recommendedTaskId: tasks[0].id, temporaryTaskId: tasks[1].id,
+      resumeTaskId: tasks[0].id, reason: snapshot.reason, snapshot, requestedBy: "agent",
+      approvedBy: "test", state: "resume-required", createdAt: now, activatedAt: now,
+      resumeRequiredAt: now, resolvedAt: "", resumedAt: "",
+    });
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.match(r, /Current focus: resume required — P001\(F001\)\/T01 — task 1 \(paused\)/);
+    assert.match(r, /Task resume required/);
+    assert.match(r, /Paused because: Temporary prerequisite/);
+    assert.match(r, /Work checkpoint: Implementing the selector/);
+    assert.match(r, /Resume from: src\/selector\.ts:20/);
+    assert.match(r, /Action: planner-task-start P001\(F001\)\/T01/);
+    assert.match(r, /0 active, 1 paused/);
   });
 });
 

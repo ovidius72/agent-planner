@@ -487,8 +487,8 @@ describe("plan-mcp strict ref validation", () => {
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.resumeTaskId, resumeId);
       assert.match(toolText(await session.client.callTool({ name: "planner-task-start", arguments: { task: temporaryId } })), /Task started/);
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "active");
-      assert.match(toolText(await session.client.callTool({ name: "planner-task-complete", arguments: { task: temporaryId } })), /Task completed/);
-      assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "resolved");
+      assert.match(toolText(await session.client.callTool({ name: "planner-task-complete", arguments: { task: temporaryId } })), /Task completed.*RESUME REQUIRED/s);
+      assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "resume-required");
       const resumed = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
       assert.match(toolText(resumed), /Recommended \(resume\): P001\(F001\)\/T001/);
     } finally {

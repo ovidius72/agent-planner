@@ -51,7 +51,15 @@ export function checkExplicitTaskStart(
     (deviation.state === "approved" || deviation.state === "active")
     && deviation.temporaryTaskId === taskId,
   );
+  const isPreservedResumeTarget = deviations.some((deviation) =>
+    (deviation.state === "approved"
+      || deviation.state === "active"
+      || deviation.state === "resume-required"
+      || deviation.state === "resolved")
+    && deviation.resumeTaskId === taskId,
+  );
   const startableStatus = candidate.task.status === "planned"
+    || (candidate.task.status === "paused" && (isPreservedResumeTarget || candidate.task.pauseSnapshot !== null))
     || (candidate.task.status === "waiting" && isTemporaryOverride);
   if (!startableStatus) return { eligible: false, reason: `Task is not startable from ${candidate.task.status}.` };
   const parentHasHardBlock = hardUnavailable.has(candidate.phase.status)
@@ -86,40 +94,42 @@ export function recommendNextTask(
 
   const newestFirst = (left: WorkDeviation, right: WorkDeviation) => right.createdAt.localeCompare(left.createdAt);
   const resumable = (candidate: TaskCandidate | undefined) => candidate
-    && (candidate.task.status === "planned" || candidate.task.status === "waiting");
+    && (candidate.task.status === "planned" || candidate.task.status === "paused" || candidate.task.status === "waiting");
   const open = deviations
-    .filter((deviation) => deviation.state === "approved" || deviation.state === "active")
+    .filter((deviation) => deviation.state === "approved"
+      || deviation.state === "active"
+      || deviation.state === "resume-required"
+      || deviation.state === "resolved")
     .sort(newestFirst);
   const top = open[0];
   if (top) {
     const temporary = byTaskId.get(top.temporaryTaskId);
     const resume = byTaskId.get(top.resumeTaskId);
-    if (temporary && terminal.has(temporary.task.status) && resume && (resume.task.status === "planned" || resume.task.status === "waiting")) {
-      return { kind: "resume", candidate: resume, deviation: top, reason: "Resume the task preserved by the most recent approved deviation." };
+    const returnIsRequired = top.state === "resume-required"
+      || top.state === "resolved"
+      || (temporary && terminal.has(temporary.task.status));
+    if (returnIsRequired && resume && resumable(resume)) {
+      return { kind: "resume", candidate: resume, deviation: top, reason: "Resume required: return to the task preserved by the most recent deviation." };
     }
     // A deviation explicitly makes its temporary task eligible while it is
-    // planned or paused. Normal priority selection still excludes waiting work.
-    if (temporary && (temporary.task.status === "planned" || temporary.task.status === "waiting")) {
+    // planned, paused, or waiting. Normal priority selection excludes these
+    // states unless the deviation deliberately selected them.
+    if (temporary && resumable(temporary)) {
       return { kind: "resume", candidate: temporary, deviation: top, reason: "Continue the temporary task of the most recent approved deviation." };
     }
   }
 
-  // A completed temporary task resolves its record, but its explicit resume
-  // target remains the next recommendation until that target itself changes.
-  const resolved = deviations
-    .filter((deviation) => deviation.state === "resolved")
-    .sort(newestFirst)
-    .find((deviation) => resumable(byTaskId.get(deviation.resumeTaskId)));
-  if (resolved) {
-    const candidate = byTaskId.get(resolved.resumeTaskId);
-    if (candidate && resumable(candidate)) {
-      return {
-        kind: "resume",
-        candidate,
-        deviation: resolved,
-        reason: "Resume the task preserved by the most recently resolved deviation.",
-      };
-    }
+  // A paused task without a surviving deviation must never disappear behind
+  // new priority work. Select the most recently paused checkpoint (LIFO).
+  const paused = candidates
+    .filter(({ task }) => task.status === "paused" && task.pauseSnapshot)
+    .sort((left, right) => right.task.pauseSnapshot!.pausedAt.localeCompare(left.task.pauseSnapshot!.pausedAt));
+  if (paused[0]) {
+    return {
+      kind: "resume",
+      candidate: paused[0],
+      reason: "Resume the most recently paused task before selecting new priority work.",
+    };
   }
 
   const ready = candidates.filter(({ feature, phase, task }) => {

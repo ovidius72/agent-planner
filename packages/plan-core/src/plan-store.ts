@@ -26,6 +26,8 @@ import {
   PhaseSchema,
   type Phase,
   type Task,
+  type TaskPauseSnapshot,
+  TaskPauseSnapshotSchema,
   type PlanWorkspace,
   PlanWorkspaceSchema,
   type Project,
@@ -1721,22 +1723,25 @@ export class PlanStore {
 
     const hasDone = meaningful.some((s) => s === "done");
     const hasActive = meaningful.some((s) => s === "in-progress");
+    const hasPaused = meaningful.some((s) => s === "paused");
     const hasPlanned = meaningful.some((s) => s === "planned");
     const hasBlocked = meaningful.some((s) => s === "blocked");
     const hasWaiting = meaningful.some((s) => s === "waiting");
     const hasDeferred = meaningful.some((s) => s === "deferred");
 
     if (hasActive) return "in-progress";
-    // If completed work exists and the ONLY remaining meaningful work is deferred,
-    // surface deferred instead of implying active execution.
-    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
+    // If completed work exists and the ONLY remaining meaningful work is paused
+    // or deferred, do not imply active execution.
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && !hasDeferred && hasPaused) return "paused";
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && !hasPaused && hasDeferred) return "deferred";
     // Partial completion with remaining planned/blocked/waiting work still means
     // the phase has genuinely started and is not terminal yet.
     if (hasDone) return "in-progress";
-    // No progress at all ⇒ surface the stall / not-started state (blocked > waiting > deferred > planned).
+    // No progress at all ⇒ surface the stall / not-started state.
     if (hasBlocked) return "blocked";
     if (hasWaiting) return "waiting";
     if (hasDeferred) return "deferred";
+    if (hasPaused) return "paused";
     return "planned";
   }
 
@@ -1752,19 +1757,22 @@ export class PlanStore {
 
     const hasDone = meaningful.some((s) => s === "done");
     const hasActive = meaningful.some((s) => s === "discovery" || s === "in-progress");
+    const hasPaused = meaningful.some((s) => s === "paused");
     const hasPlanned = meaningful.some((s) => s === "planned");
     const hasBlocked = meaningful.some((s) => s === "blocked");
     const hasWaiting = meaningful.some((s) => s === "waiting");
     const hasDeferred = meaningful.some((s) => s === "deferred");
 
     if (hasActive) return "in-progress";
-    // Same rule as phases: done + deferred-only remainder is deferred, not active.
-    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
+    // Same rule as phases: done + paused/deferred-only remainder is non-active.
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && !hasDeferred && hasPaused) return "paused";
+    if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && !hasPaused && hasDeferred) return "deferred";
     if (hasDone) return "in-progress";
     // No progress at all ⇒ surface the stall / not-started state.
     if (hasBlocked) return "blocked";
     if (hasWaiting) return "waiting";
     if (hasDeferred) return "deferred";
+    if (hasPaused) return "paused";
     return "planned";
   }
 
@@ -1860,15 +1868,21 @@ export class PlanStore {
     }));
   }
 
-  /** Mark an approved/active deviation as resolved or canceled while retaining its audit record. */
-  async setWorkDeviationState(id: string, state: "active" | "resolved" | "canceled", timestamp = nowISO()): Promise<Project> {
+  /** Advance a deviation while retaining its complete audit and return stack. */
+  async setWorkDeviationState(
+    id: string,
+    state: "active" | "resume-required" | "resolved" | "resumed" | "canceled",
+    timestamp = nowISO(),
+  ): Promise<Project> {
     return this.updateProject((project) => ({
       ...project,
       workDeviations: project.workDeviations.map((deviation) => deviation.id !== id ? deviation : {
         ...deviation,
         state,
         activatedAt: state === "active" ? timestamp : deviation.activatedAt,
+        resumeRequiredAt: state === "resume-required" ? timestamp : deviation.resumeRequiredAt,
         resolvedAt: state === "resolved" || state === "canceled" ? timestamp : deviation.resolvedAt,
+        resumedAt: state === "resumed" ? timestamp : deviation.resumedAt,
       }),
     }));
   }
@@ -2023,6 +2037,76 @@ export class PlanStore {
     });
     await this.maybeAutoSync();
     return { ...raw, status: this.derivePhaseStatus(raw.tasks) };
+  }
+
+  /** Pause active work with a mandatory durable checkpoint. */
+  async pauseTask(phaseId: string, taskId: string, input: TaskPauseSnapshot): Promise<Task> {
+    const snapshot = TaskPauseSnapshotSchema.parse(input);
+    let paused: Task | undefined;
+    await this.updatePhase(phaseId, (phase) => {
+      const task = phase.tasks.find((candidate) => candidate.id === taskId);
+      if (!task) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`);
+      if (task.status !== "in-progress") {
+        throw new PlanStoreError(`Task ${taskId} cannot be paused from ${task.status}; only in-progress work can be paused.`);
+      }
+      const description = [
+        `Reason: ${snapshot.reason}`,
+        `What was being done: ${snapshot.whatWasBeingDone}`,
+        `Resume location: ${snapshot.resumeLocation}`,
+        `How to resume: ${snapshot.howToResume}`,
+      ].join("\n");
+      paused = {
+        ...task,
+        status: "paused",
+        pauseSnapshot: snapshot,
+        pauseHistory: [...task.pauseHistory, snapshot],
+        statusLog: [...task.statusLog, {
+          id: createStatusLogEntryId(),
+          date: snapshot.pausedAt,
+          fromStatus: "in-progress",
+          toStatus: "paused",
+          title: "in-progress → paused",
+          description,
+        }],
+        updatedAt: snapshot.pausedAt,
+      };
+      phase.tasks = phase.tasks.map((candidate) => candidate.id === taskId ? paused! : candidate);
+      return phase;
+    });
+    return paused!;
+  }
+
+  /** Resume a paused task without resetting its original startedAt. */
+  async resumeTask(phaseId: string, taskId: string, timestamp = nowISO()): Promise<Task> {
+    let resumed: Task | undefined;
+    await this.updatePhase(phaseId, (phase) => {
+      const task = phase.tasks.find((candidate) => candidate.id === taskId);
+      if (!task) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`);
+      if (task.status !== "paused") {
+        throw new PlanStoreError(`Task ${taskId} cannot be resumed from ${task.status}; only paused work can be resumed.`);
+      }
+      const snapshot = task.pauseSnapshot;
+      resumed = {
+        ...task,
+        status: "in-progress",
+        pauseSnapshot: null,
+        startedAt: task.startedAt || timestamp,
+        statusLog: [...task.statusLog, {
+          id: createStatusLogEntryId(),
+          date: timestamp,
+          fromStatus: "paused",
+          toStatus: "in-progress",
+          title: "paused → in-progress",
+          description: snapshot
+            ? `Resumed from ${snapshot.resumeLocation}. ${snapshot.howToResume}`
+            : "Paused task resumed.",
+        }],
+        updatedAt: timestamp,
+      };
+      phase.tasks = phase.tasks.map((candidate) => candidate.id === taskId ? resumed! : candidate);
+      return phase;
+    });
+    return resumed!;
   }
 
   // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────

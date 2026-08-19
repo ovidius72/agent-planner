@@ -14,6 +14,7 @@ import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-li
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
+import { ResumeSnapshot } from "../../components/task/resume-snapshot";
 import { useShortcut } from "../../lib/shortcuts";
 import type { Feature, Phase, Task, ChecklistItem } from "../../lib/types";
 
@@ -61,7 +62,7 @@ function ChecklistItemToggle({
 }
 
 export function TaskDetailRoute() {
-  const { feature, phase, task } = useLoaderData() as { feature: Feature; phase: Phase; task: Task };
+  const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
   const checklist = task.checklist ?? [];
@@ -114,6 +115,8 @@ export function TaskDetailRoute() {
       </div>
 
       <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} createdAt={task.createdAt} updatedAt={task.updatedAt} startedAt={task.startedAt} completedAt={task.completedAt} />
+
+      {task.pauseSnapshot ? <ResumeSnapshot snapshot={task.pauseSnapshot} pendingResume={pendingResume} /> : null}
 
       <Card className="grid gap-4">
         {task.description ? (

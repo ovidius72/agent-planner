@@ -18,6 +18,7 @@ export type DisplayStatus =
   | "planned"
   | "started"
   | "in-progress"
+  | "paused"
   | "waiting"
   | "blocked"
   | "deferred"
@@ -29,6 +30,7 @@ export type DisplayStatus =
 export interface StatusBreakdown {
   planned: number;
   inProgress: number;
+  paused: number;
   waiting: number;
   blocked: number;
   deferred: number;
@@ -105,6 +107,16 @@ export const DISPLAY_STATUS_TOKENS: Record<DisplayStatus, DisplayStatusToken> = 
     borderStyle: "solid",
     bgOpacity: 12,
     borderOpacity: 30,
+  },
+  paused: {
+    colorVar: "--color-status-paused",
+    icon: "pause",
+    pattern: "dashed",
+    label: "Paused",
+    description: "Work checkpoint saved; not active now",
+    borderStyle: "dashed",
+    bgOpacity: 12,
+    borderOpacity: 36,
   },
   waiting: {
     colorVar: "--color-status-waiting",
@@ -271,6 +283,7 @@ export function buildBreakdownLabel(
   breakdown: {
     planned: number;
     inProgress: number;
+    paused: number;
     waiting: number;
     blocked: number;
     deferred: number;
@@ -284,6 +297,7 @@ export function buildBreakdownLabel(
   const entries: Array<[string, number]> = [
     ["done", breakdown.done],
     ["in-progress", breakdown.inProgress],
+    ["paused", breakdown.paused],
     ["planned", breakdown.planned],
     ["waiting", breakdown.waiting],
     ["blocked", breakdown.blocked],

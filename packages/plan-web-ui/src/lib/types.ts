@@ -1,7 +1,7 @@
-export type FeatureStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
-export type PhaseStatus = "draft" | "discovery" | "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
-export type TaskStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
-export type RequirementStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type FeatureStatus = "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type PhaseStatus = "draft" | "discovery" | "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type TaskStatus = "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type RequirementStatus = "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 
 export interface AcceptedDecision {
   id: string;
@@ -71,6 +71,34 @@ export interface PhaseStatusLogEntry {
   description: string;
 }
 
+export interface TaskPauseSnapshot {
+  id: string;
+  reason: string;
+  whatWasBeingDone: string;
+  resumeLocation: string;
+  howToResume: string;
+  relatedTaskId: string;
+  pausedAt: string;
+  pausedBy: string;
+}
+
+export interface WorkDeviation {
+  id: string;
+  recommendedTaskId: string;
+  temporaryTaskId: string;
+  resumeTaskId: string;
+  reason: string;
+  snapshot: TaskPauseSnapshot | null;
+  requestedBy: "agent" | "user";
+  approvedBy: string;
+  state: "approved" | "active" | "resume-required" | "resolved" | "resumed" | "canceled";
+  createdAt: string;
+  activatedAt: string;
+  resumeRequiredAt: string;
+  resolvedAt: string;
+  resumedAt: string;
+}
+
 export interface Task {
   id: string;
   phaseId: string;
@@ -89,6 +117,8 @@ export interface Task {
   checklist: ChecklistItem[];
   subtasks: Subtask[];
   dependsOn: string[];
+  pauseSnapshot: TaskPauseSnapshot | null;
+  pauseHistory: TaskPauseSnapshot[];
   startedAt: string;
   completedAt: string;
   createdAt: string;
@@ -195,6 +225,7 @@ export interface Project {
   technologies: string[];
   tools: string[];
   acceptedDecisions: AcceptedDecision[];
+  workDeviations: WorkDeviation[];
   workflowRules: {
     beforePhaseStart: string[];
     beforeTaskStart: string[];

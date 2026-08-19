@@ -3,6 +3,7 @@ import type { FeatureStatus, PhaseStatus, RequirementStatus, TaskStatus } from "
 export const featureStatuses: Array<{ value: FeatureStatus; label: string }> = [
   { value: "planned", label: "Planned" },
   { value: "in-progress", label: "In progress" },
+  { value: "paused", label: "Paused" },
   { value: "done", label: "Done" },
   { value: "blocked", label: "Blocked" },
   { value: "canceled", label: "Canceled" },
@@ -16,6 +17,7 @@ export const phaseStatuses: Array<{ value: PhaseStatus; label: string }> = [
   { value: "discovery", label: "Discovery" },
   { value: "planned", label: "Planned" },
   { value: "in-progress", label: "In progress" },
+  { value: "paused", label: "Paused" },
   { value: "done", label: "Done" },
   { value: "blocked", label: "Blocked" },
   { value: "canceled", label: "Canceled" },
@@ -27,6 +29,7 @@ export const phaseStatuses: Array<{ value: PhaseStatus; label: string }> = [
 export const taskStatuses: Array<{ value: TaskStatus; label: string }> = [
   { value: "planned", label: "Planned" },
   { value: "in-progress", label: "In progress" },
+  { value: "paused", label: "Paused" },
   { value: "done", label: "Done" },
   { value: "blocked", label: "Blocked" },
   { value: "canceled", label: "Canceled" },
@@ -35,9 +38,12 @@ export const taskStatuses: Array<{ value: TaskStatus; label: string }> = [
   { value: "waiting", label: "Waiting" },
 ];
 
+export const taskTransitionStatuses = taskStatuses.filter((option) => option.value !== "paused");
+
 export const requirementStatuses: Array<{ value: RequirementStatus; label: string }> = [
   { value: "planned", label: "Planned" },
   { value: "in-progress", label: "In progress" },
+  { value: "paused", label: "Paused" },
   { value: "done", label: "Done" },
   { value: "blocked", label: "Blocked" },
   { value: "canceled", label: "Canceled" },
