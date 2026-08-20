@@ -4,11 +4,11 @@ description: Agent Plan planner — manage project plans, features, phases, task
 
 # /planner — Agent Plan planner
 
-You are the Agent Plan planner. The `@agent-plan/mcp` server exposes the
-`planner-*` tools (35 public tools: `planner-init`, `planner-show`,
+You are the Agent Plan planner. The `@agent-plan/mcp` server exposes
+`planner-*` tools including `planner-init`, `planner-show`, `planner-version`,
 `planner-feature-*`, `planner-phase-*`, `planner-task-*`, `planner-handoff-*`,
 `planner-web`, `planner-load`, `planner-disable`, `planner-export`,
-`planner-authorize-bypass`, etc.). Route the `/planner <subcommand>` request
+`planner-authorize-bypass`, etc. Route the `/planner <subcommand>` request
 to the appropriate MCP tool call(s).
 
 ## Behavior contract
@@ -32,6 +32,7 @@ show this routing table and ask which subcommand they want.
 ### Core
 - `init` → `planner-init` (gather title + short description, create `.planner/`)
 - `show` → `planner-show`
+- `version` → `planner-version` (report the MCP/core versions actually loaded by this process)
 - `repair` → `planner-repair` (fix dangling refs, duplicate phase ids)
 - `load` → `planner-load` (enable planner + start web + recap)
 - `stop` / `disable` → `planner-disable` (disable planner + stop web)

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { PlanStore, ExportService } from "@agent-plan/core";
+import { PlanStore, ExportService, packageVersionFromModule } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
 import { basename, dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -15,6 +15,7 @@ interface CliFlags {
   local: boolean;
   user: boolean;
   full: boolean;
+  version: boolean;
 }
 
 function usage(): string {
@@ -22,6 +23,7 @@ function usage(): string {
     "agent-plan",
     "",
     "Usage:",
+    "  agent-plan --version | -v",
     "  agent-plan mcp",
     "  agent-plan init [project name] [--yes]",
     "  agent-plan setup claude-code [--user|--project] [--force] [--local]",
@@ -33,22 +35,24 @@ function usage(): string {
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
     "  setup codex                 Add Agent Plan to Codex / Copilot CLI (project .codex/mcp.json by default, user scope with --user).",
-    "  guard pre-tool-use          Claude Code hook: block Edit/Write unless a task is in-progress or a bypass is authorized (bash stays free).",,
+    "  guard pre-tool-use          Claude Code hook: block Edit/Write unless a task is in-progress or a bypass is authorized (bash stays free).",
     "",
     "Options:",
+    "  --version, -v               Print the installed agent-plan CLI version.",
     "  --yes, -y                   Accept defaults / initialize when needed.",
     "  --force                     Overwrite existing agent-plan MCP config entry.",
     "  --local                     Write config pointing to this built local CLI instead of npx agent-plan.",
-    "  --user                      Install MCP and /planner command at Claude Code or Codex user scope.",,
+    "  --user                      Install MCP and /planner command at Claude Code or Codex user scope.",
     "  --project                   Install MCP and /planner command in the current project (default).",
   ].join("\n");
 }
 
 function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
-  const flags: CliFlags = { yes: false, force: false, local: false, user: false, full: false };
+  const flags: CliFlags = { yes: false, force: false, local: false, user: false, full: false, version: false };
   const positional: string[] = [];
   for (const arg of args) {
-    if (arg === "--yes" || arg === "-y") flags.yes = true;
+    if (arg === "--version" || arg === "-v") flags.version = true;
+    else if (arg === "--yes" || arg === "-y") flags.yes = true;
     else if (arg === "--force") flags.force = true;
     else if (arg === "--local") flags.local = true;
     else if (arg === "--user") flags.user = true;
@@ -131,7 +135,7 @@ function defaultMcpConfig(flags: CliFlags): Record<string, unknown> {
 function plannerCommandTemplate(): string {
   return `---
 description: Route Agent Plan planner commands to MCP tools
-argument-hint: "init | show | reload | load | recap | disable | repair | export [--full] | web <status|start|stop> | feature <list|add|show|update|delete> | phase <add|show|discuss|update|delete> | task <add|show|discuss|update|delete|start|complete> | handoff <prepare|show|write|clear> | project <discuss|language> | bypass | clear-bypass"
+argument-hint: "init | show | version | reload | load | recap | disable | repair | export [--full] | web <status|start|stop> | feature <list|add|show|update|delete> | phase <add|show|discuss|update|delete> | task <add|show|discuss|update|delete|start|complete> | handoff <prepare|show|write|clear> | project <discuss|language> | bypass | clear-bypass"
 ---
 
 You are handling the Agent Plan slash command for this project.
@@ -148,6 +152,7 @@ Route common commands as follows:
 
 - \`init\` → call \`planner-init\`; if required fields are missing, ask for a concise project name first
 - \`show\` → call \`planner-show\`
+- \`version\` → call \`planner-version\` and report the MCP/core versions exactly as returned
 - \`reload\` → call \`planner-load\`, then present the returned recap verbatim to the user (state, active task, pending handoff, web URL). Do not read, clear, or otherwise mutate a handoff.
 - \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present that recap **verbatim and in this reply only**, ending with its final \`🌐 Web UI: <url>\` line. Pending handoffs are read-only context: do **not** call \`planner-handoff-show\` or \`planner-handoff-clear\` during \`load\`/\`recap\`. A handoff is archived only when every task in its phase is \`done\`/\`canceled\`, when a new handoff replaces it, or after an explicit user \`handoff clear\` request. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
 - \`recap\` → call \`planner-load\` (same as \`load\`) and present its returned recap verbatim; do not mutate handoffs
@@ -394,6 +399,12 @@ async function guardPreToolUse(): Promise<void> {
 async function main(): Promise<void> {
   const { positional, flags } = parseFlags(process.argv.slice(2));
   const [command, subcommand, ...rest] = positional;
+
+  if (flags.version) {
+    const pkg = packageVersionFromModule(import.meta.url, "agent-plan");
+    console.log(`${pkg.name} ${pkg.version}`);
+    return;
+  }
 
   if (!command || command === "help" || command === "--help" || command === "-h") {
     console.log(usage());

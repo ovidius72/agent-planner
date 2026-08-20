@@ -12,7 +12,7 @@
 
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { PlanStore } from "../../plan-core/dist/index.js";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 
@@ -21,6 +21,9 @@ after(async () => {
 });
 
 const LONG_DESCRIPTION = "src/harness.ts:10 existing state and the concrete goal for this host-validation entity; include file refs and behaviors to preserve so the description clears the 50-char minimum.";
+const PI_ADAPTER_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")).version;
+const CORE_VERSION = JSON.parse(readFileSync(new URL("../../plan-core/package.json", import.meta.url), "utf-8")).version;
+const SERVER_VERSION = JSON.parse(readFileSync(new URL("../../plan-server/package.json", import.meta.url), "utf-8")).version;
 
 // The lifecycle events the real adapter subscribes to (packages/pi-adapter/src/index.ts).
 const EXPECTED_HOOKS = [
@@ -48,6 +51,7 @@ describe("pi-adapter host harness", () => {
       const completions = planner.getArgumentCompletions("task");
       assert.ok(Array.isArray(completions) && completions.length > 0);
       assert.ok(completions.some((c) => c.value === "task start"), "task subcommand completion");
+      assert.ok(planner.getArgumentCompletions("ver").some((c) => c.value === "version"), "version subcommand completion");
 
       // All 49 tools with the required definition fields.
       assert.equal(host.tools.size, 49);
@@ -66,6 +70,20 @@ describe("pi-adapter host harness", () => {
 
       // The fake host surface stays limited: no stray registrations.
       assert.equal(host.sentMessages.length, 0);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("/planner version reports loaded package manifests without requiring a planner", async () => {
+    const host = await createPiHost({ name: "t293-version", seed: null });
+    try {
+      await host.runCommand("version");
+      const message = host.ui.notifyCalls.at(-1)?.message ?? "";
+      assert.match(message, new RegExp(`@agent-plan/pi-adapter: ${PI_ADAPTER_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/core: ${CORE_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/server: ${SERVER_VERSION.replaceAll(".", "\\.")}`));
+      assert.equal(existsSync(host.planRoot), false, "version lookup must not initialize planner state");
     } finally {
       await closePiHost(host);
     }
