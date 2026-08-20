@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, packageVersionFromModule, resolvedPackageVersion } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -19,6 +19,9 @@ type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredCo
 function text(textValue: string, structuredContent?: Record<string, unknown>): ToolResult {
   return structuredContent ? { content: [{ type: "text", text: textValue }], structuredContent } : { content: [{ type: "text", text: textValue }] };
 }
+
+const MCP_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/mcp");
+const CORE_PACKAGE = resolvedPackageVersion("@agent-plan/core", import.meta.url);
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -130,7 +133,7 @@ async function writeAndSummarize(st: PlanStore, message: string, structuredConte
 
 const server = new McpServer({
   name: "agent-plan-planner",
-  version: "0.1.0",
+  version: MCP_PACKAGE.version,
 });
 
 // Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
@@ -158,6 +161,20 @@ async function resolvePhaseForHandoff(st: PlanStore, ref: string | undefined): P
   const feat = phase.featureId ? features.find((f) => f.id === phase.featureId) : undefined;
   return { ok: true, phase, compositeRef: formatPhaseRef(phase.number, feat?.number) };
 }
+
+server.registerTool("planner-version", {
+  description: "Report the versions of the Agent Plan MCP server and core package actually loaded by this process. Available without an initialized .planner/ workspace.",
+}, async () => {
+  const versions = {
+    [MCP_PACKAGE.name]: MCP_PACKAGE.version,
+    [CORE_PACKAGE.name]: CORE_PACKAGE.version,
+  };
+  return text([
+    "Agent Plan runtime versions",
+    `${MCP_PACKAGE.name}: ${MCP_PACKAGE.version}`,
+    `${CORE_PACKAGE.name}: ${CORE_PACKAGE.version}`,
+  ].join("\n"), { versions });
+});
 
 server.registerTool("planner-export", {
   description: "Export the project plan as a Markdown report. Supports a concise summary or full hierarchical detail.",
