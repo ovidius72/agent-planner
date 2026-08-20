@@ -1,0 +1,149 @@
+{
+  "id": "8ba65817-a23f-4e43-a77a-7f37bf643a9a",
+  "featureId": "66e695a2-70cc-4916-8a29-99fedb40cbd1",
+  "number": 44,
+  "shortId": "TV7V2",
+  "priority": 3,
+  "slug": "move-resume-activity-and-handoff-archive-to-local",
+  "title": "Move resume, activity, and handoff archive to .local/",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Move session-local files (`resume.json`, `activity.json`, and `handoff-archive/`) from tracked `.planner/` paths into `.planner/.local/`.\n\nCode references:\n- `packages/plan-core/src/plan-store.ts:727` — `resumePath()`\n- `packages/plan-core/src/plan-store.ts:730` — `activityPath()`\n- `packages/plan-core/src/plan-store.ts:1800` — `handoffArchiveDir()`\n- `packages/plan-core/src/plan-store.ts:975` — `saveResume()`\n- `packages/plan-core/src/plan-store.ts:1044` — `appendActivity()`\n- `packages/plan-core/src/plan-store.ts:1780` — `clearPhaseHandoff()` archives to `handoff-archive/`\n\nCurrent state:\n- `resume.json` contains per-session focus, nextSteps, and machine-local `guardBypassUntil`. It is gitignored by `init()` but may still be tracked in older projects.\n- `activity.json` is an operational log.\n- `handoff-archive/` stores cleared handoff markdown for audit.\n\nWork to do:\n1. Update `resumePath()` → `.planner/.local/resume.json`.\n2. Update `activityPath()` → `.planner/.local/activity.json`.\n3. Update `handoffArchiveDir()` → `.planner/.local/handoff-archive/`.\n4. Update `saveResume()`, `loadResume()`, `authorizeGuardBypass()`, `clearGuardBypass()`, `isGuardBypassed()` to use the new path.\n5. Update `appendActivity()`, `loadActivityLog()` to use the new path.\n6. Update `clearPhaseHandoff()` archive path and history entries referencing archived files.\n7. Add migration helper: if old `resume.json`/`activity.json` exist at root, move them into `.local/` on first access.\n8. Update `.gitignore` generation to ignore `.local/` entirely.\n\nBehaviors to preserve:\n- Guard bypass timestamp must remain machine-local and not leak across clones.\n- Existing handoff archives must remain reachable after migration.\n- The resume protocol in adapters must continue to read the same data regardless of path.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "880661ae-c138-4274-87b1-41a095e84c69",
+    "04f3b834-2836-463d-9f2a-b5962b78819e"
+  ],
+  "tasks": [
+    {
+      "id": "880661ae-c138-4274-87b1-41a095e84c69",
+      "phaseId": "8ba65817-a23f-4e43-a77a-7f37bf643a9a",
+      "number": 200,
+      "shortId": "MDDSV",
+      "priority": 1,
+      "shortName": "move-resume-json-and-activity",
+      "title": "Move resume.json and activity.json to .local/",
+      "status": "done",
+      "description": "Relocate session-local `resume.json` and `activity.json` from `.planner/` to `.planner/.local/`.\n\nConcrete steps:\n1. Update `resumePath()` and `activityPath()` to return `.planner/.local/resume.json` and `.planner/.local/activity.json`.\n2. Add migration: if legacy files exist at root, move them to `.local/` on first access.\n3. Update `saveResume()`, `loadResume()`, `authorizeGuardBypass()`, `clearGuardBypass()`, `isGuardBypassed()`.\n4. Update `appendActivity()` and `loadActivityLog()`.\n5. Ensure guard bypass timestamp remains machine-local.\n6. Verify adapters read resume correctly from new path.\n\n---\n**Completion summary:**\nImplemented as part of P042 commit: resumePath() and activityPath() now return .planner/.local/resume.json and .planner/.local/activity.json, with lazy migration from root-level legacy files.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "880661ae-c138-4274-87b1-41a095e84c69-check-001-update-resumepath-and-activitypath",
+          "number": 1,
+          "title": "Update resumePath and activityPath",
+          "checked": false
+        },
+        {
+          "id": "880661ae-c138-4274-87b1-41a095e84c69-check-002-add-legacy-file-migration",
+          "number": 2,
+          "title": "Add legacy file migration",
+          "checked": false
+        },
+        {
+          "id": "880661ae-c138-4274-87b1-41a095e84c69-check-003-update-save-load-resume-methods",
+          "number": 3,
+          "title": "Update save/load resume methods",
+          "checked": false
+        },
+        {
+          "id": "880661ae-c138-4274-87b1-41a095e84c69-check-004-update-activity-methods",
+          "number": 4,
+          "title": "Update activity methods",
+          "checked": false
+        },
+        {
+          "id": "880661ae-c138-4274-87b1-41a095e84c69-check-005-verify-guard-bypass-locality",
+          "number": 5,
+          "title": "Verify guard bypass locality",
+          "checked": false
+        },
+        {
+          "id": "880661ae-c138-4274-87b1-41a095e84c69-check-006-verify-adapter-resume-reads",
+          "number": 6,
+          "title": "Verify adapter resume reads",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:22:52.611Z",
+      "completedAt": "2026-08-06T16:22:52.611Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:22:52.611Z"
+    },
+    {
+      "id": "04f3b834-2836-463d-9f2a-b5962b78819e",
+      "phaseId": "8ba65817-a23f-4e43-a77a-7f37bf643a9a",
+      "number": 195,
+      "shortId": "LU74B",
+      "priority": 1,
+      "shortName": "move-handoff-archive-to-local",
+      "title": "Move handoff-archive/ to .local/",
+      "status": "done",
+      "description": "Relocate cleared handoff archive from `.planner/handoff-archive/` to `.planner/.local/handoff-archive/`.\n\nConcrete steps:\n1. Update `handoffArchiveDir()` path helper.\n2. Update `clearPhaseHandoff()` to write archived files into `.local/handoff-archive/`.\n3. Update `listHandoffs()` and any history entries that reference archived file paths.\n4. Migrate existing `.planner/handoff-archive/` contents into `.local/handoff-archive/`.\n5. Ensure old `.planner/handoff-archive/` is ignored/cleaned after migration.\n\n---\n**Completion summary:**\nImplemented as part of P042 commit: handoffArchiveDir() now returns .planner/.local/handoff-archive/, and clearPhaseHandoff archives there. Schema comments updated.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "04f3b834-2836-463d-9f2a-b5962b78819e-check-001-update-handoffarchivedir-path",
+          "number": 1,
+          "title": "Update handoffArchiveDir path",
+          "checked": false
+        },
+        {
+          "id": "04f3b834-2836-463d-9f2a-b5962b78819e-check-002-update-clearphasehandoff-archive-path",
+          "number": 2,
+          "title": "Update clearPhaseHandoff archive path",
+          "checked": false
+        },
+        {
+          "id": "04f3b834-2836-463d-9f2a-b5962b78819e-check-003-update-history-references",
+          "number": 3,
+          "title": "Update history references",
+          "checked": false
+        },
+        {
+          "id": "04f3b834-2836-463d-9f2a-b5962b78819e-check-004-migrate-existing-archive",
+          "number": 4,
+          "title": "Migrate existing archive",
+          "checked": false
+        },
+        {
+          "id": "04f3b834-2836-463d-9f2a-b5962b78819e-check-005-clean-up-old-directory",
+          "number": 5,
+          "title": "Clean up old directory",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:22:52.612Z",
+      "completedAt": "2026-08-06T16:22:52.612Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:22:52.612Z"
+    }
+  ],
+  "createdAt": "2026-08-06T15:26:20.979Z",
+  "updatedAt": "2026-08-06T16:26:16.817Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

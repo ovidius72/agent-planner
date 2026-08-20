@@ -1,0 +1,29 @@
+{
+  "id": "66e695a2-70cc-4916-8a29-99fedb40cbd1",
+  "number": 12,
+  "shortId": "UAMRQ",
+  "priority": 12,
+  "name": "Planner local transients + stable manifest + deterministic shortId",
+  "description": "Reduce cross-worktree git churn and merge conflicts caused by planner-derived files being written inside the tracked `.planner/` tree.\n\nBackground: when two agents work on the same project in different git worktrees (e.g. `~/projects/myvim` on F004 and `/Users/antonio/projects/heca` on F009), the planner writes shared/derived files (`manifest.json`, `*.bak`, `generated/`, `resume.json`, `activity.json`, `handoff-archive/`) directly into `.planner/`. These files are tracked by git and change on every planner operation, producing large diffs and inevitable merge conflicts on unrelated feature branches.\n\nGoals:\n1. Isolate all transient/session-local/derived artifacts under `.planner/.local/` (gitignored) so they never appear in `git status` or cause merge conflicts.\n2. Make `manifest.json` stable by removing its frequently-updated `updatedAt` field; move the timestamp to `.planner/.local/timestamp.json`.\n3. Move atomic-write crash backups from `<file>.bak` next to source files into `.planner/.local/backups/<relative-path>/<file>.bak`.\n4. Move `generated/` markdown views from `.planner/generated/` to `.planner/.local/generated/`.\n5. Move `resume.json`, `activity.json`, and `handoff-archive/` into `.planner/.local/`.\n6. Make `shortId` generation deterministic for existing entities so two worktrees starting from the same commit produce identical shortIds, avoiding content conflicts during schema backfill.\n7. Reduce unnecessary I/O in `writeGenerated()` by comparing new content with existing content before writing.\n\nOut of scope:\n- Multi-root server / single UI for multiple worktrees (will be handled separately).\n- Changing how source entity files (`features/*.json`, `phases/*.json`, `project.json`, `requirements.json`) are stored.\n\nImplementation notes:\n- Path helpers in `packages/plan-core/src/plan-store.ts` are the central place to update (`manifestPath`, `generatedDir`, `resumePath`, `activityPath`, `handoffArchiveDir`, and the backup logic in `atomicWriteText`).\n- `ManifestSchema` may keep `updatedAt` for backward compat but PlanStore will read/write it from the timestamp file.\n- `createShortId` in `packages/plan-core/src/naming.ts` needs an optional `seed` parameter used during backfill.\n- `ensureShortIdsAndPriority` in `packages/plan-core/src/plan-store.ts` seeds shortIds from stable entity identifiers (`feature:${number}:${id}`, etc.).\n- Web UI and server static serving need to read `generated/` from the new `.local/generated/` path.\n- The `.gitignore` written by `PlanStore.init()` already ignores `*.bak`, `generated/`, `resume.json`, etc.; it must be updated to cover `.local/` generically.\n\nAffected packages: `@agent-plan/core`, `@agent-plan/server`, `@agent-plan/web-ui`, `@agent-plan/pi-adapter` (static dir resolution), `@agent-plan/mcp` (if it references paths).\n\nAcceptance criteria:\n- After loading the planner in two clean worktrees from the same commit, `git status` shows no changes in `.planner/` from transient files.\n- `manifest.json` is unchanged after normal planner operations.\n- `.planner/.local/` exists and contains timestamp, backups, generated, resume, activity, handoff-archive.\n- Two worktrees produce identical `shortId` values for the same entities after `ensureShortIdsAndPriority()`.\n- Build and type-check pass across the monorepo.\n- Web UI still serves correctly from the relocated generated bundle.",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "7ca415dc-ae45-4a46-97f9-26009849dea2",
+    "8ba65817-a23f-4e43-a77a-7f37bf643a9a",
+    "231fc692-57de-4ae2-8a3c-71fc49456091",
+    "d7284d16-2347-4179-9390-77df12426d50",
+    "63d46374-4f7f-4857-ab03-89b0c4a04a62",
+    "8d3ec455-03ff-45e4-8ba8-682de930171a",
+    "d3555c1d-5d03-4476-a074-23ef4791956e"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-08-06T15:25:57.405Z",
+  "updatedAt": "2026-08-06T15:25:57.405Z"
+}

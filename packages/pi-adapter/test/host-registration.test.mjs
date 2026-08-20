@@ -49,9 +49,9 @@ describe("pi-adapter host harness", () => {
       assert.ok(Array.isArray(completions) && completions.length > 0);
       assert.ok(completions.some((c) => c.value === "task start"), "task subcommand completion");
 
-      // All 47 tools with the required definition fields.
-      assert.equal(host.tools.size, 47);
-      for (const name of ["plan_init", "feature_create", "task_start", "decision_record", "handoff_write", "planner-web", "planner-load", "planner-stop"]) {
+      // All 49 tools with the required definition fields.
+      assert.equal(host.tools.size, 49);
+      for (const name of ["plan_init", "feature_create", "task_pause", "task_switch", "task_start", "decision_record", "handoff_write", "planner-web", "planner-load", "planner-stop"]) {
         const tool = host.tools.get(name);
         assert.ok(tool, `tool ${name} registered`);
         assert.ok(tool.label && tool.description, `tool ${name} has label/description`);

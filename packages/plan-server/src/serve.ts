@@ -538,6 +538,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"]; checklist?: string[] }>();
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title required" }, 400);
+    if (body.status === "paused") return c.json({ error: "A task cannot be created paused without an in-progress checkpoint. Create it planned, then use task_pause/task_switch." }, 400);
 
     const phase = await store.loadPhase(phaseId).catch(() => null);
     if (!phase) return c.json({ error: "phase not found" }, 404);
@@ -574,6 +575,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       checklist: checklistItems,
       subtasks: [],
       dependsOn: [],
+      pauseSnapshot: null,
+      pauseHistory: [],
       startedAt: initialStatus === "in-progress" || initialStatus === "done" ? now : "",
       completedAt: initialStatus === "done" ? now : "",
       createdAt: now,
@@ -635,6 +638,56 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(Array.from(activeTasksMap.values()));
   });
 
+  app.get(route("/tasks/focus"), async (c) => {
+    const [phases, featuresDoc, project] = await Promise.all([
+      store.loadAllPhases(), store.loadFeatures(), store.loadProject(),
+    ]);
+    const featureIdToNum = new Map(featuresDoc.features.map((feature) => [feature.id, feature.number]));
+    const openReturn = [...project.workDeviations]
+      .filter((deviation) => deviation.state === "resume-required" || deviation.state === "resolved")
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    const pendingByTask = new Map<string, (typeof openReturn)[number]>();
+    for (const deviation of openReturn) {
+      if (!pendingByTask.has(deviation.resumeTaskId)) pendingByTask.set(deviation.resumeTaskId, deviation);
+    }
+    const pendingOrder = new Map(openReturn.map((deviation, index) => [deviation.id, index]));
+    type FocusSummary = {
+      id: string; number: number; shortId: string; title: string; phaseId: string; phaseNumber: number;
+      featureId: string; featureNumber: number; status: Task["status"];
+      pauseSnapshot: Task["pauseSnapshot"]; pendingResume: boolean; deviationId: string;
+    };
+    const active: FocusSummary[] = [];
+    const paused: FocusSummary[] = [];
+    const pendingResume: FocusSummary[] = [];
+    for (const phase of phases) {
+      if (!phase.featureId) continue;
+      for (const task of phase.tasks) {
+        const deviation = pendingByTask.get(task.id);
+        if (task.status !== "in-progress" && task.status !== "paused" && !deviation) continue;
+        const summary: FocusSummary = {
+          id: task.id,
+          number: task.number,
+          shortId: task.shortId,
+          title: task.title,
+          phaseId: phase.id,
+          phaseNumber: phase.number,
+          featureId: phase.featureId,
+          featureNumber: featureIdToNum.get(phase.featureId) ?? 0,
+          status: task.status,
+          pauseSnapshot: task.pauseSnapshot ?? deviation?.snapshot ?? null,
+          pendingResume: Boolean(deviation),
+          deviationId: deviation?.id ?? "",
+        };
+        if (deviation) pendingResume.push(summary);
+        else if (task.status === "in-progress") active.push(summary);
+        else if (task.status === "paused") paused.push(summary);
+      }
+    }
+    pendingResume.sort((left, right) => (pendingOrder.get(left.deviationId) ?? Number.MAX_SAFE_INTEGER) - (pendingOrder.get(right.deviationId) ?? Number.MAX_SAFE_INTEGER));
+    paused.sort((left, right) => (right.pauseSnapshot?.pausedAt ?? "").localeCompare(left.pauseSnapshot?.pausedAt ?? ""));
+    return c.json({ active, paused, pendingResume });
+  });
+
   app.get(route("/tasks/:id"), async (c) => {
     const taskId = c.req.param("id");
     const phases = await store.loadAllPhases();
@@ -654,6 +707,10 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!phase) return c.json({ error: "phase not found" }, 404);
     const existing = phase.tasks.find((t) => t.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
+
+    if (body.status && body.status !== existing.status && (body.status === "paused" || existing.status === "paused")) {
+      return c.json({ error: "Paused lifecycle transitions require task_pause/task_switch/task_start so the resume checkpoint and return stack remain consistent." }, 400);
+    }
 
     // Validate motivation requirement for status transitions.
     if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status)) {

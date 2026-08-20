@@ -87,6 +87,22 @@ export const AcceptedDecisionSchema = z.object({
   acceptedAt: TimestampSchema,
 });
 
+export const TaskPauseSnapshotSchema = z.object({
+  id: z.string().min(1),
+  /** Why work stopped or changed focus. */
+  reason: z.string().min(1),
+  /** Concrete checkpoint: what was underway when the task was paused. */
+  whatWasBeingDone: z.string().min(1),
+  /** File, symbol, command, or other exact location from which to continue. */
+  resumeLocation: z.string().min(1),
+  /** Ordered, actionable instructions for resuming the task. */
+  howToResume: z.string().min(1),
+  /** Optional temporary/prerequisite task that caused the pause. */
+  relatedTaskId: z.string().default(""),
+  pausedAt: TimestampSchema,
+  pausedBy: z.string().default(""),
+});
+
 export const WorkDeviationSchema = z.object({
   id: z.string().min(1),
   /** Task the priority selector recommended when the deviation was approved. */
@@ -96,12 +112,19 @@ export const WorkDeviationSchema = z.object({
   /** Task to surface explicitly after the temporary work is resolved. */
   resumeTaskId: z.string().min(1),
   reason: z.string().default(""),
+  /** Durable checkpoint captured when the resume task was paused. */
+  snapshot: TaskPauseSnapshotSchema.nullable().default(null),
   requestedBy: z.enum(["agent", "user"]).default("agent"),
   approvedBy: z.string().default("user"),
-  state: z.enum(["approved", "active", "resolved", "canceled"]).default("approved"),
+  state: z.enum(["approved", "active", "resume-required", "resolved", "resumed", "canceled"]).default("approved"),
   createdAt: TimestampSchema,
   activatedAt: z.string().default(""),
+  /** When temporary work ended and the resume target became mandatory. */
+  resumeRequiredAt: z.string().default(""),
+  /** Legacy temporary-work completion timestamp. */
   resolvedAt: z.string().default(""),
+  /** When the preserved resume target was actually started again. */
+  resumedAt: z.string().default(""),
 });
 
 export const ProjectSchema = z.object({
@@ -127,11 +150,11 @@ export const ProjectSchema = z.object({
   workDeviations: z.array(WorkDeviationSchema).default([]),
 });
 
-export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const TaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const PhaseStatusSchema = z.enum(["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const RequirementStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const FeatureStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const TaskStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const PhaseStatusSchema = z.enum(["draft", "discovery", "planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const RequirementStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const FeatureStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
 
 export const SubtaskSchema = z.object({
   id: z.string().min(1),
@@ -156,7 +179,7 @@ const ChecklistInputSchema = z.union([z.string().min(1), ChecklistItemSchema]);
 
 /** Status transitions that require a motivation note from the agent. */
 export const STATUS_LOG_MOTIVATION_REQUIRED = new Set([
-  "blocked", "canceled", "deferred", "rejected", "waiting",
+  "paused", "blocked", "canceled", "deferred", "rejected", "waiting",
 ]);
 
 /**
@@ -214,6 +237,10 @@ export const TaskSchema = z.object({
   checklist: z.array(ChecklistInputSchema).default([]),
   subtasks: z.array(SubtaskSchema).default([]),
   dependsOn: z.array(z.string().min(1)).default([]),
+  /** Current durable checkpoint while this task is paused. */
+  pauseSnapshot: TaskPauseSnapshotSchema.nullable().default(null),
+  /** Append-only checkpoint history retained after each resume. */
+  pauseHistory: z.array(TaskPauseSnapshotSchema).default([]),
   startedAt: z.string().default(""),
   completedAt: z.string().default(""),
   createdAt: TimestampSchema,
@@ -369,6 +396,7 @@ export type WorkflowRules = z.infer<typeof WorkflowRulesSchema>;
 export type AcceptedDecision = z.infer<typeof AcceptedDecisionSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
 export type WorkDeviation = z.infer<typeof WorkDeviationSchema>;
+export type TaskPauseSnapshot = z.infer<typeof TaskPauseSnapshotSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
 export type StatusLogEntry = z.infer<typeof StatusLogEntrySchema>;

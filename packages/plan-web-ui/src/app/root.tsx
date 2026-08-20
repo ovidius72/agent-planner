@@ -1,25 +1,25 @@
 import { useEffect } from "react";
 import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router-dom";
 import { AppShell } from "../components/layout/app-shell";
-import { getActiveTasks, getProject, getUiConfig, type ActiveTaskSummary, type UiConfig } from "../lib/api";
+import { getProject, getTaskFocus, getUiConfig, type TaskFocusSummary, type UiConfig } from "../lib/api";
 import { useAnimatedFavicon } from "../hooks/use-animated-favicon";
 import { ShortcutProvider } from "../lib/shortcuts";
 import { LiveSyncBridge } from "./live-sync";
 
 export async function loader() {
-  const [project, uiConfig, activeTasks] = await Promise.all([
+  const [project, uiConfig, taskFocus] = await Promise.all([
     getProject(),
     getUiConfig(),
-    getActiveTasks(),
+    getTaskFocus(),
   ]);
-  return { project, uiConfig, activeTasks };
+  return { project, uiConfig, taskFocus };
 }
 
 export function RootRoute() {
-  const { project, uiConfig, activeTasks } = useLoaderData() as {
+  const { project, uiConfig, taskFocus } = useLoaderData() as {
     project: Awaited<ReturnType<typeof getProject>>;
     uiConfig: UiConfig;
-    activeTasks: ActiveTaskSummary[];
+    taskFocus: TaskFocusSummary;
   };
 
   useEffect(() => {
@@ -35,12 +35,12 @@ export function RootRoute() {
     }
   }, [project?.name, project?.projectRoot]);
 
-  useAnimatedFavicon(activeTasks.length > 0);
+  useAnimatedFavicon(taskFocus.active.length > 0);
 
   return (
     <ShortcutProvider shortcuts={uiConfig.shortcuts}>
       <LiveSyncBridge />
-      <AppShell project={project} activeTasks={activeTasks} serverInfo={uiConfig.server} />
+      <AppShell project={project} taskFocus={taskFocus} serverInfo={uiConfig.server} />
     </ShortcutProvider>
   );
 }

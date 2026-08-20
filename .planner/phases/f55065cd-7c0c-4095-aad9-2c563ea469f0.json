@@ -1,0 +1,219 @@
+{
+  "id": "f55065cd-7c0c-4095-aad9-2c563ea469f0",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 66,
+  "shortId": "ENR7T",
+  "priority": 15,
+  "slug": "task-focus-suspension-priority-deviations-and-deterministic-resume",
+  "title": "Task focus suspension, priority deviations and deterministic resume",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Add structured task pause/switch snapshots and ensure temporary priority deviations return agents to suspended work.",
+  "description": "Extend the task lifecycle across `packages/plan-core/src/schema.ts`, `packages/plan-core/src/task-selection.ts`, and `packages/plan-core/src/plan-store.ts`, then expose the behavior through `packages/plan-mcp/src/index.ts` and `packages/pi-adapter/src/index.ts`. Current state: tasks support planned/in-progress/waiting/etc. and project-level `workDeviations`, but explicit starts are advisory and multiple tasks can remain in-progress without durable per-task resume instructions. Add a paused lifecycle state, structured snapshots describing why work stopped, what was underway, the exact resume point and instructions, plus an explicit task switch operation that can override normal priority while preserving a LIFO return target. Normal recommendations must remain feature → phase → task priority ordered. Completing a temporary task must emit/return a resume-required signal and make the suspended task the next recommendation without falsely marking it active. Update Web UI surfaces, generated startup/operational recap, cross-harness tools, migrations/validation and tests. Preserve harness-agnostic core behavior, explicit user choice, derived parent status semantics, stable task references and existing planner data.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "9bcc2b27-cbdb-4b56-b6fa-ba626ea484a7",
+      "title": "Priority is default; structured switch is the explicit escape hatch",
+      "decision": "Normal work selection follows feature → phase → task priority, but agents may deliberately switch to a non-priority task through an atomic task switch. The current task becomes paused with a mandatory durable snapshot covering why it was left, what was underway, the exact location and how to resume. Temporary switches form a LIFO return stack. When temporary work becomes non-active or completes, the planner emits a resume-required trigger and recommends the suspended task without auto-starting it.",
+      "rationale": "Priority must prevent accidental task hopping without blocking legitimate prerequisite or urgent work. Durable task-scoped checkpoints and a deterministic return target prevent multiple unexplained in-progress tasks and make cross-session recovery reliable.",
+      "implementationNotes": "Add `paused`, structured resume snapshot fields, task_pause/task_switch operations, LIFO pending-resume selection, prominent task_complete/resume notifications, recap and Web UI presentation. Preserve explicit deviations, nested A→B→C returns, startedAt continuity, harness-agnostic core behavior and truthful derived parent statuses.",
+      "acceptedAt": "2026-08-19T11:45:57.997Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "6fddd661-1062-4624-a0ec-e6349edfc063",
+    "52e1f526-0b0c-4f8c-82da-578314674d7b",
+    "d538b57e-2d6b-4474-9f0b-b00cb6a903e9"
+  ],
+  "tasks": [
+    {
+      "id": "6fddd661-1062-4624-a0ec-e6349edfc063",
+      "phaseId": "f55065cd-7c0c-4095-aad9-2c563ea469f0",
+      "number": 287,
+      "shortId": "N5272",
+      "priority": 2,
+      "shortName": "expose-atomic-task-pause-and-s",
+      "title": "Expose atomic task pause and switch lifecycle across MCP and Pi",
+      "status": "done",
+      "description": "Modify `packages/plan-mcp/src/index.ts`, `packages/pi-adapter/src/index.ts`, their registration surfaces and adapter/MCP tests after the core model is available. Current state: `task_start` honors explicit starts with advisories and `task_deviation` records an approved override separately; there is no atomic operation that snapshots the current task, pauses it and starts the temporary task. Add dedicated `task_pause` and `task_switch` tools with mandatory reason, what-was-being-done, exact resume location and how-to-resume inputs. `task_switch` must deliberately allow non-priority work, persist the return relationship atomically, and avoid leaving multiple silent in-progress tasks. `task_start` must prefer active/pending-resume/priority work while explaining the explicit switch escape hatch. `task_complete` and other non-active exits from a temporary task must surface a prominent resume-required result without auto-starting the paused task. Keep core harness-agnostic and composite human references in responses.\n\n---\n**Completion summary:**\nCompleted cross-harness lifecycle tools on `feature/task-focus-suspension-priority` (uncommitted). Added Pi `task_pause`/`task_switch` and MCP `planner-task-pause`/`planner-task-switch`; active-task and pending-resume start guards; structured switch checkpoints; compensating rollback; resume-required completion trigger; resumed deviation state; paused resume handling and lifecycle status history. Updated tool registration/surface tests and mutation/ref-validation integration tests. Focused validation passes: MCP 30/30, Pi 38/38.",
+      "notes": "Implemented matching Pi and MCP lifecycle tools: `task_pause`/`planner-task-pause` and `task_switch`/`planner-task-switch`. Direct starts now refuse to create a second silent active task and require a structured switch; pending-resume work cannot be skipped silently. Switch accepts active or already-paused resume targets, persists snapshots and active deviations, supports deliberate non-priority work, and compensates partial writes. Completion marks the deviation `resume-required`, returns a prominent composite-ref resume trigger, and starting the preserved task marks it `resumed`. Updated registration surfaces and focused adapter/MCP tests. Validation: 30 MCP tests and 38 Pi tests passing after package builds.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6fddd661-1062-4624-a0ec-e6349edfc063-check-001-register-matching-mcp-and-pi-tool-contracts",
+          "number": 1,
+          "title": "Register matching MCP and Pi tool contracts",
+          "checked": true
+        },
+        {
+          "id": "6fddd661-1062-4624-a0ec-e6349edfc063-check-002-implement-atomic-pause-switch-orchestration",
+          "number": 2,
+          "title": "Implement atomic pause/switch orchestration",
+          "checked": true
+        },
+        {
+          "id": "6fddd661-1062-4624-a0ec-e6349edfc063-check-003-emit-resume-required-completion-responses-and-priority-guidance",
+          "number": 3,
+          "title": "Emit resume-required completion responses and priority guidance",
+          "checked": true
+        },
+        {
+          "id": "6fddd661-1062-4624-a0ec-e6349edfc063-check-004-cover-normal-override-nested-and-validation-scenarios",
+          "number": 4,
+          "title": "Cover normal, override, nested and validation scenarios",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-19T11:55:37.043Z",
+      "completedAt": "2026-08-19T12:07:13.009Z",
+      "createdAt": "2026-08-19T11:45:46.506Z",
+      "updatedAt": "2026-08-19T12:07:13.009Z"
+    },
+    {
+      "id": "52e1f526-0b0c-4f8c-82da-578314674d7b",
+      "phaseId": "f55065cd-7c0c-4095-aad9-2c563ea469f0",
+      "number": 288,
+      "shortId": "T5M6U",
+      "priority": 1,
+      "shortName": "model-paused-tasks-structured",
+      "title": "Model paused tasks, structured snapshots and return-stack selection",
+      "status": "done",
+      "description": "Modify `packages/plan-core/src/schema.ts`, `packages/plan-core/src/task-selection.ts`, `packages/plan-core/src/plan-store.ts`, `packages/plan-core/src/display-status.ts` and core tests. Current state: TaskStatus lacks `paused`; WorkDeviation identifies temporary/resume tasks but does not carry the complete durable checkpoint requested for abandoned work, and task selection treats multiple in-progress tasks as a conflict. Add backward-compatible schemas for structured pause snapshots (reason, work underway, exact location, resume instructions, related temporary task and timestamps), explicit paused semantics, and LIFO pending-resume selection. Preserve startedAt across pause/resume, archive transitions in statusLog, keep parent display status truthful when only paused children remain, and ensure normal ready selection remains feature → phase → task priority ordered. Handle legacy project/task data and nested A→B→C deviations without losing earlier return targets.\n\n---\n**Completion summary:**\nCompleted core task lifecycle model on branch `feature/task-focus-suspension-priority` (uncommitted). Files: `packages/plan-core/src/schema.ts`, `display-status.ts`, `task-selection.ts`, `plan-store.ts`; tests: `display-status.test.mjs`, `task-selection.test.mjs`, new `task-pause.test.mjs`. Added paused schemas/checkpoints, pause/resume PlanStore methods, deviation return states/timestamps, LIFO paused/resume recommendation, paused parent display and rollups. Core test suite passes 199/199.",
+      "notes": "Implemented the harness-agnostic lifecycle foundation on `feature/task-focus-suspension-priority`: `paused` workflow status; `TaskPauseSnapshot` with reason, checkpoint, exact resume location and instructions; per-task current/history snapshots; expanded deviation states and timestamps; PlanStore pause/resume primitives preserving startedAt; LIFO pending-resume selection ahead of normal feature→phase→task priority; paused-aware parent display/derived rollups. Added `packages/plan-core/test/task-pause.test.mjs` and expanded task-selection/display coverage. Validation: `pnpm --filter @agent-plan/core test` — 199/199 passing.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "52e1f526-0b0c-4f8c-82da-578314674d7b-check-001-define-backward-compatible-paused-snapshot-deviation-schemas",
+          "number": 1,
+          "title": "Define backward-compatible paused/snapshot/deviation schemas",
+          "checked": true
+        },
+        {
+          "id": "52e1f526-0b0c-4f8c-82da-578314674d7b-check-002-implement-core-pause-resume-switch-persistence-primitives",
+          "number": 2,
+          "title": "Implement core pause/resume/switch persistence primitives",
+          "checked": true
+        },
+        {
+          "id": "52e1f526-0b0c-4f8c-82da-578314674d7b-check-003-centralize-priority-and-lifo-pending-resume-selection",
+          "number": 3,
+          "title": "Centralize priority and LIFO pending-resume selection",
+          "checked": true
+        },
+        {
+          "id": "52e1f526-0b0c-4f8c-82da-578314674d7b-check-004-update-derived-status-behavior-and-core-tests",
+          "number": 4,
+          "title": "Update derived status behavior and core tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-19T11:46:45.899Z",
+      "completedAt": "2026-08-19T11:55:01.422Z",
+      "createdAt": "2026-08-19T11:45:46.559Z",
+      "updatedAt": "2026-08-19T11:55:01.422Z"
+    },
+    {
+      "id": "d538b57e-2d6b-4474-9f0b-b00cb6a903e9",
+      "phaseId": "f55065cd-7c0c-4095-aad9-2c563ea469f0",
+      "number": 289,
+      "shortId": "PR65S",
+      "priority": 3,
+      "shortName": "surface-suspended-work-and-res",
+      "title": "Surface suspended work and resume triggers in recap and Web UI",
+      "status": "done",
+      "description": "Update the relevant startup/recap generation in `packages/pi-adapter/src/index.ts`, server event payloads, and `packages/plan-web-ui/src` task/project surfaces with tests. Current state: recaps list active work and phase handoffs, while the Web UI has no first-class paused task checkpoint or pending-resume presentation. Show active, paused and pending-resume tasks separately; render why work stopped, what was underway, where and how to resume; and surface the temporary-task completion trigger through existing realtime WebSocket/event refresh paths. A pending return must remain durable across sessions, lead `task_recommend`, and remain visible until explicitly resumed, superseded by another recorded switch, or resolved. Preserve accessibility, shared UI primitives, responsive behavior, and the rule that Web UI addresses appear only on load recap or explicit web status.\n\n---\n**Completion summary:**\nCompleted: recap + server (GET /tasks/focus) representations for paused/pending-resume work; shared Web UI ResumeSnapshot + TaskFocusHeader (active/paused/pending-resume sections); realtime refresh via existing WebSocket/event paths; cross-session durability verified; focused + full workspace validation green (core 201, server 7, web-ui 17 node + 24 vitest). Code on feature/task-focus-suspension-priority, committed this session.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d538b57e-2d6b-4474-9f0b-b00cb6a903e9-check-001-add-recap-and-server-representations-for-paused-pending-resume-work",
+          "number": 1,
+          "title": "Add recap and server representations for paused/pending-resume work",
+          "checked": true
+        },
+        {
+          "id": "d538b57e-2d6b-4474-9f0b-b00cb6a903e9-check-002-render-structured-snapshots-and-resume-required-state-in-shared-web-ui-surfaces",
+          "number": 2,
+          "title": "Render structured snapshots and resume-required state in shared Web UI surfaces",
+          "checked": true
+        },
+        {
+          "id": "d538b57e-2d6b-4474-9f0b-b00cb6a903e9-check-003-exercise-realtime-refresh-and-cross-session-durability",
+          "number": 3,
+          "title": "Exercise realtime refresh and cross-session durability",
+          "checked": true
+        },
+        {
+          "id": "d538b57e-2d6b-4474-9f0b-b00cb6a903e9-check-004-run-focused-and-full-workspace-validation",
+          "number": 4,
+          "title": "Run focused and full workspace validation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-19T12:07:40.760Z",
+      "completedAt": "2026-08-19T14:28:06.203Z",
+      "createdAt": "2026-08-19T11:45:46.593Z",
+      "updatedAt": "2026-08-19T14:28:06.203Z"
+    }
+  ],
+  "createdAt": "2026-08-19T11:45:27.361Z",
+  "updatedAt": "2026-08-19T14:28:06.203Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-19T14:12:27.275Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/f55065cd-7c0c-4095-aad9-2c563ea469f0-2026-08-19T14-28-06-207Z.md",
+      "clearedAt": "2026-08-19T14:28:06.207Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "cfd6bd70-95c6-48a7-ae4f-4be60f00fba0",
+      "date": "2026-08-19T11:46:04.217Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "d1fa8e86-e1d9-4676-a4f7-3014356a64ac",
+      "date": "2026-08-19T11:46:45.903Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "7d11f374-5ac6-44af-a5dc-ab1757f26e98",
+      "date": "2026-08-19T14:28:06.230Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

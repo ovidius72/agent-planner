@@ -680,6 +680,14 @@ Before implementation work:
 /planner task start <task-id>
 ```
 
+Before temporarily changing focus:
+
+```text
+task_switch(from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume)
+```
+
+This deliberately allows necessary non-priority work while changing the source task to `paused` with a durable checkpoint. Temporary switches form a LIFO return stack; completing the temporary task emits `RESUME REQUIRED` and makes the preserved source the next recommendation. Use `task_pause` when no temporary target is being started.
+
 After completed work:
 
 ```text
@@ -697,9 +705,11 @@ Why this matters:
 
 For this reason, Agent Plan provides dedicated lifecycle tools and blocks the wrong path:
 
-- use `task_start` / `planner-task-start` / `/planner task start` to begin work;
-- use `task_complete` / `planner-task-complete` / `/planner task complete` to finish work;
-- do **not** use `task_update` to move a task directly to `in-progress` or `done`.
+- use `task_start` / `planner-task-start` / `/planner task start` to begin or resume work;
+- use `task_pause` / `planner-task-pause` to save why work stopped, what was underway, the exact resume location, and how to continue;
+- use `task_switch` / `planner-task-switch` to override normal feature → phase → task priority without losing the active task context;
+- use `task_complete` / `planner-task-complete` / `/planner task complete` to finish work and surface any required return target;
+- do **not** use `task_update` to move a task directly to `in-progress`, `paused`, or `done`.
 
 ### Write guard and temporary bypass
 

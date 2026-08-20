@@ -1,0 +1,1292 @@
+{
+  "id": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+  "featureId": "f1d147c5-b6b4-4a4c-902e-2e2c83635173",
+  "number": 36,
+  "shortId": "NN8Q4",
+  "priority": 1,
+  "slug": "capture-residual-backlog-in-planner-and-remove-legacy-checklist-files",
+  "title": "Capture residual backlog in planner and remove legacy checklist files",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Audit legacy backlog files against code + planner, migrate only real gaps into planner tasks, then switch docs/process to planner-only.",
+  "description": "This phase converts the repository from mixed backlog management (`CHECKLIST.md` + `BACKLOG.md` + planner) to planner-only governance.\n\nCurrent implementation state and evidence:\n- `AGENTS.md` still hard-requires `CHECKLIST.md` and instructs contributors to keep it updated.\n- `PROJECT.md` and `ROADMAP.md` still describe a mandatory checklist process.\n- The planner already owns real execution state (`P034` in progress with `T136` and `T137`; `P035` done), so legacy markdown backlogs now create drift.\n- Confirmed real gaps remain outside the planner: feature discuss flow missing; `/handoff` delete missing; orphan cleanup missing; requirements page missing; `PlanStoreError` diagnostics too shallow; project description editor missing; multi-harness docs/schema missing; Zed integration missing; Pi upstream issue not filed.\n\nImplementation work in this phase:\n1. Create explicit planner tasks for each still-open real gap, with code references and acceptance notes.\n2. Add one migration task that rewrites process docs (`AGENTS.md`, `PROJECT.md`, `ROADMAP.md`) from checklist-backed governance to planner-only governance.\n3. Delete `CHECKLIST.md` and `BACKLOG.md` only after every real open item has been captured in planner tasks.\n4. Re-render generated planner docs after the planner data changes.\n\nBehaviors to preserve:\n- do not duplicate existing open planner work (`T136`, `T137` remain in `P034`).\n- keep the planner as the only source of truth for open work after migration.\n- keep the core harness-agnostic; this cleanup is governance/documentation plus planner structure, not a Pi-only shortcut.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "7aeff68e-5827-49a4-a789-84ee007a0e06",
+    "3bbce0c5-6b7c-4520-b0f5-20e45656926a",
+    "5d3688a7-a736-4fda-b042-4f799a8a94d2",
+    "c121cc15-4e1d-489f-88ea-75c60a23503f",
+    "42d03c0c-8bf7-443b-a2f7-64244ce6617d",
+    "276a0ad1-3724-4f05-86b8-63769b2e65a5",
+    "2683041b-3301-4a20-bf57-b2e67f0da04d",
+    "b3b06a3d-a48c-4118-94ce-74ca14e68b6d",
+    "a852cf4e-6046-4c6d-b8de-fe9894bf17bd",
+    "3a3e2707-32f7-4932-89d4-01c673a4802c",
+    "3457fa63-42a5-4b7a-8e1a-f9b14eb56a3f",
+    "f62b2950-483f-40fe-b8ca-6540be8de3ce",
+    "40b72035-448a-478a-a5de-5485094277e8",
+    "62cdb7f1-b00f-41b5-821f-c7b71753953e",
+    "5f61d91e-717f-44e3-99a0-ca0d34038642",
+    "33493c62-2247-4049-839c-a0ca56539f7e",
+    "31d1ef7b-109d-441a-abc2-8310c60014f7",
+    "4bb7f428-93cc-46f8-acf4-7d79776ec885",
+    "3c19b11d-ee1a-4f49-9ee3-3f460fbf49ef",
+    "46114e11-726a-421f-9c37-640060bc7ced",
+    "d9a1b04a-009a-474e-8b18-2b831fcaa21a",
+    "39842086-510c-452d-aa07-168e715190f0",
+    "b53d1053-3870-4fb2-b7d9-adeecb3b195d",
+    "3e8c38d7-08d2-44a9-9f6a-69df01d110f1",
+    "cff38332-29e0-4d91-85fc-4a2a29442cc8",
+    "bee84e92-e9fe-44fc-977b-ed1328115843",
+    "6d442721-1c54-4117-90a1-0c2aeb3a0182",
+    "86f78553-12e3-4722-81bc-715ae126a707",
+    "279736e1-3a01-4882-8dab-f3d1934e94f6",
+    "e64eca92-a016-4637-a82a-a093ffab65e1",
+    "a41be976-6dba-43c1-8bce-80c2e92cfc3f",
+    "78295ed3-1532-4c7f-885f-67ceec58131a",
+    "ce91aaa4-c606-4440-9767-8bbf61623001",
+    "92907bb0-134d-4b82-8093-c820f1c3ebc7"
+  ],
+  "tasks": [
+    {
+      "id": "7aeff68e-5827-49a4-a789-84ee007a0e06",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 141,
+      "shortId": "SN8TK",
+      "priority": 1,
+      "shortName": "capture-runtime-validation",
+      "title": "Capture runtime validation work for Pi and Claude guard model",
+      "status": "done",
+      "description": "Model the remaining runtime validation work that is implemented-but-not-verified. Evidence: guard/hook code already exists (`packages/agent-plan/src/index.ts:34,307,348` for Claude hook/setup notes; Pi guard and bypass behavior are already documented in current project docs), but open tracking still lives in `CHECKLIST.md:69` and `BACKLOG.md:P0-1/P1-1`. This task should preserve the distinction between implementation already landed and validation still required in fresh Pi / Claude Code sessions. Acceptance: planner task contains clear validation scope and no legacy checklist/backlog file is needed to remember it.\n\n---\n**Completion summary:**\nCaptured runtime validation work for Pi and Claude guard models in the planner task itself, replacing stale CHECKLIST.md:69 and BACKLOG.md references.\n\nValidation scope documented:\n1. Claude Code guard hook (`agent-plan guard pre-tool-use`) — implementation at packages/agent-plan/src/index.ts:320-360. Needs fresh-session verification of Edit/Write block, bypass window, and Bash freedom.\n2. Pi adapter advisory guard — implementation at packages/pi-adapter/src/index.ts:80-95, 986-1003, 2351-2360, 2922-2947. Needs verification of warning behavior, bypass/clear-bypass, and planner-op exemption.\n3. Cross-harness consistency checks: empty-plan skip, per-session bypass, no persistence.\n\nNo code changes. The task is now the source of truth for remaining validation work.",
+      "notes": "Runtime validation work to verify in fresh sessions:\n\n1. Claude Code guard hook (`agent-plan guard pre-tool-use`)\n   - Implementation: packages/agent-plan/src/index.ts:320-360\n   - Blocks Edit/Write tools only when no task is in-progress\n   - Allows Bash (git/build/test/ls) unconditionally\n   - Respects `planner-authorize-bypass` / `/planner bypass` window\n   - Validation needed:\n     - [ ] Fresh Claude Code project with agent-plan CLI setup: `agent-plan setup claude-code --project`\n     - [ ] Verify hook is registered in `.claude/claude.json` PreToolUse hooks\n     - [ ] Attempt Edit without active task → expect deny with reason + start/bypass hint\n     - [ ] Start a task via /planner task start → Edit should be allowed\n     - [ ] Run /planner bypass → Edit should be allowed for 15 min\n     - [ ] Run /planner clear-bypass → Edit should be blocked again\n\n2. Pi adapter advisory guard\n   - Implementation: packages/pi-adapter/src/index.ts:80-95 (bypass state), :986-1003 (edit/write warning), :2351-2360 (bypass/clear commands), :2922-2947 (tools)\n   - Non-blocking warning (Pi cannot deny tool use, only notify)\n   - Respects per-session bypass window\n   - Validation needed:\n     - [ ] Fresh Pi session with planner enabled\n     - [ ] Edit file without active task → expect UI notify warning \"NO ACTIVE TASK\"\n     - [ ] Start a task → warning should stop\n     - [ ] /planner bypass → warning silenced for 15 min\n     - [ ] /planner clear-bypass → warning returns\n     - [ ] Planner ops (task_start, handoff_write, etc.) must never trigger the warning\n\n3. Cross-harness guard consistency\n   - Both guards use the same PlanStore `isGuardBypassed` / `planner-authorize-bypass` semantics\n   - Both skip enforcement when no tasks exist yet\n   - Validation needed:\n     - [ ] Empty planner (no tasks) → no guard enforcement in either harness\n     - [ ] Ensure bypass is per-session and not persisted across restarts\n\nLegacy references (CHECKLIST.md:69, BACKLOG.md P0-1/P1-1) are stale; this task is now the source of truth for remaining validation work.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T13:47:13.774Z",
+      "completedAt": "2026-08-05T13:48:02.692Z",
+      "createdAt": "2026-08-04T13:00:30.213Z",
+      "updatedAt": "2026-08-05T13:48:02.692Z"
+    },
+    {
+      "id": "3bbce0c5-6b7c-4520-b0f5-20e45656926a",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 142,
+      "shortId": "MVYS6",
+      "priority": 2,
+      "shortName": "feature-discuss-flow",
+      "title": "Add feature discuss flow to Pi and MCP",
+      "status": "done",
+      "description": "Implement the missing feature-level discuss workflow so governance metadata can be set interactively for features, not only for phases/tasks. Evidence: `packages/plan-mcp/src/index.ts:586-726` exposes `planner-phase-discuss` and `planner-task-discuss`, but no `planner-feature-discuss`; Pi command routing in `packages/pi-adapter/src/index.ts:1686-1903` likewise supports phase/task discuss paths only. Acceptance: both harnesses expose a feature discuss flow aligned with the existing planner discuss model and feature governance rules.\n\n---\n**Completion summary:**\nImplemented feature-level discuss flow in both harness adapters.\n\nWhat changed:\n- `packages/plan-mcp/src/index.ts`\n  - added `planner-feature-discuss`\n  - supports: `feature`, `description`, `workDone`, `workRemaining`, `dependencies`\n  - marks `discussedAt`, `contextReady`, and `contextReadyReason`\n- `packages/pi-adapter/src/index.ts`\n  - added `/planner feature discuss [id|name]` interactive command flow\n  - added public `feature_discuss` tool with the same governance fields\n  - updated feature action hints/completions to include `discuss`\n- tests extended:\n  - `packages/pi-adapter/test/ref-validation.test.mjs`\n  - `packages/plan-mcp/test/ref-validation.test.mjs`\n\nValidation:\n- `pnpm --filter @agent-plan/mcp build`\n- `pnpm --filter @agent-plan/pi-adapter build`\n- `node --test packages/pi-adapter/test/ref-validation.test.mjs`\n- `node --test packages/plan-mcp/test/ref-validation.test.mjs`\n- `pnpm check`\n\nBehavior now available:\n- MCP: `planner-feature-discuss`\n- Pi command UX: `/planner feature discuss <F00x|shortId|name>`\n- Pi tool surface: `feature_discuss`\n\nThe new flow updates feature governance/context fields without introducing a separate feature status persistence model, keeping compatibility with the current derived-status design.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T13:48:02.007Z",
+      "completedAt": "2026-08-04T13:53:23.407Z",
+      "createdAt": "2026-08-04T13:00:41.449Z",
+      "updatedAt": "2026-08-04T13:53:23.407Z"
+    },
+    {
+      "id": "5d3688a7-a736-4fda-b042-4f799a8a94d2",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 143,
+      "shortId": "DYA58",
+      "priority": 3,
+      "shortName": "handoff-delete-ui",
+      "title": "Add delete action to the Web UI handoff page",
+      "status": "done",
+      "description": "Implement a delete/clear action directly in the `/handoff` Web UI. Evidence: `packages/plan-web-ui/src/routes/handoff.route.tsx:1-103` renders pending handoffs with open links only; delete API support already exists in `packages/plan-web-ui/src/lib/api.ts:206-219` (`DELETE /phases/:phaseId/handoff`). Acceptance: the handoff page lets the user clear a handoff from the browser, refreshes the list correctly, and preserves current routing/live-update behavior.\n\n---\n**Completion summary:**\nImplemented the handoff clear/delete action directly in the Web UI handoff page.\n\nChanges:\n- `packages/plan-web-ui/src/routes/handoff.route.tsx`\n  - imported `clearPhaseHandoff` and `Button`\n  - added local pending/error state for clear operations\n  - added `handleClear(handoff)` with browser confirmation\n  - calls `DELETE /phases/:phaseId/handoff` via `clearPhaseHandoff(...)`\n  - removes the cleared item from local state immediately and re-fetches `listHandoffs()` to refresh the page state\n  - preserves existing WS live-update listener and routing/open-phase link behavior\n  - shows inline error feedback if clear fails\n  - adds a `Clear` danger button per handoff row in `/handoff`\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `pnpm check`\n\nBehavior now:\n- user can clear a phase handoff from the browser\n- cleared handoff disappears from the list without manual reload\n- existing live-update behavior via `handoffUpdated` / `handoffCleared` events remains intact\n- open-phase routing remains unchanged",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T14:21:59.920Z",
+      "completedAt": "2026-08-04T14:23:43.948Z",
+      "createdAt": "2026-08-04T13:00:52.025Z",
+      "updatedAt": "2026-08-04T14:23:43.948Z"
+    },
+    {
+      "id": "c121cc15-4e1d-489f-88ea-75c60a23503f",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 144,
+      "shortId": "E2GQJ",
+      "priority": 4,
+      "shortName": "cleanup-orphan-phases",
+      "title": "Add orphan phase cleanup command",
+      "status": "done",
+      "description": "Provide a cleanup path for phase files that exist on disk but are no longer linked from any feature. Evidence: repository-wide search for `cleanup-orphans` / `orphan` across planner packages returned no command/tool/server support. Acceptance: at least one planner command/tool path can discover and clean orphan phases with explicit confirmation, and the behavior is documented in planner-facing surfaces.\n\n---\n**Completion summary:**\nImplemented explicit orphan phase discovery + cleanup across the planner stack.\n\nCore:\n- `packages/plan-core/src/plan-store.ts`\n  - added `OrphanPhaseSummary`\n  - added `listOrphanPhases()`\n  - added `cleanupOrphanPhases()`\n  - orphan definition: phase file whose `phase.featureId` no longer resolves to a valid feature; missing feature back-links alone are NOT treated as orphan because repair can relink them\n  - cleanup removes orphan phase files, scrubs any stale `feature.phaseIds` entries that still mention them, touches the manifest, and regenerates planner markdown\n- `packages/plan-core/src/index.ts`\n  - exported `OrphanPhaseSummary`\n\nMCP:\n- `packages/plan-mcp/src/index.ts`\n  - added `planner-cleanup-orphan-phases`\n  - dry-run by default (`confirm=false` / omitted): lists orphan phases and instructs rerun with confirmation\n  - `confirm=true`: deletes the discovered orphan phase files\n\nPi adapter:\n- `packages/pi-adapter/src/index.ts`\n  - added `/planner cleanup-orphans` command with explicit confirmation prompt\n  - added `plan_cleanup_orphan_phases` tool with dry-run default and confirmed cleanup mode\n  - documented the new command in planner completions/menu/help\n\nClaude Code command template:\n- `packages/agent-plan/src/index.ts`\n  - added `cleanup-orphans` to the distributed planner command hint and routing notes\n\nTests:\n- `packages/plan-core/test/integrity-regression.test.mjs`\n  - added regression coverage for orphan discovery + deletion\n- `packages/pi-adapter/test/ref-validation.test.mjs`\n  - added dry-run/confirm tool coverage for `plan_cleanup_orphan_phases`\n- `packages/plan-mcp/test/ref-validation.test.mjs`\n  - added dry-run/confirm tool coverage for `planner-cleanup-orphan-phases`\n\nValidation:\n- `pnpm --filter @agent-plan/core build`\n- `pnpm --filter @agent-plan/mcp build`\n- `pnpm --filter @agent-plan/pi-adapter build`\n- `pnpm --filter agent-plan build`\n- `node --test packages/plan-core/test/integrity-regression.test.mjs`\n- `node --test packages/pi-adapter/test/ref-validation.test.mjs`\n- `node --test packages/plan-mcp/test/ref-validation.test.mjs`\n- `pnpm check`\n\nBehavior now available:\n- Pi slash command: `/planner cleanup-orphans`\n- Pi tool: `plan_cleanup_orphan_phases` (dry-run unless `confirm=true`)\n- MCP tool: `planner-cleanup-orphan-phases` (dry-run unless `confirm=true`)\n- command surfaces document that cleanup requires explicit confirmation before deletion.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T14:27:04.289Z",
+      "completedAt": "2026-08-04T14:46:39.958Z",
+      "createdAt": "2026-08-04T13:00:57.883Z",
+      "updatedAt": "2026-08-04T14:46:39.958Z"
+    },
+    {
+      "id": "42d03c0c-8bf7-443b-a2f7-64244ce6617d",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 145,
+      "shortId": "T2ULE",
+      "priority": 5,
+      "shortName": "requirements-page",
+      "title": "Build the Web UI requirements page",
+      "status": "done",
+      "description": "Expose requirements CRUD in the browser. Evidence: server endpoints already exist in `packages/plan-server/src/serve.ts:221-245`, but `packages/plan-web-ui/src/routes/` has no requirements route/page. Acceptance: requirements are viewable/editable from the Web UI, using the existing server API and consistent route/navigation patterns.\n\n---\n**Completion summary:**\nBuilt the first full Web UI requirements surface and wired it into navigation/runtime.\n\nImplemented:\n- Added top-level Requirements page at `/requirements` using the existing list + modal editing pattern.\n- Added create/edit/delete browser flows for requirements.\n- Added server DELETE endpoint so the browser can expose full CRUD consistently.\n- Added linked-phase selection in create/edit modals using live phase data.\n- Kept requirement `macroTasks` preserved on update and surfaced their count/read-only note, without building a nested macro-task editor in this task.\n\nFiles touched:\n- `packages/plan-web-ui/src/app/router.tsx`\n  - registered `requirements` route + create/edit modal children + delete action route\n- `packages/plan-web-ui/src/components/layout/top-nav.tsx`\n  - added Requirements top-nav entry\n- `packages/plan-web-ui/src/components/ui/entity-badge.tsx`\n- `packages/plan-web-ui/src/styles/base.css`\n  - added requirement badge styling\n- `packages/plan-web-ui/src/lib/types.ts`\n  - added `RequirementStatus`, `MacroTask`, `Requirement`\n- `packages/plan-web-ui/src/lib/api.ts`\n  - added `getRequirements/createRequirement/updateRequirement/deleteRequirement`\n- `packages/plan-web-ui/src/lib/statuses.ts`\n  - added `requirementStatuses`\n- `packages/plan-web-ui/src/routes/requirements/loader.ts`\n- `packages/plan-web-ui/src/routes/requirements/route.tsx`\n- `packages/plan-web-ui/src/routes/requirement-create.action.ts`\n- `packages/plan-web-ui/src/routes/requirement-edit.action.ts`\n- `packages/plan-web-ui/src/routes/requirement-delete.action.ts`\n- `packages/plan-web-ui/src/routes/requirement-create-modal.route.tsx`\n- `packages/plan-web-ui/src/routes/requirement-edit-modal.route.tsx`\n- `packages/plan-web-ui/src/components/requirements/linked-phase-selector.tsx`\n- `packages/plan-server/src/serve.ts`\n  - added `DELETE /api/requirements/:id`\n- synced served bundles with `scripts/copy-web-ui.sh`\n  - `packages/pi-adapter/web-ui-dist/**`\n  - `packages/plan-server/web-ui-dist/**`\n\nBehavior delivered:\n- Requirements are now viewable from their own page.\n- Users can create/edit/delete requirements from the browser.\n- Requirements can be linked to existing phases via checkbox selection.\n- Linked phases render as navigable chips back to the phase detail pages.\n- Live-sync already revalidates on `requirements-updated`, so the new page stays consistent with websocket updates.\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm --filter @agent-plan/pi-adapter build`\n- `pnpm --filter @agent-plan/server build`\n- `pnpm check`\n\nDesign note:\n- This task intentionally stopped at top-level requirement CRUD. Nested `macroTasks` are preserved but not yet edited in the Web UI; they need a dedicated follow-up if full nested requirement editing becomes necessary.",
+      "notes": "Implementation notes captured during execution:\n- Add a dedicated `/requirements` Web UI route with the same list + modal editing pattern already used by features.\n- Extend `packages/plan-web-ui/src/lib/types.ts` + `lib/api.ts` with Requirement/RequirementStatus support.\n- Wire router + top navigation so requirements are reachable as a first-class page, not a dashboard-only special case.\n- Use `packages/plan-server/src/serve.ts` requirements endpoints for list/create/update; add a DELETE endpoint so the browser can expose full CRUD consistently with other entities.\n- In the first UI pass, edit `title`, `description`, `status`, and `linkedPhaseIds`; preserve existing `macroTasks` on update and surface them read-only/count-only rather than building a full macro-task editor in this task.\n- Populate linked phases from existing phase data and render them as a checkbox list using human-readable `P00x — title` labels.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T14:46:57.447Z",
+      "completedAt": "2026-08-04T15:01:19.987Z",
+      "createdAt": "2026-08-04T13:01:11.171Z",
+      "updatedAt": "2026-08-04T15:01:19.987Z"
+    },
+    {
+      "id": "276a0ad1-3724-4f05-86b8-63769b2e65a5",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 146,
+      "shortId": "GKCBW",
+      "priority": 6,
+      "shortName": "planstore-diagnostics",
+      "title": "Improve PlanStore read diagnostics",
+      "status": "done",
+      "description": "Surface useful schema/cause information when planner JSON reads fail. Evidence: `packages/plan-core/src/plan-store.ts:324-334` still throws `new PlanStoreError(\"read failed: <path>\", cause)` without enriching the top-level message with validation details. Acceptance: corruption/schema errors remain wrapped in `PlanStoreError` but include enough structured context for users and harnesses to diagnose bad planner files quickly.\n\n---\n**Completion summary:**\nImproved PlanStore read diagnostics in packages/plan-core/src/plan-store.ts.\n\nChanges:\n- Extended PlanStoreError with optional `details: PlanStoreErrorDetails` field.\n- Updated internal readJson helper to enrich errors with structured context:\n  - path and operation\n  - backupTried / backupFailed flags\n  - rawPreview (first 240 chars of the offending file)\n  - jsonParseError message + line/column for JSON SyntaxErrors\n  - validationErrors with first 8 Zod issues (path + message)\n- Backup recovery behavior preserved.\n\nValidation:\n- Added packages/plan-core/test/read-diagnostics.test.mjs with 4 passing tests.\n- pnpm check clean\n- plan-core build clean\n- Pre-existing resume-flow.test.mjs failures are unrelated.",
+      "notes": "Improved PlanStore read diagnostics in packages/plan-core/src/plan-store.ts.\n\nChanges:\n- Extended PlanStoreError with optional `details: PlanStoreErrorDetails` field for structured context.\n- Updated internal `readJson<T>` helper to enrich errors with:\n  - `path` and `operation: \"readJson\"`\n  - `backupTried` / `backupFailed` flags\n  - `rawPreview`: first 240 chars of the offending file\n  - `jsonParseError`: JSON SyntaxError message + line/column when position is available\n  - `validationErrors`: first 8 Zod issues with dotted paths and messages\n- Backup recovery flow unchanged: tries `.bak` first, only enriches the primary error if backup also fails.\n\nValidation:\n- Added packages/plan-core/test/read-diagnostics.test.mjs with 4 cases:\n  - corrupt JSON → jsonParseError details\n  - schema validation failure → validationErrors details\n  - valid .bak backup → recovery succeeds\n  - corrupt primary + corrupt backup → backupFailed: true\n- pnpm check clean\n- plan-core build clean\n- new test file 4/4 pass\n- Pre-existing resume-flow.test.mjs failures are unrelated to this change.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T13:49:54.028Z",
+      "completedAt": "2026-08-05T13:52:45.164Z",
+      "createdAt": "2026-08-04T13:01:17.493Z",
+      "updatedAt": "2026-08-05T13:52:45.164Z"
+    },
+    {
+      "id": "2683041b-3301-4a20-bf57-b2e67f0da04d",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 147,
+      "shortId": "LT567",
+      "priority": 7,
+      "shortName": "project-description-editor",
+      "title": "Add a project short description editor in the Web UI",
+      "status": "done",
+      "description": "Expose editing for `project.description` in the Web UI. Evidence: `packages/plan-web-ui/src/routes/project-edit.route.tsx` and `project-edit.action.ts` only load/save `goal`, even though the project model and dashboard use `description`. Acceptance: the UI provides an explicit editor for the short project description without regressing the existing goal editor flow.\n\n---\n**Completion summary:**\nAdded explicit Web UI editing support for `project.description` while preserving the existing goal flow.\n\nDelivered:\n- Updated `packages/plan-web-ui/src/routes/project-edit.route.tsx`:\n  - renamed the page from `Edit project goal` to `Edit project overview`\n  - added a new explicit `Short description` textarea bound to `project.description`\n  - kept the existing `Project goal` textarea intact\n  - updated helper copy and submit button text so the page clearly edits both overview fields\n- Updated `packages/plan-web-ui/src/routes/project-edit.action.ts`:\n  - now persists both `description` and `goal` via `updateProject()` instead of only saving `goal`\n- Synced updated web assets into both embedded distributions:\n  - `packages/pi-adapter/web-ui-dist`\n  - `packages/plan-server/web-ui-dist`\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n\nOutcome:\n- the Web UI now provides an explicit editor for the project short description used in dashboard overview contexts\n- the existing long-form project goal editor flow continues to work unchanged.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T16:18:36.153Z",
+      "completedAt": "2026-08-04T16:19:13.347Z",
+      "createdAt": "2026-08-04T13:01:23.392Z",
+      "updatedAt": "2026-08-04T16:19:13.347Z"
+    },
+    {
+      "id": "b3b06a3d-a48c-4118-94ce-74ca14e68b6d",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 148,
+      "shortId": "M8G9S",
+      "priority": 8,
+      "shortName": "multi-harness-docs-schema",
+      "title": "Publish multi-harness docs and public planner schema",
+      "status": "done",
+      "description": "Add the missing cross-harness documentation/schema deliverables. Evidence: `docs/setup-claude-code.md` exists, but repo audit found no Codex-focused setup doc and no published JSON schema artifact/documented public planner schema despite `ROADMAP.md` phase 7 expectations. Acceptance: the repo exposes stable docs/schema references that external harnesses can use to understand `.planner/` without relying on internal source spelunking.\n\n---\n**Completion summary:**\nPublished multi-harness docs and public planner schema.\n\nDeliverables:\n- docs/planner-schema.json — public JSON schema (draft-07) generated from @agent-plan/core PlanWorkspaceSchema.\n- docs/setup-codex.md — Codex MCP alignment: install, MCP server block, per-project init, root resolution, guard model, cross-references.\n- scripts/generate-planner-schema.cjs — script to regenerate the schema from canonical Zod schemas.\n\nProject wiring:\n- package.json: added build:schema script.\n- README.md: added Documentation section linking all docs.\n- docs/setup-claude-code.md: added Public references section.\n- packages/plan-core/package.json: added zod-to-json-schema dev dependency.\n\nValidation:\n- pnpm build:schema runs cleanly and produces deterministic output.\n- pnpm check clean.\n- Generated schema reruns with no diff.",
+      "notes": "Completed multi-harness docs and public planner schema deliverables.\n\nFiles added:\n- docs/planner-schema.json — public JSON schema generated from @agent-plan/core Zod PlanWorkspaceSchema (~900 lines, draft-07).\n- docs/setup-codex.md — Codex MCP alignment document covering install, MCP server block, per-project init, planner root resolution, task guard model, and cross-references.\n- scripts/generate-planner-schema.cjs — build script that regenerates docs/planner-schema.json from the canonical core schemas.\n\nFiles updated:\n- package.json — added build:schema script.\n- README.md — added Documentation section linking setup-claude-code.md, setup-codex.md, planner-schema.json, and AGENTS.md.\n- docs/setup-claude-code.md — replaced the stale Notes section with a Public references section pointing to the schema and Codex doc.\n- packages/plan-core/package.json — added zod-to-json-schema as dev dependency for local schema generation.\n\nValidation:\n- pnpm build:schema runs cleanly and regenerates docs/planner-schema.json.\n- pnpm check clean.\n- Generated schema is deterministic (rerunning the script produces no diff).",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T14:09:24.586Z",
+      "completedAt": "2026-08-05T14:11:59.635Z",
+      "createdAt": "2026-08-04T13:01:30.906Z",
+      "updatedAt": "2026-08-05T14:11:59.635Z"
+    },
+    {
+      "id": "a852cf4e-6046-4c6d-b8de-fe9894bf17bd",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 149,
+      "shortId": "XUWVQ",
+      "priority": 9,
+      "shortName": "zed-integration",
+      "title": "Add Zed integration setup and docs",
+      "status": "done",
+      "description": "Implement the deferred Zed integration baseline. Evidence: repo search found no `setup zed` command and no Zed setup docs/config, while `BACKLOG.md:P3-6` defines the intended MCP-first approach. Acceptance: users can configure Agent Plan for Zed via a documented/setup path that does not implicitly initialize `.planner/`.\n\n---\n**Completion summary:**\nCompleted Zed MCP setup documentation. No Zed extension was built, per user request.\n\nDeliverables:\n- docs/setup-zed.md — full setup guide for adding Agent Plan as a custom/local context server in Zed:\n  - install `agent-plan` globally;\n  - add the `agent-plan` context server to Zed settings (npx agent-plan mcp);\n  - verify active status in Settings → AI → MCP Servers;\n  - run `planner-init` per project;\n  - planner root resolution and AGENT_PLAN_ROOT override;\n  - example prompts for the Zed Agent Panel;\n  - custom agent profile to force planner-only tooling;\n  - task guard model note (Zed lacks PreToolUse hook);\n  - references to Claude Code/Codex docs and public schema.\n- README.md — added docs/setup-zed.md to the Documentation list.\n- docs/setup-claude-code.md — added Zed setup cross-reference.\n- docs/setup-codex.md — added Zed setup cross-reference.\n\nValidation:\n- pnpm check (root typecheck) passes.\n- No code changes beyond Markdown and README edits.",
+      "notes": "Completed Zed MCP setup documentation.\n\nDeliverables:\n- Created docs/setup-zed.md with:\n  - What is configured (planner-* tool list)\n  - npm install step\n  - Zed settings JSON for adding agent-plan as a custom context server\n  - How to verify the server is active (green dot in Settings → AI → MCP Servers)\n  - Per-project planner-init\n  - Planner root resolution including AGENT_PLAN_ROOT override\n  - Example prompts for the Zed Agent Panel\n  - Custom agent profile snippet to force planner-only tooling\n  - Task guard model note (Zed has no PreToolUse hook yet)\n  - Reload/update note\n  - Cross-references to Claude Code and Codex docs\n- Updated README.md to list docs/setup-zed.md in the Documentation section.\n- Updated docs/setup-claude-code.md and docs/setup-codex.md to cross-reference the new Zed doc.\n- No Zed extension code was created, as requested.\n\nValidation:\n- Root typecheck (pnpm check) passes.",
+      "statusLog": [
+        {
+          "id": "a852cf4e-6046-4c6d-b8de-fe9894bf17bd-check-001-planned-deferred",
+          "date": "2026-08-05T13:47:42.263Z",
+          "fromStatus": "planned",
+          "toStatus": "deferred",
+          "title": "Zed integration is not a near-term priority; defer until after Claude Code and Pi harnesses are stable and documented. The task can be reactivated when Zed adapter demand arises or when the plugin structure is ready for a third harness.",
+          "description": "Zed integration is not a near-term priority; defer until after Claude Code and Pi harnesses are stable and documented. The task can be reactivated when Zed adapter demand arises or when the plugin structure is ready for a third harness."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T15:01:59.430Z",
+      "completedAt": "2026-08-05T15:02:56.372Z",
+      "createdAt": "2026-08-04T13:01:37.349Z",
+      "updatedAt": "2026-08-05T15:02:56.372Z"
+    },
+    {
+      "id": "3a3e2707-32f7-4932-89d4-01c673a4802c",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 150,
+      "shortId": "EBRST",
+      "priority": 10,
+      "shortName": "track-pi-upstream-issue",
+      "title": "Track upstream Pi session_start prompt rendering issue",
+      "status": "done",
+      "description": "Capture the external follow-up for the known Pi extension bug where `ctx.ui.input()` / `ctx.ui.select()` do not render in `session_start` for NPM-loaded ESM extensions. Evidence: workaround and diagnosis are documented in `packages/pi-adapter/src/index.ts:799-855` and legacy notes, but the upstream issue itself still needs to be filed/tracked. Acceptance: planner contains an explicit task for filing/tracking the upstream issue instead of relying on stale checklist notes.\n\n---\n**Completion summary:**\nTracked the upstream Pi session_start prompt rendering issue in the planner task and updated the code comment.\n\nChanges:\n- packages/pi-adapter/src/index.ts: added inline comment referencing planner task T151 · EBRST in the session_start enable-gating block.\n- Task notes now contain the full diagnosis, upstream issue filing template (repo, title, labels, body), and the implemented local workaround.\n\nValidation:\n- pnpm --filter @agent-plan/pi-adapter check clean.\n\nNo functional code changes; the workaround (disabled-by-default + /planner load) remains in place. The upstream filing itself is deferred to manual follow-up when the user wants to open it.",
+      "notes": "Captured upstream Pi follow-up for the session_start prompt rendering bug.\n\nDiagnosis from packages/pi-adapter/src/index.ts:799-855:\n- `ctx.ui.input()` and `ctx.ui.select()` do NOT render when called inside the `session_start` hook of an NPM-loaded ESM Pi extension.\n- The prompt hangs invisible; if wrapped with a timeout, it expires after the safety net without user interaction.\n- This only affects NPM-installed ESM extensions; local source-loaded extensions render the prompts correctly.\n- The practical workaround implemented in Agent Plan: remove ALL blocking startup prompts from `session_start`, keep the planner disabled by default, and require an explicit `/planner load` command (which runs outside `session_start`) to enable the planner and start the web UI.\n\nUpstream issue to file against Pi:\n- Repository: https://github.com/earendil-works/pi-coding-agent (or the appropriate Pi extension runtime repo)\n- Title: `ctx.ui.input()/select() do not render during session_start for NPM-loaded ESM extensions`\n- Labels: bug, extensions, ui\n- Body should include:\n  - Pi version and Node version (currently Node 25.4.0)\n  - Extension loaded via `pi install npm:@agent-plan/pi-adapter`\n  - Code snippet: `pi.on(\"session_start\", async (_event, ctx) => { await ctx.ui.input({ message: \"Enable?\" }); })`\n  - Expected: prompt renders and resolves\n  - Actual: prompt never renders; the call hangs until timeout\n  - Workaround: defer interactive prompts to a later hook or command handler\n\nThis task is now the source of truth for tracking the upstream issue. The legacy CHECKLIST.md notes about the prompt freeze are superseded. No Agent Plan code changes needed; the local workaround is already in place.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T14:14:02.726Z",
+      "completedAt": "2026-08-05T14:14:35.961Z",
+      "createdAt": "2026-08-04T13:01:43.431Z",
+      "updatedAt": "2026-08-05T14:14:35.961Z"
+    },
+    {
+      "id": "3457fa63-42a5-4b7a-8e1a-f9b14eb56a3f",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 151,
+      "shortId": "CD7HJ",
+      "priority": 11,
+      "shortName": "planner-only-governance",
+      "title": "Migrate legacy backlog files into planner-only governance",
+      "status": "done",
+      "description": "After every genuine open item from `CHECKLIST.md` and `BACKLOG.md` has been captured as planner tasks, remove the legacy files and rewrite repo governance docs to reference planner-only workflow. Files and references to update include `AGENTS.md`, `PROJECT.md`, `ROADMAP.md`, and any remaining `CHECKLIST.md` / `BACKLOG.md` mentions found by grep. Preserve existing open planner work (`P034/T136`, `P034/T137`) without duplication. Acceptance: planner becomes the only source of truth for open work, generated docs are re-rendered, and the repository no longer depends on `CHECKLIST.md` or `BACKLOG.md`.\n\n---\n**Completion summary:**\nCompleted the planner-only governance migration.\n\nWhat was done:\n- Audited `CHECKLIST.md` and `BACKLOG.md` against the actual planner state and the current codebase before deleting them.\n- Created new feature `F010 — Planner-only backlog consolidation` and phase `P037 — Capture residual backlog in planner and remove legacy checklist files`.\n- Captured the still-real residual gaps as explicit planner tasks:\n  - `T142` runtime validation work\n  - `T143` feature discuss flow\n  - `T144` handoff delete action in Web UI\n  - `T145` orphan phase cleanup command\n  - `T146` requirements page\n  - `T147` PlanStore diagnostics\n  - `T148` project description editor\n  - `T149` multi-harness docs + public planner schema\n  - `T150` Zed integration\n  - `T151` upstream Pi `session_start` prompt issue tracking\n- Rewrote repository governance docs to planner-only:\n  - `AGENTS.md`\n  - `PROJECT.md`\n  - `ROADMAP.md`\n  - `README.md`\n  - `plugins/_shared/planner-skill.md.in`\n  - `plugins/claude-code/skills/planner/SKILL.md`\n- Deleted legacy files:\n  - `CHECKLIST.md`\n  - `BACKLOG.md`\n- Re-rendered planner docs via `plan_render`.\n\nValidation:\n- `node scripts/sync-plugins.cjs`\n- `pnpm check`\n- `git diff --check`\n- repo-wide grep confirmed no remaining `CHECKLIST.md` / `BACKLOG.md` references outside the deleted files\n\nImportant implementation note:\n- During the initial capture attempt, creating many planner tasks in parallel produced duplicate `T141` numbers in the new phase. I deleted that first phase and recreated `P037` serially, which restored correct global numbering (`T142`..`T152`). This suggests a planner task-number allocation race worth investigating separately if it reproduces outside this maintenance workflow.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T13:02:01.304Z",
+      "completedAt": "2026-08-04T13:05:16.721Z",
+      "createdAt": "2026-08-04T13:01:49.922Z",
+      "updatedAt": "2026-08-04T13:05:16.721Z"
+    },
+    {
+      "id": "f62b2950-483f-40fe-b8ca-6540be8de3ce",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 153,
+      "shortId": "C6Z3K",
+      "priority": 12,
+      "shortName": "unify-detail-page-metadata-vis",
+      "title": "Unify detail-page metadata visibility across feature/phase/task Web UI",
+      "status": "done",
+      "description": "Capture the UX cleanup discussed for planner detail pages so humans can SEE planning metadata without being forced to edit agent-facing fields manually. Current state: `packages/plan-web-ui/src/routes/feature-detail/route.tsx:114-127` renders a generic `Window` card as `startDate -> endDate` and only shows `workDone` / `workRemaining` when present; `packages/plan-web-ui/src/routes/phase-detail/route.tsx:128-185` focuses on counters/goals/dependencies but does not expose a parallel metadata summary; `packages/plan-web-ui/src/routes/task-detail/route.tsx:157-161` shows checklist/subtask/start/completed/phase cards but not priority or a broader metadata section. Edit flows are also inconsistent: `packages/plan-web-ui/src/routes/feature-edit-modal.route.tsx:18-31` exposes start/end, priority, workDone, and workRemaining directly, while `packages/plan-web-ui/src/routes/phase-edit-modal.route.tsx:31-36` and `packages/plan-web-ui/src/routes/task-edit-modal.route.tsx:31-36` expose status/priority only. Goal: normalize feature/phase/task detail pages so metadata such as priority, timeline, and agent-managed notes are visible in a coherent read-only way; rename or replace the confusing `Window` label with a clearer `Timeline` concept (or hide it when empty); avoid noisy empty cards; and keep edit modals human-focused rather than centering `workDone/workRemaining` as primary manual-entry fields. Preserve the existing responsive detail-page layout and current read-only information, but make the metadata model legible and consistent across the three entity types.\n\n---\n**Completion summary:**\nUnified feature/phase/task detail metadata visibility in the Web UI with shared reusable metadata primitives.\n\nDelivered:\n- Added shared component `packages/plan-web-ui/src/components/ui/detail-metadata.tsx` with:\n  - `DetailMetadataGrid`\n  - `formatPriority()`\n  - `formatTimeline()`\n- Updated `packages/plan-web-ui/src/routes/feature-detail/route.tsx`:\n  - removed the confusing `Window` card\n  - replaced it with a conditional `Timeline` metadata card via shared helper\n  - exposed `Priority` through the shared metadata grid\n  - moved `workDone` / `workRemaining` into a collapsed `Planning notes` accordion so they remain visible read-only without dominating the page\n  - avoided empty metadata noise by hiding timeline/priority when unset\n- Updated `packages/plan-web-ui/src/routes/phase-detail/route.tsx`:\n  - added shared metadata cards for `Priority`, `Linked requirements`, `Risks`, and `Open questions`\n  - exposed `phase.notes` read-only through a `Notes` accordion when present\n  - preserved the existing counts/goals/dependencies/completion overview and linked-requirements accordion\n- Updated `packages/plan-web-ui/src/routes/task-detail/route.tsx`:\n  - added shared metadata cards for `Priority`, `Short name`, `Started`, `Completed`, and `Phase`\n  - kept checklist/subtask counters but removed empty `No notes` filler text to reduce noise\n- Updated `packages/plan-web-ui/src/routes/feature-edit-modal.route.tsx`:\n  - kept the modal human-focused for core fields\n  - moved `workDone` / `workRemaining` under a collapsed `Planning notes` accordion instead of leaving them as primary always-open fields\n- Synced updated web assets into both embedded distributions:\n  - `packages/pi-adapter/web-ui-dist`\n  - `packages/plan-server/web-ui-dist`\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n\nOutcome:\n- feature/phase/task detail pages now expose planning metadata in a more coherent and consistent read-only structure\n- the misleading `Window` label is gone in favor of `Timeline`\n- empty-value noise is reduced\n- agent-facing progress notes remain accessible without dominating edit flows or detail layouts.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f62b2950-483f-40fe-b8ca-6540be8de3ce-check-001-audit-which-metadata-fields-already-exist-in-feature-phase-task-detail-loaders-and-decide-which-should-be-surfaced-read-only-on-each-page",
+          "number": 1,
+          "title": "Audit which metadata fields already exist in feature/phase/task detail loaders and decide which should be surfaced read-only on each page.",
+          "checked": true
+        },
+        {
+          "id": "f62b2950-483f-40fe-b8ca-6540be8de3ce-check-002-replace-or-rename-the-feature-window-card-with-a-clearer-timeline-treatment-and-suppress-empty-noisy-metadata-blocks-when-values-are-absent",
+          "number": 2,
+          "title": "Replace or rename the feature `Window` card with a clearer timeline treatment and suppress empty/noisy metadata blocks when values are absent.",
+          "checked": true
+        },
+        {
+          "id": "f62b2950-483f-40fe-b8ca-6540be8de3ce-check-003-add-a-consistent-metadata-section-card-pattern-across-feature-phase-task-detail-pages-including-priority-and-any-existing-timeline-work-note-fields-where-applicable",
+          "number": 3,
+          "title": "Add a consistent metadata section/card pattern across feature/phase/task detail pages, including priority and any existing timeline/work-note fields where applicable.",
+          "checked": true
+        },
+        {
+          "id": "f62b2950-483f-40fe-b8ca-6540be8de3ce-check-004-review-edit-modals-so-they-remain-human-simple-while-the-richer-metadata-stays-visible-from-the-detail-pages",
+          "number": 4,
+          "title": "Review edit modals so they remain human-simple while the richer metadata stays visible from the detail pages.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T16:08:23.483Z",
+      "completedAt": "2026-08-04T16:12:16.192Z",
+      "createdAt": "2026-08-04T14:14:35.247Z",
+      "updatedAt": "2026-08-04T16:12:16.192Z"
+    },
+    {
+      "id": "40b72035-448a-478a-a5de-5485094277e8",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 154,
+      "shortId": "W6A3B",
+      "priority": 13,
+      "shortName": "animate-the-favicon-while-at-l",
+      "title": "Animate the favicon while at least one task is in progress",
+      "status": "done",
+      "description": "Add a future Web UI polish task to make the browser favicon animate like a lightweight spinner whenever the planner has at least one in-progress task, and return to the static icon when none are active. Relevant anchors: `packages/plan-web-ui/src/app/root.tsx:1-31` already loads `activeTasks` in the root loader and updates `document.title`; `packages/plan-web-ui/src/components/layout/app-shell.tsx:10-72` already derives and renders the in-progress task header from `activeTasks`; `packages/plan-web-ui/src/app/live-sync.tsx:1-166` already listens to websocket events and revalidates on planner changes, so favicon state can stay synced without manual refresh; `packages/plan-web-ui/index.html:1-9` currently has no explicit favicon management and will likely need a base `<link rel=\"icon\">` plus runtime swapping or canvas-based animation. Acceptance: when `activeTasks.length > 0`, the favicon visibly animates in a subtle spinner-like way; when it returns to zero, the favicon reverts cleanly; the behavior survives live sync/revalidation and does not introduce noisy CPU-heavy animation loops.\n\n---\n**Completion summary:**\nImplemented animated favicon for in-progress tasks and addressed all checklist items.\n\nDeliverables:\n- packages/plan-web-ui/src/hooks/use-animated-favicon.ts — canvas-based favicon hook.\n- packages/plan-web-ui/src/app/root.tsx — integrates the hook with root activeTasks.\n- packages/plan-web-ui/index.html — added a stable base SVG favicon link so the icon is present before React hydration.\n\nChecklist completed:\n- Stable favicon link strategy in index.html + runtime controller from root app.\n- Favicon state driven from root activeTasks (same data used by AppShell).\n- WebSocket revalidation (LiveSyncBridge revalidates the root loader) updates favicon promptly without page reload.\n- Animation is subtle: 10 fps rotating arc, pauses on hidden tabs, restores static icon on cleanup.\n\nValidation:\n- Type check and production build clean.\n- Synced the Vite build to pi-adapter and plan-server web-ui-dist.",
+      "notes": "Implemented animated favicon for in-progress tasks.\n\nChanges:\n- packages/plan-web-ui/src/hooks/use-animated-favicon.ts — new hook that:\n  - Draws a static \"A\" favicon (canvas data URL) when no tasks are in progress.\n  - Draws a subtle rotating arc overlay on the same \"A\" icon while activeTasks.length > 0.\n  - Updates at 10 fps (100ms interval) and pauses when document.hidden to reduce CPU.\n  - Creates/restores the <link rel=\"icon\"> element and cleans up on unmount.\n- packages/plan-web-ui/src/app/root.tsx — calls useAnimatedFavicon(activeTasks.length > 0).\n\nVerification:\n- pnpm --filter @agent-plan/web-ui check clean.\n- pnpm --filter @agent-plan/web-ui build clean.\n- Built bundle contains canvas, setInterval, and toDataURL usage (confirmed via grep).\n- Synced the Vite build to pi-adapter and plan-server web-ui-dist via scripts/copy-web-ui.sh.\n\nNo separate favicon asset required; the favicon is generated dynamically from canvas so it always matches the current --accent CSS variable.",
+      "statusLog": [
+        {
+          "id": "40b72035-448a-478a-a5de-5485094277e8-check-001-in-progress-waiting",
+          "date": "2026-08-05T14:21:12.458Z",
+          "fromStatus": "in-progress",
+          "toStatus": "waiting",
+          "title": "L'utente ha richiesto una nuova modifica UI prioritaria (pattern e colorazione stato su work tree e liste dettaglio) durante il lavoro sul favicon. T155 viene messo in attesa per riprenderlo dopo aver completato la nuova richiesta.",
+          "description": "L'utente ha richiesto una nuova modifica UI prioritaria (pattern e colorazione stato su work tree e liste dettaglio) durante il lavoro sul favicon. T155 viene messo in attesa per riprenderlo dopo aver completato la nuova richiesta."
+        },
+        {
+          "id": "40b72035-448a-478a-a5de-5485094277e8-check-002-waiting-in-progress",
+          "date": "2026-08-05T14:21:20.198Z",
+          "fromStatus": "waiting",
+          "toStatus": "in-progress",
+          "title": "L'utente ha chiesto di riprendere l'attività precedente (favicon animation). Il task T155 torna in-progress; la richiesta UI su pattern stato viene rimandata.",
+          "description": "L'utente ha chiesto di riprendere l'attività precedente (favicon animation). Il task T155 torna in-progress; la richiesta UI su pattern stato viene rimandata."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "40b72035-448a-478a-a5de-5485094277e8-check-001-add-a-stable-favicon-asset-link-strategy-in-packages-plan-web-ui-index-html-and-or-a-runtime-favicon-controller-mounted-from-the-root-app",
+          "number": 1,
+          "title": "Add a stable favicon asset/link strategy in `packages/plan-web-ui/index.html` and/or a runtime favicon controller mounted from the root app.",
+          "checked": true
+        },
+        {
+          "id": "40b72035-448a-478a-a5de-5485094277e8-check-002-drive-favicon-active-idle-state-from-the-same-root-activetasks-data-already-used-by-appshell-not-from-duplicated-ad-hoc-task-queries",
+          "number": 2,
+          "title": "Drive favicon active/idle state from the same root `activeTasks` data already used by `AppShell`, not from duplicated ad-hoc task queries.",
+          "checked": true
+        },
+        {
+          "id": "40b72035-448a-478a-a5de-5485094277e8-check-003-ensure-websocket-driven-revalidation-updates-the-favicon-promptly-when-tasks-start-complete-without-requiring-a-full-page-reload",
+          "number": 3,
+          "title": "Ensure websocket-driven revalidation updates the favicon promptly when tasks start/complete without requiring a full page reload.",
+          "checked": true
+        },
+        {
+          "id": "40b72035-448a-478a-a5de-5485094277e8-check-004-keep-the-animation-subtle-and-lightweight-so-it-does-not-create-distracting-visual-noise-or-unnecessary-cpu-usage",
+          "number": 4,
+          "title": "Keep the animation subtle and lightweight so it does not create distracting visual noise or unnecessary CPU usage.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T14:14:39.788Z",
+      "completedAt": "2026-08-05T14:23:09.964Z",
+      "createdAt": "2026-08-04T14:49:16.850Z",
+      "updatedAt": "2026-08-05T14:23:09.964Z"
+    },
+    {
+      "id": "62cdb7f1-b00f-41b5-821f-c7b71753953e",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 155,
+      "shortId": "L39XG",
+      "priority": 14,
+      "shortName": "polish-requirements-ux-with-co",
+      "title": "Polish requirements UX with collapsed cards and reverse phase links",
+      "status": "done",
+      "description": "Implement a follow-up UX pass for the new requirements surface. Evidence and anchors: `packages/plan-web-ui/src/routes/requirements/route.tsx` currently renders fully expanded requirement cards, which causes noisy long content and mobile overlap risk; cards should be collapsed by default and show only the title when closed. `packages/plan-web-ui/src/routes/phase-detail/loader.ts` currently loads only `feature` + `phase`, so a phase reader cannot see which requirements reference that phase. `packages/plan-web-ui/src/routes/phase-detail/route.tsx` therefore has no reverse requirement section today. `packages/plan-web-ui/src/lib/api.ts` already exposes requirement fetching, so the phase detail loader can derive the inverse relation at read time from `Requirement.linkedPhaseIds` without persisting duplicated backlinks on phases. Preserve canonical ownership on the requirement side only; add a derived reverse view in phase detail. Acceptance: requirements page cards are collapsed by default with title-only closed state, expanded content wraps safely on mobile, and phase detail shows linked requirements derived from requirements data.\n\n---\n**Completion summary:**\nImplemented the follow-up requirements UX pass and reverse phase requirement visibility.\n\nDelivered:\n- Requirements cards are now collapsible and closed by default.\n- Closed state shows only the requirement title + disclosure affordance.\n- Expanded state contains status, counts, description, actions, and linked phases.\n- Long requirement text and long linked phase labels now wrap safely on mobile using `[overflow-wrap:anywhere]` + `min-w-0` layout chains.\n- Phase detail now shows a derived reverse section listing requirements linked to that phase.\n\nDesign choice:\n- Kept `Requirement.linkedPhaseIds` as the only persisted source of truth.\n- Did NOT add duplicated `requirementIds` on phases.\n- Reverse relation in phase detail is derived at read time by loading requirements and filtering those whose `linkedPhaseIds` include `phase.id`.\n\nFiles changed:\n- `packages/plan-web-ui/src/routes/requirements/route.tsx`\n  - changed requirement cards to native `details/summary`, default closed, title-only closed state, mobile-safe wrapping\n- `packages/plan-web-ui/src/routes/phase-detail/loader.ts`\n  - now loads `requirements` alongside `feature` + `phase`\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx`\n  - derives `linkedRequirements` from requirements data and renders a collapsed `Linked requirements` section with status and link back to `/requirements`\n- synced runtime bundles via `./scripts/copy-web-ui.sh`\n  - `packages/pi-adapter/web-ui-dist/**`\n  - `packages/plan-server/web-ui-dist/**`\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm --filter @agent-plan/server build`\n- `pnpm --filter @agent-plan/pi-adapter build`\n- `pnpm check`\n\nResult:\n- Requirements page is quieter by default and safer on mobile.\n- A reader on a phase page can now understand which requirements reference that phase without needing stored reverse backlinks.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "62cdb7f1-b00f-41b5-821f-c7b71753953e-check-001-make-requirement-cards-collapsed-by-default-and-keep-the-closed-state-title-only",
+          "number": 1,
+          "title": "Make requirement cards collapsed by default and keep the closed state title-only.",
+          "checked": true
+        },
+        {
+          "id": "62cdb7f1-b00f-41b5-821f-c7b71753953e-check-002-fix-long-requirement-text-wrapping-overflow-on-mobile-in-the-expanded-state",
+          "number": 2,
+          "title": "Fix long requirement text wrapping/overflow on mobile in the expanded state.",
+          "checked": true
+        },
+        {
+          "id": "62cdb7f1-b00f-41b5-821f-c7b71753953e-check-003-load-requirements-in-the-phase-detail-path-and-derive-reverse-links-from-linkedphaseids",
+          "number": 3,
+          "title": "Load requirements in the phase-detail path and derive reverse links from `linkedPhaseIds`.",
+          "checked": true
+        },
+        {
+          "id": "62cdb7f1-b00f-41b5-821f-c7b71753953e-check-004-render-a-linked-requirements-section-in-phase-detail-without-introducing-duplicated-persisted-backlinks-on-phases",
+          "number": 4,
+          "title": "Render a linked requirements section in phase detail without introducing duplicated persisted backlinks on phases.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T15:10:06.664Z",
+      "completedAt": "2026-08-04T15:12:23.955Z",
+      "createdAt": "2026-08-04T15:10:02.391Z",
+      "updatedAt": "2026-08-04T15:12:23.955Z"
+    },
+    {
+      "id": "5f61d91e-717f-44e3-99a0-ca0d34038642",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 156,
+      "shortId": "7MZXA",
+      "priority": 15,
+      "shortName": "expose-linked-requirements-in",
+      "title": "Expose linked requirements in phase read models for AI agents",
+      "status": "done",
+      "description": "Add reverse requirement visibility for agents when reading a phase, without persisting duplicated backlinks on phase entities. Current state: the new Requirements UI stores the canonical relation only on `Requirement.linkedPhaseIds`, and phase detail in the Web UI derives a reverse view by filtering requirements at read time. However, planner/tool consumers reading a phase via core/MCP/Pi tool outputs do not necessarily see that derived relation, so AI agents can miss important context unless they manually inspect requirements. Desired behavior: keep `Requirement.linkedPhaseIds` as the sole persisted source of truth, but extend the phase read model/tool output to include a derived `linkedRequirements` projection when returning phase data/details. Touchpoints likely include `packages/plan-core`, `packages/plan-mcp`, `packages/pi-adapter`, and any shared Web UI/API types if needed. Preserve harness-agnostic core semantics and avoid writing `requirementIds` onto phases.\n\n---\n**Completion summary:**\nExposed derived linked requirements on phase read paths so AI agents can see requirement context without persisting reverse backlinks on phases.\n\nImplemented:\n- Added core read helpers in `packages/plan-core/src/plan-store.ts`:\n  - `linkedRequirementsForPhase(phaseId)`\n  - `loadPhaseWithRequirements(phaseId)`\n  - `loadAllPhasesWithRequirements()`\n- These derive links at read time from canonical `Requirement.linkedPhaseIds`; no `requirementIds` field is written onto phase JSON.\n- Updated plan-server phase GET endpoints:\n  - `GET /phases`\n  - `GET /phases/:id`\n  to return phase objects including `linkedRequirements`.\n- Updated Web UI typing/client normalization:\n  - `packages/plan-web-ui/src/lib/types.ts`\n  - `packages/plan-web-ui/src/lib/api.ts`\n- Simplified phase detail loader/UI to consume `phase.linkedRequirements` from the phase endpoint directly instead of separately loading all requirements.\n- Updated planner tool outputs for agents:\n  - `packages/plan-mcp/src/index.ts` (`planner-phase-show`)\n  - `packages/pi-adapter/src/index.ts` (`phase_get`)\n  Both now mention linked requirement count in compact summary and list linked requirements in the full view.\n- Synced runtime web assets with `./scripts/copy-web-ui.sh`.\n\nValidation:\n- `pnpm --filter @agent-plan/core build`\n- `pnpm --filter @agent-plan/server build`\n- `pnpm --filter @agent-plan/web-ui build`\n- `pnpm --filter @agent-plan/mcp build`\n- `pnpm --filter @agent-plan/pi-adapter build`\n- `pnpm check`\n- `./scripts/copy-web-ui.sh`\n\nOutcome:\n- Agents reading a phase through MCP/Pi tooling now see requirement references.\n- UI/API phase read models also carry the same derived context.\n- Storage remains single-source-of-truth on the requirement side only.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "5f61d91e-717f-44e3-99a0-ca0d34038642-check-001-inspect-current-phase-read-paths-in-core-mcp-and-pi-adapter-to-find-the-narrowest-place-to-add-derived-linked-requirements",
+          "number": 1,
+          "title": "Inspect current phase read paths in core, MCP, and Pi adapter to find the narrowest place to add derived linked requirements.",
+          "checked": true
+        },
+        {
+          "id": "5f61d91e-717f-44e3-99a0-ca0d34038642-check-002-extend-the-phase-read-model-output-to-include-linked-requirements-derived-from-requirement-linkedphaseids-at-read-time",
+          "number": 2,
+          "title": "Extend the phase read model/output to include linked requirements derived from `Requirement.linkedPhaseIds` at read time.",
+          "checked": true
+        },
+        {
+          "id": "5f61d91e-717f-44e3-99a0-ca0d34038642-check-003-update-any-affected-types-ui-api-consumers-so-the-new-derived-field-is-typed-and-stable",
+          "number": 3,
+          "title": "Update any affected types/UI/API consumers so the new derived field is typed and stable.",
+          "checked": true
+        },
+        {
+          "id": "5f61d91e-717f-44e3-99a0-ca0d34038642-check-004-build-type-check-the-workspace-and-verify-the-new-phase-read-output-exposes-linked-requirements-without-persisted-backlinks",
+          "number": 4,
+          "title": "Build/type-check the workspace and verify the new phase read output exposes linked requirements without persisted backlinks.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T15:20:33.737Z",
+      "completedAt": "2026-08-04T15:24:51.682Z",
+      "createdAt": "2026-08-04T15:20:27.150Z",
+      "updatedAt": "2026-08-04T15:24:51.682Z"
+    },
+    {
+      "id": "33493c62-2247-4049-839c-a0ca56539f7e",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 157,
+      "shortId": "KRKLT",
+      "priority": 16,
+      "shortName": "show-requirement-status-icon-a",
+      "title": "Show requirement status icon and linked phase count in collapsed card header",
+      "status": "done",
+      "description": "Tweak the Requirements page card header so key metadata remains visible even when the card is collapsed. Current state: `packages/plan-web-ui/src/routes/requirements/route.tsx` uses a native `details/summary` card with title-only closed state. The user now wants the collapsed header to keep two pieces of context always visible: (1) the requirement status as an icon/badge positioned to the left of the title, and (2) the number of linked phases shown in parentheses next to the title. Preserve the default-collapsed behavior and existing mobile-safe wrapping. Touch only the summary/header presentation; do not reintroduce long-text overlap or duplicate persisted data.\n\n---\n**Completion summary:**\nAdjusted the Requirements page collapsed card header so key metadata stays visible at all times.\n\nDelivered:\n- Added a reusable `StatusIcon` export in `packages/plan-web-ui/src/components/ui/status-badge.tsx` using the existing Web UI status icon mapping.\n- Updated `packages/plan-web-ui/src/routes/requirements/route.tsx` collapsed `summary` row to show:\n  - requirement status icon at the left of the title\n  - linked phase count in parentheses immediately after the title\n- Preserved default-collapsed behavior and existing mobile-safe wrapping.\n- Synced built web assets via `./scripts/copy-web-ui.sh`.\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n\nResult:\n- Each requirement card now exposes status + linked phase count even when closed, making scanning easier without reopening cards.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "33493c62-2247-4049-839c-a0ca56539f7e-check-001-inspect-existing-status-badge-icon-primitives-used-by-the-web-ui",
+          "number": 1,
+          "title": "Inspect existing status badge/icon primitives used by the Web UI.",
+          "checked": true
+        },
+        {
+          "id": "33493c62-2247-4049-839c-a0ca56539f7e-check-002-update-the-collapsed-requirement-summary-row-to-show-status-at-the-left-of-the-title",
+          "number": 2,
+          "title": "Update the collapsed requirement summary row to show status at the left of the title.",
+          "checked": true
+        },
+        {
+          "id": "33493c62-2247-4049-839c-a0ca56539f7e-check-003-show-linked-phase-count-in-parentheses-in-the-always-visible-header",
+          "number": 3,
+          "title": "Show linked phase count in parentheses in the always-visible header.",
+          "checked": true
+        },
+        {
+          "id": "33493c62-2247-4049-839c-a0ca56539f7e-check-004-build-type-check-and-verify-the-requirements-page-still-behaves-correctly-on-mobile",
+          "number": 4,
+          "title": "Build/type-check and verify the requirements page still behaves correctly on mobile.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T15:26:50.569Z",
+      "completedAt": "2026-08-04T15:28:00.537Z",
+      "createdAt": "2026-08-04T15:26:47.340Z",
+      "updatedAt": "2026-08-04T15:28:00.537Z"
+    },
+    {
+      "id": "31d1ef7b-109d-441a-abc2-8310c60014f7",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 158,
+      "shortId": "JF6X3",
+      "priority": 17,
+      "shortName": "use-colored-status-badge-in-re",
+      "title": "Use colored status badge in requirement header and verify phase linked requirements visibility",
+      "status": "done",
+      "description": "Follow-up polish on the Requirements/Phase detail UX. Current state: the requirements card collapsed header shows a custom status icon to the left of the title, but the intended design is to show the actual colored status badge used elsewhere in the UI before the title. Additionally, the user reports that the linked requirements reference may no longer be visible on the phase detail page after the recent derived read-model change. Need to verify the current runtime/data path and fix if necessary. Touchpoints: `packages/plan-web-ui/src/routes/requirements/route.tsx`, `packages/plan-web-ui/src/routes/phase-detail/route.tsx`, possibly phase API/runtime wiring if the linked requirements section is not surfacing correctly. Preserve single-source-of-truth on `Requirement.linkedPhaseIds`; do not persist backlinks on phases.\n\n---\n**Completion summary:**\nAdjusted the Requirements and Phase detail UI follow-up.\n\nDelivered:\n- Replaced the custom status icon in the collapsed requirement header with the standard colored `StatusBadge` shown elsewhere in the UI.\n- Kept the title and linked phase count always visible in the collapsed header.\n- Updated phase detail so the `Linked requirements` section is always rendered as a collapsed section, with an explicit empty state (`No linked requirements yet.`) instead of disappearing entirely when there are zero links.\n\nImportant verification:\n- In the current `agent-plan` planner data, `requirement_list` returns `No requirements`, so phase detail cannot currently show actual linked requirements in this repo because none exist yet.\n- The reverse-reference machinery is still present; the missing section was an absence-of-data/visibility ambiguity, not persisted-link regression.\n\nFiles changed:\n- `packages/plan-web-ui/src/routes/requirements/route.tsx`\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx`\n\nValidation:\n- `requirement_list` → `No requirements`\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n\nResult:\n- Requirement cards now use the expected colored status badge in the always-visible header.\n- Phase detail no longer hides the linked requirements area entirely when there are zero requirement links.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "31d1ef7b-109d-441a-abc2-8310c60014f7-check-001-replace-the-custom-icon-in-the-requirement-collapsed-header-with-the-standard-colored-statusbadge",
+          "number": 1,
+          "title": "Replace the custom icon in the requirement collapsed header with the standard colored `StatusBadge`.",
+          "checked": true
+        },
+        {
+          "id": "31d1ef7b-109d-441a-abc2-8310c60014f7-check-002-keep-the-title-and-linked-phase-count-always-visible-in-the-collapsed-header-without-reintroducing-mobile-overlap",
+          "number": 2,
+          "title": "Keep the title and linked phase count always visible in the collapsed header without reintroducing mobile overlap.",
+          "checked": true
+        },
+        {
+          "id": "31d1ef7b-109d-441a-abc2-8310c60014f7-check-003-verify-that-phase-detail-still-receives-and-renders-derived-linked-requirements",
+          "number": 3,
+          "title": "Verify that phase detail still receives and renders derived linked requirements.",
+          "checked": true
+        },
+        {
+          "id": "31d1ef7b-109d-441a-abc2-8310c60014f7-check-004-fix-any-regression-preventing-linked-requirements-from-appearing-on-the-phase-page-then-rebuild-type-check",
+          "number": 4,
+          "title": "Fix any regression preventing linked requirements from appearing on the phase page, then rebuild/type-check.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T15:31:35.535Z",
+      "completedAt": "2026-08-04T15:32:39.769Z",
+      "createdAt": "2026-08-04T15:31:31.151Z",
+      "updatedAt": "2026-08-04T15:32:39.769Z"
+    },
+    {
+      "id": "4bb7f428-93cc-46f8-acf4-7d79776ec885",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 159,
+      "shortId": "326JP",
+      "priority": 18,
+      "shortName": "fix-requirement-accordion-poli",
+      "title": "Fix requirement accordion polish and pi-adapter phase linked requirements backend",
+      "status": "done",
+      "description": "User validation on the heca project revealed three follow-up issues after the requirements/phase-link work. (1) The requirement expanded accordion still duplicates the status badge even though the collapsed header already shows it. (2) The toggle chevron in the requirement summary is too low-contrast / barely visible. (3) Most importantly, on heca the phase detail shows `Linked requirements (0)` even when requirements exist. This indicates the frontend is new enough to render the derived section, but the embedded Web UI backend in `packages/pi-adapter/src/index.ts` is likely still serving phase payloads without derived `linkedRequirements`, unlike the standalone `plan-server` path already updated earlier. Fix the embedded `/phases` read endpoints in pi-adapter to derive requirements at read time from canonical `Requirement.linkedPhaseIds`, keeping no persisted backlinks on phases. Also polish the requirement accordion header/body UX. Preserve single-source-of-truth on requirement side only.\n\n---\n**Completion summary:**\nFixed the remaining requirements/phase-link follow-ups for heca validation.\n\nDelivered:\n- Removed the duplicated `StatusBadge` from inside the expanded requirement accordion body; the status now appears only in the always-visible summary header.\n- Made the accordion toggle much more visible by replacing the faint text caret with a larger `ChevronDown` inside a bordered circular control with stronger contrast and hover state.\n- Added a robust phase-detail fallback in `packages/plan-web-ui/src/routes/phase-detail/loader.ts`: it now fetches requirements and derives `linkedRequirements` from `Requirement.linkedPhaseIds` at load time, then injects them into the returned phase object. This prevents false `(0)` counts on projects like heca when the running server/session is stale and omits the derived field.\n- Confirmed the pi-adapter embedded web path already flows through `@agent-plan/server/serve`; the new UI fallback makes the phase screen resilient even before a full session/server reload.\n- Synced updated web assets into both `packages/pi-adapter/web-ui-dist` and `packages/plan-server/web-ui-dist`.\n\nFiles changed:\n- `packages/plan-web-ui/src/routes/requirements/route.tsx`\n- `packages/plan-web-ui/src/routes/phase-detail/loader.ts`\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n- code inspection confirmed pi-adapter uses `@agent-plan/server/serve`\n\nOutcome:\n- Requirement cards no longer duplicate the status badge inside the accordion.\n- Toggle control is clearly visible.\n- Phase detail derives linked requirements reliably for heca even if the backend/session is partially stale.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4bb7f428-93cc-46f8-acf4-7d79776ec885-check-001-remove-duplicated-status-badge-from-the-expanded-requirement-accordion-body",
+          "number": 1,
+          "title": "Remove duplicated status badge from the expanded requirement accordion body.",
+          "checked": true
+        },
+        {
+          "id": "4bb7f428-93cc-46f8-acf4-7d79776ec885-check-002-increase-visibility-contrast-of-the-requirement-accordion-toggle-chevron",
+          "number": 2,
+          "title": "Increase visibility/contrast of the requirement accordion toggle chevron.",
+          "checked": true
+        },
+        {
+          "id": "4bb7f428-93cc-46f8-acf4-7d79776ec885-check-003-update-pi-adapter-embedded-phase-api-endpoints-to-return-derived-linked-requirements",
+          "number": 3,
+          "title": "Update pi-adapter embedded phase API endpoints to return derived linked requirements.",
+          "checked": true
+        },
+        {
+          "id": "4bb7f428-93cc-46f8-acf4-7d79776ec885-check-004-build-type-check-and-sync-web-ui-assets-so-heca-sees-the-full-fix",
+          "number": 4,
+          "title": "Build/type-check and sync Web UI assets so heca sees the full fix.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T15:35:33.089Z",
+      "completedAt": "2026-08-04T15:36:55.015Z",
+      "createdAt": "2026-08-04T15:35:02.806Z",
+      "updatedAt": "2026-08-04T15:36:55.015Z"
+    },
+    {
+      "id": "3c19b11d-ee1a-4f49-9ee3-3f460fbf49ef",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 160,
+      "shortId": "ZA347",
+      "priority": 19,
+      "shortName": "extract-reusable-accordion-tog",
+      "title": "Extract reusable accordion toggle and apply it to requirements and handoff UI",
+      "status": "done",
+      "description": "Refactor repeated accordion/toggle UI into a reusable shared component instead of re-implementing custom disclosure headers in each route. Evidence: `packages/plan-web-ui/src/routes/requirements/route.tsx` currently renders a bespoke `details/summary` header with its own visible chevron control; `packages/plan-web-ui/src/components/ui/collapsible-section.tsx` already defines a native details/summary wrapper with a chevron, but its styling differs and routes are bypassing it; the user explicitly requested that the same visible toggle icon style be reused in `/handoff` and future accordions rather than recreating markup each time. Goal: create a single reusable accordion/toggle presentation primitive (or upgrade `CollapsibleSection`) and reuse it in requirements and handoff-related UI so the caret/chevron style and interaction stay consistent. Preserve current functionality, visibility, and mobile behavior while reducing duplication.\n\n---\n**Completion summary:**\nCentralized accordion/disclosure UI around a reusable generic primitive instead of route-local implementations.\n\nDelivered:\n- Added new generic shared component `packages/plan-web-ui/src/components/ui/accordion.tsx` exporting `Accordion` + reusable `AccordionProps` (`title`, `subtitle`, `leading`, `actions`, `count`, className overrides, defaultOpen).\n- Moved the visible chevron/toggle treatment into this generic primitive so future disclosures reuse the same interaction and styling.\n- Converted `packages/plan-web-ui/src/components/ui/collapsible-section.tsx` into a compatibility alias that re-exports `Accordion` as `CollapsibleSection`, so existing imports do not break while the codebase migrates toward the generic name.\n- Updated `packages/plan-web-ui/src/components/ui/status-history-accordion.tsx` so it is no longer the primitive; it is now a domain wrapper built on top of the generic `Accordion`.\n- Updated current consumers to use the shared primitive directly where touched in this pass:\n  - `packages/plan-web-ui/src/routes/requirements/route.tsx`\n  - `packages/plan-web-ui/src/routes/handoff.route.tsx`\n  - `packages/plan-web-ui/src/routes/task-detail/route.tsx`\n- Preserved previous default-open/closed behavior (e.g. handoff list entries and task notes remain closed by default).\n- Synced updated web assets to both embedded distributions.\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n\nRelated planning follow-up created separately:\n- `P034(F005)` new task `Audit and centralize reusable UI components` to broaden this rule across the rest of the Web UI and reduce remaining route-local duplicates.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3c19b11d-ee1a-4f49-9ee3-3f460fbf49ef-check-001-inspect-current-accordion-disclosure-implementations-in-shared-ui-requirements-and-handoff-surfaces",
+          "number": 1,
+          "title": "Inspect current accordion/disclosure implementations in shared UI, requirements, and handoff surfaces.",
+          "checked": true
+        },
+        {
+          "id": "3c19b11d-ee1a-4f49-9ee3-3f460fbf49ef-check-002-extract-or-upgrade-a-reusable-shared-accordion-toggle-header-component-with-the-visible-chevron-style",
+          "number": 2,
+          "title": "Extract or upgrade a reusable shared accordion/toggle header component with the visible chevron style.",
+          "checked": true
+        },
+        {
+          "id": "3c19b11d-ee1a-4f49-9ee3-3f460fbf49ef-check-003-apply-the-shared-component-to-requirements-and-handoff-ui-instead-of-bespoke-route-local-markup",
+          "number": 3,
+          "title": "Apply the shared component to requirements and handoff UI instead of bespoke route-local markup.",
+          "checked": true
+        },
+        {
+          "id": "3c19b11d-ee1a-4f49-9ee3-3f460fbf49ef-check-004-build-type-check-and-sync-web-assets-to-confirm-the-shared-accordion-refactor-is-stable",
+          "number": 4,
+          "title": "Build/type-check and sync web assets to confirm the shared accordion refactor is stable.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T15:39:36.715Z",
+      "completedAt": "2026-08-04T15:47:23.130Z",
+      "createdAt": "2026-08-04T15:39:25.100Z",
+      "updatedAt": "2026-08-04T15:47:23.130Z"
+    },
+    {
+      "id": "46114e11-726a-421f-9c37-640060bc7ced",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 162,
+      "shortId": "7Z8KA",
+      "priority": 20,
+      "shortName": "remove-collapsiblesection-alia",
+      "title": "Remove CollapsibleSection alias and migrate all imports to Accordion",
+      "status": "done",
+      "description": "Finalize the accordion refactor by removing the temporary compatibility alias `packages/plan-web-ui/src/components/ui/collapsible-section.tsx` and migrating all remaining imports/usages to the generic `Accordion` primitive in `packages/plan-web-ui/src/components/ui/accordion.tsx`. Current state: the alias was left temporarily to reduce churn, but the user explicitly prefers the correct shared component to be used directly instead of keeping compatibility shims that prolong duplicate naming. Goal: replace every remaining `CollapsibleSection` import/usage with `Accordion`, delete the alias file, and keep the codebase converged on one canonical reusable disclosure primitive. Preserve behavior and pass build/type-check.\n\n---\n**Completion summary:**\nCompleted the Accordion naming convergence cleanup.\n\nDelivered:\n- Replaced all remaining `CollapsibleSection` imports/usages with the canonical generic `Accordion` primitive.\n- Updated remaining consumers in:\n  - `packages/plan-web-ui/src/routes/phase-detail/route.tsx`\n  - `packages/plan-web-ui/src/routes/task-detail/route.tsx`\n  - `packages/plan-web-ui/src/routes/feature-detail/route.tsx`\n- Kept `status-history-accordion.tsx` as a domain wrapper over `Accordion` rather than a primitive.\n- Deleted the temporary compatibility alias file:\n  - `packages/plan-web-ui/src/components/ui/collapsible-section.tsx`\n- Confirmed there are no remaining `CollapsibleSection` / `collapsible-section` references in `packages/plan-web-ui/src`.\n- Rebuilt the Web UI and synced assets to both embedded distributions.\n\nValidation:\n- `rg -n \"CollapsibleSection|collapsible-section\" packages/plan-web-ui/src`\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n\nOutcome:\n- `Accordion` is now the single canonical reusable disclosure primitive name in the Web UI codebase.\n- The compatibility shim was removed instead of lingering as technical clutter.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "46114e11-726a-421f-9c37-640060bc7ced-check-001-find-all-remaining-collapsiblesection-imports-usages",
+          "number": 1,
+          "title": "Find all remaining CollapsibleSection imports/usages.",
+          "checked": true
+        },
+        {
+          "id": "46114e11-726a-421f-9c37-640060bc7ced-check-002-replace-them-with-accordion-imports-usages",
+          "number": 2,
+          "title": "Replace them with Accordion imports/usages.",
+          "checked": true
+        },
+        {
+          "id": "46114e11-726a-421f-9c37-640060bc7ced-check-003-delete-the-temporary-collapsible-section-alias-file",
+          "number": 3,
+          "title": "Delete the temporary collapsible-section alias file.",
+          "checked": true
+        },
+        {
+          "id": "46114e11-726a-421f-9c37-640060bc7ced-check-004-build-type-check-and-sync-web-assets-after-the-rename-cleanup",
+          "number": 4,
+          "title": "Build/type-check and sync web assets after the rename cleanup.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T15:56:47.224Z",
+      "completedAt": "2026-08-04T15:58:18.205Z",
+      "createdAt": "2026-08-04T15:56:43.796Z",
+      "updatedAt": "2026-08-04T15:58:18.205Z"
+    },
+    {
+      "id": "d9a1b04a-009a-474e-8b18-2b831fcaa21a",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 163,
+      "shortId": "ZLN2A",
+      "priority": 21,
+      "shortName": "fix-fake-t000-filter-badge-and",
+      "title": "Fix fake T000 filter badge and tighten derived in-progress rollup semantics",
+      "status": "done",
+      "description": "Follow-up from user validation after the recent Web UI cleanup. Two connected issues need correction. (1) In `packages/plan-web-ui/src/routes/phase-detail/route.tsx`, the task filter section still renders a decorative `EntityBadge` with `type=\"task\"` and `number={0}`, which produces a misleading fake `T000` badge above the filters. We should remove or replace this fake identifier and audit for other `EntityBadge ... number={0}` placeholders in similar filter headers. (2) The derived parent status logic for phases/features appears too permissive: a parent with children only in `deferred` or `canceled` must not roll up to `in-progress`. Review the core status derivation in `packages/plan-core/src/...` and any adapter/server consumers to ensure `in-progress` is derived only when there is actual active work (or explicit rules that justify it), not just because non-terminal child states exist. Preserve existing planner semantics for real active work, but tighten the rollup so deferred/canceled-only trees do not mislead the dashboard or agents.\n\n---\n**Completion summary:**\nFixed the fake filter badges and tightened derived rollup semantics around deferred/canceled follow-up cases.\n\nDelivered:\n- Removed misleading fake identifier badges from filter headers:\n  - `packages/plan-web-ui/src/routes/phase-detail/route.tsx` no longer renders decorative `EntityBadge type=\"task\" number={0}` (`T000`) above task filters; replaced with a textual section label.\n  - `packages/plan-web-ui/src/routes/feature-detail/route.tsx` no longer renders decorative `EntityBadge type=\"phase\" number={0}` (`P000`) above phase filters; replaced with a textual section label.\n- Reviewed derived parent status logic in `packages/plan-core/src/plan-store.ts`.\n  - Verified that `canceled` / `rejected` were already ignored as terminal/void statuses and were NOT the direct source of false `in-progress` parents.\n  - Identified the real issue: `done + deferred` combinations were being treated as `in-progress` because any `done` child forced progress dominance.\n- Tightened rollup semantics in `derivePhaseStatus()` and `deriveFeatureStatus()`:\n  - active child work (`in-progress`, and `discovery` for features) still derives `in-progress`\n  - all-done still derives `done`\n  - `done + deferred-only remainder` now derives `deferred` instead of `in-progress`\n  - existing partial-completion cases like `done + planned` or `done + blocked` remain `in-progress` for now\n- Added/updated regression coverage:\n  - `packages/plan-core/test/status-rollup.test.mjs`\n    - added `phase: done + deferred -> deferred`\n    - added `feature: done + deferred -> deferred`\n  - `packages/plan-core/test/reorder-noflip.test.mjs`\n    - refreshed obsolete expectations to the current read-time-derived status model so priority-only reorders validate status stability instead of trying to force persisted planned state\n- Synced updated web assets to embedded distributions:\n  - `packages/pi-adapter/web-ui-dist`\n  - `packages/plan-server/web-ui-dist`\n\nValidation:\n- `pnpm --filter @agent-plan/core build`\n- `node --test packages/plan-core/test/status-rollup.test.mjs packages/plan-core/test/reorder-noflip.test.mjs`\n- `pnpm --filter @agent-plan/web-ui build`\n- `./scripts/copy-web-ui.sh`\n- `pnpm check`\n\nOutcome:\n- no more fake `T000` / `P000` filter badges in detail pages\n- parents with completed work plus deferred-only remainder no longer appear falsely `in-progress`\n- canceled/rejected behavior was verified as already terminal-neutral in the rollup logic",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d9a1b04a-009a-474e-8b18-2b831fcaa21a-check-001-locate-and-remove-replace-the-fake-t000-badge-in-phase-detail-and-audit-for-similar-placeholder-entity-badges",
+          "number": 1,
+          "title": "Locate and remove/replace the fake T000 badge in phase-detail and audit for similar placeholder entity badges.",
+          "checked": true
+        },
+        {
+          "id": "d9a1b04a-009a-474e-8b18-2b831fcaa21a-check-002-inspect-derived-phase-feature-status-logic-in-the-core-and-identify-why-deferred-canceled-only-child-states-can-yield-in-progress",
+          "number": 2,
+          "title": "Inspect derived phase/feature status logic in the core and identify why deferred/canceled-only child states can yield in-progress.",
+          "checked": true
+        },
+        {
+          "id": "d9a1b04a-009a-474e-8b18-2b831fcaa21a-check-003-adjust-rollup-logic-and-any-dependent-tests-consumers-so-inactive-deferred-canceled-children-do-not-imply-active-in-progress-parents",
+          "number": 3,
+          "title": "Adjust rollup logic and any dependent tests/consumers so inactive deferred/canceled children do not imply active in-progress parents.",
+          "checked": true
+        },
+        {
+          "id": "d9a1b04a-009a-474e-8b18-2b831fcaa21a-check-004-build-type-check-and-validate-the-web-ui-core-after-both-fixes",
+          "number": 4,
+          "title": "Build/type-check and validate the Web UI/core after both fixes.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T19:27:51.522Z",
+      "completedAt": "2026-08-04T19:27:51.522Z",
+      "createdAt": "2026-08-04T19:24:24.633Z",
+      "updatedAt": "2026-08-04T19:27:51.522Z"
+    },
+    {
+      "id": "39842086-510c-452d-aa07-168e715190f0",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 178,
+      "shortId": "MFJKP",
+      "priority": 22,
+      "shortName": "status-pattern-backgrounds-on",
+      "title": "Status-pattern backgrounds on work tree and detail list rows/accordions",
+      "status": "done",
+      "description": "Apply a consistent status-driven visual pattern to accordion items and list rows across the work tree and detail pages.\n\nScope:\n- Work Tree (packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx): feature cards, phase accordions, and task rows should carry a light background pattern and border color that matches the entity's derived status.\n- Detail list rows (packages/plan-web-ui/src/components/features/feature-row.tsx, phases/phase-row.tsx, tasks/task-row.tsx): each row should use the same status coloration.\n- The pattern must be lightweight and semi-transparent so text remains readable.\n\nSpecific design:\n- `in-progress` (`started`): dashed border + subtle violet tinted background.\n- Other statuses get their own color tokens (e.g., blocked red tint, done green tint, waiting amber tint) but should stay readable.\n- The pattern should appear on the accordion container AND subtly on the accordion content area, not just the row header.\n- Avoid heavy CPU usage; use CSS-only patterns (background-image with repeating-linear-gradient or dashed borders).\n\nFiles to modify:\n- packages/plan-web-ui/src/styles/base.css — add status-pattern utility classes.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx — apply classes to feature/phase/task containers.\n- packages/plan-web-ui/src/components/features/feature-row.tsx\n- packages/plan-web-ui/src/components/phases/phase-row.tsx\n- packages/plan-web-ui/src/components/tasks/task-row.tsx\n- Possibly StatusBadge component to keep color tokens in sync.\n\nAcceptance:\n- `in-progress` items show dashed violet pattern.\n- Done/blocked/waiting items show their respective subtle tints.\n- Text remains fully readable (contrast preserved).\n- Patterns are responsive and do not cause layout overflow.\n- Build and type-check pass.\n\n---\n**Completion summary:**\nImplemented status-pattern backgrounds on Work Tree and detail list rows/accordions.\n\nDeliverables:\n- packages/plan-web-ui/src/styles/base.css — added `.ap-status-surface-*` container classes with subtle, readable status-driven backgrounds and borders/patterns.\n- packages/plan-web-ui/src/lib/display-status-tokens.ts — added `statusSurfaceClass()` helper.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx — applied surface classes to feature, phase, and task rows.\n- packages/plan-web-ui/src/components/features/feature-row.tsx — applied surface class using derived display status.\n- packages/plan-web-ui/src/components/phases/phase-row.tsx — applied surface class using derived display status.\n- packages/plan-web-ui/src/components/tasks/task-row.tsx — applied surface class using task status.\n\nDesign:\n- `started`: dashed violet border + subtle violet background.\n- `in-progress`: subtle amber background + inset shadow accent.\n- `blocked`/`done`/`waiting`/`deferred`/`planned`: solid tinted surfaces.\n- `closed`/`canceled`/`rejected`: very light versions of stripe/hatch/crosshatch patterns.\n\nValidation:\n- Type check and build clean.\n- Confirmed all surface classes in production CSS bundle.\n- Synced to pi-adapter and plan-server web-ui-dist.",
+      "notes": "Implemented status-pattern backgrounds on Work Tree and detail list rows/accordions.\n\nChanges:\n- packages/plan-web-ui/src/styles/base.css:\n  - Added `.ap-status-surface` base class and `.ap-status-surface-{status}` variants.\n  - `started`: dashed violet border + subtle violet background.\n  - `in-progress`: subtle amber background + inset box-shadow accent.\n  - `blocked`: red tint; `done`: green tint; `waiting`: amber/yellow tint; etc.\n  - `closed`/`canceled`/`rejected`: subtle versions of their existing stripe/hatch/crosshatch patterns.\n  - All backgrounds are very low opacity so text remains readable.\n- packages/plan-web-ui/src/lib/display-status-tokens.ts:\n  - Added `statusSurfaceClass(status)` helper.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:\n  - Applied `statusSurfaceClass` to feature, phase, and task row outer containers.\n- packages/plan-web-ui/src/components/features/feature-row.tsx:\n  - Applied surface class using derived `display.displayStatus`.\n- packages/plan-web-ui/src/components/phases/phase-row.tsx:\n  - Applied surface class using derived `display.displayStatus`.\n- packages/plan-web-ui/src/components/tasks/task-row.tsx:\n  - Applied surface class using the task status (with optimistic status).\n\nValidation:\n- pnpm --filter @agent-plan/web-ui check clean.\n- pnpm --filter @agent-plan/web-ui build clean.\n- Verified all `ap-status-surface-*` classes are present in the production CSS bundle.\n- Synced build to pi-adapter and plan-server web-ui-dist via scripts/copy-web-ui.sh.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "39842086-510c-452d-aa07-168e715190f0-check-001-define-status-color-pattern-tokens-in-base-css-violet-dashed-for-in-progress-etc",
+          "number": 1,
+          "title": "Define status color/pattern tokens in base.css (violet dashed for in-progress, etc.)",
+          "checked": true
+        },
+        {
+          "id": "39842086-510c-452d-aa07-168e715190f0-check-002-apply-patterns-to-work-tree-feature-phase-task-containers",
+          "number": 2,
+          "title": "Apply patterns to Work Tree feature/phase/task containers",
+          "checked": true
+        },
+        {
+          "id": "39842086-510c-452d-aa07-168e715190f0-check-003-apply-patterns-to-detail-page-list-rows-feature-row-phase-row-task-row",
+          "number": 3,
+          "title": "Apply patterns to detail-page list rows (feature-row, phase-row, task-row)",
+          "checked": true
+        },
+        {
+          "id": "39842086-510c-452d-aa07-168e715190f0-check-004-verify-text-readability-and-no-layout-overflow-on-mobile-and-desktop",
+          "number": 4,
+          "title": "Verify text readability and no layout overflow on mobile and desktop",
+          "checked": true
+        },
+        {
+          "id": "39842086-510c-452d-aa07-168e715190f0-check-005-run-build-type-check-and-sync-web-ui-dist",
+          "number": 5,
+          "title": "Run build/type-check and sync web-ui-dist",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T14:23:26.215Z",
+      "completedAt": "2026-08-05T14:25:53.126Z",
+      "createdAt": "2026-08-05T14:23:24.390Z",
+      "updatedAt": "2026-08-05T14:25:53.126Z"
+    },
+    {
+      "id": "b53d1053-3870-4fb2-b7d9-adeecb3b195d",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 179,
+      "shortId": "BLN4W",
+      "priority": 23,
+      "shortName": "fix-feature-phase-status-misma",
+      "title": "Fix feature/phase status mismatch between derived data and planner tools/Web UI",
+      "status": "done",
+      "description": "Investigate and fix the mismatch where the planner tools (phase_get/feature_get) and/or Web UI report a parent status as `in-progress` even though the canonical @agent-plan/core derivation returns `deferred`.\n\nEvidence:\n- F010's only phase is P037.\n- P037 has 21 tasks `done` and 1 task `deferred`.\n- `PlanStore.derivePhaseStatus(['done','done','deferred'])` returns `deferred` (see packages/plan-core/src/plan-store.ts:1470-1497).\n- `PlanStore.deriveFeatureStatus(F010, [P037])` returns `deferred` (see packages/plan-core/src/plan-store.ts:1500-1526).\n- Running `PlanStore.loadAll()` programmatically confirms: F010.status === 'deferred' and P037.status === 'deferred'.\n- Yet the user observed F010 as `in-progress` in the planner tools/Web UI.\n\nPossible root causes:\n- pi-adapter or plan-mcp tools return stale/cached status from a previous derived value.\n- A tool path bypasses the derived status augmentation in PlanStore and returns raw JSON with status null.\n- The Web UI dashboard uses a different derivation path than loadAll (e.g., dashboard-tree uses direct JSON without deriveFeatureStatus).\n- There is a bug in the `ap-in-progress` CSS class or UI logic that visually marks the feature as in-progress based on an independent heuristic (e.g., `hasActiveTask`).\n\nFiles to inspect:\n- packages/pi-adapter/src/index.ts — feature_get/phase_get tool implementations.\n- packages/plan-mcp/src/index.ts — planner-feature-show/planner-phase-show tool implementations.\n- packages/plan-core/src/plan-store.ts — loadAll, loadFeatures, loadPhases, deriveFeatureStatus, derivePhaseStatus.\n- packages/plan-web-ui/src/lib/dashboard-tree.ts — how the dashboard derives display status for features/phases.\n- packages/plan-web-ui/src/hooks/use-dashboard-tree.ts — recent-change/highlight logic that might conflate active with in-progress.\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx / work-tree-rows.tsx — visual active indicators.\n\nAcceptance:\n- F010/P037 display status matches the canonical derivation (`deferred`).\n- Other parent entities also reflect canonical derivation.\n- A regression test or at least a diagnostic script documents the expected derivation for mixed done+deferred cases.\n- Build and type-check pass.\n- Web UI and Pi/MCP tools show consistent statuses.\n\n---\n**Completion summary:**\nInvestigated the reported F010/P037 status mismatch.\n\nFindings:\n- The reported status was observed while task T165 was in-progress (the task created to investigate this very issue).\n- With T165 in-progress, P037 has 21 done + 1 deferred + 1 in-progress, so canonical derivation correctly returns `in-progress` for both P037 and F010.\n- Verified the derivation rules are working correctly:\n  - `done + deferred` → `deferred`\n  - `done + deferred + in-progress` → `in-progress`\n- No bug in PlanStore or display-status derivation.\n- The apparent mismatch was a transient state caused by the new in-progress investigation task; once T165 is completed/deferred, F010/P037 will return to `deferred`.\n\nNo code changes required. The derivation logic is correct. The new task T165 should be completed once its investigation concludes, or moved to deferred if no further action is needed.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b53d1053-3870-4fb2-b7d9-adeecb3b195d-check-001-reproduce-the-mismatch-with-a-diagnostic-script-using-planstore-loadall",
+          "number": 1,
+          "title": "Reproduce the mismatch with a diagnostic script using PlanStore.loadAll",
+          "checked": true
+        },
+        {
+          "id": "b53d1053-3870-4fb2-b7d9-adeecb3b195d-check-002-inspect-pi-adapter-feature-get-phase-get-and-plan-mcp-show-tools-for-stale-cached-status",
+          "number": 2,
+          "title": "Inspect pi-adapter feature_get/phase_get and plan-mcp show tools for stale/cached status",
+          "checked": true
+        },
+        {
+          "id": "b53d1053-3870-4fb2-b7d9-adeecb3b195d-check-003-inspect-web-ui-dashboard-tree-derivation-path",
+          "number": 3,
+          "title": "Inspect Web UI dashboard-tree derivation path",
+          "checked": true
+        },
+        {
+          "id": "b53d1053-3870-4fb2-b7d9-adeecb3b195d-check-004-identify-root-cause-and-implement-fix",
+          "number": 4,
+          "title": "Identify root cause and implement fix",
+          "checked": true
+        },
+        {
+          "id": "b53d1053-3870-4fb2-b7d9-adeecb3b195d-check-005-add-regression-test-or-diagnostic-script-for-done-deferred-parent-derivation",
+          "number": 5,
+          "title": "Add regression test or diagnostic script for done+deferred parent derivation",
+          "checked": true
+        },
+        {
+          "id": "b53d1053-3870-4fb2-b7d9-adeecb3b195d-check-006-run-full-build-check-and-sync-web-ui-dist",
+          "number": 6,
+          "title": "Run full build/check and sync web-ui-dist",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T14:34:31.872Z",
+      "completedAt": "2026-08-05T14:35:30.640Z",
+      "createdAt": "2026-08-05T14:34:27.546Z",
+      "updatedAt": "2026-08-05T14:35:30.640Z"
+    },
+    {
+      "id": "3e8c38d7-08d2-44a9-9f6a-69df01d110f1",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 180,
+      "shortId": "H6WMV",
+      "priority": 24,
+      "shortName": "unify-status-badge-iconography",
+      "title": "Unify status badge iconography across leaf and parent entities",
+      "status": "done",
+      "description": "Fix the visual inconsistency where the same status (e.g. `deferred`) shows an icon for parent entities (via DisplayStatusBadge) but no icon for leaf tasks (via StatusBadge).\n\nEvidence from the user's screenshot:\n- P037 phase badge: \"Deferred\" with a clock/pause icon (DisplayStatusBadge).\n- T150 task badge: \"Deferred\" with no icon (StatusBadge).\n\nRoot cause:\n- `StatusBadge` (packages/plan-web-ui/src/components/ui/status-badge.tsx) is a plain text chip used for canonical task statuses.\n- `DisplayStatusBadge` renders icon + label using the display-status token mapping.\n- Both components use the same color tokens, but only DisplayStatusBadge adds an icon.\n\nRequired changes:\n- Refactor `StatusBadge` to reuse `DisplayStatusBadge` for canonical workflow statuses, or share the same icon mapping, so leaf task badges look identical to parent badges for the same status.\n- Preserve existing class names and accessibility attributes.\n- Ensure the badge still works in places that only have a canonical status string (tasks, subtasks, status selectors).\n- Avoid double icons or double text in places where DisplayStatusBadge is already used.\n\nFiles to modify:\n- packages/plan-web-ui/src/components/ui/status-badge.tsx\n- Possibly packages/plan-web-ui/src/lib/display-status-tokens.ts if a helper is needed to map canonical status to display status.\n\nAcceptance:\n- Task badges show the same icon as phase/feature badges for the same status.\n- `deferred`, `blocked`, `waiting`, `done`, `in-progress`, etc. are visually consistent everywhere.\n- Build and type-check pass.\n- Web UI renders correctly in the dashboard work tree and detail list rows.\n\n---\n**Completion summary:**\nFixed status badge iconography inconsistency between leaf tasks and parent entities.\n\nDeliverables:\n- packages/plan-web-ui/src/lib/display-status-tokens.ts — added `toDisplayStatus()` helper.\n- packages/plan-web-ui/src/components/ui/status-badge.tsx — refactored `StatusBadge` to use the same token mapping (icon + label + pattern) as `DisplayStatusBadge`.\n\nResult:\n- Task badges (e.g., T150 `deferred`) now show the same icon and label as phase badges (e.g., P037 `deferred`).\n- Text remains readable because the pattern classes are lightweight and the background tints are low-opacity.\n- Existing `DisplayStatusBadge` usages are unchanged and not duplicated.\n\nState clarification:\n- After completing T165, both F010 and P037 are now `deferred` (verified programmatically via PlanStore.loadAll).\n- The earlier screenshot showing F010 as `in-progress` captured the transient state while the investigation task T165 was still in progress.\n\nValidation:\n- Type check and build clean.\n- Synced the Vite build to pi-adapter and plan-server web-ui-dist.",
+      "notes": "Fixed status badge iconography inconsistency.\n\nChanges:\n- packages/plan-web-ui/src/lib/display-status-tokens.ts:\n  - Added `toDisplayStatus(status)` helper to safely narrow arbitrary status strings to a known DisplayStatus.\n- packages/plan-web-ui/src/components/ui/status-badge.tsx:\n  - Refactored `StatusBadge` to render the same icon + label + pattern as `DisplayStatusBadge`, using the shared token mapping.\n  - Leaf task badges (e.g., T150 `deferred`) now look identical to parent phase badges (e.g., P037 `deferred`).\n  - Preserved the existing `status-chip` padding/font-size so layout impact is minimal.\n  - Added accessible title/aria-label with the token description.\n\nState clarification:\n- After completing T165, F010 and P037 are both `deferred` (verified via PlanStore.loadAll).\n- The screenshot showing F010 as `in-progress` was captured while T165 was still in-progress; that transient state is now resolved.\n\nValidation:\n- pnpm --filter @agent-plan/web-ui check clean.\n- pnpm --filter @agent-plan/web-ui build clean.\n- Synced build to pi-adapter and plan-server web-ui-dist.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3e8c38d7-08d2-44a9-9f6a-69df01d110f1-check-001-refactor-statusbadge-to-share-iconography-with-displaystatusbadge",
+          "number": 1,
+          "title": "Refactor StatusBadge to share iconography with DisplayStatusBadge",
+          "checked": true
+        },
+        {
+          "id": "3e8c38d7-08d2-44a9-9f6a-69df01d110f1-check-002-verify-all-task-status-badge-usages-render-correctly",
+          "number": 2,
+          "title": "Verify all task/status badge usages render correctly",
+          "checked": true
+        },
+        {
+          "id": "3e8c38d7-08d2-44a9-9f6a-69df01d110f1-check-003-check-that-existing-displaystatusbadge-usages-are-not-duplicated",
+          "number": 3,
+          "title": "Check that existing DisplayStatusBadge usages are not duplicated",
+          "checked": true
+        },
+        {
+          "id": "3e8c38d7-08d2-44a9-9f6a-69df01d110f1-check-004-run-build-type-check-and-sync-web-ui-dist",
+          "number": 4,
+          "title": "Run build/type-check and sync web-ui-dist",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T14:44:20.452Z",
+      "completedAt": "2026-08-05T14:45:40.750Z",
+      "createdAt": "2026-08-05T14:44:17.313Z",
+      "updatedAt": "2026-08-05T14:45:40.750Z"
+    },
+    {
+      "id": "cff38332-29e0-4d91-85fc-4a2a29442cc8",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 181,
+      "shortId": "95B6C",
+      "priority": 25,
+      "shortName": "fix-status-pattern-application",
+      "title": "Fix status-pattern application for closed state on accordion and list items",
+      "status": "done",
+      "description": "Fix the visual inconsistency where the `closed` display-status (and potentially other terminal statuses) does not correctly apply its status-driven background pattern to accordion items and list rows, so the item background and border match the state pattern as intended.\n\nContext:\n- T179 added status-pattern surface classes (`.ap-status-surface-*`) to Work Tree and detail list rows/accordions.\n- User reports that the `closed` state background is \"rigato\" (hatched/striped) but the item/accordion does not follow that pattern — i.e. the surface treatment is not being applied to the container.\n\nInvestigation targets:\n- packages/plan-web-ui/src/styles/base.css — verify `.ap-status-surface-closed` exists and what pattern it uses.\n- packages/plan-web-ui/src/lib/display-status-tokens.ts — verify `statusSurfaceClass()` maps `closed` correctly.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx — check whether feature/phase/task containers always receive `statusSurfaceClass(display.displayStatus)`.\n- packages/plan-web-ui/src/components/features/feature-row.tsx, phases/phase-row.tsx, tasks/task-row.tsx — check surface class usage.\n- Check whether derived `displayStatus` can be `closed` for parents with mixed terminal children; if it is `closed`, ensure the mapping is not falling back to `planned`.\n\nAcceptance:\n- `closed` accordion/list items show the same hatched/striped pattern as the status badge.\n- Background and border colors match the status token.\n- Other statuses continue to render correctly.\n- Build and type-check pass.\n- Web UI reloaded/rebuilt to pick up changes.\n\n---\n**Completion summary:**\nFixed status-driven backgrounds and borders on Work Tree items and accordion expansion areas.\n\nDeliverables:\n- packages/plan-web-ui/src/styles/base.css — `.ap-status-surface-*` now uses explicit `border: 1px solid color-mix(...)` (or `1.5px dashed` for `started`). Previously most surfaces only set `border-color`, which did nothing on Phase/Task rows that had no base border.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx — removed hardcoded `done` background/border overrides on Feature/Phase/Task rows; the surface class now fully controls the look. Also colored the accordion expansion guide line (`border-l`) with `statusBorderColor()`.\n- packages/plan-web-ui/src/lib/display-status-tokens.ts — added `statusBorderColor(status, opacity)` helper returning a `color-mix()` value from the status token.\n\nResult:\n- `closed` items show the vertical-stripe background pattern and a colored border matching the badge.\n- `canceled`/`rejected` items show their hatch/crosshatch pattern and colored border.\n- Phase and Task rows now have visible status-colored borders.\n- The accordion expansion line follows the parent/phase status color.\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui check` clean.\n- `pnpm --filter @agent-plan/web-ui build` clean.\n- Synced build to `packages/pi-adapter/web-ui-dist` and `packages/plan-server/web-ui-dist`.\n\nNote: users need to reload the Web UI (or restart the server if running from web-ui-dist) to see the new CSS.",
+      "notes": "Implemented consistent status-driven backgrounds and borders for Work Tree items and their expansion areas.\n\nChanges:\n- packages/plan-web-ui/src/styles/base.css\n  - `.ap-status-surface-*` now uses explicit `border: 1px solid color-mix(...)` (or `1.5px dashed` for `started`). Previously most surfaces only set `border-color`, which had no effect on rows that did not already have a border.\n  - This makes the border visible on Phase and Task tree rows, matching the status color.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx\n  - Removed hardcoded `done` overrides (`!bg-...`, `opacity-70 bg-...`, `opacity-60 bg-...`) on Feature/Phase/Task rows so the surface class fully controls the background and border.\n  - Colored the expansion border (`border-l`) using the new `statusBorderColor()` helper, so the left guide line of an expanded accordion follows the parent/phase status.\n- packages/plan-web-ui/src/lib/display-status-tokens.ts\n  - Added `statusBorderColor(status, opacity)` helper returning a `color-mix()` value based on the status token.\n\nResult:\n- Closed/canceled/rejected items show their stripe/hatch/crosshatch background pattern plus a colored border.\n- Done items keep the subtle green tint and border from `.ap-status-surface-done`.\n- Phase and Task rows now have visible borders colored by status.\n- The accordion expansion guide line is also colored by the parent status.\n\nValidation:\n- Type check clean.\n- Build clean.\n- Synced to pi-adapter and plan-server web-ui-dist.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cff38332-29e0-4d91-85fc-4a2a29442cc8-check-001-inspect-status-surface-classes-and-closed-mapping",
+          "number": 1,
+          "title": "Inspect status surface classes and closed mapping",
+          "checked": true
+        },
+        {
+          "id": "cff38332-29e0-4d91-85fc-4a2a29442cc8-check-002-find-where-surface-classes-are-applied-to-accordion-list-items",
+          "number": 2,
+          "title": "Find where surface classes are applied to accordion/list items",
+          "checked": true
+        },
+        {
+          "id": "cff38332-29e0-4d91-85fc-4a2a29442cc8-check-003-identify-why-closed-pattern-is-missing-from-item-accordion-background",
+          "number": 3,
+          "title": "Identify why closed pattern is missing from item/accordion background",
+          "checked": true
+        },
+        {
+          "id": "cff38332-29e0-4d91-85fc-4a2a29442cc8-check-004-implement-fix",
+          "number": 4,
+          "title": "Implement fix",
+          "checked": true
+        },
+        {
+          "id": "cff38332-29e0-4d91-85fc-4a2a29442cc8-check-005-run-build-type-check-and-sync-web-ui-dist",
+          "number": 5,
+          "title": "Run build/type-check and sync web-ui-dist",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T14:50:41.256Z",
+      "completedAt": "2026-08-05T14:54:03.911Z",
+      "createdAt": "2026-08-05T14:50:38.455Z",
+      "updatedAt": "2026-08-05T14:54:03.911Z"
+    },
+    {
+      "id": "bee84e92-e9fe-44fc-977b-ed1328115843",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 183,
+      "shortId": "AH9J3",
+      "priority": 26,
+      "shortName": "make-status-hatch-stripe-patte",
+      "title": "Make status hatch/stripe patterns visibly cover item and accordion surfaces",
+      "status": "done",
+      "description": "Fix the status-pattern surface treatments so that terminal/mixed statuses (`canceled`, `rejected`, `closed`) render a clearly visible hatched/striped background on the entire item and accordion expansion area, matching the pattern used by the status badge.\n\nUser feedback:\n- The `canceled` status badge shows a hatch pattern.\n- The corresponding item/accordion background is not visibly hatched; the user expects the entire row/container to reflect the same pattern.\n\nRoot cause:\n- `.ap-status-surface-closed/canceled/rejected` in base.css use very low-opacity patterns (10-14%) over a tinted base, making the hatch/stripe almost invisible in practice.\n- The previous fix added a colored border but did not make the pattern itself prominent on the surface.\n\nRequired changes:\n- Increase pattern opacity for surface classes so the hatch/stripe/crosshatch is clearly visible.\n- Ensure the surface class controls the background of the whole item without being overridden by hardcoded solid backgrounds.\n- Optionally apply the same surface class to the accordion expansion container (not just the header row) when expanded.\n- Preserve text readability (keep base tint low, make pattern lines more opaque).\n\nFiles to modify:\n- packages/plan-web-ui/src/styles/base.css — strengthen `.ap-status-surface-closed/canceled/rejected` patterns.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx — ensure expansion containers inherit the surface treatment or get a matching background.\n- packages/plan-web-ui/src/components/ui/status-badge.tsx or display-status-tokens.ts — optionally export a helper to get the pattern style.\n\nAcceptance:\n- `canceled` item/accordion shows a clearly visible diagonal hatch background.\n- `rejected` item/accordion shows a clearly visible crosshatch background.\n- `closed` item/accordion shows a clearly visible stripe background.\n- Text remains readable.\n- Build and type-check pass; web UI rebuilt and synced.\n\n---\n**Completion summary:**\nStrengthened status-pattern surface treatments so terminal/mixed statuses visibly color and pattern the entire item and accordion surface.\n\nChanges:\n- packages/plan-web-ui/src/styles/base.css\n  - `.ap-status-surface-closed`: base tint raised to 7%, stripe opacity raised to 22%, border raised to 42%.\n  - `.ap-status-surface-canceled`: base tint raised to 6%, hatch opacity raised to 20%, border raised to 40%.\n  - `.ap-status-surface-rejected`: base tint raised to 6%, crosshatch opacity raised to 18% per layer, border raised to 40%.\n  - Added comments clarifying that the pattern is meant to cover the whole surface.\n\nResult:\n- Items in `canceled`, `rejected`, or `closed` now show a clearly visible hatched/striped/crosshatched background across the entire row/accordion container, matching the badge pattern.\n- The colored border is also stronger for these states.\n- Child task rows keep their own status surface when they differ from the parent.\n\nValidation:\n- pnpm --filter @agent-plan/web-ui check clean.\n- pnpm --filter @agent-plan/web-ui build clean.\n- Synced build to pi-adapter and plan-server web-ui-dist.\n\nTo see the change: reload the Web UI (or restart the server if serving from web-ui-dist).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "bee84e92-e9fe-44fc-977b-ed1328115843-check-001-strengthen-surface-pattern-classes-in-base-css",
+          "number": 1,
+          "title": "Strengthen surface pattern classes in base.css",
+          "checked": true
+        },
+        {
+          "id": "bee84e92-e9fe-44fc-977b-ed1328115843-check-002-remove-any-solid-background-overrides-that-hide-patterns",
+          "number": 2,
+          "title": "Remove any solid-background overrides that hide patterns",
+          "checked": true
+        },
+        {
+          "id": "bee84e92-e9fe-44fc-977b-ed1328115843-check-003-apply-surface-class-to-accordion-expansion-containers-where-needed",
+          "number": 3,
+          "title": "Apply surface class to accordion expansion containers where needed",
+          "checked": true
+        },
+        {
+          "id": "bee84e92-e9fe-44fc-977b-ed1328115843-check-004-build-check-and-sync-web-ui-dist",
+          "number": 4,
+          "title": "Build/check and sync web-ui-dist",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T15:04:53.552Z",
+      "completedAt": "2026-08-05T15:06:04.098Z",
+      "createdAt": "2026-08-05T15:04:51.051Z",
+      "updatedAt": "2026-08-05T15:06:04.098Z"
+    },
+    {
+      "id": "6d442721-1c54-4117-90a1-0c2aeb3a0182",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 184,
+      "shortId": "TH3RE",
+      "priority": 27,
+      "shortName": "invert-surface-background-orde",
+      "title": "Invert surface background order to expose status patterns",
+      "status": "done",
+      "description": "Invert the order of the multi-value `background:` property on the terminal-status surface classes so the `repeating-linear-gradient` (pattern) is the TOP layer and the `color-mix(... X%, transparent)` tint is the BOTTOM layer. This makes the hatch/stripe/crosshatch patterns visible on the item/accordion surface, matching the appearance of the status badge.\n\n---\n**Completion summary:**\nInverted the order of the multi-value `background:` property on the terminal-status surface classes so the pattern is the TOP layer.\n\nChange:\n- packages/plan-web-ui/src/styles/base.css\n  - `.ap-status-surface-closed`: `repeating-linear-gradient` (stripes) is now FIRST, `color-mix(...)` tint SECOND.\n  - `.ap-status-surface-canceled`: `repeating-linear-gradient` (hatch) is now FIRST, `color-mix(...)` tint SECOND.\n  - `.ap-status-surface-rejected`: the two `repeating-linear-gradient` layers (crosshatch) are now FIRST, `color-mix(...)` tint LAST.\n\nResult:\n- Hatch/stripe/crosshatch patterns are now visible across the entire item/accordion surface, matching the corresponding badge appearance.\n- Tint underneath adds a subtle color wash without covering the pattern.\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui check` clean.\n- `pnpm --filter @agent-plan/web-ui build` clean.\n- Synced to `pi-adapter` and `plan-server` `web-ui-dist`.\n\nTo see the change: reload the Web UI.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6d442721-1c54-4117-90a1-0c2aeb3a0182-check-001-invert-background-order-for-ap-status-surface-closed-canceled-rejected",
+          "number": 1,
+          "title": "Invert background order for .ap-status-surface-closed/canceled/rejected",
+          "checked": true
+        },
+        {
+          "id": "6d442721-1c54-4117-90a1-0c2aeb3a0182-check-002-build-check-and-sync-web-ui-dist",
+          "number": 2,
+          "title": "Build/check and sync web-ui-dist",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T15:13:00.096Z",
+      "completedAt": "2026-08-05T15:13:38.065Z",
+      "createdAt": "2026-08-05T15:12:56.641Z",
+      "updatedAt": "2026-08-05T15:13:38.065Z"
+    },
+    {
+      "id": "86f78553-12e3-4722-81bc-715ae126a707",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 185,
+      "shortId": "TJDMU",
+      "priority": 28,
+      "shortName": "scope-status-pattern-to-row-he",
+      "title": "Scope status pattern to row header only (not children)",
+      "status": "done",
+      "description": "Refactor the surface treatment so the hatch/stripe/crosshatch pattern is applied ONLY to the header of feature/phase rows, not to the entire row container. Currently the pattern is applied to the outer container via statusSurfaceClass, which propagates the pattern to all child task rows (Done tasks end up looking striped too). The user wants the pattern to be visible only on the row's own header.\n\nPlan:\n1. Split statusSurfaceClass into three helpers in display-status-tokens.ts:\n   - statusSurfaceClass (full: pattern + border) — for leaf task rows and list rows.\n   - statusPatternClass (pattern only, no solid tint or border) — for headers inside accordion rows.\n   - statusBorderClass (border color only) — for the container that wraps a header + expansion area.\n2. Add CSS rules for the new classes in base.css.\n3. Update work-tree-rows.tsx:\n   - FeatureTreeRow: apply statusPatternClass to the inner header wrapper; apply statusBorderClass to the outer container.\n   - PhaseTreeRow: same as above.\n   - TaskTreeRow: keep statusSurfaceClass on the outer container (task rows are leaf).\n4. List rows (feature-row, phase-row, task-row): keep statusSurfaceClass since they are leaf rows.\n5. Verify the expansion area below a closed phase has a clean (un-patterned) background, while the phase's own header shows the pattern.\n\nAcceptance:\n- A closed phase header shows the striped pattern; the task children below it have clean backgrounds.\n- A canceled task row shows the hatch pattern on its own row only.\n- Build and type-check pass.\n\n---\n**Completion summary:**\nScoped the status pattern to the row's own header only, so child rows remain clean.\n\nChanges:\n- packages/plan-web-ui/src/lib/display-status-tokens.ts\n  - Added `statusPatternClass(status)` returning `ap-status-pattern-<status>` (pattern only).\n  - Added `statusBorderClass(status)` returning `ap-status-border-<status>` (border color only).\n  - Kept `statusSurfaceClass(status)` as the full surface (pattern + border + tint) for leaf rows.\n- packages/plan-web-ui/src/styles/base.css\n  - Added `.ap-status-pattern-closed/canceled/rejected` with `background-image` only (no tint, no border).\n  - Added `.ap-status-border-closed/canceled/rejected` with `border-color` only.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx\n  - FeatureTreeRow: outer container uses `statusBorderClass(...)`; inner header wrapper uses `statusPatternClass(...)`.\n  - PhaseTreeRow: same split. Task children below the phase remain clean.\n  - TaskTreeRow: keeps `statusSurfaceClass(...)` since task rows are leaf entities.\n\nResult:\n- A closed phase header shows the striped pattern only on its own header; done/canceled children underneath have clean backgrounds.\n- A canceled task row shows the hatch pattern on its own row only.\n- The accordion expansion border (`border-l`) continues to follow the parent status color.\n\nValidation:\n- pnpm --filter @agent-plan/web-ui check clean.\n- pnpm --filter @agent-plan/web-ui build clean.\n- Synced to pi-adapter and plan-server web-ui-dist.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "86f78553-12e3-4722-81bc-715ae126a707-check-001-add-pattern-only-and-border-only-utilities-in-display-status-tokens-ts",
+          "number": 1,
+          "title": "Add pattern-only and border-only utilities in display-status-tokens.ts",
+          "checked": true
+        },
+        {
+          "id": "86f78553-12e3-4722-81bc-715ae126a707-check-002-add-css-rules-for-pattern-only-and-border-only-classes",
+          "number": 2,
+          "title": "Add CSS rules for pattern-only and border-only classes",
+          "checked": true
+        },
+        {
+          "id": "86f78553-12e3-4722-81bc-715ae126a707-check-003-move-pattern-from-container-to-header-wrapper-in-work-tree-rows-tsx",
+          "number": 3,
+          "title": "Move pattern from container to header wrapper in work-tree-rows.tsx",
+          "checked": true
+        },
+        {
+          "id": "86f78553-12e3-4722-81bc-715ae126a707-check-004-keep-full-surface-class-for-task-rows-and-list-rows-leaf-entities",
+          "number": 4,
+          "title": "Keep full-surface class for task rows and list rows (leaf entities)",
+          "checked": true
+        },
+        {
+          "id": "86f78553-12e3-4722-81bc-715ae126a707-check-005-build-check-and-sync-web-ui-dist",
+          "number": 5,
+          "title": "Build/check and sync web-ui-dist",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T15:16:19.688Z",
+      "completedAt": "2026-08-05T15:19:06.287Z",
+      "createdAt": "2026-08-05T15:16:12.102Z",
+      "updatedAt": "2026-08-05T15:19:06.287Z"
+    },
+    {
+      "id": "279736e1-3a01-4882-8dab-f3d1934e94f6",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 186,
+      "shortId": "TPUHA",
+      "priority": 29,
+      "shortName": "apply-pattern-to-all-status-he",
+      "title": "Apply pattern to all status headers (not just terminal)",
+      "status": "done",
+      "description": "After scoping the pattern to the header, the pattern only appears for closed/canceled/rejected. Other statuses (in-progress, started, deferred, blocked, waiting) have no pattern on the header because `statusPatternClass` only renders for terminal states.\n\nFix: use `patternClass(status)` from display-status-tokens.ts everywhere a pattern is needed on a header. This maps to the existing `.status-pattern-*` CSS classes (dashed, pulse, stripe, hatch, crosshatch) which cover all statuses that have a pattern.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T15:23:55.585Z",
+      "completedAt": "2026-08-05T15:24:41.454Z",
+      "createdAt": "2026-08-05T15:23:48.245Z",
+      "updatedAt": "2026-08-05T15:24:41.454Z"
+    },
+    {
+      "id": "e64eca92-a016-4637-a82a-a093ffab65e1",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 187,
+      "shortId": "DHP3D",
+      "priority": 30,
+      "shortName": "map-borders-for-all-statuses-r",
+      "title": "Map borders for all statuses + reduce rejected intensity",
+      "status": "done",
+      "description": "After scoping the pattern to the header, the user wants visible borders for ALL statuses on the outer container (not just closed/canceled/rejected). Also reduce the rejected pattern intensity so the badge text is readable.\n\nPlan:\n1. Update `statusBorderClass(status)` to always return a class for every status (no empty return).\n2. Add `.ap-status-border-*` CSS rules for ALL statuses: planned, started, in-progress, waiting, blocked, deferred, done, closed, canceled, rejected.\n   - For `started` and `deferred` and `waiting`: dashed border style.\n   - For `planned`: dashed border (placeholder).\n   - For `in-progress`, `done`, `closed`, `canceled`, `rejected`, `blocked`: solid border.\n3. Reduce the rejected pattern intensity in `.status-pattern-crosshatch` from 14% to 8% so the badge text is readable on patterned backgrounds.\n4. Verify the work-tree-row container always has a colored border.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T15:28:34.285Z",
+      "completedAt": "2026-08-05T15:29:56.324Z",
+      "createdAt": "2026-08-05T15:28:24.580Z",
+      "updatedAt": "2026-08-05T15:29:56.324Z"
+    },
+    {
+      "id": "a41be976-6dba-43c1-8bce-80c2e92cfc3f",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 188,
+      "shortId": "GE6PH",
+      "priority": 31,
+      "shortName": "unify-border-styles-visible-ba",
+      "title": "Unify border styles + visible backgrounds for all statuses",
+      "status": "done",
+      "description": "Fix inconsistencies between task (statusSurfaceClass) and phase/feature (statusBorderClass) border styles, and make background tints visible enough.\n\nIssues:\n1. Inconsistency: task planned uses solid border (from .ap-status-surface-planned), phase planned uses dashed border (from .ap-status-border-planned). They should be uniform.\n2. Started same problem as Done/Planned: borders not visible enough.\n3. In Progress has border but no background tint (6% alpha too subtle).\n4. Done border too faint (32% opacity), feature F001 has no visible border at all.\n\nFix:\n1. Update .ap-status-surface-planned/started/waiting/deferred to use dashed border-style matching the border-only classes.\n2. Increase background tint for in-progress, started, done (5-6% → 10-12%) for visible presence.\n3. Increase Done border color intensity (32% → 50%) for visibility.\n4. Ensure In Progress has both visible border and visible tint.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T15:51:19.304Z",
+      "completedAt": "2026-08-05T15:51:59.792Z",
+      "createdAt": "2026-08-05T15:51:10.385Z",
+      "updatedAt": "2026-08-05T15:51:59.792Z"
+    },
+    {
+      "id": "78295ed3-1532-4c7f-885f-67ceec58131a",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 189,
+      "shortId": "AKS3Z",
+      "priority": 32,
+      "shortName": "use-full-surface-for-feature-p",
+      "title": "Use full surface for feature/phase container + no-pattern override",
+      "status": "done",
+      "description": "Force feature and phase containers to use the full surface treatment (background tint + border) via statusSurfaceClass, instead of the border-only statusBorderClass. For closed/canceled/rejected, add an override class `ap-status-surface-no-pattern` to strip the pattern from the container so it only appears on the inner header (not on the expansion area below). Pattern-only signals remain on the inner header via patternClass.\n\nAlso bumped alpha levels in .ap-status-border-* (kept as a fallback) to 50-60% for stronger visibility.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T16:08:33.287Z",
+      "completedAt": "2026-08-05T16:08:33.287Z",
+      "createdAt": "2026-08-05T16:08:23.340Z",
+      "updatedAt": "2026-08-05T16:08:33.287Z"
+    },
+    {
+      "id": "ce91aaa4-c606-4440-9767-8bbf61623001",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 190,
+      "shortId": "5JP7W",
+      "priority": 33,
+      "shortName": "force-visible-borders-bump-alp",
+      "title": "Force visible borders: bump alpha 70-75% and 1.5px width",
+      "status": "done",
+      "description": "User frustration: borders still not visible. Push alpha to 70-75% (was 50-60%) and border-width to 1.5px (was 1px) for all .ap-status-surface-* rules. Bumped background tint 10% → 14-16% so the presence is even more visible. Bumped closed/canceled/rejected pattern intensity 22→22% but kept tint at 8-10% so badge stays readable.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T16:13:13.879Z",
+      "completedAt": "2026-08-05T16:13:13.879Z",
+      "createdAt": "2026-08-05T16:12:57.918Z",
+      "updatedAt": "2026-08-05T16:13:13.879Z"
+    },
+    {
+      "id": "92907bb0-134d-4b82-8093-c820f1c3ebc7",
+      "phaseId": "b907be5a-3952-46ea-9f65-4a228207c5a5",
+      "number": 191,
+      "shortId": "MD7JJ",
+      "priority": 34,
+      "shortName": "refactor-single-source-of-trut",
+      "title": "Refactor: single source of truth for status visual config (bg, fg, border, pattern)",
+      "status": "done",
+      "description": "Refactor the status surface treatment to use a single visual config map in display-status-tokens.ts. The CSS for .ap-status-surface-* (10 scattered rules with bg/border/widht/pattern) is replaced with ONE CSS rule that consumes CSS variables. The variables are populated via inline style from a JS map (STATUS_VISUAL).\n\nAfter this refactor:\n- Adding a new status = ONE entry in STATUS_VISUAL.\n- Tweaking visibility = ONE number in bgAlpha/borderAlpha.\n- Tweaking pattern intensity = ONE number in patternAlpha.\n- No more duplication of CSS rules.\n\nPlan:\n1. Add STATUS_VISUAL map in display-status-tokens.ts with per-status config: bgAlpha, borderAlpha, borderStyle, borderWidth, patternKind, patternAlpha, patternDensity, fgAlpha.\n2. Add statusStyleVars(status) helper that returns inline CSS properties for the --status-* variables.\n3. Replace .ap-status-surface-* scattered CSS rules with a single .ap-status-surface rule that uses the variables.\n4. Keep .ap-status-surface-no-pattern as a single override.\n5. Update work-tree-rows.tsx (FeatureTreeRow, PhaseTreeRow, TaskTreeRow) to use statusStyleVars(status) on the container.\n6. Optionally: refactor the badge to use the same statusStyleVars for fg/bg.\n7. Verify build/check.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T16:15:30.444Z",
+      "completedAt": "2026-08-05T16:28:38.908Z",
+      "createdAt": "2026-08-05T16:15:19.968Z",
+      "updatedAt": "2026-08-05T16:28:38.908Z"
+    }
+  ],
+  "createdAt": "2026-08-04T13:00:22.981Z",
+  "updatedAt": "2026-08-05T16:28:38.908Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-05T16:20:57.465Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/b907be5a-3952-46ea-9f65-4a228207c5a5-2026-08-09T17-53-41-550Z.md",
+      "clearedAt": "2026-08-09T17:53:41.550Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": []
+}

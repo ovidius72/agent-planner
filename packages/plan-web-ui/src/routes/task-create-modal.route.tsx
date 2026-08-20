@@ -7,7 +7,7 @@ import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
-import { taskStatuses } from "../lib/statuses";
+import { taskTransitionStatuses } from "../lib/statuses";
 import { useShortcut } from "../lib/shortcuts";
 
 export function TaskCreateModalRoute() {
@@ -25,7 +25,7 @@ export function TaskCreateModalRoute() {
         <Field label="Checklist (one per line)"><Textarea name="checklist" placeholder={"Step one\nStep two\nStep three"} /></Field>
         <Field label="Status">
           <Select name="status" defaultValue="planned">
-            {taskStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {taskTransitionStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
         <ModalActions>

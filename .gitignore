@@ -40,8 +40,6 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
-# Planner runtime data (per-project, not part of the source repo)
-.planner
 
 # Pi agent local state
 .pi

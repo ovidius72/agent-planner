@@ -1,0 +1,104 @@
+{
+  "id": "47797e21-9333-4e95-a643-d2bf00a6001a",
+  "featureId": "70134ccd-3e0a-43b0-b03a-4bfa7b6fb277",
+  "number": 32,
+  "shortId": "3AKLT",
+  "priority": 1,
+  "slug": "test-phase",
+  "title": "Test phase",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Throwaway phase holding the status-history/checklist test task. Created under the Test feature to exercise pending→in-progress→done lifecycle with real timestamps and checklist C{n} toggling. Not implementation work.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "6cf74348-9c59-4a17-be5e-ab29c7cb38ab"
+  ],
+  "tasks": [
+    {
+      "id": "6cf74348-9c59-4a17-be5e-ab29c7cb38ab",
+      "phaseId": "47797e21-9333-4e95-a643-d2bf00a6001a",
+      "number": 126,
+      "shortId": "XYMVQ",
+      "priority": 1,
+      "shortName": "status-history-checklist-toggl",
+      "title": "Status history + checklist toggle test",
+      "status": "done",
+      "description": "Live UI test task. Verifies: (a) StatusCardStepper renders pending→in-progress→done with 10s-gapped timestamps; (b) checklist C1..C5 numbering renders and planner-task-checklist-toggle marks C1/C2/C3 done without rewriting the list; (c) \"New Added Tasks\" card appears on home dashboard within 3 min. Throwaway — delete after inspecting.\n\n---\n**Completion summary:**\nTest checklist granular ops + status history. All 5 steps ticked. Stepper redesign, task_create checklist seeding, checklist add/remove/toggle granular tools (plan-core/checklist.ts helpers), agent guidance (skill + tool descriptions), README 36→38, slash commands + completions. Verified via MCP end-to-end (add C4, toggle by C{n}/title, remove C1 renumber, stable ids, checked preserved).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6cf74348-9c59-4a17-be5e-ab29c7cb38ab-check-001-step-one",
+          "number": 1,
+          "title": "Step one",
+          "checked": true
+        },
+        {
+          "id": "6cf74348-9c59-4a17-be5e-ab29c7cb38ab-check-002-step-two",
+          "number": 2,
+          "title": "Step two",
+          "checked": true
+        },
+        {
+          "id": "6cf74348-9c59-4a17-be5e-ab29c7cb38ab-check-003-step-three",
+          "number": 3,
+          "title": "Step three",
+          "checked": true
+        },
+        {
+          "id": "6cf74348-9c59-4a17-be5e-ab29c7cb38ab-check-004-step-four",
+          "number": 4,
+          "title": "Step four",
+          "checked": true
+        },
+        {
+          "id": "6cf74348-9c59-4a17-be5e-ab29c7cb38ab-check-005-step-five",
+          "number": 5,
+          "title": "Step five",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T18:46:12.325Z",
+      "completedAt": "2026-07-30T08:14:39.192Z",
+      "createdAt": "2026-07-29T18:45:52.992Z",
+      "updatedAt": "2026-07-30T08:14:39.192Z"
+    }
+  ],
+  "createdAt": "2026-07-29T18:45:47.704Z",
+  "updatedAt": "2026-08-06T18:32:15.724Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-07-29T20:12:50.862Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/47797e21-9333-4e95-a643-d2bf00a6001a-2026-07-30T08-14-38-571Z.md",
+      "clearedAt": "2026-07-30T08:14:38.571Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "c2224e02-7bfc-488a-b351-7f62d18b6046",
+      "date": "2026-07-30T08:14:38.577Z",
+      "fromStatus": "draft",
+      "toStatus": "done",
+      "title": "draft → done",
+      "description": ""
+    }
+  ]
+}

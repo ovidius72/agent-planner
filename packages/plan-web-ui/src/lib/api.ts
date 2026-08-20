@@ -13,6 +13,8 @@ function normalizeTask(task: Task): Task {
     acceptedDecisions: task.acceptedDecisions ?? [],
     checklist: task.checklist ?? [],
     subtasks: task.subtasks ?? [],
+    pauseSnapshot: task.pauseSnapshot ?? null,
+    pauseHistory: task.pauseHistory ?? [],
     startedAt: task.startedAt ?? "",
     completedAt: task.completedAt ?? "",
     descriptionUpdatedAt: task.descriptionUpdatedAt ?? "",
@@ -66,6 +68,7 @@ function normalizeProject(project: Project): Project {
     technologies: project.technologies ?? [],
     tools: project.tools ?? [],
     acceptedDecisions: project.acceptedDecisions ?? [],
+    workDeviations: project.workDeviations ?? [],
     planRoot: project.planRoot ?? "",
     projectRoot: project.projectRoot ?? "",
     workflowRules: {
@@ -141,6 +144,19 @@ export interface ActiveTaskSummary {
   featureId: string;
   featureNumber: number;
   status: string;
+}
+
+export interface FocusTaskSummary extends ActiveTaskSummary {
+  status: Task["status"];
+  pauseSnapshot: Task["pauseSnapshot"];
+  pendingResume: boolean;
+  deviationId: string;
+}
+
+export interface TaskFocusSummary {
+  active: FocusTaskSummary[];
+  paused: FocusTaskSummary[];
+  pendingResume: FocusTaskSummary[];
 }
 
 export async function getProject(): Promise<Project> {
@@ -245,6 +261,11 @@ export async function deleteTask(taskId: string): Promise<{ deleted: string }> {
 
 export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
   return request("/tasks/active");
+}
+
+export async function getTaskFocus(): Promise<TaskFocusSummary> {
+  const result = await request<TaskFocusSummary>("/tasks/focus");
+  return { active: result.active ?? [], paused: result.paused ?? [], pendingResume: result.pendingResume ?? [] };
 }
 
 export async function listHandoffs(): Promise<HandoffSummary[]> {

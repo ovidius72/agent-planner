@@ -62,7 +62,7 @@ test("listTools exposes the full published tool set with actionable input schema
       "planner-task-update", "planner-task-checklist-toggle",
       "planner-task-checklist-add", "planner-task-checklist-remove",
       "planner-task-delete", "planner-task-recommend", "planner-task-deviation",
-      "planner-task-start", "planner-task-complete",
+      "planner-task-pause", "planner-task-switch", "planner-task-start", "planner-task-complete",
       "planner-handoff-list", "planner-handoff-show", "planner-handoff-write",
       "planner-handoff-prepare", "planner-handoff-clear",
       "planner-web", "planner-load", "planner-disable",

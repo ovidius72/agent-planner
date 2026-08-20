@@ -1,0 +1,89 @@
+{
+  "id": "7ca415dc-ae45-4a46-97f9-26009849dea2",
+  "featureId": "66e695a2-70cc-4916-8a29-99fedb40cbd1",
+  "number": 45,
+  "shortId": "X8N5U",
+  "priority": 4,
+  "slug": "deterministic-shortid-backfill",
+  "title": "Deterministic shortId backfill",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Make `shortId` generation deterministic for existing entities so multiple worktrees starting from the same commit produce identical shortIds during schema backfill.\n\nCode references:\n- `packages/plan-core/src/naming.ts:34` — `createShortId()` (random)\n- `packages/plan-core/src/plan-store.ts:1309` — `ensureShortIdsAndPriority()`\n- `packages/plan-core/src/schema.ts` — Feature/Phase/Task schemas with `shortId`\n\nCurrent state:\n- `createShortId()` picks 5 random Crockford characters.\n- `ensureShortIdsAndPriority()` assigns shortIds to any entity with an empty `shortId`.\n- In the heca project, `myvim` and `/Users/antonio/projects/heca` produced different shortIds (`P3QX2`, `2B79G`, `6HRWJ` vs `4LGHX`, `483GL`) for the same feature UUIDs.\n\nWork to do:\n1. Add an optional `seed` parameter to `createShortId(existing, seed?)`.\n2. When `seed` is provided, derive the shortId deterministically from a stable hash of the seed (e.g. stable string hash encoded in Crockford alphabet), then scan offsets for collision avoidance.\n3. In `ensureShortIdsAndPriority()`, pass stable seeds:\n   - features: `feature:${f.number}:${f.id}`\n   - phases: `phase:${p.number}:${p.id}`\n   - tasks: `task:${t.number}:${t.id}`\n4. Keep the random path for new entity creation where no stable seed exists yet.\n5. Add unit tests verifying deterministic output and collision handling.\n\nBehaviors to preserve:\n- Existing non-empty shortIds must never be overwritten.\n- Collision guard must still function if a deterministic candidate is already taken.\n- Newly created entities via `task_create`/`phase_create`/`feature_create` continue to receive random shortIds (they have no stable history yet).",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "8187b283-c4a6-4845-8ada-93ec308ec321"
+  ],
+  "tasks": [
+    {
+      "id": "8187b283-c4a6-4845-8ada-93ec308ec321",
+      "phaseId": "7ca415dc-ae45-4a46-97f9-26009849dea2",
+      "number": 194,
+      "shortId": "KT9QW",
+      "priority": 1,
+      "shortName": "implement-deterministic-shorti",
+      "title": "Implement deterministic shortId seeding",
+      "status": "done",
+      "description": "Make `createShortId` deterministic when a stable seed is provided, and use it during `ensureShortIdsAndPriority()`.\n\nConcrete steps:\n1. Add optional `seed` parameter to `createShortId(existing, seed?)`.\n2. Implement stable hash + Crockford encoding for seeded ids.\n3. Use collision-offset scan if seeded candidate is taken.\n4. Update `ensureShortIdsAndPriority()` to pass stable seeds:\n   - `feature:${number}:${id}`\n   - `phase:${number}:${id}`\n   - `task:${number}:${id}`\n5. Keep random generation for new entity creation (no stable history).\n6. Add unit tests for determinism and collision behavior.\n\n---\n**Completion summary:**\nImplemented as part of P042 commit: createShortId(existing, seed?) derives IDs deterministically from a stable hash of the seed; ensureShortIdsAndPriority passes feature:/phase:/task: seeds. Verified two worktrees produce identical 497 shortIds.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "8187b283-c4a6-4845-8ada-93ec308ec321-check-001-add-seed-parameter-to-createshortid",
+          "number": 1,
+          "title": "Add seed parameter to createShortId",
+          "checked": false
+        },
+        {
+          "id": "8187b283-c4a6-4845-8ada-93ec308ec321-check-002-implement-stable-hash-encoder",
+          "number": 2,
+          "title": "Implement stable hash encoder",
+          "checked": false
+        },
+        {
+          "id": "8187b283-c4a6-4845-8ada-93ec308ec321-check-003-update-ensureshortidsandpriority-seeds",
+          "number": 3,
+          "title": "Update ensureShortIdsAndPriority seeds",
+          "checked": false
+        },
+        {
+          "id": "8187b283-c4a6-4845-8ada-93ec308ec321-check-004-preserve-random-path-for-new-entities",
+          "number": 4,
+          "title": "Preserve random path for new entities",
+          "checked": false
+        },
+        {
+          "id": "8187b283-c4a6-4845-8ada-93ec308ec321-check-005-add-unit-tests",
+          "number": 5,
+          "title": "Add unit tests",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:22:52.611Z",
+      "completedAt": "2026-08-06T16:22:52.611Z",
+      "createdAt": "2026-08-06T15:27:09.260Z",
+      "updatedAt": "2026-08-06T16:22:52.611Z"
+    }
+  ],
+  "createdAt": "2026-08-06T15:26:27.676Z",
+  "updatedAt": "2026-08-06T16:26:16.790Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

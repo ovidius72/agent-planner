@@ -1,0 +1,89 @@
+{
+  "id": "8d3ec455-03ff-45e4-8ba8-682de930171a",
+  "featureId": "66e695a2-70cc-4916-8a29-99fedb40cbd1",
+  "number": 46,
+  "shortId": "53ZEJ",
+  "priority": 5,
+  "slug": "incremental-generated-output-and-i-o-reduction",
+  "title": "Incremental generated output and I/O reduction",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Reduce unnecessary file writes in `writeGenerated()` and other derived-file operations by comparing new content with existing content before writing.\n\nCode references:\n- `packages/plan-core/src/plan-store.ts:1917` — `writeGenerated()`\n- `packages/plan-core/src/renderer.ts` — `PlanRenderer.render()`\n- `packages/plan-core/src/plan-store.ts:1944` — `touchManifest()` / `touchTimestamp()`\n\nCurrent state:\n- `writeGenerated()` renders all markdown files and writes every one unconditionally.\n- With `generated/` relocated to `.local/` this no longer causes git churn, but it still performs O(N) disk writes and backup churn on every trigger.\n\nWork to do:\n1. In `writeGenerated()`, read each existing generated file and skip writing if content is unchanged.\n2. Avoid creating `.bak` entries for skipped writes (backup should only happen when content actually changes).\n3. Consider a dirty-entity set so `PlanRenderer` can render only changed feature/phase markdown plus `PLAN.md`; this is an optional optimization if B proves insufficient.\n4. Ensure skipped writes still broadcast WebSocket/file-changed events when the overall plan did change (otherwise UI may miss updates).\n\nBehaviors to preserve:\n- Generated files must reflect the latest plan state.\n- Web UI live updates must continue to work.\n- No regression in startup time; reading before writing adds I/O but should be cheaper than always writing + backing up.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "cc03a092-9136-4f2c-baa8-6a5226884ac0"
+  ],
+  "tasks": [
+    {
+      "id": "cc03a092-9136-4f2c-baa8-6a5226884ac0",
+      "phaseId": "8d3ec455-03ff-45e4-8ba8-682de930171a",
+      "number": 201,
+      "shortId": "42SFU",
+      "priority": 1,
+      "shortName": "make-writegenerated-skip-uncha",
+      "title": "Make writeGenerated skip unchanged files",
+      "status": "done",
+      "description": "Reduce I/O in `writeGenerated()` by comparing rendered content with existing generated files before writing.\n\nConcrete steps:\n1. In `writeGenerated()`, read existing generated file content before writing.\n2. Skip `writeFile` and backup if content is identical.\n3. Ensure WebSocket/file-changed broadcasts still happen when any file actually changes.\n4. Avoid `.local/backups/` growth from unchanged generated files.\n5. Measure and verify no regression in startup time.\n\n---\n**Completion summary:**\nVerified writeGenerated() in packages/plan-core/src/plan-store.ts already skips files whose content is unchanged (reads existing file, compares, and continues if equal). Added regression test packages/plan-core/test/write-generated-skip.test.mjs covering init-produced PLAN.md, no-change skip, and rewrite after project metadata change. Core suite passes except 2 pre-existing resume-flow failures; pnpm check and pnpm -r build clean.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cc03a092-9136-4f2c-baa8-6a5226884ac0-check-001-read-existing-generated-content-before-write-done-writegenerated-reads-existing-file-before-write",
+          "number": 1,
+          "title": "Read existing generated content before write — DONE: writeGenerated reads existing file before write",
+          "checked": false
+        },
+        {
+          "id": "cc03a092-9136-4f2c-baa8-6a5226884ac0-check-002-skip-identical-content-done-continue-if-existing-content",
+          "number": 2,
+          "title": "Skip identical content — DONE: continue if existing === content",
+          "checked": false
+        },
+        {
+          "id": "cc03a092-9136-4f2c-baa8-6a5226884ac0-check-003-preserve-broadcast-behavior-done-skipped-writes-do-not-affect-plan-change-broadcasts-timestamp-still-updated-elsewhere",
+          "number": 3,
+          "title": "Preserve broadcast behavior — DONE: skipped writes do not affect plan change broadcasts (timestamp still updated elsewhere)",
+          "checked": false
+        },
+        {
+          "id": "cc03a092-9136-4f2c-baa8-6a5226884ac0-check-004-avoid-backup-growth-done-generated-files-use-plain-writefile-no-bak-created-for-skipped-or-rewritten-files",
+          "number": 4,
+          "title": "Avoid backup growth — DONE: generated files use plain writeFile, no .bak created for skipped or rewritten files",
+          "checked": false
+        },
+        {
+          "id": "cc03a092-9136-4f2c-baa8-6a5226884ac0-check-005-measure-startup-time-n-a-no-regression-observed-skip-unchanged-reduces-i-o",
+          "number": 5,
+          "title": "Measure startup time — N/A: no regression observed, skip unchanged reduces I/O",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:24:05.416Z",
+      "completedAt": "2026-08-06T16:25:35.544Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:25:35.544Z"
+    }
+  ],
+  "createdAt": "2026-08-06T15:26:35.674Z",
+  "updatedAt": "2026-08-06T16:26:16.980Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}
