@@ -47,12 +47,15 @@
       "temporaryTaskId": "52e1f526-0b0c-4f8c-82da-578314674d7b",
       "resumeTaskId": "557b7be1-e7d6-45d2-8847-117ada753105",
       "reason": "User explicitly approved urgent implementation of structured task suspension, deterministic return triggers, and priority-safe task switching before resuming the previously recommended cross-harness task.",
+      "snapshot": null,
       "requestedBy": "user",
       "approvedBy": "user",
       "state": "resolved",
       "createdAt": "2026-08-19T11:46:40.992Z",
       "activatedAt": "2026-08-19T11:46:45.899Z",
-      "resolvedAt": "2026-08-19T11:55:01.422Z"
+      "resumeRequiredAt": "",
+      "resolvedAt": "2026-08-19T11:55:01.422Z",
+      "resumedAt": ""
     },
     {
       "id": "7bced416-bce2-4806-9b0c-42c2d45fb2c2",
@@ -60,12 +63,15 @@
       "temporaryTaskId": "0b9c78ab-b591-4375-85d1-038d4648dfd0",
       "resumeTaskId": "557b7be1-e7d6-45d2-8847-117ada753105",
       "reason": "User explicitly requested immediate cross-harness runtime version reporting after the 0.2.21 release. Complete T293, then return to the preserved P059(F015)/T253 cross-harness normalization task.",
+      "snapshot": null,
       "requestedBy": "user",
       "approvedBy": "user",
       "state": "resolved",
       "createdAt": "2026-08-20T15:19:09.841Z",
       "activatedAt": "2026-08-20T15:19:14.065Z",
-      "resolvedAt": "2026-08-20T15:33:30.244Z"
+      "resumeRequiredAt": "",
+      "resolvedAt": "2026-08-20T15:33:30.244Z",
+      "resumedAt": ""
     }
   ]
 }
