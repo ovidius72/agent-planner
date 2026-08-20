@@ -5,13 +5,13 @@
     "name": "Agent Plan"
   },
   "description": "Agent Plan — structured project planning for Claude Code (features, phases, tasks, live web dashboard).",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "plugins": [
     {
       "name": "agent-plan",
       "source": "./plugins/claude-code",
       "description": "Structured project planning for Claude Code. Manage features, phases, tasks, and a live web dashboard. Disabled by default; run /planner load to enable.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "author": {
         "name": "Agent Plan"
       },
