@@ -1,0 +1,233 @@
+{
+  "id": "226e309f-39ea-469a-9460-b2ccc8f81e8e",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 51,
+  "shortId": "LEHEY",
+  "priority": 11,
+  "slug": "handoff-lifecycle-archive-and-target-confirmation",
+  "title": "Handoff lifecycle, archive and target confirmation",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make handoff lifecycle reliable across Pi, MCP, server and Web UI.",
+  "description": "Completed handoff lifecycle hardening across core, Pi, MCP, server, and Web UI. PlanStore now archives stale handoffs when phases become done/canceled, archives replaced content as superseded, rejects new writes to terminal phases, repairs legacy stale data, filters listHandoffs() to active non-orphan phases, and exposes archived handoff summaries from `.planner/.local/handoff-archive/`. Pi lifecycle mutation paths now call syncTaskStatusRollup(); Pi/MCP handoff tools require explicit phaseRef and confirmed=true after the agent proposes the exact feature+phase and receives user confirmation, with no first-in-progress fallback. Server exposes `/handoffs/archive`; Web UI keeps `/handoff` pending-only and adds `/handoff/archive` for recoverable history. Files: packages/plan-core/src/plan-store.ts, packages/plan-core/test/handoff-lifecycle.test.mjs, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, packages/plan-server/src/serve.ts, packages/plan-web-ui/src/routes/handoff.route.tsx, packages/plan-web-ui/src/routes/handoff-archive.route.tsx, router/API/types, and copied web-ui-dist bundles. Validation: pnpm -r build, pnpm check, focused core tests pass; no commit/push performed.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Phase completion archives its pending handoff in every Pi/MCP/server lifecycle path.",
+    "repair() and listHandoffs() clean legacy terminal-phase handoffs; active list excludes archived/terminal/orphan entries.",
+    "Handoff target is proposed from conversation/context and requires explicit user confirmation before write; no implicit phase fallback remains.",
+    "Archived handoffs are recoverable through PlanStore/server and visible only at /handoff/archive.",
+    "Build, typecheck, focused regression tests, and generated UI bundle validation pass."
+  ],
+  "taskIds": [
+    "bc22af3d-70a0-4ff4-8c80-d1477c326fba",
+    "a689e845-87aa-478f-9085-e0beffefd5c5",
+    "7861a7cf-b336-423b-8c0f-bcc3d9531770",
+    "96a04526-b44e-4283-ae9e-e3cc440cdeb5"
+  ],
+  "tasks": [
+    {
+      "id": "bc22af3d-70a0-4ff4-8c80-d1477c326fba",
+      "phaseId": "226e309f-39ea-469a-9460-b2ccc8f81e8e",
+      "number": 220,
+      "shortId": "JL6J2",
+      "priority": 1,
+      "shortName": "core-handoff-lifecycle",
+      "title": "Core handoff lifecycle and archive cleanup",
+      "status": "done",
+      "description": "Update packages/plan-core/src/plan-store.ts around syncTaskStatusRollup(), clearPhaseHandoff(), listHandoffs(), repair(), and setPhaseHandoff(). Preserve the existing phase-scoped handoff and handoffHistory archive under .planner/.local/handoff-archive/, but make completion cleanup reliable and idempotent: archive stale handoffs when a derived phase reaches done, sweep legacy stale done handoffs during repair, hide done/canceled/orphan entries from the active list, and reject new writes to completed phases. Add a core archive listing/read model suitable for the Web UI while retaining the five-entry history cap and clear reasons. Cover legacy plans and malformed/missing archive files without losing current phase JSON data.\n\n---\n**Completion summary:**\nImplemented core handoff lifecycle hardening in packages/plan-core/src/plan-store.ts: added ArchivedPhaseHandoffSummary/listArchivedHandoffs(), rejected writes to done/canceled phases, archived replaced handoffs as superseded, filtered active list to non-done/non-canceled/non-orphan phases, added cleanupStaleHandoffs() and repair() retroactive stale cleanup. Added packages/plan-core/test/handoff-lifecycle.test.mjs covering supersede archive, repair cleanup, active filtering, and done-phase write rejection. Verified core build and 18 focused handoff/resume tests pass.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "bc22af3d-70a0-4ff4-8c80-d1477c326fba-check-001-audit-derived-phase-status-and-all-planstore-handoff-lifecycle-paths",
+          "number": 1,
+          "title": "Audit derived phase status and all PlanStore handoff lifecycle paths.",
+          "checked": true
+        },
+        {
+          "id": "bc22af3d-70a0-4ff4-8c80-d1477c326fba-check-002-implement-stale-done-cleanup-and-active-list-filtering",
+          "number": 2,
+          "title": "Implement stale-done cleanup and active-list filtering.",
+          "checked": true
+        },
+        {
+          "id": "bc22af3d-70a0-4ff4-8c80-d1477c326fba-check-003-reject-writes-to-done-phases-and-expose-archived-handoff-metadata-content",
+          "number": 3,
+          "title": "Reject writes to done phases and expose archived handoff metadata/content.",
+          "checked": true
+        },
+        {
+          "id": "bc22af3d-70a0-4ff4-8c80-d1477c326fba-check-004-add-core-regression-tests-for-completion-repair-filtering-and-archive-retention",
+          "number": 4,
+          "title": "Add core regression tests for completion, repair, filtering, and archive retention.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T14:46:24.034Z",
+      "completedAt": "2026-08-09T14:49:38.364Z",
+      "createdAt": "2026-08-09T14:45:55.759Z",
+      "updatedAt": "2026-08-09T14:49:38.364Z"
+    },
+    {
+      "id": "a689e845-87aa-478f-9085-e0beffefd5c5",
+      "phaseId": "226e309f-39ea-469a-9460-b2ccc8f81e8e",
+      "number": 221,
+      "shortId": "K94KE",
+      "priority": 2,
+      "shortName": "adapter-handoff-targeting",
+      "title": "Pi and MCP handoff targeting and lifecycle integration",
+      "status": "done",
+      "description": "Update packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts. Invoke PlanStore.syncTaskStatusRollup() after every Pi task lifecycle mutation (task start, complete, status update, delete where applicable) to match existing MCP/server behavior. Remove the first-in-progress fallback from handoff resolution and make writes fail safely without a resolved target; implement prepare as a proposal flow that derives the most recent non-done work context, presents the exact F/P/T target for user confirmation, and writes only after confirmation. Never propose or write an operational handoff on a derived done/canceled phase. Keep show/list/clear semantics explicit, preserve composite identifiers, and align all tool descriptions/protocol text so they no longer instruct agents to guess or write immediately.\n\n---\n**Completion summary:**\nIntegrated Pi lifecycle paths with PlanStore.syncTaskStatusRollup() so phase completion archives handoffs; task completion responses now report archived phase handoffs. Removed implicit first-in-progress handoff resolution in Pi and MCP. Handoff writes/clears/shows now require explicit phaseRef; writes require confirmed=true after the agent proposes the exact target and receives user confirmation. Updated Pi prepare prompt, MCP prepare tool, legacy handoff tools, and CLI help. Verified core/pi-adapter/mcp builds and pnpm check.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a689e845-87aa-478f-9085-e0beffefd5c5-check-001-wire-pi-lifecycle-mutations-to-synctaskstatusrollup",
+          "number": 1,
+          "title": "Wire Pi lifecycle mutations to syncTaskStatusRollup().",
+          "checked": true
+        },
+        {
+          "id": "a689e845-87aa-478f-9085-e0beffefd5c5-check-002-remove-unsafe-implicit-phase-fallback-in-both-adapters",
+          "number": 2,
+          "title": "Remove unsafe implicit phase fallback in both adapters.",
+          "checked": true
+        },
+        {
+          "id": "a689e845-87aa-478f-9085-e0beffefd5c5-check-003-implement-proposal-confirmation-behavior-for-handoff-preparation",
+          "number": 3,
+          "title": "Implement proposal/confirmation behavior for handoff preparation.",
+          "checked": true
+        },
+        {
+          "id": "a689e845-87aa-478f-9085-e0beffefd5c5-check-004-align-tool-schemas-confirmations-and-operational-prompts-add-adapter-tests",
+          "number": 4,
+          "title": "Align tool schemas, confirmations, and operational prompts; add adapter tests.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T14:49:46.188Z",
+      "completedAt": "2026-08-09T15:13:57.869Z",
+      "createdAt": "2026-08-09T14:46:03.344Z",
+      "updatedAt": "2026-08-09T15:13:57.869Z"
+    },
+    {
+      "id": "7861a7cf-b336-423b-8c0f-bcc3d9531770",
+      "phaseId": "226e309f-39ea-469a-9460-b2ccc8f81e8e",
+      "number": 222,
+      "shortId": "FG9DF",
+      "priority": 3,
+      "shortName": "handoff-archive-ui",
+      "title": "Handoff archive API and Web UI route",
+      "status": "done",
+      "description": "Extend packages/plan-server/src/serve.ts and packages/plan-web-ui/src/routes/handoff.route.tsx plus route registration and API types. Keep GET /handoffs limited to pending handoffs on non-done phases, add an archive endpoint that reads PlanStore archive metadata/content, and expose a separate /handoff/archive/ page or nested view. The active page must never render archived or completed-phase handoffs; the archive page should show phase composite ref, feature context, archived timestamp, reason, and recoverable content without allowing archived entries to become active accidentally. Preserve LAN/WS updates, clear behavior, responsive layout, and existing deep links to active phase handoffs.\n\n---\n**Completion summary:**\nAdded PlanStore archive listing consumed by plan-server GET /handoffs/archive. Extended Web UI types/API and created /handoff/archive route with archived timestamp/reason/file/content, while active /handoff now links to archive and only displays pending entries from the filtered core list. Verified core/server/web-ui builds.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7861a7cf-b336-423b-8c0f-bcc3d9531770-check-001-add-server-api-archive-listing-and-content-mapping",
+          "number": 1,
+          "title": "Add server/API archive listing and content mapping.",
+          "checked": true
+        },
+        {
+          "id": "7861a7cf-b336-423b-8c0f-bcc3d9531770-check-002-filter-active-endpoint-page-to-pending-non-done-handoffs",
+          "number": 2,
+          "title": "Filter active endpoint/page to pending non-done handoffs.",
+          "checked": true
+        },
+        {
+          "id": "7861a7cf-b336-423b-8c0f-bcc3d9531770-check-003-implement-handoff-archive-route-and-ui",
+          "number": 3,
+          "title": "Implement /handoff/archive/ route and UI.",
+          "checked": true
+        },
+        {
+          "id": "7861a7cf-b336-423b-8c0f-bcc3d9531770-check-004-verify-responsive-rendering-links-and-live-updates",
+          "number": 4,
+          "title": "Verify responsive rendering, links, and live updates.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T15:14:01.266Z",
+      "completedAt": "2026-08-09T15:16:23.493Z",
+      "createdAt": "2026-08-09T14:46:13.370Z",
+      "updatedAt": "2026-08-09T15:16:23.493Z"
+    },
+    {
+      "id": "96a04526-b44e-4283-ae9e-e3cc440cdeb5",
+      "phaseId": "226e309f-39ea-469a-9460-b2ccc8f81e8e",
+      "number": 223,
+      "shortId": "QSLST",
+      "priority": 4,
+      "shortName": "handoff-regression-verificatio",
+      "title": "End-to-end verification and operational guidance",
+      "status": "done",
+      "description": "Verify the complete handoff lifecycle across PlanStore, Pi adapter, MCP server, HTTP server, and Web UI. Exercise a pending handoff, task completion that closes a phase, repair of pre-existing done-phase handoffs, explicit confirmation of a non-done target after decisions, and archive visibility under /handoff/archive/ while ensuring /handoff remains clean. Update shared tool descriptions or tests where behavior diverges, run pnpm check and relevant builds/tests, and record concrete files, commands, and residual risks in task notes without committing or pushing.\n\n---\n**Completion summary:**\nVerified full handoff lifecycle implementation: pnpm -r build and pnpm check pass; focused core handoff/resume/create/feature validation tests pass (32 tests, plus 4 lifecycle tests after active-list cleanup addition). Copied Vite UI bundle into packages/pi-adapter/web-ui-dist and packages/plan-server/web-ui-dist. Confirmed active /handoff excludes/archives stale done handoffs, archive data is exposed via /handoffs/archive, and repair reports archived counts. No commit or push performed.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "96a04526-b44e-4283-ae9e-e3cc440cdeb5-check-001-run-focused-core-and-adapter-server-regression-tests",
+          "number": 1,
+          "title": "Run focused core and adapter/server regression tests.",
+          "checked": true
+        },
+        {
+          "id": "96a04526-b44e-4283-ae9e-e3cc440cdeb5-check-002-run-pnpm-check-and-relevant-package-builds",
+          "number": 2,
+          "title": "Run pnpm check and relevant package builds.",
+          "checked": true
+        },
+        {
+          "id": "96a04526-b44e-4283-ae9e-e3cc440cdeb5-check-003-exercise-active-archive-ui-api-behavior",
+          "number": 3,
+          "title": "Exercise active/archive UI/API behavior.",
+          "checked": true
+        },
+        {
+          "id": "96a04526-b44e-4283-ae9e-e3cc440cdeb5-check-004-record-verification-results-and-residual-risks",
+          "number": 4,
+          "title": "Record verification results and residual risks.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T15:16:30.162Z",
+      "completedAt": "2026-08-09T15:20:29.522Z",
+      "createdAt": "2026-08-09T14:46:19.626Z",
+      "updatedAt": "2026-08-09T15:20:29.522Z"
+    }
+  ],
+  "createdAt": "2026-08-09T14:45:44.287Z",
+  "updatedAt": "2026-08-09T15:20:51.572Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

@@ -1,0 +1,442 @@
+{
+  "id": "fa4eb802-7f3c-44b9-a0d6-86034f02a917",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 62,
+  "shortId": "L48UC",
+  "priority": 12,
+  "slug": "pi-adapter-command-parsing-work-protocol",
+  "title": "Pi adapter command parsing & work protocol",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Corregge i parametri dei comandi /planner, la risoluzione coerente dei riferimenti e il caricamento obbligatorio del contesto gerarchico prima di avviare un task.",
+  "description": "Il Pi adapter registra il comando `/planner` in `packages/pi-adapter/src/index.ts:2428` e gestisce il ramo `phase add` vicino a `packages/pi-adapter/src/index.ts:1684`; oggi il titolo passato a `/planner phase add <title>` non viene riconosciuto. Va verificato l’intero dispatch dei sottocomandi che richiedono parametri, inclusi i percorsi di aggiornamento feature/fase/task. Un aggiornamento tramite riferimento `F00x` ha riportato successo ma ha scritto sulla feature sbagliata: la risoluzione del riferimento usata dalla validazione e quella usata dalla scrittura devono convergere su un’unica implementazione. Prima di `task_start`, il workflow dell’adapter deve leggere descrizione e requisiti della feature del task e poi descrizione e requisiti della fase; l’ordine è vincolante. Decisioni e modifiche concordate con l’utente devono essere registrate sia nella feature sia nella fase pertinente. Conservare il core harness-agnostic: la policy dell’interazione Pi resta nell’adapter, mentre l’eventuale risolutore condiviso resta nel core. Aggiungere test di regressione per titoli multi-parola, riferimenti F00x/P00x/T00x, shortId e UUID e per l’ordine delle letture di contesto.",
+  "notes": "",
+  "goals": [
+    "Fare in modo che `/planner phase add <title>` e tutti i comandi con argomenti ricevano e interpretino correttamente i parametri.",
+    "Usare un unico percorso di risoluzione per riferimenti `F00x`, `P00x`, `T00x`, shortId e UUID, così lettura e scrittura agiscono sulla stessa entità.",
+    "Prima di `task_start`, caricare e presentare il contesto in ordine feature → fase, inclusi descrizione e requisiti collegati.",
+    "Persistire le decisioni e modifiche concordate con l’utente sia nella feature sia nella fase pertinente."
+  ],
+  "nonGoals": [
+    "Ridisegnare il modello dati del planner o rendere il core dipendente da Pi.",
+    "Modificare deliberatamente entità planner esistenti come workaround del bug.",
+    "Cambiare la semantica dei lifecycle dei task oltre al contesto obbligatorio prima dell’avvio."
+  ],
+  "dependencies": [
+    "`packages/pi-adapter/src/index.ts` per il parsing e l’integrazione con l’host Pi.",
+    "Risolutori e persistenza in `packages/plan-core` e test esistenti del workspace."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "I comandi possono avere convenzioni argomento differenti; una normalizzazione troppo aggressiva può rompere comandi senza parametri.",
+    "La risoluzione di riferimenti può essere duplicata tra adapter, core e MCP; la correzione deve eliminare la divergenza senza introdurre coupling del core a Pi."
+  ],
+  "openQuestions": [],
+  "decisions": [
+    "I parametri dei comandi devono essere inoltrati e interpretati in modo uniforme, inclusi titoli multi-parola.",
+    "La risoluzione di un riferimento deve essere centralizzata, riusata da validazione e mutazione, e verificata con test per F00x/P00x/T00x, shortId e UUID.",
+    "Il contesto prima di task_start segue rigidamente feature (descrizione + requisiti) → fase (descrizione + requisiti).",
+    "Decisioni e modifiche discusse con l’utente vengono registrate sia nella feature sia nella fase pertinente."
+  ],
+  "acceptedDecisions": [
+    {
+      "id": "P062-D001",
+      "title": "Decision capture uses an additive dual-write tool",
+      "decision": "The Pi adapter exposes `decision_record` to append the same structured decision to the active phase and its owning feature after validating ownership.",
+      "rationale": "A dedicated planner operation makes the required two-level persistence explicit and prevents agents from accidentally replacing unrelated decision history.",
+      "implementationNotes": "The operation resolves feature and phase references, verifies the phase belongs to the feature, appends a shared AcceptedDecision under the feature lock, then regenerates planner views.",
+      "acceptedAt": "2026-08-11T08:30:00.000Z"
+    }
+  ],
+  "completionCriteria": [
+    "`/planner phase add <titolo multi-parola>` crea una fase con il titolo corretto.",
+    "Ogni comando Pi adapter che richiede parametri ha copertura di regressione per input valido e gestione dell’input mancante.",
+    "Un `feature_update` tramite `F00x` aggiorna la stessa entità che viene letta tramite quel riferimento; analoghe garanzie esistono per fase e task.",
+    "Il briefing prodotto prima di `task_start` contiene, nell’ordine, feature e relativi requisiti, quindi fase e relativi requisiti.",
+    "Le nuove decisioni di questa fase sono presenti nella feature F005 e nella fase P062."
+  ],
+  "taskIds": [
+    "0877fa3b-b380-4ef6-b778-a1ce2f4c8611",
+    "ec404a24-11aa-404b-99cc-246cccc85a67",
+    "b98af291-dfea-41bb-b1d5-fab38162cd26",
+    "28783840-4707-4401-9f91-84440e55630f",
+    "ff18270f-8972-4525-9e47-8ef224a67f87"
+  ],
+  "tasks": [
+    {
+      "id": "0877fa3b-b380-4ef6-b778-a1ce2f4c8611",
+      "phaseId": "fa4eb802-7f3c-44b9-a0d6-86034f02a917",
+      "number": 269,
+      "shortId": "J4P9D",
+      "priority": 1,
+      "shortName": "fix-command-argument-resolutio",
+      "title": "Fix command argument parsing and audit parameterized commands",
+      "status": "done",
+      "description": "Focus only on command-input handling. Inspect the grouped command registration at `packages/pi-adapter/src/index.ts:2428`, `handlePlanner` near `:1043`, and the `phase add` branch near `:1683`. Determine the exact argument string Pi passes to `handler(args, ctx)` and correct the tokenization/forwarding so `/planner phase add <titolo multi-parola>` preserves its complete title. Inventory every `/planner` branch that consumes `subArgs` or a positional parameter, make their handling consistent, and retain clear diagnostics for missing input. Do not change entity-reference mutation semantics in this task; that belongs to T270. Add direct command-host tests for successful multi-word titles and missing parameters.\n\n---\n**Completion summary:**\nVerified the Pi command handler receives a single complete `args` string per the extension API and preserves `rest.join(\" \")`. Added a real-host regression for `/planner phase add Multi Word Phase Title`, which persists and reports the full title. Updated the task-start and planner context instructions to require feature → phase → task reads. Validation: `pnpm --filter @agent-plan/core build`, `pnpm --filter @agent-plan/pi-adapter build`, `pnpm --filter @agent-plan/mcp check`, and 26 focused tests passed.\n\n---\n**Completion summary:**\nRework after review: removed the adapter-local phase resolver so interactive commands use the shared core resolver, and changed `/planner phase discuss/show/delete/update <ref>` plus `/planner task delete/update <phase-ref>` to resolve P00x/P00x(F00x)/shortId/UUID/title instead of UUID-only `loadPhase`. Added real-host coverage that confirms phase and task commands use P001 without a fallback phase picker. Pi adapter build and 25 focused tests pass.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "0877fa3b-b380-4ef6-b778-a1ce2f4c8611-check-001-done-planned",
+          "date": "2026-08-11T08:38:58.192Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "La review ha rilevato che il task era stato completato senza correggere il bug reale né l’audit dei comandi parametrizzati. Viene riaperto per riprodurre il difetto nel percorso runtime e correggere tutti i resolver che ignorano riferimenti umani.",
+          "description": "La review ha rilevato che il task era stato completato senza correggere il bug reale né l’audit dei comandi parametrizzati. Viene riaperto per riprodurre il difetto nel percorso runtime e correggere tutti i resolver che ignorano riferimenti umani."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0877fa3b-b380-4ef6-b778-a1ce2f4c8611-check-001-map-the-pi-handler-argument-contract-and-all-parameterized-planner-branches",
+          "number": 1,
+          "title": "Map the Pi handler argument contract and all parameterized `/planner` branches.",
+          "checked": true
+        },
+        {
+          "id": "0877fa3b-b380-4ef6-b778-a1ce2f4c8611-check-002-fix-multi-word-phase-add-title-parsing",
+          "number": 2,
+          "title": "Fix multi-word `phase add` title parsing.",
+          "checked": true
+        },
+        {
+          "id": "0877fa3b-b380-4ef6-b778-a1ce2f4c8611-check-003-normalize-handling-and-missing-argument-diagnostics-for-equivalent-command-branches",
+          "number": 3,
+          "title": "Normalize handling and missing-argument diagnostics for equivalent command branches.",
+          "checked": true
+        },
+        {
+          "id": "0877fa3b-b380-4ef6-b778-a1ce2f4c8611-check-004-add-command-host-regression-tests-for-valid-and-absent-parameters",
+          "number": 4,
+          "title": "Add command-host regression tests for valid and absent parameters.",
+          "checked": true
+        },
+        {
+          "id": "0877fa3b-b380-4ef6-b778-a1ce2f4c8611-check-005-run-the-focused-adapter-tests-and-document-results",
+          "number": 5,
+          "title": "Run the focused adapter tests and document results.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T08:07:14.929Z",
+      "completedAt": "2026-08-11T08:43:10.366Z",
+      "createdAt": "2026-08-11T08:06:41.208Z",
+      "updatedAt": "2026-08-11T08:43:10.366Z"
+    },
+    {
+      "id": "ec404a24-11aa-404b-99cc-246cccc85a67",
+      "phaseId": "fa4eb802-7f3c-44b9-a0d6-86034f02a917",
+      "number": 270,
+      "shortId": "A7Y94",
+      "priority": 2,
+      "shortName": "unify-entity-reference-resolut",
+      "title": "Unify entity reference resolution for planner mutations",
+      "status": "done",
+      "description": "Trace strict reference resolution in `packages/pi-adapter/src/index.ts:287` and all tool mutation paths, including `feature_update` near `:3122`, phase updates, and task updates. Reproduce the defect where `feature_update` accepts `F00x` but mutates a different feature, then ensure validation, lookup and write all retain the single resolved internal ID. Audit equivalent feature/phase/task references and preserve support for global F00x/P00x/T00x, shortId, UUID and unambiguous names. Do not rely on checking raw planner files in production code; route through validated PlanStore operations. Add regressions that assert the intended entity changes and adjacent entities remain untouched.\n\n---\n**Completion summary:**\nMade `feature_get` use the same strict resolver as feature mutation tools and return the resolved entity’s derived requirements. Feature mutations already resolve once to the internal UUID before persistence; added an isolated F001 regression proving only the intended feature changes. Phase/task operations use the shared core reference resolvers. Focused build/check and 26 tests passed.\n\n---\n**Completion summary:**\nRework after review completed: all interactive phase resolution now delegates to the shared core resolver (the adapter-local duplicate was removed), including phase discuss/show/delete/update and task delete/update phase arguments. This supports global P00x, composite P00x(F00x), shortId, UUID and title consistently. Host regression confirms P001 does not fall back to a phase picker. Build and focused tests pass.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ec404a24-11aa-404b-99cc-246cccc85a67-check-001-done-planned",
+          "date": "2026-08-11T08:42:51.329Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Riaperto dopo review: i comandi interattivi phase/task continuavano a usare `loadPhase` e ignoravano P00x/shortId/titolo; la precedente chiusura non aveva coperto questi percorsi.",
+          "description": "Riaperto dopo review: i comandi interattivi phase/task continuavano a usare `loadPhase` e ignoravano P00x/shortId/titolo; la precedente chiusura non aveva coperto questi percorsi."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ec404a24-11aa-404b-99cc-246cccc85a67-check-001-map-resolver-use-in-feature-phase-and-task-read-mutation-paths",
+          "number": 1,
+          "title": "Map resolver use in feature, phase and task read/mutation paths.",
+          "checked": true
+        },
+        {
+          "id": "ec404a24-11aa-404b-99cc-246cccc85a67-check-002-reproduce-the-f00x-wrong-target-update-with-isolated-fixtures",
+          "number": 2,
+          "title": "Reproduce the F00x wrong-target update with isolated fixtures.",
+          "checked": true
+        },
+        {
+          "id": "ec404a24-11aa-404b-99cc-246cccc85a67-check-003-centralize-or-consistently-reuse-the-resolved-internal-id-for-validation-and-persistence",
+          "number": 3,
+          "title": "Centralize or consistently reuse the resolved internal ID for validation and persistence.",
+          "checked": true
+        },
+        {
+          "id": "ec404a24-11aa-404b-99cc-246cccc85a67-check-004-cover-human-ids-shortids-uuids-and-ambiguous-names-for-all-entity-kinds",
+          "number": 4,
+          "title": "Cover human IDs, shortIds, UUIDs and ambiguous names for all entity kinds.",
+          "checked": true
+        },
+        {
+          "id": "ec404a24-11aa-404b-99cc-246cccc85a67-check-005-run-focused-resolver-regression-tests-and-record-results",
+          "number": 5,
+          "title": "Run focused resolver regression tests and record results.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T08:21:16.499Z",
+      "completedAt": "2026-08-11T08:43:31.687Z",
+      "createdAt": "2026-08-11T08:08:10.716Z",
+      "updatedAt": "2026-08-11T08:43:31.687Z"
+    },
+    {
+      "id": "b98af291-dfea-41bb-b1d5-fab38162cd26",
+      "phaseId": "fa4eb802-7f3c-44b9-a0d6-86034f02a917",
+      "number": 271,
+      "shortId": "3UVSY",
+      "priority": 3,
+      "shortName": "enforce-context-before-task-st",
+      "title": "Enforce feature-to-phase context before task start",
+      "status": "done",
+      "description": "Inspect the `task_start` tool implementation in `packages/pi-adapter/src/index.ts` and any briefing/recap helpers in `packages/plan-core`. Before a task becomes in-progress, load and present context in the mandatory sequence: first the parent feature description and its linked requirements, then the parent phase description and its linked requirements. Treat absent links as an explicit empty result rather than skipping a level. Preserve the harness-agnostic core boundary: if shared data assembly is useful, expose it as generic planner data, but Pi-specific workflow enforcement remains in the adapter. Add tests that observe both contents and ordering.\n\n---\n**Completion summary:**\nAdded `PlanStore.linkedRequirementsForFeature()` (requirements linked to any phase in the feature) and changed the shared task-context renderer to emit feature description + feature requirements before phase description + phase requirements, including explicit empty states. Pi `task_start` now assembles this context before mutating lifecycle state; MCP receives the same enriched shared briefing. Updated tool/prompt instructions and added ordering regressions. Core/Pi builds and 26 focused tests pass.\n\n---\n**Completion summary:**\nRework after review: moved MCP parent feature/phase context assembly before handoff archival and lifecycle mutation, matching Pi semantics. The shared renderer retains the required feature → requirements → phase → requirements order. MCP typecheck passed.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "b98af291-dfea-41bb-b1d5-fab38162cd26-check-001-done-planned",
+          "date": "2026-08-11T08:42:54.554Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Riaperto dopo review: il briefing MCP veniva ancora costruito dopo la transizione lifecycle, contrariamente al protocollo feature → fase prima di task_start.",
+          "description": "Riaperto dopo review: il briefing MCP veniva ancora costruito dopo la transizione lifecycle, contrariamente al protocollo feature → fase prima di task_start."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b98af291-dfea-41bb-b1d5-fab38162cd26-check-001-locate-current-task-start-validation-and-context-briefing-construction",
+          "number": 1,
+          "title": "Locate current task-start validation and context-briefing construction.",
+          "checked": true
+        },
+        {
+          "id": "b98af291-dfea-41bb-b1d5-fab38162cd26-check-002-define-feature-and-phase-requirement-lookup-without-breaking-unlinked-entities",
+          "number": 2,
+          "title": "Define feature and phase requirement lookup without breaking unlinked entities.",
+          "checked": true
+        },
+        {
+          "id": "b98af291-dfea-41bb-b1d5-fab38162cd26-check-003-implement-mandatory-feature-phase-context-order-before-lifecycle-transition",
+          "number": 3,
+          "title": "Implement mandatory feature → phase context order before lifecycle transition.",
+          "checked": true
+        },
+        {
+          "id": "b98af291-dfea-41bb-b1d5-fab38162cd26-check-004-add-order-sensitive-host-tool-regression-tests",
+          "number": 4,
+          "title": "Add order-sensitive host/tool regression tests.",
+          "checked": true
+        },
+        {
+          "id": "b98af291-dfea-41bb-b1d5-fab38162cd26-check-005-run-focused-task-start-tests-and-record-results",
+          "number": 5,
+          "title": "Run focused task-start tests and record results.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T08:21:53.697Z",
+      "completedAt": "2026-08-11T08:43:54.745Z",
+      "createdAt": "2026-08-11T08:08:19.577Z",
+      "updatedAt": "2026-08-11T08:43:54.745Z"
+    },
+    {
+      "id": "28783840-4707-4401-9f91-84440e55630f",
+      "phaseId": "fa4eb802-7f3c-44b9-a0d6-86034f02a917",
+      "number": 272,
+      "shortId": "WE7YV",
+      "priority": 4,
+      "shortName": "persist-user-decisions",
+      "title": "Persist user decisions across feature and phase context",
+      "status": "done",
+      "description": "Review the feature and phase update/discussion tools in `packages/pi-adapter/src/index.ts`, plus the relevant core schemas and persistence APIs. Implement an adapter workflow that, when a new decision or a meaningful change is agreed with the user during work, records the same decision at both the parent feature and the active phase using the structured decision fields already supported by the plan. Preserve incremental history: never overwrite unrelated existing decisions, and use human-readable decision IDs, title, rationale and implementation notes. Ensure the mechanism can be invoked without treating planner metadata work as a code edit. Add tests proving a captured decision is visible from both parent entities after reload.\n\n---\n**Completion summary:**\nAdded Pi tool `decision_record`, a planner metadata operation that validates feature/phase ownership and appends one structured AcceptedDecision to both entities under the feature lock, preserving existing history. Added host round-trip coverage that reloads planner entities and confirms both contain the same decision. Pi adapter build and 7 host tests pass.\n\n---\n**Completion summary:**\nRework after review: `decision_record` now compensates the feature write if the phase write fails, returning an error instead of reporting a partial dual-write as success. Added a host regression that forces the phase persistence failure and verifies the feature decision is removed. Pi adapter build and 9 host tests pass.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "28783840-4707-4401-9f91-84440e55630f-check-001-done-planned",
+          "date": "2026-08-11T08:42:58.127Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Riaperto dopo review: `decision_record` poteva lasciare una scrittura parziale tra feature e fase in caso di errore nella seconda persistenza.",
+          "description": "Riaperto dopo review: `decision_record` poteva lasciare una scrittura parziale tra feature e fase in caso di errore nella seconda persistenza."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "28783840-4707-4401-9f91-84440e55630f-check-001-map-structured-decision-fields-and-the-current-feature-phase-update-paths",
+          "number": 1,
+          "title": "Map structured decision fields and the current feature/phase update paths.",
+          "checked": true
+        },
+        {
+          "id": "28783840-4707-4401-9f91-84440e55630f-check-002-define-an-additive-dual-write-workflow-that-preserves-existing-decisions",
+          "number": 2,
+          "title": "Define an additive dual-write workflow that preserves existing decisions.",
+          "checked": true
+        },
+        {
+          "id": "28783840-4707-4401-9f91-84440e55630f-check-003-implement-the-feature-and-phase-persistence-helper-or-command-tool-integration",
+          "number": 3,
+          "title": "Implement the feature-and-phase persistence helper or command/tool integration.",
+          "checked": true
+        },
+        {
+          "id": "28783840-4707-4401-9f91-84440e55630f-check-004-add-reload-based-regression-coverage-for-both-entities-and-existing-history",
+          "number": 4,
+          "title": "Add reload-based regression coverage for both entities and existing history.",
+          "checked": true
+        },
+        {
+          "id": "28783840-4707-4401-9f91-84440e55630f-check-005-run-focused-persistence-tests-and-document-results",
+          "number": 5,
+          "title": "Run focused persistence tests and document results.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T08:22:52.278Z",
+      "completedAt": "2026-08-11T08:44:46.836Z",
+      "createdAt": "2026-08-11T08:08:27.659Z",
+      "updatedAt": "2026-08-11T08:44:46.836Z"
+    },
+    {
+      "id": "ff18270f-8972-4525-9e47-8ef224a67f87",
+      "phaseId": "fa4eb802-7f3c-44b9-a0d6-86034f02a917",
+      "number": 273,
+      "shortId": "QKAYG",
+      "priority": 5,
+      "shortName": "verify-pi-adapter-regressions",
+      "title": "Verify Pi adapter command and workflow regressions",
+      "status": "done",
+      "description": "Integrate regression coverage for the completed P062 fixes using the real adapter host fixture at `packages/pi-adapter/test/helpers/pi-host-fixture.mjs`, command registration tests in `packages/pi-adapter/test/host-registration.test.mjs`, and strict reference tests in `packages/pi-adapter/test/ref-validation.test.mjs`. Exercise a multi-word `/planner phase add` title, representative parameterized commands with valid/missing inputs, correct F00x/P00x/T00x/shortId/UUID mutation targeting, feature-before-phase task-start context, and feature-plus-phase decision persistence. Run the package test command and the workspace check relevant to affected packages; report failures precisely without changing unrelated existing worktree modifications.\n\n---\n**Completion summary:**\nVerification completed: `pnpm check`, `pnpm test:unit`, and `git diff --check` all passed. Unit suite: 314 tests passed, 0 failed. Added/updated coverage exercises multi-word phase command titles, strict F00x mutation targeting, feature-before-phase task context and decision dual-write. Preserved pre-existing unrelated worktree changes: timer `unref` change in `packages/pi-adapter/src/index.ts`, `HANDOFF.md` deletion, `test/coverage.config.mjs`, and the pre-existing host-fixture/test files.\n\n---\n**Completion summary:**\nVerification completed after the lifecycle ambiguity was resolved in P063(F005): `planner-web stop` now stops only the Web UI and preserves planner context without a URL, while `/planner stop` disables planner-session context injection and clears transient recap/cache state until `/planner load`. The earlier lifecycle failures that caused this task to be blocked are therefore superseded. Regression coverage covers multi-word phase commands, strict F00x/P00x/T00x/shortId/UUID targeting, feature-before-phase task context, decision dual-write, and explicit Web-only versus full planner stop contracts. Final verification: `pnpm check`, `pnpm test:unit` (328/328 passing), and `git diff --check`; no commit created.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ff18270f-8972-4525-9e47-8ef224a67f87-check-001-done-planned",
+          "date": "2026-08-11T08:43:05.213Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Riaperto per verificare le correzioni emerse dalla review e coprire i percorsi interattivi parametrizzati che la precedente verifica non esercitava.",
+          "description": "Riaperto per verificare le correzioni emerse dalla review e coprire i percorsi interattivi parametrizzati che la precedente verifica non esercitava."
+        },
+        {
+          "id": "ff18270f-8972-4525-9e47-8ef224a67f87-check-002-in-progress-blocked",
+          "date": "2026-08-11T08:46:05.115Z",
+          "fromStatus": "in-progress",
+          "toStatus": "blocked",
+          "title": "La verifica completa ha rivelato due regressioni nel test di lifecycle Pi: dopo i cicli load/stop il prompt resta iniettato quando il test si aspetta undefined, e il test di cache riceve undefined dopo stop dove si aspetta un blocco di contesto senza URL. Servono decisione e correzione della semantica `before_agent_start`/cache; non chiudo la fase né dichiaro il suite verde.",
+          "description": "La verifica completa ha rivelato due regressioni nel test di lifecycle Pi: dopo i cicli load/stop il prompt resta iniettato quando il test si aspetta undefined, e il test di cache riceve undefined dopo stop dove si aspetta un blocco di contesto senza URL. Servono decisione e correzione della semantica `before_agent_start`/cache; non chiudo la fase né dichiaro il suite verde."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ff18270f-8972-4525-9e47-8ef224a67f87-check-001-extend-the-real-pi-host-fixture-only-if-required-for-observable-command-and-context-assertions",
+          "number": 1,
+          "title": "Extend the real Pi host fixture only if required for observable command and context assertions.",
+          "checked": true
+        },
+        {
+          "id": "ff18270f-8972-4525-9e47-8ef224a67f87-check-002-cover-each-of-the-four-preceding-task-outcomes-with-independent-regressions",
+          "number": 2,
+          "title": "Cover each of the four preceding task outcomes with independent regressions.",
+          "checked": true
+        },
+        {
+          "id": "ff18270f-8972-4525-9e47-8ef224a67f87-check-003-run-pi-adapter-tests-and-affected-workspace-checks",
+          "number": 3,
+          "title": "Run Pi adapter tests and affected workspace checks.",
+          "checked": true
+        },
+        {
+          "id": "ff18270f-8972-4525-9e47-8ef224a67f87-check-004-verify-existing-unrelated-packages-pi-adapter-src-index-ts-timer-change-remains-untouched",
+          "number": 4,
+          "title": "Verify existing unrelated `packages/pi-adapter/src/index.ts` timer change remains untouched.",
+          "checked": true
+        },
+        {
+          "id": "ff18270f-8972-4525-9e47-8ef224a67f87-check-005-record-commands-results-and-any-residual-gaps-in-the-task-notes",
+          "number": 5,
+          "title": "Record commands, results and any residual gaps in the task notes.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T08:24:31.154Z",
+      "completedAt": "2026-08-11T13:57:38.863Z",
+      "createdAt": "2026-08-11T08:08:34.148Z",
+      "updatedAt": "2026-08-11T13:57:38.863Z"
+    }
+  ],
+  "createdAt": "2026-08-11T08:06:16.009Z",
+  "updatedAt": "2026-08-11T13:57:38.863Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-11T12:40:08.837Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/fa4eb802-7f3c-44b9-a0d6-86034f02a917-2026-08-11T13-57-38-867Z.md",
+      "clearedAt": "2026-08-11T13:57:38.867Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/fa4eb802-7f3c-44b9-a0d6-86034f02a917-2026-08-11T12-40-08-834Z.md",
+      "clearedAt": "2026-08-11T12:40:08.834Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/fa4eb802-7f3c-44b9-a0d6-86034f02a917-2026-08-11T08-25-25-644Z.md",
+      "clearedAt": "2026-08-11T08:25:25.644Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "715f179d-ae50-467f-94ac-6c60dc26c124",
+      "date": "2026-08-11T08:07:14.933Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "c5d4145f-b841-4b54-bfeb-66158f009780",
+      "date": "2026-08-11T08:25:25.665Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "f4cd5fa0-dd41-48b7-a87c-22d292fab61d",
+      "date": "2026-08-11T08:38:58.197Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "0b3a07ee-f87a-4036-adb6-5173ec698778",
+      "date": "2026-08-11T13:57:38.883Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

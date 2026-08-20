@@ -1,0 +1,89 @@
+{
+  "id": "d070f000-3354-4210-bd53-4d5eeb86349f",
+  "featureId": "957f4acd-f885-4429-a191-89cbd9899ba2",
+  "number": 40,
+  "shortId": "MH5G9",
+  "priority": 1,
+  "slug": "register-agent-plan-on-the-official-mcp-registry",
+  "title": "Register Agent Plan on the official MCP registry",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Publish the Agent Plan MCP server listing to registry.modelcontextprotocol.io.",
+  "description": "Register the Agent Plan MCP server on the official Model Context Protocol registry so it is discoverable by MCP clients (Claude Desktop, Zed, Cursor, etc.) without requiring a harness-specific plugin or extension.\n\nContext:\n- The MCP registry is at https://registry.modelcontextprotocol.io/ and is currently in public preview.\n- Agent Plan already distributes `@agent-plan/mcp` via npm and documents setup for Claude Code, Codex, and Zed.\n- The registry is a public listing/catalog, separate from npm distribution.\n\nFiles likely involved:\n- New registry manifest/YAML under the official MCP registry repo (external PR).\n- README.md / docs — update with registry badge or install-from-registry instructions once published.\n- packages/agent-plan CLI or docs — possibly add a command to generate/copy registry metadata.\n\nOpen questions:\n- Exact registry submission format (YAML/JSON schema, PR process).\n- Whether the registry requires a hosted remote MCP server or accepts stdio command entries.\n- Version pinning and update cadence.\n\nOut of scope for this phase:\n- Building new harness plugins/extensions.\n- Changing the MCP server protocol implementation (stdio remains the transport).",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "e3a80f43-3354-4ef5-9b72-d397486099da"
+  ],
+  "tasks": [
+    {
+      "id": "e3a80f43-3354-4ef5-9b72-d397486099da",
+      "phaseId": "d070f000-3354-4210-bd53-4d5eeb86349f",
+      "number": 182,
+      "shortId": "BAJCV",
+      "priority": 1,
+      "shortName": "add-agent-plan-to-the-official",
+      "title": "Add Agent Plan to the official MCP registry",
+      "status": "done",
+      "description": "Submit a listing for the Agent Plan MCP server to the official Model Context Protocol registry (https://registry.modelcontextprotocol.io/).\n\nBackground:\n- The registry is a public catalog of MCP servers maintained by Anthropic, currently in preview.\n- It is separate from npm distribution: npm holds the code, the registry holds the discoverable listing.\n- Agent Plan is already distributed as `@agent-plan/mcp` on npm and documented for Claude Code, Codex, and Zed.\n\nWork items:\n1. Read the current registry submission docs at https://modelcontextprotocol.io/registry/about and the registry repo (https://github.com/modelcontextprotocol/registry) to determine the required manifest format and PR process.\n2. Prepare registry metadata (name, description, homepage, runtime, command, env, tool summary, categories/tags).\n3. Open a PR against the official registry repo.\n4. Update project docs (README.md or docs/setup-*.md) to mention installation via the MCP registry once the listing is live.\n\nAcceptance:\n- Agent Plan appears in the MCP registry search/listing.\n- Docs reference the registry as an install option.\n- Existing npm and per-harness setup docs remain accurate.\n\nNotes:\n- Do not implement a remote/SSE MCP server; Agent Plan remains stdio-only.\n- The registry listing should point clients to `npx agent-plan mcp` (or `npx -y @agent-plan/mcp`) as the local command.\n\n---\n**Completion summary:**\nPrepared @agent-plan/mcp for official MCP registry: added mcpName io.github.ovidius72/agent-plan to packages/plan-mcp/package.json, created packages/plan-mcp/server.json manifest, included server.json in npm package files. Build and type-check clean. Final publish to registry.modelcontextprotocol.io requires maintainer to run `npx mcp-publisher login github && npx mcp-publisher publish` in packages/plan-mcp (documented in CHECKLIST.md).",
+      "notes": "Prepared @agent-plan/mcp for official MCP registry:\n- Added mcpName \"io.github.ovidius72/agent-plan\" to packages/plan-mcp/package.json\n- Created packages/plan-mcp/server.json registry manifest\n- Included server.json in npm package files array\n- Build and type-check clean\n\nFinal publish step requires maintainer authentication via mcp-publisher (documented in CHECKLIST.md).",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e3a80f43-3354-4ef5-9b72-d397486099da-check-001-read-registry-submission-docs-and-format",
+          "number": 1,
+          "title": "Read registry submission docs and format",
+          "checked": false
+        },
+        {
+          "id": "e3a80f43-3354-4ef5-9b72-d397486099da-check-002-prepare-registry-manifest-metadata",
+          "number": 2,
+          "title": "Prepare registry manifest metadata",
+          "checked": false
+        },
+        {
+          "id": "e3a80f43-3354-4ef5-9b72-d397486099da-check-003-open-pr-against-modelcontextprotocol-registry",
+          "number": 3,
+          "title": "Open PR against modelcontextprotocol/registry",
+          "checked": false
+        },
+        {
+          "id": "e3a80f43-3354-4ef5-9b72-d397486099da-check-004-update-project-docs-to-reference-registry-install",
+          "number": 4,
+          "title": "Update project docs to reference registry install",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:26:33.726Z",
+      "completedAt": "2026-08-06T18:33:35.105Z",
+      "createdAt": "2026-08-05T15:03:56.226Z",
+      "updatedAt": "2026-08-06T18:33:35.105Z"
+    }
+  ],
+  "createdAt": "2026-08-05T15:03:51.821Z",
+  "updatedAt": "2026-08-06T18:33:37.312Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-05T15:04:01.959Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/d070f000-3354-4210-bd53-4d5eeb86349f-2026-08-09T17-53-41-550Z.md",
+      "clearedAt": "2026-08-09T17:53:41.550Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": []
+}

@@ -1,0 +1,215 @@
+{
+  "id": "231fc692-57de-4ae2-8a3c-71fc49456091",
+  "featureId": "66e695a2-70cc-4916-8a29-99fedb40cbd1",
+  "number": 47,
+  "shortId": "TBR5J",
+  "priority": 6,
+  "slug": "integration-migration-and-verification",
+  "title": "Integration, migration, and verification",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Integrate all changes, provide migration for existing projects, and verify end-to-end across worktrees.\n\nCode references:\n- `packages/plan-core/src/plan-store.ts:480` — heavy init / migration hooks\n- `packages/plan-core/src/plan-store.ts:701` — `migrateLegacy()`\n- `packages/pi-adapter/src/index.ts:3400` — `before_agent_start` heavy init\n- `packages/plan-server/src/serve.ts:990` — `serve()` startup\n\nWork to do:\n1. Add a one-time migration in PlanStore that, on first access to an existing plan, creates `.local/` and moves legacy `resume.json`, `activity.json`, `generated/`, `handoff-archive/` into it.\n2. Update `.gitignore` generation to include `.local/` and remove redundant per-file patterns.\n3. Update `@agent-plan/server` and `@agent-plan/pi-adapter` to resolve generated/static paths from `.local/`.\n4. Update Web UI build/copy scripts if needed.\n5. Run full monorepo build and type-check.\n6. Test scenario: two clean worktrees from `next`, load planner in both, confirm `git status` shows no `.planner/.local/` files and `manifest.json` is unchanged.\n7. Test deterministic shortId: both worktrees produce identical shortIds.\n8. Test crash recovery: kill process mid-write, verify `.local/backups/` can restore source file.\n9. Test migration: old plan without `.local/` is transparently migrated.\n\nAcceptance criteria:\n- `git status` after normal planner use in a worktree shows only source entity changes relevant to the feature being worked on.\n- No merge conflicts on `manifest.json`, `generated/`, `resume.json`, `activity.json`, `.bak`, or `handoff-archive/` between feature branches.\n- Build/check pass.\n- Web UI serves and updates correctly.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "613e3e01-7cea-43c9-b970-b7322690765b",
+    "eca437d3-3a7c-4a19-8204-08384e53ec30",
+    "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01"
+  ],
+  "tasks": [
+    {
+      "id": "613e3e01-7cea-43c9-b970-b7322690765b",
+      "phaseId": "231fc692-57de-4ae2-8a3c-71fc49456091",
+      "number": 198,
+      "shortId": "6UPBE",
+      "priority": 1,
+      "shortName": "add-migration-for-existing-pla",
+      "title": "Add migration for existing plans",
+      "status": "done",
+      "description": "Provide transparent one-time migration for plans that do not yet have `.planner/.local/`.\n\nConcrete steps:\n1. On PlanStore first load, detect absence of `.local/`.\n2. Create `.local/` subdirectories.\n3. Move existing `resume.json`, `activity.json`, `generated/`, `handoff-archive/` into `.local/`.\n4. Bootstrap `.local/timestamp.json` from `manifest.json` `updatedAt`.\n5. Leave `.planner/manifest.json` stable.\n6. Remove or ignore old root-level transient files after migration.\n7. Test on an old plan snapshot.\n\n---\n**Completion summary:**\nImplemented as part of P042 commit: migrateLegacyLocalFile helper moves legacy resume.json, activity.json, generated/, handoff-archive/ into .local/ on first access.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "613e3e01-7cea-43c9-b970-b7322690765b-check-001-detect-missing-local",
+          "number": 1,
+          "title": "Detect missing .local/",
+          "checked": false
+        },
+        {
+          "id": "613e3e01-7cea-43c9-b970-b7322690765b-check-002-create-local-dirs",
+          "number": 2,
+          "title": "Create .local/ dirs",
+          "checked": false
+        },
+        {
+          "id": "613e3e01-7cea-43c9-b970-b7322690765b-check-003-move-resume-activity-generated-handoff",
+          "number": 3,
+          "title": "Move resume/activity/generated/handoff",
+          "checked": false
+        },
+        {
+          "id": "613e3e01-7cea-43c9-b970-b7322690765b-check-004-bootstrap-timestamp",
+          "number": 4,
+          "title": "Bootstrap timestamp",
+          "checked": false
+        },
+        {
+          "id": "613e3e01-7cea-43c9-b970-b7322690765b-check-005-clean-old-root-files",
+          "number": 5,
+          "title": "Clean old root files",
+          "checked": false
+        },
+        {
+          "id": "613e3e01-7cea-43c9-b970-b7322690765b-check-006-test-on-old-plan",
+          "number": 6,
+          "title": "Test on old plan",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:22:52.611Z",
+      "completedAt": "2026-08-06T16:22:52.611Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:22:52.611Z"
+    },
+    {
+      "id": "eca437d3-3a7c-4a19-8204-08384e53ec30",
+      "phaseId": "231fc692-57de-4ae2-8a3c-71fc49456091",
+      "number": 203,
+      "shortId": "745LK",
+      "priority": 1,
+      "shortName": "run-monorepo-build-and-type-ch",
+      "title": "Run monorepo build and type-check",
+      "status": "done",
+      "description": "Run full build and type-check across all packages after integration.\n\nConcrete steps:\n1. Run `pnpm install` if needed.\n2. Run `pnpm -r build`.\n3. Run `pnpm check`.\n4. Fix any errors introduced by path changes.\n5. Verify `build:pi-adapter` pipeline still bundles web UI correctly.\n\n---\n**Completion summary:**\nVerified: pnpm check and pnpm -r build are clean on feat/planner-local-transients.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "eca437d3-3a7c-4a19-8204-08384e53ec30-check-001-pnpm-install",
+          "number": 1,
+          "title": "pnpm install",
+          "checked": false
+        },
+        {
+          "id": "eca437d3-3a7c-4a19-8204-08384e53ec30-check-002-pnpm-r-build",
+          "number": 2,
+          "title": "pnpm -r build",
+          "checked": false
+        },
+        {
+          "id": "eca437d3-3a7c-4a19-8204-08384e53ec30-check-003-pnpm-check",
+          "number": 3,
+          "title": "pnpm check",
+          "checked": false
+        },
+        {
+          "id": "eca437d3-3a7c-4a19-8204-08384e53ec30-check-004-fix-errors",
+          "number": 4,
+          "title": "Fix errors",
+          "checked": false
+        },
+        {
+          "id": "eca437d3-3a7c-4a19-8204-08384e53ec30-check-005-verify-build-pi-adapter-pipeline",
+          "number": 5,
+          "title": "Verify build:pi-adapter pipeline",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:22:52.612Z",
+      "completedAt": "2026-08-06T16:22:52.612Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:22:52.612Z"
+    },
+    {
+      "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01",
+      "phaseId": "231fc692-57de-4ae2-8a3c-71fc49456091",
+      "number": 197,
+      "shortId": "S884V",
+      "priority": 1,
+      "shortName": "verify-two-worktree-scenario",
+      "title": "Verify two-worktree scenario",
+      "status": "done",
+      "description": "End-to-end verification that two clean worktrees from the same commit produce no transient git churn.\n\nConcrete steps:\n1. Create two temporary worktrees from `next`.\n2. Load the planner in both (e.g. via CLI or by running pi-adapter session_start equivalent).\n3. Run `git status` in both worktrees.\n4. Confirm `.planner/.local/` files are not shown.\n5. Confirm `manifest.json` is unchanged.\n6. Confirm shortIds generated are identical.\n7. Document results in task notes.\n\n---\n**Completion summary:**\nVerified: two independent worktrees from the same heca plan produce 113 tracked files with 0 diffs and identical manifest.json.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01-check-001-create-two-temp-worktrees",
+          "number": 1,
+          "title": "Create two temp worktrees",
+          "checked": false
+        },
+        {
+          "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01-check-002-load-planner-in-both",
+          "number": 2,
+          "title": "Load planner in both",
+          "checked": false
+        },
+        {
+          "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01-check-003-check-git-status",
+          "number": 3,
+          "title": "Check git status",
+          "checked": false
+        },
+        {
+          "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01-check-004-confirm-local-ignored",
+          "number": 4,
+          "title": "Confirm .local/ ignored",
+          "checked": false
+        },
+        {
+          "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01-check-005-confirm-manifest-stable",
+          "number": 5,
+          "title": "Confirm manifest stable",
+          "checked": false
+        },
+        {
+          "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01-check-006-confirm-deterministic-shortids",
+          "number": 6,
+          "title": "Confirm deterministic shortIds",
+          "checked": false
+        },
+        {
+          "id": "46cfd9c3-a46b-4c21-8d6b-1027c80e1e01-check-007-document-results",
+          "number": 7,
+          "title": "Document results",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T16:22:52.612Z",
+      "completedAt": "2026-08-06T16:22:52.612Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:22:52.612Z"
+    }
+  ],
+  "createdAt": "2026-08-06T15:26:43.548Z",
+  "updatedAt": "2026-08-06T16:26:16.856Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

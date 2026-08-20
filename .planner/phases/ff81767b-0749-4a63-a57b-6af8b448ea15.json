@@ -1,0 +1,173 @@
+{
+  "id": "ff81767b-0749-4a63-a57b-6af8b448ea15",
+  "featureId": "bd655486-e048-47ae-b06c-2bed511d89c6",
+  "number": 57,
+  "shortId": "ULUJ7",
+  "priority": 6,
+  "slug": "web-ui-unit-and-component-tests",
+  "title": "Web UI unit and component tests",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Test React validation, loaders/actions, stateful components, and error states.",
+  "description": "Establish focused Web UI tests for route loaders/actions, form validation, reusable badges and status components, Work Tree filtering/sorting/expansion, requirements linking, handoff pending/archive rendering, modal scroll behavior, responsive class contracts, and live-sync refresh handling. Use a browser-like test environment with deterministic API mocks for unit/component isolation, while keeping business assertions aligned with the server contract. Cover valid and invalid feature, phase, task, and requirement submissions, missing required fields, server validation errors, optimistic/pending states, empty states, and archive content rendering. Exclude generated Vite bundles from coverage and keep tests resilient to visual styling refactors.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "5895d27c-832f-4c10-8877-f40f55a9a60f",
+    "2f18837d-0653-4d5b-bf11-394383b88921",
+    "f9223b85-9898-4332-b119-0eb741a59de9",
+    "d7fdc2e0-f20f-43e1-8be0-3b9866556907"
+  ],
+  "tasks": [
+    {
+      "id": "5895d27c-832f-4c10-8877-f40f55a9a60f",
+      "phaseId": "ff81767b-0749-4a63-a57b-6af8b448ea15",
+      "number": 244,
+      "shortId": "WGHAS",
+      "priority": 1,
+      "shortName": "webui-test-environment",
+      "title": "Set up Web UI test environment and route fixtures",
+      "status": "done",
+      "description": "Configure the Web UI test runner with a DOM/browser-like environment, deterministic API request mocks, router loaders/actions fixtures, and reusable feature/phase/task/requirement/handoff data. Keep tests independent of a running production server while matching the real API types and error payloads. Add helpers for form submissions, navigation state, live-sync events, localStorage work-tree state, and cleanup.\n\n---\n**Completion summary:**\nConfigured Vitest 4 with jsdom and Testing Library in `packages/plan-web-ui`; added deterministic typed entity fixtures, API fetch mock/response helpers, a memory-router renderer, browser cleanup/WebSocket setup, and a route-loader smoke test. `pnpm --filter @agent-plan/web-ui test`, `check`, and `build` pass (Vite reports its existing >500 kB chunk-size warning). No commit/push.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "5895d27c-832f-4c10-8877-f40f55a9a60f-check-001-in-progress-planned",
+          "date": "2026-08-13T22:25:33.912Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "Task returned to planned at the user's explicit request; no implementation work was performed.",
+          "description": "Task returned to planned at the user's explicit request; no implementation work was performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T22:24:22.725Z",
+      "completedAt": "2026-08-13T22:38:19.915Z",
+      "createdAt": "2026-08-09T17:42:15.364Z",
+      "updatedAt": "2026-08-13T22:38:19.915Z"
+    },
+    {
+      "id": "2f18837d-0653-4d5b-bf11-394383b88921",
+      "phaseId": "ff81767b-0749-4a63-a57b-6af8b448ea15",
+      "number": 245,
+      "shortId": "5QAS6",
+      "priority": 2,
+      "shortName": "webui-form-validation",
+      "title": "Test feature, phase, task, and requirement forms",
+      "status": "done",
+      "description": "Cover create/edit modal validation for feature, phase, task, and requirement flows with missing, empty, valid, long, and malformed values. Verify submit buttons are blocked or errors rendered when required fields fail, successful actions navigate/revalidate correctly, server validation errors remain visible, optional descriptions and fields behave correctly, and mobile modal scrolling keeps all controls reachable.\n\n---\n**Completion summary:**\nAdded Vitest action coverage for feature, phase, task, and requirement creation/editing: required fields/params, trim and list normalization, server validation errors, redirects, malformed priorities, linked phases, and task checklist state preservation. Added component assertions for native required validation plus the scrollable accessible modal shell. Fixed duplicate accessible “Close modal” controls by making the pointer-only backdrop hidden from assistive technology. `pnpm --filter @agent-plan/web-ui test` (29 total) and `check` pass. No commit/push.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T22:38:28.179Z",
+      "completedAt": "2026-08-13T22:41:22.044Z",
+      "createdAt": "2026-08-09T17:42:20.943Z",
+      "updatedAt": "2026-08-13T22:41:22.044Z"
+    },
+    {
+      "id": "f9223b85-9898-4332-b119-0eb741a59de9",
+      "phaseId": "ff81767b-0749-4a63-a57b-6af8b448ea15",
+      "number": 246,
+      "shortId": "GNXHP",
+      "priority": 3,
+      "shortName": "webui-tree-detail-components",
+      "title": "Test Work Tree, detail pages, badges, and status components",
+      "status": "done",
+      "description": "Test dashboard Work Tree filtering, sorting, expand/collapse including done entities, active-task highlighting, responsive row layout, copyable F/P/T badges, status/display-status badges, detail page headers/actions, list rows, status history, checklists, and empty/loading/error states. Assert long titles wrap without overflow and semantic labels/buttons remain accessible while preserving the existing reusable component contracts.\n\n---\n**Completion summary:**\nImplemented the requested active-task header navigation/copy parity with the Work Tree in `packages/plan-web-ui/src/components/layout/app-shell.tsx`. Each in-progress task now renders one linked, color-segmented `EntityPathBadge` (`F00x/P00x/T00x`): feature links to its feature detail, phase to phase detail, and task to task detail. A sibling `CopyableBadge` copies the same composite entity path, preserving valid DOM (no nested anchor/button) and the LAN-safe clipboard fallback already used by the Work Tree. Task title navigation and the existing locate-in-Work-Tree button remain intact.\n\nRebuilt the Vite bundles into both tracked consumers: `packages/pi-adapter/web-ui-dist/` and `packages/plan-server/web-ui-dist/`. Validation passed: `pnpm --filter @agent-plan/web-ui build`, `pnpm --filter @agent-plan/web-ui test` (17/17), `pnpm build:pi-adapter`, `pnpm check`, and `git diff --check`. No commit created; working tree contains the source and regenerated bundle artifacts.\n\n---\n**Completion summary:**\nFollow-up completed locally (not committed): active-task summaries now include `shortId` from the canonical `GET /tasks/active` server response (`packages/plan-server/src/serve.ts`), the Web UI API type carries it, and `ActiveTasksHeader` renders reusable `ShortIdBadge` beside the linked/copyable F/P/T entity path. This uses the identical copy-button behavior and short-id presentation as the Work Tree rather than duplicating UI logic. Added a server contract assertion that verifies the active-task payload exposes the task shortId. Rebuilt the tracked Vite artifacts for both `packages/pi-adapter/web-ui-dist/` and `packages/plan-server/web-ui-dist/`.\n\nValidation passed: server build + CRUD test (15/15), Web UI build + test (17/17), `pnpm build:pi-adapter`, `pnpm check`, and `git diff --check`.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f9223b85-9898-4332-b119-0eb741a59de9-check-001-done-planned",
+          "date": "2026-08-13T12:09:47.532Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Follow-up requested immediately after completion: the active-task header must also display the copyable shortId badge alongside the composite F/P/T path, matching the Work Tree.",
+          "description": "Follow-up requested immediately after completion: the active-task header must also display the copyable shortId badge alongside the composite F/P/T path, matching the Work Tree."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T08:02:29.772Z",
+      "completedAt": "2026-08-13T12:11:37.459Z",
+      "createdAt": "2026-08-09T17:42:26.975Z",
+      "updatedAt": "2026-08-13T12:11:37.459Z"
+    },
+    {
+      "id": "d7fdc2e0-f20f-43e1-8be0-3b9866556907",
+      "phaseId": "ff81767b-0749-4a63-a57b-6af8b448ea15",
+      "number": 247,
+      "shortId": "USCHE",
+      "priority": 4,
+      "shortName": "webui-handoff-live-sync",
+      "title": "Test handoff, requirements links, live sync, and archive UI",
+      "status": "done",
+      "description": "Verify pending handoff rendering, clear action, archive link and archive route content/reason/timestamp, requirements linked to phases, live-sync revalidation after mutations, stale/empty states, and navigation between detail pages. Assert archived entries never appear in the active list and that Web UI errors are handled without losing local state.\n\n---\n**Completion summary:**\nAdded component coverage for active handoff clearing, conflict errors that preserve local pending state, WebSocket handoff refresh, archive metadata/empty states, canonical requirement-to-phase grouping and navigation, phase-detail linked-requirement loading, compact anchor links, and live-sync mutation revalidation/no-op handling. Improved handoff clear errors to render the server response body. Root `scripts/test-all.mjs` now runs Web UI Vitest coverage alongside Node tests. Verified `pnpm --filter @agent-plan/web-ui test`, `pnpm test -- --no-build` (361 Node + 21 Vitest tests), `pnpm build`, and `pnpm check`; Vite retains its existing >500 kB chunk warning. No commit/push.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T22:41:33.769Z",
+      "completedAt": "2026-08-13T22:45:49.945Z",
+      "createdAt": "2026-08-09T17:42:32.598Z",
+      "updatedAt": "2026-08-13T22:45:49.945Z"
+    }
+  ],
+  "createdAt": "2026-08-09T17:39:32.377Z",
+  "updatedAt": "2026-08-13T22:45:49.945Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-13T22:30:02.991Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/ff81767b-0749-4a63-a57b-6af8b448ea15-2026-08-13T22-45-49-950Z.md",
+      "clearedAt": "2026-08-13T22:45:49.950Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/ff81767b-0749-4a63-a57b-6af8b448ea15-2026-08-13T22-24-14-990Z.md",
+      "clearedAt": "2026-08-13T22:24:14.990Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "133f56f2-186b-4b13-b977-ec9bb0d12040",
+      "date": "2026-08-13T22:32:02.897Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "d90872b0-2ae6-4570-a4f7-da0bb2508bf7",
+      "date": "2026-08-13T22:45:49.968Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

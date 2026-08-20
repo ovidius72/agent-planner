@@ -1,0 +1,328 @@
+{
+  "id": "fd1e90e7-0744-40b1-842d-fffb75b81dea",
+  "featureId": "b65b97e1-86a7-4942-8b29-732ce8e5db04",
+  "number": 61,
+  "shortId": "8VW6R",
+  "priority": 1,
+  "slug": "canonical-requirement-links-phase-navigation-and-agent-work-discipline",
+  "title": "Canonical requirement links, phase navigation, and agent work discipline",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make requirements visible and navigable from phases, then require phase context and priority-aware task selection across adapters.",
+  "description": "`packages/plan-server/src/serve.ts:23-42` resolves new requirement links to phase UUIDs, but existing `.planner/requirements.json` values remain public P00x refs. Because `packages/plan-web-ui/src/routes/requirements/route.tsx:27-32,66` maps only `phase.id` UUIDs and `packages/plan-web-ui/src/routes/phase-detail/loader.ts:7-9` compares UUIDs directly, legacy links appear as zero links in both requirement and phase UI. Normalize existing links to UUIDs without changing their phase mapping, then add requirement affordances to `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`, group `/requirements` content by linked phase with stable anchors, and make phase detail linked requirements work again. Update Pi (`packages/pi-adapter/src/index.ts:3701-3709`) and MCP (`packages/plan-mcp/src/index.ts:985-989`) operational contracts so work starts/resumes only after task detail and full phase context including linked requirements have been read. Define priority guidance using existing numeric priority fields (lower is higher): continue active work; otherwise choose ready work feature→phase→task with dependency/block constraints. Preserve no-link empty states, accessibility, mobile layout, UUID persistence, and all existing human F/P/T references.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "4ddb4afd-1ad1-43b2-816e-91ea4d7c1bd4",
+    "3926dc30-3d5f-49be-a233-c24fde184a09",
+    "6cd1f126-2a6b-4694-82ea-c370a859d873",
+    "56fbd086-4fef-450b-8757-bad172b9eb41",
+    "5f6cf5b6-c2ce-4cac-a9de-835eb4dd03e9",
+    "c5984789-40f9-484f-b310-fab4d0bf9302"
+  ],
+  "tasks": [
+    {
+      "id": "4ddb4afd-1ad1-43b2-816e-91ea4d7c1bd4",
+      "phaseId": "fd1e90e7-0744-40b1-842d-fffb75b81dea",
+      "number": 262,
+      "shortId": "LXVSX",
+      "priority": 2,
+      "shortName": "expose-requirement-indicators",
+      "title": "Expose requirement indicators and phase-grouped navigation in Web UI",
+      "status": "done",
+      "description": "`packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx` renders expandable feature/phase/task rows but currently has no requirement indicator. `packages/plan-web-ui/src/routes/requirements/route.tsx:66-125` renders requirement cards as a flat list and must instead support phase-grouped sections with stable phase anchors while retaining filtering, unlinked requirements, mobile wrapping, and accessible navigation. Add an accessible icon/badge on every Work Tree/feature-list phase accordion that has linked requirements; its link must target the matching phase anchor in `/requirements`. Reuse shared badge/tooltip/icon conventions rather than duplicating route-local markup. Include component/unit coverage for visibility, href/anchor generation, grouped output, and no-link phases.\n\n---\n**Completion summary:**\nAdded `packages/plan-web-ui/src/components/requirements/phase-requirement-link.tsx`, a reusable accessible phase→requirements icon/count link used in `work-tree-rows.tsx` and `phase-row.tsx`. Refactored `/requirements` into priority-ordered phase sections with stable `#phase-<UUID>` anchors, robust browser hash scrolling, and an unlinked/stale fallback; preserved linked-phase and macro-task metadata. Added `packages/plan-web-ui/src/lib/requirement-groups.ts` with `packages/plan-web-ui/test/requirement-groups.test.mjs` (2 passing tests: priority/multi-link grouping + stale/empty fallback). Verified `pnpm check` and `pnpm test:unit` (173/173); bundle copied to server static package folders. No commit or push.",
+      "notes": "Implemented reusable `PhaseRequirementLink` used by Work Tree `PhaseTreeRow` and `PhaseRow` in feature detail/list contexts. The icon shows only for phases with `linkedRequirements`, uses an accessible label/tooltip, and targets `/requirements#phase-<UUID>`. Refactored Requirements page to group filtered requirements by linked phase, expose stable phase anchors, retain a no-valid-link fallback, and preserve linked-phase/macro-task summary metadata. Added pure `groupRequirementsByPhase` helper + 2 tests for priority ordering, multi-phase duplication, and stale/empty fallback. Build assets synced via scripts/copy-web-ui.sh; the currently running server serves a previously loaded static directory, so it needs its normal reload cycle to show the new bundle.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4ddb4afd-1ad1-43b2-816e-91ea4d7c1bd4-check-001-add-accessible-requirement-affordance-to-phase-accordions",
+          "number": 1,
+          "title": "Add accessible requirement affordance to phase accordions",
+          "checked": true
+        },
+        {
+          "id": "4ddb4afd-1ad1-43b2-816e-91ea4d7c1bd4-check-002-group-linked-requirements-by-phase-with-stable-anchors",
+          "number": 2,
+          "title": "Group linked requirements by phase with stable anchors",
+          "checked": true
+        },
+        {
+          "id": "4ddb4afd-1ad1-43b2-816e-91ea4d7c1bd4-check-003-preserve-a-clear-unlinked-requirements-section-and-filters",
+          "number": 3,
+          "title": "Preserve a clear unlinked requirements section and filters",
+          "checked": true
+        },
+        {
+          "id": "4ddb4afd-1ad1-43b2-816e-91ea4d7c1bd4-check-004-verify-links-work-on-desktop-and-mobile",
+          "number": 4,
+          "title": "Verify links work on desktop and mobile",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T21:33:40.031Z",
+      "completedAt": "2026-08-09T21:39:47.087Z",
+      "createdAt": "2026-08-09T21:30:42.416Z",
+      "updatedAt": "2026-08-09T21:39:47.087Z"
+    },
+    {
+      "id": "3926dc30-3d5f-49be-a233-c24fde184a09",
+      "phaseId": "fd1e90e7-0744-40b1-842d-fffb75b81dea",
+      "number": 263,
+      "shortId": "DZSUD",
+      "priority": 4,
+      "shortName": "require-phase-context-and-prio",
+      "title": "Require phase context and priority-aware task selection across adapters",
+      "status": "done",
+      "description": "Pi task lifecycle registration begins at `packages/pi-adapter/src/index.ts:3701-3709`; MCP task-start is at `packages/plan-mcp/src/index.ts:985-989`. Extend their operational guidance/briefing so an agent starting or resuming work must read the current task in full and the owning phase in full, including linked requirements, before implementation. The protocol must direct selection to continue any active task; otherwise select ready work hierarchically feature→phase→task by ascending `priority` (lower is higher), respecting dependencies and blocked/waiting states. Align Pi and MCP wording without coupling PlanStore core to either harness. Add tests/snapshots of generated guidance where available, retain planner operations as exempt from code-edit task guards, and preserve composite refs in chat.\n\n---\n**Completion summary:**\nUpdated the harness-agnostic core `buildPhaseContextBlock` to enumerate linked requirement titles/descriptions (or explicitly state none). Both Pi `task_start` and MCP `planner-task-start` now load the enriched phase and return this requirements briefing; their tool guidance requires full task+parent phase reading before start and defines active-task precedence plus ready-work selection by ascending feature→phase→task priority with dependency/block constraints. Pi’s injected context repeats the mandatory protocol. Added `packages/plan-core/test/task-context.test.mjs` (2/2); verified core/MCP/Pi builds, `pnpm check`, and `pnpm test:unit` (176/176). No commit/push.",
+      "notes": "Extended harness-agnostic `buildPhaseContextBlock` to include titled, described linked requirements (or an explicit none state), and changed Pi/MCP task-start to load the enriched phase before emitting it. Pi `task_start` and MCP `planner-task-start` descriptions now require full task+phase reading before start and specify active-task precedence plus ready-work ordering by feature→phase→task priority. Pi’s injected operational context also repeats the mandatory read and priority policy. Added packages/plan-core/test/task-context.test.mjs (2 tests). Verified core/MCP/Pi builds, pnpm check, and pnpm test:unit (176/176).",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3926dc30-3d5f-49be-a233-c24fde184a09-check-001-add-task-phase-requirements-briefing-to-pi-lifecycle-guidance",
+          "number": 1,
+          "title": "Add task/phase/requirements briefing to Pi lifecycle guidance",
+          "checked": true
+        },
+        {
+          "id": "3926dc30-3d5f-49be-a233-c24fde184a09-check-002-add-equivalent-mcp-guidance",
+          "number": 2,
+          "title": "Add equivalent MCP guidance",
+          "checked": true
+        },
+        {
+          "id": "3926dc30-3d5f-49be-a233-c24fde184a09-check-003-document-hierarchical-priority-selection-and-active-task-precedence",
+          "number": 3,
+          "title": "Document hierarchical priority selection and active-task precedence",
+          "checked": true
+        },
+        {
+          "id": "3926dc30-3d5f-49be-a233-c24fde184a09-check-004-verify-no-harness-specific-behavior-leaks-into-core",
+          "number": 4,
+          "title": "Verify no harness-specific behavior leaks into core",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T21:42:30.342Z",
+      "completedAt": "2026-08-09T21:46:04.941Z",
+      "createdAt": "2026-08-09T21:30:42.416Z",
+      "updatedAt": "2026-08-09T21:46:04.941Z"
+    },
+    {
+      "id": "6cd1f126-2a6b-4694-82ea-c370a859d873",
+      "phaseId": "fd1e90e7-0744-40b1-842d-fffb75b81dea",
+      "number": 264,
+      "shortId": "YTARV",
+      "priority": 1,
+      "shortName": "normalize-existing-requirement",
+      "title": "Normalize existing requirement phase links to UUIDs",
+      "status": "done",
+      "description": "Existing `.planner/requirements.json` records store human phase refs (`P052`, etc.), while `packages/plan-web-ui/src/routes/requirements/route.tsx:27-32,66` and `packages/plan-web-ui/src/routes/phase-detail/loader.ts:7-9` look up only `Phase.id` UUIDs. `packages/plan-server/src/serve.ts:23-42` already resolves future HTTP writes to UUIDs. Using the user-confirmed existing mappings, resolve every legacy `linkedPhaseIds` value to its current phase UUID, preserve title/description/status/macroTasks and exact link membership, and verify no dangling/missing/duplicate UUID remains. Add a regression test for legacy P00x link normalization or UI-resolvable canonical links; do not alter unrelated planner entities or phase priority.\n\n---\n**Completion summary:**\nNormalized the seven existing requirements through the running project API: all 25 `linkedPhaseIds` are now canonical phase UUIDs (nine linked phases) with identical membership, no public P00x refs, no dangling IDs, and no duplicates. The live Web UI/API verification confirms every link resolves against `/api/phases`. Regression protection is `packages/plan-server/test/requirements-api.test.mjs`, which verifies P001 reference canonicalization plus invalid-link atomic rejection; rerun after server build: 3/3 passing. No commit or push.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6cd1f126-2a6b-4694-82ea-c370a859d873-check-001-map-every-existing-p00x-link-to-its-current-phase-uuid",
+          "number": 1,
+          "title": "Map every existing P00x link to its current phase UUID",
+          "checked": true
+        },
+        {
+          "id": "6cd1f126-2a6b-4694-82ea-c370a859d873-check-002-persist-only-canonical-uuid-phase-links-without-changing-membership",
+          "number": 2,
+          "title": "Persist only canonical UUID phase links without changing membership",
+          "checked": true
+        },
+        {
+          "id": "6cd1f126-2a6b-4694-82ea-c370a859d873-check-003-verify-requirements-and-phase-detail-resolve-all-expected-links",
+          "number": 3,
+          "title": "Verify requirements and phase detail resolve all expected links",
+          "checked": true
+        },
+        {
+          "id": "6cd1f126-2a6b-4694-82ea-c370a859d873-check-004-add-regression-coverage-for-legacy-p00x-normalization",
+          "number": 4,
+          "title": "Add regression coverage for legacy P00x normalization",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T21:31:17.693Z",
+      "completedAt": "2026-08-09T21:33:29.311Z",
+      "createdAt": "2026-08-09T21:30:42.416Z",
+      "updatedAt": "2026-08-09T21:33:29.311Z"
+    },
+    {
+      "id": "56fbd086-4fef-450b-8757-bad172b9eb41",
+      "phaseId": "fd1e90e7-0744-40b1-842d-fffb75b81dea",
+      "number": 265,
+      "shortId": "2JFDC",
+      "priority": 3,
+      "shortName": "restore-phase-detail-requireme",
+      "title": "Restore phase detail requirement links and regression coverage",
+      "status": "done",
+      "description": "`packages/plan-web-ui/src/routes/phase-detail/loader.ts:7-9` calculates `linkedRequirements` with direct phase UUID membership and `packages/plan-web-ui/src/routes/phase-detail/route.tsx:208-245` renders the Linked requirements metadata/accordion. Once canonical links are stored, verify this loader and detail UI show all requirements for the current phase, count them accurately, and provide navigation back to the anchored phase group in `/requirements`. Maintain the no-linked-requirements empty state, existing status badges, responsive layout, and safe requirement title wrapping. Add regression coverage for canonical links and ensure legacy links are handled by the migration path rather than silently disappearing.\n\n---\n**Completion summary:**\nAdded `GET /phases/:id` regression coverage in `packages/plan-server/test/requirements-api.test.mjs`: a requirement created with P001 is stored canonically and returned in the phase’s `linkedRequirements` (4/4 API tests pass). Phase-detail requirement cards now navigate to the UUID-backed grouped Requirements anchor, `/requirements#phase-<phase.id>`, while preserving count/cards/empty state. Verified server + Web UI builds, `pnpm check`, and synced static bundles. No commit/push.",
+      "notes": "Added a server regression test proving GET /phases/:id returns the requirement created through a human P001 ref after it is canonicalized to the phase UUID. Updated phase detail requirement cards to navigate to `/requirements#phase-<phase UUID>`, matching stable grouped anchors added in T262; existing count/cards/empty state remain. Verified server build + requirements API test (4/4), Web UI build, root pnpm check, and synced static bundles.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "56fbd086-4fef-450b-8757-bad172b9eb41-check-001-verify-phase-loader-finds-uuid-linked-requirements",
+          "number": 1,
+          "title": "Verify phase loader finds UUID-linked requirements",
+          "checked": true
+        },
+        {
+          "id": "56fbd086-4fef-450b-8757-bad172b9eb41-check-002-show-correct-count-and-requirement-cards-in-phase-detail",
+          "number": 2,
+          "title": "Show correct count and requirement cards in phase detail",
+          "checked": true
+        },
+        {
+          "id": "56fbd086-4fef-450b-8757-bad172b9eb41-check-003-link-back-to-the-phase-anchor-on-requirements-page",
+          "number": 3,
+          "title": "Link back to the phase anchor on Requirements page",
+          "checked": true
+        },
+        {
+          "id": "56fbd086-4fef-450b-8757-bad172b9eb41-check-004-cover-linked-and-empty-states",
+          "number": 4,
+          "title": "Cover linked and empty states",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T21:40:14.291Z",
+      "completedAt": "2026-08-09T21:42:18.296Z",
+      "createdAt": "2026-08-09T21:30:42.416Z",
+      "updatedAt": "2026-08-09T21:42:18.296Z"
+    },
+    {
+      "id": "5f6cf5b6-c2ce-4cac-a9de-835eb4dd03e9",
+      "phaseId": "fd1e90e7-0744-40b1-842d-fffb75b81dea",
+      "number": 266,
+      "shortId": "JZG69",
+      "priority": 5,
+      "shortName": "hide-requirement-status-badges",
+      "title": "Hide requirement status badges in requirements list",
+      "status": "done",
+      "description": "`packages/plan-web-ui/src/routes/requirements/route.tsx` currently renders workflow-status badges beside requirement rows/groups. Requirements are specifications, not executable tasks; keep the persisted `Requirement.status` field unchanged for compatibility, but do not display it in the Requirements list UI. Preserve phase grouping, requirement title/description, phase links, empty states, responsive layout, and accessibility. Update focused UI tests or build verification as appropriate.\n\n---\n**Completion summary:**\nRemoved requirement-status presentation from the Requirements list: `RequirementCard` has no status badge, the route no longer parses/applies a status filter, and no status selector is provided. Generalized shared `ListFilters` so status is optional and the control/grid only render when status options are supplied; other entity lists keep their existing status filtering. Preserved search, requirement grouping, phase navigation, and persisted requirement status. Verified web-ui production build and root `pnpm check`. No commit/push.",
+      "notes": "Removed visual requirement workflow status from `routes/requirements/route.tsx`: no accordion status badge and no status query/filter. Made shared `ListFilters` support status-less lists, conditionally hiding the status select and using an appropriate responsive grid while all existing status-enabled callers retain their behavior. Verified `pnpm --filter @agent-plan/web-ui build` and `pnpm check`.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "5f6cf5b6-c2ce-4cac-a9de-835eb4dd03e9-check-001-locate-every-requirement-list-status-badge-and-remove-only-its-visual-rendering",
+          "number": 1,
+          "title": "Locate every requirement-list status badge and remove only its visual rendering",
+          "checked": true
+        },
+        {
+          "id": "5f6cf5b6-c2ce-4cac-a9de-835eb4dd03e9-check-002-preserve-requirement-navigation-grouping-and-data-model-behavior",
+          "number": 2,
+          "title": "Preserve requirement navigation, grouping, and data model behavior",
+          "checked": true
+        },
+        {
+          "id": "5f6cf5b6-c2ce-4cac-a9de-835eb4dd03e9-check-003-build-and-verify-the-web-ui",
+          "number": 3,
+          "title": "Build and verify the Web UI",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T21:59:25.148Z",
+      "completedAt": "2026-08-09T22:00:48.561Z",
+      "createdAt": "2026-08-09T21:59:22.001Z",
+      "updatedAt": "2026-08-09T22:00:48.561Z"
+    },
+    {
+      "id": "c5984789-40f9-484f-b310-fab4d0bf9302",
+      "phaseId": "fd1e90e7-0744-40b1-842d-fffb75b81dea",
+      "number": 268,
+      "shortId": "WKKXT",
+      "priority": 6,
+      "shortName": "enforce-priority-aware-task-se",
+      "title": "Enforce priority-aware task selection with resumable deviations",
+      "status": "done",
+      "description": "The existing Pi/MCP work-selection rule is prompt-only and was not reliably followed. Add a harness-agnostic core selector that determines the recommended next task by feature → phase → task priority (lower non-zero priority first; stable number tie-breaker), honors a single genuinely active task, excludes blocked/waiting/deferred/canceled/rejected work, and evaluates completed task dependencies. Model approved temporary deviations as structured, stackable records: they may be created before any task starts or while an active task is paused; retain the recommended/resume task, temporary task, request/approval origin, reason, timestamps, and resolution state. The selector must prefer the explicit resume target after a deviation ends. Pi and MCP must surface the recommendation and deviation/resume context, but must not block a user-approved temporary task choice. Update lifecycle guidance and add core/Pi/MCP tests for normal priority, tie-breakers, active work, dependencies, pre-start deviations, paused-task deviations, nested overrides, and resumption. Preserve existing task status lifecycle, UUID references, and harness-agnostic core boundaries.\n\n---\n**Completion summary:**\nImplemented and reviewed priority-aware task selection end-to-end. Added a harness-agnostic core selector (`packages/plan-core/src/task-selection.ts`) and persisted structured work-deviation records. Pi and MCP now expose recommendation/deviation tools, deny out-of-priority starts unless a user-approved deviation exists, activate deviations when temporary work starts, resolve them on completion, and continue to surface the retained resume target. Added core selector and Pi/MCP integration coverage for priority/tie-breaks, active conflicts, dependencies, pre-start/nested deviations, denied starts, activation/resolution, and resumption. Cleared the consumed P061 handoff. Verified `pnpm check`, targeted 39 tests, and `pnpm test` 264/264. No commit/push.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c5984789-40f9-484f-b310-fab4d0bf9302-check-001-design-and-persist-structured-deviation-resume-records-in-the-core-model",
+          "number": 1,
+          "title": "Design and persist structured deviation/resume records in the core model",
+          "checked": true
+        },
+        {
+          "id": "c5984789-40f9-484f-b310-fab4d0bf9302-check-002-implement-and-test-the-harness-agnostic-next-task-selector",
+          "number": 2,
+          "title": "Implement and test the harness-agnostic next-task selector",
+          "checked": true
+        },
+        {
+          "id": "c5984789-40f9-484f-b310-fab4d0bf9302-check-003-expose-recommendation-and-resumable-deviation-context-in-pi-and-mcp-without-hard-blocking",
+          "number": 3,
+          "title": "Expose recommendation and resumable deviation context in Pi and MCP without hard blocking",
+          "checked": true
+        },
+        {
+          "id": "c5984789-40f9-484f-b310-fab4d0bf9302-check-004-add-cross-harness-regression-coverage-and-validate-the-full-suite",
+          "number": 4,
+          "title": "Add cross-harness regression coverage and validate the full suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-10T07:34:22.207Z",
+      "completedAt": "2026-08-10T09:08:50.851Z",
+      "createdAt": "2026-08-10T07:34:18.307Z",
+      "updatedAt": "2026-08-10T09:08:50.851Z"
+    }
+  ],
+  "createdAt": "2026-08-09T21:30:20.375Z",
+  "updatedAt": "2026-08-10T09:08:50.851Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-10T08:16:07.027Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/fd1e90e7-0744-40b1-842d-fffb75b81dea-2026-08-10T08-55-31-885Z.md",
+      "clearedAt": "2026-08-10T08:55:31.885Z",
+      "reason": "manual"
+    },
+    {
+      "file": "handoff-archive/fd1e90e7-0744-40b1-842d-fffb75b81dea-2026-08-10T07-40-47-001Z.md",
+      "clearedAt": "2026-08-10T07:40:47.001Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": []
+}

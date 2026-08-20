@@ -1,0 +1,106 @@
+{
+  "id": "61aa15cc-c510-4be4-983a-5105743c2f3b",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 23,
+  "shortId": "7FYAQ",
+  "priority": 4,
+  "slug": "web-ui-locate-active-task-new-added-tasks-section-in-progress-highlight-fix",
+  "title": "Web UI: locate active task + new-added-tasks section + in-progress highlight fix",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Web UI dashboard improvements (3 sub-features), all in packages/plan-web-ui/src:\n\n1. Header active-task → locate in work-tree:\n   - app-shell.tsx ActiveTasksHeader (line ~11): each task row is a <Link> to task-detail. Add a separate locate icon button (stopPropagation) that navigates to /?locate=T00x (query param, not hash — survives refresh, no '/' issues).\n   - work-tree.tsx + use-dashboard-tree.ts: read ?locate=T00x, find task by number, force-expand feature+phase, scrollIntoView the task row + pulse ap-search-hit ~3s, clear param.\n   - work-tree-rows.tsx TaskTreeRow (line ~306): add id={`task-row-${task.number}`} on the row container for scroll target.\n\n2. New Added Tasks section (new component new-added-tasks.tsx):\n   - Mirror latest-completed-tasks.tsx structure. Tasks with createdAt < 3min (NEW_TASK_WINDOW_MS=180000), sorted desc. Hide section entirely when empty (transient, not permanent). Single setTimeout for expiry (no per-row polling).\n   - dashboard/route.tsx: mount <NewAddedTasks> after <LatestCompletedTasks> (line 57).\n\n3. In-progress highlight fix (work-tree-rows.tsx lines 99, 201):\n   - Current: ${hasActiveTask ? \"ap-in-progress\" : feature.status === \"in-progress\" ? \"border orange bg\" : \"\"} — the status-only branch colors orange WITH border even when no task is actually in-progress.\n   - ap-progress-glow keyframe (base.css:276) = animated inset orange border + glow. ap-in-progress (base.css:288) gated on hasActiveTask already.\n   - Fix: remove the `: feature.status === \"in-progress\" ? \"...\"` and `: phase.status === \"in-progress\" ? \"...\"` static-orange branches → orange ONLY when hasActiveTask (genuine active task). Task row (line 308) keeps task.status === \"in-progress\" (a task IS the active unit).\n\nBehaviors preserved: ap-in-progress glow on hasActiveTask; recentlyChanged ring; ap-search-hit highlight; DnD (id on SortableItem wrapper, anchor id on inner row — different elements); done opacity styling.\n\nStack: React + TypeScript, react-router useSearchParams/useNavigate, lucide-react icon.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "4cf1d4b1-c103-4691-a9ca-3f07d3ff2f47",
+    "fc38cfa1-3aad-4224-a676-db8b3cefbc79"
+  ],
+  "tasks": [
+    {
+      "id": "4cf1d4b1-c103-4691-a9ca-3f07d3ff2f47",
+      "phaseId": "61aa15cc-c510-4be4-983a-5105743c2f3b",
+      "number": 93,
+      "shortId": "DDWAA",
+      "priority": 1,
+      "shortName": "locate-active-task-in-work-tre",
+      "title": "Locate active task in work-tree + New Added Tasks section + in-progress highlight fix",
+      "status": "done",
+      "description": "Implement 3 Web UI sub-features (packages/plan-web-ui/src):\n\n1. LOCATE: app-shell.tsx ActiveTasksHeader — add locate icon (stopPropagation, useNavigate → /?locate=T00x) alongside the existing <Link>→detail. work-tree.tsx + use-dashboard-tree.ts read ?locate, force-expand feature+phase, scrollIntoView task row (id={`task-row-${task.number}`} added on TaskTreeRow at work-tree-rows.tsx:306), pulse ap-search-hit ~3s, clear param.\n\n2. NEW TASKS SECTION: new new-added-tasks.tsx (mirror latest-completed-tasks.tsx), tasks createdAt < 3min sorted desc, hidden when empty, single setTimeout for expiry. dashboard/route.tsx mount after LatestCompletedTasks (line 57).\n\n3. IN-PROGRESS FIX: work-tree-rows.tsx lines 99 (feature card) + 201 (phase card) — remove the `: status === \"in-progress\" ? orange-border` static branches. Orange ONLY when hasActiveTask. Task row (308) keeps task in-progress glow.\n\nNo commit/push without permission.\n\n---\n**Completion summary:**\nImplementate 3 sub-feature Web UI (packages/plan-web-ui/src), verificate con puppeteer su heca .planner. Build + check puliti.\n\n1. LOCATE active task in work-tree:\n   - app-shell.tsx ActiveTasksHeader: ristrutturata la riga (Link→detail flex-1 + button locate separato, evita button-in-link). Import useNavigate + LocateFixed (lucide). onClick stopPropagation → navigate(`/?locate=T${task.number}`). aria-label=\"Locate T00x in work tree\".\n   - work-tree.tsx: effect locate che legge ?locate=T00x, trova il task in phases per number, clear filtri (onlyActive/hideDone/searchQuery/treeOpenMode=all), force-expand feature+phase, scrollIntoView row, pulse via locatePulseId (stato locale, 2500ms, indipendente dal pruning di recentTaskIds che lo faceva scomparire a 500ms), clear param. Merge locatePulseId nel highlightedTaskIds passato a FeatureTreeRow → ap-search-hit.\n   - work-tree-rows.tsx TaskTreeRow: aggiunto id={`task-row-${task.number}`} (target scroll, non collide con dnd-kit id su SortableItem wrapper).\n   - use-dashboard-tree.ts: esposti setExpandedFeatureIds/setExpandedPhaseIds/setRecentTaskIds + aggiunti al DashboardTreeApi interface.\n\n2. NEW ADDED TASKS section (new component new-added-tasks.tsx):\n   - Mirror di latest-completed-tasks.tsx. Tasks con createdAt < 3min (NEW_TASK_WINDOW_MS=180000), sort desc, cap 20. Nascosta quando vuota (transient). Single setTimeout al soonest expiry per re-render (no polling). Badge \"New\" pill + \"Added {relative}\". Montata in dashboard/route.tsx dopo LatestCompletedTasks.\n\n3. IN-PROGRESS highlight fix (work-tree-rows.tsx righe 99, 201):\n   - Rimossi i branch `: feature.status === \"in-progress\" ? \"border orange\"` e `: phase.status === \"in-progress\" ? \"border orange\"` — ora orange (ap-in-progress glow) SOLO quando hasActiveTask (genuino task in-progress). Prima: card con status in-progress ma nessun task attivo mostravano bordo orange statico.\n\nVerifica puppeteer (heca .planner):\n- in-progress: 3 ap-in-progress cards, tutte con ap-progress-dot ✓ (glow solo su active)\n- header: 1 locate icon (LocateFixed) ✓\n- locate /?locate=T364: rowExists ✓, scrollIntoView (rowTop 276, inViewport) ✓, ap-search-hit pulse persiste a 1500ms ✓ (non prunato), paramCleared ✓\n- New Added Tasks: visible quando esiste task <3min, hidden altrimenti ✓\n\nFile: work-tree-rows.tsx, work-tree.tsx, app-shell.tsx, use-dashboard-tree.ts, dashboard/route.tsx, new-added-tasks.tsx (nuovo). 91 insertions, 12 deletions (solo src).\n\nNon committato (in attesa permesso utente).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T10:34:39.907Z",
+      "completedAt": "2026-07-29T10:46:42.302Z",
+      "createdAt": "2026-07-29T10:34:36.187Z",
+      "updatedAt": "2026-07-29T10:46:42.302Z"
+    },
+    {
+      "id": "fc38cfa1-3aad-4224-a676-db8b3cefbc79",
+      "phaseId": "61aa15cc-c510-4be4-983a-5105743c2f3b",
+      "number": 211,
+      "shortId": "D2LJ8",
+      "priority": 2,
+      "shortName": "locate-active-task-should-expa",
+      "title": "Locate active task should expand only the branch containing the task",
+      "status": "done",
+      "description": "When clicking the target/locate icon for an in-progress task in the header, the current locate effect sets treeOpenMode('all'), which expands every feature/phase. User wants only the specific feature and phase containing the target task to expand, keeping the rest of the tree untouched.\n\nCode references:\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx (locate effect)\n- packages/plan-web-ui/src/hooks/use-dashboard-tree.ts (treeOpenMode and expansion state setters)\n\nAcceptance:\n- Clicking the target icon navigates to dashboard with ?locate=T00x.\n- Only the feature containing the task and the phase containing the task expand.\n- Other features/phases keep their current expansion state.\n- Filters that would hide the task are still cleared.\n- Scroll and pulse behavior remain.\n- Build and copy bundle pass.\n\n---\n**Completion summary:**\nUpdated locate-in-work-tree effect in packages/plan-web-ui/src/components/dashboard/work-tree.tsx to use treeOpenMode('smart') instead of 'all'. Now clicking the target icon for an active task expands only the feature and phase containing that task, leaving the rest of the tree in its current state. Filters that would hide the task are still cleared. Scroll and pulse behavior remain. Built and copied bundle.",
+      "notes": "Changed locate effect to use treeOpenMode('smart') instead of 'all', so only the feature and phase containing the target task expand. Built and copied bundle.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "fc38cfa1-3aad-4224-a676-db8b3cefbc79-check-001-inspect-locate-effect-and-expansion-logic",
+          "number": 1,
+          "title": "Inspect locate effect and expansion logic",
+          "checked": true
+        },
+        {
+          "id": "fc38cfa1-3aad-4224-a676-db8b3cefbc79-check-002-design-branch-only-expansion-without-treeopenmode-all",
+          "number": 2,
+          "title": "Design branch-only expansion without treeOpenMode('all')",
+          "checked": true
+        },
+        {
+          "id": "fc38cfa1-3aad-4224-a676-db8b3cefbc79-check-003-implement-targeted-expansion",
+          "number": 3,
+          "title": "Implement targeted expansion",
+          "checked": true
+        },
+        {
+          "id": "fc38cfa1-3aad-4224-a676-db8b3cefbc79-check-004-build-and-copy-bundle",
+          "number": 4,
+          "title": "Build and copy bundle",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T22:57:19.761Z",
+      "completedAt": "2026-08-06T22:58:05.852Z",
+      "createdAt": "2026-08-06T22:57:17.068Z",
+      "updatedAt": "2026-08-06T22:58:05.852Z"
+    }
+  ],
+  "createdAt": "2026-07-29T10:34:21.110Z",
+  "updatedAt": "2026-08-06T22:58:05.852Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}
