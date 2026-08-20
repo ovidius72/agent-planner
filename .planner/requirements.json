@@ -1,0 +1,106 @@
+{
+  "requirements": [
+    {
+      "id": "36f83cdd-02f8-41d3-a7c0-4125e17109d5",
+      "title": "Public surface inventory",
+      "description": "Every public PlanStore operation, HTTP API route, MCP tool, Pi command/tool/hook, and Web UI loader/action in scope must have at least one named positive, negative, lifecycle, or persistence scenario in the shared test matrix.",
+      "status": "in-progress",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "68870bdf-f51c-4720-bc92-67fd579769fe",
+        "eb35be8c-458e-4d38-8550-0198e7b9c4ce"
+      ],
+      "createdAt": "2026-08-09T18:06:14.419Z",
+      "updatedAt": "2026-08-09T20:48:57.165Z"
+    },
+    {
+      "id": "86c82402-03ab-4ff8-b173-51cc1ec1f946",
+      "title": "Domain validation and atomicity",
+      "description": "Feature, phase, task, and requirement operations must validate required/optional fields, references, duplicates, statuses, and malformed input; rejected writes must not partially mutate the canonical .planner state.",
+      "status": "planned",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "80d4d600-8bfe-446f-a813-3b51787b23c1",
+        "cfcf7894-d087-4811-ae58-5c07134d4699",
+        "f8c4904c-96a7-42e9-b735-a0d2cbbd27f3",
+        "d7c69001-2a64-4043-842d-76be4527333d",
+        "ff81767b-0749-4a63-a57b-6af8b448ea15",
+        "99801f2f-20b9-4159-ac32-f167eae30da5"
+      ],
+      "createdAt": "2026-08-09T18:06:19.365Z",
+      "updatedAt": "2026-08-09T18:06:19.365Z"
+    },
+    {
+      "id": "5e2e9f29-fef7-4163-8082-9b80d6cb1301",
+      "title": "Lifecycle and persistence invariants",
+      "description": "Status rollups, checklists, reorder, requirements links, repair, import/export, handoff replacement/archive, planner load/stop, and resume behavior must persist correctly across reloads and preserve canonical history and composite references.",
+      "status": "planned",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "80d4d600-8bfe-446f-a813-3b51787b23c1",
+        "cfcf7894-d087-4811-ae58-5c07134d4699",
+        "f8c4904c-96a7-42e9-b735-a0d2cbbd27f3",
+        "d7c69001-2a64-4043-842d-76be4527333d",
+        "99801f2f-20b9-4159-ac32-f167eae30da5"
+      ],
+      "createdAt": "2026-08-09T18:06:24.732Z",
+      "updatedAt": "2026-08-09T18:06:24.732Z"
+    },
+    {
+      "id": "b1de68f2-8950-4883-8ba7-b88a878016b2",
+      "title": "Cross-harness semantic parity",
+      "description": "Equivalent scenarios executed through the HTTP API, MCP adapter, and Pi adapter must produce semantically equivalent normalized outcomes, persisted snapshots, identifiers, statuses, validation categories, and lifecycle side effects.",
+      "status": "planned",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "cfcf7894-d087-4811-ae58-5c07134d4699",
+        "f8c4904c-96a7-42e9-b735-a0d2cbbd27f3",
+        "d7c69001-2a64-4043-842d-76be4527333d",
+        "eb35be8c-458e-4d38-8550-0198e7b9c4ce"
+      ],
+      "createdAt": "2026-08-09T18:06:29.784Z",
+      "updatedAt": "2026-08-09T18:06:29.784Z"
+    },
+    {
+      "id": "36c7a4bc-cd71-472b-abe1-813aa3348e69",
+      "title": "Real server and adapter integration",
+      "description": "Integration tests must exercise a real plan-server over HTTP, the real MCP server through an MCP client, and the real Pi adapter with only the Pi host boundary controlled; core persistence and temporary filesystem state must remain real.",
+      "status": "planned",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "cfcf7894-d087-4811-ae58-5c07134d4699",
+        "f8c4904c-96a7-42e9-b735-a0d2cbbd27f3",
+        "d7c69001-2a64-4043-842d-76be4527333d"
+      ],
+      "createdAt": "2026-08-09T18:06:35.583Z",
+      "updatedAt": "2026-08-09T18:06:35.583Z"
+    },
+    {
+      "id": "41f2a93f-b46e-4c42-ac39-dfaeca27e7c1",
+      "title": "Browser-visible workflow coverage",
+      "description": "The real Web UI must have unit/component coverage and Playwright desktop/mobile scenarios for bootstrap, entity CRUD, validation failures, requirements, statuses, handoffs/archive, resume-visible flows, responsive behavior, and accessibility-critical interactions.",
+      "status": "planned",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "ff81767b-0749-4a63-a57b-6af8b448ea15",
+        "99801f2f-20b9-4159-ac32-f167eae30da5"
+      ],
+      "createdAt": "2026-08-09T18:06:40.341Z",
+      "updatedAt": "2026-08-09T18:06:40.341Z"
+    },
+    {
+      "id": "ea5311b6-6bf7-4025-a1d9-a6c306652fc2",
+      "title": "Coverage, CI, and deterministic diagnostics",
+      "description": "The repository must provide repeatable package/root test commands, enforce agreed source coverage thresholds, run integration and Playwright suites in CI on Node 25, upload actionable failure artifacts, and clean temporary files, ports, processes, and browser resources deterministically.",
+      "status": "planned",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "68870bdf-f51c-4720-bc92-67fd579769fe",
+        "99801f2f-20b9-4159-ac32-f167eae30da5",
+        "309eaa59-03df-4bcd-b761-8e100e928e94"
+      ],
+      "createdAt": "2026-08-09T18:06:47.107Z",
+      "updatedAt": "2026-08-09T18:06:47.107Z"
+    }
+  ]
+}

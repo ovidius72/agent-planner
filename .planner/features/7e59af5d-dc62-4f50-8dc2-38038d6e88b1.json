@@ -1,0 +1,23 @@
+{
+  "id": "7e59af5d-dc62-4f50-8dc2-38038d6e88b1",
+  "number": 13,
+  "shortId": "3EXFD",
+  "priority": 13,
+  "name": "Web UI page title includes project folder",
+  "description": "Distinguish multiple planner web UI instances (e.g. heca in two different project directories) by including the project folder name in the browser tab title.\n\nCurrent state: `packages/plan-web-ui/src/app/root.tsx` always sets `document.title` to `Project Name · Agent Plan`, which makes it impossible to tell apart two projects with the same name opened in different directories (e.g. `~/projects/myvim` and `~/projects/heca` both named \"Heca\").\n\nGoal: append the basename of the project root directory to the page title when it differs from the project name, producing titles such as `Heca · myvim` vs `Heca · heca`.\n\nOut of scope: multi-planner server/UI, favicon differentiation, URL-based switching.\n\nImplementation:\n- Read `project.projectRoot` from the root loader (already exposed by `@agent-plan/server`).\n- Compute the folder name from the last segment of `project.projectRoot`.\n- Update the `useEffect` in `RootRoute` to set `document.title = project.name` plus the folder suffix.\n- Keep the fallback title `Agent Plan` when the project name is missing.\n\nAcceptance criteria:\n- For `/Users/antonio/projects/myvim`: tab title is `Heca · myvim`.\n- For `/Users/antonio/projects/heca`: tab title is `Heca · heca`.\n- For `/Users/antonio/projects/agent-plan`: tab title is `Agent Plan · agent-plan`.\n- Build and type-check pass.",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "2dbfeb21-6f00-4fdf-8869-60614887706d"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-08-06T15:42:27.908Z",
+  "updatedAt": "2026-08-06T15:42:27.908Z"
+}

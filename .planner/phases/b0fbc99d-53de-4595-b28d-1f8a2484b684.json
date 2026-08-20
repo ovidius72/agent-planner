@@ -1,0 +1,228 @@
+{
+  "id": "b0fbc99d-53de-4595-b28d-1f8a2484b684",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 63,
+  "shortId": "C4FWW",
+  "priority": 13,
+  "slug": "separate-planner-and-web-ui-lifecycle",
+  "title": "Separate planner and Web UI lifecycle",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Definisce e verifica la separazione tra planner attivo senza Web UI e stop completo della sessione planner.",
+  "description": "Il lifecycle Pi è gestito in `packages/pi-adapter/src/index.ts`, con `plannerSessionEnabled`, `stopServer()`, il comando `/planner stop`, il tool `planner-web` e l’hook `before_agent_start`. I failure in `packages/pi-adapter/test/web-lifecycle.test.mjs` mostrano che la semantica tra fermare soltanto la Web UI e fermare il planner è ambigua. Questa fase deve rendere `planner-web stop` un’operazione solo-UI: il planner, i tool, i lifecycle e il contesto restano attivi, ma il contesto non pubblica URL e dichiara la UI non avviata. `/planner stop` deve invece disabilitare il planner della sessione, fermare il server e azzerare cache/flag transitori così l’hook non inietta più contesto né URL fino a `/planner load`. Il processo MCP esterno non è gestibile dall’estensione Pi e non va dichiarato fermato. Preservare core harness-agnostic; aggiungere test host reali per entrambi i contratti e per il riavvio.",
+  "notes": "",
+  "goals": [
+    "Mantenere il planner operativo dopo `planner-web stop`, fermando esclusivamente il server della Web UI.",
+    "Far sì che `/planner stop` disabiliti completamente il planner della sessione Pi, fermi il server e rimuova il contesto planner dai turni successivi.",
+    "Rendere cache e flag del contesto coerenti attraverso stop, web-stop e load.",
+    "Verificare i contratti con test host ripetibili."
+  ],
+  "nonGoals": [
+    "Terminare processi MCP esterni: l’estensione Pi non ne possiede il lifecycle.",
+    "Cambiare il dominio core o rendere la persistenza dipendente da Pi."
+  ],
+  "dependencies": [
+    "`packages/pi-adapter/src/index.ts` lifecycle e comandi.",
+    "`packages/pi-adapter/test/web-lifecycle.test.mjs` e host fixture."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Azzerare flag condivisi nel percorso solo-UI può disabilitare accidentalmente il planner.",
+    "I test devono distinguere semanticamente URL assente da contesto assente."
+  ],
+  "openQuestions": [],
+  "decisions": [
+    "`planner-web stop` ferma esclusivamente la Web UI e mantiene planner, tool, lifecycle e contesto attivi.",
+    "`/planner stop` disabilita il planner della sessione Pi, ferma la Web UI e impedisce ulteriore context injection fino a `/planner load`.",
+    "Un MCP esterno non è arrestabile dal Pi adapter e non deve essere presentato come servizio fermato."
+  ],
+  "acceptedDecisions": [
+    {
+      "id": "P063-D001",
+      "title": "Planner and Web UI have separate stop semantics",
+      "decision": "`planner-web stop` stops only the Web UI while keeping planner context and lifecycle active; `/planner stop` disables the planner session and stops its managed server.",
+      "rationale": "A user may close the UI without losing agent planning behavior, while a full planner stop must remove session-managed planner behavior deterministically.",
+      "implementationNotes": "External MCP processes are outside the Pi adapter lifecycle and are not claimed as stopped.",
+      "acceptedAt": "2026-08-11T09:00:00.000Z"
+    }
+  ],
+  "completionCriteria": [
+    "Dopo `planner-web stop`, `before_agent_start` continua a fornire contesto senza URL e con indicazione UI non avviata.",
+    "Dopo `/planner stop`, `before_agent_start` restituisce `undefined` e nessun URL viene aggiunto.",
+    "`/planner load` ripristina planner e Web UI dopo entrambi i percorsi.",
+    "I test lifecycle sono verdi e distinguono esplicitamente i due contratti."
+  ],
+  "taskIds": [
+    "a3e221fc-f334-456f-8b01-df27cffdef90",
+    "f88ea69b-2efc-4c75-994c-b9de915d94c8",
+    "3638049b-b954-4186-9cfe-3d2ac994d9d7"
+  ],
+  "tasks": [
+    {
+      "id": "a3e221fc-f334-456f-8b01-df27cffdef90",
+      "phaseId": "b0fbc99d-53de-4595-b28d-1f8a2484b684",
+      "number": 274,
+      "shortId": "BTULU",
+      "priority": 1,
+      "shortName": "separate-planner-web-stop",
+      "title": "Separate Pi planner and Web UI stop semantics",
+      "status": "done",
+      "description": "Inspect lifecycle state and commands in `packages/pi-adapter/src/index.ts`, especially `plannerSessionEnabled`, `stopServer()`, the `planner-web` tool, `/planner stop`, `/planner load`, cache invalidation and `before_agent_start`. Implement explicit behavior: `planner-web stop` only stops the Web UI and invalidates cached context so the next injected planner context says the UI is not running; `/planner stop` disables the session planner, stops the Web UI, clears transient recap/context state and prevents subsequent injection until `/planner load`. Do not claim to stop external MCP processes. Preserve the existing disabled-by-default rule and idempotent load/stop behavior.\n\n---\n**Completion summary:**\nAdded `disablePlannerSession()` to clear enabled state, resume flags/timer and cached context. `/planner stop` and `planner-stop` use it before stopping the server; `planner-web stop` continues to call only `stopServer()` and therefore keeps planner context active while invalidating its URL. Pi lifecycle focused suite passes (4/4).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a3e221fc-f334-456f-8b01-df27cffdef90-check-001-map-state-transitions-for-web-stop-planner-stop-and-planner-load",
+          "number": 1,
+          "title": "Map state transitions for web stop, planner stop and planner load.",
+          "checked": false
+        },
+        {
+          "id": "a3e221fc-f334-456f-8b01-df27cffdef90-check-002-implement-the-distinct-state-transitions-and-cache-invalidation",
+          "number": 2,
+          "title": "Implement the distinct state transitions and cache invalidation.",
+          "checked": false
+        },
+        {
+          "id": "a3e221fc-f334-456f-8b01-df27cffdef90-check-003-verify-hooks-and-message-url-behavior-under-both-stop-paths",
+          "number": 3,
+          "title": "Verify hooks and message URL behavior under both stop paths.",
+          "checked": false
+        },
+        {
+          "id": "a3e221fc-f334-456f-8b01-df27cffdef90-check-004-build-the-pi-adapter-and-record-results",
+          "number": 4,
+          "title": "Build the Pi adapter and record results.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T12:38:19.157Z",
+      "completedAt": "2026-08-11T12:38:50.762Z",
+      "createdAt": "2026-08-11T12:37:31.723Z",
+      "updatedAt": "2026-08-11T12:38:50.762Z"
+    },
+    {
+      "id": "f88ea69b-2efc-4c75-994c-b9de915d94c8",
+      "phaseId": "b0fbc99d-53de-4595-b28d-1f8a2484b684",
+      "number": 275,
+      "shortId": "7EMY4",
+      "priority": 2,
+      "shortName": "test-planner-web-lifecycle",
+      "title": "Test planner and Web UI lifecycle contracts",
+      "status": "done",
+      "description": "Update `packages/pi-adapter/test/web-lifecycle.test.mjs` using the real adapter host. Assert that `planner-web stop` leaves planner context injection active but removes the Web URL and reports Web UI stopped; assert `/planner stop` removes context injection and URL entirely; assert `/planner load` restores both planner context and a working Web UI after either path. Retain idempotent repeated load behavior while avoiding assumptions that the OS cannot reuse a released dynamic port. Exercise tool and command paths separately.\n\n---\n**Completion summary:**\nLifecycle host tests now distinguish Web-only stop (context remains, URL absent) from planner stop (no context injection), cover restart through planner-web start and /planner load, and avoid assuming a released dynamic port cannot be reused. Focused suite passes 4/4.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f88ea69b-2efc-4c75-994c-b9de915d94c8-check-001-add-a-regression-for-web-only-stop-retaining-context-without-url",
+          "number": 1,
+          "title": "Add a regression for Web-only stop retaining context without URL.",
+          "checked": false
+        },
+        {
+          "id": "f88ea69b-2efc-4c75-994c-b9de915d94c8-check-002-add-a-regression-for-full-planner-stop-disabling-context-injection",
+          "number": 2,
+          "title": "Add a regression for full planner stop disabling context injection.",
+          "checked": false
+        },
+        {
+          "id": "f88ea69b-2efc-4c75-994c-b9de915d94c8-check-003-cover-load-recovery-after-both-stop-paths",
+          "number": 3,
+          "title": "Cover load recovery after both stop paths.",
+          "checked": false
+        },
+        {
+          "id": "f88ea69b-2efc-4c75-994c-b9de915d94c8-check-004-run-the-focused-lifecycle-suite",
+          "number": 4,
+          "title": "Run the focused lifecycle suite.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T12:39:13.026Z",
+      "completedAt": "2026-08-11T12:39:18.448Z",
+      "createdAt": "2026-08-11T12:37:38.035Z",
+      "updatedAt": "2026-08-11T12:39:18.448Z"
+    },
+    {
+      "id": "3638049b-b954-4186-9cfe-3d2ac994d9d7",
+      "phaseId": "b0fbc99d-53de-4595-b28d-1f8a2484b684",
+      "number": 276,
+      "shortId": "K5YSV",
+      "priority": 3,
+      "shortName": "verify-lifecycle-separation",
+      "title": "Verify lifecycle separation across the workspace",
+      "status": "done",
+      "description": "Run type checks and relevant unit suites after the lifecycle changes. Confirm `packages/pi-adapter/test/web-lifecycle.test.mjs` passes alongside host registration and reference tests, then run `pnpm check`, `pnpm test:unit` and `git diff --check`. Record any failure outside the phase as a separate blocker rather than weakening lifecycle assertions. Verify no commit is made until user review.\n\n---\n**Completion summary:**\nVerification passed: `pnpm check`, `pnpm test:unit` (328/328 passing), and `git diff --check`. No commit was created.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3638049b-b954-4186-9cfe-3d2ac994d9d7-check-001-run-focused-pi-lifecycle-and-host-tests",
+          "number": 1,
+          "title": "Run focused Pi lifecycle and host tests.",
+          "checked": false
+        },
+        {
+          "id": "3638049b-b954-4186-9cfe-3d2ac994d9d7-check-002-run-workspace-typecheck-and-unit-suite",
+          "number": 2,
+          "title": "Run workspace typecheck and unit suite.",
+          "checked": false
+        },
+        {
+          "id": "3638049b-b954-4186-9cfe-3d2ac994d9d7-check-003-run-whitespace-diff-validation-and-inspect-remaining-worktree-changes",
+          "number": 3,
+          "title": "Run whitespace diff validation and inspect remaining worktree changes.",
+          "checked": false
+        },
+        {
+          "id": "3638049b-b954-4186-9cfe-3d2ac994d9d7-check-004-record-verification-outcome-without-committing",
+          "number": 4,
+          "title": "Record verification outcome without committing.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T12:39:31.090Z",
+      "completedAt": "2026-08-11T12:40:04.435Z",
+      "createdAt": "2026-08-11T12:37:43.797Z",
+      "updatedAt": "2026-08-11T12:40:04.435Z"
+    }
+  ],
+  "createdAt": "2026-08-11T12:37:13.926Z",
+  "updatedAt": "2026-08-11T12:40:04.435Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "cacda2dd-fad8-4cd7-9acc-3cb90bbf89a5",
+      "date": "2026-08-11T12:38:19.161Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "3177b262-d568-453d-8a7d-5d45dde78cb3",
+      "date": "2026-08-11T12:40:04.440Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

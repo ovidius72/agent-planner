@@ -1982,6 +1982,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           acceptedDecisions: [],
           checklist: [], subtasks: [],
           dependsOn: [],
+          pauseSnapshot: null, pauseHistory: [],
           startedAt: "", completedAt: "",
           createdAt: now, updatedAt: now,
         };
@@ -3718,6 +3719,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const priority = await st.nextPriority("task", phaseId);
       const now = nowISO();
       const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
+      if (initialStatus === "paused") {
+        return { content: [{ type: "text", text: "A task cannot be created paused without an in-progress checkpoint. Create it planned, then use task_pause/task_switch." }], details: {} };
+      }
       const task: Task = {
         id: taskId, phaseId, number: identity.number, shortId: identity.shortId, priority, shortName,
         title: params.title,
@@ -3733,6 +3737,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           : [],
         subtasks: [],
         dependsOn: [],
+        pauseSnapshot: null,
+        pauseHistory: [],
         startedAt: initialStatus === "in-progress" || initialStatus === "done" ? now : "",
         completedAt: initialStatus === "done" ? now : "",
         createdAt: now, updatedAt: now,
@@ -3913,7 +3919,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (temporary.task.id === resume.task.id) return { content: [{ type: "text", text: "A temporary task must differ from its resume target." }], details: {} };
       if (temporary.task.status !== "planned") return { content: [{ type: "text", text: `Temporary task is not startable: ${temporary.task.status}.` }], details: {} };
       const timestamp = nowISO();
-      const record = { id: crypto.randomUUID(), recommendedTaskId: selected.candidate?.task.id ?? resume.task.id, temporaryTaskId: temporary.task.id, resumeTaskId: resume.task.id, reason: params.reason, requestedBy: "user" as const, approvedBy: "user", state: "approved" as const, createdAt: timestamp, activatedAt: "", resolvedAt: "" };
+      const record = {
+        id: crypto.randomUUID(), recommendedTaskId: selected.candidate?.task.id ?? resume.task.id,
+        temporaryTaskId: temporary.task.id, resumeTaskId: resume.task.id, reason: params.reason, snapshot: null,
+        requestedBy: "user" as const, approvedBy: "user", state: "approved" as const,
+        createdAt: timestamp, activatedAt: "", resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
+      };
       await st.addWorkDeviation(record);
       await st.writeGenerated();
       const tempRef = `${formatPhaseRef(temporary.phase.number, featureNumberOfPhase(temporary.phase, features.features))}/T${String(temporary.task.number).padStart(3, "0")}`;
@@ -3923,9 +3934,182 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "task_pause",
+    label: "Task Pause",
+    description: "Pause an in-progress task with a mandatory durable checkpoint: why work stopped, what was underway, the exact resume location, and how to continue.",
+    parameters: Type.Object({
+      taskId: Type.String({ description: "Task ref to pause" }),
+      reason: Type.String({ description: "Why work is being paused" }),
+      what_was_being_done: Type.String({ description: "Concrete work underway at the checkpoint" }),
+      resume_location: Type.String({ description: "Exact file, symbol, command, or location from which to continue" }),
+      how_to_resume: Type.String({ description: "Actionable instructions for resuming" }),
+      paused_by: Type.Optional(Type.String({ description: "Agent/session identifier" })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
+      if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      if (found.task.status !== "in-progress") return { content: [{ type: "text", text: `Task pause denied: task is ${found.task.status}, not in-progress.` }], details: found.task };
+      const snapshot = {
+        id: crypto.randomUUID(), reason: params.reason.trim(), whatWasBeingDone: params.what_was_being_done.trim(),
+        resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(), relatedTaskId: "",
+        pausedAt: nowISO(), pausedBy: params.paused_by?.trim() ?? "",
+      };
+      const paused = await st.pauseTask(found.phase.id, found.task.id, snapshot);
+      await st.syncTaskStatusRollup(found.phase.id);
+      const activeDeviation = (await st.loadProject()).workDeviations
+        .filter((deviation) => (deviation.state === "approved" || deviation.state === "active")
+          && deviation.temporaryTaskId === found.task.id)
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+      if (activeDeviation) await st.setWorkDeviationState(activeDeviation.id, "resume-required", snapshot.pausedAt);
+      const resume = activeDeviation
+        ? findTaskByRef(await st.loadAllPhases(), features, activeDeviation.resumeTaskId)
+        : undefined;
+      await st.writeGenerated();
+      const reference = `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(paused.number).padStart(3, "0")}`;
+      const resumeRef = resume
+        ? `${formatPhaseRef(resume.phase.number, featureNumberOfPhase(resume.phase, features))}/T${String(resume.task.number).padStart(3, "0")}`
+        : "";
+      return {
+        content: [{ type: "text", text: [
+          `⏸️ Task paused: ${reference} — ${paused.title}`,
+          `Why: ${snapshot.reason}`,
+          `Checkpoint: ${snapshot.whatWasBeingDone}`,
+          `Resume from: ${snapshot.resumeLocation}`,
+          `How to resume: ${snapshot.howToResume}`,
+          resume ? `↩️ RESUME REQUIRED: ${resumeRef} — ${resume.task.title}` : "",
+        ].filter(Boolean).join("\n") }],
+        details: { task: paused, snapshot, ...(resume ? { resumeRequired: { taskId: resume.task.id } } : {}) },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "task_switch",
+    label: "Task Switch",
+    description: "Switch from active work to a temporary task, even outside priority order. Atomically snapshots/pauses the source, starts the target, and pushes a durable LIFO return target.",
+    parameters: Type.Object({
+      from_task: Type.String({ description: "Currently in-progress task ref" }),
+      to_task: Type.String({ description: "Temporary task ref to start" }),
+      reason: Type.String({ description: "Why this temporary switch is necessary" }),
+      what_was_being_done: Type.String({ description: "Concrete work underway in the source task" }),
+      resume_location: Type.String({ description: "Exact source resume location" }),
+      how_to_resume: Type.String({ description: "Actionable source resume instructions" }),
+      switched_by: Type.Optional(Type.String({ description: "Agent/session identifier" })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const [featuresDoc, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+      const features = featuresDoc.features;
+      const source = findTaskByRef(phases, features, params.from_task.trim());
+      const target = findTaskByRef(phases, features, params.to_task.trim());
+      if (!source) return { content: [{ type: "text", text: `Task not found: ${params.from_task}` }], details: {} };
+      if (!target) return { content: [{ type: "text", text: `Task not found: ${params.to_task}` }], details: {} };
+      if (source.task.id === target.task.id) return { content: [{ type: "text", text: "Source and temporary task must differ." }], details: {} };
+      if (source.task.status !== "in-progress" && source.task.status !== "paused") {
+        return { content: [{ type: "text", text: `Task switch denied: source is ${source.task.status}; only in-progress or pending-resume paused work can be switched.` }], details: {} };
+      }
+      const eligibility = checkExplicitTaskStart(features, phases, target.task.id, project.workDeviations);
+      if (!eligibility.eligible) return { content: [{ type: "text", text: `Task switch denied: ${eligibility.reason}` }], details: eligibility };
+
+      const timestamp = nowISO();
+      const snapshot = {
+        id: crypto.randomUUID(), reason: params.reason.trim(), whatWasBeingDone: params.what_was_being_done.trim(),
+        resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(),
+        relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: params.switched_by?.trim() ?? "",
+      };
+      const selection = recommendNextTask(features, phases, project.workDeviations);
+      const record = {
+        id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
+        temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason: snapshot.reason, snapshot,
+        requestedBy: "agent" as const, approvedBy: params.switched_by?.trim() || "explicit task_switch",
+        state: "active" as const, createdAt: timestamp, activatedAt: timestamp,
+        resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
+      };
+      const sourceWasActive = source.task.status === "in-progress";
+      let sourceCheckpointed = false;
+      let targetStarted = false;
+      try {
+        if (sourceWasActive) {
+          await st.pauseTask(source.phase.id, source.task.id, snapshot);
+        } else {
+          await st.updatePhase(source.phase.id, (phase) => {
+            const task = phase.tasks.find((entry) => entry.id === source.task.id);
+            if (!task) throw new Error(`Paused source task disappeared: ${params.from_task}`);
+            task.pauseSnapshot = snapshot;
+            task.pauseHistory = [...task.pauseHistory, snapshot];
+            task.updatedAt = timestamp;
+            return phase;
+          });
+        }
+        sourceCheckpointed = true;
+        if (target.task.status === "paused") {
+          await st.resumeTask(target.phase.id, target.task.id, timestamp);
+        } else {
+          await st.updatePhase(target.phase.id, (phase) => {
+            const task = phase.tasks.find((entry) => entry.id === target.task.id);
+            if (!task) throw new Error(`Temporary task disappeared: ${params.to_task}`);
+            const previousStatus = task.status;
+            applyTaskLifecycleDates(task, "in-progress", timestamp);
+            task.statusLog = [...task.statusLog, {
+              id: createChecklistItemId(task.id, task.statusLog.length + 1, `${previousStatus}-in-progress`),
+              date: timestamp, fromStatus: previousStatus, toStatus: "in-progress",
+              title: `${previousStatus} → in-progress`, description: `Temporary switch from ${source.task.title}.`,
+            }];
+            task.updatedAt = timestamp;
+            phase.updatedAt = timestamp;
+            return phase;
+          });
+        }
+        targetStarted = true;
+        await st.addWorkDeviation(record);
+        if (target.task.status === "paused") {
+          const resumedDeviation = project.workDeviations
+            .filter((deviation) => deviation.resumeTaskId === target.task.id
+              && (deviation.state === "resume-required" || deviation.state === "resolved"))
+            .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+          if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
+        }
+      } catch (error) {
+        if (targetStarted) {
+          await st.updatePhase(target.phase.id, (phase) => {
+            phase.tasks = phase.tasks.map((task) => task.id === target.task.id ? target.task : task);
+            return phase;
+          }).catch(() => {});
+        }
+        if (sourceCheckpointed) {
+          if (sourceWasActive) await st.resumeTask(source.phase.id, source.task.id, nowISO()).catch(() => {});
+          else await st.updatePhase(source.phase.id, (phase) => {
+            phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
+            return phase;
+          }).catch(() => {});
+        }
+        throw error;
+      }
+      await st.syncTaskStatusRollup(source.phase.id);
+      if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
+      await st.writeGenerated();
+      const sourceRef = `${formatPhaseRef(source.phase.number, featureNumberOfPhase(source.phase, features))}/T${String(source.task.number).padStart(3, "0")}`;
+      const targetRef = `${formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features))}/T${String(target.task.number).padStart(3, "0")}`;
+      return {
+        content: [{ type: "text", text: [
+          `🔀 Task switched: ${sourceRef} → ${targetRef}`,
+          `Paused snapshot: ${snapshot.whatWasBeingDone}`,
+          `Return target: ${sourceRef} from ${snapshot.resumeLocation}`,
+          "Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.",
+        ].join("\n") }],
+        details: { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "task_start",
     label: "Task Start",
-    description: "Set a task to in-progress. BEFORE calling, read feature_get(full=true) for the parent feature and its linked requirements, then phase_get(full=true) for the parent phase and its linked requirements, then task_get(full=true). Continue an already in-progress task; otherwise select ready work by feature → phase → task priority (lower number first), respecting dependencies and blocked/waiting states. Sets startedAt automatically and returns the ordered feature/phase requirements briefing.",
+    description: "Set a task to in-progress or resume paused work. BEFORE calling, read feature_get(full=true), phase_get(full=true), then task_get(full=true). A different active task must first be suspended through task_switch. Otherwise follow active/pending-resume/feature → phase → task priority guidance.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
     }),
@@ -3943,6 +4127,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
       if (!eligibility.eligible) return { content: [{ type: "text", text: `Task start denied: ${eligibility.reason}` }], details: eligibility };
       const selection = recommendNextTask(features, phases, project.workDeviations);
+      if (selection.kind === "conflict") {
+        return { content: [{ type: "text", text: `${selection.reason} Pause/reconcile active tasks before starting another task.` }], details: selection };
+      }
+      if (selection.kind === "active" && selection.candidate?.task.id !== task.id) {
+        const activeRef = `${formatPhaseRef(selection.candidate!.phase.number, featureNumberOfPhase(selection.candidate!.phase, features))}/T${String(selection.candidate!.task.number).padStart(3, "0")}`;
+        return { content: [{ type: "text", text: `Task start denied: ${activeRef} is active. Use task_switch to snapshot and pause it before starting another task.` }], details: selection };
+      }
+      if (selection.kind === "resume" && selection.candidate?.task.id !== task.id) {
+        const resumeRef = `${formatPhaseRef(selection.candidate!.phase.number, featureNumberOfPhase(selection.candidate!.phase, features))}/T${String(selection.candidate!.task.number).padStart(3, "0")}`;
+        return { content: [{ type: "text", text: `Task start denied: ${resumeRef} is pending resume. Resume it now, or use task_switch from that paused task with a new checkpoint and reason.` }], details: selection };
+      }
       // Assemble the mandatory parent context before changing task lifecycle state.
       // The output order is feature + its requirements, then phase + its requirements.
       const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
@@ -3956,29 +4151,40 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         phaseWithRequirements.linkedRequirements ?? [],
         featureRequirements,
       );
-      const advisory = selection.kind === "conflict"
-        ? `\n\n⚠️ ${selection.reason} Explicit task request honored; reconcile active work before relying on automatic recommendations.`
-        : selection.candidate && selection.candidate.task.id !== task.id
-          ? selection.kind === "active"
-            ? `\n\n⚠️ Active-task advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} is already in progress. Explicit task request honored.`
-            : `\n\n⚠️ Priority advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} is the automatic recommendation. Explicit task request honored.`
-          : "";
+      const advisory = selection.candidate && selection.candidate.task.id !== task.id
+        ? `\n\n⚠️ ${selection.kind === "resume" ? "Resume" : "Priority"} advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} is the automatic recommendation. Explicit task request honored.`
+        : "";
       const now = nowISO();
       let startedTask: Task | undefined;
-      await st.updatePhase(found.phase.id, (phase) => {
-        const t = phase.tasks.find((x) => x.id === found.task.id);
-        if (!t) return phase;
-        applyTaskLifecycleDates(t, "in-progress", now);
-        t.updatedAt = now;
-        phase.updatedAt = now;
-        startedTask = t;
-        return phase;
-      });
+      if (task.status === "paused") {
+        startedTask = await st.resumeTask(found.phase.id, found.task.id, now);
+      } else {
+        await st.updatePhase(found.phase.id, (phase) => {
+          const t = phase.tasks.find((x) => x.id === found.task.id);
+          if (!t) return phase;
+          const previousStatus = t.status;
+          applyTaskLifecycleDates(t, "in-progress", now);
+          t.statusLog = [...t.statusLog, {
+            id: createChecklistItemId(t.id, t.statusLog.length + 1, `${previousStatus}-in-progress`),
+            date: now, fromStatus: previousStatus, toStatus: "in-progress",
+            title: `${previousStatus} → in-progress`, description: "",
+          }];
+          t.updatedAt = now;
+          phase.updatedAt = now;
+          startedTask = t;
+          return phase;
+        });
+      }
       await st.syncTaskStatusRollup(found.phase.id);
       const approvedDeviation = project.workDeviations.find((deviation) =>
         deviation.temporaryTaskId === task.id && deviation.state === "approved",
       );
       if (approvedDeviation) await st.setWorkDeviationState(approvedDeviation.id, "active", now);
+      const resumedDeviation = project.workDeviations
+        .filter((deviation) => deviation.resumeTaskId === task.id
+          && (deviation.state === "resume-required" || deviation.state === "resolved"))
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+      if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", now);
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
       return { content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}` }], details: startedTask };
@@ -4002,6 +4208,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
       const task = found.task;
       if (task.status === "done") return { content: [{ type: "text", text: `Task ${task.id} is already done.` }], details: task };
+      if (task.status === "paused") return { content: [{ type: "text", text: "Task completion denied: resume paused work with task_start before completing it, or cancel it explicitly with motivation." }], details: task };
       const unchecked = task.checklist.filter((item) => !item.checked);
       if (unchecked.length > 0 && !params.force) {
         return {
@@ -4014,7 +4221,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.updatePhase(found.phase.id, (phase) => {
         const t = phase.tasks.find((x) => x.id === found.task.id);
         if (!t) return phase;
+        const previousStatus = t.status;
         applyTaskLifecycleDates(t, "done", now);
+        t.statusLog = [...t.statusLog, {
+          id: createChecklistItemId(t.id, t.statusLog.length + 1, `${previousStatus}-done`),
+          date: now, fromStatus: previousStatus, toStatus: "done",
+          title: `${previousStatus} → done`, description: "",
+        }];
         if (params.description_update) {
           const sep = t.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
           t.description = t.description + sep + params.description_update;
@@ -4028,10 +4241,32 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const completedDeviation = (await st.loadProject()).workDeviations
         .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === task.id)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-      if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resolved", now);
+      if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resume-required", now);
       await st.writeGenerated();
       if (!completedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      return { content: [{ type: "text", text: `✅ Task completed: ${completedTask.id} — ${completedTask.title} (done)${clearedRef ? ` — phase handoff archived (${clearedRef})` : ""}` }], details: completedTask };
+      let resumeNotice = "";
+      let resumeRequired: Record<string, unknown> | undefined;
+      if (completedDeviation) {
+        const resume = findTaskByRef(await st.loadAllPhases(), features, completedDeviation.resumeTaskId);
+        if (resume) {
+          const snapshot = resume.task.pauseSnapshot ?? completedDeviation.snapshot;
+          const resumeRef = `${formatPhaseRef(resume.phase.number, featureNumberOfPhase(resume.phase, features))}/T${String(resume.task.number).padStart(3, "0")}`;
+          resumeNotice = [
+            "",
+            `↩️ RESUME REQUIRED: ${resumeRef} — ${resume.task.title}`,
+            snapshot ? `Paused because: ${snapshot.reason}` : "Return to the preserved task before selecting new priority work.",
+            snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
+            snapshot ? `How to resume: ${snapshot.howToResume}` : "",
+            `Next action: task_start ${resumeRef}`,
+          ].filter(Boolean).join("\n");
+          resumeRequired = { taskId: resume.task.id, phaseId: resume.phase.id, snapshot };
+        }
+      }
+      const completedRef = `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(completedTask.number).padStart(3, "0")}`;
+      return {
+        content: [{ type: "text", text: `✅ Task completed: ${completedRef} — ${completedTask.title} (done)${clearedRef ? ` — phase handoff archived (${clearedRef})` : ""}${resumeNotice}` }],
+        details: resumeRequired ? { task: completedTask, resumeRequired } : completedTask,
+      };
     },
   });
 

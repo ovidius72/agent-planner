@@ -14,8 +14,8 @@
  *
  * These are NEVER persisted: they are computed on demand from children's
  * canonical workflow statuses. The canonical workflow model
- * (`planned | in-progress | waiting | blocked | deferred | done | canceled |
- * rejected`) is unchanged.
+ * (`planned | in-progress | paused | waiting | blocked | deferred | done |
+ * canceled | rejected`) includes paused leaf work without implying active execution.
  */
 
 import type { TaskStatus, PhaseStatus } from "./schema.js";
@@ -27,6 +27,7 @@ import type { TaskStatus, PhaseStatus } from "./schema.js";
 export type WorkflowStatus =
   | "planned"
   | "in-progress"
+  | "paused"
   | "waiting"
   | "blocked"
   | "deferred"
@@ -45,6 +46,7 @@ export type DisplayStatus = WorkflowStatus | "started" | "closed";
 export interface StatusBreakdown {
   planned: number;
   inProgress: number;
+  paused: number;
   waiting: number;
   blocked: number;
   deferred: number;
@@ -69,19 +71,20 @@ export interface ParentDisplay {
 }
 
 const ACTIVE = new Set<WorkflowStatus>(["in-progress"]);
-const OPEN = new Set<WorkflowStatus>(["planned", "waiting", "blocked", "deferred"]);
+const OPEN = new Set<WorkflowStatus>(["planned", "paused", "waiting", "blocked", "deferred"]);
 const TERMINAL = new Set<WorkflowStatus>(["done", "canceled", "rejected"]);
 
 /** Count children per canonical workflow status. Pure; does not mutate input. */
 export function countBreakdown(statuses: readonly WorkflowStatus[]): StatusBreakdown {
   const breakdown: StatusBreakdown = {
-    planned: 0, inProgress: 0, waiting: 0, blocked: 0,
+    planned: 0, inProgress: 0, paused: 0, waiting: 0, blocked: 0,
     deferred: 0, done: 0, canceled: 0, rejected: 0,
   };
   for (const s of statuses) {
     switch (s) {
       case "planned": breakdown.planned++; break;
       case "in-progress": breakdown.inProgress++; break;
+      case "paused": breakdown.paused++; break;
       case "waiting": breakdown.waiting++; break;
       case "blocked": breakdown.blocked++; break;
       case "deferred": breakdown.deferred++; break;
@@ -94,7 +97,7 @@ export function countBreakdown(statuses: readonly WorkflowStatus[]): StatusBreak
 }
 
 function emptyBreakdown(): StatusBreakdown {
-  return { planned: 0, inProgress: 0, waiting: 0, blocked: 0, deferred: 0, done: 0, canceled: 0, rejected: 0 };
+  return { planned: 0, inProgress: 0, paused: 0, waiting: 0, blocked: 0, deferred: 0, done: 0, canceled: 0, rejected: 0 };
 }
 
 /**
@@ -108,6 +111,7 @@ function emptyBreakdown(): StatusBreakdown {
  *       - all `rejected` → `rejected`
  *       - otherwise → `closed` (mixed terminal outcomes)
  *  3. Compute `unfinished = meaningful ∩ OPEN`.
+ *       - homogeneous `paused` → `paused`
  *       - homogeneous `waiting` → `waiting`
  *       - homogeneous `blocked` → `blocked`
  *       - homogeneous `deferred` → `deferred`
@@ -165,6 +169,11 @@ export function deriveParentDisplay(childStatuses: readonly WorkflowStatus[]): P
   // 3. Unfinished meaningful remainder.
   const unfinished = meaningful.filter((s) => OPEN.has(s));
 
+  const allPaused = unfinished.length > 0 && unfinished.every((s) => s === "paused");
+  if (allPaused) {
+    return { displayStatus: "paused", breakdown, hasStarted, totalChildren, meaningfulChildren };
+  }
+
   const allWaiting = unfinished.length > 0 && unfinished.every((s) => s === "waiting");
   if (allWaiting) {
     return { displayStatus: "waiting", breakdown, hasStarted, totalChildren, meaningfulChildren };
@@ -199,6 +208,7 @@ export function toWorkflowStatus(value: string): WorkflowStatus | null {
   switch (value) {
     case "planned":
     case "in-progress":
+    case "paused":
     case "waiting":
     case "blocked":
     case "deferred":

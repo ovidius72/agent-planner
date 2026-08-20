@@ -56,6 +56,20 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   const totalT = allTasks.length;
   const doneT = allTasks.filter(({ task }) => task.status === "done").length;
   const activeT = allTasks.filter(({ task }) => task.status === "in-progress").length;
+  const pausedTasks = allTasks.filter(({ task }) => task.status === "paused");
+  const pausedT = pausedTasks.length;
+  const pendingDeviation = [...plan.project.workDeviations]
+    .filter((deviation) => deviation.state === "resume-required" || deviation.state === "resolved")
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .find((deviation) => allTasks.some(({ task }) => task.id === deviation.resumeTaskId
+      && (task.status === "paused" || task.status === "planned" || task.status === "waiting")));
+  const pendingResume = pendingDeviation
+    ? allTasks.find(({ task }) => task.id === pendingDeviation.resumeTaskId)
+    : undefined;
+  const standalonePaused = pausedTasks
+    .filter(({ task }) => task.id !== pendingResume?.task.id)
+    .sort((left, right) => (right.task.pauseSnapshot?.pausedAt ?? "").localeCompare(left.task.pauseSnapshot?.pausedAt ?? ""));
+  const latestStandalonePaused = standalonePaused[0];
 
   // Plan is fully complete: there is work and all of it is done, nothing active.
   // (totalT > 0 guards the empty/unstarted case from looking "complete".)
@@ -85,8 +99,8 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
 
   lines.push(
     italian
-      ? `Avanzamento: feature ${doneF}/${totalF} completate (${activeF} attive) · fasi ${doneP}/${totalP} completate (${activeP} attive) · task ${doneT}/${totalT} completati (${activeT} attivi)`
-      : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active)`,
+      ? `Avanzamento: feature ${doneF}/${totalF} completate (${activeF} attive) · fasi ${doneP}/${totalP} completate (${activeP} attive) · task ${doneT}/${totalT} completati (${activeT} attivi, ${pausedT} in pausa)`
+      : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active, ${pausedT} paused)`,
   );
 
   if (focusTask && focusPhase) {
@@ -95,6 +109,18 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     const tr = tref(focusTask.task.number);
     lines.push(
       `${italian ? "Focus corrente" : "Current focus"}: ${fr} — ${focusFeature?.name ?? "?"} / ${pr} — ${focusPhase.title} / ${tr} — ${focusTask.task.title} (in-progress)`,
+    );
+  } else if (pendingResume) {
+    const feature = feats.find((entry) => entry.id === pendingResume.phase.featureId);
+    const ref = `${formatPhaseRef(pendingResume.phase.number, feature?.number)}/${tref(pendingResume.task.number)}`;
+    lines.push(
+      `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "ripresa obbligatoria" : "resume required"} — ${ref} — ${pendingResume.task.title} (${pendingResume.task.status})`,
+    );
+  } else if (latestStandalonePaused) {
+    const feature = feats.find((entry) => entry.id === latestStandalonePaused.phase.featureId);
+    const ref = `${formatPhaseRef(latestStandalonePaused.phase.number, feature?.number)}/${tref(latestStandalonePaused.task.number)}`;
+    lines.push(
+      `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "task in pausa da riprendere" : "paused task to resume"} — ${ref} — ${latestStandalonePaused.task.title}`,
     );
   } else if (handoffs.length > 0) {
     const top = handoffs[0]!;
@@ -116,7 +142,23 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   // instead of surfacing potentially-stale resume.json nextSteps. When no
   // handoff exists, fall back to resume.nextSteps but mark them as possibly
   // stale (free-text that refreshResume never touches, so they can drift).
-  if (handoffs.length > 0) {
+  if (pendingResume) {
+    const feature = feats.find((entry) => entry.id === pendingResume.phase.featureId);
+    const ref = `${formatPhaseRef(pendingResume.phase.number, feature?.number)}/${tref(pendingResume.task.number)}`;
+    lines.push(
+      italian
+        ? `Prossimo step: riprendi ${ref} con ${taskStartCmd}. Il checkpoint del task è prioritario rispetto a nuovo lavoro e handoff di fase.`
+        : `Next step: resume ${ref} with ${taskStartCmd}. Its task checkpoint takes precedence over new work and phase handoffs.`,
+    );
+  } else if (latestStandalonePaused) {
+    const feature = feats.find((entry) => entry.id === latestStandalonePaused.phase.featureId);
+    const ref = `${formatPhaseRef(latestStandalonePaused.phase.number, feature?.number)}/${tref(latestStandalonePaused.task.number)}`;
+    lines.push(
+      italian
+        ? `Prossimo step: riprendi il checkpoint più recente, ${ref}, con ${taskStartCmd}, prima di scegliere nuovo lavoro.`
+        : `Next step: resume the newest checkpoint, ${ref}, with ${taskStartCmd} before selecting new work.`,
+    );
+  } else if (handoffs.length > 0) {
     lines.push(
       italian
         ? `Prossimo step: leggi l'handoff di fase pendente sotto (fonte autorevole, gestita attivamente). I nextSteps legacy di resume.json sono soppressi perché possono essere stale.`
@@ -134,6 +176,38 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     lines.push(staleNote);
   }
 
+  if (pendingResume) {
+    const feature = feats.find((entry) => entry.id === pendingResume.phase.featureId);
+    const ref = `${formatPhaseRef(pendingResume.phase.number, feature?.number)}/${tref(pendingResume.task.number)}`;
+    const snapshot = pendingResume.task.pauseSnapshot ?? pendingDeviation?.snapshot;
+    lines.push(
+      "",
+      italian ? "## Ripresa task obbligatoria" : "## Task resume required",
+      `${ref} — ${pendingResume.task.title}`,
+      snapshot ? `${italian ? "Perché è stato sospeso" : "Paused because"}: ${snapshot.reason}` : "",
+      snapshot ? `${italian ? "Stato del lavoro" : "Work checkpoint"}: ${snapshot.whatWasBeingDone}` : "",
+      snapshot ? `${italian ? "Riprendi da" : "Resume from"}: ${snapshot.resumeLocation}` : "",
+      snapshot ? `${italian ? "Come riprendere" : "How to resume"}: ${snapshot.howToResume}` : "",
+      `${italian ? "Azione" : "Action"}: ${taskStartCmd} ${ref}`,
+    );
+  }
+
+  if (standalonePaused.length > 0) {
+    lines.push("", italian ? `## Task in pausa (${standalonePaused.length})` : `## Paused tasks (${standalonePaused.length})`);
+    for (const entry of standalonePaused) {
+      const feature = feats.find((item) => item.id === entry.phase.featureId);
+      const ref = `${formatPhaseRef(entry.phase.number, feature?.number)}/${tref(entry.task.number)}`;
+      const snapshot = entry.task.pauseSnapshot;
+      lines.push(
+        `${ref} — ${entry.task.title}`,
+        snapshot ? `  ${italian ? "Perché" : "Why"}: ${snapshot.reason}` : "",
+        snapshot ? `  ${italian ? "Stato" : "Checkpoint"}: ${snapshot.whatWasBeingDone}` : "",
+        snapshot ? `  ${italian ? "Riprendi da" : "Resume from"}: ${snapshot.resumeLocation}` : "",
+        snapshot ? `  ${italian ? "Come" : "How"}: ${snapshot.howToResume}` : "",
+      );
+    }
+  }
+
   if (handoffs.length > 0) {
     const top = handoffs[0]!;
     lines.push(
@@ -141,7 +215,14 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
       italian ? `## Handoff di fase pendenti (${handoffs.length})` : `## Pending phase handoffs (${handoffs.length})`,
     );
     handoffs.forEach((h, i) => lines.push(`[${i + 1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`));
-    if (handoffs.length === 1) {
+    if (pendingResume || latestStandalonePaused) {
+      lines.push(
+        "",
+        italian
+          ? "→ Questi handoff restano disponibili come contesto, ma prima risolvi il task da riprendere indicato sopra."
+          : "→ These handoffs remain available as context, but first resolve the task resume shown above.",
+      );
+    } else if (handoffs.length === 1) {
       lines.push(
         "",
         italian
@@ -163,7 +244,7 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
         ? `Piano completo — aggiungi una nuova feature (${featureAddCmd}) o fase (${phaseAddCmd}) per continuare.`
         : `Plan complete — add a new feature (${featureAddCmd}) or phase (${phaseAddCmd}) to continue.`,
     );
-  } else if (activeT === 0) {
+  } else if (activeT === 0 && !pendingResume && standalonePaused.length === 0) {
     lines.push(
       "",
       italian

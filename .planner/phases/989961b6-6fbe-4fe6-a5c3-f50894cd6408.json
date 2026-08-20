@@ -1,0 +1,245 @@
+{
+  "id": "989961b6-6fbe-4fe6-a5c3-f50894cd6408",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 65,
+  "shortId": "VZ7EQ",
+  "priority": 14,
+  "slug": "header-reference-links-and-entity-update-timestamps",
+  "title": "Header reference links and entity update timestamps",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make active-task header references match the Work Tree and expose entity update history in list views.",
+  "description": "`packages/plan-web-ui/src/components/layout/app-shell.tsx:30-77` renders the header’s in-progress task cards and currently uses `EntityPathBadge`, `CopyableBadge`, and `ShortIdBadge` without the Work Tree’s known-good navigation/copy interaction contract. `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:1-360` is the reference implementation for feature/phase/task badges, paths, short IDs, links, status state, and recent-change presentation. `packages/plan-core/src/schema.ts:41-332` and `packages/plan-core/src/plan-store.ts:1432,1584` already persist updatedAt across planner entities; detail pages already consume lifecycle timestamps via `StatusCardStepper`, while list/tree pages do not expose a durable last-update value. Implement and test clickable header T/P/F references with copy behavior parity, then display meaningful last-update timestamps for features, phases, and tasks, preserving responsive layout, accessible link/button semantics, and existing WebSocket refresh behavior.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "2f60fcaa-7edb-40ba-bbd2-c64135687782",
+    "9ee1a6b5-2861-4b43-a5c9-b54387aed0d4",
+    "7022a97a-422b-42b9-8751-00e5935cfff8"
+  ],
+  "tasks": [
+    {
+      "id": "2f60fcaa-7edb-40ba-bbd2-c64135687782",
+      "phaseId": "989961b6-6fbe-4fe6-a5c3-f50894cd6408",
+      "number": 283,
+      "shortId": "ZSZET",
+      "priority": 1,
+      "shortName": "header-links-updates",
+      "title": "Restore header reference links and expose entity update timestamps",
+      "status": "done",
+      "description": "Implement the requested UI validation slice in `packages/plan-web-ui/src/components/layout/app-shell.tsx:30-77` and the shared list/tree presentation that follows `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:1-360`. The header must make Txxx/Pxxx/Fxxx references individually navigable and retain copy affordances for composite path and short IDs, matching the Work Tree rather than treating the entire card as the only navigation target. Surface entity updatedAt values for feature, phase, and task list/tree views using existing typed fields from `packages/plan-web-ui/src/lib/types.ts` and the timestamps persisted by `packages/plan-core/src/schema.ts:41-332`; distinguish status/lifecycle timestamps where data already provides them, without changing planner lifecycle semantics. Add targeted React/UI tests around the header link destinations/copy behavior and visible timestamps, preserve responsive wrapping, keyboard navigation, and existing locate button propagation rules.\n\n---\n**Completion summary:**\nCompleted UI timestamp and header-reference validation. Added `packages/plan-web-ui/src/components/ui/last-updated.tsx` for persisted `updatedAt` rendering; wired it into feature/phase/task rows, Work Tree rows, and all three entity detail metadata grids. Exported `ActiveTasksHeader` for direct regression coverage and added `packages/plan-web-ui/test/entity-references-and-updates.test.tsx`, asserting clickable F/P/T routes and composite/short-ID copy controls. Validation passed: `pnpm --filter @agent-plan/web-ui test`, `pnpm --filter @agent-plan/web-ui check`, `pnpm build:pi-adapter`, `pnpm check`, and `git diff --check`. No commit or push was made.\n\n---\n**Completion summary:**\nManual verification completed by the user: the active-task header behaved correctly in the live project. The task can now close. Existing automated validation remains: package tests, package type-check, adapter build, root type-check, and diff whitespace check passed. No commit or push was made.",
+      "notes": "Implemented a shared `LastUpdated` semantic `<time>` component based on the persisted entity `updatedAt`; status-specific dates remain authoritative in existing status history/stepper, so the UI does not falsely infer a separate description-update timestamp from data that does not record one. Exposed this timestamp in feature, phase, task list rows, Work Tree rows, and detail metadata. Header references already used the Work Tree `EntityPathBadge` and copyable composite/short-ID controls; exported the header for direct regression coverage and added a test asserting F/P/T destinations plus both copy controls.",
+      "statusLog": [
+        {
+          "id": "2f60fcaa-7edb-40ba-bbd2-c64135687782-check-001-done-planned",
+          "date": "2026-08-18T14:44:20.164Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "The user explicitly requested this task remain started so they can inspect the in-progress header behavior in the live project. It was completed before that manual verification occurred; reopening preserves the requested live validation state without discarding the implementation and automated validation already performed.",
+          "description": "The user explicitly requested this task remain started so they can inspect the in-progress header behavior in the live project. It was completed before that manual verification occurred; reopening preserves the requested live validation state without discarding the implementation and automated validation already performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-18T14:39:01.559Z",
+      "completedAt": "2026-08-18T14:46:06.170Z",
+      "createdAt": "2026-08-18T14:38:49.896Z",
+      "updatedAt": "2026-08-18T14:46:06.170Z"
+    },
+    {
+      "id": "9ee1a6b5-2861-4b43-a5c9-b54387aed0d4",
+      "phaseId": "989961b6-6fbe-4fe6-a5c3-f50894cd6408",
+      "number": 284,
+      "shortId": "3BYGJ",
+      "priority": 2,
+      "shortName": "phase-updatedat-diagnosis",
+      "title": "Diagnose missing phase-detail update timestamp",
+      "status": "done",
+      "description": "Investigate why the locally built `packages/pi-adapter/dist/index.js` dashboard does not show the planned `Last updated` metadata on Phase detail pages. Verify `packages/plan-web-ui/src/routes/phase-detail/route.tsx`, client API/type mappings, server route payloads, and the exact static bundle currently served by the local Pi adapter. Preserve existing entity detail metadata and status-history semantics; determine whether the value is absent upstream, hidden by conditional rendering, or the browser/session serves a stale artifact. Add or adjust a focused regression test only if a code defect is confirmed.\n\n---\n**Completion summary:**\nDiagnosis completed without source edits. The local built adapter bundle (`index-DxZ3GyW2.js`) contains the timestamp UI, while the currently served planner instance exposes an older bundle (`index-rFM0JSW_.js`) that does not. To verify the local build, stop the old planner server, run `/planner load` in the Pi session launched with `--no-extensions -e packages/pi-adapter/dist/index.js`, and open that session’s reported address. No commit or push was made.",
+      "notes": "Diagnosis: no source or API data defect was found. `phase-detail/route.tsx` renders `Last updated` whenever `phase.updatedAt` is non-empty, and client types declare the field. The local adapter bundle built from this checkout is `index-DxZ3GyW2.js` and contains the literal `Last updated`; the currently served Web UI at the existing planner port serves different, older `index-rFM0JSW_.js`, which does not contain it. The local Pi invocation does not replace an already running planner server automatically because planner startup is disabled by default and the existing server remains owner of the port. User must stop the old owner, run `/planner load` in the Pi process launched with the local adapter, then browse the newly reported address / hard-refresh.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-18T15:23:36.071Z",
+      "completedAt": "2026-08-18T15:24:02.808Z",
+      "createdAt": "2026-08-18T15:23:29.524Z",
+      "updatedAt": "2026-08-18T15:24:02.808Z"
+    },
+    {
+      "id": "7022a97a-422b-42b9-8751-00e5935cfff8",
+      "phaseId": "989961b6-6fbe-4fe6-a5c3-f50894cd6408",
+      "number": 285,
+      "shortId": "EBMT4",
+      "priority": 3,
+      "shortName": "description-updatedat",
+      "title": "Track description-specific update timestamps",
+      "status": "done",
+      "description": "Add a description-specific `descriptionUpdatedAt` timestamp for Features, Phases, and Tasks, distinct from the generic entity `updatedAt`. Update core schema, persistence/migration/defaults, and server/API mutation paths so it changes only when the corresponding description value changes. In `packages/plan-web-ui`, show the generic entity timestamp in detail metadata and display `Description · last updated: …` beside each entity description heading. Preserve existing status/lifecycle timestamps and do not alter generic entity-update behavior. Add focused core/API/UI tests covering description-only updates, non-description updates, and presentation for all three entity detail pages.\n\n---\n**Completion summary:**\nCompleted dual timestamp support. Added persisted `descriptionUpdatedAt` to core Feature/Phase/Task schemas and centralized PlanStore stamping so it changes only with description content, including nested task mutations; legacy descriptions receive their creation date as the only truthful historical fallback. New entities across Pi, MCP, and HTTP API initialize the field. Feature/Phase/Task detail pages now show `Description` with its own timestamp and distinguish generic metadata as `Entity last updated`. Added core regression test `packages/plan-core/test/description-updated-at.test.mjs`. Validation passed: core test suite (192 tests), web UI test suite (23 tests), MCP test command, Pi adapter test command, `pnpm build:pi-adapter`, root `pnpm check`, and `git diff --check`. No commit or push was made.\n\n---\n**Completion summary:**\nReopened and corrected after live verification: legacy Feature records did not apply the creation-date fallback during read normalization, leaving the description timestamp absent while Phase and Task showed it. `PlanStore.loadFeatures` now applies the same display-only fallback without rewriting the planner files. Added a regression test using a persisted legacy Feature fixture. Validation passed: core suite (193 tests), root `pnpm check`, `pnpm build:pi-adapter`, and `git diff --check`. No commit, version bump, push, or PR has been made.",
+      "notes": "Follow-up correction after live verification: legacy Feature records were returned with empty descriptionUpdatedAt because loadFeatures did not apply the same creation-date fallback that phase/task normalization already used. `PlanStore.loadFeatures` now normalizes feature descriptions on read (without rewriting persisted files), so legacy Feature descriptions display `createdAt` as the truthful fallback. Added a regression test that writes a legacy feature fixture with an empty timestamp and asserts the display value. Revalidated core tests (193 passing), root type check, adapter build, and whitespace check.",
+      "statusLog": [
+        {
+          "id": "7022a97a-422b-42b9-8751-00e5935cfff8-check-001-done-planned",
+          "date": "2026-08-18T15:52:41.386Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Reopened after live verification found a legacy Feature normalization gap: existing feature descriptions without descriptionUpdatedAt do not receive the creation-date fallback, while Phase and Task descriptions do. The completed implementation needs this corrective persistence/read-path fix and regression coverage.",
+          "description": "Reopened after live verification found a legacy Feature normalization gap: existing feature descriptions without descriptionUpdatedAt do not receive the creation-date fallback, while Phase and Task descriptions do. The completed implementation needs this corrective persistence/read-path fix and regression coverage."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-18T15:25:58.397Z",
+      "completedAt": "2026-08-18T15:53:49.197Z",
+      "createdAt": "2026-08-18T15:25:51.702Z",
+      "updatedAt": "2026-08-18T15:53:49.197Z"
+    }
+  ],
+  "createdAt": "2026-08-18T14:38:42.120Z",
+  "updatedAt": "2026-08-19T14:09:40.574Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-19T13:49:32.872Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/989961b6-6fbe-4fe6-a5c3-f50894cd6408-2026-08-19T14-26-58-330Z.md",
+      "clearedAt": "2026-08-19T14:26:58.330Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/989961b6-6fbe-4fe6-a5c3-f50894cd6408-2026-08-19T13-49-32-869Z.md",
+      "clearedAt": "2026-08-19T13:49:32.869Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/989961b6-6fbe-4fe6-a5c3-f50894cd6408-2026-08-19T12-33-38-027Z.md",
+      "clearedAt": "2026-08-19T12:33:38.027Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/989961b6-6fbe-4fe6-a5c3-f50894cd6408-2026-08-19T12-25-14-985Z.md",
+      "clearedAt": "2026-08-19T12:25:14.985Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/989961b6-6fbe-4fe6-a5c3-f50894cd6408-2026-08-18T16-07-26-167Z.md",
+      "clearedAt": "2026-08-18T16:07:26.167Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "68b102b0-6eaf-47b4-985d-bdf2e916fb2a",
+      "date": "2026-08-18T14:39:01.563Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "75e10ea4-e02f-46fe-854f-b842334da760",
+      "date": "2026-08-18T14:44:10.744Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "11d32a55-b6e8-4d24-9c57-933b82b309ff",
+      "date": "2026-08-18T14:44:20.168Z",
+      "fromStatus": "done",
+      "toStatus": "planned",
+      "title": "done → planned",
+      "description": ""
+    },
+    {
+      "id": "09261360-3165-48a1-8ab9-09324be52521",
+      "date": "2026-08-18T14:44:31.289Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "d452a331-fa6c-4c88-a67f-9968f1aec247",
+      "date": "2026-08-18T14:46:06.175Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "ef0e5585-423e-4e4e-bf2b-53d41f5636cd",
+      "date": "2026-08-18T15:23:36.075Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "f7dfc3aa-3af7-4ac8-9da3-675650ea0893",
+      "date": "2026-08-18T15:24:02.812Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "483fc178-428e-467d-8392-01b2d752e558",
+      "date": "2026-08-18T15:25:58.401Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "8d8e45da-c6d3-40e3-9ab0-77ca85308316",
+      "date": "2026-08-18T15:36:21.916Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "632c9b8d-4545-427f-ae85-2c9dc1bfb7f1",
+      "date": "2026-08-18T15:52:41.392Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "67fed1b3-54f4-4946-805a-325682febf71",
+      "date": "2026-08-18T15:53:49.201Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "1c83eb5e-ec57-469a-8083-8ec07ca24f58",
+      "date": "2026-08-18T16:02:06.241Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    }
+  ]
+}

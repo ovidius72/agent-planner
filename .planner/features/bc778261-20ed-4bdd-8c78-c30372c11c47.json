@@ -1,0 +1,25 @@
+{
+  "id": "bc778261-20ed-4bdd-8c78-c30372c11c47",
+  "number": 7,
+  "shortId": "P8YFF",
+  "priority": 7,
+  "name": "Global-unique P/T numbering (Option 1: stable global sequence)",
+  "description": "Phase and Task numbers become globally unique across the whole project (one P001, one T001), so agents can reference bare `P00x`/`T00x` unambiguously and the Web UI shows each number once. Currently `Phase.number` is per-feature and `Task.number` is per-phase (assigned by `normalizeStructureSnapshot` at packages/plan-core/src/plan-store.ts:340-395 via `index+1`), so every feature has a P001 and every phase has a T001 — ambiguous in chat and handoffs.\n\n**Model (Option 1, user-confirmed 2026-07-27):** F/P/T numbers are a stable global project sequence. Assigned ONCE at creation from a monotonic counter persisted in project.json (`nextFeatureNumber`/`nextPhaseNumber`/`nextTaskNumber`). Never renumbered on load. Deletions leave gaps (preserves references). Composite `F00x/P00x/T00x` still unique; bare `P00x`/`T00x` now unique too.\n\n**Systems involved:**\n- packages/plan-core/src/schema.ts:160,197,240 — Feature/Phase/Task `number` + `shortId` (5-char [A-Z2-9]{5}, already exists). ProjectSchema needs the 3 counters.\n- packages/plan-core/src/plan-store.ts:340 `normalizeStructureSnapshot` (renumbers per-parent — must STOP renumbering, keep only phaseIds/taskIds/orphan repair); createPhase/createTask/createFeature (assign from counter); new `migrateToGlobalSequence` (one-time renumber by createdAt asc, idempotent via duplicate-detection).\n- packages/plan-core/src/refs.ts:27 `findPhaseByRef` (already accepts bare P00x + shortId + composite + UUID + title). Need shared `findTaskByRef` in core (currently duplicated in plan-mcp:76 + pi-adapter) accepting bare T00x + composite F/P/T + shortId + UUID + title.\n- packages/plan-mcp/src/index.ts:76 + packages/pi-adapter/src/index.ts (local findTaskByRef → use core; tool confirmations emit composite+shortId not UUID; tool descriptions advertise ref forms).\n- packages/plan-web-ui (EntityBadge/CopyableBadge already show composite; verify global numbers render, add shortId where relevant).\n\n**Migration (user-confirmed \"renumber all now\"):** one-shot renumbers existing 16 phases + 72 tasks + 6 features by `createdAt` asc to 1..N global, sets counters. Old bare-P/T references in chat/handoffs become stale but current state is already ambiguous — net improvement. Idempotent (skip if no duplicate numbers).\n\n**Behaviors to preserve:** composite ID format unchanged (`F00x/P00x/T00x`); findPhaseByRef resolution order; shortId backfill; drag&drop ordering (uses arrays, not numbers); recap composite refs; AGENTS.md rule 9 (composite/shortId, never raw UUID).",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "424f195a-7108-4472-a72e-f318b2191bf4",
+    "3b7567a5-a90e-4f57-ae22-c22782161038",
+    "9dc917e5-aef2-4f65-817d-91ae44d55eef"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-27T18:18:41.974Z",
+  "updatedAt": "2026-07-27T18:18:58.659Z"
+}

@@ -1,0 +1,27 @@
+{
+  "id": "70134ccd-3e0a-43b0-b03a-4bfa7b6fb277",
+  "number": 9,
+  "shortId": "L3BKK",
+  "priority": 9,
+  "name": "Checklist exposure + status history cards",
+  "description": "Make the per-task checklist actually used by agents (instead of writing steps in `description` or \"DONE\" in item titles) and visualize feature/phase/task status history as a chronological card stepper.\n\nCURRENT STATE:\n- `Task.checklist: ChecklistItem[]` exists (packages/plan-core/src/schema.ts:126,176) with `{ id, title, checked }`. `id` is a long internal slug (`${taskId}-check-NNN-slug`, packages/plan-core/src/naming.ts:107). There is NO short, human-referenceable per-item number (like F00x/P00x/T00x) — agents cannot say \"check C2\".\n- MCP: `planner-task-add` (packages/plan-mcp/src/index.ts:594) and `planner-task-discuss` (line 656, misnamed — really \"persist notes/checklist\") accept `checklist` as plain strings and write every item back as `checked: false`. `planner-task-update` (line 683) does NOT accept `checklist` at all. There is NO tool to toggle an item's `checked` flag — agents can only replace the whole list (losing checked state), which is why they write \"DONE\" in titles.\n- pi-adapter: `planner-task-update` accepts `checklist` strings (packages/pi-adapter/src/index.ts:3311) but also writes `checked: false`; no toggle.\n- `task_complete` (plan-mcp:808, pi-adapter:3430) warns on unchecked items but cannot check them.\n- Web UI: task-detail renders toggleable checkboxes (packages/plan-web-ui/src/routes/task-detail/route.tsx:23-69) via an HTML form POST to `.../checklist/:itemId/toggle` (router.tsx:91). task-EDIT modal has a checklist textarea; task-CREATE modal has NO checklist field. So checklists can only be added after creation.\n- `Task.statusLog: StatusLogEntry[]` is persisted (schema.ts:146) and rendered in task-detail as a collapsible TEXT timeline (route.tsx:122-150). Not a card stepper.\n- `Phase` and `Feature` have NO persisted status (derived from children at read time, schema.ts comments) and NO `statusLog` — so there is no status history for them.\n\nGOALS:\n1. Checklist items get a per-task `C{n}` number (1-based) so they are referenceable in chat/tool calls and shown as a badge in the Web UI.\n2. Add `planner-task-checklist-toggle` MCP + pi-adapter tool: takes a task ref + `C{n}`/id/title + optional `checked` boolean, flips/sets `checked`. Add `checklist` param to `planner-task-update`. So agents can tick items instead of writing \"DONE\".\n3. Web UI: add checklist field to task-CREATE modal; make task-detail checklist an always-open \"Steps\" section with `C{n}` badges + inline toggle; keep the edit-modal textarea.\n4. Skill (`plugins/_shared/planner-skill.md.in`) + MCP tool descriptions instruct agents to put implementation steps in the checklist and tick via `planner-task-checklist-toggle`, not in `description`.\n5. Persist `statusLog` on `Phase` and `Feature`: on each status rollup in PlanStore, compare new derived status to the last `statusLog` entry's `toStatus`; append a `StatusLogEntry` only on actual change. `status` itself stays unpersisted/derived (statusLog is just an audit trail).\n6. New `StatusCardStepper` Web UI component: horizontal row of cards, one per transition in chronological order, each filled (status color + icon + timestamp) when reached. Replace task-detail text timeline with it; add to phase-detail + feature-detail.\n7. Docs (README, CHECKLIST.md) + release:next.\n\nBEHAVIORS TO PRESERVE: `task_complete` checklist enforcement (warn unless force); existing `id` stability; web UI toggle endpoint; status derivation principle (status stays derived, not persisted).",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "e27f4239-83a3-40c0-9bc0-5d209088920a",
+    "cb13b41f-0948-4835-b2b9-74923c359995",
+    "5b5aee8a-0621-40eb-aee8-c66a54795b15",
+    "181f402f-5541-44ff-84df-3b40e4e12a14",
+    "47797e21-9333-4e95-a643-d2bf00a6001a"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-29T18:05:45.253Z",
+  "updatedAt": "2026-07-29T18:06:29.050Z"
+}

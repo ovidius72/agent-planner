@@ -4,8 +4,13 @@ import { checkExplicitTaskStart, recommendNextTask } from "../dist/index.js";
 
 const NOW = "2026-08-10T00:00:00.000Z";
 const feature = (number, priority = 10, status = "planned") => ({ id: `feature-${number}`, number, priority, status });
-const task = (id, number, priority = 10, status = "planned", dependsOn = []) => ({ id, number, priority, status, dependsOn });
+const task = (id, number, priority = 10, status = "planned", dependsOn = [], pauseSnapshot = null) => ({ id, number, priority, status, dependsOn, pauseSnapshot });
 const phase = (id, featureId, number, priority, tasks, status = "planned") => ({ id, featureId, number, priority, tasks, status });
+const snapshot = (pausedAt, relatedTaskId = "") => ({
+  id: `snapshot-${pausedAt}`, reason: "Temporary switch", whatWasBeingDone: "Core work",
+  resumeLocation: "src/core.ts:10", howToResume: "Continue the core change", relatedTaskId,
+  pausedAt, pausedBy: "test",
+});
 const deviation = (temporaryTaskId, resumeTaskId, state = "approved") => ({
   id: `deviation-${temporaryTaskId}`, recommendedTaskId: resumeTaskId, temporaryTaskId, resumeTaskId,
   reason: "Urgent approved work", requestedBy: "user", approvedBy: "user", state,
@@ -40,9 +45,11 @@ test("explicit starts preserve readiness gates but do not enforce priority or si
   const features = [feature(1)];
   const phases = [phase("p", "feature-1", 1, 1, [
     task("priority", 1, 1), task("explicit", 2, 2), task("blocked", 3, 3, "blocked"), task("dependent", 4, 4, "planned", ["priority"]),
+    task("paused", 5, 5, "paused", [], snapshot(NOW)),
   ])];
 
   assert.equal(checkExplicitTaskStart(features, phases, "explicit").eligible, true, "a lower-priority explicit task is valid");
+  assert.equal(checkExplicitTaskStart(features, phases, "paused").eligible, true, "a paused task with a checkpoint is resumable");
   phases[0].tasks.find((item) => item.id === "priority").status = "in-progress";
   assert.equal(checkExplicitTaskStart(features, phases, "explicit").eligible, true, "an explicit task remains valid with another active task");
   assert.equal(checkExplicitTaskStart(features, phases, "blocked").eligible, false, "blocked work stays unavailable");
@@ -84,6 +91,31 @@ test("nested deviations follow the latest open override and resume its preserved
   const result = recommendation(features, phases, [first, nested]);
   assert.equal(result.kind, "resume");
   assert.equal(result.candidate.task.id, "first");
+});
+
+test("orphan paused checkpoints are resumed LIFO before new priority work", () => {
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [
+    task("priority", 1, 1),
+    task("older", 2, 2, "paused", [], snapshot("2026-08-10T00:00:00.000Z")),
+    task("newer", 3, 3, "paused", [], snapshot("2026-08-10T01:00:00.000Z")),
+  ])];
+  const result = recommendation(features, phases);
+  assert.equal(result.kind, "resume");
+  assert.equal(result.candidate.task.id, "newer");
+});
+
+test("resume-required deviations return to a paused snapshot", () => {
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [
+    task("resume", 1, 1, "paused", [], snapshot(NOW, "temporary")),
+    task("temporary", 2, 2, "done"),
+  ])];
+  const pending = { ...deviation("temporary", "resume", "resume-required"), resumeRequiredAt: NOW };
+  const result = recommendation(features, phases, [pending]);
+  assert.equal(result.kind, "resume");
+  assert.equal(result.candidate.task.id, "resume");
+  assert.match(result.reason, /Resume required/);
 });
 
 test("resolved deviations retain their explicit resume target; canceled records do not override priority", () => {

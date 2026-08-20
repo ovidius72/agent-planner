@@ -195,6 +195,139 @@
               "type": "integer",
               "exclusiveMinimum": 0,
               "default": 1
+            },
+            "workDeviations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "recommendedTaskId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "temporaryTaskId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "resumeTaskId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "snapshot": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "reason": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "whatWasBeingDone": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "resumeLocation": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "howToResume": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "relatedTaskId": {
+                            "type": "string",
+                            "default": ""
+                          },
+                          "pausedAt": {
+                            "$ref": "10/manifest/properties/createdAt"
+                          },
+                          "pausedBy": {
+                            "type": "string",
+                            "default": ""
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "reason",
+                          "whatWasBeingDone",
+                          "resumeLocation",
+                          "howToResume",
+                          "pausedAt"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "requestedBy": {
+                    "type": "string",
+                    "enum": [
+                      "agent",
+                      "user"
+                    ],
+                    "default": "agent"
+                  },
+                  "approvedBy": {
+                    "type": "string",
+                    "default": "user"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "active",
+                      "resume-required",
+                      "resolved",
+                      "resumed",
+                      "canceled"
+                    ],
+                    "default": "approved"
+                  },
+                  "createdAt": {
+                    "$ref": "6/manifest/properties/createdAt"
+                  },
+                  "activatedAt": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "resumeRequiredAt": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "resolvedAt": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "resumedAt": {
+                    "type": "string",
+                    "default": ""
+                  }
+                },
+                "required": [
+                  "id",
+                  "recommendedTaskId",
+                  "temporaryTaskId",
+                  "resumeTaskId",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
             }
           },
           "required": [
@@ -234,6 +367,10 @@
                     "minLength": 1
                   },
                   "description": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "descriptionUpdatedAt": {
                     "type": "string",
                     "default": ""
                   },
@@ -305,6 +442,7 @@
                           "enum": [
                             "planned",
                             "in-progress",
+                            "paused",
                             "done",
                             "blocked",
                             "canceled",
@@ -382,6 +520,7 @@
                     "enum": [
                       "planned",
                       "in-progress",
+                      "paused",
                       "done",
                       "blocked",
                       "canceled",
@@ -513,6 +652,10 @@
                 "type": "string",
                 "default": ""
               },
+              "descriptionUpdatedAt": {
+                "type": "string",
+                "default": ""
+              },
               "notes": {
                 "type": "string",
                 "default": ""
@@ -637,6 +780,10 @@
                       "type": "string",
                       "default": ""
                     },
+                    "descriptionUpdatedAt": {
+                      "type": "string",
+                      "default": ""
+                    },
                     "notes": {
                       "type": "string",
                       "default": ""
@@ -720,6 +867,7 @@
                             "enum": [
                               "planned",
                               "in-progress",
+                              "paused",
                               "done",
                               "blocked",
                               "canceled",
@@ -755,6 +903,24 @@
                       "items": {
                         "type": "string",
                         "minLength": 1
+                      },
+                      "default": []
+                    },
+                    "pauseSnapshot": {
+                      "anyOf": [
+                        {
+                          "$ref": "9/project/properties/workDeviations/items/properties/snapshot/anyOf/0"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "pauseHistory": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "8/project/properties/workDeviations/items/properties/snapshot/anyOf/0"
                       },
                       "default": []
                     },
@@ -847,6 +1013,7 @@
                         "discovery",
                         "planned",
                         "in-progress",
+                        "paused",
                         "done",
                         "blocked",
                         "canceled",

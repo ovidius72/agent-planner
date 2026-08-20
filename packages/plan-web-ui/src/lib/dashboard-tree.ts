@@ -70,10 +70,11 @@ const STATUS_ORDER: Record<TaskStatus | PhaseStatus | FeatureStatus, number> = {
   "waiting": 3,
   "blocked": 4,
   "deferred": 5,
-  "in-progress": 6,
-  "done": 7,
-  "canceled": 8,
-  "rejected": 9,
+  "paused": 6,
+  "in-progress": 7,
+  "done": 8,
+  "canceled": 9,
+  "rejected": 10,
 };
 
 function sortValue<T extends Feature | Phase | Task>(entity: T, key: WorkTreeSortKey): string | number {

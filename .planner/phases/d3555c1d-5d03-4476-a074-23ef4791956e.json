@@ -1,0 +1,89 @@
+{
+  "id": "d3555c1d-5d03-4476-a074-23ef4791956e",
+  "featureId": "66e695a2-70cc-4916-8a29-99fedb40cbd1",
+  "number": 64,
+  "shortId": "PURRJ",
+  "priority": 7,
+  "slug": "cross-worktree-allocation-and-safe-startup",
+  "title": "Cross-worktree allocation and safe startup",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Prevent automatic global planner rewrites and concurrent F/P/T or shortId collisions across worktrees.",
+  "description": "Current F012 moved transient state to `.planner/.local/` but did not isolate canonical entity writes: `packages/plan-mcp/src/index.ts:39-45`, `packages/pi-adapter/src/index.ts:4213-4223`, and `packages/plan-server/src/serve.ts:1032-1040` automatically call global migration/backfill during ordinary load/start. `packages/plan-core/src/plan-store.ts:1000-1045` stores global F/P/T counters in tracked `project.json`, so two worktrees can allocate the same numbers; `packages/plan-core/src/naming.ts:45-75` has deterministic backfill only, while new entity creation uses local random shortId assignment. Implement a merge-safe design: normal load must not mutate canonical planner entities; explicit maintenance is separately invoked; concurrent ID assignment must be safe across local worktrees and preserve existing UUIDs/shortIds without rewriting unrelated entity files. Add focused regression coverage for no-load-write behavior and concurrent allocation. Preserve `.local/` for transients only and preserve all existing canonical entity content.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "3482c3e0-4c65-4ab2-bfc8-e073bbcd82c9"
+  ],
+  "tasks": [
+    {
+      "id": "3482c3e0-4c65-4ab2-bfc8-e073bbcd82c9",
+      "phaseId": "d3555c1d-5d03-4476-a074-23ef4791956e",
+      "number": 282,
+      "shortId": "H7L8S",
+      "priority": 1,
+      "shortName": "design-and-implement-merge-saf",
+      "title": "Design and implement merge-safe planner allocation",
+      "status": "done",
+      "description": "Implement the approved cross-worktree safety correction in `packages/plan-core/src/plan-store.ts`, `packages/plan-core/src/naming.ts`, and startup callers in `packages/plan-mcp/src/index.ts`, `packages/pi-adapter/src/index.ts`, and `packages/plan-server/src/serve.ts`. Existing state: normal startup invokes `migrateToGlobalSequence` and `ensureShortIdsAndPriority`, which can rewrite unrelated canonical planner entities; globally numbered F/P/T allocation persists counters in tracked `project.json`, which duplicates values when branches diverge. Introduce a safe allocator for simultaneous worktrees, make normal loads read-only, retain explicit maintenance paths, and ensure new shortIds are immutable and collision-safe across worktrees. Add regression tests demonstrating separate worktrees/instances do not auto-rewrite unrelated planner files and cannot allocate duplicate F/P/T or shortIds. Do not hand-edit the user’s conflicted planner JSON or resolve their active merge; work only on Agent Plan implementation and isolated temp fixtures.\n\n---\n**Completion summary:**\nImplemented cross-worktree allocation and startup safety. `PlanStore.allocateEntityIdentity(kind, entityId)` reserves F/P/T numbers and immutable 5-char short IDs in a lock-protected allocation registry under the shared Git common directory (`.git/agent-plan/allocations/<manifest-projectId>.json`); it never updates tracked `project.json`. Pi, MCP, and HTTP creation paths now reserve number+shortId together before persisting the owned entity. Removed automatic `migrateToGlobalSequence`/`ensureShortIdsAndPriority` from MCP store loading, Pi session init, and web server startup; ordinary `loadManifest`/`loadAll` no longer rewrites `.planner/.gitignore` or bootstraps local timestamp state. Global repair/backfill stays explicit. Added regression coverage for read-only ordinary loads and atomic multi-instance allocation without project counter mutation; adjusted server expectation to global T numbering.\n\nValidation: `pnpm test` (360/360), targeted core regression suite, `pnpm check`, `pnpm test:matrix`, and `git diff --check` all pass. Note: same-clone worktrees are protected by the common Git-dir registry; independent clones/machines need a future shared allocator service to guarantee coordinated human-number allocation.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3482c3e0-4c65-4ab2-bfc8-e073bbcd82c9-check-001-map-creation-and-startup-paths-plus-choose-allocator-storage-locking-semantics",
+          "number": 1,
+          "title": "Map creation and startup paths plus choose allocator storage/locking semantics",
+          "checked": true
+        },
+        {
+          "id": "3482c3e0-4c65-4ab2-bfc8-e073bbcd82c9-check-002-make-normal-mcp-pi-server-loads-non-mutating",
+          "number": 2,
+          "title": "Make normal MCP/Pi/server loads non-mutating",
+          "checked": true
+        },
+        {
+          "id": "3482c3e0-4c65-4ab2-bfc8-e073bbcd82c9-check-003-implement-cross-worktree-safe-f-p-t-and-shortid-allocation",
+          "number": 3,
+          "title": "Implement cross-worktree-safe F/P/T and shortId allocation",
+          "checked": true
+        },
+        {
+          "id": "3482c3e0-4c65-4ab2-bfc8-e073bbcd82c9-check-004-add-isolated-regression-tests-for-no-implicit-writes-and-concurrent-allocation",
+          "number": 4,
+          "title": "Add isolated regression tests for no implicit writes and concurrent allocation",
+          "checked": true
+        },
+        {
+          "id": "3482c3e0-4c65-4ab2-bfc8-e073bbcd82c9-check-005-run-targeted-and-full-validation",
+          "number": 5,
+          "title": "Run targeted and full validation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T20:23:01.217Z",
+      "completedAt": "2026-08-13T20:38:19.209Z",
+      "createdAt": "2026-08-13T20:22:56.930Z",
+      "updatedAt": "2026-08-13T20:38:19.209Z"
+    }
+  ],
+  "createdAt": "2026-08-13T20:22:44.530Z",
+  "updatedAt": "2026-08-13T20:38:19.209Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

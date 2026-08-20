@@ -1,0 +1,15 @@
+{
+  "updatedAt": "2026-08-07T07:42:09.118Z",
+  "currentPhaseId": "7802b17b-9e1c-404a-a67c-2516709e18d4",
+  "inProgressTaskIds": [
+    "d9c9651f-490e-43ca-a6b0-a3be354fa8b3"
+  ],
+  "nextSteps": [
+    "Run /planner project discuss to bootstrap discovery"
+  ],
+  "nextStepsUpdatedAt": "2026-07-30T08:12:25.749Z",
+  "blockers": [],
+  "notes": "Project initialized. Awaiting discovery.",
+  "lastSessionSummary": "",
+  "guardBypassUntil": ""
+}

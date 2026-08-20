@@ -1,0 +1,341 @@
+{
+  "id": "3a8045d3-ca32-4be5-89a8-2ddd3a64c579",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 39,
+  "shortId": "MAPMZ",
+  "priority": 2,
+  "slug": "work-tree-sorting-controls",
+  "title": "Work Tree sorting controls",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Work Tree sorting controls (priority/number/date/title/shortId)",
+  "description": "Add global sorting controls to the Work Tree so users can order features, phases, and tasks by criteria other than priority. The current `buildWorkTree` hardcodes `priority ASC → number ASC → createdAt → title`. The user reports seeing older tasks before newer ones because priority numbers can drift from creation order after drag-and-drop reorder or midpoint insert.\n\nScope:\n- Add a sort selector in the dashboard Work Tree header/toolbar.\n- Support per-level sort keys: priority, number (global sequence), createdAt, updatedAt, title, shortId.\n- For tasks also support: startedAt, completedAt, status (workflow order).\n- Provide asc/desc toggle.\n- Persist the selected sort in `localStorage` per project (via `dashboard-storage.ts`).\n- Keep the existing default behavior (`priority` asc) so current users see no change until they interact.\n- Maintain responsive layout; the control must fit in the existing toolbar.\n\nNon-scope:\n- Server-side sorting (keep client-side only).\n- Reordering the internal canonical priority field; this only changes presentation order.\n\nFiles likely to change:\n- `packages/plan-web-ui/src/lib/dashboard-tree.ts` — accept sort options, build sorted tree accordingly.\n- `packages/plan-web-ui/src/hooks/use-dashboard-tree.ts` — hold sort state, persist to localStorage.\n- `packages/plan-web-ui/src/components/dashboard/work-tree.tsx` — render sort controls.\n- `packages/plan-web-ui/src/lib/dashboard-storage.ts` — add storage key helpers if needed.\n- `packages/plan-web-ui/src/lib/types.ts` — possibly add a shared `SortKey`/`SortDirection` type.\n\nReference:\n- `packages/plan-web-ui/src/lib/dashboard-tree.ts:buildWorkTree`\n- `packages/plan-web-ui/src/hooks/use-dashboard-tree.ts`\n- `packages/plan-web-ui/src/components/dashboard/work-tree.tsx`\n\nBehaviors to preserve: existing expand/collapse, filters, search, drag-and-drop, and mobile layout.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "bf407bd1-32c5-4f22-97db-3d667805626c",
+    "c0e4bbd2-1cb0-4237-8b4c-cdd36df8ad3e",
+    "d8665f22-81d0-415d-ab76-a45953eaa11e",
+    "312b179d-691e-4097-a064-4e4afd178303",
+    "d1675c4d-5fce-491f-9b90-711487f54003",
+    "e3cdf0b4-1871-4406-b5b0-7e4fd83e150d"
+  ],
+  "tasks": [
+    {
+      "id": "bf407bd1-32c5-4f22-97db-3d667805626c",
+      "phaseId": "3a8045d3-ca32-4be5-89a8-2ddd3a64c579",
+      "number": 176,
+      "shortId": "TBZFZ",
+      "priority": 1,
+      "shortName": "implement-work-tree-sort-selec",
+      "title": "Implement Work Tree sort selector and persistence",
+      "status": "done",
+      "description": "Implement the Work Tree sort selector.\n\nPlan:\n1. Add `SortKey` and `SortDirection` types in `packages/plan-web-ui/src/lib/types.ts` or a new `packages/plan-web-ui/src/lib/dashboard-sort.ts`.\n2. Define sort key options per level:\n   - Feature/Phase/Task common: `priority`, `number`, `createdAt`, `updatedAt`, `title`, `shortId`\n   - Task-only: `startedAt`, `completedAt`, `status`\n3. Update `buildWorkTree(features, phases, options?)` in `packages/plan-web-ui/src/lib/dashboard-tree.ts` to accept a sort config and sort features, phases, and tasks accordingly.\n4. Store sort state in `useDashboardTree` with `localStorage` persistence (add key in `dashboard-storage.ts`).\n5. Render a compact sort control in `packages/plan-web-ui/src/components/dashboard/work-tree.tsx` near the search/filter bar.\n6. Ensure the default sort matches current behavior (`priority` asc).\n7. Add/adapt unit tests for `dashboard-tree.ts` sort logic.\n\nReference files:\n- `packages/plan-web-ui/src/lib/dashboard-tree.ts`\n- `packages/plan-web-ui/src/hooks/use-dashboard-tree.ts`\n- `packages/plan-web-ui/src/components/dashboard/work-tree.tsx`\n- `packages/plan-web-ui/src/lib/dashboard-storage.ts`\n\nPreserve: expand/collapse, filters, search, drag-and-drop, mobile layout.\n\n---\n**Completion summary:**\nImplemented Work Tree global sort selector.\n\nFiles changed:\n- packages/plan-web-ui/src/lib/dashboard-tree.ts — added WorkTreeSortKey/Direction/Config, DEFAULT_WORK_TREE_SORT, sortValue/compareEntities helpers, buildWorkTree now accepts sort config.\n- packages/plan-web-ui/src/hooks/use-dashboard-tree.ts — added sort state with localStorage persistence, exposed sort/setSort, resetFilters resets to default.\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx — added SortControl (select + direction toggle), placed above filter chips.\n- CHECKLIST.md — documented new feature under Unreleased changes.\n- packages/pi-adapter/web-ui-dist + packages/plan-server/web-ui-dist — rebuilt Vite bundle copied.\n\nBranch: feat/work-tree-sort-selector (from next because develop is missing the P039 derive-display dependencies).\nValidation: pnpm check clean, pnpm -r build clean, plan-web-ui tests pass.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "bf407bd1-32c5-4f22-97db-3d667805626c-check-001-in-progress-waiting",
+          "date": "2026-08-05T11:05:54.212Z",
+          "fromStatus": "in-progress",
+          "toStatus": "waiting",
+          "title": "User asked to stop implementation and discuss the design first. I had already started writing code (dashboard-tree.ts + use-dashboard-tree.ts). Pausing now to align before proceeding.",
+          "description": "User asked to stop implementation and discuss the design first. I had already started writing code (dashboard-tree.ts + use-dashboard-tree.ts). Pausing now to align before proceeding."
+        },
+        {
+          "id": "bf407bd1-32c5-4f22-97db-3d667805626c-check-002-waiting-in-progress",
+          "date": "2026-08-05T11:06:16.432Z",
+          "fromStatus": "waiting",
+          "toStatus": "in-progress",
+          "title": "User confirmed single global sort selector is the desired design. Resuming implementation.",
+          "description": "User confirmed single global sort selector is the desired design. Resuming implementation."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T11:04:03.729Z",
+      "completedAt": "2026-08-05T11:11:05.921Z",
+      "createdAt": "2026-08-05T11:03:51.415Z",
+      "updatedAt": "2026-08-05T11:11:05.921Z"
+    },
+    {
+      "id": "c0e4bbd2-1cb0-4237-8b4c-cdd36df8ad3e",
+      "phaseId": "3a8045d3-ca32-4be5-89a8-2ddd3a64c579",
+      "number": 177,
+      "shortId": "PFJP9",
+      "priority": 2,
+      "shortName": "polish-work-tree-sort-control",
+      "title": "Polish Work Tree sort control styling",
+      "status": "done",
+      "description": "Polish the styling of the Work Tree sort control so it does not look like the large filter chips below. From the screenshot, the current SortControl uses a full-width h-11 pill select and an equally wide direction pill, which looks clunky.\n\nTarget design:\n- Compact single-line control that fits on mobile without wrapping.\n- Smaller select (h-9 or h-10, rounded-lg, minimal padding, subtle border).\n- Direction toggle as a small square/circle icon button (not a wide pill), with an SVG arrow (ChevronUp/ChevronDown or ArrowUp/ArrowDown from lucide-react) instead of the ↑/↓ unicode character.\n- Keep label visible on desktop, hidden on mobile.\n- Keep the control aligned with the search bar, above the filter chips.\n- Preserve all existing behavior: options, direction toggle, localStorage persistence.\n\nFile:\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx (SortControl component and its container).\n\n---\n**Completion summary:**\nPolished the Work Tree sort control styling.\n\nChanges:\n- Replaced large h-11 pill select/direction button with a compact inline control:\n  - Small rounded container (h-9) matching the card surface.\n  - Native select with custom ChevronDown icon, no field-control padding.\n  - Tiny square direction toggle (h-6 w-6) with lucide-react sort icons.\n  - Label inline on desktop, hidden on mobile.\n- Changed the toolbar row to always flex-wrap instead of stacking on mobile.\n- Removed unused Select component import from work-tree.tsx.\n- Rebuilt and copied web-ui dist.\n\nValidation: pnpm check clean, pnpm -r build clean.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T11:18:14.340Z",
+      "completedAt": "2026-08-05T11:19:43.822Z",
+      "createdAt": "2026-08-05T11:18:12.345Z",
+      "updatedAt": "2026-08-05T11:19:43.822Z"
+    },
+    {
+      "id": "d8665f22-81d0-415d-ab76-a45953eaa11e",
+      "phaseId": "3a8045d3-ca32-4be5-89a8-2ddd3a64c579",
+      "number": 206,
+      "shortId": "TXHQ2",
+      "priority": 3,
+      "shortName": "update-agents-md-branching-rul",
+      "title": "Update AGENTS.md branching rules and operational protocol",
+      "status": "done",
+      "description": "Update AGENTS.md to reflect current project workflow:\n- §12 Branching & Release: clarify develop/main/next model with next as long-running experimental branch; feature experiments start from next; PRs target the branch the developer specifies.\n- §12: emphasize that commits and PRs to any branch require explicit user approval/request before execution.\n- Pre-flight Protocol: expand coverage to modifications, hotfixes, refactors, docs updates, and any code/config/repo changes, not just new phases/tasks/features.\n- Fix duplicate section numbering (two §2s) and update numbering.\n- §6 Naming conventions: update or remove stale phase/task slug examples that conflict with global P00x/T00x numbering.\n- §8 Stack: update to actual current stack (React, TypeScript, Hono, WebSocket, Zod, Node, pnpm workspace, etc.).\n- Remove application-internal rules that belong to the product design (Web UI address injection, narration blocking, stop-on-command) and keep only development process rules.\n- Clarify that AGENTS.md is modified only on explicit user request and is independent of planner tracking.\n- Clarify that GSD workflows/skills must not be used in this project because planner is the source of truth and dual planners could conflict.\n- Note: .planner/ may now be tracked in the repo; AGENTS.md is a standalone file unrelated to planner entities.\n\n---\n**Completion summary:**\nUpdated AGENTS.md:\n- Renumbered sections to remove duplicate §2.\n- Rewrote §13 Branching & Release: clarified develop/main/next model with next as long-running experimental branch; feature experiments start from next; added prominent rule that commits and PRs to any branch require explicit user approval/request.\n- Expanded Pre-flight Protocol to cover all code/config/repo/environment changes, not only new phases/tasks/features.\n- Updated §7 naming conventions to reflect global P00x/T00x numbering and auto-derived slugs.\n- Updated §9 stack section to actual tech: React, TypeScript, Hono, Node.js ≥25, WebSocket, Vite, pnpm, Zod.\n- Updated §12 handoff: handoff write happens on explicit user request, not automatically.\n- Removed application-internal behavior rules (URL injection, anti-narration, stop command) from dev governance.\n- Added §14 AGENTS.md modification policy (standalone file, modified only on user request).\n- Added §15 explicit GSD prohibition to avoid dual-planner conflicts.\n- Updated §5 to note .planner/ may be tracked in repo.\nFile modified: AGENTS.md. No commit or push performed.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-001-update-12-branching-model-with-next-as-experimental-long-running-branch",
+          "number": 1,
+          "title": "Update §12 branching model with next as experimental long-running branch",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-002-add-explicit-approval-rule-for-commits-and-prs-to-any-branch",
+          "number": 2,
+          "title": "Add explicit approval rule for commits and PRs to any branch",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-003-expand-pre-flight-protocol-to-all-code-config-repo-changes",
+          "number": 3,
+          "title": "Expand Pre-flight Protocol to all code/config/repo changes",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-004-fix-duplicate-section-numbering",
+          "number": 4,
+          "title": "Fix duplicate section numbering",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-005-update-naming-conventions-section",
+          "number": 5,
+          "title": "Update naming conventions section",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-006-update-stack-section-to-actual-tech",
+          "number": 6,
+          "title": "Update stack section to actual tech",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-007-remove-app-internal-behavior-rules-url-injection-narration-stop-command",
+          "number": 7,
+          "title": "Remove app-internal behavior rules (URL injection, narration, stop command)",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-008-add-agents-md-modification-policy",
+          "number": 8,
+          "title": "Add AGENTS.md modification policy",
+          "checked": true
+        },
+        {
+          "id": "d8665f22-81d0-415d-ab76-a45953eaa11e-check-009-add-gsd-prohibition-note",
+          "number": 9,
+          "title": "Add GSD prohibition note",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T21:44:53.219Z",
+      "completedAt": "2026-08-06T21:46:22.597Z",
+      "createdAt": "2026-08-06T21:44:51.436Z",
+      "updatedAt": "2026-08-06T21:46:22.597Z"
+    },
+    {
+      "id": "312b179d-691e-4097-a064-4e4afd178303",
+      "phaseId": "3a8045d3-ca32-4be5-89a8-2ddd3a64c579",
+      "number": 207,
+      "shortId": "787ZZ",
+      "priority": 4,
+      "shortName": "fix-work-tree-accordion-expand",
+      "title": "Fix Work Tree accordion expand/collapse for recently linked features",
+      "status": "done",
+      "description": "Investigate and fix a bug in the dashboard Work Tree accordion where:\n1. Clicking the down-arrow icon of an expanded feature no longer collapses the feature.\n2. Features F011, F012, F013, F014 (recently linked to their parent features in the planner) do not expand at all in the Work Tree.\n\nCode references to inspect:\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx\n- packages/plan-web-ui/src/hooks/use-dashboard-tree.ts\n- packages/plan-web-ui/src/components/ui/accordion.tsx\n\nLikely causes:\n- State key mismatch after feature linking/renumbering.\n- Accordion toggle handler bound to wrong element or event propagation stopped.\n- Feature rows filtered out or rendered without children due to stale tree data.\n- Feature done-status auto-collapse logic interfering with user toggle.\n\nAcceptance: all features expand/collapse on arrow click; recently linked features (F011-F014) render their phases and tasks; no horizontal overflow or layout regression.\n\n---\n**Completion summary:**\nFixed Work Tree accordion toggle in packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx. Feature and phase chevron buttons now stop event propagation on click and pointerDown, preventing dnd-kit sortable wrapper from intercepting toggles. This restores expand/collapse for all features, including done features F011-F014 collapsed by default. Build passes with pnpm --filter @agent-plan/web-ui build. Headless smoke test not run due to missing browser harness; user should verify in browser after rebuilding web-ui.",
+      "notes": "Investigated Work Tree accordion toggle issue.\n\nSuspected cause: feature/phase rows are wrapped in dnd-kit SortableItem. The PointerSensor or the sortable wrapper can intercept/interfere with click events on the chevron toggle button, especially on repeated interactions, making the button feel unresponsive.\n\nFix applied in packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:\n- Added e.stopPropagation() in onClick for both FeatureTreeRow and PhaseTreeRow chevron buttons.\n- Added onPointerDown={(e) => e.stopPropagation()} to prevent dnd-kit from capturing the pointer event on the toggle.\n\nThis should restore collapse/expand on arrow click, including for done features (F011-F014) which are collapsed by default in \"all\" open mode.\n\nBuild passes (pnpm --filter @agent-plan/web-ui build). Manual verification in browser still needed because no headless browser/test harness is available in the workspace.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "312b179d-691e-4097-a064-4e4afd178303-check-001-inspect-accordion-state-and-toggle-handlers",
+          "number": 1,
+          "title": "Inspect accordion state and toggle handlers",
+          "checked": true
+        },
+        {
+          "id": "312b179d-691e-4097-a064-4e4afd178303-check-002-identify-why-f011-f014-do-not-expand",
+          "number": 2,
+          "title": "Identify why F011-F014 do not expand",
+          "checked": true
+        },
+        {
+          "id": "312b179d-691e-4097-a064-4e4afd178303-check-003-fix-arrow-click-collapse-behavior",
+          "number": 3,
+          "title": "Fix arrow click collapse behavior",
+          "checked": true
+        },
+        {
+          "id": "312b179d-691e-4097-a064-4e4afd178303-check-004-verify-with-build-and-smoke-test",
+          "number": 4,
+          "title": "Verify with build and smoke test",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T22:05:19.619Z",
+      "completedAt": "2026-08-06T22:08:17.873Z",
+      "createdAt": "2026-08-06T22:05:17.751Z",
+      "updatedAt": "2026-08-06T22:08:17.873Z"
+    },
+    {
+      "id": "d1675c4d-5fce-491f-9b90-711487f54003",
+      "phaseId": "3a8045d3-ca32-4be5-89a8-2ddd3a64c579",
+      "number": 208,
+      "shortId": "28PTZ",
+      "priority": 5,
+      "shortName": "fix-header-active-task-locate",
+      "title": "Fix header active-task locate icon click does nothing",
+      "status": "done",
+      "description": "User reports that clicking the target/locate icon on an in-progress task in the top header active-tasks bar does nothing. Expected behavior: navigate to the dashboard and scroll to/highlight the task in the Work Tree (via ?locate=T00x query param or equivalent).\n\nCode references to inspect:\n- packages/plan-web-ui/src/components/layout/app-shell.tsx (active tasks header bar)\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx (locate param handler)\n- packages/plan-web-ui/src/hooks/use-dashboard-tree.ts\n- packages/plan-web-ui/src/lib/api.ts\n\nLikely causes:\n- onClick handler missing or broken\n- navigate() not called with correct location\n- locate effect in WorkTree not triggering because the route is not dashboard\n- event propagation blocked\n\nAcceptance: clicking the target icon for an active task navigates to dashboard Work Tree, expands the task's feature+phase, scrolls to the task row, and pulses/highlight it.\n\n---\n**Completion summary:**\nFixed locate-in-work-tree scroll.\n\nRoot causes:\n1. TaskTreeRow never rendered `id={`task-row-${task.number}`}`, so WorkTree's locate effect could never find the target DOM element.\n2. Locate effect set treeOpenMode(\"all\"), which auto-collapses done features and races with the explicit feature expansion.\n\nChanges:\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx: pass `id={`task-row-${task.number}`}` to StatusItem.\n- packages/plan-web-ui/src/components/ui/status-item.tsx: forward optional `id` prop to the root div.\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx: use treeOpenMode(\"smart\") in locate effect to preserve explicit expansions.\n\nBuild passes (pnpm --filter @agent-plan/web-ui build). Browser verification recommended.\n\n---\n**Completion summary:**\nLocate icon now works after copying the updated Vite bundle to packages/pi-adapter/web-ui-dist via scripts/copy-web-ui.sh and reloading the browser. Root fix was restoring the missing id={`task-row-${task.number}`} on TaskTreeRow (lost during StatusItem refactor) and forwarding id through StatusItem.",
+      "notes": "User confirmed he runs via 'pi --no-extensions -e /Users/antonio/projects/agent-plan/packages/pi-adapter/dist/index.js'. This loads the web UI from packages/pi-adapter/web-ui-dist, not from packages/plan-web-ui/dist. I only rebuilt the latter, so the deployed bundle was stale.\n\nRan scripts/copy-web-ui.sh to copy the new Vite bundle into packages/pi-adapter/web-ui-dist and packages/plan-server/web-ui-dist. Verified the bundled JS now contains 'task-row-'.\n\nNext, user must restart the pi-adapter process (because the running server caches static files; Vite bundle filenames are hashed and changed, so in theory a hard refresh could be enough, but safer to restart the server).",
+      "statusLog": [
+        {
+          "id": "d1675c4d-5fce-491f-9b90-711487f54003-check-001-done-in-progress",
+          "date": "2026-08-06T22:36:14.950Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "User reports the locate icon still does nothing after the first fix. Need to investigate further: verify the build is being used, the correct id, and whether the issue is browser-side or a deployment mismatch.",
+          "description": "User reports the locate icon still does nothing after the first fix. Need to investigate further: verify the build is being used, the correct id, and whether the issue is browser-side or a deployment mismatch."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d1675c4d-5fce-491f-9b90-711487f54003-check-001-inspect-header-active-task-target-icon-handler",
+          "number": 1,
+          "title": "Inspect header active-task target icon handler",
+          "checked": true
+        },
+        {
+          "id": "d1675c4d-5fce-491f-9b90-711487f54003-check-002-trace-locate-navigation-and-query-param-flow",
+          "number": 2,
+          "title": "Trace locate navigation and query param flow",
+          "checked": true
+        },
+        {
+          "id": "d1675c4d-5fce-491f-9b90-711487f54003-check-003-fix-broken-click-handler-or-navigation",
+          "number": 3,
+          "title": "Fix broken click handler or navigation",
+          "checked": true
+        },
+        {
+          "id": "d1675c4d-5fce-491f-9b90-711487f54003-check-004-verify-scrolling-and-highlight-behavior",
+          "number": 4,
+          "title": "Verify scrolling and highlight behavior",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T22:32:44.588Z",
+      "completedAt": "2026-08-06T22:50:21.533Z",
+      "createdAt": "2026-08-06T22:32:42.184Z",
+      "updatedAt": "2026-08-06T22:50:21.533Z"
+    },
+    {
+      "id": "e3cdf0b4-1871-4406-b5b0-7e4fd83e150d",
+      "phaseId": "3a8045d3-ca32-4be5-89a8-2ddd3a64c579",
+      "number": 210,
+      "shortId": "ZGKWN",
+      "priority": 6,
+      "shortName": "fix-home-edit-project-button-a",
+      "title": "Fix home Edit project button alignment and restore project name in edit modal",
+      "status": "done",
+      "description": "User reports two issues in the Web UI home page:\n1. The 'Edit project' button on the dashboard Project Goal card is visually misaligned (screenshot provided via clipboard).\n2. The project edit modal only shows 'short description' and 'project goal' fields — the project name field is missing, so the user cannot rename the project.\n\nCode references:\n- packages/plan-web-ui/src/routes/dashboard/route.tsx (Edit project button placement)\n- packages/plan-web-ui/src/routes/project-edit-modal/route.tsx or similar (form fields)\n- packages/plan-web-ui/src/components/ui/modal-shell.tsx (modal layout)\n\nAcceptance:\n- Edit project button is vertically aligned with the Project Goal header on both desktop and mobile.\n- Project edit modal contains a field to edit the project name.\n- Build and copy bundle pass.\n\n---\n**Completion summary:**\nFixed two Web UI issues:\n\n1. Dashboard 'Edit project' button alignment (packages/plan-web-ui/src/routes/dashboard/route.tsx): changed the Project Goal card header from `flex flex-col gap-4 md:flex-row md:items-center md:justify-between` to `flex items-start justify-between gap-4`, and removed `self-start md:self-center` from the button. This aligns the button top with the 'Project Goal' title instead of centering it against the whole content block.\n\n2. Project edit modal missing name field (packages/plan-web-ui/src/routes/project-edit.route.tsx): added a 'Project name' Input field at the top of the form, with required attribute. Added Input import. Updated the action (packages/plan-web-ui/src/routes/project-edit.action.ts) to include `name` in updateProject.\n\nBuild, type-check (pnpm check), and copy-web-ui.sh all pass. Browser reload required.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e3cdf0b4-1871-4406-b5b0-7e4fd83e150d-check-001-inspect-dashboard-route-button-layout",
+          "number": 1,
+          "title": "Inspect dashboard route button layout",
+          "checked": true
+        },
+        {
+          "id": "e3cdf0b4-1871-4406-b5b0-7e4fd83e150d-check-002-inspect-project-edit-modal-form-fields",
+          "number": 2,
+          "title": "Inspect project edit modal form fields",
+          "checked": true
+        },
+        {
+          "id": "e3cdf0b4-1871-4406-b5b0-7e4fd83e150d-check-003-fix-button-alignment",
+          "number": 3,
+          "title": "Fix button alignment",
+          "checked": true
+        },
+        {
+          "id": "e3cdf0b4-1871-4406-b5b0-7e4fd83e150d-check-004-restore-project-name-field-in-edit-modal",
+          "number": 4,
+          "title": "Restore project name field in edit modal",
+          "checked": true
+        },
+        {
+          "id": "e3cdf0b4-1871-4406-b5b0-7e4fd83e150d-check-005-build-and-copy-bundle",
+          "number": 5,
+          "title": "Build and copy bundle",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T22:55:39.057Z",
+      "completedAt": "2026-08-06T22:57:01.327Z",
+      "createdAt": "2026-08-06T22:55:37.049Z",
+      "updatedAt": "2026-08-06T22:57:01.327Z"
+    }
+  ],
+  "createdAt": "2026-08-05T11:03:29.206Z",
+  "updatedAt": "2026-08-06T22:57:01.327Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-06T22:49:35.224Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/3a8045d3-ca32-4be5-89a8-2ddd3a64c579-2026-08-09T17-53-41-550Z.md",
+      "clearedAt": "2026-08-09T17:53:41.550Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": []
+}

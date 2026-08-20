@@ -1,0 +1,213 @@
+{
+  "id": "eb35be8c-458e-4d38-8550-0198e7b9c4ce",
+  "featureId": "bd655486-e048-47ae-b06c-2bed511d89c6",
+  "number": 59,
+  "shortId": "23SEL",
+  "priority": 8,
+  "slug": "cross-harness-contract-matrix",
+  "title": "Cross-harness contract matrix",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Run equivalent scenarios through API, MCP, and Pi and compare normalized outcomes.",
+  "description": "Define a shared scenario matrix whose cases can be executed through the HTTP API, MCP tools, and Pi adapter commands/tools. Normalize identifiers, status payloads, error categories, and persisted plan snapshots so equivalent operations can be compared without coupling tests to transport formatting. Include create/update/delete flows, invalid validation inputs, references, requirements links, status rollups, handoff proposal/confirmation, archive behavior, repair, load/stop lifecycle, and resume context. Record intentional transport differences explicitly and fail on semantic divergence. This phase is the compatibility gate ensuring that every harness exposes the same planner behavior while preserving each harness's native protocol.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "557b7be1-e7d6-45d2-8847-117ada753105",
+    "d53a4ebe-5f74-4358-a44c-b97c1d09ac31",
+    "c6105a1d-3710-45c0-b8c7-81cc0bf1ccb0",
+    "e1d3242f-2142-4ddf-8830-7f794f6af5e6",
+    "17087d2b-f3c7-4bf2-a05a-7cdf6d882601"
+  ],
+  "tasks": [
+    {
+      "id": "557b7be1-e7d6-45d2-8847-117ada753105",
+      "phaseId": "eb35be8c-458e-4d38-8550-0198e7b9c4ce",
+      "number": 253,
+      "shortId": "VABNQ",
+      "priority": 1,
+      "shortName": "adapter-normalized-outcomes",
+      "title": "Define normalized adapter outcomes and persisted snapshots",
+      "status": "planned",
+      "description": "Implement shared normalization for API JSON, MCP structured content, Pi tool/notification responses, and persisted `.planner` snapshots. Normalize UUID-bearing payloads to composite F/P/T references where appropriate, classify validation/permission/not-found/terminal-state errors, and compare canonical entity/status/handoff data while preserving intentional transport differences. Document the fields that must match across harnesses.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-09T17:43:11.040Z",
+      "updatedAt": "2026-08-09T17:43:11.040Z"
+    },
+    {
+      "id": "d53a4ebe-5f74-4358-a44c-b97c1d09ac31",
+      "phaseId": "eb35be8c-458e-4d38-8550-0198e7b9c4ce",
+      "number": 254,
+      "shortId": "7VXZS",
+      "priority": 2,
+      "shortName": "crossharness-validation-parity",
+      "title": "Run validation and error-parity scenarios across API MCP and Pi",
+      "status": "planned",
+      "description": "Execute the same invalid feature, phase, task, requirement, reference, checklist, reorder, and handoff inputs through HTTP API, MCP, and Pi. Compare normalized error categories, blocked-write behavior, field paths/messages where contractually stable, and final filesystem snapshots. Record explicit differences only where a harness protocol requires different wrapping, ensuring no adapter silently accepts input rejected by core.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-09T17:43:19.029Z",
+      "updatedAt": "2026-08-09T17:43:19.029Z"
+    },
+    {
+      "id": "c6105a1d-3710-45c0-b8c7-81cc0bf1ccb0",
+      "phaseId": "eb35be8c-458e-4d38-8550-0198e7b9c4ce",
+      "number": 255,
+      "shortId": "25HLJ",
+      "priority": 3,
+      "shortName": "crossharness-lifecycle-parity",
+      "title": "Run lifecycle, requirements, handoff, and resume parity scenarios",
+      "status": "done",
+      "description": "Execute equivalent valid scenarios through API, MCP, and Pi: create hierarchy, link requirements, start/update/complete tasks, derive parent status, prepare and confirm a handoff, archive on completion, repair stale state, load/stop planner services, and reopen for resume. Compare canonical persisted state, active/archive lists, handoff reasons/history, composite references, and lifecycle side effects across all entry points.\n\n---\n**Completion summary:**\nFixed cross-harness handoff/resume lifecycle regression. `planner-load` now explicitly treats pending handoffs as read-only context and forbids implicit show/clear; the generated CLI command router mirrors the same rule. `buildRecap` now ends with the `🌐 Web UI:` line so Codex can render the dashboard address consistently. Core lifecycle cleanup now archives a handoff only when every task is `done` or `canceled`, covering the prior all-canceled/rejected gap; writes archive a superseded prior handoff and retain only the newest active version; explicit clear remains manual. Updated Pi wording and the surface inventory to match. Added/updated core tests for replacement and all-canceled archival and an MCP regression test proving `planner-load` retains a pending handoff and its final nonempty output line is Web UI.\n\nValidated: `pnpm test` (360/360), `pnpm build`, `pnpm check`, `pnpm plugins:check`, targeted core/MCP suites, `pnpm test:matrix`, and `git diff --check`. Changes are ready locally; release commit/push/bump pending the requested publish step.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T18:42:38.404Z",
+      "completedAt": "2026-08-13T18:52:18.067Z",
+      "createdAt": "2026-08-09T17:43:27.114Z",
+      "updatedAt": "2026-08-13T18:52:18.067Z"
+    },
+    {
+      "id": "e1d3242f-2142-4ddf-8830-7f794f6af5e6",
+      "phaseId": "eb35be8c-458e-4d38-8550-0198e7b9c4ce",
+      "number": 256,
+      "shortId": "7CT2Y",
+      "priority": 4,
+      "shortName": "crossharness-report",
+      "title": "Generate cross-harness compatibility report and drift checks",
+      "status": "planned",
+      "description": "Produce machine-readable and human-readable reports showing scenario pass/fail by API, MCP, Pi, and browser layers, normalized output differences, persisted snapshot differences, and uncovered public surfaces. Add a drift check that fails when a newly registered tool/route/command has no matrix entry, while allowing explicitly documented exceptions for UI-only or host-only operations.",
+      "notes": "2026-08-14: validata e pubblicata la release prerelease `0.2.19-next.26` su `next` per rendere disponibile il codice corrente. Commit pubblicati: `835175f` (suite E2E browser) e `9f73779` (bump next). Validazioni: `pnpm check` e `pnpm test:e2e` — 22 test passati. Il report cross-harness e il drift check restano da implementare.",
+      "statusLog": [
+        {
+          "id": "e1d3242f-2142-4ddf-8830-7f794f6af5e6-check-001-in-progress-planned",
+          "date": "2026-08-17T08:56:21.681Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "Avviato per regolarizzare il lavoro di release richiesto dall'utente, ma il deliverable specifico (report di compatibilità e drift check) non è stato implementato in questa sessione. Il task torna planned per evitare di rappresentare come attiva un'attività non in corso.",
+          "description": "Avviato per regolarizzare il lavoro di release richiesto dall'utente, ma il deliverable specifico (report di compatibilità e drift check) non è stato implementato in questa sessione. Il task torna planned per evitare di rappresentare come attiva un'attività non in corso."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-17T08:55:08.946Z",
+      "completedAt": "",
+      "createdAt": "2026-08-09T17:43:32.502Z",
+      "updatedAt": "2026-08-17T08:56:21.681Z"
+    },
+    {
+      "id": "17087d2b-f3c7-4bf2-a05a-7cdf6d882601",
+      "phaseId": "eb35be8c-458e-4d38-8550-0198e7b9c4ce",
+      "number": 281,
+      "shortId": "WTPX5",
+      "priority": 5,
+      "shortName": "fix-phase-read-and-multi-activ",
+      "title": "Fix phase-read contract and explicit multi-active task starts",
+      "status": "done",
+      "description": "Repair two cross-harness regressions observed while operating the planner in heca. First, `packages/plan-mcp/src/index.ts` registers `planner-phase-show` (around lines 630–644) and calls `text(..., { linkedRequirements })`: Claude Code renders this sparse structured payload and hides the otherwise correct text content containing the phase title and long description. Define a complete structured phase read model (identity/ref, title, summary, description when `full=true`, derived status, task count, and `linkedRequirements`) and validate it through the real MCP harness as Claude Code consumes it. Second, `packages/plan-mcp/src/index.ts` task-start logic (around lines 1019–1084) and the matching `packages/pi-adapter/src/index.ts` logic (around lines 3924–3980) treat `recommendNextTask()` as a hard authorization gate. When multiple tasks are already `in-progress`, its intentionally advisory `conflict` result prevents an explicitly requested task (such as T416) from starting. Preserve automatic-selection safety and conflict warnings, but allow an explicit task-start request for a valid ready task without requiring unrelated active tasks to be falsely completed/blocked. Confirm behavior is consistent in MCP and Pi, preserve dependency and terminal-state protection, and add regression tests using the real MCP server and Pi host fixture.\n\n---\n**Completion summary:**\nFixed the cross-harness regressions locally (not committed). `planner-phase-show` in `packages/plan-mcp/src/index.ts` now returns a complete structured `phase` model (human ref, title, summary, derived status, task count, and description on `full=true`) alongside linked requirements, so Claude Code no longer hides the phase description by rendering only `{linkedRequirements}`. Added a real MCP regression test that reads the structured response as a Claude-style client.\n\nAdded the harness-agnostic `checkExplicitTaskStart` in `packages/plan-core/src/task-selection.ts`. MCP and Pi task-start handlers now use it to enforce real availability/dependency rules while treating priority, a single active task, and multiple active tasks as advisories rather than hard denials for an explicit task reference. Responses distinguish priority, active-task, and active-work-conflict advisories. This allows an explicitly chosen task such as T416 to start without falsely closing unrelated tasks. Also fixed approved deviation activation so it remains reliable even when recommendation output points at already active work; preserved the existing approved waiting-task exception.\n\nAdded unit + real MCP/Pi adapter regression coverage. Validation passed: targeted suite 59/59, `pnpm check`, and `pnpm test` 359/359 (baseline coverage line 82.92%, branch 73.4%, functions 78.7%). Modified files remain uncommitted on `next`: core selector/tests, MCP handler/tests, Pi handler/tests.",
+      "notes": "While executing the cross-harness regression suite, an existing deviation test exposed a coupled third defect: `recommendNextTask()` returns the current active task before inspecting an approved deviation, so starting the deviation’s temporary task after another explicit start does not transition the deviation to `active`. The task-start fix will activate an approved matching deviation directly from persisted `workDeviations`, rather than relying on advisory recommendation output. This preserves the deviation/resume lifecycle under explicit multi-active starts.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "17087d2b-f3c7-4bf2-a05a-7cdf6d882601-check-001-return-a-complete-structured-phase-read-payload-through-planner-phase-show-and-cover-claude-style-consumption",
+          "number": 1,
+          "title": "Return a complete structured phase-read payload through planner-phase-show and cover Claude-style consumption",
+          "checked": true
+        },
+        {
+          "id": "17087d2b-f3c7-4bf2-a05a-7cdf6d882601-check-002-permit-explicitly-requested-ready-tasks-to-start-when-multiple-tasks-are-already-active-while-retaining-advisory-conflict-reporting",
+          "number": 2,
+          "title": "Permit explicitly requested ready tasks to start when multiple tasks are already active while retaining advisory conflict reporting",
+          "checked": true
+        },
+        {
+          "id": "17087d2b-f3c7-4bf2-a05a-7cdf6d882601-check-003-run-targeted-adapter-tests-plus-monorepo-build-check-and-full-test-suite",
+          "number": 3,
+          "title": "Run targeted adapter tests plus monorepo build, check, and full test suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-11T23:09:56.687Z",
+      "completedAt": "2026-08-11T23:19:40.549Z",
+      "createdAt": "2026-08-11T23:09:44.807Z",
+      "updatedAt": "2026-08-11T23:19:40.549Z"
+    }
+  ],
+  "createdAt": "2026-08-09T17:39:45.822Z",
+  "updatedAt": "2026-08-17T08:56:21.681Z",
+  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-19T15:08:32.617Z\nUpdated at: 2026-08-19T15:08:32.617Z\nReason: before compact\n\n## Progress snapshot\n- Features: 14/16 done, 2 active\n- Phases: 63/66 done, 1 active/discovery\n- Tasks: 281/291 done, 0 active\n\n## Current focus\n- Feature: `bd655486-e048-47ae-b06c-2bed511d89c6` — Integration Test & Cross-Harness Verification (in-progress)\n- Phase: `eb35be8c-458e-4d38-8550-0198e7b9c4ce` — Cross-harness contract matrix (in-progress)\n- Task: `e1d3242f-2142-4ddf-8830-7f794f6af5e6` — Generate cross-harness compatibility report and drift checks (planned)\n\n## What was being done\n2026-08-14: validata e pubblicata la release prerelease `0.2.19-next.26` su `next` per rendere disponibile il codice corrente. Commit pubblicati: `835175f` (suite E2E browser) e `9f73779` (bump next). Validazioni: `pnpm check` e `pnpm test:e2e` — 22 test passati. Il report cross-harness e il drift check restano da implementare.\n\n## Current Task Statuses (phase eb35be8c-458e-4d38-8550-0198e7b9c4ce)\n- 📋 `557b7be1-e7d6-45d2-8847-117ada753105` — Define normalized adapter outcomes and persisted snapshots (planned)\n- 📋 `d53a4ebe-5f74-4358-a44c-b97c1d09ac31` — Run validation and error-parity scenarios across API MCP and Pi (planned)\n- ✅ `c6105a1d-3710-45c0-b8c7-81cc0bf1ccb0` — Run lifecycle, requirements, handoff, and resume parity scenarios (done)\n- 📋 `e1d3242f-2142-4ddf-8830-7f794f6af5e6` — Generate cross-harness compatibility report and drift checks (planned)\n- ✅ `17087d2b-f3c7-4bf2-a05a-7cdf6d882601` — Fix phase-read contract and explicit multi-active task starts (done)\n\n## How to resume\n1. Open task e1d3242f-2142-4ddf-8830-7f794f6af5e6 (Generate cross-harness compatibility report and drift checks).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start e1d3242f-2142-4ddf-8830-7f794f6af5e6 (or call task_start).\n4. Continue with the next activity: Start task e1d3242f-2142-4ddf-8830-7f794f6af5e6 — Generate cross-harness compatibility report and drift checks with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/eb35be8c-458e-4d38-8550-0198e7b9c4ce.json\n- .planner/phases/f55065cd-7c0c-4095-aad9-2c563ea469f0.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task e1d3242f-2142-4ddf-8830-7f794f6af5e6 — Generate cross-harness compatibility report and drift checks with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase eb35be8c-458e-4d38-8550-0198e7b9c4ce.\n\n## Recent activity\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n- 2026-07-30T08:14:39.219Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-30T08:14:38.600Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-15T20:24:28.850Z [feature_created] 5bb28fc7-8002-46f9-970d-4151d6cb4884: Feature created: Improvements\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-08-19T15:08:32.622Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-19T15-08-32-618Z.md",
+      "clearedAt": "2026-08-19T15:08:32.618Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-18T15-52-31-435Z.md",
+      "clearedAt": "2026-08-18T15:52:31.435Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-18T15-38-26-831Z.md",
+      "clearedAt": "2026-08-18T15:38:26.831Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-18T15-36-28-711Z.md",
+      "clearedAt": "2026-08-18T15:36:28.711Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-18T15-18-56-941Z.md",
+      "clearedAt": "2026-08-18T15:18:56.941Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "edb5a0d0-729f-424d-b22c-665b822cc521",
+      "date": "2026-08-17T08:55:08.952Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
+}
