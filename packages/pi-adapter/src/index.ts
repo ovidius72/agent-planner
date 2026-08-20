@@ -11,7 +11,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, packageVersionFromModule, resolvedPackageVersion } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -28,6 +28,9 @@ import type { ServeHandle, UiConfig, ShortcutConfigSpec } from "@agent-plan/serv
 
 const PI_CONFIG_DIR_NAME = ".pi";
 const PLAN_DIR_NAME = ".planner";
+const PI_ADAPTER_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/pi-adapter");
+const CORE_PACKAGE = resolvedPackageVersion("@agent-plan/core", import.meta.url);
+const SERVER_PACKAGE = resolvedPackageVersion("@agent-plan/server", import.meta.url);
 
 let capturedPi: ExtensionAPI | null = null;
 
@@ -109,6 +112,7 @@ const healedStatusRoots = new Set<string>();
 const PLANNER_COMMAND_COMPLETIONS = [
   { value: "init", label: "init", description: "Initialize planner in this project" },
   { value: "show", label: "show", description: "Show planner overview" },
+  { value: "version", label: "version", description: "Show loaded Agent Plan package versions" },
   { value: "repair", label: "repair", description: "Repair planner integrity" },
   { value: "cleanup-orphans", label: "cleanup-orphans", description: "List and remove orphan phase files" },
   { value: "project discuss", label: "project discuss", description: "Run project discovery" },
@@ -1118,6 +1122,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     const PLANNER_MENU_ACTIONS = [
       "init",
       "show",
+      "version",
       "repair",
       "cleanup-orphans",
       "project discuss",
@@ -1154,7 +1159,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       "stop",
     ];
 
-    const SUB_HELP = "Available: init, show, repair, cleanup-orphans, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, stop\n" +
+    const SUB_HELP = "Available: init, show, version, repair, cleanup-orphans, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, stop\n" +
       "Try: /planner <TAB>  |  /planner feature list  |  /planner task start  |  /planner cleanup-orphans\n" +
       "Handoff actions: /planner handoff list | show P00x | write P00x | clear P00x | prepare (prepare proposes a target and asks for confirmation)";
 
@@ -1165,6 +1170,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return;
       }
       await runPlanner(action, ctx);
+      return;
+    }
+
+    if (a === "version") {
+      ctx.ui.notify([
+        "Agent Plan runtime versions",
+        `${PI_ADAPTER_PACKAGE.name}: ${PI_ADAPTER_PACKAGE.version}`,
+        `${CORE_PACKAGE.name}: ${CORE_PACKAGE.version}`,
+        `${SERVER_PACKAGE.name}: ${SERVER_PACKAGE.version}`,
+      ].join("\n"), "info");
       return;
     }
 

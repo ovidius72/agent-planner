@@ -429,11 +429,39 @@ The CLI package is `agent-plan`.
 
 ```bash
 agent-plan help
+agent-plan --version       # alias: -v
 agent-plan mcp
 agent-plan init
 agent-plan export [--full]
 agent-plan setup claude-code --user
 agent-plan setup claude-code --project
+```
+
+### Version reporting
+
+Report the installed CLI package:
+
+```bash
+agent-plan --version       # alias: agent-plan -v
+```
+
+Report the versions loaded by each harness:
+
+```text
+# Pi
+/planner version
+
+# Claude Code plugin
+/planner version
+
+# Claude Code or Codex through MCP
+planner-version
+```
+
+The MCP result identifies the loaded `@agent-plan/mcp` and `@agent-plan/core` packages. Pi also identifies the loaded `@agent-plan/pi-adapter` and `@agent-plan/server` packages. To inspect Pi's installed package directly from a shell:
+
+```bash
+npm --prefix "$HOME/.pi/agent/npm" list @agent-plan/pi-adapter --depth=0
 ```
 
 ### `agent-plan mcp`

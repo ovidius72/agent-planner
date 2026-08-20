@@ -117,6 +117,7 @@ export const coreSurfaces = [
   { id: "core.exportService", kind: "module", name: "ExportService", description: "Markdown export of the whole plan (export-service.ts).", anchor: "packages/plan-core/src/export-service.ts:32", coverage: { phase: "P054", reason: "covered via the API export endpoint scenarios (P054)" } },
   { id: "core.buildRecap", kind: "function", name: "buildRecap", description: "Harness-agnostic recap text (pi | mcp).", anchor: "packages/plan-core/src/recap.ts:39" },
   { id: "core.buildPhaseContextBlock", kind: "function", name: "buildPhaseContextBlock", description: "Phase context injection block.", anchor: "packages/plan-core/src/task-context.ts:17", coverage: { phase: "P053", reason: "covered by core domain validation scenarios (P053)" } },
+  { id: "core.packageVersion", kind: "module", name: "package-version.ts", description: "Resolve package versions from the manifests of modules actually loaded by a harness.", anchor: "packages/plan-core/src/package-version.ts", coverage: { phase: "P059", reason: "Runtime version normalization is covered by the cross-harness contract matrix (P059)." } },
 
   // ── Pure helpers ───────────────────────────────────────────────────
   { id: "core.naming", kind: "module", name: "naming.ts", description: "createFeatureId/PhaseId/TaskId/RequirementId, shortIds, slugs, ref formatters, isUuid, validateResolvedTarget.", anchor: "packages/plan-core/src/naming.ts" },
@@ -177,6 +178,7 @@ export const apiSurfaces = [
  * @type {SurfaceEntry[]}
  */
 export const mcpSurfaces = [
+  { id: "mcp.version", kind: "tool", name: "planner-version", description: "Report the loaded MCP and core package versions without requiring a planner workspace.", anchor: "packages/plan-mcp/src/index.ts:164", coverage: { phase: "P059", reason: "Version parity across Claude and Codex uses the cross-harness contract matrix (P059)." } },
   { id: "mcp.init", kind: "tool", name: "planner-init", description: "Initialize .planner/ in AGENT_PLAN_ROOT or cwd.", anchor: "packages/plan-mcp/src/index.ts:205" },
   { id: "mcp.show", kind: "tool", name: "planner-show", description: "Overview recap of the plan.", anchor: "packages/plan-mcp/src/index.ts:223", coverage: { phase: "P055", reason: "covered by MCP adapter scenarios (P055)" } },
   { id: "mcp.repair", kind: "tool", name: "planner-repair", description: "Repair plan integrity.", anchor: "packages/plan-mcp/src/index.ts:263", coverage: { phase: "P055", reason: "covered by MCP adapter scenarios (P055)" } },
@@ -224,7 +226,7 @@ export const mcpSurfaces = [
  * @type {SurfaceEntry[]}
  */
 export const piSurfaces = [
-  { id: "pi.command", kind: "command", name: "/planner <subcommand>", description: "Hierarchical command: init/show/repair/cleanup-orphans/project <discuss|language>/feature <add|show|discuss|update|delete|list>/phase <add|show|discuss|update|delete|list>/task <add|show|discuss|update|delete|list|start|complete|checklist <toggle|add|remove>>/handoff <list|show|write|clear|prepare>/bypass/clear-bypass/load/stop|disable/web <status>.", anchor: "packages/pi-adapter/src/index.ts:2424", coverage: { phase: "P056", reason: "covered by Pi adapter scenarios (P056)" } },
+  { id: "pi.command", kind: "command", name: "/planner <subcommand>", description: "Hierarchical command: init/show/version/repair/cleanup-orphans/project <discuss|language>/feature <add|show|discuss|update|delete|list>/phase <add|show|discuss|update|delete|list>/task <add|show|discuss|update|delete|list|start|complete|checklist <toggle|add|remove>>/handoff <list|show|write|clear|prepare>/bypass/clear-bypass/load/stop|disable/web <status>.", anchor: "packages/pi-adapter/src/index.ts:2424", coverage: { phase: "P056", reason: "covered by Pi adapter scenarios (P056)" } },
   { id: "pi.sessionStart", kind: "hook", name: "session_start", description: "Restore state, autocomplete, planner gating (disabled until /planner load), proactive handoff notice.", anchor: "packages/pi-adapter/src/index.ts:805", coverage: { phase: "P056", reason: "covered by Pi adapter scenarios (P056)" } },
   { id: "pi.sessionBeforeSwitch", kind: "hook", name: "session_before_switch", description: "Write project handoff before switching session.", anchor: "packages/pi-adapter/src/index.ts:896", coverage: { phase: "P056", reason: "covered by Pi adapter scenarios (P056)" } },
   { id: "pi.sessionBeforeCompact", kind: "hook", name: "session_before_compact", description: "Write project handoff before compact.", anchor: "packages/pi-adapter/src/index.ts:905", coverage: { phase: "P056", reason: "covered by Pi adapter scenarios (P056)" } },
