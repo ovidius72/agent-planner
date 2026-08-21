@@ -5,6 +5,7 @@
   "priority": 0,
   "name": "Improvements",
   "description": "Improvements a fixes. Discuss with the iser",
+  "descriptionUpdatedAt": "2026-07-15T20:24:28.795Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -37,16 +38,7 @@
     "c6a30eff-af52-406f-a696-14125b19b06c"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "28d1a639-e10b-403b-871e-7d9e7a4d6a36",
-      "date": "2026-08-20T15:19:14.098Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z"
 }

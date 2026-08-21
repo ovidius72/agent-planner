@@ -6,6 +6,7 @@ import { FormattedText } from "../ui/formatted-text";
 import { ResumeSnapshot } from "../task/resume-snapshot";
 import type { ActiveTaskSummary, FocusTaskSummary, ServerInfo, TaskFocusSummary } from "../../lib/api";
 import { CopyableBadge, EntityPathBadge, formatEntityPath, ShortIdBadge } from "../ui/badges";
+import { StatusBadge } from "../ui/status-badge";
 import type { Project } from "../../lib/types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting" | "disconnected";
@@ -22,10 +23,6 @@ function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
         : "border-[var(--border)]"}`}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <span
-          aria-hidden="true"
-          className={`inline-block h-2 w-2 shrink-0 rounded-full ${task.status === "in-progress" ? "bg-[var(--accent)]" : "border border-[var(--accent)] bg-transparent"}`}
-        />
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <EntityPathBadge
             featureNum={task.featureNumber}
@@ -39,6 +36,7 @@ function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
             <span className="sr-only">Copy task path</span>
           </CopyableBadge>
           {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
+          <span className="shrink-0"><StatusBadge status={task.status} /></span>
           <Link to={to} className="min-w-0 flex-1 truncate font-medium hover:text-[var(--accent)]">
             {task.title}
           </Link>

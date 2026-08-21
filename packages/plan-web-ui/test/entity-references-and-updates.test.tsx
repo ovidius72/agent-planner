@@ -34,7 +34,7 @@ describe("entity references and timestamps", () => {
     expect(screen.getByRole("button", { name: "Copy TSK03" })).toBeInTheDocument();
   });
 
-  it("surfaces paused checkpoints and highlights a pending resume", () => {
+  it("surfaces paused checkpoints and keeps resume-required separate from canonical status", () => {
     renderRoute([{ path: "/", element: (
       <TaskFocusHeader taskFocus={{ active: [], paused: [], pendingResume: [{
         id: "task-4", number: 4, shortId: "TSK04", title: "Paused task",
@@ -49,10 +49,26 @@ describe("entity references and timestamps", () => {
     ) }]);
 
     expect(screen.getByRole("heading", { name: "Resume required (1)" })).toBeInTheDocument();
-    expect(screen.getAllByText("Resume required")).toHaveLength(2);
+    expect(screen.getByText("Paused")).toBeInTheDocument();
+    expect(screen.getByText("Resume checkpoint")).toBeInTheDocument();
     expect(screen.getByText("Temporary prerequisite")).toBeInTheDocument();
     expect(screen.getByText("src/selector.ts:20")).toBeInTheDocument();
     expect(screen.getByText("Finish branch and rerun tests")).toBeInTheDocument();
+  });
+
+  it("shows planned resume targets as planned plus a secondary resume-required marker", () => {
+    renderRoute([{ path: "/", element: (
+      <TaskFocusHeader taskFocus={{ active: [], paused: [], pendingResume: [{
+        id: "task-5", number: 5, shortId: "TSK05", title: "Return target",
+        phaseId: "phase-2", phaseNumber: 2, featureId: "feature-1", featureNumber: 1,
+        status: "planned", pendingResume: true, deviationId: "deviation-2", pauseSnapshot: null,
+      }] }} />
+    ) }]);
+
+    expect(screen.getByRole("heading", { name: "Resume required (1)" })).toBeInTheDocument();
+    expect(screen.getByText("Planned")).toBeInTheDocument();
+    expect(screen.getAllByText("Resume required")).toHaveLength(1);
+    expect(screen.getByText("Return to this preserved task before selecting new priority work.")).toBeInTheDocument();
   });
 
   it("renders the persisted entity last-update timestamp as a semantic time", () => {

@@ -1410,8 +1410,10 @@ server.registerTool("planner-handoff-write", {
   let body = content.trim();
   const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
   const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
-  const isGeneric = !firstHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(firstHeadingText);
-  if (!title && isGeneric) {
+  const genericTitlePattern = /^(handoff|canonical handoff|session handoff)$/i;
+  const effectiveHeadingText = title?.trim() ? title.trim() : firstHeadingText;
+  const isGeneric = !effectiveHeadingText || genericTitlePattern.test(effectiveHeadingText);
+  if (isGeneric) {
     return text("❌ Generic handoff title. Provide a meaningful `title` (or start your markdown with a descriptive H1) summarizing the work — e.g. 'P049 — featureId validation: tests + adapter wiring'. Generic titles like 'Handoff' or 'Canonical handoff' are not accepted.");
   }
   if (title && title.trim()) {

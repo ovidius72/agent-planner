@@ -72,6 +72,22 @@
       "resumeRequiredAt": "",
       "resolvedAt": "2026-08-20T15:33:30.244Z",
       "resumedAt": ""
+    },
+    {
+      "id": "fa392991-9f5e-4b44-86e7-e91ea5d9b710",
+      "recommendedTaskId": "557b7be1-e7d6-45d2-8847-117ada753105",
+      "temporaryTaskId": "d538b57e-2d6b-4474-9f0b-b00cb6a903e9",
+      "resumeTaskId": "557b7be1-e7d6-45d2-8847-117ada753105",
+      "reason": "Correggere la regressione di presentazione introdotta ieri in P066: la Web UI sta mescolando stato canonico del task e marker di ritorno/resume. Serve una deviazione temporanea per riallineare le superfici UI alla semantica corretta senza perdere il ritorno prioritario a T253(P059/F015).",
+      "snapshot": null,
+      "requestedBy": "user",
+      "approvedBy": "user",
+      "state": "resumed",
+      "createdAt": "2026-08-21T07:14:28.782Z",
+      "activatedAt": "2026-08-21T07:14:31.621Z",
+      "resumeRequiredAt": "2026-08-21T07:16:17.915Z",
+      "resolvedAt": "",
+      "resumedAt": "2026-08-21T08:11:04.077Z"
     }
   ]
 }

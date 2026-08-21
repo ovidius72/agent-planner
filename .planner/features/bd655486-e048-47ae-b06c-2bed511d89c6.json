@@ -5,6 +5,7 @@
   "priority": 15,
   "name": "Integration Test & Cross-Harness Verification",
   "description": "Build a comprehensive, harness-agnostic verification system for Agent Plan across the domain core, HTTP API/server, MCP adapter, Pi adapter, and React Web UI. Current tests are scattered under packages/*/test and mostly cover core validation/ref regressions; packages/plan-core/test/handoff-lifecycle.test.mjs was added during the handoff lifecycle work but integration coverage is still missing for server routes, MCP tool calls, Pi lifecycle hooks, and browser flows. The feature must inventory every public tool, command, API route, schema, loader/action, and lifecycle transition; create reusable temporary .planner fixtures; exercise identical business scenarios through API, MCP, and Pi boundaries; and add Playwright scenarios for the real server/UI. Preserve PlanStore as the behavioral source of truth, composite F/P/T references, phase-scoped handoffs, requirements-to-phase links, status rollups, repair semantics, planner load/stop behavior, and harness-agnostic contracts. Establish measurable coverage gates (target at least 80% statements/lines/functions, with generated bundles and bootstrap-only code explicitly excluded), CI-friendly commands, deterministic cleanup, and documentation for extending the scenario matrix. Do not hide untestable code behind mocks: mock only the Pi host boundary while using the real PlanStore/filesystem, use an in-memory or subprocess MCP client against the real MCP server, use real HTTP requests against a temporary server, and use Playwright for browser-visible behavior.",
+  "descriptionUpdatedAt": "2026-08-09T17:37:06.764Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -12,7 +13,16 @@
   "endDate": "",
   "workDone": "",
   "workRemaining": "",
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "beb51e6b-0fa1-44e0-b842-6b917203b3b9",
+      "title": "Resume-required layout cleanup deferred to final P059 task",
+      "decision": "The resume-required focus header must stay compact: long checkpoint narrative belongs inside the task detail view, not inside the sticky header summary card. The layout cleanup will be tracked as a dedicated planned task and executed after the remaining P059 contract-matrix deliverables.",
+      "rationale": "The current sticky header presentation can expand into a large scrollable block, which hurts scanability and duplicates detail that already belongs to the task page. Tracking it separately avoids mixing an unrelated Web UI cleanup into the already completed normalization deliverable while preserving visibility of the regression.",
+      "implementationNotes": "Create a final P059 task targeting `packages/plan-web-ui/src/components/layout/app-shell.tsx`, `packages/plan-web-ui/src/components/task/resume-snapshot.tsx`, and task-detail surfaces/tests. Keep canonical status plus resume marker in the header, render only compact summary text there, and leave the full pause/resume snapshot content on the task detail route.",
+      "acceptedAt": "2026-08-21T08:36:23.462Z"
+    }
+  ],
   "phaseIds": [
     "68870bdf-f51c-4720-bc92-67fd579769fe",
     "80d4d600-8bfe-446f-a813-3b51787b23c1",
@@ -36,5 +46,5 @@
     }
   ],
   "createdAt": "2026-08-09T17:37:06.764Z",
-  "updatedAt": "2026-08-09T17:37:06.764Z"
+  "updatedAt": "2026-08-21T08:36:23.462Z"
 }

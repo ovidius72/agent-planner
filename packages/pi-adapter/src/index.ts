@@ -2676,15 +2676,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const title = params.title?.trim();
+      if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
+      const links = await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
+      if (!links.ok) return { content: [{ type: "text", text: links.error }], details: {} };
       const requirements = await st.loadRequirements();
       const now = nowISO();
       const requirement: Requirement = {
         id: createRequirementId(),
-        title: params.title.trim(),
+        title,
         description: params.description?.trim() ?? "",
         status: (params.status?.trim() as Requirement["status"] | undefined) ?? "planned",
         macroTasks: [],
-        linkedPhaseIds: (params.linkedPhaseIds ?? []).map((entry) => entry.trim()).filter(Boolean),
+        linkedPhaseIds: links.linkedPhaseIds,
         createdAt: now,
         updatedAt: now,
       };
@@ -2712,10 +2716,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const requirements = await st.loadRequirements();
       const requirement = requirements.requirements.find((entry) => entry.id === params.requirementId);
       if (!requirement) return { content: [{ type: "text", text: `Requirement not found: ${params.requirementId}` }], details: {} };
-      if (params.title !== undefined) requirement.title = params.title.trim();
+      if (params.title !== undefined) {
+        const title = params.title.trim();
+        if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
+        requirement.title = title;
+      }
       if (params.description !== undefined) requirement.description = params.description.trim();
       if (params.status !== undefined) requirement.status = params.status.trim() as Requirement["status"];
-      if (params.linkedPhaseIds !== undefined) requirement.linkedPhaseIds = params.linkedPhaseIds.map((entry) => entry.trim()).filter(Boolean);
+      if (params.linkedPhaseIds !== undefined) {
+        const links = await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
+        if (!links.ok) return { content: [{ type: "text", text: links.error }], details: {} };
+        requirement.linkedPhaseIds = links.linkedPhaseIds;
+      }
       requirement.updatedAt = nowISO();
       await st.saveRequirements(requirements);
       await st.writeGenerated();
@@ -2930,6 +2942,27 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     return { ok: true, phase, compositeRef: formatPhaseRef(phase.number, feat?.number) };
   }
 
+  async function resolveRequirementPhaseRefs(
+    st: PlanStore,
+    refs: string[] | undefined,
+  ): Promise<{ ok: true; linkedPhaseIds: string[] } | { ok: false; error: string }> {
+    if (!Array.isArray(refs) || refs.length === 0) {
+      return { ok: false, error: "linkedPhaseIds must contain at least one phase" };
+    }
+    const trimmed = refs.map((entry) => entry.trim()).filter(Boolean);
+    if (trimmed.length === 0) {
+      return { ok: false, error: "linkedPhaseIds must contain non-empty phase references" };
+    }
+    const phases = await st.loadAllPhases();
+    const features = (await st.loadFeatures()).features;
+    const resolved = trimmed.map((ref) => findPhaseByRef(phases, features, ref));
+    const missingIndex = resolved.findIndex((phase) => !phase);
+    if (missingIndex !== -1) {
+      return { ok: false, error: `linked phase not found: ${trimmed[missingIndex]}` };
+    }
+    return { ok: true, linkedPhaseIds: [...new Set(resolved.map((phase) => phase!.id))] };
+  }
+
   pi.registerTool({
     name: "handoff_list",
     label: "Handoff List",
@@ -2981,11 +3014,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // Derive the current first non-empty line (H1) of the supplied body.
       const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
       const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
-      const isGeneric = !firstHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(firstHeadingText);
-      if (!title && isGeneric) {
+      const genericTitlePattern = /^(handoff|canonical handoff|session handoff)$/i;
+      const effectiveHeadingText = (title && title.length > 0) ? title : firstHeadingText;
+      const isGeneric = !effectiveHeadingText || genericTitlePattern.test(effectiveHeadingText);
+      if (isGeneric) {
         return {
           content: [{ type: "text", text: "❌ Generic handoff title. Provide a meaningful `title` (or start your markdown with a descriptive H1) summarizing the work — e.g. 'P049 — featureId validation: tests + adapter wiring'. Generic titles like 'Handoff' or 'Canonical handoff' are not accepted." }],
-          details: { error: "generic title", firstHeadingText },
+          details: { error: "generic title", firstHeadingText: effectiveHeadingText || firstHeadingText },
         };
       }
       // Normalize: if a title is provided, replace or prepend the H1 so the first line is the title.
@@ -3396,6 +3431,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const title = params.title?.trim();
+      if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
       if (!params.featureId?.trim()) return { content: [{ type: "text", text: "featureId is required: a phase must belong to a feature." }], details: {} };
       const createPhaseFeatures = (await st.loadFeatures()).features;
       const resolvedFeature = resolveFeatureRefStrict(createPhaseFeatures, params.featureId);
@@ -3412,7 +3449,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const priority = await st.nextPriority("phase", featureId);
         const now = nowISO();
         phase = {
-          id, number: identity.number, shortId: identity.shortId, priority, slug: normalizeSlug(params.title), title: params.title,
+          id, number: identity.number, shortId: identity.shortId, priority, slug: normalizeSlug(title), title,
           featureId,
           status: (params.status as Phase["status"] | undefined) ?? "draft",
           discussedAt: "",
@@ -3710,6 +3747,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const title = params.title?.trim();
+      if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
       if (!params.featureId?.trim()) return { content: [{ type: "text", text: "featureId is required: a task must belong to a feature." }], details: {} };
       const features = (await st.loadFeatures()).features;
       const resolvedFeature = resolveFeatureRefStrict(features, params.featureId.trim());
@@ -3728,7 +3767,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!phaseValidation.ok) return { content: [{ type: "text", text: phaseValidation.error }], details: {} };
       const existingPhase = await st.loadPhase(phaseId);
       if (!existingPhase) return { content: [{ type: "text", text: `Resolved phase ${phaseId} no longer exists. Refusing to create task.` }], details: {} };
-      const shortName = clampSlug(params.shortName ?? params.title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
+      const shortName = clampSlug(params.shortName ?? title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
       const taskId = createTaskId();
       const identity = await st.allocateEntityIdentity("task", taskId);
       const priority = await st.nextPriority("task", phaseId);
@@ -3739,7 +3778,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       const task: Task = {
         id: taskId, phaseId, number: identity.number, shortId: identity.shortId, priority, shortName,
-        title: params.title,
+        title,
         status: initialStatus,
         description: params.description ?? "",
         descriptionUpdatedAt: now,

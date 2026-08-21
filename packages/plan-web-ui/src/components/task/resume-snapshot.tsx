@@ -25,7 +25,7 @@ export function ResumeSnapshot({
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
         <h3 id={headingId} className="text-sm font-bold text-[var(--text)]">
-          {pendingResume ? "Resume required" : "Paused work snapshot"}
+          {pendingResume ? "Resume checkpoint" : "Paused work snapshot"}
         </h3>
         <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">
           {formatDateTime(snapshot.pausedAt)}
