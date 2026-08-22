@@ -21,6 +21,14 @@
       "rationale": "The current sticky header presentation can expand into a large scrollable block, which hurts scanability and duplicates detail that already belongs to the task page. Tracking it separately avoids mixing an unrelated Web UI cleanup into the already completed normalization deliverable while preserving visibility of the regression.",
       "implementationNotes": "Create a final P059 task targeting `packages/plan-web-ui/src/components/layout/app-shell.tsx`, `packages/plan-web-ui/src/components/task/resume-snapshot.tsx`, and task-detail surfaces/tests. Keep canonical status plus resume marker in the header, render only compact summary text there, and leave the full pause/resume snapshot content on the task detail route.",
       "acceptedAt": "2026-08-21T08:36:23.462Z"
+    },
+    {
+      "id": "92978ada-1f99-4a97-90aa-ea4c9bd17807",
+      "title": "Resume-required is advisory, but checkpoint reading must be surfaced",
+      "decision": "Pending-resume / resume-required tasks must not hard-block starting a different task. They remain advisory warnings in recap and task-start flows. The separate resume checkpoint field must be surfaced directly in task_get(full=true) so agents actually read it.",
+      "rationale": "Blocking task_start on pending resume prevents legitimate context switches and contradicts the intended role of paused work as advisory context rather than a lock. At the same time, keeping the checkpoint separate from description is only useful if the agent is forced to see it in the normal read path.",
+      "implementationNotes": "Remove the pending-resume denial from task_start and replace it with warning/advisory text. Keep recap surfacing of paused/pending-resume tasks. Extend task_get(full=true) to print the pauseSnapshot/resume-checkpoint block (why paused, work checkpoint, resume from, how to resume) whenever present or pending-resume applies. Mirror the same semantics in MCP/tests so cross-harness contracts stay aligned.",
+      "acceptedAt": "2026-08-21T10:20:58.372Z"
     }
   ],
   "phaseIds": [
@@ -46,5 +54,5 @@
     }
   ],
   "createdAt": "2026-08-09T17:37:06.764Z",
-  "updatedAt": "2026-08-21T08:36:23.462Z"
+  "updatedAt": "2026-08-21T10:20:58.372Z"
 }

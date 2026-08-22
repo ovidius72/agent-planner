@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useLoaderData, useNavigate, useRouteLoaderData } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Button } from "../../components/ui/button";
@@ -8,8 +9,9 @@ import { LatestCompletedTasks } from "../../components/dashboard/latest-complete
 import { NewAddedTasks } from "../../components/dashboard/new-added-tasks";
 import { StatCards } from "../../components/dashboard/stat-cards";
 import { WorkTree } from "../../components/dashboard/work-tree";
+import { ResumeRequiredSection } from "../../components/dashboard/resume-required";
 import { useShortcut } from "../../lib/shortcuts";
-import type { ActiveTaskSummary } from "../../lib/api";
+import type { ActiveTaskSummary, TaskFocusSummary } from "../../lib/api";
 import type { Feature, Phase, Project } from "../../lib/types";
 
 /**
@@ -24,7 +26,11 @@ export function DashboardRoute() {
     phases: Phase[];
     activeTasks: ActiveTaskSummary[];
   };
-  const { project } = useRouteLoaderData("root") as { project: Project };
+  const { project, taskFocus } = useRouteLoaderData("root") as { project: Project; taskFocus: TaskFocusSummary };
+  const resumeRequiredIds = useMemo(
+    () => new Set((taskFocus.pendingResume ?? []).map((t) => t.id)),
+    [taskFocus.pendingResume],
+  );
   const navigate = useNavigate();
   const openEditProject = () => navigate("/project/edit");
   useShortcut("edit", openEditProject);
@@ -48,11 +54,14 @@ export function DashboardRoute() {
 
       <StatCards features={features} phases={phases} />
 
+      <ResumeRequiredSection tasks={taskFocus.pendingResume} />
+
       <WorkTree
         features={features}
         phases={phases}
         activeTasks={activeTasks}
         projectStorageScope={projectStorageScope}
+        resumeRequiredIds={resumeRequiredIds}
       />
 
       <LatestCompletedTasks features={features} phases={phases} />

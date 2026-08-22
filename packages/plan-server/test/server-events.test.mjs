@@ -179,7 +179,7 @@ test("API-only mode (staticDir disabled): root is not served, API still works", 
   assert.ok(Array.isArray(features.body));
 });
 
-test("task focus endpoint separates active and paused work and marks pending resume", async () => {
+test("task focus endpoint keeps checkpointed work in pending resume and marks pending resume", async () => {
   const fx = await startServerFixture({ name: "t289-task-focus" });
   const phase = (await fx.store.loadAllPhases())[0];
   const task = phase.tasks[0];
@@ -191,7 +191,7 @@ test("task focus endpoint separates active and paused work and marks pending res
   };
   await fx.store.updatePhase(phase.id, (stored) => {
     const target = stored.tasks.find((entry) => entry.id === task.id);
-    target.status = "paused";
+    target.status = "planned";
     target.pauseSnapshot = snapshot;
     target.pauseHistory = [snapshot];
     return stored;
@@ -204,7 +204,7 @@ test("task focus endpoint separates active and paused work and marks pending res
 
   const focus = (await request(fx, "/tasks/focus")).body;
   assert.deepEqual(focus.active, []);
-  assert.deepEqual(focus.paused, []);
+  assert.equal(focus.paused, undefined);
   assert.equal(focus.pendingResume.length, 1);
   assert.equal(focus.pendingResume[0].id, task.id);
   assert.equal(focus.pendingResume[0].pendingResume, true);
@@ -214,11 +214,47 @@ test("task focus endpoint separates active and paused work and marks pending res
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...task, phaseId: phase.id, status: "in-progress" }), expectStatus: 400,
   });
-  assert.match(unsafeResume.body.error, /Paused lifecycle transitions require/);
+  assert.match(unsafeResume.body.error, /Resume checkpoint lifecycle transitions require/);
   const unsafeCreate = await request(fx, `/phases/${phase.id}/tasks`, {
     ...json({ title: "Invalid paused task", status: "paused" }), expectStatus: 400,
   });
   assert.match(unsafeCreate.body.error, /cannot be created paused/);
+});
+
+test("task focus endpoint ignores done resume targets and stale deviations", async () => {
+  const fx = await startServerFixture({ name: "t289-task-focus-done" });
+  const phase = (await fx.store.loadAllPhases())[0];
+  const task = phase.tasks[0];
+  const now = "2026-08-18T12:34:56.000Z";
+  const snapshot = {
+    id: "snapshot-2", reason: "Temporary prerequisite", whatWasBeingDone: "Implementing focus endpoint",
+    resumeLocation: "src/serve.ts:640", howToResume: "Finish endpoint and rerun server tests",
+    relatedTaskId: "temporary-task", pausedAt: now, pausedBy: "server-test",
+  };
+  await fx.store.updatePhase(phase.id, (stored) => {
+    const target = stored.tasks.find((entry) => entry.id === task.id);
+    target.status = "planned";
+    target.pauseSnapshot = snapshot;
+    target.pauseHistory = [snapshot];
+    return stored;
+  });
+  await fx.store.addWorkDeviation({
+    id: "deviation-2", recommendedTaskId: task.id, temporaryTaskId: "temporary-task",
+    resumeTaskId: task.id, reason: snapshot.reason, snapshot, requestedBy: "agent", approvedBy: "test",
+    state: "resume-required", createdAt: now, activatedAt: now, resumeRequiredAt: now, resolvedAt: "", resumedAt: "",
+  });
+  await fx.store.updatePhase(phase.id, (stored) => {
+    const target = stored.tasks.find((entry) => entry.id === task.id);
+    target.status = "done";
+    target.completedAt = now;
+    return stored;
+  });
+
+  const focus = (await request(fx, "/tasks/focus")).body;
+  assert.deepEqual(focus.active, []);
+  assert.equal(focus.paused, undefined);
+  assert.deepEqual(focus.pendingResume, []);
+  assert.equal((await fx.store.loadProject()).workDeviations.length, 0);
 });
 
 // ── Live-sync events (real WebSocket) ──────────────────────────────────────

@@ -158,8 +158,8 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         taskId: "T001", reason: "Temporary review interruption", what_was_being_done: "Implementing login",
         resume_location: "src/login.ts:20", how_to_resume: "Continue login and rerun auth tests", paused_by: "pi-test",
       });
-      assert.match(toolText(paused), /Task paused: P001\(F001\)\/T001/);
-      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "paused");
+      assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T001/);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
       assert.match(toolText(await host.runTool("task_start", { taskId: "T001" })), /Task started/);
 
       // Complete without force is gated by the unchecked checklist item.
@@ -208,21 +208,42 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       });
       assert.match(toolText(switched), /Task switched: P001\(F001\)\/T002 → P001\(F001\)\/T001/);
       let tasks = (await host.store.loadAllPhases())[0].tasks;
-      assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "paused", "planned"]);
+      assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
       assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
       const done = await host.runTool("task_complete", { taskId: "T001", force: true });
       assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
       assert.equal((await host.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 
-      const skipDenied = await host.runTool("task_start", { taskId: "T003" });
-      assert.match(toolText(skipDenied), /pending resume/i);
+      const shownResume = await host.runTool("task_get", { taskId: "T002", full: true });
+      assert.match(toolText(shownResume), /Resume advisory:/);
+      assert.match(toolText(shownResume), /Work checkpoint: Editing the lower-priority implementation/);
+      assert.match(toolText(shownResume), /Resume from: src\/task-start\.ts:20/);
+
+      const skipAdvisory = await host.runTool("task_start", { taskId: "T003" });
+      assert.match(toolText(skipAdvisory), /✅ Task started: P001\(F001\)\/T003/);
+      assert.match(toolText(skipAdvisory), /RESUME REQUIRED before starting a different task: P001\(F001\)\/T002/);
+      assert.ok(skipAdvisory.resumeRequired, "task_start while a resume-required is pending must return an explicit structured resumeRequired proposal");
+      assert.equal(skipAdvisory.resumeRequired.taskId, tasks[1].id);
+      assert.equal(skipAdvisory.resumeRequired.snapshot?.resumeLocation, "src/task-start.ts:20");
+      let project = await host.store.loadProject();
+      assert.equal(project.workDeviations.at(-1).state, "resume-required");
+
+      await host.runTool("task_complete", { taskId: "T003", force: true });
       const resumed = await host.runTool("task_start", { taskId: "T002" });
       assert.match(toolText(resumed), /Task started/);
       tasks = (await host.store.loadAllPhases())[0].tasks;
       assert.equal(tasks[1].status, "in-progress");
       assert.equal(tasks[1].pauseSnapshot, null);
-      assert.equal((await host.store.loadProject()).workDeviations.at(-1).state, "resumed");
+      project = await host.store.loadProject();
+      assert.equal(project.workDeviations.at(-1).state, "resumed");
+
+      const finishedResumeTarget = await host.runTool("task_complete", { taskId: "T002", force: true });
+      assert.doesNotMatch(toolText(finishedResumeTarget), /RESUME REQUIRED:/);
+      project = await host.store.loadProject();
+      assert.equal(project.workDeviations.length, 0);
+      const shownDone = await host.runTool("task_get", { taskId: "T002", full: true });
+      assert.doesNotMatch(toolText(shownDone), /Resume advisory:/);
     } finally {
       await closePiHost(host);
     }

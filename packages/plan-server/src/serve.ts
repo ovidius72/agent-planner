@@ -1,4 +1,4 @@
-import { watch, existsSync, readFileSync } from "node:fs";
+import { watch, existsSync, readFileSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { networkInterfaces } from "node:os";
@@ -538,7 +538,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"]; checklist?: string[] }>();
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title required" }, 400);
-    if (body.status === "paused") return c.json({ error: "A task cannot be created paused without an in-progress checkpoint. Create it planned, then use task_pause/task_switch." }, 400);
+    if ((body.status as string | undefined) === "paused") return c.json({ error: "A task cannot be created paused without an in-progress checkpoint. Create it planned, then use task_pause/task_switch." }, 400);
 
     const phase = await store.loadPhase(phaseId).catch(() => null);
     if (!phase) return c.json({ error: "phase not found" }, 404);
@@ -657,13 +657,14 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       pauseSnapshot: Task["pauseSnapshot"]; pendingResume: boolean; deviationId: string;
     };
     const active: FocusSummary[] = [];
-    const paused: FocusSummary[] = [];
     const pendingResume: FocusSummary[] = [];
     for (const phase of phases) {
       if (!phase.featureId) continue;
       for (const task of phase.tasks) {
+        if (task.status === "done" || task.status === "canceled" || task.status === "rejected") continue;
         const deviation = pendingByTask.get(task.id);
-        if (task.status !== "in-progress" && task.status !== "paused" && !deviation) continue;
+        const snapshot = task.pauseSnapshot ?? deviation?.snapshot ?? null;
+        if (task.status !== "in-progress" && !snapshot && !deviation) continue;
         const summary: FocusSummary = {
           id: task.id,
           number: task.number,
@@ -674,18 +675,21 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
           featureId: phase.featureId,
           featureNumber: featureIdToNum.get(phase.featureId) ?? 0,
           status: task.status,
-          pauseSnapshot: task.pauseSnapshot ?? deviation?.snapshot ?? null,
-          pendingResume: Boolean(deviation),
+          pauseSnapshot: snapshot,
+          pendingResume: Boolean(snapshot || deviation),
           deviationId: deviation?.id ?? "",
         };
-        if (deviation) pendingResume.push(summary);
-        else if (task.status === "in-progress") active.push(summary);
-        else if (task.status === "paused") paused.push(summary);
+        if (task.status === "in-progress") active.push(summary);
+        if (snapshot || deviation) pendingResume.push(summary);
       }
     }
-    pendingResume.sort((left, right) => (pendingOrder.get(left.deviationId) ?? Number.MAX_SAFE_INTEGER) - (pendingOrder.get(right.deviationId) ?? Number.MAX_SAFE_INTEGER));
-    paused.sort((left, right) => (right.pauseSnapshot?.pausedAt ?? "").localeCompare(left.pauseSnapshot?.pausedAt ?? ""));
-    return c.json({ active, paused, pendingResume });
+    pendingResume.sort((left, right) => {
+      const leftOrder = left.deviationId ? (pendingOrder.get(left.deviationId) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.deviationId ? (pendingOrder.get(right.deviationId) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return (right.pauseSnapshot?.pausedAt ?? "").localeCompare(left.pauseSnapshot?.pausedAt ?? "");
+    });
+    return c.json({ active, pendingResume });
   });
 
   app.get(route("/tasks/:id"), async (c) => {
@@ -708,8 +712,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const existing = phase.tasks.find((t) => t.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
 
-    if (body.status && body.status !== existing.status && (body.status === "paused" || existing.status === "paused")) {
-      return c.json({ error: "Paused lifecycle transitions require task_pause/task_switch/task_start so the resume checkpoint and return stack remain consistent." }, 400);
+    if (body.status && body.status !== existing.status && (((body.status as string) === "paused") || ((existing.status as string) === "paused") || (existing.pauseSnapshot && body.status === "in-progress"))) {
+      return c.json({ error: "Resume checkpoint lifecycle transitions require task_pause/task_switch/task_start so the checkpoint and return stack remain consistent." }, 400);
     }
 
     // Validate motivation requirement for status transitions.
@@ -1050,11 +1054,34 @@ function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, stati
 
 /** Resolve the web UI bundle shipped alongside this package (../web-ui-dist
  * relative to dist/serve.js). Returns undefined when not bundled (dev/API-only).
- * Callers can pass staticDir: "" to force API-only even when the bundle exists. */
+ * Callers can pass staticDir: "" to force API-only even when the bundle exists.
+ *
+ * In a monorepo dev checkout both the vendored snapshot (web-ui-dist) and the
+ * freshly built packages/plan-web-ui/dist may exist; prefer the most recently
+ * built one so a fresh `pnpm build:web-ui` (or copy-web-ui.sh) takes effect
+ * instead of a stale vendored bundle. Deterministic: compare index.html mtimes. */
 function resolveBundledStaticDir(): string | undefined {
   try {
-    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "web-ui-dist");
-    return existsSync(join(dir, "index.html")) ? dir : undefined;
+    const base = dirname(fileURLToPath(import.meta.url));
+    const vendored = join(base, "..", "web-ui-dist");
+    const devUi = join(base, "..", "..", "plan-web-ui", "dist");
+    const candidates = [vendored, devUi].filter((d) => {
+      try {
+        return existsSync(join(d, "index.html"));
+      } catch {
+        return false;
+      }
+    });
+    if (candidates.length === 0) return undefined;
+    if (candidates.length === 1) return candidates[0];
+    const mtime = (d: string): number => {
+      try {
+        return statSync(join(d, "index.html")).mtimeMs;
+      } catch {
+        return 0;
+      }
+    };
+    return [...candidates].sort((a, b) => mtime(b) - mtime(a))[0];
   } catch {
     return undefined;
   }

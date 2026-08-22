@@ -28,6 +28,14 @@
       "rationale": "The current sticky header presentation can expand into a large scrollable block, which hurts scanability and duplicates detail that already belongs to the task page. Tracking it separately avoids mixing an unrelated Web UI cleanup into the already completed normalization deliverable while preserving visibility of the regression.",
       "implementationNotes": "Create a final P059 task targeting `packages/plan-web-ui/src/components/layout/app-shell.tsx`, `packages/plan-web-ui/src/components/task/resume-snapshot.tsx`, and task-detail surfaces/tests. Keep canonical status plus resume marker in the header, render only compact summary text there, and leave the full pause/resume snapshot content on the task detail route.",
       "acceptedAt": "2026-08-21T08:36:23.462Z"
+    },
+    {
+      "id": "92978ada-1f99-4a97-90aa-ea4c9bd17807",
+      "title": "Resume-required is advisory, but checkpoint reading must be surfaced",
+      "decision": "Pending-resume / resume-required tasks must not hard-block starting a different task. They remain advisory warnings in recap and task-start flows. The separate resume checkpoint field must be surfaced directly in task_get(full=true) so agents actually read it.",
+      "rationale": "Blocking task_start on pending resume prevents legitimate context switches and contradicts the intended role of paused work as advisory context rather than a lock. At the same time, keeping the checkpoint separate from description is only useful if the agent is forced to see it in the normal read path.",
+      "implementationNotes": "Remove the pending-resume denial from task_start and replace it with warning/advisory text. Keep recap surfacing of paused/pending-resume tasks. Extend task_get(full=true) to print the pauseSnapshot/resume-checkpoint block (why paused, work checkpoint, resume from, how to resume) whenever present or pending-resume applies. Mirror the same semantics in MCP/tests so cross-harness contracts stay aligned.",
+      "acceptedAt": "2026-08-21T10:20:58.372Z"
     }
   ],
   "completionCriteria": [],
@@ -157,9 +165,9 @@
       "priority": 4,
       "shortName": "crossharness-report",
       "title": "Generate cross-harness compatibility report and drift checks",
-      "status": "planned",
-      "description": "Produce machine-readable and human-readable reports showing scenario pass/fail by API, MCP, Pi, and browser layers, normalized output differences, persisted snapshot differences, and uncovered public surfaces. Add a drift check that fails when a newly registered tool/route/command has no matrix entry, while allowing explicitly documented exceptions for UI-only or host-only operations.",
-      "descriptionUpdatedAt": "2026-08-09T17:43:32.502Z",
+      "status": "done",
+      "description": "Produce machine-readable and human-readable reports showing scenario pass/fail by API, MCP, Pi, and browser layers, normalized output differences, persisted snapshot differences, and uncovered public surfaces. Add a drift check that fails when a newly registered tool/route/command has no matrix entry, while allowing explicitly documented exceptions for UI-only or host-only operations.\n\n---\n**Completion summary:**\nAdded cross-harness compatibility reporting and drift-check artifacts for P059 in `scripts/compatibility-report.mjs`, with deterministic JSON + Markdown outputs (`compatibility-report.json`, `compatibility-report.md`) that summarize API/MCP/Pi parity coverage plus UI/e2e browser-layer inventory/executor gaps. Refactored parity executor registration into `test/helpers/error-parity-harnesses.mjs` so `test/error-parity.test.mjs` and the compatibility reporter share the same real API/MCP/Pi fixture runners and snapshot normalization rules. Added `test/compatibility-report.test.mjs` to verify pure report building, markdown rendering, drift analysis, and end-to-end deterministic artifact generation; exposed the workflow via `package.json` script `test:compatibility`. Validation: `node --test test/error-parity.test.mjs test/compatibility-report.test.mjs test/result-normalization.test.mjs test/matrix-consistency.test.mjs` passed 36/36.",
+      "descriptionUpdatedAt": "2026-08-21T11:11:33.559Z",
       "notes": "2026-08-14: validata e pubblicata la release prerelease `0.2.19-next.26` su `next` per rendere disponibile il codice corrente. Commit pubblicati: `835175f` (suite E2E browser) e `9f73779` (bump next). Validazioni: `pnpm check` e `pnpm test:e2e` — 22 test passati. Il report cross-harness e il drift check restano da implementare.",
       "statusLog": [
         {
@@ -169,6 +177,22 @@
           "toStatus": "planned",
           "title": "Avviato per regolarizzare il lavoro di release richiesto dall'utente, ma il deliverable specifico (report di compatibilità e drift check) non è stato implementato in questa sessione. Il task torna planned per evitare di rappresentare come attiva un'attività non in corso.",
           "description": "Avviato per regolarizzare il lavoro di release richiesto dall'utente, ma il deliverable specifico (report di compatibilità e drift check) non è stato implementato in questa sessione. Il task torna planned per evitare di rappresentare come attiva un'attività non in corso."
+        },
+        {
+          "id": "e1d3242f-2142-4ddf-8830-7f794f6af5e6-check-002-planned-in-progress",
+          "date": "2026-08-21T09:40:14.526Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e1d3242f-2142-4ddf-8830-7f794f6af5e6-check-003-in-progress-done",
+          "date": "2026-08-21T11:11:33.557Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -179,9 +203,9 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-08-17T08:55:08.946Z",
-      "completedAt": "",
+      "completedAt": "2026-08-21T11:11:33.557Z",
       "createdAt": "2026-08-09T17:43:32.502Z",
-      "updatedAt": "2026-08-17T08:56:21.681Z"
+      "updatedAt": "2026-08-21T11:11:33.557Z"
     },
     {
       "id": "17087d2b-f3c7-4bf2-a05a-7cdf6d882601",
@@ -235,11 +259,28 @@
       "priority": 999,
       "shortName": "fix-resume-required-header-lay",
       "title": "Fix resume-required header layout and keep full checkpoint details in task view",
-      "status": "planned",
-      "description": "The current resume-required presentation in `packages/plan-web-ui/src/components/layout/app-shell.tsx` renders `ResumeSnapshot` directly inside the sticky focus header when `task.pauseSnapshot` exists. In real data this pushes long checkpoint prose into the header, creates an oversized card, and can introduce an internal scrollbar, as seen in the user screenshot. The full checkpoint narrative already belongs on the task detail surface (`packages/plan-web-ui/src/routes/task-detail/route.tsx` with data from `packages/plan-web-ui/src/routes/task-detail/loader.ts`) and should remain there. Implement a compact header-only presentation that preserves canonical task status plus the secondary resume marker from T289, shows at most a short summary/action hint in the sticky header, and leaves the full Why paused / Work checkpoint / Resume from / How to resume content inside the task view. Update the related Web UI tests in `packages/plan-web-ui/test/entity-references-and-updates.test.tsx` (and any route-level tests if needed) so the header no longer renders the verbose snapshot block while task detail still renders the full checkpoint content. Preserve the current pending-resume semantics and do not regress the distinction between canonical workflow status and resume-required markers.",
-      "descriptionUpdatedAt": "2026-08-21T08:36:32.354Z",
+      "status": "done",
+      "description": "The current resume-required presentation in `packages/plan-web-ui/src/components/layout/app-shell.tsx` renders `ResumeSnapshot` directly inside the sticky focus header when `task.pauseSnapshot` exists. In real data this pushes long checkpoint prose into the header, creates an oversized card, and can introduce an internal scrollbar, as seen in the user screenshot. The full checkpoint narrative already belongs on the task detail surface (`packages/plan-web-ui/src/routes/task-detail/route.tsx` with data from `packages/plan-web-ui/src/routes/task-detail/loader.ts`) and should remain there. Implement a compact header-only presentation that preserves canonical task status plus the secondary resume marker from T289, shows at most a short summary/action hint in the sticky header, and leaves the full Why paused / Work checkpoint / Resume from / How to resume content inside the task view. Update the related Web UI tests in `packages/plan-web-ui/test/entity-references-and-updates.test.tsx` (and any route-level tests if needed) so the header no longer renders the verbose snapshot block while task detail still renders the full checkpoint content. Preserve the current pending-resume semantics and do not regress the distinction between canonical workflow status and resume-required markers.\n\n---\n**Completion summary:**\nUpdated the Web UI resume-required presentation so the sticky focus header stays compact while the full checkpoint remains in the task detail surface. In `packages/plan-web-ui/src/components/layout/app-shell.tsx`, `FocusTaskRow` now shows only a short checkpoint summary (`Checkpoint saved: …`) plus a task-detail hint instead of rendering the full `ResumeSnapshot`, and the header container no longer uses the internal `max-h/overflow-y-auto` scrollbar wrapper. In `packages/plan-web-ui/src/components/task/resume-snapshot.tsx`, the snapshot component was simplified back to a single full-detail layout for task detail usage only. Added/updated Web UI tests in `packages/plan-web-ui/test/entity-references-and-updates.test.tsx` to assert that the header stays compact, canonical status remains primary with a secondary resume marker, and the task detail route still renders the full Resume checkpoint content. Validation: `pnpm --filter @agent-plan/web-ui test -- --run test/entity-references-and-updates.test.tsx` and `pnpm --filter @agent-plan/web-ui build` both passed.",
+      "descriptionUpdatedAt": "2026-08-21T13:07:58.806Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "089693a1-8545-4379-9174-d6dcda64beac-check-001-planned-in-progress",
+          "date": "2026-08-21T13:05:24.797Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "089693a1-8545-4379-9174-d6dcda64beac-check-002-in-progress-done",
+          "date": "2026-08-21T13:07:58.805Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -247,37 +288,52 @@
           "id": "089693a1-8545-4379-9174-d6dcda64beac-check-001-reduce-pending-resume-header-rows-to-a-compact-non-scrollable-summary-in-app-shell-tsx",
           "number": 1,
           "title": "Reduce pending-resume header rows to a compact non-scrollable summary in `app-shell.tsx`.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "089693a1-8545-4379-9174-d6dcda64beac-check-002-keep-full-resumesnapshot-details-on-the-task-detail-route-and-any-non-header-surface-where-verbose-checkpoint-context-belongs",
           "number": 2,
           "title": "Keep full `ResumeSnapshot` details on the task detail route and any non-header surface where verbose checkpoint context belongs.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "089693a1-8545-4379-9174-d6dcda64beac-check-003-update-web-ui-tests-to-assert-compact-header-rendering-and-retained-full-task-detail-checkpoint-rendering",
           "number": 3,
           "title": "Update Web UI tests to assert compact header rendering and retained full task-detail checkpoint rendering.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-21T13:05:24.797Z",
+      "completedAt": "2026-08-21T13:07:58.805Z",
       "createdAt": "2026-08-21T08:36:32.352Z",
-      "updatedAt": "2026-08-21T08:36:35.174Z"
+      "updatedAt": "2026-08-21T13:07:58.805Z"
     }
   ],
   "createdAt": "2026-08-09T17:39:45.822Z",
-  "updatedAt": "2026-08-21T08:59:45.823Z",
-  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-21T09:00:05.979Z\nUpdated at: 2026-08-21T09:00:05.979Z\nReason: before compact\n\n## Progress snapshot\n- Features: 14/16 done, 2 active\n- Phases: 64/67 done, 1 active/discovery\n- Tasks: 284/293 done, 0 active\n\n## Current focus\n- Feature: `bd655486-e048-47ae-b06c-2bed511d89c6` — Integration Test & Cross-Harness Verification (in-progress)\n- Phase: `eb35be8c-458e-4d38-8550-0198e7b9c4ce` — Cross-harness contract matrix (in-progress)\n- Task: `089693a1-8545-4379-9174-d6dcda64beac` — Fix resume-required header layout and keep full checkpoint details in task view (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase eb35be8c-458e-4d38-8550-0198e7b9c4ce)\n- ✅ `557b7be1-e7d6-45d2-8847-117ada753105` — Define normalized adapter outcomes and persisted snapshots (done)\n- ✅ `d53a4ebe-5f74-4358-a44c-b97c1d09ac31` — Run validation and error-parity scenarios across API MCP and Pi (done)\n- ✅ `c6105a1d-3710-45c0-b8c7-81cc0bf1ccb0` — Run lifecycle, requirements, handoff, and resume parity scenarios (done)\n- 📋 `e1d3242f-2142-4ddf-8830-7f794f6af5e6` — Generate cross-harness compatibility report and drift checks (planned)\n- ✅ `17087d2b-f3c7-4bf2-a05a-7cdf6d882601` — Fix phase-read contract and explicit multi-active task starts (done)\n- 📋 `089693a1-8545-4379-9174-d6dcda64beac` — Fix resume-required header layout and keep full checkpoint details in task view (planned)\n\n## How to resume\n1. Open task 089693a1-8545-4379-9174-d6dcda64beac (Fix resume-required header layout and keep full checkpoint details in task view).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start 089693a1-8545-4379-9174-d6dcda64beac (or call task_start).\n4. Continue with the next activity: Start task 089693a1-8545-4379-9174-d6dcda64beac — Fix resume-required header layout and keep full checkpoint details in task view with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/eb35be8c-458e-4d38-8550-0198e7b9c4ce.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task 089693a1-8545-4379-9174-d6dcda64beac — Fix resume-required header layout and keep full checkpoint details in task view with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase eb35be8c-458e-4d38-8550-0198e7b9c4ce.\n\n## Recent activity\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n- 2026-07-30T08:14:39.219Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-30T08:14:38.600Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-15T20:24:28.850Z [feature_created] 5bb28fc7-8002-46f9-970d-4151d6cb4884: Feature created: Improvements\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
-  "handoffUpdatedAt": "2026-08-21T09:00:05.983Z",
+  "updatedAt": "2026-08-21T13:07:58.805Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-21T11:11:49.761Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-21T13-05-20-496Z.md",
+      "clearedAt": "2026-08-21T13:05:20.496Z",
+      "reason": "manual"
+    },
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-21T11-11-49-758Z.md",
+      "clearedAt": "2026-08-21T11:11:49.758Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-21T10-25-17-958Z.md",
+      "clearedAt": "2026-08-21T10:25:17.958Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-21T09-00-05-980Z.md",
       "clearedAt": "2026-08-21T09:00:05.980Z",
@@ -286,21 +342,6 @@
     {
       "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-21T08-28-44-884Z.md",
       "clearedAt": "2026-08-21T08:28:44.884Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-21T08-15-35-524Z.md",
-      "clearedAt": "2026-08-21T08:15:35.524Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-21T08-11-04-054Z.md",
-      "clearedAt": "2026-08-21T08:11:04.054Z",
-      "reason": "manual"
-    },
-    {
-      "file": "handoff-archive/eb35be8c-458e-4d38-8550-0198e7b9c4ce-2026-08-20T17-50-22-141Z.md",
-      "clearedAt": "2026-08-20T17:50:22.141Z",
       "reason": "superseded"
     }
   ],
@@ -311,6 +352,14 @@
       "fromStatus": "draft",
       "toStatus": "in-progress",
       "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "e28a33bd-42f4-470e-b429-3d2bd3b35ccb",
+      "date": "2026-08-21T13:07:58.811Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ]

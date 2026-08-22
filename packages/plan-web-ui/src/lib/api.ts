@@ -155,7 +155,6 @@ export interface FocusTaskSummary extends ActiveTaskSummary {
 
 export interface TaskFocusSummary {
   active: FocusTaskSummary[];
-  paused: FocusTaskSummary[];
   pendingResume: FocusTaskSummary[];
 }
 
@@ -164,7 +163,9 @@ export async function getProject(): Promise<Project> {
 }
 
 export async function updateProject(project: Project): Promise<Project> {
-  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify(project) }));
+  // Runtime workDeviations live in .local/deviations.json (T299); the project
+  // editor must never round-trip them into shared project.json.
+  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify({ ...project, workDeviations: [] }) }));
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -265,7 +266,7 @@ export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
 
 export async function getTaskFocus(): Promise<TaskFocusSummary> {
   const result = await request<TaskFocusSummary>("/tasks/focus");
-  return { active: result.active ?? [], paused: result.paused ?? [], pendingResume: result.pendingResume ?? [] };
+  return { active: result.active ?? [], pendingResume: result.pendingResume ?? [] };
 }
 
 export async function listHandoffs(): Promise<HandoffSummary[]> {

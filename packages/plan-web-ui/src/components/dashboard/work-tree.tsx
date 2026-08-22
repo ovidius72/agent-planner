@@ -74,7 +74,7 @@ function ToolbarButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex h-8 min-h-8 w-full items-center justify-center rounded-[10px] border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+      className={`inline-flex h-7 min-h-7 shrink-0 items-center justify-center whitespace-nowrap rounded-[9px] border px-2 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:h-8 sm:min-h-8 sm:rounded-[10px] sm:px-2.5 ${
         active
           ? "border-transparent bg-[var(--accent)] text-white"
           : "border-[var(--border)] bg-[var(--surface-card)] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
@@ -90,11 +90,13 @@ export function WorkTree({
   phases,
   activeTasks,
   projectStorageScope,
+  resumeRequiredIds = new Set<string>(),
 }: {
   features: Feature[];
   phases: Phase[];
   activeTasks: ActiveTaskSummary[];
   projectStorageScope: string;
+  resumeRequiredIds?: Set<string>;
 }) {
   const tree = useDashboardTree({ features, phases, projectStorageScope });
   // Optimistic reorder: a transient per-scope order applied on drag-end so the
@@ -315,7 +317,7 @@ export function WorkTree({
         </div>
       </div>
 
-      <div className="ap-search-sticky z-20 grid gap-3" style={{ top: headerH }}>
+      <div className="ap-search-sticky z-20 grid gap-2" style={{ top: headerH }}>
         <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SortControl sort={tree.sort} onChange={tree.setSort} />
@@ -325,8 +327,9 @@ export function WorkTree({
             </p>
           ) : null}
         </div>
-        <div className="grid grid-cols-2 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:grid-cols-3 sm:rounded-[18px] sm:px-4 sm:py-3 lg:grid-cols-6">
-          <ToolbarButton active={tree.isAllExpanded} onClick={() => tree.isAllExpanded ? tree.collapseAll() : tree.expandAll()}>
+        <div className="flex flex-col gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1.5 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden sm:gap-2 sm:rounded-[14px] sm:px-3 sm:py-2">
+            <ToolbarButton active={tree.isAllExpanded} onClick={() => tree.isAllExpanded ? tree.collapseAll() : tree.expandAll()}>
             {tree.isAllExpanded ? "Collapse all" : "Expand all"}
           </ToolbarButton>
           <ToolbarButton active={tree.hideDone} onClick={() => tree.setHideDone((value) => !value)}>
@@ -361,7 +364,8 @@ export function WorkTree({
           >
             {repairing ? "Repairing…" : "Repair"}
           </ToolbarButton>
-          {repairMsg ? <span className="hidden text-xs text-[var(--text-muted)] sm:inline sm:truncate">{repairMsg}</span> : null}
+          </div>
+          {repairMsg ? <span className="text-xs text-[var(--text-muted)] sm:truncate">{repairMsg}</span> : null}
         </div>
       </div>
 
@@ -381,6 +385,7 @@ export function WorkTree({
                     isPhaseRecentlyChanged={isPhaseRecentlyChanged}
                     isTaskRecentlyChanged={isTaskRecentlyChanged}
                     highlightedTaskIds={(() => { const base = tree.searchActive ? tree.matchedTaskIds : undefined; if (!locatePulseId) return base; const set = new Set(base ?? []); set.add(locatePulseId); return set; })()}
+                    resumeRequiredIds={resumeRequiredIds}
                   />
                 </SortableItem>
               ))}

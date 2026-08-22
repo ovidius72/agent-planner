@@ -24,7 +24,24 @@
     "d3555c1d-5d03-4476-a074-23ef4791956e"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "afc2038d-89e6-4569-85bc-8779700c13a3",
+      "date": "2026-08-21T15:39:00.512Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "af295f80-98d4-4870-a0e3-90d8efdb733c",
+      "date": "2026-08-21T15:44:09.822Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-08-06T15:25:57.405Z",
   "updatedAt": "2026-08-06T15:25:57.405Z"
 }

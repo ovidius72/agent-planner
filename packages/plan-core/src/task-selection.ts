@@ -59,7 +59,6 @@ export function checkExplicitTaskStart(
     && deviation.resumeTaskId === taskId,
   );
   const startableStatus = candidate.task.status === "planned"
-    || (candidate.task.status === "paused" && (isPreservedResumeTarget || candidate.task.pauseSnapshot !== null))
     || (candidate.task.status === "waiting" && isTemporaryOverride);
   if (!startableStatus) return { eligible: false, reason: `Task is not startable from ${candidate.task.status}.` };
   const parentHasHardBlock = hardUnavailable.has(candidate.phase.status)
@@ -94,7 +93,7 @@ export function recommendNextTask(
 
   const newestFirst = (left: WorkDeviation, right: WorkDeviation) => right.createdAt.localeCompare(left.createdAt);
   const resumable = (candidate: TaskCandidate | undefined) => candidate
-    && (candidate.task.status === "planned" || candidate.task.status === "paused" || candidate.task.status === "waiting");
+    && (candidate.task.status === "planned" || candidate.task.status === "waiting");
   const open = deviations
     .filter((deviation) => deviation.state === "approved"
       || deviation.state === "active"
@@ -112,23 +111,23 @@ export function recommendNextTask(
       return { kind: "resume", candidate: resume, deviation: top, reason: "Resume required: return to the task preserved by the most recent deviation." };
     }
     // A deviation explicitly makes its temporary task eligible while it is
-    // planned, paused, or waiting. Normal priority selection excludes these
+    // planned or waiting. Normal priority selection excludes these
     // states unless the deviation deliberately selected them.
     if (temporary && resumable(temporary)) {
       return { kind: "resume", candidate: temporary, deviation: top, reason: "Continue the temporary task of the most recent approved deviation." };
     }
   }
 
-  // A paused task without a surviving deviation must never disappear behind
-  // new priority work. Select the most recently paused checkpoint (LIFO).
-  const paused = candidates
-    .filter(({ task }) => task.status === "paused" && task.pauseSnapshot)
+  // A saved checkpoint without a surviving deviation must never disappear
+  // behind new priority work. Select the most recent checkpoint (LIFO).
+  const checkpointed = candidates
+    .filter(({ task }) => task.status === "planned" && task.pauseSnapshot)
     .sort((left, right) => right.task.pauseSnapshot!.pausedAt.localeCompare(left.task.pauseSnapshot!.pausedAt));
-  if (paused[0]) {
+  if (checkpointed[0]) {
     return {
       kind: "resume",
-      candidate: paused[0],
-      reason: "Resume the most recently paused task before selecting new priority work.",
+      candidate: checkpointed[0],
+      reason: "Resume the most recent checkpoint before selecting new priority work.",
     };
   }
 
@@ -141,4 +140,67 @@ export function recommendNextTask(
   return ready[0]
     ? { kind: "priority", candidate: ready[0], reason: "Highest-priority ready task by feature, phase, then task." }
     : { kind: "none", reason: "No ready task is available." };
+}
+
+/**
+ * Snapshot fields surfaced in the explicit resume-required proposal. Derived
+ * from {@link TaskPauseSnapshot}; kept structural so adapters can build it
+ * without importing the full snapshot type.
+ */
+export interface ResumeRequiredSnapshot {
+  reason: string;
+  resumeLocation: string;
+  howToResume: string;
+}
+
+/**
+ * Structured, harness-agnostic resume-required proposal. A pending resume must
+ * be surfaced loudly (force awareness) but must NOT hard-block an explicit
+ * start of a different task. The caller keeps the start advisory/non-blocking;
+ * this only standardizes the human-readable message and the machine-readable
+ * payload so every harness (Pi, MCP, Web UI) proposes resume the same way.
+ */
+export interface ResumeRequiredProposal {
+  text: string;
+  structured: {
+    taskId: string;
+    phaseId: string;
+    snapshot: ResumeRequiredSnapshot | null;
+  };
+}
+
+/**
+ * Build an explicit resume-required proposal. `ref` is the already-formatted
+ * composite reference (F00x/P00x/T00x) supplied by the caller; `snapshot` is
+ * the task's checkpoint (or the deviation's stored snapshot) when present.
+ */
+export function buildResumeRequiredProposal(params: {
+  ref: string;
+  title: string;
+  taskId: string;
+  phaseId: string;
+  snapshot: ResumeRequiredSnapshot | null;
+}): ResumeRequiredProposal {
+  const { ref, title, taskId, phaseId, snapshot } = params;
+  const reason = snapshot?.reason ?? "A preserved task is waiting to be resumed before new work begins.";
+  const resumeFrom = snapshot?.resumeLocation ?? "The preserved task's last checkpoint.";
+  const howToResume = snapshot?.howToResume ?? "Re-open the task detail and resume from its checkpoint.";
+  const text = [
+    `↩️ RESUME REQUIRED before starting a different task: ${ref} — ${title}`,
+    `Checkpoint reason: ${reason}`,
+    `Resume from: ${resumeFrom}`,
+    `How to resume: ${howToResume}`,
+    `Next action: task_start ${ref}`,
+    "Explicit task request honored — but resume the preserved work first, or explicitly confirm you intend to skip it.",
+  ].join("\n");
+  return {
+    text,
+    structured: {
+      taskId,
+      phaseId,
+      snapshot: snapshot
+        ? { reason: snapshot.reason, resumeLocation: snapshot.resumeLocation, howToResume: snapshot.howToResume }
+        : null,
+    },
+  };
 }

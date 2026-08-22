@@ -65,10 +65,23 @@ describe("buildRecap — not complete, no active task", () => {
 });
 
 describe("buildRecap — active task", () => {
-  test("focus line shows composite IDs", async () => {
+  test("focus line shows composite IDs with context-re-read advisory", async () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "planned" }] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
     assert.ok(r.includes("Current focus: F01 — Feat One / P001(F001) — Phase 1 / T01 — task 1 (in-progress)"), "focus line with composite IDs");
+    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context:"), "context-re-read advisory for in-progress task");
+    assert.ok(r.includes("/planner feature show F01"), "pi feature show suggestion");
+    assert.ok(r.includes("/planner phase show P001(F001)"), "pi phase show suggestion");
+    assert.ok(r.includes("/planner task show T01 (full)"), "pi task show suggestion");
+  });
+
+  test("context-re-read advisory uses MCP command form", async () => {
+    const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "planned" }] });
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context:"), "context-re-read advisory for in-progress task");
+    assert.ok(r.includes("planner-feature-show F01"), "mcp feature show suggestion");
+    assert.ok(r.includes("planner-phase-show P001(F001)"), "mcp phase show suggestion");
+    assert.ok(r.includes("planner-task-show T01 (full)"), "mcp task show suggestion");
   });
 });
 
@@ -81,8 +94,8 @@ describe("buildRecap — pending task resume", () => {
     };
     const { store } = await makePlan({ tasks: [{ status: "paused", pauseSnapshot: snapshot }] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
-    assert.match(r, /Current focus: paused task to resume — P001\(F001\)\/T01 — task 1/);
-    assert.match(r, /Paused tasks \(1\)/);
+    assert.match(r, /Current focus: checkpoint to evaluate — P001\(F001\)\/T01 — task 1/);
+    assert.match(r, /Saved checkpoints \(1\)/);
     assert.match(r, /Why: User interrupted the task/);
     assert.match(r, /Checkpoint: Editing the parser/);
     assert.match(r, /Resume from: src\/parser\.ts:44/);
@@ -104,13 +117,14 @@ describe("buildRecap — pending task resume", () => {
       resumeRequiredAt: now, resolvedAt: "", resumedAt: "",
     });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
-    assert.match(r, /Current focus: resume required — P001\(F001\)\/T01 — task 1 \(paused\)/);
-    assert.match(r, /Task resume required/);
-    assert.match(r, /Paused because: Temporary prerequisite/);
+    assert.match(r, /Current focus: resume required — P001\(F001\)\/T01 — task 1 \(planned\)/);
+    assert.match(r, /Task resume advisory/);
+    assert.match(r, /Checkpoint reason: Temporary prerequisite/);
     assert.match(r, /Work checkpoint: Implementing the selector/);
     assert.match(r, /Resume from: src\/selector\.ts:20/);
-    assert.match(r, /Action: planner-task-start P001\(F001\)\/T01/);
-    assert.match(r, /0 active, 1 paused/);
+    assert.match(r, /Suggested action: evaluate planner-task-start P001\(F001\)\/T01/);
+    assert.match(r, /Resume advisory: evaluate whether to resume P001\(F001\)\/T01 with planner-task-start/);
+    assert.match(r, /0 active, 1 with checkpoints/);
   });
 });
 

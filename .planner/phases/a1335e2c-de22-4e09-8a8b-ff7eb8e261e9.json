@@ -1,0 +1,150 @@
+{
+  "id": "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 72,
+  "shortId": "NUZ8Y",
+  "priority": 21,
+  "slug": "dashboard-discuss-list-ui-consistency-ref-segments-scroll-containment",
+  "title": "Dashboard & discuss-list UI consistency (ref segments + scroll containment)",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make dashboard Latest-Completed / New-Added cards use the same clickable+copy Fxxx/Pxxx/Txxx segmented ref as WorkTree, and fix Pi discuss/list commands' scroll containment so long lists stay in their viewport.",
+  "description": "F005 improvements sub-phase for two concrete UI consistency bugs discovered during the P069 resume-awareness work:\n\n(1) Dashboard \"Latest completed tasks\" (packages/plan-web-ui/src/components/dashboard/latest-completed-tasks.tsx) and \"New Added Tasks\" (packages/plan-web-ui/src/components/dashboard/new-added-tasks.tsx) render only `EntityBadge type=task` (Txxx) + `ParentBadge` (Pxxx(Fxxx)) — they do NOT show the full clickable Fxxx/Pxxx/Txxx segmented reference with per-segment copy buttons that the WorkTree cards (packages/plan-web-ui/src/components/dashboard/work-tree.tsx) and the entity detail pages use. Goal: give both dashboard cards the SAME segmented ref header as the WorkTree — each segment (Fxxx / Pxxx(Fxxx) / Txxx) clickable (navigates to the entity) and each carrying a copy button for the number and the shortId. Reuse the existing reusable ref component (CompositeRef / segment + CopyableBadge in packages/plan-web-ui/src/components/ui/badges.tsx: CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath). If no single reusable segmented-ref component exists that does clickable-segments + copy for number+shortId, create one and use it consistently across WorkTree, entity detail pages, and these two dashboard cards so the header is identical everywhere.\n\n(2) In Pi (packages/pi-adapter/src/index.ts), `/planner feature discuss`, `/planner phase discuss`, `/planner task discuss` (and any sibling command that populates a long entity list) render a list of features/phases/tasks that overflows the available height. It is scrollable, but when the user scrolls to the bottom the cursor/selection escapes the list viewport instead of keeping the items scrolled within the container. Must inspect ALL commands that populate a list view (feature discuss, phase discuss, task discuss, feature list, phase list, task list, handoff list, and any other list-rendering path) and fix the scroll containment / focus trapping so the list stays within its scroll area and items scroll up when at the bottom. Likely requires a shared scrollable-list component in the pi-adapter UI surface (ctx.ui) rather than per-command ad-hoc rendering.\n\nOut of scope: changing the Web UI header (already addressed by P070/F005 and P071/F005); changing the planner core data model; GSD.\n\nThis phase deliberately lives OUTSIDE the P069 resume-awareness sequence — P069 (T296/T297/T298) and the P060 CI task (T258) take precedence and are worked first, per project instruction.",
+  "descriptionUpdatedAt": "2026-08-22T07:15:53.104Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "930ad2be-aa0a-488d-934e-517f0a009f41",
+    "264614a7-6889-44f4-a095-e6f0125368b7"
+  ],
+  "tasks": [
+    {
+      "id": "930ad2be-aa0a-488d-934e-517f0a009f41",
+      "phaseId": "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
+      "number": 305,
+      "shortId": "B3W2X",
+      "priority": 1,
+      "shortName": "reuse-segmented-clickable-copy",
+      "title": "Reuse segmented clickable+copy ref header on Latest Completed / New Added dashboard cards",
+      "status": "planned",
+      "description": "Issue 1 (P072/F005): The dashboard cards `LatestCompletedTasks` (packages/plan-web-ui/src/components/dashboard/latest-completed-tasks.tsx) and `NewAddedTasks` (packages/plan-web-ui/src/components/dashboard/new-added-tasks.tsx) currently render only `EntityBadge type=\"task\"` (Txxx) + `ParentBadge` (Pxxx(Fxxx)). The WorkTree cards (packages/plan-web-ui/src/components/dashboard/work-tree.tsx) and the entity detail pages render the full segmented reference Fxxx / Pxxx(Fxxx) / Txxx where each segment is clickable (navigates to the entity) and each carries a copy button for the number AND the shortId, via the reusable helpers in packages/plan-web-ui/src/components/ui/badges.tsx (CopyableBadge at line 241, EntityPathBadge, ShortIdBadge, formatEntityPath).\n\nWork:\n1. Inventory the existing reusable ref primitives in badges.tsx (CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath) and how WorkTree/detail pages compose them into the Fxxx/Pxxx/Txxx segmented header.\n2. If a single composable segmented-ref component (e.g. `CompositeRef` / `RefSegments`) that renders clickable segments + per-segment copy for number+shortId does NOT already exist in a shared place, create one under packages/plan-web-ui/src/components/ui/ (reusing CopyableBadge + the existing navigation/Link pattern) so it is reusable.\n3. Replace the `EntityBadge`/`ParentBadge` header in latest-completed-tasks.tsx and new-added-tasks.tsx with the same segmented ref header used by WorkTree (clickable segments + copy button for number and shortId), keeping the existing StatusBadge, title Link, feature/phase subtitle, and Completed/Added timestamp.\n4. Verify the header segments are identical to WorkTree and detail page (clickable + copy number + shortId), and that the cards keep filtering semantics (latest 3 completed, new within 24h, transient New Added).\n\nCode references: latest-completed-tasks.tsx:1-90 (EntityBadge/ParentBadge/StatusBadge usage at 40-43, 55-58); new-added-tasks.tsx:1-95 (EntityBadge/ParentBadge/StatusBadge + New pill at 41-48, 60-63); badges.tsx:241 CopyableBadge, 237+ copy helper with http-LAN fallback; work-tree.tsx (reference segmented header).\n\nTests: update any web-ui test asserting the old badge-only header on these cards (e.g. packages/plan-web-ui/test/entity-references-and-updates.test.tsx) to assert the segmented clickable+copy Fxxx/Pxxx/Txxx header is present; run `pnpm --filter @agent-plan/web-ui check` + the web-ui vitest suite; verify via the dev server (`pnpm dev`) in a real browser (browser-tools) that each segment is clickable and the copy button copies number+shortId.",
+      "descriptionUpdatedAt": "2026-08-22T07:16:07.164Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "930ad2be-aa0a-488d-934e-517f0a009f41-check-001-inventory-reusable-ref-primitives-in-badges-tsx-copyablebadge-entitypathbadge-shortidbadge-formatentitypath-and-how-worktree-detail-compose-them",
+          "number": 1,
+          "title": "Inventory reusable ref primitives in badges.tsx (CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath) and how WorkTree/detail compose them",
+          "checked": false
+        },
+        {
+          "id": "930ad2be-aa0a-488d-934e-517f0a009f41-check-002-create-a-shared-segmented-ref-component-if-one-does-not-already-exist-clickable-segments-per-segment-copy-for-number-and-shortid",
+          "number": 2,
+          "title": "Create a shared segmented-ref component if one does not already exist (clickable segments + per-segment copy for number and shortId)",
+          "checked": false
+        },
+        {
+          "id": "930ad2be-aa0a-488d-934e-517f0a009f41-check-003-replace-entitybadge-parentbadge-header-in-latestcompletedtasks-with-the-worktree-style-segmented-header",
+          "number": 3,
+          "title": "Replace EntityBadge/ParentBadge header in LatestCompletedTasks with the WorkTree-style segmented header",
+          "checked": false
+        },
+        {
+          "id": "930ad2be-aa0a-488d-934e-517f0a009f41-check-004-replace-entitybadge-parentbadge-header-in-newaddedtasks-with-the-worktree-style-segmented-header",
+          "number": 4,
+          "title": "Replace EntityBadge/ParentBadge header in NewAddedTasks with the WorkTree-style segmented header",
+          "checked": false
+        },
+        {
+          "id": "930ad2be-aa0a-488d-934e-517f0a009f41-check-005-update-web-ui-tests-run-check-vitest-verify-via-pnpm-dev-browser-that-segments-are-clickable-and-copy-number-shortid",
+          "number": 5,
+          "title": "Update web-ui tests + run check & vitest; verify via pnpm dev browser that segments are clickable and copy number+shortId",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-22T07:16:07.162Z",
+      "updatedAt": "2026-08-22T07:16:07.162Z"
+    },
+    {
+      "id": "264614a7-6889-44f4-a095-e6f0125368b7",
+      "phaseId": "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
+      "number": 306,
+      "shortId": "YBULF",
+      "priority": 2,
+      "shortName": "fix-pi-discuss-list-command-sc",
+      "title": "Fix Pi discuss/list command scroll containment (cursor escapes list at bottom)",
+      "status": "planned",
+      "description": "Issue 2 (P072/F005): In Pi (packages/pi-adapter/src/index.ts), `/planner feature discuss`, `/planner phase discuss`, `/planner task discuss` (and any sibling command that populates a long entity list) render a list of features/phases/tasks that overflows the available height. It is scrollable, but when the user scrolls to the bottom the cursor/selection escapes the list viewport instead of keeping the items scrolled within the container — i.e. the list is not properly contained in its own scrollable surface.\n\nWork:\n1. Locate every command handler that renders a long entity list: `feature discuss`, `phase discuss`, `task discuss`, `feature list`, `phase list`, `task list`, `handoff list`, and any other list-rendering path in packages/pi-adapter/src/index.ts (search discuss/list/scroll/overflow). Confirm which share a rendering path and which are ad-hoc.\n2. Determine the Pi UI surface used (ctx.ui.* list/scroll primitives) and where the scroll container / focus handling lives — the bug is likely a missing `overflow` containment, a focus/selection trap that lets the cursor leave the list, or a container that grows with content instead of clipping to a max height.\n3. Introduce or reuse a single shared scrollable-list component for the pi-adapter command UI so ALL list-populating commands keep their items inside a fixed-height scroll area (scroll up when at the bottom; cursor/focus stays within the list). Apply it to every command found in step 1 — do NOT fix only discuss while leaving list/handoff broken.\n4. Verify the long-list behavior in the real Pi harness: scrolling to the bottom keeps items within the viewport and does not let the cursor escape the page.\n\nCode references: packages/pi-adapter/src/index.ts discuss handlers (PLANNER_COMMAND_COMPLETIONS list ~118-141 incl. \"feature discuss\"/\"phase discuss\"/\"task discuss\"/\"handoff list\"; command dispatch at ~1150-1164; handler bodies around 1239+ for project/feature/phase/task discuss). The list UI is rendered through the extension ctx.ui surface.\n\nTests: if the pi-adapter has unit/integration tests for the discuss/list rendering (packages/pi-adapter/test), extend or add coverage for long-list scroll containment; otherwise document the manual verification via the real Pi harness (`pi --no-extensions -e ...` or the user's launch) since this is a TUI scroll-focus behavior. Run `pnpm --filter @agent-plan/pi-adapter build` + its test script green.",
+      "descriptionUpdatedAt": "2026-08-22T07:16:17.064Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "264614a7-6889-44f4-a095-e6f0125368b7-check-001-locate-all-commands-that-populate-a-long-list-feature-phase-task-discuss-list-handoff-list-others-in-pi-adapter-src-index-ts",
+          "number": 1,
+          "title": "Locate ALL commands that populate a long list (feature/phase/task discuss + list, handoff list, others) in pi-adapter/src/index.ts",
+          "checked": false
+        },
+        {
+          "id": "264614a7-6889-44f4-a095-e6f0125368b7-check-002-identify-the-pi-ui-scroll-container-focus-trap-bug-causing-cursor-escape-at-list-bottom",
+          "number": 2,
+          "title": "Identify the Pi UI scroll container / focus-trap bug causing cursor escape at list bottom",
+          "checked": false
+        },
+        {
+          "id": "264614a7-6889-44f4-a095-e6f0125368b7-check-003-introduce-reuse-a-shared-scrollable-list-component-for-the-pi-adapter-command-ui",
+          "number": 3,
+          "title": "Introduce/reuse a shared scrollable-list component for the pi-adapter command UI",
+          "checked": false
+        },
+        {
+          "id": "264614a7-6889-44f4-a095-e6f0125368b7-check-004-apply-it-to-every-list-populating-command-discuss-list-handoff-list-others",
+          "number": 4,
+          "title": "Apply it to every list-populating command (discuss, list, handoff list, others)",
+          "checked": false
+        },
+        {
+          "id": "264614a7-6889-44f4-a095-e6f0125368b7-check-005-verify-long-list-scroll-containment-in-the-real-pi-harness-pi-adapter-build-tests-green",
+          "number": 5,
+          "title": "Verify long-list scroll containment in the real Pi harness + pi-adapter build/tests green",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-22T07:16:17.062Z",
+      "updatedAt": "2026-08-22T07:16:17.062Z"
+    }
+  ],
+  "createdAt": "2026-08-22T07:15:53.104Z",
+  "updatedAt": "2026-08-22T07:16:17.062Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

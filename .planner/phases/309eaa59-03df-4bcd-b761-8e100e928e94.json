@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "Make the complete suite repeatable in CI with enforceable coverage and contributor guidance.",
   "description": "Wire package and root scripts for unit, integration, coverage, and Playwright runs. Publish package-level coverage reports and enforce agreed thresholds for source code while excluding generated assets and unavoidable bootstrap wrappers. Add CI services/setup for Node 25, browsers, temporary ports, and deterministic test data; make failures retain useful Playwright traces and coverage artifacts. Document how to run all suites, how to add a scenario to the shared matrix, how Pi host fakes work, how MCP transports are selected, and how to diagnose flaky filesystem/WebSocket/browser tests. Keep publication workflows separate from test execution and do not alter release behavior.",
+  "descriptionUpdatedAt": "2026-08-09T17:39:51.927Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -36,19 +37,39 @@
       "priority": 1,
       "shortName": "test-scripts-gates",
       "title": "Wire package and root test scripts with coverage gates",
-      "status": "planned",
-      "description": "Add consistent package scripts for unit, integration, coverage, and E2E suites, plus root orchestration commands that run the complete matrix in dependency order. Enforce package-level statement/line/function thresholds and branch thresholds agreed during baseline, exclude generated bundles only, and emit CI-readable summaries plus HTML/JSON artifacts. Ensure failures stop the pipeline and local commands remain usable without CI-only services.",
+      "status": "done",
+      "description": "Add consistent package scripts for unit, integration, coverage, and E2E suites, plus root orchestration commands that run the complete matrix in dependency order. Enforce package-level statement/line/function thresholds and branch thresholds agreed during baseline, exclude generated bundles only, and emit CI-readable summaries plus HTML/JSON artifacts. Ensure failures stop the pipeline and local commands remain usable without CI-only services.\n\n---\n**Completion summary:**\nChiuso il task in seguito alla rivalutazione della priorità di lavoro. Durante questa attivazione è stata svolta solo ricognizione read-only del wiring già esistente per script e coverage gates: package.json root con test/test:unit/test:integration/test:e2e/test:coverage/test:matrix/test:compatibility, scripts/test-all.mjs per l’orchestrazione, test/coverage.config.mjs per le soglie, e .github/workflows/ci.yml con build/check/test. Nessuna ulteriore modifica di codice o configurazione eseguita in questa fase.",
+      "descriptionUpdatedAt": "2026-08-21T13:16:18.541Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "7b1a5923-24f7-48e6-bd18-7407a9d34018-check-001-planned-in-progress",
+          "date": "2026-08-21T13:09:19.701Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7b1a5923-24f7-48e6-bd18-7407a9d34018-check-002-in-progress-done",
+          "date": "2026-08-21T13:16:18.539Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T13:09:19.701Z",
+      "completedAt": "2026-08-21T13:16:18.539Z",
       "createdAt": "2026-08-09T17:43:38.804Z",
-      "updatedAt": "2026-08-09T17:43:38.804Z"
+      "updatedAt": "2026-08-21T13:16:18.539Z"
     },
     {
       "id": "435838bc-6747-4d2b-ab0c-19065de1e99a",
@@ -58,19 +79,31 @@
       "priority": 2,
       "shortName": "ci-test-workflow",
       "title": "Add CI workflow for browsers integration services and reports",
-      "status": "planned",
-      "description": "Extend CI for Node 25, dependency installation, TypeScript checks, package tests, coverage collection, Playwright browser installation, real server/MCP/Pi integration fixtures, and artifact upload on failure. Keep publication workflow separate, use isolated temporary directories and dynamic ports, and make browser traces/screenshots/coverage available for diagnosis without leaking project data or secrets.",
+      "status": "done",
+      "description": "Extend CI for Node 25, dependency installation, TypeScript checks, package tests, coverage collection, Playwright browser installation, real server/MCP/Pi integration fixtures, and artifact upload on failure. Keep publication workflow separate, use isolated temporary directories and dynamic ports, and make browser traces/screenshots/coverage available for diagnosis without leaking project data or secrets.\n\n---\n**Completion summary:**\nImplemented P060(F015)/T258 — extend CI for browser integration + coverage reports.\n\nChanged only `.github/workflows/ci.yml` (publish.yml left separate, as required).\n\n- `build` job: replaced `pnpm test` with `pnpm test:coverage` (enforces the FINAL coverage gate from test/coverage.config.mjs). Added an `actions/upload-artifact@v4` step (if: always) uploading `reports/**/coverage.lcov`, `reports/**/report.html`, `reports/**/results.json` for diagnosis.\n- new `e2e` job: checkout → pnpm/node25 setup → `pnpm install --frozen-lockfile` → `npx playwright install --with-deps chromium` → `pnpm build` → `pnpm exec playwright test` → on failure uploads `playwright-report/` + `test-results/` (traces/screenshots) via `actions/upload-artifact@v4`.\n\nIsolation / safety (per task requirements):\n- The e2e fixtures (e2e/fixtures.ts) spin up their OWN real plan-server with `port: 0` (dynamic) and an isolated `planRoot` from mkdtemp; they import `packages/plan-server/dist` + `packages/plan-web-ui/dist` directly. So CI never touches the project `.planner` and never reads secrets. Artifacts contain only generated traces/screenshots/coverage — no project data.\n- Browser install uses `--with-deps chromium` only; `forbidOnly`/retries/workers are already CI-gated in playwright.config.ts.\n\nVerification (local, no commit per project rules):\n- YAML parsed clean — jobs: [build, e2e]; triggers push[develop] + pull_request.\n- `pnpm exec playwright test --list` discovers 22 tests across 4 spec files (bootstrap-crud, handoff-resume, responsive, status-dashboard) in both chromium + mobile-chromium projects — config + specs wired correctly.\n- Root `pnpm check`/`pnpm build` already green from prior tasks in this sequence.\n\nThis closes the agreed sequence T296 → T297 → T298 → T258. No commit/push (project Pre-flight: git mutations require explicit per-action user permission).",
+      "descriptionUpdatedAt": "2026-08-22T14:16:19.300Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "435838bc-6747-4d2b-ab0c-19065de1e99a-check-001-planned-done",
+          "date": "2026-08-22T14:16:19.298Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-22T14:16:19.298Z",
+      "completedAt": "2026-08-22T14:16:19.298Z",
       "createdAt": "2026-08-09T17:43:45.430Z",
-      "updatedAt": "2026-08-09T17:43:45.430Z"
+      "updatedAt": "2026-08-22T14:16:19.298Z"
     },
     {
       "id": "a8116a83-1ebc-457f-a139-159be58c19ef",
@@ -82,6 +115,7 @@
       "title": "Document scenario authoring, adapters, fixtures, and troubleshooting",
       "status": "planned",
       "description": "Document how to run each suite, interpret coverage, add shared scenarios, extend API/MCP/Pi runners, use the Pi host boundary, seed browser fixtures, debug WebSocket and dynamic-port failures, and update exclusions or thresholds responsibly. Include the full public-surface inventory workflow and rules for never touching real user `.planner` directories in tests.",
+      "descriptionUpdatedAt": "2026-08-09T17:43:53.392Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -89,6 +123,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-09T17:43:53.392Z",
@@ -104,6 +140,7 @@
       "title": "Harden deterministic cleanup and flaky-test diagnostics",
       "status": "planned",
       "description": "Audit all new suites for leaked timers, ports, WebSocket listeners, child processes, browser contexts, temporary directories, and stale generated files. Add retries only where justified, failure diagnostics with scenario IDs and snapshots, deterministic clocks/IDs where needed, and a quarantine policy for genuinely environment-dependent Pi CLI smoke checks. Confirm repeated local and CI runs produce stable results without mutating repository planner state.",
+      "descriptionUpdatedAt": "2026-08-09T17:44:01.101Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -111,6 +148,8 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-08-09T17:44:01.101Z",
@@ -118,10 +157,45 @@
     }
   ],
   "createdAt": "2026-08-09T17:39:51.927Z",
-  "updatedAt": "2026-08-09T17:44:01.101Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-22T14:16:19.298Z",
+  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-22T14:06:54.040Z\nUpdated at: 2026-08-22T14:06:54.040Z\nReason: before compact\n\n## Progress snapshot\n- Features: 14/16 done, 2 active\n- Phases: 68/71 done, 1 active/discovery\n- Tasks: 297/305 done, 0 active\n\n## Current focus\n- Feature: `bd655486-e048-47ae-b06c-2bed511d89c6` — Integration Test & Cross-Harness Verification (in-progress)\n- Phase: `309eaa59-03df-4bcd-b761-8e100e928e94` — CI coverage gates and test documentation (in-progress)\n- Task: `198679e2-262d-4dfd-a601-995e3c94a729` — Harden deterministic cleanup and flaky-test diagnostics (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 309eaa59-03df-4bcd-b761-8e100e928e94)\n- ✅ `7b1a5923-24f7-48e6-bd18-7407a9d34018` — Wire package and root test scripts with coverage gates (done)\n- 📋 `435838bc-6747-4d2b-ab0c-19065de1e99a` — Add CI workflow for browsers integration services and reports (planned)\n- 📋 `a8116a83-1ebc-457f-a139-159be58c19ef` — Document scenario authoring, adapters, fixtures, and troubleshooting (planned)\n- 📋 `198679e2-262d-4dfd-a601-995e3c94a729` — Harden deterministic cleanup and flaky-test diagnostics (planned)\n\n## How to resume\n1. Open task 198679e2-262d-4dfd-a601-995e3c94a729 (Harden deterministic cleanup and flaky-test diagnostics).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start 198679e2-262d-4dfd-a601-995e3c94a729 (or call task_start).\n4. Continue with the next activity: Start task 198679e2-262d-4dfd-a601-995e3c94a729 — Harden deterministic cleanup and flaky-test diagnostics with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/309eaa59-03df-4bcd-b761-8e100e928e94.json\n- .planner/phases/37449829-247b-4dda-a5c1-23bdb44d54b9.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task 198679e2-262d-4dfd-a601-995e3c94a729 — Harden deterministic cleanup and flaky-test diagnostics with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase 309eaa59-03df-4bcd-b761-8e100e928e94.\n\n## Recent activity\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n- 2026-07-30T08:14:39.219Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-30T08:14:38.600Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-15T20:24:28.850Z [feature_created] 5bb28fc7-8002-46f9-970d-4151d6cb4884: Feature created: Improvements\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-08-22T14:06:54.044Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
-  "statusLog": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-22T14-06-54-041Z.md",
+      "clearedAt": "2026-08-22T14:06:54.041Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-21T15-18-06-839Z.md",
+      "clearedAt": "2026-08-21T15:18:06.839Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-21T15-09-34-535Z.md",
+      "clearedAt": "2026-08-21T15:09:34.535Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-21T15-02-18-362Z.md",
+      "clearedAt": "2026-08-21T15:02:18.362Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-21T14-55-45-230Z.md",
+      "clearedAt": "2026-08-21T14:55:45.230Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "eecd0055-5695-49cf-a984-03931c0d4e14",
+      "date": "2026-08-21T13:09:19.706Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ]
 }

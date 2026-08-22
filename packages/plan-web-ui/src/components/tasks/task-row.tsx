@@ -63,8 +63,8 @@ export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { fe
 
         <statusFetcher.Form method="post" action={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}/status`} className="w-full lg:w-auto">
           <div className="relative">
-            <select name="status" value={status} disabled={isUpdatingStatus || isDeleting || task.status === "paused"} aria-busy={isUpdatingStatus} title={task.status === "paused" ? "Resume paused work through task_start so its checkpoint is preserved." : undefined} className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]" onChange={(event) => statusFetcher.submit(event.currentTarget.form)}>
-              {(task.status === "paused" ? taskStatuses : taskTransitionStatuses).map((option) => (
+            <select name="status" value={status} disabled={isUpdatingStatus || isDeleting || Boolean(task.pauseSnapshot)} aria-busy={isUpdatingStatus} title={task.pauseSnapshot ? "Resume checkpointed work through task_start so its checkpoint is preserved." : undefined} className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]" onChange={(event) => statusFetcher.submit(event.currentTarget.form)}>
+              {taskTransitionStatuses.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>

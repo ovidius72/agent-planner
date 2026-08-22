@@ -229,8 +229,8 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
       task: "T002", reason: "Temporary review interruption", what_was_being_done: "Validating the provider contract",
       resume_location: "src/provider.ts:20", how_to_resume: "Continue validation and rerun provider tests", paused_by: "mcp-test",
     });
-    assert.match(toolText(paused), /Task paused: P001\(F001\)\/T002/);
-    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "paused");
+    assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T002/);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
     assert.match(toolText(await callTool(session, "planner-task-start", { task: "T002" })), /Task started/);
     const done = await callTool(session, "planner-task-complete", { task: "T002", force: true });
     assert.match(toolText(done), /\(done\)/);
@@ -359,21 +359,43 @@ test("priority is overridable but active task switches require a snapshot and de
     });
     assert.match(toolText(switched), /Task switched: P001\(F001\)\/T002 → P001\(F001\)\/T001/);
     let tasks = (await session.store.loadAllPhases())[0].tasks;
-    assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "paused", "planned"]);
+    assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
     assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
     const done = await callTool(session, "planner-task-complete", { task: "T001", force: true });
     assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
     assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 
-    const skipDenied = await callTool(session, "planner-task-start", { task: "T003" });
-    assert.match(toolText(skipDenied), /pending resume/i);
+    const shownResume = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.match(toolText(shownResume), /Resume advisory:/);
+    assert.match(toolText(shownResume), /Work checkpoint: Editing the lower-priority implementation/);
+    assert.match(toolText(shownResume), /Resume from: src\/task-start\.ts:20/);
+
+    const skipAdvisory = await callTool(session, "planner-task-start", { task: "T003" });
+    assert.match(toolText(skipAdvisory), /✅ Task started: P001\(F001\)\/T003/);
+    assert.match(toolText(skipAdvisory), /RESUME REQUIRED before starting a different task: P001\(F001\)\/T002/);
+    const skipStructured = toolStructured(skipAdvisory);
+    assert.ok(skipStructured?.resumeRequired, "task_start while a resume-required is pending must return an explicit structured resumeRequired proposal");
+    assert.equal(skipStructured.resumeRequired.taskId, tasks[1].id);
+    assert.equal(skipStructured.resumeRequired.snapshot?.resumeLocation, "src/task-start.ts:20");
+    let project = await session.store.loadProject();
+    assert.equal(project.workDeviations.at(-1).state, "resume-required");
+
+    await callTool(session, "planner-task-complete", { task: "T003", force: true });
     const resumed = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(resumed), /Task started/);
     tasks = (await session.store.loadAllPhases())[0].tasks;
     assert.equal(tasks[1].status, "in-progress");
     assert.equal(tasks[1].pauseSnapshot, null);
-    assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resumed");
+    project = await session.store.loadProject();
+    assert.equal(project.workDeviations.at(-1).state, "resumed");
+
+    const finishedResumeTarget = await callTool(session, "planner-task-complete", { task: "T002", force: true });
+    assert.doesNotMatch(toolText(finishedResumeTarget), /RESUME REQUIRED:/);
+    project = await session.store.loadProject();
+    assert.equal(project.workDeviations.length, 0);
+    const shownDone = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.doesNotMatch(toolText(shownDone), /Resume advisory:/);
   } finally {
     await closeMcpFixture(session);
   }
