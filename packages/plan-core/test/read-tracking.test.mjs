@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, invalidateReads, readTrackingSnapshot } from "../dist/index.js";
+import { markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, hasReadRequirements, requirementReadAdvisory, markRequirementRead, invalidateReads, readTrackingSnapshot } from "../dist/index.js";
 
 test("a fresh read set requires both feature and phase", () => {
   invalidateReads();
@@ -50,8 +50,42 @@ test("an orphan phase (no feature) only requires the phase", () => {
 test("invalidateReads clears the set", () => {
   invalidateReads();
   markPhaseRead("P1", "F1");
+  markRequirementRead("R1");
   assert.equal(hasReadParents("F1", "P1"), true);
+  assert.equal(hasReadRequirements(["R1"]), true);
   invalidateReads();
   assert.equal(hasReadParents("F1", "P1"), false);
-  assert.deepEqual(readTrackingSnapshot(), { features: [], phases: [] });
+  assert.equal(hasReadRequirements(["R1"]), false);
+  assert.deepEqual(readTrackingSnapshot(), { features: [], phases: [], requirements: [] });
+});
+
+test("T319 — a fresh read set requires linked requirements", () => {
+  invalidateReads();
+  assert.equal(hasReadRequirements(["R1", "R2"]), false);
+});
+
+test("T319 — markRequirementRead records a requirement", () => {
+  invalidateReads();
+  markRequirementRead("R1");
+  assert.equal(hasReadRequirements(["R1"]), true);
+  assert.equal(hasReadRequirements(["R1", "R2"]), false); // R2 still unread
+});
+
+test("T319 — requirementReadAdvisory warns when any linked requirement is unread", () => {
+  invalidateReads();
+  assert.equal(requirementReadAdvisory([]), "", "empty list means nothing required");
+  assert.notEqual(requirementReadAdvisory(["R1"]), "", "unread requirement warns");
+  markRequirementRead("R1");
+  assert.equal(requirementReadAdvisory(["R1"]), "", "all read → no advisory");
+  assert.notEqual(requirementReadAdvisory(["R1", "R2"]), "", "partial read still warns");
+});
+
+test("T319 — requirement read is independent from feature/phase read", () => {
+  invalidateReads();
+  markRequirementRead("R1");
+  assert.equal(hasReadRequirements(["R1"]), true);
+  assert.equal(hasReadParents("F1", "P1"), false, "reading a requirement does NOT satisfy feature/phase");
+  markPhaseRead("P1", "F1");
+  assert.equal(hasReadParents("F1", "P1"), true);
+  assert.equal(hasReadRequirements(["R1"]), true, "requirement read persists across phase read");
 });

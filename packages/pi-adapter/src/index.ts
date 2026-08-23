@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, parentReadAdvisory, invalidateReads } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, parentReadAdvisory, hasReadRequirements, requirementReadAdvisory, markRequirementRead, invalidateReads } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -2180,6 +2180,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (phase && !hasReadParents(phase.featureId, phase.id)) {
           ctx.ui.notify("⚠️ READ REQUIRED before proceeding: read the parent feature and phase (full=true) for this task before starting it.", "warning");
         }
+        if (phase) {
+          const linkedRequirementIds = [
+            ...(await st.linkedRequirementsForPhase(phase.id)).map((r) => r.id),
+            ...(phase.featureId ? (await st.linkedRequirementsForFeature(phase.featureId)).map((r) => r.id) : []),
+          ];
+          if (linkedRequirementIds.length > 0 && !hasReadRequirements(linkedRequirementIds)) {
+            ctx.ui.notify("⚠️ REQUIREMENTS READ REQUIRED: read the requirements linked to this phase (and feature) before starting the task.", "warning");
+          }
+        }
         if (task.status === "in-progress") {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
@@ -2690,6 +2699,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const requirements = await st.loadRequirements();
+      requirements.requirements.forEach((req) => markRequirementRead(req.id));
       return {
         content: [{ type: "text", text: requirements.requirements.map((req) => `- ${req.id} — ${req.title} (${req.status})`).join("\n") || "No requirements" }],
         details: requirements,
@@ -4215,6 +4225,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const sourceRef = `${formatPhaseRef(source.phase.number, featureNumberOfPhase(source.phase, features))}/T${String(source.task.number).padStart(3, "0")}`;
       const targetRef = `${formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features))}/T${String(target.task.number).padStart(3, "0")}`;
       const targetReadAdvisory = parentReadAdvisory(target.phase.featureId, target.phase.id);
+      const targetRequirementAdvisory = requirementReadAdvisory([
+        ...(await st.linkedRequirementsForPhase(target.phase.id)).map((r) => r.id),
+        ...(target.phase.featureId ? (await st.linkedRequirementsForFeature(target.phase.featureId)).map((r) => r.id) : []),
+      ]);
       return {
         content: [{ type: "text", text: [
           `🔀 Task switched: ${sourceRef} → ${targetRef}`,
@@ -4222,8 +4236,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           `Return target: ${sourceRef} from ${snapshot.resumeLocation}`,
           "Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.",
           ...(targetReadAdvisory ? [targetReadAdvisory.trimStart()] : []),
+          ...(targetRequirementAdvisory ? [targetRequirementAdvisory.trimStart()] : []),
         ].join("\n") }],
-        details: { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id, ...(targetReadAdvisory ? { readRequired: true } : {}) },
+        details: { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id, ...(targetReadAdvisory || targetRequirementAdvisory ? { readRequired: true } : {}) },
       };
     },
   });
@@ -4331,11 +4346,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
       const readAdvisory = parentReadAdvisory(parentFeature?.id, found.phase.id);
+      const requirementAdvisory = requirementReadAdvisory([
+        ...(phaseWithRequirements.linkedRequirements ?? []).map((r) => r.id),
+        ...featureRequirements.map((r) => r.id),
+      ]);
       return {
-        content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}${readAdvisory}` }],
+        content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}${readAdvisory}${requirementAdvisory}` }],
         details: startedTask,
         ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
-        ...(readAdvisory ? { readRequired: true } : {}),
+        ...(readAdvisory || requirementAdvisory ? { readRequired: true } : {}),
       };
     },
   });

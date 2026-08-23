@@ -334,16 +334,9 @@ export function WorkTree({
 
       <div className="ap-search-sticky z-20 grid gap-2" style={{ top: headerH }}>
         <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SortControl sort={tree.sort} onChange={tree.setSort} />
-          {tree.searchActive ? (
-            <p className="text-xs text-[var(--text-muted)]">
-              {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-col gap-1.5 sm:gap-2">
-          <div className="flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1.5 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden sm:gap-2 sm:rounded-[14px] sm:px-3 sm:py-2">
+          <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1.5 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 sm:gap-2 sm:rounded-[14px] sm:px-3 sm:py-2">
             <ToolbarButton active={tree.isAllExpanded} onClick={() => tree.isAllExpanded ? tree.collapseAll() : tree.expandAll()}>
             {tree.isAllExpanded ? "Collapse all" : "Expand all"}
           </ToolbarButton>
@@ -380,8 +373,13 @@ export function WorkTree({
             {repairing ? "Repairing…" : "Repair"}
           </ToolbarButton>
           </div>
-          {repairMsg ? <span className="text-xs text-[var(--text-muted)] sm:truncate">{repairMsg}</span> : null}
         </div>
+        {tree.searchActive ? (
+          <p className="text-xs text-[var(--text-muted)]">
+            {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
+          </p>
+        ) : null}
+        {repairMsg ? <span className="text-xs text-[var(--text-muted)] sm:truncate">{repairMsg}</span> : null}
       </div>
 
       <div className="grid gap-3">

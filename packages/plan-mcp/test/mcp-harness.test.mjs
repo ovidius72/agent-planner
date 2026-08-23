@@ -53,7 +53,7 @@ test("listTools exposes the full published tool set with actionable input schema
     const names = tools.map((tool) => tool.name);
 
     const expected = [
-      "planner-version", "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init",
+      "planner-version", "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init", "planner-requirement-list",
       "planner-show", "planner-repair", "planner-cleanup-orphan-phases",
       "planner-project-language", "planner-project-discuss",
       "planner-feature-list", "planner-phase-list", "planner-task-list",

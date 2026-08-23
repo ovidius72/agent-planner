@@ -101,6 +101,18 @@
       ],
       "createdAt": "2026-08-09T18:06:47.107Z",
       "updatedAt": "2026-08-09T18:06:47.107Z"
+    },
+    {
+      "id": "f794df81-953f-42e4-bb68-91e1c303d7d0",
+      "title": "Detail-page filter parity with WorkTree + text-search fix",
+      "description": "Le pagine feature-detail (packages/plan-web-ui/src/routes/feature-detail/route.tsx) e phase-detail (packages/plan-web-ui/src/routes/phase-detail/route.tsx) usano ListFilters (packages/plan-web-ui/src/components/ui/list-filters.tsx) che invia una GET-form a ogni keystroke via useSubmit() -> navigazione completa -> reload della pagina + window scroll-to-top, e fa match solo su title/id/summary/description. Mancano i toggle di filtro del WorkTree (Hide Done / Hide Planned / Only active) presenti in components/dashboard/work-tree.tsx:350-358. Obiettivo: portare sulle pagine di dettaglio gli stessi toggle del WorkTree (semantica hideDone/hidePlanned/onlyActiveBranches da lib/dashboard-tree.ts:162-178), una ricerca testuale debounced (~250ms) che fa match di title/number/shortId, submit automatico alla scelta di un filtro, rimozione del bottone \"Apply Filter\", e nessun reload/scroll-reset per keystroke.",
+      "status": "planned",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "P074"
+      ],
+      "createdAt": "2026-08-23T11:26:36.504Z",
+      "updatedAt": "2026-08-23T11:27:04.660Z"
     }
   ]
 }

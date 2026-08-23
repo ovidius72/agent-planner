@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, parentReadAdvisory, invalidateReads } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, parentReadAdvisory, requirementReadAdvisory, markRequirementRead, invalidateReads } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -1242,13 +1242,18 @@ server.registerTool("planner-task-switch", {
   await st.syncTaskStatusRollup(source.phase.id);
   if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
   const targetReadAdvisory = parentReadAdvisory(target.phase.featureId, target.phase.id);
+  const targetRequirementAdvisory = requirementReadAdvisory([
+    ...(await st.linkedRequirementsForPhase(target.phase.id)).map((r) => r.id),
+    ...(target.phase.featureId ? (await st.linkedRequirementsForFeature(target.phase.featureId)).map((r) => r.id) : []),
+  ]);
   return writeAndSummarize(st, [
     `🔀 Task switched: ${taskCompositeRef(source.task, source.phase, features)} → ${taskCompositeRef(target.task, target.phase, features)}`,
     `Resume checkpoint: ${snapshot.whatWasBeingDone}`,
     `Return target: ${taskCompositeRef(source.task, source.phase, features)} from ${snapshot.resumeLocation}`,
     `Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.`,
     ...(targetReadAdvisory ? [targetReadAdvisory.trimStart()] : []),
-  ].join("\n"), { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id, ...(targetReadAdvisory ? { readRequired: true } : {}) });
+    ...(targetRequirementAdvisory ? [targetRequirementAdvisory.trimStart()] : []),
+  ].join("\n"), { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id, ...(targetReadAdvisory || targetRequirementAdvisory ? { readRequired: true } : {}) });
 });
 
 server.registerTool("planner-task-start", {
@@ -1361,9 +1366,13 @@ server.registerTool("planner-task-start", {
   if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
   const t = updatedTask ?? found.task;
   const readAdvisory = parentReadAdvisory(parentFeature?.id, found.phase.id);
-  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}${readAdvisory}`, {
+  const requirementAdvisory = requirementReadAdvisory([
+    ...(phaseWithRequirements.linkedRequirements ?? []).map((r) => r.id),
+    ...featureRequirements.map((r) => r.id),
+  ]);
+  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}${readAdvisory}${requirementAdvisory}`, {
     ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
-    ...(readAdvisory ? { readRequired: true } : {}),
+    ...(readAdvisory || requirementAdvisory ? { readRequired: true } : {}),
   });
 });
 
@@ -1453,6 +1462,16 @@ server.registerTool("planner-handoff-show", {
   const content = await st.getPhaseHandoff(r.phase.id);
   if (!content.trim()) return text(`No handoff set on ${r.compositeRef}.`, { phaseRef: r.compositeRef, empty: true });
   return text(`Handoff for ${r.compositeRef}:\n\n${content}`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
+});
+
+server.registerTool("planner-requirement-list", {
+  description: "List all top-level requirements in requirements.json. Reading this list records the requirements as read for the start/resume read-enforcement (explicit requirement read, required alongside feature/phase reads).",
+  inputSchema: {},
+}, async () => {
+  const st = await requireStore();
+  const requirements = await st.loadRequirements();
+  requirements.requirements.forEach((req) => markRequirementRead(req.id));
+  return text(requirements.requirements.map((req) => `- ${req.id} — ${req.title} (${req.status})`).join("\n") || "No requirements", { requirements });
 });
 
 server.registerTool("planner-handoff-write", {
