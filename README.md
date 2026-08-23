@@ -117,7 +117,7 @@ Per-harness behavior (consistent across harnesses):
 
 ### Update
 
-The plugin version is bumped by `pnpm release` together with the npm packages (the plugin has its own version track, independent from the npm package versions). The MCP server auto-updates because `.mcp.json` runs `npx -y @agent-plan/mcp`, which fetches the latest published `@agent-plan/mcp` from npm.
+The plugin version is bumped by the release scripts together with the npm packages — `pnpm release` for the stable channel and `pnpm release:next` for the `next` prerelease channel (the plugin has its own version track, independent from the npm package versions). Both `plugins/claude-code/.claude-plugin/plugin.json` and the repo-root `.claude-plugin/marketplace.json` are updated, so `/plugin marketplace update` detects the new version and refreshes the plugin files. The MCP server auto-updates independently because `.mcp.json` runs `npx -y @agent-plan/mcp`, which fetches the latest published `@agent-plan/mcp` from npm.
 
 **As a user** — after a new release is merged to `main`, refresh in Claude Code:
 
@@ -127,7 +127,7 @@ The plugin version is bumped by `pnpm release` together with the npm packages (t
 
 Then restart Claude Code in the project so the MCP server re-launches with the new `@agent-plan/mcp`.
 
-**As a maintainer** — push plugin changes to the repo's default branch (`main`, where `.claude-plugin/marketplace.json` lives). The release script bumps the plugin version in `plugins/claude-code/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` so `/plugin marketplace update` detects the new version.
+**As a maintainer** — run the release script for the target channel (`pnpm release` for stable, `pnpm release:next` for `next`). It bumps the plugin version in `plugins/claude-code/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` so `/plugin marketplace update` detects the new version and refreshes the plugin files. Do not edit the `version` fields by hand: the scripts own them, and an unchanged pinned version makes Claude Code report "already at the latest" and skip the refresh (see anthropics/claude-code#79950).
 
 ### Local development / testing
 

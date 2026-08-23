@@ -1,10 +1,13 @@
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ActiveTasksHeader } from "../src/components/layout/app-shell";
 import { ResumeRequiredSection } from "../src/components/dashboard/resume-required";
 import { TopNav } from "../src/components/layout/top-nav";
 import { TaskDetailRoute } from "../src/routes/task-detail/route";
 import { LastUpdated } from "../src/components/ui/last-updated";
+import { LatestCompletedTasks } from "../src/components/dashboard/latest-completed-tasks";
+import { NewAddedTasks } from "../src/components/dashboard/new-added-tasks";
 import { makeFeature, makePhase, makeTask, renderRoute } from "./fixtures";
 
 describe("entity references and timestamps", () => {
@@ -144,5 +147,41 @@ describe("entity references and timestamps", () => {
     expect(screen.getByRole("button", { name: "Export" })).toBeInTheDocument();
     expect(screen.getByLabelText("Switch to light theme")).toBeInTheDocument();
     expect(screen.getAllByText("Live").length).toBeGreaterThan(0);
+  });
+});
+
+describe("dashboard cards reuse the segmented ref header", () => {
+  it("renders the clickable F/P/T segmented header with copyable short id + name tooltips on Latest completed tasks", () => {
+    const feature = makeFeature();
+    const task = makeTask({ status: "done", completedAt: "2026-01-02T00:00:00.000Z" });
+    const phase = makePhase({ tasks: [task] });
+    const { container } = render(
+      <MemoryRouter>
+        <LatestCompletedTasks features={[feature]} phases={[phase]} />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector(".entity-path-badge")).toBeTruthy();
+    expect(container.querySelector(".short-id-badge")).toBeTruthy();
+    expect(container.querySelector(".copyable-id")).toBeTruthy();
+    expect(container.querySelector(".entity-path-seg--feature")?.getAttribute("title")).toBe("Example feature");
+    expect(container.querySelector(".entity-path-seg--phase")?.getAttribute("title")).toBe("Example phase");
+    expect(container.querySelector(".entity-path-seg--task")?.getAttribute("title")).toBe("Example task");
+  });
+
+  it("renders the segmented header with the New pill + name tooltips on New added tasks", () => {
+    const feature = makeFeature();
+    const task = makeTask({ status: "planned", createdAt: new Date().toISOString(), startedAt: "" });
+    const phase = makePhase({ tasks: [task] });
+    const { container } = render(
+      <MemoryRouter>
+        <NewAddedTasks features={[feature]} phases={[phase]} />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector(".entity-path-badge")).toBeTruthy();
+    expect(container.querySelector(".short-id-badge")).toBeTruthy();
+    expect(screen.getByText("New")).toBeTruthy();
+    expect(container.querySelector(".entity-path-seg--feature")?.getAttribute("title")).toBe("Example feature");
+    expect(container.querySelector(".entity-path-seg--phase")?.getAttribute("title")).toBe("Example phase");
+    expect(container.querySelector(".entity-path-seg--task")?.getAttribute("title")).toBe("Example task");
   });
 });

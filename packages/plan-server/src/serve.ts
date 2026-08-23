@@ -5,7 +5,7 @@ import { networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
@@ -92,6 +92,13 @@ function featureGovernanceReady(feature: Feature): boolean {
 
 function phaseGovernanceReady(phase: Phase): boolean {
   return Boolean(phase.discussedAt || (phase.contextReady && phase.contextReadyReason.trim()));
+}
+
+// Web UI calls are the human supervisor and are exempt from agent-only
+// governance gates (e.g. feature/phase discuss-before-work). Identified by the
+// X-Planner-Source: web-ui header the browser client always sends.
+function fromWebUi(c: Context): boolean {
+  return c.req.header("X-Planner-Source") === "web-ui";
 }
 
 function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): Task {
@@ -353,7 +360,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const idx = features.features.findIndex((f) => f.id === id);
     if (idx === -1) return c.json({ error: "not found" }, 404);
 
-    if (entersGovernedState(features.features[idx]?.status, body.status) && !featureGovernanceReady(body)) {
+    if (entersGovernedState(features.features[idx]?.status, body.status) && !fromWebUi(c) && !featureGovernanceReady(body)) {
       return c.json({ error: "feature governance required: discuss the feature first, or set contextReady=true with a reason before starting work." }, 400);
     }
 
@@ -396,7 +403,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     // Backward-compatible: accept a full Phase object, or generate one from title.
     if (body.id && body.slug && body.number && body.tasks && body.taskIds) {
       const full = body as Phase;
-      if (requiresGovernance(full.status) && !phaseGovernanceReady(full)) {
+      if (requiresGovernance(full.status) && !fromWebUi(c) && !phaseGovernanceReady(full)) {
         return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
       }
       await store.updatePhase(full.id, () => full);
@@ -495,7 +502,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (body.id !== id) return c.json({ error: "id mismatch" }, 400);
     const existingPhase = await store.loadPhase(id).catch(() => null);
     if (!existingPhase) return c.json({ error: "phase not found" }, 404);
-    if (entersGovernedState(existingPhase.status, body.status) && !phaseGovernanceReady(body)) {
+    if (entersGovernedState(existingPhase.status, body.status) && !fromWebUi(c) && !phaseGovernanceReady(body)) {
       return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
     }
     await store.updatePhase(id, () => body);
@@ -542,7 +549,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
     const phase = await store.loadPhase(phaseId).catch(() => null);
     if (!phase) return c.json({ error: "phase not found" }, 404);
-    if (requiresGovernance(body.status) && phase.featureId) {
+    if (requiresGovernance(body.status) && phase.featureId && !fromWebUi(c)) {
       const features = await store.loadFeatures();
       const feature = features.features.find((entry) => entry.id === phase.featureId);
       if (feature && !featureGovernanceReady(feature)) {
@@ -716,14 +723,16 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       return c.json({ error: "Resume checkpoint lifecycle transitions require task_pause/task_switch/task_start so the checkpoint and return stack remain consistent." }, 400);
     }
 
-    // Validate motivation requirement for status transitions.
-    if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status)) {
+    // Validate motivation requirement for status transitions. The Web UI is the
+    // human supervisor and is exempt (X-Planner-Source: web-ui) — agents calling
+    // the API without that header are still required to motivate state changes.
+    if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status) && !fromWebUi(c)) {
       if (!body.motivation || !body.motivation.trim()) {
         return c.json({ error: `Status transition "${existing.status} → ${body.status}" requires a motivation. Provide the "motivation" field with a detailed explanation.` }, 400);
       }
     }
 
-    if (entersGovernedState(existing.status, body.status) && phase.featureId) {
+    if (entersGovernedState(existing.status, body.status) && phase.featureId && !fromWebUi(c)) {
       const features = await store.loadFeatures();
       const feature = features.features.find((entry) => entry.id === phase.featureId);
       if (feature && !featureGovernanceReady(feature)) {

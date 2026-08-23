@@ -19,6 +19,16 @@ import { FeatureTreeRow } from "./work-tree-rows";
 import { SortableItem } from "./sortable";
 import { SearchBar } from "./search-bar";
 
+// Strip the ?locate= query param from the URL WITHOUT a router navigation, so
+// React Router's <ScrollRestoration /> doesn't fire and reset the page scroll
+// to the top after we've already scrolled the located task into view.
+function clearLocateParam(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("locate")) return;
+  url.searchParams.delete("locate");
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 /**
  * The collapsible feature → phase → task Work Tree, plus its filter bar
  * (status chips, hide-done/planned, active-only, expand/collapse, repair).
@@ -200,7 +210,7 @@ export function WorkTree({
   // locatePulseId (independent of recentTaskIds, which the hook prunes on data
   // change), then strips the param. Re-runs after expansion/filter renders until
   // the row is in the DOM. ──────────────────────────────────────────────
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [locatePulseId, setLocatePulseId] = useState<string | null>(null);
   const locateParam = searchParams.get("locate");
   const locateNum = locateParam ? parseInt(locateParam.replace(/^T/i, ""), 10) : null;
@@ -210,7 +220,12 @@ export function WorkTree({
       .flatMap((p) => p.tasks.map((t) => ({ t, p })))
       .find(({ t }) => t.number === locateNum);
     if (!found) {
-      setSearchParams((prev) => { prev.delete("locate"); return prev; }, { replace: true });
+      // `phases` may not be loaded yet (fresh mount or cross-route navigation
+      // into /?locate=…): keep the param so this effect retries once the data
+      // arrives, instead of stripping it prematurely and never scrolling.
+      // Only strip when the data is present and the task genuinely doesn't exist.
+      if (phases.length === 0) return;
+      clearLocateParam();
       return;
     }
     const { t, p } = found;
@@ -245,7 +260,7 @@ export function WorkTree({
       window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
       setLocatePulseId(t.id);
       const pulse = window.setTimeout(() => setLocatePulseId(null), 2500);
-      setSearchParams((prev) => { prev.delete("locate"); return prev; }, { replace: true });
+      clearLocateParam();
       return () => window.clearTimeout(pulse);
     }
     // else: expansion/filter change just requested → effect re-runs after render

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router-dom";
+import { isRouteErrorResponse, ScrollRestoration, useLoaderData, useRouteError } from "react-router-dom";
 import { AppShell } from "../components/layout/app-shell";
 import { getProject, getTaskFocus, getUiConfig, type TaskFocusSummary, type UiConfig } from "../lib/api";
 import { useAnimatedFavicon } from "../hooks/use-animated-favicon";
@@ -40,6 +40,7 @@ export function RootRoute() {
   return (
     <ShortcutProvider shortcuts={uiConfig.shortcuts}>
       <LiveSyncBridge />
+      <ScrollRestoration />
       <AppShell project={project} taskFocus={taskFocus} serverInfo={uiConfig.server} />
     </ShortcutProvider>
   );

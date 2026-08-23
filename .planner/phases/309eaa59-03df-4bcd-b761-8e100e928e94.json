@@ -113,11 +113,20 @@
       "priority": 3,
       "shortName": "test-documentation",
       "title": "Document scenario authoring, adapters, fixtures, and troubleshooting",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Document how to run each suite, interpret coverage, add shared scenarios, extend API/MCP/Pi runners, use the Pi host boundary, seed browser fixtures, debug WebSocket and dynamic-port failures, and update exclusions or thresholds responsibly. Include the full public-surface inventory workflow and rules for never touching real user `.planner` directories in tests.",
       "descriptionUpdatedAt": "2026-08-09T17:43:53.392Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "67fb8f12-2492-4482-95ba-ba5878a0d2e9",
+          "date": "2026-08-23T09:59:14.233Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -125,10 +134,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-08-23T09:59:14.233Z",
       "completedAt": "",
       "createdAt": "2026-08-09T17:43:53.392Z",
-      "updatedAt": "2026-08-09T17:43:53.392Z"
+      "updatedAt": "2026-08-23T09:59:14.233Z"
     },
     {
       "id": "198679e2-262d-4dfd-a601-995e3c94a729",
@@ -142,7 +151,24 @@
       "description": "Audit all new suites for leaked timers, ports, WebSocket listeners, child processes, browser contexts, temporary directories, and stale generated files. Add retries only where justified, failure diagnostics with scenario IDs and snapshots, deterministic clocks/IDs where needed, and a quarantine policy for genuinely environment-dependent Pi CLI smoke checks. Confirm repeated local and CI runs produce stable results without mutating repository planner state.",
       "descriptionUpdatedAt": "2026-08-09T17:44:01.101Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "1460274a-0ed7-4366-a075-912b0a557dba",
+          "date": "2026-08-23T10:39:41.761Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "69c988be-a6fe-44dc-a172-ba4e23005876",
+          "date": "2026-08-23T10:40:00.799Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -150,18 +176,28 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-08-23T10:39:41.761Z",
       "completedAt": "",
       "createdAt": "2026-08-09T17:44:01.101Z",
-      "updatedAt": "2026-08-09T17:44:01.101Z"
+      "updatedAt": "2026-08-23T10:40:00.799Z"
     }
   ],
   "createdAt": "2026-08-09T17:39:51.927Z",
-  "updatedAt": "2026-08-22T14:16:19.298Z",
-  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-22T14:06:54.040Z\nUpdated at: 2026-08-22T14:06:54.040Z\nReason: before compact\n\n## Progress snapshot\n- Features: 14/16 done, 2 active\n- Phases: 68/71 done, 1 active/discovery\n- Tasks: 297/305 done, 0 active\n\n## Current focus\n- Feature: `bd655486-e048-47ae-b06c-2bed511d89c6` — Integration Test & Cross-Harness Verification (in-progress)\n- Phase: `309eaa59-03df-4bcd-b761-8e100e928e94` — CI coverage gates and test documentation (in-progress)\n- Task: `198679e2-262d-4dfd-a601-995e3c94a729` — Harden deterministic cleanup and flaky-test diagnostics (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 309eaa59-03df-4bcd-b761-8e100e928e94)\n- ✅ `7b1a5923-24f7-48e6-bd18-7407a9d34018` — Wire package and root test scripts with coverage gates (done)\n- 📋 `435838bc-6747-4d2b-ab0c-19065de1e99a` — Add CI workflow for browsers integration services and reports (planned)\n- 📋 `a8116a83-1ebc-457f-a139-159be58c19ef` — Document scenario authoring, adapters, fixtures, and troubleshooting (planned)\n- 📋 `198679e2-262d-4dfd-a601-995e3c94a729` — Harden deterministic cleanup and flaky-test diagnostics (planned)\n\n## How to resume\n1. Open task 198679e2-262d-4dfd-a601-995e3c94a729 (Harden deterministic cleanup and flaky-test diagnostics).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start 198679e2-262d-4dfd-a601-995e3c94a729 (or call task_start).\n4. Continue with the next activity: Start task 198679e2-262d-4dfd-a601-995e3c94a729 — Harden deterministic cleanup and flaky-test diagnostics with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/309eaa59-03df-4bcd-b761-8e100e928e94.json\n- .planner/phases/37449829-247b-4dda-a5c1-23bdb44d54b9.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task 198679e2-262d-4dfd-a601-995e3c94a729 — Harden deterministic cleanup and flaky-test diagnostics with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase 309eaa59-03df-4bcd-b761-8e100e928e94.\n\n## Recent activity\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n- 2026-07-30T08:14:39.219Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-30T08:14:38.600Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-15T20:24:28.850Z [feature_created] 5bb28fc7-8002-46f9-970d-4151d6cb4884: Feature created: Improvements\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
-  "handoffUpdatedAt": "2026-08-22T14:06:54.044Z",
+  "updatedAt": "2026-08-23T10:40:00.799Z",
+  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-23T10:09:38.403Z\nUpdated at: 2026-08-23T10:09:38.403Z\nReason: before compact\n\n## Progress snapshot\n- Features: 15/16 done, 1 active\n- Phases: 71/72 done, 1 active/discovery\n- Tasks: 307/309 done, 1 active\n\n## Current focus\n- Feature: `bd655486-e048-47ae-b06c-2bed511d89c6` — Integration Test & Cross-Harness Verification (in-progress)\n- Phase: `309eaa59-03df-4bcd-b761-8e100e928e94` — CI coverage gates and test documentation (in-progress)\n- Task: `a8116a83-1ebc-457f-a139-159be58c19ef` — Document scenario authoring, adapters, fixtures, and troubleshooting (in-progress)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 309eaa59-03df-4bcd-b761-8e100e928e94)\n- ✅ `7b1a5923-24f7-48e6-bd18-7407a9d34018` — Wire package and root test scripts with coverage gates (done)\n- ✅ `435838bc-6747-4d2b-ab0c-19065de1e99a` — Add CI workflow for browsers integration services and reports (done)\n- 🚧 `a8116a83-1ebc-457f-a139-159be58c19ef` — Document scenario authoring, adapters, fixtures, and troubleshooting (in-progress)\n- 📋 `198679e2-262d-4dfd-a601-995e3c94a729` — Harden deterministic cleanup and flaky-test diagnostics (planned)\n\n## How to resume\n1. Open task a8116a83-1ebc-457f-a139-159be58c19ef (Document scenario authoring, adapters, fixtures, and troubleshooting).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: Resume task a8116a83-1ebc-457f-a139-159be58c19ef — Document scenario authoring, adapters, fixtures, and troubleshooting.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/309eaa59-03df-4bcd-b761-8e100e928e94.json\n- .planner/phases/a1335e2c-de22-4e09-8a8b-ff7eb8e261e9.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Resume task a8116a83-1ebc-457f-a139-159be58c19ef — Document scenario authoring, adapters, fixtures, and troubleshooting.\n- Review the task details and continue implementation in phase 309eaa59-03df-4bcd-b761-8e100e928e94.\n- When the work is complete, call task_complete so the derived phase/feature statuses stay correct.\n\n## Recent activity\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n- 2026-07-30T08:14:39.219Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-30T08:14:38.600Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-15T20:24:28.850Z [feature_created] 5bb28fc7-8002-46f9-970d-4151d6cb4884: Feature created: Improvements\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-08-23T10:09:38.407Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T10-09-38-404Z.md",
+      "clearedAt": "2026-08-23T10:09:38.404Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T08-43-35-136Z.md",
+      "clearedAt": "2026-08-23T08:43:35.136Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-22T14-06-54-041Z.md",
       "clearedAt": "2026-08-22T14:06:54.041Z",
@@ -175,16 +211,6 @@
     {
       "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-21T15-09-34-535Z.md",
       "clearedAt": "2026-08-21T15:09:34.535Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-21T15-02-18-362Z.md",
-      "clearedAt": "2026-08-21T15:02:18.362Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-21T14-55-45-230Z.md",
-      "clearedAt": "2026-08-21T14:55:45.230Z",
       "reason": "superseded"
     }
   ],

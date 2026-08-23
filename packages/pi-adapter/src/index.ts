@@ -11,7 +11,8 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion } from "@agent-plan/core";
+import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, parentReadAdvisory, invalidateReads } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -1284,11 +1285,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         .slice()
         .sort((a, b) => a.number - b.number);
       if (features.length === 0) return null;
-      const options = features.map((f) => `  ${formatFeatureRef(f.number)} ${statusIcon(f.status)} ${f.name}${f.shortId ? ` · ${f.shortId}` : ""}`);
-      const chosen = await ctx.ui.select("Pick a feature", options);
-      if (chosen == null) return null;
-      const idx = options.indexOf(chosen);
-      return idx >= 0 ? features[idx]! : null;
+      return paginatedSelect(ctx, {
+        title: "Pick a feature",
+        items: features,
+        render: (f) => `  ${formatFeatureRef(f.number)} ${statusIcon(f.status)} ${f.name}${f.shortId ? ` · ${f.shortId}` : ""}`,
+        pageSize: 10,
+      });
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1298,11 +1300,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const phases = (await st.loadAllPhases().catch(() => [] as Phase[])).slice().sort((a, b) => a.number - b.number);
       if (phases.length === 0) { return null; }
       const features = (await st.loadFeatures().catch(() => ({ features: [] as Feature[] }))).features;
-      const options = phases.map((p) => `  ${formatPhaseRef(p.number, featureNumberOfPhase(p, features))} ${statusIcon(p.status)} ${p.title}${p.shortId ? ` · ${p.shortId}` : ""}`);
-      const chosen = await ctx.ui.select("Pick a phase", options);
-      if (chosen == null) return null;
-      const idx = options.indexOf(chosen);
-      return idx >= 0 ? phases[idx]! : null;
+      return paginatedSelect(ctx, {
+        title: "Pick a phase",
+        items: phases,
+        render: (p) => `  ${formatPhaseRef(p.number, featureNumberOfPhase(p, features))} ${statusIcon(p.status)} ${p.title}${p.shortId ? ` · ${p.shortId}` : ""}`,
+        pageSize: 10,
+      });
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1311,11 +1314,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         async function pickTask(phase: Phase): Promise<Task | null> {
       if (phase.tasks.length === 0) return null;
       const tasks = phase.tasks.slice().sort((a, b) => a.number - b.number);
-      const options = tasks.map((t) => `  T${String(t.number).padStart(3, "0")} ${statusIcon(t.status)} ${t.title}${t.shortId ? ` · ${t.shortId}` : ""}`);
-      const chosen = await ctx.ui.select(`Pick a task from "${phase.title}"`, options);
-      if (chosen == null) return null;
-      const idx = options.indexOf(chosen);
-      return idx >= 0 ? tasks[idx]! : null;
+      return paginatedSelect(ctx, {
+        title: `Pick a task from "${phase.title}"`,
+        items: tasks,
+        render: (t) => `  T${String(t.number).padStart(3, "0")} ${statusIcon(t.status)} ${t.title}${t.shortId ? ` · ${t.shortId}` : ""}`,
+        pageSize: 10,
+      });
     }
 
     function parseMultilineList(value: string | undefined): string[] {
@@ -1569,11 +1573,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return;
         }
         const phases = await st.loadAllPhases();
-        ctx.ui.notify(features.map((feature) => {
+        const lines = features.map((feature) => {
           const featurePhases = phases.filter((phase) => phase.featureId === feature.id);
           const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
           return `${statusIcon(feature.status)} ${feature.name} (${feature.id}) — ${featurePhases.length} phases, ${taskCount} tasks`;
-        }).join("\n"), "info");
+        });
+        await paginatedNotify(ctx, { title: "features", lines, pageSize: 10 });
         return;
       }
       if (b === "add") {
@@ -2172,6 +2177,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           task = await pickTask(phase);
           if (!task) { ctx.ui.notify("Aborted", "warning"); return; }
         }
+        if (phase && !hasReadParents(phase.featureId, phase.id)) {
+          ctx.ui.notify("⚠️ READ REQUIRED before proceeding: read the parent feature and phase (full=true) for this task before starting it.", "warning");
+        }
         if (task.status === "in-progress") {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
           return;
@@ -2305,7 +2313,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (action === "list") {
         const list = await st.listHandoffs();
         if (list.length === 0) { ctx.ui.notify("No phase handoffs set.", "info"); return; }
-        ctx.ui.notify(list.map((e) => `• ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`).join("\n"), "info");
+        await paginatedNotify(ctx, {
+          title: "phase handoffs",
+          lines: list.map((e) => `• ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`),
+          pageSize: 10,
+        });
         return;
       }
       if (action === "show") {
@@ -3149,6 +3161,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const resolvedFeature = resolveFeatureRefStrict(features, ref);
         if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
         const feature = resolvedFeature.feature;
+        markFeatureRead(feature.id);
         const phases = (await st.loadAllPhases()).filter((p) => p.featureId === feature.id);
         const linkedRequirements = await st.linkedRequirementsForFeature(feature.id);
         const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases${linkedRequirements.length ? `; ${linkedRequirements.length} linked requirement${linkedRequirements.length === 1 ? "" : "s"}` : ""})`;
@@ -3429,6 +3442,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const features = (await st.loadFeatures()).features;
         const phase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
         if (!phase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+        markPhaseRead(phase.id, phase.featureId);
         const linkedRequirements = await st.linkedRequirementsForPhase(phase.id);
         const reqCount = linkedRequirements.length;
         const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
@@ -3746,6 +3760,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const features = (await st.loadFeatures()).features;
         const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
         if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+        markTaskRead(found.task.id, found.phase.id, found.phase.featureId);
         const summary = `${found.task.title} — ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status})`;
         if (!params.full) return { content: [{ type: "text", text: summary }], details: {} };
         const project = await st.loadProject();
@@ -4061,6 +4076,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(), relatedTaskId: "",
         pausedAt: nowISO(), pausedBy: params.paused_by?.trim() ?? "",
       };
+      invalidateReads();
       const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
       await st.syncTaskStatusRollup(found.phase.id);
       const activeDeviation = (await st.loadProject()).workDeviations
@@ -4198,14 +4214,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.writeGenerated();
       const sourceRef = `${formatPhaseRef(source.phase.number, featureNumberOfPhase(source.phase, features))}/T${String(source.task.number).padStart(3, "0")}`;
       const targetRef = `${formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features))}/T${String(target.task.number).padStart(3, "0")}`;
+      const targetReadAdvisory = parentReadAdvisory(target.phase.featureId, target.phase.id);
       return {
         content: [{ type: "text", text: [
           `🔀 Task switched: ${sourceRef} → ${targetRef}`,
           `Resume checkpoint: ${snapshot.whatWasBeingDone}`,
           `Return target: ${sourceRef} from ${snapshot.resumeLocation}`,
           "Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.",
+          ...(targetReadAdvisory ? [targetReadAdvisory.trimStart()] : []),
         ].join("\n") }],
-        details: { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id },
+        details: { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id, ...(targetReadAdvisory ? { readRequired: true } : {}) },
       };
     },
   });
@@ -4312,10 +4330,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", now);
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      const readAdvisory = parentReadAdvisory(parentFeature?.id, found.phase.id);
       return {
-        content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}` }],
+        content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}${readAdvisory}` }],
         details: startedTask,
         ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
+        ...(readAdvisory ? { readRequired: true } : {}),
       };
     },
   });

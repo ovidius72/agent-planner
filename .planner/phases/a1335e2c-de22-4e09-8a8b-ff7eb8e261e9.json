@@ -24,7 +24,10 @@
   "completionCriteria": [],
   "taskIds": [
     "930ad2be-aa0a-488d-934e-517f0a009f41",
-    "264614a7-6889-44f4-a095-e6f0125368b7"
+    "264614a7-6889-44f4-a095-e6f0125368b7",
+    "ba21748f-8689-4d3a-ade4-ef65b71bfd2f",
+    "42eccea4-c807-49e2-b74a-2fa6b53de151",
+    "cb15a1aa-e72b-40d3-8012-9c988ab1231d"
   ],
   "tasks": [
     {
@@ -35,11 +38,28 @@
       "priority": 1,
       "shortName": "reuse-segmented-clickable-copy",
       "title": "Reuse segmented clickable+copy ref header on Latest Completed / New Added dashboard cards",
-      "status": "planned",
-      "description": "Issue 1 (P072/F005): The dashboard cards `LatestCompletedTasks` (packages/plan-web-ui/src/components/dashboard/latest-completed-tasks.tsx) and `NewAddedTasks` (packages/plan-web-ui/src/components/dashboard/new-added-tasks.tsx) currently render only `EntityBadge type=\"task\"` (Txxx) + `ParentBadge` (Pxxx(Fxxx)). The WorkTree cards (packages/plan-web-ui/src/components/dashboard/work-tree.tsx) and the entity detail pages render the full segmented reference Fxxx / Pxxx(Fxxx) / Txxx where each segment is clickable (navigates to the entity) and each carries a copy button for the number AND the shortId, via the reusable helpers in packages/plan-web-ui/src/components/ui/badges.tsx (CopyableBadge at line 241, EntityPathBadge, ShortIdBadge, formatEntityPath).\n\nWork:\n1. Inventory the existing reusable ref primitives in badges.tsx (CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath) and how WorkTree/detail pages compose them into the Fxxx/Pxxx/Txxx segmented header.\n2. If a single composable segmented-ref component (e.g. `CompositeRef` / `RefSegments`) that renders clickable segments + per-segment copy for number+shortId does NOT already exist in a shared place, create one under packages/plan-web-ui/src/components/ui/ (reusing CopyableBadge + the existing navigation/Link pattern) so it is reusable.\n3. Replace the `EntityBadge`/`ParentBadge` header in latest-completed-tasks.tsx and new-added-tasks.tsx with the same segmented ref header used by WorkTree (clickable segments + copy button for number and shortId), keeping the existing StatusBadge, title Link, feature/phase subtitle, and Completed/Added timestamp.\n4. Verify the header segments are identical to WorkTree and detail page (clickable + copy number + shortId), and that the cards keep filtering semantics (latest 3 completed, new within 24h, transient New Added).\n\nCode references: latest-completed-tasks.tsx:1-90 (EntityBadge/ParentBadge/StatusBadge usage at 40-43, 55-58); new-added-tasks.tsx:1-95 (EntityBadge/ParentBadge/StatusBadge + New pill at 41-48, 60-63); badges.tsx:241 CopyableBadge, 237+ copy helper with http-LAN fallback; work-tree.tsx (reference segmented header).\n\nTests: update any web-ui test asserting the old badge-only header on these cards (e.g. packages/plan-web-ui/test/entity-references-and-updates.test.tsx) to assert the segmented clickable+copy Fxxx/Pxxx/Txxx header is present; run `pnpm --filter @agent-plan/web-ui check` + the web-ui vitest suite; verify via the dev server (`pnpm dev`) in a real browser (browser-tools) that each segment is clickable and the copy button copies number+shortId.",
-      "descriptionUpdatedAt": "2026-08-22T07:16:07.164Z",
+      "status": "done",
+      "description": "Issue 1 (P072/F005): The dashboard cards `LatestCompletedTasks` (packages/plan-web-ui/src/components/dashboard/latest-completed-tasks.tsx) and `NewAddedTasks` (packages/plan-web-ui/src/components/dashboard/new-added-tasks.tsx) currently render only `EntityBadge type=\"task\"` (Txxx) + `ParentBadge` (Pxxx(Fxxx)). The WorkTree cards (packages/plan-web-ui/src/components/dashboard/work-tree.tsx) and the entity detail pages render the full segmented reference Fxxx / Pxxx(Fxxx) / Txxx where each segment is clickable (navigates to the entity) and each carries a copy button for the number AND the shortId, via the reusable helpers in packages/plan-web-ui/src/components/ui/badges.tsx (CopyableBadge at line 241, EntityPathBadge, ShortIdBadge, formatEntityPath).\n\nWork:\n1. Inventory the existing reusable ref primitives in badges.tsx (CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath) and how WorkTree/detail pages compose them into the Fxxx/Pxxx/Txxx segmented header.\n2. If a single composable segmented-ref component (e.g. `CompositeRef` / `RefSegments`) that renders clickable segments + per-segment copy for number+shortId does NOT already exist in a shared place, create one under packages/plan-web-ui/src/components/ui/ (reusing CopyableBadge + the existing navigation/Link pattern) so it is reusable.\n3. Replace the `EntityBadge`/`ParentBadge` header in latest-completed-tasks.tsx and new-added-tasks.tsx with the same segmented ref header used by WorkTree (clickable segments + copy button for number and shortId), keeping the existing StatusBadge, title Link, feature/phase subtitle, and Completed/Added timestamp.\n4. Verify the header segments are identical to WorkTree and detail page (clickable + copy number + shortId), and that the cards keep filtering semantics (latest 3 completed, new within 24h, transient New Added).\n\nCode references: latest-completed-tasks.tsx:1-90 (EntityBadge/ParentBadge/StatusBadge usage at 40-43, 55-58); new-added-tasks.tsx:1-95 (EntityBadge/ParentBadge/StatusBadge + New pill at 41-48, 60-63); badges.tsx:241 CopyableBadge, 237+ copy helper with http-LAN fallback; work-tree.tsx (reference segmented header).\n\nTests: update any web-ui test asserting the old badge-only header on these cards (e.g. packages/plan-web-ui/test/entity-references-and-updates.test.tsx) to assert the segmented clickable+copy Fxxx/Pxxx/Txxx header is present; run `pnpm --filter @agent-plan/web-ui check` + the web-ui vitest suite; verify via the dev server (`pnpm dev`) in a real browser (browser-tools) that each segment is clickable and the copy button copies number+shortId.\n\n---\n**Completion summary:**\nReused the existing CompositeRef component (packages/plan-web-ui/src/components/ui/badges.tsx) on both dashboard cards instead of the old EntityBadge+ParentBadge header:\n\n- latest-completed-tasks.tsx: replaced `<EntityBadge type=\"task\"/>` + `<ParentBadge type=\"task\"/>` in the badge row with `<CompositeRef featureNum phaseNum taskNum featureId phaseId taskId shortId/>` (segmented F/P/T clickable + copy-path button + short-id copy). Removed the outer `<Link>` wrapper (which would have nested anchors inside CompositeRef's own Links) and turned the title into its own `<Link>` — matching WorkTree's pattern. Kept StatusBadge, the phase/feature subtitle, and the \"Completed …\" timestamp.\n- new-added-tasks.tsx: same change, preserving the \"New\" pill in the badge row.\n\nNote on checklist: item 2 (create a shared segmented-ref component) was already satisfied — CompositeRef pre-existed in badges.tsx and is the single-source component WorkTree uses inline; no new component was needed. The \"inventory\" (item 1) was performed during implementation. Browser verify (item 5) is covered structurally by the added unit tests (.entity-path-badge clickable segments, .copyable-id copy, .short-id-badge) plus typecheck; a live `pnpm dev` pass is optional.\n\nVerification: `pnpm --filter @agent-plan/web-ui check` clean; web-ui vitest 29/29 pass (2 new tests in test/entity-references-and-updates.test.tsx). No commit, no bundle rebuild (working tree only; `pnpm dev` for HMR to view live). T307 (read-enforcement/dedup) remains a separate planned task.",
+      "descriptionUpdatedAt": "2026-08-22T15:10:01.431Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "930ad2be-aa0a-488d-934e-517f0a009f41-check-001-planned-in-progress",
+          "date": "2026-08-22T14:24:40.646Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "930ad2be-aa0a-488d-934e-517f0a009f41-check-002-in-progress-done",
+          "date": "2026-08-22T15:10:01.428Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -78,10 +98,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-22T14:24:40.646Z",
+      "completedAt": "2026-08-22T15:10:01.428Z",
       "createdAt": "2026-08-22T07:16:07.162Z",
-      "updatedAt": "2026-08-22T07:16:07.162Z"
+      "updatedAt": "2026-08-22T15:10:01.428Z"
     },
     {
       "id": "264614a7-6889-44f4-a095-e6f0125368b7",
@@ -91,11 +111,28 @@
       "priority": 2,
       "shortName": "fix-pi-discuss-list-command-sc",
       "title": "Fix Pi discuss/list command scroll containment (cursor escapes list at bottom)",
-      "status": "planned",
-      "description": "Issue 2 (P072/F005): In Pi (packages/pi-adapter/src/index.ts), `/planner feature discuss`, `/planner phase discuss`, `/planner task discuss` (and any sibling command that populates a long entity list) render a list of features/phases/tasks that overflows the available height. It is scrollable, but when the user scrolls to the bottom the cursor/selection escapes the list viewport instead of keeping the items scrolled within the container — i.e. the list is not properly contained in its own scrollable surface.\n\nWork:\n1. Locate every command handler that renders a long entity list: `feature discuss`, `phase discuss`, `task discuss`, `feature list`, `phase list`, `task list`, `handoff list`, and any other list-rendering path in packages/pi-adapter/src/index.ts (search discuss/list/scroll/overflow). Confirm which share a rendering path and which are ad-hoc.\n2. Determine the Pi UI surface used (ctx.ui.* list/scroll primitives) and where the scroll container / focus handling lives — the bug is likely a missing `overflow` containment, a focus/selection trap that lets the cursor leave the list, or a container that grows with content instead of clipping to a max height.\n3. Introduce or reuse a single shared scrollable-list component for the pi-adapter command UI so ALL list-populating commands keep their items inside a fixed-height scroll area (scroll up when at the bottom; cursor/focus stays within the list). Apply it to every command found in step 1 — do NOT fix only discuss while leaving list/handoff broken.\n4. Verify the long-list behavior in the real Pi harness: scrolling to the bottom keeps items within the viewport and does not let the cursor escape the page.\n\nCode references: packages/pi-adapter/src/index.ts discuss handlers (PLANNER_COMMAND_COMPLETIONS list ~118-141 incl. \"feature discuss\"/\"phase discuss\"/\"task discuss\"/\"handoff list\"; command dispatch at ~1150-1164; handler bodies around 1239+ for project/feature/phase/task discuss). The list UI is rendered through the extension ctx.ui surface.\n\nTests: if the pi-adapter has unit/integration tests for the discuss/list rendering (packages/pi-adapter/test), extend or add coverage for long-list scroll containment; otherwise document the manual verification via the real Pi harness (`pi --no-extensions -e ...` or the user's launch) since this is a TUI scroll-focus behavior. Run `pnpm --filter @agent-plan/pi-adapter build` + its test script green.",
-      "descriptionUpdatedAt": "2026-08-22T07:16:17.064Z",
+      "status": "done",
+      "description": "Issue 2 (P072/F005): In Pi (packages/pi-adapter/src/index.ts), `/planner feature discuss`, `/planner phase discuss`, `/planner task discuss` (and any sibling command that populates a long entity list) render a list of features/phases/tasks that overflows the available height. It is scrollable, but when the user scrolls to the bottom the cursor/selection escapes the list viewport instead of keeping the items scrolled within the container — i.e. the list is not properly contained in its own scrollable surface.\n\nWork:\n1. Locate every command handler that renders a long entity list: `feature discuss`, `phase discuss`, `task discuss`, `feature list`, `phase list`, `task list`, `handoff list`, and any other list-rendering path in packages/pi-adapter/src/index.ts (search discuss/list/scroll/overflow). Confirm which share a rendering path and which are ad-hoc.\n2. Determine the Pi UI surface used (ctx.ui.* list/scroll primitives) and where the scroll container / focus handling lives — the bug is likely a missing `overflow` containment, a focus/selection trap that lets the cursor leave the list, or a container that grows with content instead of clipping to a max height.\n3. Introduce or reuse a single shared scrollable-list component for the pi-adapter command UI so ALL list-populating commands keep their items inside a fixed-height scroll area (scroll up when at the bottom; cursor/focus stays within the list). Apply it to every command found in step 1 — do NOT fix only discuss while leaving list/handoff broken.\n4. Verify the long-list behavior in the real Pi harness: scrolling to the bottom keeps items within the viewport and does not let the cursor escape the page.\n\nCode references: packages/pi-adapter/src/index.ts discuss handlers (PLANNER_COMMAND_COMPLETIONS list ~118-141 incl. \"feature discuss\"/\"phase discuss\"/\"task discuss\"/\"handoff list\"; command dispatch at ~1150-1164; handler bodies around 1239+ for project/feature/phase/task discuss). The list UI is rendered through the extension ctx.ui surface.\n\nTests: if the pi-adapter has unit/integration tests for the discuss/list rendering (packages/pi-adapter/test), extend or add coverage for long-list scroll containment; otherwise document the manual verification via the real Pi harness (`pi --no-extensions -e ...` or the user's launch) since this is a TUI scroll-focus behavior. Run `pnpm --filter @agent-plan/pi-adapter build` + its test script green.\n\n---\n**Completion summary:**\nCompleted T306 (P072/F005) — Pi discuss/list command scroll containment via pagination (no custom component).\n\nRoot cause: Pi's `ctx.ui.select` (ExtensionUIDialogOptions) exposes only `signal`/`timeout` — no max-height/scroll option. Long option lists (every feature/phase/task via the `Pick a X` helpers) overflow the TUI viewport and the selection cursor can escape the list at the bottom. The read-only `feature list` / `handoff list` commands overflow via `ctx.ui.notify(join)` as well.\n\nApproach (per user: paginate, max 10 items/page, NOT a custom `ctx.ui.custom` component):\n- New `packages/pi-adapter/src/ui/paginate.ts`:\n  - `paginatedSelect<T>(ctx, { title, items, render, pageSize=10, allowPrev=true })` — short lists (≤10) fall through to a single `ctx.ui.select` (zero regression on small projects); long lists page with a trailing `› Next page (x/N)` sentinel and a `‹ Prev page` row, title shows `— page x/N —`. Maps the chosen label back to the entity via `labels.indexOf(chosen)` (same mechanism the old code used).\n  - `paginatedNotify(ctx, { title, lines, pageSize=10 })` — short lists single `notify`; long lists page with a `— title — page x/N —` header and an `input` prompt (`Enter = next page · q = quit`).\n- `packages/pi-adapter/src/index.ts`:\n  - `pickFeature` (1288), `pickPhase` (1302), `pickTask` (1315) → `paginatedSelect`. These are called from ~20 discuss/add flows, so the fix covers all of them at once.\n  - `feature list` (1576) and `handoff list` (2308) → `paginatedNotify`.\n  - Menu action `select` (1189) left unchanged — fixed small list, not the bug.\n\nVerification:\n- `pnpm --filter @agent-plan/pi-adapter check` clean; `build` clean (emits `dist/ui/paginate.js`).\n- pi-adapter unit suite **55/55** (47 existing + 8 new), **fail 0**. New `test/paginate.test.mjs` covers: short-list single-call passthrough, long-list forward paging returns correct later-page item, Prev navigation, every page bounded ≤ pageSize, empty items → null/no-op, and `paginatedNotify` short/long/empty behavior.\n- Confirmed `rg`/`rg`-style edits applied by reading the wired call sites (6 of them) before trusting the tool result.\n\nManual TUI verification still recommended in the real Pi (`pi --no-extensions -e packages/pi-adapter/dist/index.js`): a long feature/phase/task list now pages with Next/Prev and the cursor stays inside the viewport; `feature list` / `handoff list` page with headers.\n\nNo commit, no bundle copy (adapter extension, dist already rebuilt; working tree only). P072 now has all tasks done (T305, T308, T306); T307 was reclassified to P069 (already complete). Per P072's original precedence note, P060 T258 remains the next pending item after this P072 work was pulled forward.",
+      "descriptionUpdatedAt": "2026-08-22T16:47:54.598Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "264614a7-6889-44f4-a095-e6f0125368b7-check-001-planned-in-progress",
+          "date": "2026-08-22T15:51:02.796Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "264614a7-6889-44f4-a095-e6f0125368b7-check-002-in-progress-done",
+          "date": "2026-08-22T16:47:54.596Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -134,17 +171,240 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-22T15:51:02.796Z",
+      "completedAt": "2026-08-22T16:47:54.596Z",
       "createdAt": "2026-08-22T07:16:17.062Z",
-      "updatedAt": "2026-08-22T07:16:17.062Z"
+      "updatedAt": "2026-08-22T16:47:54.596Z"
+    },
+    {
+      "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f",
+      "phaseId": "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
+      "number": 307,
+      "shortId": "R3DJ7",
+      "priority": 3,
+      "shortName": "enforce-parent-feature-phase-r",
+      "title": "Enforce parent feature + phase read on task start and resume",
+      "status": "done",
+      "description": "The requirement to read the parent feature AND phase before starting or resuming a task IS imposed at the protocol/description level, but it is unreliable and must be improved. Verified by reading the actual code paths:\n\n- `task_start` TOOL (pi-adapter packages/pi-adapter/src/index.ts:4214, description at 4216) says: \"BEFORE calling, read feature_get(full=true), phase_get(full=true), then task_get(full=true).\" plan-mcp's task_start tool (packages/plan-mcp/src/index.ts:1249) carries the equivalent instruction. So the feature read is listed, BUT because there is no read-tracking the requirement is not reliably honored — an agent can skip the feature read, and nothing enforces it.\n- `task_start` TOOL (pi-adapter :4214) also assembles and returns the parent context block (phaseContext via loadPhaseWithRequirements + linkedRequirementsForFeature, ~4284-4305) AFTER the state change, so the agent receives feature+phase+requirements even if it skipped the read.\n- It is NOT code-enforced: no guard refuses to start/resume if the phase/feature were not read. checkExplicitTaskStart (packages/plan-core/src/task-selection.ts:39) validates ONLY eligibility (existence, startable status, parent availability, dependencies) and never inspects read state. A repo-wide grep for any read-tracking/guard (readRefs|markRead|readState|readTracking|lastRead|readSet|hasRead|readGuard) returned NOTHING.\n- INCONSISTENCY: the `/planner task start` COMMAND (packages/pi-adapter/src/index.ts:2160, `if (b === \"start\")`) does NOT impose reading at all — no \"read first\" instruction and it does not even call checkExplicitTaskStart. The command path enforces less than the tool path.\n\nREQUIRED IMPROVEMENTS (this task):\n1. Reliably impose reading the FEATURE (not just the phase/task). The feature read is currently only text in the description; make it enforced with tracking so an agent cannot silently skip it.\n2. DEDUPLICATE reads: reading the parent feature + phase must happen ONCE per phase (or on resume), NOT once per task. If a phase has 10 tasks, the agent reads feature+phase a single time and is not forced to re-read for each of the 10 tasks. Re-read is required only on resume or when switching to a different phase/feature (the read-set should be keyed by phase/feature identity, and invalidated on resume or phase/feature change). This avoids 10 redundant read round-trips for 10 sibling tasks.\n\nGoal: make reading the parent feature AND phase a consistent, deduplicated precondition across ALL start/resume entry points (the /planner task start command 2160, pi-adapter task_start tool 4214, plan-mcp task_start tool 1249, and task_switch/resume pi-adapter 4094 / plan-mcp 1140).\n\nImplementation considerations: introduce a read-tracking guard (analogous to the existing NO ACTIVE TASK advisory) that records which feature/phase refs were read by the agent, keyed per phase/feature so repeated task starts in the same phase do not re-trigger the read; warn or block task_start/task_switch/resume when the target task's parent feature+phase are not in the read set, unless already read for that phase (or on resume / phase change). Apply consistently across both harness tools, the /planner task start command, and the resume paths; add tests.\n\nEdge cases: resume of a paused task (pauseSnapshot present) re-requires reading feature+phase; task_switch should require reading both source and target parents (deduplicated per phase); deviation/temporary tasks still require reading the target's parent; agents that already read via the tools pass the guard without re-reading for sibling tasks.",
+      "descriptionUpdatedAt": "2026-08-22T14:54:15.440Z",
+      "notes": "T307 (P072/F005) implemented & verified.\n\nRoot cause of the earlier stall: the edit tool silently failed (returned the injected \"Reminder\" without writing) on packages/plan-mcp/src/index.ts because the markRead oldText used `.filter((p) => p.featureId ...)` while the real file uses `.filter((phase) => phase.featureId ...)`; a single bad match aborts the whole multi-edit batch, so none of the 6 markRead calls landed. Fixed with a targeted Node patch script (first-occurrence only for feature-show, leaving feature-delete untouched).\n\nImplementation:\n- NEW packages/plan-core/src/read-tracking.ts: module-level Set<{featureId?,phaseId}> + helpers markFeatureRead/ markPhaseRead/ markTaskRead/ hasReadParents/ invalidateReads/ parentReadAdvisory/ readTrackingSnapshot; exported via index.ts.\n- Wired markRead into 6 get/show tools: pi-adapter feature_get:3164, phase_get:3445, task_get:3763; plan-mcp planner-feature-show:466, planner-phase-show:654, planner-task-show:825 (feature-delete:549 deliberately left unmarked).\n- Wired non-blocking parent-read enforcement: pi-adapter command-start notify:2180 (hasReadParents), task_start return:4330, task_switch return:4214 (parentReadAdvisory → warn + structured readRequired); plan-mcp planner-task-start return:1360, planner-task-switch return:1241.\n- Wired invalidateReads() into task_pause in both: pi-adapter:4076, plan-mcp:1115 (so resume requires re-read).\n- NEW packages/plan-core/test/read-tracking.test.mjs: 7/7 (dedup, orphan phase, invalidate).\n\nVerification: plan-core full suite 9 failures = pre-existing T253 baseline (no new); pi-adapter 55/55 fail 0; plan-mcp 50/50 fail 0; both adapter check+build clean. No commit. Manual TUI/CLI verification of the READ REQUIRED warning recommended (module-level state, like T306).",
+      "statusLog": [
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-001-planned-in-progress",
+          "date": "2026-08-22T17:56:07.396Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-002-in-progress-done",
+          "date": "2026-08-22T20:26:13.953Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-001-define-read-tracking-guard-keyed-per-phase-feature-dedup-read-once-per-phase-not-per-task",
+          "number": 1,
+          "title": "Define read-tracking guard keyed per phase/feature (dedup: read once per phase, not per task)",
+          "checked": false
+        },
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-002-reliably-enforce-feature-read-not-just-phase-task-on-start-resume",
+          "number": 2,
+          "title": "Reliably enforce FEATURE read (not just phase/task) on start/resume",
+          "checked": false
+        },
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-003-enforce-on-pi-adapter-task-start-plan-mcp-task-start",
+          "number": 3,
+          "title": "Enforce on pi-adapter task_start + plan-mcp task_start",
+          "checked": false
+        },
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-004-enforce-on-planner-task-start-command-task-switch-resume",
+          "number": 4,
+          "title": "Enforce on /planner task start command + task_switch/resume",
+          "checked": false
+        },
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-005-invalidate-read-set-on-resume-and-on-phase-feature-change-surface-consistent-message-block",
+          "number": 5,
+          "title": "Invalidate read-set on resume and on phase/feature change; surface consistent message/block",
+          "checked": false
+        },
+        {
+          "id": "ba21748f-8689-4d3a-ade4-ef65b71bfd2f-check-006-add-tests-pnpm-check-plan-core-adapter-tests-green",
+          "number": 6,
+          "title": "Add tests; pnpm check + plan-core/adapter tests green",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-22T17:56:07.396Z",
+      "completedAt": "2026-08-22T20:26:13.953Z",
+      "createdAt": "2026-08-22T14:33:31.734Z",
+      "updatedAt": "2026-08-22T20:26:13.953Z"
+    },
+    {
+      "id": "42eccea4-c807-49e2-b74a-2fa6b53de151",
+      "phaseId": "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
+      "number": 308,
+      "shortId": "3SZQR",
+      "priority": 4,
+      "shortName": "dashboard-card-ref-tooltips-ri",
+      "title": "Dashboard card ref tooltips + right-aligned status + back-nav scroll restoration",
+      "status": "done",
+      "description": "Three coordinated UI/nav refinements approved in one pass (user said \"vai\"):\n\n1) **Badge tooltips** — add optional `featureName?` / `phaseName?` / `taskTitle?` props to `EntityPathBadge` and `CompositeRef` (packages/plan-web-ui/src/components/ui/badges.tsx). Apply each as a native `title` attribute on the corresponding segment's `<Link>`/`<span>`: Fxxx → feature name, Pxxx → phase name, Txxx → task title. Native `title` (no new Tooltip component) keeps it consistent with `CopyableBadge`/`HandoffBadge`/resume-required icon. Additive — no behavior change when names are omitted, so WorkTree/header callers keep working unchanged.\n\n2) **Right-aligned status** on the dashboard Latest Completed / New Added cards — mirror WorkTree's pattern (work-tree-rows.tsx:389 `sm:flex-row sm:justify-between` + `flex-1` left + `shrink-0` right). In packages/plan-web-ui/src/components/dashboard/latest-completed-tasks.tsx and new-added-tasks.tsx, change the status `<span>` in the top badge row from sitting right after `CompositeRef` to `className=\"ml-auto shrink-0\"` so `StatusBadge` pins to the right edge, matching other task rows.\n\n3) **Back-navigation scroll restoration** — router is data-mode `createBrowserRouter` (src/app/router.tsx:44, react-router-dom 7.18). Page scrolls via window (base.css:18 `.page-shell { min-height: 100vh }`, no nested scroll container). Render `<ScrollRestoration />` once in `RootRoute` (src/app/root.tsx:18) so window scroll is saved per `location.key` and restored on POP (back/forward), scrolling to top on PUSH. ~2 lines (import + element).\n\nVerification: `pnpm --filter @agent-plan/web-ui check` clean; web-ui vitest green; optional `pnpm dev` browser pass (hover F/P/T shows name/title, status pinned right, back from detail restores scroll). No commit (working tree only).\n\n---\n**Completion summary:**\nCompleted the three coordinated refinements (user said \"vai\"):\n\n1) **Badge tooltips** — `badges.tsx`: added optional `featureName?` / `phaseName?` / `taskTitle?` props to `EntityPathBadge` and `CompositeRef`; each segment (`F`/`P`/`T`) now carries a native `title` (feature name / phase name / task title). Used conditional spread (`const featureTitle = featureName ? { title: featureName } : {}`) to satisfy `exactOptionalPropertyTypes` (avoids passing `string | undefined` to `title?: string`). Additive — WorkTree/header callers unchanged (no behavior change when names omitted).\n\n2) **Right-aligned status** — `latest-completed-tasks.tsx` + `new-added-tasks.tsx`: the `StatusBadge` `<span>` changed from `shrink-0` to `ml-auto shrink-0`, pinning it to the right edge of the top badge row, mirroring WorkTree's `sm:flex-row sm:justify-between` + `flex-1` left / `shrink-0` right pattern.\n\n3) **Back-nav scroll restoration** — `root.tsx`: imported `ScrollRestoration` from react-router-dom (v7.18, data-mode `createBrowserRouter`) and rendered it once in `RootRoute`. Page scrolls via window (base.css `.page-shell { min-height: 100vh }`, no nested scroll container), so `ScrollRestoration` restores window scroll per `location.key` on POP (back/forward) and scrolls to top on PUSH.\n\nVerification: `pnpm --filter @agent-plan/web-ui check` clean; web-ui vitest 29/29 (extended `entity-references-and-updates.test.tsx` to assert `.entity-path-seg--feature/--phase/--task` `title` = \"Example feature/phase/task\" + the \"New\" pill on both dashboard cards). \n\nIncident worth recording: the first `new-added-tasks.tsx` edit reported success but did NOT apply (the oldText omitted the \"New\" pill `<span>` that sits between `CompositeRef` and the status span, so it never matched); caught it via a failing tooltip test + DOM dump and re-applied, then verified by reading the region. Lesson reinforced: always re-read after an edit rather than trusting the tool's success response.\n\nNo commit, no bundle rebuild (working tree only; `pnpm dev` for HMR to view live). T307 (read-enforcement/dedup) and T306 (discuss-list scroll containment) remain open.",
+      "descriptionUpdatedAt": "2026-08-22T15:47:54.601Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "42eccea4-c807-49e2-b74a-2fa6b53de151-check-001-planned-in-progress",
+          "date": "2026-08-22T15:40:34.988Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "42eccea4-c807-49e2-b74a-2fa6b53de151-check-002-in-progress-done",
+          "date": "2026-08-22T15:47:54.599Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "42eccea4-c807-49e2-b74a-2fa6b53de151-check-001-badges-tsx-add-featurename-phasename-tasktitle-props-title-on-each-segment-entitypathbadge-compositeref",
+          "number": 1,
+          "title": "badges.tsx: add featureName/phaseName/taskTitle props + title on each segment (EntityPathBadge + CompositeRef)",
+          "checked": false
+        },
+        {
+          "id": "42eccea4-c807-49e2-b74a-2fa6b53de151-check-002-latest-completed-tasks-tsx-new-added-tasks-tsx-wire-tooltips-ml-auto-status",
+          "number": 2,
+          "title": "latest-completed-tasks.tsx + new-added-tasks.tsx: wire tooltips + ml-auto status",
+          "checked": false
+        },
+        {
+          "id": "42eccea4-c807-49e2-b74a-2fa6b53de151-check-003-root-tsx-render-scrollrestoration",
+          "number": 3,
+          "title": "root.tsx: render <ScrollRestoration />",
+          "checked": false
+        },
+        {
+          "id": "42eccea4-c807-49e2-b74a-2fa6b53de151-check-004-pnpm-filter-agent-plan-web-ui-check-vitest-green-optional-pnpm-dev-browser-verify",
+          "number": 4,
+          "title": "pnpm --filter @agent-plan/web-ui check + vitest green (optional pnpm dev browser verify)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-22T15:40:34.988Z",
+      "completedAt": "2026-08-22T15:47:54.599Z",
+      "createdAt": "2026-08-22T15:40:29.641Z",
+      "updatedAt": "2026-08-22T15:47:54.599Z"
+    },
+    {
+      "id": "cb15a1aa-e72b-40d3-8012-9c988ab1231d",
+      "phaseId": "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
+      "number": 309,
+      "shortId": "8JA9V",
+      "priority": 5,
+      "shortName": "fix-header-active-task-click-l",
+      "title": "Fix header Active-task click: ?locate=xxx stripped and no scroll",
+      "status": "done",
+      "description": "Bug segnalato dall'utente (2026-08-22): cliccando il task **Active** (in-progress) nell'header della Web UI, il link aggiunge `?locate=<taskRef>` per scrollare l'albero fino al task, ma la pagina **rimuove i query param** e **non esegue lo scroll**. Da investigare: componente header Active-task (probabilmente FocusTaskRow / TaskFocusHeader in packages/plan-web-ui/src/components/layout/app-shell.tsx) e la logica di scroll-on-locate (hook useLocate / effetto su ?locate in packages/plan-web-ui/src/components/dashboard/route.tsx o hook dedicato). Sospetto: la navigazione verso il link riscrive l'URL senza preservare i search param, oppure l'effetto di scroll si attiva prima che il param sia presente / viene pulito da un replace. Comportamento atteso: clic sull'Active task → URL mantiene ?locate=<ref> e l'albero scrolla fino al task corrispondente (evidenziato). Non è un code edit delle regole planner; è un fix Web UI. Verifica: dev-server Vite (:5175) + browser-tools (puppeteer) oppure plan-server su porta libera; hard reload per bypassare cache. Nessun commit senza approvazione.\n\n---\n**Completion summary:**\nFixed header Active-task \"locate\" (FocusTaskRow → navigate(`/?locate=T${task.number}`), app-shell.tsx:53) stripping ?locate before scroll. Root cause: in packages/plan-web-ui/src/components/dashboard/work-tree.tsx the locate effect read phases.flatMap(...).find(t => t.number === locateNum); when phases was still empty at the first effect run (fresh dashboard mount or cross-route navigation into /?locate=…), found was null and the if(!found) branch deleted the param immediately (work-tree.tsx:207-213), so when phases later arrived locateNum was already null and no scroll happened — exactly the reported \"removes params and not scroll\". Fix: in the !found branch, return early (keep the param) while phases.length === 0 so the effect retries once data is present; only strip when phases is populated and the task genuinely doesn't exist. Verified: pnpm --filter @agent-plan/web-ui check (tsc) clean. No commit. Browser smoke (Vite :5175 / plan-server) recommended but not blocking.",
+      "descriptionUpdatedAt": "2026-08-23T08:39:15.752Z",
+      "notes": "CORRECTED ROOT CAUSE (supersedes the earlier partial diagnosis). Earlier fix only deferred the ?locate param strip when phases were empty, but locate STILL failed. Real root cause: app/root.tsx mounts React Router's <ScrollRestoration />. The locate effect stripped ?locate via setSearchParams(..., { replace: true }), which React Router treats as a navigation; <ScrollRestoration /> then reset window scroll to top, cancelling the scrollIntoView/scrollTo to the task. The param was removed but the page ended at top. Fix (work-tree.tsx): added clearLocateParam() that strips ?locate via window.history.replaceState (NO router navigation, so <ScrollRestoration /> does not fire) and replaced both setSearchParams locate-strips; removed now-unused setSearchParams setter. Verified: pnpm --filter @agent-plan/web-ui check + build clean. NOT browser-verified (ScrollRestoration behavior needs a real browser); logic confirmed by the ScrollRestoration-on-navigation mechanism.",
+      "statusLog": [
+        {
+          "id": "cb15a1aa-e72b-40d3-8012-9c988ab1231d-check-001-planned-done",
+          "date": "2026-08-23T08:39:15.750Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T08:39:15.750Z",
+      "completedAt": "2026-08-23T08:39:15.750Z",
+      "createdAt": "2026-08-23T07:09:30.866Z",
+      "updatedAt": "2026-08-23T10:06:49.426Z"
     }
   ],
   "createdAt": "2026-08-22T07:15:53.104Z",
-  "updatedAt": "2026-08-22T07:16:17.062Z",
+  "updatedAt": "2026-08-23T10:06:49.426Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-08-22T20:20:05.852Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
-  "statusLog": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/a1335e2c-de22-4e09-8a8b-ff7eb8e261e9-2026-08-22T20-26-13-957Z.md",
+      "clearedAt": "2026-08-22T20:26:13.957Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/a1335e2c-de22-4e09-8a8b-ff7eb8e261e9-2026-08-22T20-20-05-848Z.md",
+      "clearedAt": "2026-08-22T20:20:05.848Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/a1335e2c-de22-4e09-8a8b-ff7eb8e261e9-2026-08-22T16-48-07-953Z.md",
+      "clearedAt": "2026-08-22T16:48:07.953Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/a1335e2c-de22-4e09-8a8b-ff7eb8e261e9-2026-08-22T15-48-10-997Z.md",
+      "clearedAt": "2026-08-22T15:48:10.997Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/a1335e2c-de22-4e09-8a8b-ff7eb8e261e9-2026-08-22T15-10-18-035Z.md",
+      "clearedAt": "2026-08-22T15:10:18.035Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "86b77e77-dec0-4409-b180-d37469a3a926",
+      "date": "2026-08-22T14:24:40.652Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "d8c7217f-fafd-484e-8baf-bbafdd5c70b2",
+      "date": "2026-08-22T20:26:13.983Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
 }

@@ -89,11 +89,15 @@ function normalizeRequirement(requirement: Requirement): Requirement {
 }
 
 async function fetchOrThrow(path: string, init?: RequestInit): Promise<Response> {
+  // Every call from the web UI is the human supervisor. Tag it so the server
+  // skips agent-only governance gates (e.g. feature/phase discuss-before-work).
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Planner-Source": "web-ui",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
   try {
-    return await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...init,
-    });
+    return await fetch(`${API_BASE}${path}`, { ...init, headers });
   } catch {
     throw new Response("Planner web server unavailable. Pi or planner-web may have stopped. Restart the planner web UI or Pi, then reload this page.", {
       status: 503,
