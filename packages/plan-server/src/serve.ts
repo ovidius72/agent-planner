@@ -1,13 +1,13 @@
-import { watch, existsSync, readFileSync } from "node:fs";
+import { watch, existsSync, readFileSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -92,6 +92,13 @@ function featureGovernanceReady(feature: Feature): boolean {
 
 function phaseGovernanceReady(phase: Phase): boolean {
   return Boolean(phase.discussedAt || (phase.contextReady && phase.contextReadyReason.trim()));
+}
+
+// Web UI calls are the human supervisor and are exempt from agent-only
+// governance gates (e.g. feature/phase discuss-before-work). Identified by the
+// X-Planner-Source: web-ui header the browser client always sends.
+function fromWebUi(c: Context): boolean {
+  return c.req.header("X-Planner-Source") === "web-ui";
 }
 
 function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): Task {
@@ -353,7 +360,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const idx = features.features.findIndex((f) => f.id === id);
     if (idx === -1) return c.json({ error: "not found" }, 404);
 
-    if (entersGovernedState(features.features[idx]?.status, body.status) && !featureGovernanceReady(body)) {
+    if (entersGovernedState(features.features[idx]?.status, body.status) && !fromWebUi(c) && !featureGovernanceReady(body)) {
       return c.json({ error: "feature governance required: discuss the feature first, or set contextReady=true with a reason before starting work." }, 400);
     }
 
@@ -396,7 +403,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     // Backward-compatible: accept a full Phase object, or generate one from title.
     if (body.id && body.slug && body.number && body.tasks && body.taskIds) {
       const full = body as Phase;
-      if (requiresGovernance(full.status) && !phaseGovernanceReady(full)) {
+      if (requiresGovernance(full.status) && !fromWebUi(c) && !phaseGovernanceReady(full)) {
         return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
       }
       await store.updatePhase(full.id, () => full);
@@ -495,7 +502,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (body.id !== id) return c.json({ error: "id mismatch" }, 400);
     const existingPhase = await store.loadPhase(id).catch(() => null);
     if (!existingPhase) return c.json({ error: "phase not found" }, 404);
-    if (entersGovernedState(existingPhase.status, body.status) && !phaseGovernanceReady(body)) {
+    if (entersGovernedState(existingPhase.status, body.status) && !fromWebUi(c) && !phaseGovernanceReady(body)) {
       return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
     }
     await store.updatePhase(id, () => body);
@@ -538,11 +545,11 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"]; checklist?: string[] }>();
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title required" }, 400);
-    if (body.status === "paused") return c.json({ error: "A task cannot be created paused without an in-progress checkpoint. Create it planned, then use task_pause/task_switch." }, 400);
+    if ((body.status as string | undefined) === "paused") return c.json({ error: "A task cannot be created paused without an in-progress checkpoint. Create it planned, then use task_pause/task_switch." }, 400);
 
     const phase = await store.loadPhase(phaseId).catch(() => null);
     if (!phase) return c.json({ error: "phase not found" }, 404);
-    if (requiresGovernance(body.status) && phase.featureId) {
+    if (requiresGovernance(body.status) && phase.featureId && !fromWebUi(c)) {
       const features = await store.loadFeatures();
       const feature = features.features.find((entry) => entry.id === phase.featureId);
       if (feature && !featureGovernanceReady(feature)) {
@@ -657,13 +664,14 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       pauseSnapshot: Task["pauseSnapshot"]; pendingResume: boolean; deviationId: string;
     };
     const active: FocusSummary[] = [];
-    const paused: FocusSummary[] = [];
     const pendingResume: FocusSummary[] = [];
     for (const phase of phases) {
       if (!phase.featureId) continue;
       for (const task of phase.tasks) {
+        if (task.status === "done" || task.status === "canceled" || task.status === "rejected") continue;
         const deviation = pendingByTask.get(task.id);
-        if (task.status !== "in-progress" && task.status !== "paused" && !deviation) continue;
+        const snapshot = task.pauseSnapshot ?? deviation?.snapshot ?? null;
+        if (task.status !== "in-progress" && !snapshot && !deviation) continue;
         const summary: FocusSummary = {
           id: task.id,
           number: task.number,
@@ -674,18 +682,85 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
           featureId: phase.featureId,
           featureNumber: featureIdToNum.get(phase.featureId) ?? 0,
           status: task.status,
-          pauseSnapshot: task.pauseSnapshot ?? deviation?.snapshot ?? null,
-          pendingResume: Boolean(deviation),
+          pauseSnapshot: snapshot,
+          pendingResume: Boolean(snapshot || deviation),
           deviationId: deviation?.id ?? "",
         };
-        if (deviation) pendingResume.push(summary);
-        else if (task.status === "in-progress") active.push(summary);
-        else if (task.status === "paused") paused.push(summary);
+        if (task.status === "in-progress") active.push(summary);
+        if (snapshot || deviation) pendingResume.push(summary);
       }
     }
-    pendingResume.sort((left, right) => (pendingOrder.get(left.deviationId) ?? Number.MAX_SAFE_INTEGER) - (pendingOrder.get(right.deviationId) ?? Number.MAX_SAFE_INTEGER));
-    paused.sort((left, right) => (right.pauseSnapshot?.pausedAt ?? "").localeCompare(left.pauseSnapshot?.pausedAt ?? ""));
-    return c.json({ active, paused, pendingResume });
+    pendingResume.sort((left, right) => {
+      const leftOrder = left.deviationId ? (pendingOrder.get(left.deviationId) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.deviationId ? (pendingOrder.get(right.deviationId) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return (right.pauseSnapshot?.pausedAt ?? "").localeCompare(left.pauseSnapshot?.pausedAt ?? "");
+    });
+    return c.json({ active, pendingResume });
+  });
+
+  /** Canonical HTTP task-entry path. Generic task updates must never start work,
+   * because start/resume is responsible for clearing checkpoints and closing
+   * any matching return-stack deviation. */
+  app.post(route("/tasks/:id/start"), async (c) => {
+    const taskId = c.req.param("id");
+    const [phases, featuresDoc, project] = await Promise.all([
+      store.loadAllPhases(), store.loadFeatures(), store.loadProject(),
+    ]);
+    const phase = phases.find((entry) => entry.tasks.some((task) => task.id === taskId));
+    const existing = phase?.tasks.find((task) => task.id === taskId);
+    if (!phase || !existing) return c.json({ error: "task not found" }, 404);
+    if (existing.status === "in-progress") return c.json({ error: "task is already in-progress" }, 400);
+
+    const eligibility = checkExplicitTaskStart(featuresDoc.features, phases, existing.id, project.workDeviations);
+    if (!eligibility.eligible) return c.json({ error: `Task start denied: ${eligibility.reason}` }, 400);
+    const selection = recommendNextTask(featuresDoc.features, phases, project.workDeviations);
+    if (selection.kind === "conflict") return c.json({ error: selection.reason }, 409);
+    if (selection.kind === "active" && selection.candidate?.task.id !== existing.id) {
+      return c.json({ error: `Task start denied: another task is active. Use task_switch to checkpoint it before starting this task.` }, 409);
+    }
+
+    const now = nowISO();
+    let updated: Task | undefined;
+    if (existing.pauseSnapshot) {
+      updated = await store.resumeTask(phase.id, existing.id, now);
+    } else {
+      await store.updatePhase(phase.id, (current) => {
+        const task = current.tasks.find((entry) => entry.id === existing.id);
+        if (!task) return current;
+        const previousStatus = task.status;
+        applyTaskLifecycleDates(task, "in-progress", now);
+        task.statusLog = [...(task.statusLog ?? []), {
+          id: createTaskId(),
+          date: now,
+          fromStatus: previousStatus,
+          toStatus: "in-progress",
+          title: `${previousStatus} → in-progress`,
+          description: "",
+        }];
+        task.updatedAt = now;
+        current.updatedAt = now;
+        updated = task;
+        return current;
+      });
+    }
+
+    const approvedDeviation = project.workDeviations.find((deviation) =>
+      deviation.temporaryTaskId === existing.id && deviation.state === "approved",
+    );
+    if (approvedDeviation) await store.setWorkDeviationState(approvedDeviation.id, "active", now);
+    const resumedDeviation = project.workDeviations
+      .filter((deviation) => deviation.resumeTaskId === existing.id
+        && (deviation.state === "resume-required" || deviation.state === "resolved"))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    if (resumedDeviation) await store.setWorkDeviationState(resumedDeviation.id, "resumed", now);
+
+    await store.syncTaskStatusRollup(phase.id);
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "phases-updated", data: { action: "task-started", id: phase.id, phaseId: phase.id, featureId: phase.featureId ?? "", taskId } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    await store.appendActivity("task_status", existing.id, `Task ${existing.id} → in-progress`);
+    return c.json(updated ?? existing);
   });
 
   app.get(route("/tasks/:id"), async (c) => {
@@ -708,18 +783,20 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const existing = phase.tasks.find((t) => t.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
 
-    if (body.status && body.status !== existing.status && (body.status === "paused" || existing.status === "paused")) {
-      return c.json({ error: "Paused lifecycle transitions require task_pause/task_switch/task_start so the resume checkpoint and return stack remain consistent." }, 400);
+    if (body.status && body.status !== existing.status && (body.status === "in-progress" || (body.status as string) === "paused" || (existing.status as string) === "paused")) {
+      return c.json({ error: "Task start/resume transitions require POST /tasks/:id/start so lifecycle state, checkpoints, and return stacks remain consistent." }, 400);
     }
 
-    // Validate motivation requirement for status transitions.
-    if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status)) {
+    // Validate motivation requirement for status transitions. The Web UI is the
+    // human supervisor and is exempt (X-Planner-Source: web-ui) — agents calling
+    // the API without that header are still required to motivate state changes.
+    if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status) && !fromWebUi(c)) {
       if (!body.motivation || !body.motivation.trim()) {
         return c.json({ error: `Status transition "${existing.status} → ${body.status}" requires a motivation. Provide the "motivation" field with a detailed explanation.` }, 400);
       }
     }
 
-    if (entersGovernedState(existing.status, body.status) && phase.featureId) {
+    if (entersGovernedState(existing.status, body.status) && phase.featureId && !fromWebUi(c)) {
       const features = await store.loadFeatures();
       const feature = features.features.find((entry) => entry.id === phase.featureId);
       if (feature && !featureGovernanceReady(feature)) {
@@ -1050,11 +1127,34 @@ function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, stati
 
 /** Resolve the web UI bundle shipped alongside this package (../web-ui-dist
  * relative to dist/serve.js). Returns undefined when not bundled (dev/API-only).
- * Callers can pass staticDir: "" to force API-only even when the bundle exists. */
+ * Callers can pass staticDir: "" to force API-only even when the bundle exists.
+ *
+ * In a monorepo dev checkout both the vendored snapshot (web-ui-dist) and the
+ * freshly built packages/plan-web-ui/dist may exist; prefer the most recently
+ * built one so a fresh `pnpm build:web-ui` (or copy-web-ui.sh) takes effect
+ * instead of a stale vendored bundle. Deterministic: compare index.html mtimes. */
 function resolveBundledStaticDir(): string | undefined {
   try {
-    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "web-ui-dist");
-    return existsSync(join(dir, "index.html")) ? dir : undefined;
+    const base = dirname(fileURLToPath(import.meta.url));
+    const vendored = join(base, "..", "web-ui-dist");
+    const devUi = join(base, "..", "..", "plan-web-ui", "dist");
+    const candidates = [vendored, devUi].filter((d) => {
+      try {
+        return existsSync(join(d, "index.html"));
+      } catch {
+        return false;
+      }
+    });
+    if (candidates.length === 0) return undefined;
+    if (candidates.length === 1) return candidates[0];
+    const mtime = (d: string): number => {
+      try {
+        return statSync(join(d, "index.html")).mtimeMs;
+      } catch {
+        return 0;
+      }
+    };
+    return [...candidates].sort((a, b) => mtime(b) - mtime(a))[0];
   } catch {
     return undefined;
   }

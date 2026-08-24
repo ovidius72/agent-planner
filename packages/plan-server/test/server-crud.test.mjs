@@ -209,8 +209,12 @@ test("task update: rename, motivation gate on restricted transitions, statusLog 
     ...put({ phaseId: phase.id, status: "blocked" }),
     expectStatus: 400,
   });
-  // in-progress (not restricted) → 200, sets startedAt
-  const started = await request(fx, `/tasks/${task.body.id}`, put({ phaseId: phase.id, status: "in-progress" }));
+  // Generic updates cannot start work; the lifecycle endpoint sets startedAt.
+  await request(fx, `/tasks/${task.body.id}`, {
+    ...put({ phaseId: phase.id, status: "in-progress" }),
+    expectStatus: 400,
+  });
+  const started = await request(fx, `/tasks/${task.body.id}/start`, { method: "POST" });
   assert.ok(started.body.startedAt);
   assert.equal(started.body.statusLog.length, 1, "statusLog entry appended");
   assert.equal(started.body.statusLog[0].title, "planned → in-progress");
@@ -406,21 +410,21 @@ test("atomicity: rejected writes leave plan unchanged; malformed JSON and bad me
   assert.equal(wrongMethod.body, "404 Not Found");
 });
 
-test("delete removes the phase file AND its inline .bak (no resurrect via readJson backup fallback)", async () => {
+test("delete removes the phase file and its local backup (no resurrect via readJson backup fallback)", async () => {
   const fx = await startServerFixture({ name: "t233-delete-bak" });
   const feature = (await request(fx, "/features")).body[0];
   const created = await request(fx, "/phases", { ...json({ title: "Bak victim", featureId: feature.id }), expectStatus: 201 });
   const id = created.body.id;
-  // PUT rename → updatePhase writes the inline phases/<id>.json.bak backup
+  // PUT rename → updatePhase writes .local/backups/phases/<id>.json.bak
   await request(fx, `/phases/${id}`, put({ ...created.body, title: "Renamed" }));
   const phaseFile = join(fx.planRoot, "phases", `${id}.json`);
-  const bakFile = `${phaseFile}.bak`;
-  assert.ok(existsSync(bakFile), "inline .bak exists after updatePhase");
+  const bakFile = join(fx.planRoot, ".local", "backups", "phases", `${id}.json.bak`);
+  assert.ok(existsSync(bakFile), "local backup exists after updatePhase");
 
   await request(fx, `/phases/${id}`, { method: "DELETE" });
   assert.equal(existsSync(phaseFile), false, "phase file removed");
-  assert.equal(existsSync(bakFile), false, "inline .bak removed with the phase");
-  // readJson would otherwise resurrect the phase from the .bak fallback
+  assert.equal(existsSync(bakFile), false, "local backup removed with the phase");
+  // readJson would otherwise resurrect the phase from the backup fallback
   await request(fx, `/phases/${id}`, { expectStatus: 404 });
 });
 

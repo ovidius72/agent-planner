@@ -70,7 +70,6 @@ const STATUS_ORDER: Record<TaskStatus | PhaseStatus | FeatureStatus, number> = {
   "waiting": 3,
   "blocked": 4,
   "deferred": 5,
-  "paused": 6,
   "in-progress": 7,
   "done": 8,
   "canceled": 9,

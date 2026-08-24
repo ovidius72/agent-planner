@@ -56,20 +56,20 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   const totalT = allTasks.length;
   const doneT = allTasks.filter(({ task }) => task.status === "done").length;
   const activeT = allTasks.filter(({ task }) => task.status === "in-progress").length;
-  const pausedTasks = allTasks.filter(({ task }) => task.status === "paused");
-  const pausedT = pausedTasks.length;
+  const checkpointedTasks = allTasks.filter(({ task }) => !["done", "canceled", "rejected"].includes(task.status) && task.pauseSnapshot);
+  const checkpointedT = checkpointedTasks.length;
   const pendingDeviation = [...plan.project.workDeviations]
     .filter((deviation) => deviation.state === "resume-required" || deviation.state === "resolved")
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .find((deviation) => allTasks.some(({ task }) => task.id === deviation.resumeTaskId
-      && (task.status === "paused" || task.status === "planned" || task.status === "waiting")));
+      && (task.status === "planned" || task.status === "waiting" || task.status === "in-progress")));
   const pendingResume = pendingDeviation
     ? allTasks.find(({ task }) => task.id === pendingDeviation.resumeTaskId)
     : undefined;
-  const standalonePaused = pausedTasks
+  const standaloneCheckpoints = checkpointedTasks
     .filter(({ task }) => task.id !== pendingResume?.task.id)
     .sort((left, right) => (right.task.pauseSnapshot?.pausedAt ?? "").localeCompare(left.task.pauseSnapshot?.pausedAt ?? ""));
-  const latestStandalonePaused = standalonePaused[0];
+  const latestStandaloneCheckpoint = standaloneCheckpoints[0];
 
   // Plan is fully complete: there is work and all of it is done, nothing active.
   // (totalT > 0 guards the empty/unstarted case from looking "complete".)
@@ -90,6 +90,9 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   const featureAddCmd = cmd("/planner feature add", "planner-feature-add");
   const phaseAddCmd = cmd("/planner phase add", "planner-phase-add");
   const handoffShowCmd = cmd("/planner handoff show", "planner-handoff-show");
+  const featureShowCmd = cmd("/planner feature show", "planner-feature-show");
+  const phaseShowCmd = cmd("/planner phase show", "planner-phase-show");
+  const taskShowCmd = cmd("/planner task show", "planner-task-show");
 
   const lines: string[] = [];
   lines.push(italian ? "## Ripresa planner" : "## Planner recap");
@@ -99,8 +102,8 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
 
   lines.push(
     italian
-      ? `Avanzamento: feature ${doneF}/${totalF} completate (${activeF} attive) · fasi ${doneP}/${totalP} completate (${activeP} attive) · task ${doneT}/${totalT} completati (${activeT} attivi, ${pausedT} in pausa)`
-      : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active, ${pausedT} paused)`,
+      ? `Avanzamento: feature ${doneF}/${totalF} completate (${activeF} attive) · fasi ${doneP}/${totalP} completate (${activeP} attive) · task ${doneT}/${totalT} completati (${activeT} attivi, ${checkpointedT} con checkpoint)`
+      : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active, ${checkpointedT} with checkpoints)`,
   );
 
   if (focusTask && focusPhase) {
@@ -110,17 +113,23 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     lines.push(
       `${italian ? "Focus corrente" : "Current focus"}: ${fr} — ${focusFeature?.name ?? "?"} / ${pr} — ${focusPhase.title} / ${tr} — ${focusTask.task.title} (in-progress)`,
     );
+    lines.push(
+      "",
+      italian
+        ? `Questo task è in-progress (lavoro iniziato in una sessione precedente). Prima di continuare, rileggi il contesto completo: ${taskShowCmd} ${tr} (full=true), ${phaseShowCmd} ${pr} (full=true), ${featureShowCmd} ${fr} (full=true).`
+        : `⚠️ This task is in-progress (work started in a previous session). Before continuing, re-read the full context in this order: ${taskShowCmd} ${tr} (full=true), ${phaseShowCmd} ${pr} (full=true), ${featureShowCmd} ${fr} (full=true).`,
+    );
   } else if (pendingResume) {
     const feature = feats.find((entry) => entry.id === pendingResume.phase.featureId);
     const ref = `${formatPhaseRef(pendingResume.phase.number, feature?.number)}/${tref(pendingResume.task.number)}`;
     lines.push(
       `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "ripresa obbligatoria" : "resume required"} — ${ref} — ${pendingResume.task.title} (${pendingResume.task.status})`,
     );
-  } else if (latestStandalonePaused) {
-    const feature = feats.find((entry) => entry.id === latestStandalonePaused.phase.featureId);
-    const ref = `${formatPhaseRef(latestStandalonePaused.phase.number, feature?.number)}/${tref(latestStandalonePaused.task.number)}`;
+  } else if (latestStandaloneCheckpoint) {
+    const feature = feats.find((entry) => entry.id === latestStandaloneCheckpoint.phase.featureId);
+    const ref = `${formatPhaseRef(latestStandaloneCheckpoint.phase.number, feature?.number)}/${tref(latestStandaloneCheckpoint.task.number)}`;
     lines.push(
-      `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "task in pausa da riprendere" : "paused task to resume"} — ${ref} — ${latestStandalonePaused.task.title}`,
+      `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "checkpoint da valutare" : "checkpoint to evaluate"} — ${ref} — ${latestStandaloneCheckpoint.task.title}`,
     );
   } else if (handoffs.length > 0) {
     const top = handoffs[0]!;
@@ -147,16 +156,16 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     const ref = `${formatPhaseRef(pendingResume.phase.number, feature?.number)}/${tref(pendingResume.task.number)}`;
     lines.push(
       italian
-        ? `Prossimo step: riprendi ${ref} con ${taskStartCmd}. Il checkpoint del task è prioritario rispetto a nuovo lavoro e handoff di fase.`
-        : `Next step: resume ${ref} with ${taskStartCmd}. Its task checkpoint takes precedence over new work and phase handoffs.`,
+        ? `Avviso ripresa: valuta se riprendere ${ref} con ${taskStartCmd}. Il checkpoint del task va letto prima di decidere se tornare su questo lavoro o proseguire altrove.`
+        : `Resume advisory: evaluate whether to resume ${ref} with ${taskStartCmd}. Read its checkpoint before deciding whether to return to this work or continue elsewhere.`,
     );
-  } else if (latestStandalonePaused) {
-    const feature = feats.find((entry) => entry.id === latestStandalonePaused.phase.featureId);
-    const ref = `${formatPhaseRef(latestStandalonePaused.phase.number, feature?.number)}/${tref(latestStandalonePaused.task.number)}`;
+  } else if (latestStandaloneCheckpoint) {
+    const feature = feats.find((entry) => entry.id === latestStandaloneCheckpoint.phase.featureId);
+    const ref = `${formatPhaseRef(latestStandaloneCheckpoint.phase.number, feature?.number)}/${tref(latestStandaloneCheckpoint.task.number)}`;
     lines.push(
       italian
-        ? `Prossimo step: riprendi il checkpoint più recente, ${ref}, con ${taskStartCmd}, prima di scegliere nuovo lavoro.`
-        : `Next step: resume the newest checkpoint, ${ref}, with ${taskStartCmd} before selecting new work.`,
+        ? `Avviso ripresa: valuta il checkpoint più recente, ${ref}, con ${taskStartCmd}, prima di scegliere se tornare su quel lavoro o avviarne altro.`
+        : `Resume advisory: evaluate the newest checkpoint, ${ref}, with ${taskStartCmd} before deciding whether to return to it or start other work.`,
     );
   } else if (handoffs.length > 0) {
     lines.push(
@@ -182,19 +191,19 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     const snapshot = pendingResume.task.pauseSnapshot ?? pendingDeviation?.snapshot;
     lines.push(
       "",
-      italian ? "## Ripresa task obbligatoria" : "## Task resume required",
+      italian ? "## Avviso ripresa task" : "## Task resume advisory",
       `${ref} — ${pendingResume.task.title}`,
-      snapshot ? `${italian ? "Perché è stato sospeso" : "Paused because"}: ${snapshot.reason}` : "",
+      snapshot ? `${italian ? "Perché è stato salvato il checkpoint" : "Checkpoint reason"}: ${snapshot.reason}` : "",
       snapshot ? `${italian ? "Stato del lavoro" : "Work checkpoint"}: ${snapshot.whatWasBeingDone}` : "",
       snapshot ? `${italian ? "Riprendi da" : "Resume from"}: ${snapshot.resumeLocation}` : "",
       snapshot ? `${italian ? "Come riprendere" : "How to resume"}: ${snapshot.howToResume}` : "",
-      `${italian ? "Azione" : "Action"}: ${taskStartCmd} ${ref}`,
+      italian ? `Azione suggerita: valuta ${taskStartCmd} ${ref}` : `Suggested action: evaluate ${taskStartCmd} ${ref}`,
     );
   }
 
-  if (standalonePaused.length > 0) {
-    lines.push("", italian ? `## Task in pausa (${standalonePaused.length})` : `## Paused tasks (${standalonePaused.length})`);
-    for (const entry of standalonePaused) {
+  if (standaloneCheckpoints.length > 0) {
+    lines.push("", italian ? `## Checkpoint salvati (${standaloneCheckpoints.length})` : `## Saved checkpoints (${standaloneCheckpoints.length})`);
+    for (const entry of standaloneCheckpoints) {
       const feature = feats.find((item) => item.id === entry.phase.featureId);
       const ref = `${formatPhaseRef(entry.phase.number, feature?.number)}/${tref(entry.task.number)}`;
       const snapshot = entry.task.pauseSnapshot;
@@ -215,7 +224,7 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
       italian ? `## Handoff di fase pendenti (${handoffs.length})` : `## Pending phase handoffs (${handoffs.length})`,
     );
     handoffs.forEach((h, i) => lines.push(`[${i + 1}] ${h.compositeRef} — ${h.updatedAt} — "${h.firstLine}"`));
-    if (pendingResume || latestStandalonePaused) {
+    if (pendingResume || latestStandaloneCheckpoint) {
       lines.push(
         "",
         italian
@@ -244,7 +253,7 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
         ? `Piano completo — aggiungi una nuova feature (${featureAddCmd}) o fase (${phaseAddCmd}) per continuare.`
         : `Plan complete — add a new feature (${featureAddCmd}) or phase (${phaseAddCmd}) to continue.`,
     );
-  } else if (activeT === 0 && !pendingResume && standalonePaused.length === 0) {
+  } else if (activeT === 0 && !pendingResume && standaloneCheckpoints.length === 0) {
     lines.push(
       "",
       italian

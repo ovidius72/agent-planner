@@ -33,6 +33,7 @@ import { action as taskCreateAction } from "../routes/task-create.action";
 import { action as taskEditAction } from "../routes/task-edit.action";
 import { action as taskDeleteAction } from "../routes/task-delete.action";
 import { action as taskStatusAction } from "../routes/task-status.action";
+import { action as taskStartAction } from "../routes/task-start.action";
 import { action as projectEditAction } from "../routes/project-edit.action";
 import { action as requirementCreateAction } from "../routes/requirement-create.action";
 import { action as requirementEditAction } from "../routes/requirement-edit.action";
@@ -107,6 +108,7 @@ export const router = createBrowserRouter([
         ],
       },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/delete", action: taskDeleteAction },
+      { path: "features/:featureId/phases/:phaseId/tasks/:taskId/start", action: taskStartAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/status", action: taskStatusAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/checklist/:itemId/toggle", action: taskChecklistToggleAction },
     ],

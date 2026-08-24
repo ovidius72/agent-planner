@@ -95,6 +95,57 @@ describe("P004 resume flow — auto-clear-on-done", () => {
     assert.equal(cleared, null);
     assert.equal((await store.loadPhase(p.id)).handoff, "# keep me");
   });
+
+  test("completing a preserved resume target clears live deviations and its active checkpoint", async () => {
+    const { store, mkPhase, mkTask, now } = await setup();
+    const p = mkPhase(7, "planned");
+    await store.savePhase(p);
+    const resumeTask = mkTask(p.id, "in-progress");
+    const temporaryTask = { ...mkTask(p.id, "done"), id: createTaskId(), number: 2 };
+    await store.updatePhase(p.id, (ph) => { ph.tasks = [resumeTask, temporaryTask]; return ph; });
+
+    const snapshot = {
+      id: "snapshot-1",
+      reason: "Temporary prerequisite",
+      whatWasBeingDone: "Implementing the main branch",
+      resumeLocation: "src/resume.ts:12",
+      howToResume: "Reopen the main branch and rerun tests",
+      relatedTaskId: temporaryTask.id,
+      pausedAt: now,
+      pausedBy: "test",
+    };
+    await store.pauseTask(p.id, resumeTask.id, snapshot);
+    assert.equal((await store.loadPhase(p.id)).tasks.find((task) => task.id === resumeTask.id).status, "planned");
+    await store.addWorkDeviation({
+      id: "deviation-1",
+      recommendedTaskId: resumeTask.id,
+      temporaryTaskId: temporaryTask.id,
+      resumeTaskId: resumeTask.id,
+      reason: snapshot.reason,
+      snapshot,
+      requestedBy: "agent",
+      approvedBy: "test",
+      state: "resume-required",
+      createdAt: now,
+      activatedAt: now,
+      resumeRequiredAt: now,
+      resolvedAt: "",
+      resumedAt: "",
+    });
+
+    await store.updatePhase(p.id, (ph) => {
+      const task = ph.tasks.find((entry) => entry.id === resumeTask.id);
+      task.status = "done";
+      task.completedAt = nowISO();
+      return ph;
+    });
+
+    const phase = await store.loadPhase(p.id);
+    const completed = phase.tasks.find((task) => task.id === resumeTask.id);
+    assert.equal(completed.status, "done");
+    assert.equal(completed.pauseSnapshot, null);
+    assert.equal((await store.loadProject()).workDeviations.length, 0);
+  });
 });
 
 describe("P004 resume flow — write-to-in-progress + fallback", () => {

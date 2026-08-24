@@ -7,9 +7,12 @@ export async function loader({ params }: { params: { featureId?: string; phaseId
   const [feature, phase, task, project] = await Promise.all([
     getFeature(featureId), getPhase(phaseId), getTask(taskId), getProject(),
   ]);
-  const pendingResume = project.workDeviations.some((deviation) =>
-    deviation.resumeTaskId === task.id
-      && (deviation.state === "resume-required" || deviation.state === "resolved"),
-  );
+  const pendingResume = task.status !== "done"
+    && task.status !== "canceled"
+    && task.status !== "rejected"
+    && (Boolean(task.pauseSnapshot) || project.workDeviations.some((deviation) =>
+      deviation.resumeTaskId === task.id
+        && (deviation.state === "resume-required" || deviation.state === "resolved"),
+    ));
   return { feature, phase, task, pendingResume };
 }

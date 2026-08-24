@@ -89,11 +89,15 @@ function normalizeRequirement(requirement: Requirement): Requirement {
 }
 
 async function fetchOrThrow(path: string, init?: RequestInit): Promise<Response> {
+  // Every call from the web UI is the human supervisor. Tag it so the server
+  // skips agent-only governance gates (e.g. feature/phase discuss-before-work).
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Planner-Source": "web-ui",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
   try {
-    return await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...init,
-    });
+    return await fetch(`${API_BASE}${path}`, { ...init, headers });
   } catch {
     throw new Response("Planner web server unavailable. Pi or planner-web may have stopped. Restart the planner web UI or Pi, then reload this page.", {
       status: 503,
@@ -155,7 +159,6 @@ export interface FocusTaskSummary extends ActiveTaskSummary {
 
 export interface TaskFocusSummary {
   active: FocusTaskSummary[];
-  paused: FocusTaskSummary[];
   pendingResume: FocusTaskSummary[];
 }
 
@@ -164,7 +167,9 @@ export async function getProject(): Promise<Project> {
 }
 
 export async function updateProject(project: Project): Promise<Project> {
-  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify(project) }));
+  // Runtime workDeviations live in .local/deviations.json (T299); the project
+  // editor must never round-trip them into shared project.json.
+  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify({ ...project, workDeviations: [] }) }));
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -255,6 +260,11 @@ export async function updateTask(task: Task): Promise<Task> {
   return normalizeTask(await request(`/tasks/${task.id}`, { method: "PUT", body: JSON.stringify(task) }));
 }
 
+/** Start planned work or resume a checkpoint through the canonical lifecycle. */
+export async function startTask(taskId: string): Promise<Task> {
+  return normalizeTask(await request(`/tasks/${taskId}/start`, { method: "POST" }));
+}
+
 export async function deleteTask(taskId: string): Promise<{ deleted: string }> {
   return request(`/tasks/${taskId}`, { method: "DELETE" });
 }
@@ -265,7 +275,7 @@ export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
 
 export async function getTaskFocus(): Promise<TaskFocusSummary> {
   const result = await request<TaskFocusSummary>("/tasks/focus");
-  return { active: result.active ?? [], paused: result.paused ?? [], pendingResume: result.pendingResume ?? [] };
+  return { active: result.active ?? [], pendingResume: result.pendingResume ?? [] };
 }
 
 export async function listHandoffs(): Promise<HandoffSummary[]> {

@@ -1,0 +1,50 @@
+{
+  "id": "e9ec811f-0052-4ca6-8841-a2d8129f71a9",
+  "number": 18,
+  "shortId": "HAY8P",
+  "priority": 18,
+  "name": "Enforce planner context and language preferences",
+  "description": "`packages/plan-core/src/read-tracking.ts:1-105` currently records a task read as also reading its phase and feature, and only exposes a non-blocking advisory. `packages/pi-adapter/src/index.ts:4351-4357` and `packages/plan-mcp/src/index.ts:1368-1375` perform start/resume mutation before returning that advisory. The session context at `pi-adapter/src/index.ts:4774-4776` gives the reverse of the user-required order. The desired contract is a hard, session-local gate requiring the exact target lineage to be read with `full=true` in this order: task, then phase, then feature, before task start/resume or switch can mutate state. Pause/switch/session reset must require a fresh sequence. `packages/pi-adapter/src/index.ts:1552-1554` also defaults blank chat language to Italian; unset language preferences must fall back to English, while an explicitly chosen content language may seed blank chat language. `packages/plan-mcp/src/index.ts:1455-1465` and `pi-adapter/src/index.ts:3028-3043` already return phase handoff text in tool content, but harness-level regression coverage must prevent content from being lost behind metadata. Preserve human Web UI lifecycle controls and the core's harness-agnostic domain boundary.",
+  "descriptionUpdatedAt": "2026-08-24T14:32:51.223Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [
+    {
+      "id": "1b823396-f04b-4d01-b506-8ff93a8926c9",
+      "title": "Hard-gate ordered full context reads",
+      "decision": "Agent lifecycle operations must require task_get(full=true) → phase_get(full=true) → feature_get(full=true) for the exact target lineage, in that order, before task_start or task_switch can mutate planner state.",
+      "rationale": "Advisory-only parent-read tracking allowed agents to start work without reading the task, phase, or feature descriptions and even treated a task read as implicitly reading its parents.",
+      "implementationNotes": "Keep this enforcement session-local in harness adapters, invalidate it on session start, pause, and switch, require linked requirements separately, and preserve Web UI access for the human supervisor.",
+      "acceptedAt": "2026-08-24T14:45:39.179Z"
+    }
+  ],
+  "phaseIds": [
+    "64805f9b-e2fa-4ae7-8fed-b583ffda23ac"
+  ],
+  "dependsOn": [],
+  "statusLog": [
+    {
+      "id": "9b778f7e-c016-4c12-b4d0-aaf88afae158",
+      "date": "2026-08-24T14:33:39.744Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "904ffdce-ebbb-4f6b-a8a1-291b11198c29",
+      "date": "2026-08-24T14:53:08.789Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-08-24T14:32:51.093Z",
+  "updatedAt": "2026-08-24T14:45:39.179Z"
+}

@@ -1,13 +1,18 @@
 import { test, expect } from "./fixtures";
 
-test("empty project opens the real dashboard and exposes the bootstrap routes", async ({ page, planner }) => {
+test("empty project opens the real dashboard and exposes the bootstrap routes", async ({ page, planner }, testInfo) => {
   await page.goto(planner.url);
 
   await expect(page.getByRole("heading", { name: "Project Goal" })).toBeVisible();
   await expect(page.getByText("No work items match the current filters.")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Features/i })).toBeVisible();
+  const compact = testInfo.project.name.startsWith("mobile");
+  if (compact) await page.getByRole("button", { name: "Open menu" }).click();
+  const featuresLink = compact
+    ? page.getByRole("menu").getByRole("link", { name: "Features" })
+    : page.getByRole("navigation").getByRole("link", { name: "Features" });
+  await expect(featuresLink).toBeVisible();
 
-  await page.getByRole("link", { name: /Features/i }).first().click();
+  await featuresLink.click();
   await expect(page.getByRole("link", { name: "Create your first feature" })).toBeVisible();
 });
 

@@ -5,6 +5,7 @@
   "priority": 0,
   "name": "Improvements",
   "description": "Improvements a fixes. Discuss with the iser",
+  "descriptionUpdatedAt": "2026-07-15T20:24:28.795Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -34,19 +35,17 @@
     "989961b6-6fbe-4fe6-a5c3-f50894cd6408",
     "f55065cd-7c0c-4095-aad9-2c563ea469f0",
     "097f7a01-e0f8-4674-aaf9-26823085342c",
-    "c6a30eff-af52-406f-a696-14125b19b06c"
+    "c6a30eff-af52-406f-a696-14125b19b06c",
+    "37449829-247b-4dda-a5c1-23bdb44d54b9",
+    "3229644a-741f-4d63-9407-325993b0921e",
+    "b381740f-9b2a-4cde-b150-875ad182fa86",
+    "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
+    "1ba31e0f-5ba3-4eba-9b6b-88f795ae499d",
+    "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+    "cd3fd548-a183-448c-9a87-cf804bcdb075"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "28d1a639-e10b-403b-871e-7d9e7a4d6a36",
-      "date": "2026-08-20T15:19:14.098Z",
-      "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z"
 }

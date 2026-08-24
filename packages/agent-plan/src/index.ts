@@ -148,6 +148,8 @@ $ARGUMENTS
 
 Use the Agent Plan MCP tools. Do not treat this as a shell command.
 
+Before starting, resuming, or switching to a task, read the exact lineage in this order: \`planner-task-show\` with \`full=true\`, then \`planner-phase-show\` with \`full=true\`, then \`planner-feature-show\` with \`full=true\`. Read linked requirements with \`planner-requirement-list\` when present. These lifecycle operations reject requests until the reads are complete.
+
 Route common commands as follows:
 
 - \`init\` → call \`planner-init\`; if required fields are missing, ask for a concise project name first

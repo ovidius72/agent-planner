@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
@@ -96,3 +96,41 @@ jobs:
           publish_pkg packages/plan-server
           publish_pkg packages/agent-plan
           publish_pkg packages/pi-adapter
+
+      - name: Tag successful stable release
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+
+          versions=$(node -e "console.log(['plan-core','plan-mcp','plan-server','agent-plan','pi-adapter'].map((dir) => require('./packages/' + dir + '/package.json').version).join(' '))")
+          read -r -a version_list <<< "${versions}"
+          version="${version_list[0]}"
+          for candidate in "${version_list[@]}"; do
+            if [ "${candidate}" != "${version}" ]; then
+              echo "Package versions are not unified: ${versions}"
+              exit 1
+            fi
+          done
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refusing to tag non-stable version: ${version}"
+            exit 1
+          fi
+
+          tag="v${version}"
+          existing=$(git ls-remote --tags origin "refs/tags/${tag}^{}" | awk '{print $1}')
+          if [ -z "${existing}" ]; then
+            existing=$(git ls-remote --tags origin "refs/tags/${tag}" | awk '{print $1}')
+          fi
+          if [ -n "${existing}" ]; then
+            if [ "${existing}" != "${GITHUB_SHA}" ]; then
+              echo "Tag ${tag} already points to ${existing}, not ${GITHUB_SHA}."
+              exit 1
+            fi
+            echo "Tag ${tag} already points to this release; nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "Release ${tag}"
+          git push origin "${tag}"

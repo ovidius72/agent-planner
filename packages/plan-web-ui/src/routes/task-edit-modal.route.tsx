@@ -7,7 +7,7 @@ import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
-import { taskStatuses, taskTransitionStatuses } from "../lib/statuses";
+import { taskTransitionStatuses } from "../lib/statuses";
 import { useShortcut } from "../lib/shortcuts";
 import type { Feature, Phase, Task } from "../lib/types";
 
@@ -23,15 +23,20 @@ export function TaskEditModalRoute() {
   useShortcut("submit", submit, { allowInEditable: true });
   const data = useRouteLoaderData("task-detail") as { feature: Feature; phase: Phase; task: Task };
   const task = data.task;
+  // Entering in-progress is a lifecycle action, not an editable status change.
+  // Keep it selectable only for an already active task, where saving preserves
+  // the existing value rather than attempting a transition.
+  const statusOptions = task.status === "in-progress"
+    ? taskTransitionStatuses
+    : taskTransitionStatuses.filter((option) => option.value !== "in-progress");
 
   return (
     <ModalShell title="Edit task" description="Update execution details and checklist items.">
       <Form ref={formRef} method="post" className="grid gap-4">
         <Field label="Title"><Input name="title" defaultValue={task.title} required /></Field>
         <Field label="Status">
-          {task.status === "paused" ? <input type="hidden" name="status" value="paused" /> : null}
-          <Select name={task.status === "paused" ? undefined : "status"} defaultValue={task.status} disabled={task.status === "paused"} title={task.status === "paused" ? "Resume paused work through task_start so its checkpoint is preserved." : undefined}>
-            {(task.status === "paused" ? taskStatuses : taskTransitionStatuses).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select name="status" defaultValue={task.status} disabled={Boolean(task.pauseSnapshot)} title={task.pauseSnapshot ? "Resume checkpointed work through task_start so its checkpoint is preserved." : undefined}>
+            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
         <Field label="Priority"><Input type="number" name="priority" defaultValue={task.priority ?? 0} min={0} /></Field>

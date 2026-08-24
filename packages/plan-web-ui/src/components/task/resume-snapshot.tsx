@@ -6,11 +6,9 @@ import { formatDateTime } from "../ui/last-updated";
 export function ResumeSnapshot({
   snapshot,
   pendingResume = false,
-  compact = false,
 }: {
   snapshot: TaskPauseSnapshot;
   pendingResume?: boolean;
-  compact?: boolean;
 }) {
   const headingId = useId();
   const Icon = pendingResume ? RotateCcw : PauseCircle;
@@ -25,15 +23,15 @@ export function ResumeSnapshot({
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
         <h3 id={headingId} className="text-sm font-bold text-[var(--text)]">
-          {pendingResume ? "Resume required" : "Paused work snapshot"}
+          Resume checkpoint
         </h3>
         <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">
           {formatDateTime(snapshot.pausedAt)}
         </span>
       </div>
-      <dl className={`mt-3 grid ${compact ? "gap-2" : "gap-3 sm:grid-cols-2"}`}>
+      <dl className="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
-          <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-subtle)]">Why paused</dt>
+          <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-subtle)]">Checkpoint reason</dt>
           <dd className="mt-1 text-sm text-[var(--text-muted)] [overflow-wrap:anywhere]">{snapshot.reason}</dd>
         </div>
         <div>

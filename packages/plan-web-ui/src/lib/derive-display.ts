@@ -9,7 +9,6 @@ import type { TaskStatus, PhaseStatus, Task, Phase } from "./types";
 export type WorkflowStatus =
   | "planned"
   | "in-progress"
-  | "paused"
   | "waiting"
   | "blocked"
   | "deferred"
@@ -22,7 +21,6 @@ export type DisplayStatus = WorkflowStatus | "started" | "closed";
 export interface StatusBreakdown {
   planned: number;
   inProgress: number;
-  paused: number;
   waiting: number;
   blocked: number;
   deferred: number;
@@ -40,7 +38,7 @@ export interface ParentDisplay {
 }
 
 const ACTIVE = new Set<WorkflowStatus>(["in-progress"]);
-const OPEN = new Set<WorkflowStatus>(["planned", "paused", "waiting", "blocked", "deferred"]);
+const OPEN = new Set<WorkflowStatus>(["planned", "waiting", "blocked", "deferred"]);
 const TERMINAL = new Set<WorkflowStatus>(["done", "canceled", "rejected"]);
 
 export function fromCanonicalStatus(status: TaskStatus | PhaseStatus): WorkflowStatus {
@@ -51,14 +49,13 @@ export function fromCanonicalStatus(status: TaskStatus | PhaseStatus): WorkflowS
 
 export function countBreakdown(statuses: readonly WorkflowStatus[]): StatusBreakdown {
   const breakdown: StatusBreakdown = {
-    planned: 0, inProgress: 0, paused: 0, waiting: 0, blocked: 0,
+    planned: 0, inProgress: 0, waiting: 0, blocked: 0,
     deferred: 0, done: 0, canceled: 0, rejected: 0,
   };
   for (const s of statuses) {
     switch (s) {
       case "planned": breakdown.planned++; break;
       case "in-progress": breakdown.inProgress++; break;
-      case "paused": breakdown.paused++; break;
       case "waiting": breakdown.waiting++; break;
       case "blocked": breakdown.blocked++; break;
       case "deferred": breakdown.deferred++; break;
@@ -71,7 +68,7 @@ export function countBreakdown(statuses: readonly WorkflowStatus[]): StatusBreak
 }
 
 function emptyBreakdown(): StatusBreakdown {
-  return { planned: 0, inProgress: 0, paused: 0, waiting: 0, blocked: 0, deferred: 0, done: 0, canceled: 0, rejected: 0 };
+  return { planned: 0, inProgress: 0, waiting: 0, blocked: 0, deferred: 0, done: 0, canceled: 0, rejected: 0 };
 }
 
 export function deriveParentDisplay(childStatuses: readonly WorkflowStatus[]): ParentDisplay {
@@ -106,9 +103,6 @@ export function deriveParentDisplay(childStatuses: readonly WorkflowStatus[]): P
 
   const unfinished = meaningful.filter((s) => OPEN.has(s));
 
-  if (unfinished.length > 0 && unfinished.every((s) => s === "paused")) {
-    return { displayStatus: "paused", breakdown, hasStarted, totalChildren, meaningfulChildren };
-  }
   if (unfinished.length > 0 && unfinished.every((s) => s === "waiting")) {
     return { displayStatus: "waiting", breakdown, hasStarted, totalChildren, meaningfulChildren };
   }

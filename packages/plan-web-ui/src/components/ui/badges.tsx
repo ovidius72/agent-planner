@@ -154,6 +154,9 @@ export function EntityPathBadge({
   featureId,
   phaseId,
   taskId,
+  featureName,
+  phaseName,
+  taskTitle,
 }: {
   featureNum?: number | undefined;
   phaseNum?: number | undefined;
@@ -161,18 +164,26 @@ export function EntityPathBadge({
   featureId?: string | undefined;
   phaseId?: string | undefined;
   taskId?: string | undefined;
+  featureName?: string | undefined;
+  phaseName?: string | undefined;
+  taskTitle?: string | undefined;
 }) {
+  const featureTitle = featureName ? { title: featureName } : {};
+  const phaseTitle = phaseName ? { title: phaseName } : {};
+  const taskTitleAttr = taskTitle ? { title: taskTitle } : {};
+
   const FeatureSegment = featureId
     ? ({ children }: { children: ReactNode }) => (
         <Link
           to={`/features/${featureId}`}
+          {...featureTitle}
           className="entity-path-seg entity-path-seg--feature entity-path-seg--link"
         >
           {children}
         </Link>
       )
     : ({ children }: { children: ReactNode }) => (
-        <span className="entity-path-seg entity-path-seg--feature">
+        <span className="entity-path-seg entity-path-seg--feature" {...featureTitle}>
           {children}
         </span>
       );
@@ -181,13 +192,14 @@ export function EntityPathBadge({
     ? ({ children }: { children: ReactNode }) => (
         <Link
           to={`/features/${featureId}/phases/${phaseId}`}
+          {...phaseTitle}
           className="entity-path-seg entity-path-seg--phase entity-path-seg--link"
         >
           {children}
         </Link>
       )
     : ({ children }: { children: ReactNode }) => (
-        <span className="entity-path-seg entity-path-seg--phase">
+        <span className="entity-path-seg entity-path-seg--phase" {...phaseTitle}>
           {children}
         </span>
       );
@@ -196,13 +208,14 @@ export function EntityPathBadge({
     ? ({ children }: { children: ReactNode }) => (
         <Link
           to={`/features/${featureId}/phases/${phaseId}/tasks/${taskId}`}
+          {...taskTitleAttr}
           className="entity-path-seg entity-path-seg--task entity-path-seg--link"
         >
           {children}
         </Link>
       )
     : ({ children }: { children: ReactNode }) => (
-        <span className="entity-path-seg entity-path-seg--task">
+        <span className="entity-path-seg entity-path-seg--task" {...taskTitleAttr}>
           {children}
         </span>
       );
@@ -281,6 +294,66 @@ export function ShortIdBadge({ shortId }: { shortId: string }) {
     <CopyableBadge id={shortId}>
       <span className="short-id-badge">{shortId}</span>
     </CopyableBadge>
+  );
+}
+
+/**
+ * Single-source segmented entity reference used everywhere a planner entity is
+ * labelled: the Work Tree, entity detail pages, and the dashboard Latest
+ * Completed / New Added cards.
+ *
+ * Renders, in order:
+ *  - `EntityPathBadge` — the F00x[/P00x][/T00x] segments, each clickable
+ *    (navigates to that entity's detail page) when its id is provided.
+ *  - a `CopyableBadge` for the composite path (e.g. "F001/P002/T003") so the
+ *    full per-parent reference is one click away.
+ *  - `ShortIdBadge` — the globally-unique 5-char short id (e.g. "UUXD1"),
+ *    copyable on its own.
+ *
+ * Keeping this in one component guarantees the header is byte-for-byte
+ * identical across every surface.
+ */
+export function CompositeRef({
+  featureNum,
+  phaseNum,
+  taskNum,
+  featureId,
+  phaseId,
+  taskId,
+  shortId,
+  featureName,
+  phaseName,
+  taskTitle,
+}: {
+  featureNum?: number | undefined;
+  phaseNum?: number | undefined;
+  taskNum?: number | undefined;
+  featureId?: string | undefined;
+  phaseId?: string | undefined;
+  taskId?: string | undefined;
+  shortId?: string | undefined;
+  featureName?: string | undefined;
+  phaseName?: string | undefined;
+  taskTitle?: string | undefined;
+}) {
+  return (
+    <>
+      <EntityPathBadge
+        featureNum={featureNum}
+        phaseNum={phaseNum}
+        taskNum={taskNum}
+        featureId={featureId}
+        phaseId={phaseId}
+        taskId={taskId}
+        featureName={featureName}
+        phaseName={phaseName}
+        taskTitle={taskTitle}
+      />
+      <CopyableBadge id={formatEntityPath({ featureNum, phaseNum, taskNum })}>
+        <span className="sr-only">Copy path</span>
+      </CopyableBadge>
+      {shortId ? <ShortIdBadge shortId={shortId} /> : null}
+    </>
   );
 }
 

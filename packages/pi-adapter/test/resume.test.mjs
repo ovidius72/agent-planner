@@ -62,6 +62,13 @@ function recapUrl(host) {
 /** Path to the built pi-adapter package (used by the CLI smoke test). */
 const ADAPTER_PACKAGE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+async function readTaskContext(host, taskId = "T001") {
+  await host.runTool("task_get", { taskId, full: true });
+  await host.runTool("phase_get", { phaseId: "P001", full: true });
+  await host.runTool("feature_get", { featureId: "F001", full: true });
+  await host.runTool("requirement_list", {});
+}
+
 describe("pi-adapter resume flow and CLI smoke", () => {
   test("repeated sessions over the same project: port preference, state entry, handoff carries over", async () => {
     const host1 = await createPiHost({ name: "t243-repeat", seed: "minimal", keepRootOnClose: true });
@@ -151,7 +158,8 @@ describe("pi-adapter resume flow and CLI smoke", () => {
       });
       assert.ok((await phase()).handoff, "handoff present before task start");
 
-      const started = await host.runTool("task_start", { taskId: "T001" });
+      await readTaskContext(host);
+    const started = await host.runTool("task_start", { taskId: "T001" });
       assert.match(toolText(started), /✅ Task started:/);
       let p = await phase();
       assert.equal(p.tasks[0].status, "in-progress", "task started despite the pending handoff");
@@ -204,7 +212,8 @@ describe("pi-adapter resume flow and CLI smoke", () => {
         confirmed: true,
       });
 
-      await host.runCommand("task start T001");
+      await readTaskContext(host);
+    await host.runCommand("task start T001");
       const phase = (await host.store.loadAllPhases())[0];
       assert.equal(phase.tasks[0].status, "in-progress");
       assert.match(phase.handoff, /Command start must keep this handoff\./);

@@ -1,0 +1,204 @@
+{
+  "id": "3229644a-741f-4d63-9407-325993b0921e",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 70,
+  "shortId": "SC989",
+  "priority": 19,
+  "slug": "web-ui-header-slimming-dedicated-resume-required-section",
+  "title": "Web UI header slimming & dedicated Resume Required section",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Compact sticky header (in-progress only) + dedicated Resume Required section before the work tree.",
+  "description": "Redesign the planner Web UI sticky header so it stays compact and offloads resume-required tasks to a dedicated, scannable section.\n\nFiles touched (packages/plan-web-ui):\n- src/components/layout/app-shell.tsx — `TaskFocusHeader` now renders ONLY `focus.active` (the `pendingResume` section was removed); `FocusTaskRow` exported for reuse. Header height complaint resolved: header shows in-progress tasks only.\n- src/components/layout/top-nav.tsx — single-row TopNav (done earlier): smaller buttons (h-8/h-9, text-xs/sm:text-sm), mobile hamburger (lucide Menu/X + click-outside + Escape) holding nav + Export; theme toggle + live badge always visible; Dashboard link dropped (logo already links to '/'); project path kept only as a brand title tooltip.\n- src/components/dashboard/work-tree.tsx — filter bar (done earlier): 6 ToolbarButton toggles collapsed from a 3-row grid into a single horizontally scrollable flex row with a visible desktop scrollbar (scrollbar hidden only on mobile), smaller buttons.\n- src/components/dashboard/resume-required.tsx — NEW `ResumeRequiredSection` lists `taskFocus.pendingResume` (title + entity-path badges + status + 'Resume required' pill + Locate) with NO checkpoint reason/description; placed BEFORE `<WorkTree/>` on the dashboard route.\n- src/routes/dashboard/route.tsx — consumes `taskFocus` from `useRouteLoaderData(\"root\")` and renders `<ResumeRequiredSection tasks={taskFocus.pendingResume} />` before `<WorkTree/>`.\n- test/entity-references-and-updates.test.tsx — updated the two resume-marker tests to render `ResumeRequiredSection` instead of `TaskFocusHeader` with `pendingResume`.\n\nCurrent state: header compaction (single-row TopNav, single-row filters, in-progress-only header) and the Resume Required section are CODE-COMPLETE and typecheck-clean (tsc --noEmit passes) with the entity-references tests passing 6/6. NOT yet rebuilt/copied into the served web-ui-dist bundle, and NOT committed (project rule: stay on feature branch, no commit without explicit request).\n\nBehaviors to preserve: in-progress tasks remain in the sticky header with Locate + entity-path links; the full checkpoint (Why paused / Work checkpoint / Resume from / How to resume) stays ONLY in the task detail view (src/components/task/resume-snapshot.tsx, rendered by routes/task-detail/route.tsx) — never in the header or the resume section.\n\nBuild/deploy note: a single `pnpm build` (root) now runs tsc -b + pnpm build:web-ui + bash scripts/copy-web-ui.sh, which deploys the bundle to ALL packages/*/web-ui-dist consumers (pi-adapter, plan-server). The live pi dashboard on :56321 serves a baked-in stale bundle (B97B4wii) and will only reflect edits after a rebuild+copy AND a process restart; verify against a freshly built plan-server on a clean port with cache-busting.",
+  "descriptionUpdatedAt": "2026-08-21T17:03:02.706Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "36d38180-d81b-4768-b474-682a30431bb3",
+    "916f49c6-f3bd-4915-8736-10fab905fb63"
+  ],
+  "tasks": [
+    {
+      "id": "36d38180-d81b-4768-b474-682a30431bb3",
+      "phaseId": "3229644a-741f-4d63-9407-325993b0921e",
+      "number": 302,
+      "shortId": "LAY5J",
+      "priority": 1,
+      "shortName": "slim-sticky-header-to-in-progr",
+      "title": "Slim sticky header to in-progress only; relocate resume-required tasks to a dedicated section before the work tree",
+      "status": "done",
+      "description": "Implement a compact planner Web UI layout: the sticky header shows ONLY in-progress (active) tasks, and resume-required (paused/pendingResume) tasks move to a dedicated, scannable section placed before the work tree on the dashboard — listed WITHOUT the checkpoint reason/description.\n\nCode references (packages/plan-web-ui):\n- src/components/layout/app-shell.tsx — `TaskFocusHeader` now renders only `focus.active` (pendingResume section removed); `FocusTaskRow` is exported for reuse.\n- src/components/dashboard/resume-required.tsx — NEW `ResumeRequiredSection({ tasks })` renders `taskFocus.pendingResume` via `FocusTaskRow`: entity-path badges (F/P/T + shortId), StatusBadge, 'Resume required' pill, title link to task detail, Locate button. No checkpoint reason/description.\n- src/routes/dashboard/route.tsx — pulls `taskFocus` from `useRouteLoaderData(\"root\")` (root loader returns `{project, uiConfig, taskFocus}`) and renders `<ResumeRequiredSection tasks={taskFocus.pendingResume} />` immediately BEFORE `<WorkTree/>`.\n- (Earlier, same effort) src/components/layout/top-nav.tsx single-row redesign + src/components/dashboard/work-tree.tsx single-row filter bar.\n\nCurrent state: CODE-COMPLETE. `pnpm check` (tsc --noEmit) passes clean; `pnpm vitest run test/entity-references-and-updates.test.tsx` passes 6/6 (the two resume-marker tests were updated to render `ResumeRequiredSection`).\n\nEdge cases / behaviors to preserve:\n- When there are zero active tasks, `TaskFocusHeader` returns null (header hidden) — resume tasks still show in the dashboard section.\n- The full checkpoint (Why paused / Work checkpoint / Resume from / How to resume) remains ONLY in the task detail view (src/components/task/resume-snapshot.tsx via routes/task-detail/route.tsx) — never in the header or the resume section.\n- `ActiveTasksHeader` wrapper still passes `pendingResume: []` and is unaffected.\n\nVerification steps remaining (NOT yet done):\n1. Rebuild + copy: `pnpm build` at repo root (runs tsc -b + build:web-ui + scripts/copy-web-ui.sh to all packages/*/web-ui-dist).\n2. Verify on a CLEAN port with a freshly started plan-server serving agent-plan's .planner (the user's :3030 pi serves a DIFFERENT project — HypePublicSiteMonorepo — so it must not be used for agent-plan verification), with browser cache-busting, confirming: header shows only in-progress; 'Resume required (n)' section appears before the work tree; rows have no reason/description.\n3. No commit (project rule: stay on feature branch, commit only on explicit request).\n\nNote: the live pi dashboard on :56321 serves a baked-in stale bundle (B97B4wii) and needs a full rebuild+copy+restart to reflect edits.\n\n---\n**Completion summary:**\nIMPLEMENTED + VERIFIED (browser, Vite dev on localhost:5175, agent-plan data, source HMR — no rebuild/copy/cache loop).\n\nWhat changed (packages/plan-web-ui):\n- app-shell.tsx: TaskFocusHeader now renders ONLY focus.active (pendingResume section removed); FocusTaskRow exported for reuse. Header is slim + in-progress-only.\n- resume-required.tsx (NEW): ResumeRequiredSection lists taskFocus.pendingResume via FocusTaskRow — title + entity-path badges + status + 'Resume required' pill + Locate. NO checkpoint reason/description.\n- dashboard/route.tsx: consumes taskFocus from useRouteLoaderData(\"root\") and renders <ResumeRequiredSection tasks={taskFocus.pendingResume} /> BEFORE <WorkTree/>.\n- top-nav.tsx (earlier): single-row header, hamburger, Dashboard link dropped.\n- work-tree.tsx (earlier): single-row scrollable filter bar with desktop scrollbar.\n- test/entity-references-and-updates.test.tsx: 2 resume-marker tests updated to render ResumeRequiredSection (6/6 pass).\n- vite.config.ts: proxy /api (keep prefix, since plan-server serves API under /api when it bundles the UI via resolveBundledStaticDir → apiPrefix=\"/api\") + /ws (ws:true) for live-sync.\n- scripts/dev-web.mjs (NEW) + package.json \"dev\" script: one command starts plan-server (agent-plan .planner, port 3090 via PLAN_PORT/PLAN_ROOT) and Vite dev (5175) with VITE_PROXY_TARGET, so in-progress source is visible instantly via HMR.\n\nVerification:\n- pnpm check clean; vitest entity-references 6/6.\n- pnpm build (root) builds + copies bundle to ALL packages/*/web-ui-dist (pi-adapter, plan-server).\n- Browser (localhost:5175): header shows only \"ACTIVE TASKS (1)\" T302 (LAY5J) In Progress; 'Resume required' section lists T299 'Move resume-awareness runtime state to worktree-local storage' with NO checkpoint description (body hasCheckpointDescription=false). Confirms the design: header = in-progress only; resume tasks in a dedicated section before the work tree, no reason/description.\n\nNote: the live pi dashboard on :56321 serves a baked-in stale bundle (B97B4wii) and needs a full rebuild+copy+restart to reflect edits; for fast iteration use `pnpm dev` (localhost:5175). No commit (project rule: stay on feature branch).",
+      "descriptionUpdatedAt": "2026-08-21T17:22:53.727Z",
+      "notes": "Deviation corrected (2026-08-21): the initial T302 implementation changed FocusTaskRow's title from the release's inline `flex-1 truncate` (single row) to `block` with `truncate` REMOVED, and bumped font to `sm:text-base`. That style change was made WITHOUT user agreement and introduced a title-wrapping regression (\"titles go to second row\"). User corrected: UI style/layout changes must be proposed and agreed, not done unilaterally (especially deviations from the released behavior). Fix: reverted title to `flex-1 truncate` inline single-row (matches release), removed `sm:text-base`. Confirmed by user (\"1. si\"). Also: scripts/dev-web.mjs now (a) polls /api/health before starting Vite (removes the backend-not-ready WS race) and (b) spawns Vite directly (no pnpm wrapper) + detached children, so Ctrl-C shuts down cleanly without ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL. Note: a benign vite-proxy WS ECONNRESET may still appear once at startup (proxied live-sync socket resets then reconnects; one connection stays up).",
+      "statusLog": [
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-001-planned-in-progress",
+          "date": "2026-08-21T17:04:07.677Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Move resume-awareness runtime state to worktree-local storage."
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-002-in-progress-done",
+          "date": "2026-08-21T17:22:53.725Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-001-taskfocusheader-renders-only-active-pendingresume-removed",
+          "number": 1,
+          "title": "TaskFocusHeader renders only active (pendingResume removed)",
+          "checked": false
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-002-resumerequiredsection-component-created-and-reused-via-focustaskrow",
+          "number": 2,
+          "title": "ResumeRequiredSection component created and reused via FocusTaskRow",
+          "checked": false
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-003-dashboard-route-renders-resumerequiredsection-before-worktree-via-userouteloaderdata-root",
+          "number": 3,
+          "title": "Dashboard route renders ResumeRequiredSection before WorkTree via useRouteLoaderData('root')",
+          "checked": false
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-004-header-shows-no-checkpoint-reason-description-only-in-progress",
+          "number": 4,
+          "title": "Header shows no checkpoint reason/description; only in-progress",
+          "checked": false
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-005-resume-section-lists-tasks-without-reason-description",
+          "number": 5,
+          "title": "Resume section lists tasks without reason/description",
+          "checked": false
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-006-tests-updated-entity-references-and-passing-6-6",
+          "number": 6,
+          "title": "Tests updated (entity-references) and passing 6/6",
+          "checked": false
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-007-pnpm-check-clean",
+          "number": 7,
+          "title": "pnpm check clean",
+          "checked": false
+        },
+        {
+          "id": "36d38180-d81b-4768-b474-682a30431bb3-check-008-rebuild-copy-web-ui-dist-verify-on-clean-port-agent-plan-data",
+          "number": 8,
+          "title": "Rebuild + copy web-ui-dist, verify on clean port (agent-plan data)",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T17:04:07.677Z",
+      "completedAt": "2026-08-21T17:22:53.725Z",
+      "createdAt": "2026-08-21T17:03:15.428Z",
+      "updatedAt": "2026-08-21T19:00:55.706Z"
+    },
+    {
+      "id": "916f49c6-f3bd-4915-8736-10fab905fb63",
+      "phaseId": "3229644a-741f-4d63-9407-325993b0921e",
+      "number": 303,
+      "shortId": "NKQ3E",
+      "priority": 2,
+      "shortName": "add-resume-required-icon-to-wo",
+      "title": "Add resume-required icon to WorkTree task rows",
+      "status": "done",
+      "description": "Add a per-task \"resume required\" icon (with tooltip) in the Work Tree so paused-and-switched-away tasks are visually identifiable in their phase, not only in the dedicated \"Resume required\" section or the header.\n\nData source: the root loader already returns `taskFocus.pendingResume` (the resume-required tasks, derived from `workDeviations` with state `resume-required` in packages/plan-core/src/task-selection.ts / plan-store.ts). Build a `Set<taskId>` from it and thread it down:\n- packages/plan-web-ui/src/routes/dashboard/route.tsx (DashboardRoute, reads taskFocus via useRouteLoaderData(\"root\")) → pass to <WorkTree/>.\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx (WorkTree + FeatureTreeRow call site) → pass to FeatureTreeRow.\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx (FeatureTreeRow → PhaseTreeRow → TaskTreeRow) → pass to TaskTreeRow.\n\nRendering (TaskTreeRow): when `resumeRequiredIds.has(task.id)`, render an inline `RotateCcw` icon (lucide-react, same glyph used in packages/plan-web-ui/src/components/task/resume-snapshot.tsx for pendingResume) in the badge row next to ShortIdBadge / in-progress dot, with a native `title` tooltip (\"Resume required — this task was paused and must be resumed before starting new work.\") and aria-label. Visible on mobile + desktop. Accent/warning tone, non-invasive.\n\nVerification: `pnpm check` (web-ui tsc --noEmit) clean; run `pnpm dev` (localhost:5175) and confirm the resume-required task (e.g. T299/MA23W) shows the RotateCcw icon in its phase row with tooltip, while non-resume tasks do not. No commit (project rule: stay on feature branch).\n\n---\n**Completion summary:**\nIMPLEMENTED + typecheck-clean (pnpm --filter @agent-plan/web-ui check → 0 errors).\n\nAdded a per-task \"resume required\" icon in the Work Tree so paused-and-switched-away tasks are identifiable in their phase, not only in the dedicated \"Resume required\" section or the header.\n\nWhat changed (packages/plan-web-ui):\n- routes/dashboard/route.tsx: build `resumeRequiredIds = useMemo(() => new Set((taskFocus.pendingResume ?? []).map(t => t.id)), [taskFocus.pendingResume])` from the root loader's `taskFocus.pendingResume`, and pass it to <WorkTree/>.\n- components/dashboard/work-tree.tsx: WorkTree accepts `resumeRequiredIds?: Set<string>` (defaulted to empty Set in destructuring) and forwards it to FeatureTreeRow.\n- components/dashboard/work-tree-rows.tsx: threaded `resumeRequiredIds` through FeatureTreeRow → PhaseTreeRow → TaskTreeRow (each defaulted to new Set<string>() to satisfy exactOptionalPropertyTypes). TaskTreeRow renders an inline `RotateCcw` lucide icon (same glyph as resume-snapshot.tsx for pendingResume) in the badge row when `resumeRequiredIds.has(task.id)`, with a native `title` tooltip (\"Resume required — this task was paused and must be resumed before starting new work.\") + aria-label, accent color, visible on mobile + desktop.\n\nData source: taskFocus.pendingResume (root loader) = resume-required tasks derived from workDeviations state \"resume-required\" (plan-core task-selection.ts / plan-store.ts). No new API; pure presentation.\n\nVerification: web-ui tsc --noEmit clean. Dev server was killed at the user's request so they can run `pnpm dev` (localhost:5175) and see the RotateCcw icon on the resume-required task (T299 / MA23W) inside its phase row, while non-resume tasks show none.\n\nPlanner: T303 started via task_switch from T299 (P069/F005) — completing T303 will re-emit RESUME REQUIRED for T299. No commit (project rule: stay on feature branch).",
+      "descriptionUpdatedAt": "2026-08-21T18:51:38.880Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "916f49c6-f3bd-4915-8736-10fab905fb63-check-001-planned-in-progress",
+          "date": "2026-08-21T18:48:31.753Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Move resume-awareness runtime state to worktree-local storage."
+        },
+        {
+          "id": "916f49c6-f3bd-4915-8736-10fab905fb63-check-002-in-progress-done",
+          "date": "2026-08-21T18:51:38.878Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T18:48:31.753Z",
+      "completedAt": "2026-08-21T18:51:38.878Z",
+      "createdAt": "2026-08-21T18:47:46.953Z",
+      "updatedAt": "2026-08-21T18:51:38.878Z"
+    }
+  ],
+  "createdAt": "2026-08-21T17:03:02.706Z",
+  "updatedAt": "2026-08-21T19:00:55.706Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "e6f890ec-2493-4f1a-a286-21b0877fe0e1",
+      "date": "2026-08-21T17:04:07.721Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "cec67563-447f-4f50-b180-185757fc4bc0",
+      "date": "2026-08-21T17:22:53.731Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "766039bb-c7ae-4688-b6fa-bab7eca4d953",
+      "date": "2026-08-21T18:48:31.799Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "ad90df13-dcc0-40b7-bd3b-ce2b29d84c16",
+      "date": "2026-08-21T18:51:38.883Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

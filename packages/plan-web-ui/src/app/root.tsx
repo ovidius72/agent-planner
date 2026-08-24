@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router-dom";
+import { isRouteErrorResponse, ScrollRestoration, useLoaderData, useRouteError } from "react-router-dom";
 import { AppShell } from "../components/layout/app-shell";
 import { getProject, getTaskFocus, getUiConfig, type TaskFocusSummary, type UiConfig } from "../lib/api";
 import { useAnimatedFavicon } from "../hooks/use-animated-favicon";
@@ -40,6 +40,10 @@ export function RootRoute() {
   return (
     <ShortcutProvider shortcuts={uiConfig.shortcuts}>
       <LiveSyncBridge />
+      {/* Key scroll restoration by pathname only, so changing search params / sort /
+          filters on the same page does NOT reset the window scroll position. This
+          keeps the detail-page filters and the ?locate scroll from jumping to top. */}
+      <ScrollRestoration getKey={(location) => location.pathname} />
       <AppShell project={project} taskFocus={taskFocus} serverInfo={uiConfig.server} />
     </ShortcutProvider>
   );

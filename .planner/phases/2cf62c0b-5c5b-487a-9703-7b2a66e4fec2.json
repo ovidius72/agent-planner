@@ -1,0 +1,475 @@
+{
+  "id": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 74,
+  "shortId": "83TPN",
+  "priority": 23,
+  "slug": "detail-page-filter-parity-search",
+  "title": "Detail-page filter parity & search",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Filtri WorkTree-parity + ricerca debounced su feature-detail/phase-detail",
+  "description": "Implementare controlli di filtro condivisi su feature-detail e phase-detail speculari al WorkTree (toggle Hide Done / Hide Planned / Only active; semantica hideDone/hidePlanned/onlyActiveBranches da lib/dashboard-tree.ts:162-178: per task onlyActive = status===\\\"in-progress\\\"; per phase onlyActive = status in [\\\"in-progress\\\",\\\"discovery\\\"]), con ricerca testuale debounced (~250ms) che fa match di title/number/shortId (estendere matchesListQuery in lib/list-filtering.ts) SENZA navigazione router per keystroke (evita il reset di <ScrollRestoration/>). File da modificare: nuovo packages/plan-web-ui/src/components/ui/detail-filters.tsx (componente condiviso controllato: query draft locale + debounce, status auto-submit, 3 toggle, link Clear, nessun bottone Apply), routes/feature-detail/route.tsx (filtra PHASES), routes/phase-detail/route.tsx (filtra TASKS), app/root.tsx (<ScrollRestoration getKey={(location)=>location.pathname}> per scroll-safe su cambi search-param/sort). Comportamenti da preservare: SortControl, filtro status, label conteggio risultati, link Clear. Rimuovere ListFilters dalle due route di dettaglio (resta per features/ e requirements/). Verificare con browser (nessun reload/scroll per keystroke) + test vitest su detail-filters.",
+  "descriptionUpdatedAt": "2026-08-23T11:26:36.630Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "fb6c8235-23da-4828-9ea7-622ffc0162cb",
+    "e2f24834-0bb5-41a7-a4d1-a0d2eaa76fa7",
+    "3ad7c45b-8c1d-4fe5-acb3-105bbb800ca2",
+    "3ae4d86a-8a76-4615-9c0e-a35bd8208d22",
+    "fd9506a6-684a-47ae-b2df-8abf5a62be2a",
+    "6863da25-76dc-434c-967b-0a374f7ba097",
+    "b23c07cb-7597-45c2-a185-304c2a8d64c9",
+    "da95b2c5-5ddb-4b8a-926b-34f45afc7e57"
+  ],
+  "tasks": [
+    {
+      "id": "fb6c8235-23da-4828-9ea7-622ffc0162cb",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 311,
+      "shortId": "NBLMP",
+      "priority": 40,
+      "shortName": "tests-for-detailfilters-detail",
+      "title": "Tests for DetailFilters + detail-page filtering",
+      "status": "done",
+      "description": "Aggiungere packages/plan-web-ui/test/detail-filters.test.tsx (o estendere entity-references-and-updates.test.tsx) con asserzioni vitest: DetailFilters renderizza 3 toggle (Hide Done/Hide Planned/Only active) + input testuale + Select status + link Clear e NON renderizza un bottone \"Apply Filter\"/\"Apply filters\"; digitare nel testo con fake timers chiama onChange con query dopo ~250ms (debounce) e non prima; toggle Hide Done chiama onChange con hideDone=true; cambio status chiama onChange immediato; Clear chiama onChange con stato vuoto e svuota il draft. Aggiungere un test di filtraggio a livello di route: feature-detail esclude fasi done/planned e mostra solo fasi attive con onlyActive, e matchesListQuery su title/number/shortId; phase-detail equivalente sui task. Eseguire pnpm --filter @agent-plan/web-ui check + vitest (tutti verdi). Nessun commit.\n\n---\n**Completion summary:**\nImplementato DetailFilters (componente condiviso controllato: query draft locale + debounce 250ms, status auto-submit, 3 toggle, Clear, nessun Apply) e cablato in feature-detail (filtra PHASES) e phase-detail (filtra TASKS). ScrollRestoration in app/root.tsx con getKey=pathname per scroll-safe su sort/q. Filtri in stato locale (nessuna navigazione router per keystroke); sync URL via window.history.replaceState (deep-link senza reset scroll). passesDetailFilters in lib/list-filtering.ts con semantica per task (onlyActive=in-progress) e phase (onlyActive=[in-progress,discovery]). ListFilters mantenuto per features/ e requirements/. Verifica: pnpm --filter @agent-plan/web-ui check pulito; vitest 43/43 (14 nuovi su DetailFilters+passesDetailFilters+matchesListQuery); vite build pulito; dev server (pnpm dev) boota e serve HTTP 200 su :5175. Non committato (in attesa di autorizzazione).",
+      "descriptionUpdatedAt": "2026-08-23T11:35:35.131Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "fb6c8235-23da-4828-9ea7-622ffc0162cb-check-001-planned-in-progress",
+          "date": "2026-08-23T11:32:26.112Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "fb6c8235-23da-4828-9ea7-622ffc0162cb-check-002-in-progress-done",
+          "date": "2026-08-23T11:35:35.130Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T11:32:26.112Z",
+      "completedAt": "2026-08-23T11:35:35.130Z",
+      "createdAt": "2026-08-23T11:27:04.866Z",
+      "updatedAt": "2026-08-23T11:35:35.130Z"
+    },
+    {
+      "id": "e2f24834-0bb5-41a7-a4d1-a0d2eaa76fa7",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 312,
+      "shortId": "UWHPY",
+      "priority": 10,
+      "shortName": "shared-detailfilters-component",
+      "title": "Shared DetailFilters component (WorkTree-parity toggles + debounced search)",
+      "status": "done",
+      "description": "Crea packages/plan-web-ui/src/components/ui/detail-filters.tsx esportando DetailFilters, una filter-bar controllata per le pagine di dettaglio. Props: entityKind (\"phase\"|\"task\"), statusOptions, value {query,status,hideDone,hidePlanned,onlyActive}, onChange(next), resultsLabel, clearTo. Interno: local queryDraft (useState) seminato da value.query; input testuale onChange imposta draft + schedula onChange({...value, query: draft}) con debounce ~250ms (useRef timer + useEffect cleanup); <Select> status onChange -> onChange immediato; tre toggle stile ToolbarButton (components/dashboard/work-tree.tsx:71) Hide Done / Hide Planned / Only active, onClick -> onChange immediato (toggle del boolean); link Clear -> onChange({}) + setDraft(\"\"). NON usare <Form>/useSubmit (evita navigazione router -> nessun reset di <ScrollRestoration/>); NON rendering del bottone \"Apply Filter\". Preservare la label conteggio risultati e il link Clear. In app/root.tsx montare <ScrollRestoration getKey={(location)=>location.pathname} /> così eventuali navigazioni da cambio search-param/sort non resettano lo scroll della finestra (scroll-safe globale, coerente con il fix ?locate). Verificare: pnpm --filter @agent-plan/web-ui check pulito. Nessun commit.",
+      "descriptionUpdatedAt": "2026-08-23T11:27:04.912Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "e2f24834-0bb5-41a7-a4d1-a0d2eaa76fa7-check-001-planned-in-progress",
+          "date": "2026-08-23T11:28:08.774Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e2f24834-0bb5-41a7-a4d1-a0d2eaa76fa7-check-002-in-progress-done",
+          "date": "2026-08-23T11:29:43.493Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T11:28:08.774Z",
+      "completedAt": "2026-08-23T11:29:43.493Z",
+      "createdAt": "2026-08-23T11:27:04.908Z",
+      "updatedAt": "2026-08-23T11:29:43.493Z"
+    },
+    {
+      "id": "3ad7c45b-8c1d-4fe5-acb3-105bbb800ca2",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 313,
+      "shortId": "HTM3V",
+      "priority": 20,
+      "shortName": "wire-detailfilters-into-featur",
+      "title": "Wire DetailFilters into feature-detail (filter phases)",
+      "status": "done",
+      "description": "In packages/plan-web-ui/src/routes/feature-detail/route.tsx: sostituire ListFilters con DetailFilters entityKind=\"phase\". Aggiungere stato filtro locale (useState) seminato dagli URL search params (q/status/hideDone/hidePlanned/onlyActive) per deep-link; filtrare phases: status match esatto + passesFilters (hideDone -> escludi status===\"done\"; hidePlanned -> escludi status===\"planned\"; onlyActive -> status in [\"in-progress\",\"discovery\"]) + matchesListQuery(query, [phase.title, String(phase.number), phase.shortId]) (estendere la chiamata rispetto a [phase.title, phase.id, phase.summary, phase.description]). Sincronizzare i filtri su URL via window.history.replaceState (debounced) per shareability SENZA navigazione router. Rimuovere query/status da useSearchParams (tenere sort/dir per SortControl). Preservare SortControl, label \"X of Y phases\", link Clear, e la card di riepilogo. Verificare nel browser: digitare nella ricerca non ricarica la pagina né scrolla in cima; i toggle Hide Done/Hide Planned/Only active filtrano le fasi; nessun bottone Apply Filter. Nessun commit.",
+      "descriptionUpdatedAt": "2026-08-23T11:27:04.989Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3ad7c45b-8c1d-4fe5-acb3-105bbb800ca2-check-001-planned-in-progress",
+          "date": "2026-08-23T11:30:40.898Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3ad7c45b-8c1d-4fe5-acb3-105bbb800ca2-check-002-in-progress-done",
+          "date": "2026-08-23T11:32:03.404Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T11:30:40.898Z",
+      "completedAt": "2026-08-23T11:32:03.404Z",
+      "createdAt": "2026-08-23T11:27:04.986Z",
+      "updatedAt": "2026-08-23T11:32:03.404Z"
+    },
+    {
+      "id": "3ae4d86a-8a76-4615-9c0e-a35bd8208d22",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 314,
+      "shortId": "GVXTV",
+      "priority": 30,
+      "shortName": "wire-detailfilters-into-phase",
+      "title": "Wire DetailFilters into phase-detail (filter tasks)",
+      "status": "done",
+      "description": "In packages/plan-web-ui/src/routes/phase-detail/route.tsx: sostituire ListFilters con DetailFilters entityKind=\"task\". Stato filtro locale (useState) seminato da URL search params; filtrare tasks: status match esatto + passesFilters (hideDone -> escludi status===\"done\"; hidePlanned -> escludi status===\"planned\"; onlyActive -> status===\"in-progress\") + matchesListQuery(query, [task.title, String(task.number), task.shortId]) (estendere rispetto a [task.title, task.id, task.description, task.shortName]). Sincronizzare su URL via window.history.replaceState (debounced). Rimuovere query/status da useSearchParams (tenere sort/dir). Preservare SortControl, label \"X of Y tasks\", link Clear, handoff card. Verificare nel browser: ricerca debounced, toggle filtrano i task, nessun reload/scroll per keystroke, nessun Apply Filter. Nessun commit.",
+      "descriptionUpdatedAt": "2026-08-23T11:27:05.030Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3ae4d86a-8a76-4615-9c0e-a35bd8208d22-check-001-planned-in-progress",
+          "date": "2026-08-23T11:32:11.046Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3ae4d86a-8a76-4615-9c0e-a35bd8208d22-check-002-in-progress-done",
+          "date": "2026-08-23T11:32:20.035Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T11:32:11.046Z",
+      "completedAt": "2026-08-23T11:32:20.035Z",
+      "createdAt": "2026-08-23T11:27:05.028Z",
+      "updatedAt": "2026-08-23T11:32:20.035Z"
+    },
+    {
+      "id": "fd9506a6-684a-47ae-b2df-8abf5a62be2a",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 315,
+      "shortId": "BUYJZ",
+      "priority": 41,
+      "shortName": "mobile-filter-parity-detail-to",
+      "title": "Mobile filter parity: Detail toggle row = single scroll row like WorkTree",
+      "status": "done",
+      "description": "Rendere la riga dei filtri toggle in DetailFilters (packages/plan-web-ui/src/components/ui/detail-filters.tsx) identica a quella del WorkTree (packages/plan-web-ui/src/components/dashboard/work-tree.tsx:346) ANCHE su mobile, non solo su desktop. Oggi DetailFilters usa `flex flex-wrap` sull'outer container, quindi su schermi stretti i toggle (Hide Done / Hide Planned / Only active / Clear) vanno a capo formando una griglia, mentre WorkTree è una singola riga orizzontale scrollabile (`overflow-x-auto` + `max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden`, scrollbar visibile da sm in su, nascosta sotto i 640px). I bottoni `toggleClass` di DetailFilters sono già identici a `ToolbarButton` di WorkTree (h-7/sm:h-8, rounded-[9px]/[10px], active=accent fill). Cambia solo il contenitore: racchiudere i 3 toggle + Clear in un unico `div` con le stesse classi della riga WorkTree (`flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1.5 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden sm:gap-2 sm:rounded-[14px] sm:px-3 sm:py-2`), mentre Search + Status restano nei loro blocchi (flex-wrap per restare affiancati su desktop, a capo su mobile stretto). L'outer container passa da `flex flex-wrap items-end` a `flex flex-col gap-3`. Verificare con check + vitest (i test esistenti su DetailFilters non dipendono dallo stile del contenitore) e confronto visivo mobile via dev server. Non committare senza autorizzazione.\n\n---\n**Completion summary:**\nRistrutturato il contenitore di DetailFilters (packages/plan-web-ui/src/components/ui/detail-filters.tsx): outer da `flex flex-wrap items-end` a `flex flex-col gap-3`; i 3 toggle + Clear ora vivono in un unico `div` con le STESSE classi della riga WorkTree (work-tree.tsx:346): `flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1.5 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden sm:gap-2 sm:rounded-[14px] sm:px-3 sm:py-2`. Risultato: su mobile la riga dei filtri è una singola riga orizzontale scrollabile (NON più a griglia), identica a WorkTree, con scrollbar visibile da 640px in su e nascosta sotto i 640px (stessa regola max-sm di WorkTree). Search + Status restano nei loro blocchi (`flex flex-wrap` → affiancati su desktop, a capo su mobile stretto). I bottoni `toggleClass` erano già identici a `ToolbarButton`. Verifica: check pulito, detail-filters.test.tsx 14/14 verdi. Non committato.",
+      "descriptionUpdatedAt": "2026-08-23T11:48:39.887Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "fd9506a6-684a-47ae-b2df-8abf5a62be2a-check-001-planned-in-progress",
+          "date": "2026-08-23T11:48:12.734Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "fd9506a6-684a-47ae-b2df-8abf5a62be2a-check-002-in-progress-done",
+          "date": "2026-08-23T11:48:39.885Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T11:48:12.734Z",
+      "completedAt": "2026-08-23T11:48:39.885Z",
+      "createdAt": "2026-08-23T11:48:05.442Z",
+      "updatedAt": "2026-08-23T11:48:39.885Z"
+    },
+    {
+      "id": "6863da25-76dc-434c-967b-0a374f7ba097",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 316,
+      "shortId": "M5QN5",
+      "priority": 42,
+      "shortName": "phases-n-tasks-n-headers-creat",
+      "title": "PHASES(n) / TASKS(n) headers + create buttons aligned in detail pages",
+      "status": "done",
+      "description": "Allineare le sezioni PHASES (feature-detail) e TASKS (phase-detail) tra loro e col pattern coerente. Oggi: feature-detail/route.tsx:185-189 ha l'header \"Phases\" + descrizione con il bottone \"Create phase\" già a destra (md:justify-between), ma il conteggio non è inline nel label. phase-detail/route.tsx:326-332 ha l'header \"Tasks\" + descrizione SENZA bottone create (il \"Create task\" è invece nella action-row in alto a linea 155, insieme a Edit/Delete phase). Incoerenza: il create task non sta nell'header Tasks come il create phase sta nell'header Phases. Fix: (1) feature-detail: cambiare il label \"Phases\" in \"Phases ({phases.length})\" (route.tsx:186) — il create phase resta nell'header. (2) phase-detail: cambiare \"Tasks\" in \"Tasks ({phase.tasks.length})\" (route.tsx:327) e spostare il bottone \"Create task\" dall'action-row in alto (route.tsx:155) DENTRO l'header Tasks, rendendolo `flex flex-col gap-4 md:flex-row md:items-start md:justify-between` con label+descrizione a sinistra e `<Link to=\"tasks/new\"><Button variant=\"primary\" shortcut=\"create\">Create task</Button></Link>` a destra, speculare all'header Phases di feature-detail. Non rimuovere le CompactCard di statistica (sono widget aggregati distinti). Verificare con check + grep test per nessun assert sul testo esatto \"Phases\"/\"Tasks\". Non committare senza autorizzazione.\n\n---\n**Completion summary:**\nAllineate le sezioni PHASES (feature-detail/route.tsx) e TASKS (phase-detail/route.tsx) in modo speculare. feature-detail: label \"Phases\" → \"Phases ({phases.length})\" (route.tsx:186); il bottone Create phase era già nell'header (md:justify-between), nessun spostamento. phase-detail: label \"Tasks\" → \"Tasks ({phase.tasks.length})\" (route.tsx:327) e spostato il bottone Create task dall'action-row in alto (route.tsx:155, dove c'erano Edit/Create/Delete phase) DENTRO l'header Tasks, reso `flex flex-col gap-4 md:flex-row md:items-start md:justify-between` con label+descrizione a sinistra e `<Link to=\"tasks/new\"><Button variant=\"primary\" shortcut=\"create\">Create task</Button></Link>` a destra — speculare all'header Phases di feature-detail. Mantenute le CompactCard di statistica (widget aggregati distinti); aggiunto solo \"(n)\" negli header di sezione per l'allineamento. Verifica: check pulito, web-ui vitest 43/43 verdi. Non committato.",
+      "descriptionUpdatedAt": "2026-08-23T13:02:53.035Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "6863da25-76dc-434c-967b-0a374f7ba097-check-001-planned-in-progress",
+          "date": "2026-08-23T13:01:18.710Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "6863da25-76dc-434c-967b-0a374f7ba097-check-002-in-progress-done",
+          "date": "2026-08-23T13:02:53.033Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T13:01:18.710Z",
+      "completedAt": "2026-08-23T13:02:53.033Z",
+      "createdAt": "2026-08-23T13:00:56.555Z",
+      "updatedAt": "2026-08-23T13:02:53.033Z"
+    },
+    {
+      "id": "b23c07cb-7597-45c2-a185-304c2a8d64c9",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 317,
+      "shortId": "PFEDD",
+      "priority": 43,
+      "shortName": "restructure-detail-page-filter",
+      "title": "Restructure detail-page filter layout: count in header, row1 search|sort, row2 filters",
+      "status": "done",
+      "description": "Riorganizzare il layout dei filtri in feature-detail/route.tsx (sezione PHASES) e phase-detail/route.tsx (sezione TASKS) secondo spec utente: (1) il conteggio \"PHASES (n)\" / \"TASKS (n)\" resta nell'header di sezione (già fatto in T316); row1 = [Search (left)] <-> [Sort by (right)]; row2 = [Filters: status + Hide Done / Hide Planned / Only active / Clear]; rimuovere il \"resultsLabel\" (il \"n phases / n of m phases\" sotto i filtri) perché il conteggio è ora in (1). Modifiche: (a) packages/plan-web-ui/src/components/ui/detail-filters.tsx — rimuovere la prop `resultsLabel` e il relativo `<div>`; aggiungere prop `sortSlot?: ReactNode`; dividere il `return` in due righe: riga1 `<div className=\"flex flex-wrap items-center gap-3\">` con Search (flex-1) + {sortSlot}; riga2 `<div className=\"flex flex-wrap items-center gap-3\">` con Status (se showsStatus) + pill dei toggle (flex-1, scroll-x). (b) feature-detail/route.tsx — sostituire il `<div>` che conteneva `<SortControl/>` + `<DetailFilters resultsLabel=.../>` con un solo `<DetailFilters ... sortSlot={<SortControl .../>} />` (senza resultsLabel). (c) phase-detail/route.tsx — stesso cambio con entityKind=\"task\". (d) test/detail-filters.test.tsx — rimuovere `resultsLabel=\"3 of 5 tasks\"` dal render di default (prop rimossa). Verificare: check + vitest (detail-filters.test.tsx + intera suite). Non committare senza autorizzazione.\n\n---\n**Completion summary:**\nRiorganizzato il layout dei filtri in feature-detail e phase-detail secondo la spec. (1) conteggio \"PHASES (n)\" / \"TASKS (n)\" nell'header di sezione (da T316). Nuovo DetailFilters (detail-filters.tsx): rimossa prop `resultsLabel` + relativo `<div>`; aggiunta prop `sortSlot?: ReactNode`; `return` suddiviso in due righe — riga1 `<div flex flex-wrap gap-3>` con Search (flex-1) + {sortSlot}, riga2 `<div flex flex-wrap gap-3>` con Status (se showsStatus) + pill dei toggle (Hide Done / Hide Planned / Only active / Clear, flex-1 scroll-x). Route feature-detail e phase-detail: sostituito il `<div>` che conteneva `<SortControl/>`+`<DetailFilters resultsLabel=.../>` con un solo `<DetailFilters ... sortSlot={<SortControl .../>} />` (senza resultsLabel). Test detail-filters.test.tsx aggiornato (rimosso `resultsLabel=\"3 of 5 tasks\"` dal render di default). Verifica: check pulito, web-ui vitest 43/43 verdi. Non committato.",
+      "descriptionUpdatedAt": "2026-08-23T13:29:09.287Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "b23c07cb-7597-45c2-a185-304c2a8d64c9-check-001-planned-in-progress",
+          "date": "2026-08-23T13:26:13.813Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b23c07cb-7597-45c2-a185-304c2a8d64c9-check-002-in-progress-done",
+          "date": "2026-08-23T13:29:09.277Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T13:26:13.813Z",
+      "completedAt": "2026-08-23T13:29:09.277Z",
+      "createdAt": "2026-08-23T13:26:08.979Z",
+      "updatedAt": "2026-08-23T13:29:09.277Z"
+    },
+    {
+      "id": "da95b2c5-5ddb-4b8a-926b-34f45afc7e57",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 318,
+      "shortId": "4JSL7",
+      "priority": 44,
+      "shortName": "fix-vertical-alignment-of-deta",
+      "title": "Fix vertical alignment of detail-page filter rows (baseline + uniform control height)",
+      "status": "done",
+      "description": "Le due righe di DetailFilters (detail-filters.tsx) erano `items-center`, quindi SortControl (box h-9, label inline) e i pill dei toggle (senza label) \"galleggiavano\" al centro della riga invece di allinearsi alla baseline dei controlli. Fix: (1) entrambe le righe `<div className=\"flex flex-wrap items-center gap-3\">` → `items-end` (allinea i fondi dei controlli); (2) uniformare le altezze a h-9 per un look coerente: Search Input `min-h-9 py-2 sm:min-h-11 sm:py-2.5` → `h-9 py-2`; Status Select `min-h-9 appearance-none py-2 pr-8 sm:min-h-11 sm:py-2.5` → `h-9 appearance-none py-2 pr-8`; toggleClass pill `h-7 min-h-7 ... sm:h-8 sm:min-h-8` → `h-9 min-h-9 ... sm:h-9 sm:min-h-9` (toggleClass è usato solo in DetailFilters, non in WorkTree). Risultato: riga1 [Search(h-9) | Sort(h-9)] e riga2 [Status(h-9) | pill(h-9)] tutti a 36px e allineati in basso. Verificare: check + vitest. Non committare senza autorizzazione.\n\n---\n**Completion summary:**\nAllineamento verticale delle due righe di DetailFilters sistemato. Causa: le righe erano `items-center`, quindi SortControl (box h-9, label inline) e i pill (senza label) \"galleggiavano\" al centro invece di allinearsi alla baseline; inoltre lo Status select era un `.field-control` nudo (min-height 48px, border-strong, bg surface-elevated, padding 0.75rem) mentre i pill stavano in un contenitore bordato più leggero (border var(--border), bg surface-card) → incoerenza. Fix: (1) entrambe le righe `flex flex-wrap items-center` → `items-end` (i fondi dei controlli si allineano); (2) lo Status select ora è avvolto nello STESSO contenitore dei pill — `flex items-center rounded-[12px] border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1.5 sm:rounded-[14px] sm:px-3 sm:py-2` — con la select internalmente `h-9 appearance-none border-0 bg-transparent py-0 pr-8` (niente più bordo/padding doppio, il padding è del box); i due box di riga2 sono ora identici come stile; (3) Search input uniformato a `h-9 py-2` per allinearsi al box h-9 di Sort; (4) i pill (toggleClass) portati a `h-9 min-h-9 sm:h-9 sm:min-h-9` così i due box di riga2 hanno anche altezza identica (~48px mobile / ~52px sm). Verifica: check pulito, web-ui vitest 43/43 verdi. Non committato.",
+      "descriptionUpdatedAt": "2026-08-23T16:16:17.001Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "da95b2c5-5ddb-4b8a-926b-34f45afc7e57-check-001-planned-in-progress",
+          "date": "2026-08-23T16:14:49.597Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "da95b2c5-5ddb-4b8a-926b-34f45afc7e57-check-002-in-progress-done",
+          "date": "2026-08-23T16:16:17.000Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T16:14:49.597Z",
+      "completedAt": "2026-08-23T16:16:17.000Z",
+      "createdAt": "2026-08-23T16:12:36.113Z",
+      "updatedAt": "2026-08-23T16:16:17.000Z"
+    }
+  ],
+  "createdAt": "2026-08-23T11:26:36.630Z",
+  "updatedAt": "2026-08-23T16:16:17.000Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-23T11:33:39.783Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/2cf62c0b-5c5b-487a-9703-7b2a66e4fec2-2026-08-23T11-35-35-133Z.md",
+      "clearedAt": "2026-08-23T11:35:35.133Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "503d2678-57ea-4af1-b952-9c199a45d8c2",
+      "date": "2026-08-23T11:27:37.701Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "28355f30-4d1e-4dbb-b69b-e6391415591c",
+      "date": "2026-08-23T11:28:08.780Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "4cc6da5d-4742-4dad-8d3d-bbd5c9952480",
+      "date": "2026-08-23T11:35:35.174Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "d17dc2d6-fdf7-49f0-9773-ed68e38f2e1b",
+      "date": "2026-08-23T11:48:12.739Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "94ec3712-bf93-4f29-9440-6a0f4f6df3fe",
+      "date": "2026-08-23T11:48:39.890Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "6d86f159-01fe-4379-a867-a3fd865c97c0",
+      "date": "2026-08-23T13:01:18.717Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "8368bf47-98ff-40c1-a025-29f4d69535eb",
+      "date": "2026-08-23T13:02:53.038Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "dcc80d1c-9725-493b-8e60-e3842762b6f0",
+      "date": "2026-08-23T13:26:13.817Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "a68bf4c8-5f5d-4f14-8fa5-843267623c55",
+      "date": "2026-08-23T13:29:09.291Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "e11e9281-bcaf-4306-86e0-4b97c2deecd4",
+      "date": "2026-08-23T16:14:49.602Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "00344496-169f-45c5-b6cc-c95c118e9aaf",
+      "date": "2026-08-23T16:16:17.004Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

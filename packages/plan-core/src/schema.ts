@@ -150,11 +150,11 @@ export const ProjectSchema = z.object({
   workDeviations: z.array(WorkDeviationSchema).default([]),
 });
 
-export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const TaskStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const PhaseStatusSchema = z.enum(["draft", "discovery", "planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const RequirementStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const FeatureStatusSchema = z.enum(["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const TaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const PhaseStatusSchema = z.enum(["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const RequirementStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const FeatureStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
 
 export const SubtaskSchema = z.object({
   id: z.string().min(1),
@@ -179,7 +179,7 @@ const ChecklistInputSchema = z.union([z.string().min(1), ChecklistItemSchema]);
 
 /** Status transitions that require a motivation note from the agent. */
 export const STATUS_LOG_MOTIVATION_REQUIRED = new Set([
-  "paused", "blocked", "canceled", "deferred", "rejected", "waiting",
+  "blocked", "canceled", "deferred", "rejected", "waiting",
 ]);
 
 /**

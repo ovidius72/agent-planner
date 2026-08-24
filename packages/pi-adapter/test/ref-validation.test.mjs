@@ -406,6 +406,10 @@ describe("pi-adapter strict ref validation", () => {
     assert.match(toolText(recorded), /Approved deviation/);
     let project = await st.loadProject();
     assert.equal(project.workDeviations.at(-1)?.resumeTaskId, taskId);
+    await tools.get("task_get").execute("id", { taskId: temporaryId, full: true }, undefined, undefined, ctx);
+    await tools.get("phase_get").execute("id", { phaseId: "P001", full: true }, undefined, undefined, ctx);
+    await tools.get("feature_get").execute("id", { featureId: "F001", full: true }, undefined, undefined, ctx);
+    await tools.get("requirement_list").execute("id", {}, undefined, undefined, ctx);
     const started = await tools.get("task_start").execute("id", { taskId: temporaryId }, undefined, undefined, ctx);
     const startedText = toolText(started);
     assert.match(startedText, /Task started/);

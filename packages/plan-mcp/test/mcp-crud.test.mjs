@@ -38,7 +38,14 @@ after(async () => {
 
 const LONG = "src/mcp-crud.ts:10 existing state and the concrete goal for this entity; include file refs and behaviors to preserve so the description clears the 50-char minimum.";
 
-const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+async function readTaskContext(session, task = "T001", phase = "P001", feature = "F001") {
+  await callTool(session, "planner-task-show", { task, full: true });
+  await callTool(session, "planner-phase-show", { phase, full: true });
+  await callTool(session, "planner-feature-show", { feature, full: true });
+  await callTool(session, "planner-requirement-list", {});
+}
 
 // ── Feature CRUD ───────────────────────────────────────────────────────────
 
@@ -200,6 +207,11 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     expectToolError(noMotivation, /requires a motivation/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
 
+    // Starting is a dedicated lifecycle operation, not a generic update.
+    const genericStart = await callTool(session, "planner-task-update", { task: "T002", status: "in-progress" });
+    expectToolError(genericStart, /require planner-task-start/);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
+
     // with motivation → transition + statusLog entry
     const blocked = await callTool(session, "planner-task-update", { task: "T002", status: "blocked", motivation: "Waiting on the payments provider contract." });
     assert.match(toolText(blocked), /\(blocked\)/);
@@ -222,15 +234,22 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     // blocked is not startable → reopen to planned (motivation required) first
     await callTool(session, "planner-task-update", { task: "T002", status: "planned", motivation: "Provider contract signed; resume work." });
 
+    // Lifecycle work is rejected without the ordered full-read sequence.
+    const deniedWithoutReads = await callTool(session, "planner-task-start", { task: "T002" });
+    assert.match(toolText(deniedWithoutReads), /context reads required.*exact task/i);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
+
     // lifecycle: start (T002 is the only ready task) → complete → reopen needs motivation
+    await readTaskContext(session, "T002");
     const started = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(started), /Task started: P001\(F001\)\/T002/);
     const paused = await callTool(session, "planner-task-pause", {
       task: "T002", reason: "Temporary review interruption", what_was_being_done: "Validating the provider contract",
       resume_location: "src/provider.ts:20", how_to_resume: "Continue validation and rerun provider tests", paused_by: "mcp-test",
     });
-    assert.match(toolText(paused), /Task paused: P001\(F001\)\/T002/);
-    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "paused");
+    assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T002/);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
+    await readTaskContext(session, "T002");
     assert.match(toolText(await callTool(session, "planner-task-start", { task: "T002" })), /Task started/);
     const done = await callTool(session, "planner-task-complete", { task: "T002", force: true });
     assert.match(toolText(done), /\(done\)/);
@@ -345,13 +364,16 @@ test("priority is overridable but active task switches require a snapshot and de
       });
     }
 
+    await readTaskContext(session, "T002");
     const priorityOverride = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
     assert.match(toolText(priorityOverride), /Priority advisory/);
 
+    await readTaskContext(session, "T001");
     const denied = await callTool(session, "planner-task-start", { task: "T001" });
     assert.match(toolText(denied), /Task start denied.*planner-task-switch/i);
 
+    await readTaskContext(session, "T001");
     const switched = await callTool(session, "planner-task-switch", {
       from_task: "T002", to_task: "T001", reason: "Seed task must unblock temporary implementation",
       what_was_being_done: "Editing the lower-priority implementation", resume_location: "src/task-start.ts:20",
@@ -359,21 +381,45 @@ test("priority is overridable but active task switches require a snapshot and de
     });
     assert.match(toolText(switched), /Task switched: P001\(F001\)\/T002 → P001\(F001\)\/T001/);
     let tasks = (await session.store.loadAllPhases())[0].tasks;
-    assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "paused", "planned"]);
+    assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
     assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
     const done = await callTool(session, "planner-task-complete", { task: "T001", force: true });
     assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
     assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 
-    const skipDenied = await callTool(session, "planner-task-start", { task: "T003" });
-    assert.match(toolText(skipDenied), /pending resume/i);
+    const shownResume = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.match(toolText(shownResume), /Resume advisory:/);
+    assert.match(toolText(shownResume), /Work checkpoint: Editing the lower-priority implementation/);
+    assert.match(toolText(shownResume), /Resume from: src\/task-start\.ts:20/);
+
+    await readTaskContext(session, "T003");
+    const skipAdvisory = await callTool(session, "planner-task-start", { task: "T003" });
+    assert.match(toolText(skipAdvisory), /✅ Task started: P001\(F001\)\/T003/);
+    assert.match(toolText(skipAdvisory), /RESUME REQUIRED before starting a different task: P001\(F001\)\/T002/);
+    const skipStructured = toolStructured(skipAdvisory);
+    assert.ok(skipStructured?.resumeRequired, "task_start while a resume-required is pending must return an explicit structured resumeRequired proposal");
+    assert.equal(skipStructured.resumeRequired.taskId, tasks[1].id);
+    assert.equal(skipStructured.resumeRequired.snapshot?.resumeLocation, "src/task-start.ts:20");
+    let project = await session.store.loadProject();
+    assert.equal(project.workDeviations.at(-1).state, "resume-required");
+
+    await callTool(session, "planner-task-complete", { task: "T003", force: true });
+    await readTaskContext(session, "T002");
     const resumed = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(resumed), /Task started/);
     tasks = (await session.store.loadAllPhases())[0].tasks;
     assert.equal(tasks[1].status, "in-progress");
     assert.equal(tasks[1].pauseSnapshot, null);
-    assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resumed");
+    project = await session.store.loadProject();
+    assert.equal(project.workDeviations.at(-1).state, "resumed");
+
+    const finishedResumeTarget = await callTool(session, "planner-task-complete", { task: "T002", force: true });
+    assert.doesNotMatch(toolText(finishedResumeTarget), /RESUME REQUIRED:/);
+    project = await session.store.loadProject();
+    assert.equal(project.workDeviations.length, 0);
+    const shownDone = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.doesNotMatch(toolText(shownDone), /Resume advisory:/);
   } finally {
     await closeMcpFixture(session);
   }
