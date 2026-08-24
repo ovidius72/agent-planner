@@ -23,9 +23,8 @@ test("task status changes update active work, derived parents, and persisted lif
   const taskId = phase.tasks[0]!.id;
   await prepareTaskGovernance(planner, phase.featureId, phase.id);
 
-  await page.goto(`${planner.url}/features/${phase.featureId}/phases/${phase.id}`);
-  const status = page.locator('select[name="status"]').last();
-  await status.selectOption("in-progress");
+  await page.goto(`${planner.url}/features/${phase.featureId}/phases/${phase.id}/tasks/${taskId}`);
+  await page.getByRole("button", { name: "Start task" }).click();
   await expect(page.getByText("Active tasks (1)")).toBeVisible();
   await expect(page.getByRole("banner").getByRole("link", { name: "Implement login", exact: true })).toHaveCount(1);
 
@@ -33,6 +32,8 @@ test("task status changes update active work, derived parents, and persisted lif
   expect(started.body).toMatchObject({ status: "in-progress" });
   expect((started.body as { startedAt: string }).startedAt).not.toBe("");
 
+  await page.getByRole("link", { name: "Back to phase" }).click();
+  const status = page.locator('select[name="status"]').last();
   await status.selectOption("done");
   await expect(page.getByText(/Completed /)).toBeVisible();
   await expect(page.getByText("Active tasks (1)")).toHaveCount(0);

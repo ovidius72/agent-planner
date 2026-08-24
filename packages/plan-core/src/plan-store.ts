@@ -1426,12 +1426,13 @@ export class PlanStore {
   async refreshResume(notes?: string, lastSessionSummary?: string): Promise<ResumeFocus> {
     const workspace = await this.loadAll();
     const inProgressPhases = workspace.phases.filter((p) => p.status === "in-progress");
+    const activePhase = workspace.phases.find((phase) => phase.tasks.some((task) => task.status === "in-progress"));
     const inProgressTasks = workspace.phases.flatMap((p) => p.tasks.filter((t) => t.status === "in-progress"));
     const blockedTasks = workspace.phases.flatMap((p) => p.tasks.filter((t) => t.status === "blocked"));
     const existing = await this.loadResume();
     const resume: ResumeFocus = {
       updatedAt: nowISO(),
-      currentPhaseId: inProgressPhases[0]?.id ?? existing?.currentPhaseId ?? "",
+      currentPhaseId: activePhase?.id ?? (existing?.currentPhaseId || inProgressPhases[0]?.id || ""),
       inProgressTaskIds: inProgressTasks.map((t) => t.id),
       nextSteps: existing?.nextSteps ?? [],
       nextStepsUpdatedAt: existing?.nextStepsUpdatedAt ?? "",

@@ -1011,7 +1011,7 @@ The expected tarball contents for each public package are:
 
 ### Publish to npm
 
-Publishing is automated by GitHub Actions. The workflow `.github/workflows/publish.yml` runs **only** on merge of a release PR into `main` (`push: branches:[main]`). It publishes all five public packages in dependency order using `pnpm publish` (which rewrites `workspace:*` ranges to the resolved versions). Merging into `develop` does **not** publish — `develop` is staging.
+Publishing is automated by GitHub Actions. The workflow `.github/workflows/publish.yml` runs on pushes to `main` and `next`: `main` publishes the stable `latest` channel after a release PR merge, while `next` publishes prereleases under the `next` dist-tag. It publishes all five public packages in dependency order using `pnpm publish` (which rewrites `workspace:*` ranges to the resolved versions). Merging into `develop` does **not** publish — `develop` is staging. After a successful stable publish from `main`, the workflow creates the canonical annotated tag `vX.Y.Z`; prerelease publishes never create stable tags.
 
 Do **not** run `npm publish` manually per package: it would publish stale `workspace:*` ranges that npm cannot install.
 
@@ -1032,12 +1032,12 @@ pnpm release -- --dry-run  # preview only
 The script does everything:
 
 1. **Pre-flight** — clean working tree, on `develop`, up to date with `origin/develop`.
-2. **Compute the unified target version** — `bump(max(current versions), level)` with a downgrade guard.
+2. **Compute the unified target version** — fetch canonical `vX.Y.Z` tags and bump the latest stable tag. While tag history is being bootstrapped, fall back to the unified stable version on `origin/main`. Develop prerelease suffixes such as `-next.N` never affect the stable base; explicit versions retain a downgrade guard.
 3. **Create `release/v<version>`** from `develop` and bump all 5 packages to that version.
 4. **Verify** — `pnpm install` + `pnpm -r build` + `pnpm check` (rolls back the branch on failure).
 5. **Commit, push, and open a PR → `main`**.
 
-Merge the release PR into `main` to trigger `publish.yml` (npm publish). Then sync `develop`:
+Merge the release PR into `main` to trigger `publish.yml` (npm publish + stable `vX.Y.Z` tag). Then sync `develop`:
 
 ```bash
 git switch develop && git pull && git merge origin/main && git push
@@ -1064,9 +1064,10 @@ npm i @agent-plan/core@next
 ```
 
 The plugin (`plugins/claude-code/.claude-plugin/plugin.json` and
-`.claude-plugin/marketplace.json`) is **not** bumped by `release:next` — it
-follows the stable `main` release track only, so the marketplace plugin
-version advances on `pnpm release` (stable), not on prereleases.
+`.claude-plugin/marketplace.json`) has its own version track but is bumped by
+both release scripts so marketplace clients can detect refreshed plugin files
+on either channel. Stable Git tags always use the unified npm package version,
+not the independent plugin version.
 
 ### Install the published CLI
 

@@ -473,7 +473,49 @@ describe("plan-mcp strict ref validation", () => {
     }
   });
 
-  test("planner-task-recommend and planner-task-deviation retain an explicit resume target", async () => {
+  test("planner-task-recommend continues the persisted current phase before global priority", async () => {
+  const { plannerRoot, st, featureB } = await setup();
+  const now = nowISO();
+  const currentPhaseId = createPhaseId();
+  const currentTaskId = createTaskId();
+  await st.savePhase(PhaseSchema.parse({
+    id: currentPhaseId,
+    number: 2,
+    priority: 20,
+    featureId: featureB.id,
+    slug: "current-phase",
+    title: "Current Phase",
+    status: "planned",
+    tasks: [{
+      id: currentTaskId,
+      number: 2,
+      priority: 20,
+      phaseId: currentPhaseId,
+      title: "Continue current phase",
+      shortName: "continue-current-phase",
+      status: "planned",
+      description: "Current phase continuation task with enough detail for this MCP recommendation regression.",
+      createdAt: now,
+      updatedAt: now,
+    }],
+    taskIds: [currentTaskId],
+    createdAt: now,
+    updatedAt: now,
+  }));
+  const resume = await st.loadResume();
+  await st.saveResume({ ...resume, currentPhaseId });
+
+  const session = await startClient(plannerRoot);
+  try {
+    const result = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
+    assert.match(toolText(result), /Recommended \(priority\): P002\(F002\)\/T002/);
+    assert.match(toolText(result), /Continue the current phase/);
+  } finally {
+    await session.close();
+  }
+});
+
+test("planner-task-recommend and planner-task-deviation retain an explicit resume target", async () => {
     const { plannerRoot, st, phase } = await setup();
     const temporaryId = createTaskId();
     const resumeId = phase.tasks[0].id;

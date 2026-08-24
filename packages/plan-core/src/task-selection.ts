@@ -83,6 +83,7 @@ export function recommendNextTask(
   features: Feature[],
   phases: Phase[],
   deviations: WorkDeviation[] = [],
+  currentPhaseId = "",
 ): TaskRecommendation {
   const featureById = new Map(features.map((feature) => [feature.id, feature]));
   const candidates = phases.flatMap((phase) => phase.tasks.map((task) => ({ feature: phase.featureId ? featureById.get(phase.featureId) : undefined, phase, task })));
@@ -136,6 +137,17 @@ export function recommendNextTask(
     if (unavailable.has(phase.status) || (feature && unavailable.has(feature.status))) return false;
     return task.dependsOn.every((id) => byTaskId.get(id)?.task.status === "done");
   });
+  const currentPhaseReady = currentPhaseId
+    ? ready.filter(({ phase }) => phase.id === currentPhaseId).sort((a, b) => compare(a.task, b.task))
+    : [];
+  if (currentPhaseReady[0]) {
+    return {
+      kind: "priority",
+      candidate: currentPhaseReady[0],
+      reason: "Continue the current phase before selecting new work elsewhere.",
+    };
+  }
+
   ready.sort((a, b) => compare(a.feature ?? { priority: 0, number: 0 }, b.feature ?? { priority: 0, number: 0 }) || compare(a.phase, b.phase) || compare(a.task, b.task));
   return ready[0]
     ? { kind: "priority", candidate: ready[0], reason: "Highest-priority ready task by feature, phase, then task." }

@@ -1056,12 +1056,12 @@ server.registerTool("planner-task-delete", {
 });
 
 server.registerTool("planner-task-recommend", {
-  description: "Return the harness-agnostic recommended task: continue one active task, otherwise choose ready work by feature → phase → task priority. Reports dependency, availability, and approved deviation/resume context without starting or blocking work.",
+  description: "Return the harness-agnostic recommended task: continue one active task or the current phase, otherwise choose ready work by feature → phase → task priority. Reports dependency, availability, and approved deviation/resume context without starting or blocking work.",
   inputSchema: {},
 }, async () => {
   const st = await requireStore();
-  const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
-  const result = recommendNextTask(features.features, phases, project.workDeviations);
+  const [features, phases, project, resume] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
+  const result = recommendNextTask(features.features, phases, project.workDeviations, resume?.currentPhaseId);
   if (!result.candidate) return text(`No task recommendation: ${result.reason}`, { kind: result.kind, reason: result.reason, activeTaskIds: result.activeCandidates?.map((candidate) => candidate.task.id) ?? [] });
   const { candidate } = result;
   const ref = taskCompositeRef(candidate.task, candidate.phase, features.features);
@@ -1075,10 +1075,10 @@ server.registerTool("planner-task-deviation", {
   inputSchema: { temporary_task: z.string().min(1), resume_task: z.string().min(1).optional(), reason: z.string().min(1) },
 }, async ({ temporary_task, resume_task, reason }) => {
   const st = await requireStore();
-  const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+  const [features, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
   const temporary = findTaskByRef(phases, features.features, temporary_task);
   if (!temporary) return text(`Task not found: ${temporary_task}`);
-  const selected = recommendNextTask(features.features, phases, project.workDeviations);
+  const selected = recommendNextTask(features.features, phases, project.workDeviations, focus?.currentPhaseId);
   const resume = resume_task ? findTaskByRef(phases, features.features, resume_task) : selected.candidate;
   if (!resume) return text(`No resume task is available. Provide resume_task explicitly. ${selected.reason}`);
   if (temporary.task.id === resume.task.id) return text("A temporary task must differ from its resume target.");
@@ -1151,7 +1151,7 @@ server.registerTool("planner-task-switch", {
   },
 }, async ({ from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume, switched_by }) => {
   const st = await requireStore();
-  const [featuresDoc, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+  const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
   const features = featuresDoc.features;
   const source = findTaskByRef(phases, features, from_task);
   const target = findTaskByRef(phases, features, to_task);
@@ -1179,7 +1179,7 @@ server.registerTool("planner-task-switch", {
     resumeLocation: resume_location, howToResume: how_to_resume,
     relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: switched_by?.trim() ?? "",
   };
-  const selection = recommendNextTask(features, phases, project.workDeviations);
+  const selection = recommendNextTask(features, phases, project.workDeviations, focus?.currentPhaseId);
   const record = {
     id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
     temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason, snapshot,
@@ -1279,11 +1279,10 @@ server.registerTool("planner-task-start", {
   if (!hasReadRequirements(linkedRequirementIds)) {
     return text("Task start denied: read the requirements linked to the task's phase and feature first.", { requirementIds: linkedRequirementIds });
   }
-  const project = await st.loadProject();
-  const phases = await st.loadAllPhases();
+  const [project, phases, focus] = await Promise.all([st.loadProject(), st.loadAllPhases(), st.loadResume()]);
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
   if (!eligibility.eligible) return text(`Task start denied: ${eligibility.reason}`, { reason: eligibility.reason });
-  const selection = recommendNextTask(features, phases, project.workDeviations);
+  const selection = recommendNextTask(features, phases, project.workDeviations, focus?.currentPhaseId);
   if (selection.kind === "conflict") {
     return text(`${selection.reason} Pause/reconcile active tasks before starting another task.`, {
       activeTaskIds: selection.activeCandidates?.map((candidate) => candidate.task.id) ?? [],

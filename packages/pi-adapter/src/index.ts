@@ -4018,13 +4018,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_recommend",
     label: "Task Recommend",
-    description: "Return the recommended next task without starting work: continue one active task, otherwise choose ready work by feature → phase → task priority. Reports approved deviation/resume context and never blocks an explicit user choice.",
+    description: "Return the recommended next task without starting work: continue one active task or the current phase, otherwise choose ready work by feature → phase → task priority. Reports approved deviation/resume context and never blocks an explicit user choice.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
-      const result = recommendNextTask(features.features, phases, project.workDeviations);
+      const [features, phases, project, resume] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
+      const result = recommendNextTask(features.features, phases, project.workDeviations, resume?.currentPhaseId);
       if (!result.candidate) return { content: [{ type: "text", text: `No task recommendation: ${result.reason}` }], details: result };
       const { candidate } = result;
       const reference = `${formatPhaseRef(candidate.phase.number, featureNumberOfPhase(candidate.phase, features.features))}/T${String(candidate.task.number).padStart(3, "0")}`;
@@ -4047,10 +4047,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+      const [features, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
       const temporary = findTaskByRef(phases, features.features, params.temporary_task.trim());
       if (!temporary) return { content: [{ type: "text", text: `Task not found: ${params.temporary_task}` }], details: {} };
-      const selected = recommendNextTask(features.features, phases, project.workDeviations);
+      const selected = recommendNextTask(features.features, phases, project.workDeviations, focus?.currentPhaseId);
       const resume = params.resume_task ? findTaskByRef(phases, features.features, params.resume_task.trim()) : selected.candidate;
       if (!resume) return { content: [{ type: "text", text: `No resume task is available. Provide resume_task explicitly. ${selected.reason}` }], details: selected };
       if (temporary.task.id === resume.task.id) return { content: [{ type: "text", text: "A temporary task must differ from its resume target." }], details: {} };
@@ -4140,7 +4140,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [featuresDoc, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+      const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
       const features = featuresDoc.features;
       const source = findTaskByRef(phases, features, params.from_task.trim());
       const target = findTaskByRef(phases, features, params.to_task.trim());
@@ -4170,7 +4170,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(),
         relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: params.switched_by?.trim() ?? "",
       };
-      const selection = recommendNextTask(features, phases, project.workDeviations);
+      const selection = recommendNextTask(features, phases, project.workDeviations, focus?.currentPhaseId);
       const record = {
         id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
         temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason: snapshot.reason, snapshot,
@@ -4283,11 +4283,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!hasReadRequirements(linkedRequirementIds)) {
         return { content: [{ type: "text", text: "Task start denied: read the requirements linked to the task's phase and feature first." }], details: { requirementIds: linkedRequirementIds } };
       }
-      const project = await st.loadProject();
-      const phases = await st.loadAllPhases();
+      const [project, phases, focus] = await Promise.all([st.loadProject(), st.loadAllPhases(), st.loadResume()]);
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
       if (!eligibility.eligible) return { content: [{ type: "text", text: `Task start denied: ${eligibility.reason}` }], details: eligibility };
-      const selection = recommendNextTask(features, phases, project.workDeviations);
+      const selection = recommendNextTask(features, phases, project.workDeviations, focus?.currentPhaseId);
       if (selection.kind === "conflict") {
         return { content: [{ type: "text", text: `${selection.reason} Pause/reconcile active tasks before starting another task.` }], details: selection };
       }

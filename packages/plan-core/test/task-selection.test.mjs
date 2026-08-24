@@ -31,6 +31,45 @@ test("selects the lowest feature → phase → task priority with number tie-bre
   assert.equal(result.candidate.task.id, "tie-break");
 });
 
+test("continues ready work in the current phase before global priority", () => {
+  const features = [feature(1, 1), feature(2, 20)];
+  const phases = [
+    phase("global-priority", "feature-1", 1, 1, [task("t374", 374, 1)]),
+    phase("current", "feature-2", 2, 20, [task("t438", 438, 1, "done"), task("t439", 439, 2)]),
+  ];
+
+  const result = recommendNextTask(features, phases, [], "current");
+  assert.equal(result.kind, "priority");
+  assert.equal(result.candidate.task.id, "t439");
+  assert.match(result.reason, /current phase/i);
+});
+
+test("falls back to global priority when the current phase has no ready task", () => {
+  const features = [feature(1, 1), feature(2, 20)];
+  const phases = [
+    phase("global-priority", "feature-1", 1, 1, [task("global", 1, 1)]),
+    phase("current", "feature-2", 2, 20, [task("blocked", 2, 1, "blocked")]),
+  ];
+
+  const result = recommendNextTask(features, phases, [], "current");
+  assert.equal(result.candidate.task.id, "global");
+  assert.match(result.reason, /feature, phase, then task/i);
+});
+
+test("active and resume work still override current-phase continuity", () => {
+  const features = [feature(1)];
+  const phases = [
+    phase("current", "feature-1", 1, 1, [task("current-ready", 1)]),
+    phase("other", "feature-1", 2, 2, [task("active", 2, 2, "in-progress")]),
+  ];
+  assert.equal(recommendNextTask(features, phases, [], "current").candidate.task.id, "active");
+
+  phases[1].tasks[0].status = "done";
+  phases[1].tasks.push(task("resume", 3, 3));
+  const pending = deviation("temporary", "resume", "resume-required");
+  assert.equal(recommendNextTask(features, phases, [pending], "current").candidate.task.id, "resume");
+});
+
 test("returns one active task, but reports an unsafe multiple-active conflict", () => {
   const features = [feature(1)];
   const phases = [phase("p", "feature-1", 1, 1, [task("active", 1, 1, "in-progress"), task("planned", 2, 1)])];
