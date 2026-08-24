@@ -267,9 +267,9 @@
       "priority": 4,
       "shortName": "validate-promote",
       "title": "Validate next and prepare stable promotion",
-      "status": "waiting",
-      "description": "After T327-T329 complete, run `pnpm test:unit`, the full Playwright E2E suite, `pnpm build`, `pnpm check`, and `git diff --check`; inspect the complete diff and ensure planner artifacts are synchronized. Commit the approved fixes on `next`, run `pnpm release:next`, and verify publish plus CI status. Prepare promotion toward `develop` and then use the documented stable `pnpm release` flow to create a release branch/PR toward main, but never merge a GitHub PR: only the user performs PR merges. Preserve all validation evidence and stop/report if any check is red.",
-      "descriptionUpdatedAt": "2026-08-24T15:33:05.188Z",
+      "status": "done",
+      "description": "After T327-T329 complete, run `pnpm test:unit`, the full Playwright E2E suite, `pnpm build`, `pnpm check`, and `git diff --check`; inspect the complete diff and ensure planner artifacts are synchronized. Commit the approved fixes on `next`, run `pnpm release:next`, and verify publish plus CI status. Prepare promotion toward `develop` and then use the documented stable `pnpm release` flow to create a release branch/PR toward main, but never merge a GitHub PR: only the user performs PR merges. Preserve all validation evidence and stop/report if any check is red.\n\n---\n**Completion summary:**\nValidated and published next prerelease 0.2.22-next.4; PR #41 (`next` → `develop`) passed build, coverage, E2E, security, and publish checks and was merged by the user as 40486850. From updated `develop`, `pnpm release -- --dry-run` resolved the stable target to 0.2.23 from the unified origin/main 0.2.22 fallback because no canonical stable tags exist yet. `pnpm release` created commit 5a8ac70 on `release/v0.2.23`, bumped all five packages to 0.2.23 and the Claude plugin/marketplace to 0.1.8, passed build and typecheck, pushed the branch, and opened PR #42 to `main`. PR #42 build, Playwright E2E, and GitGuardian checks passed. No PR was merged by the agent.",
+      "descriptionUpdatedAt": "2026-08-24T16:07:10.080Z",
       "notes": "",
       "statusLog": [
         {
@@ -287,6 +287,30 @@
           "toStatus": "waiting",
           "title": "Validated next prerelease 0.2.22-next.4 is published and PR #41 (next → develop) has green build, coverage, E2E, security, and publish checks. Stable release preparation cannot continue until the user performs the required GitHub PR merge; agents must never merge PRs.",
           "description": "Validated next prerelease 0.2.22-next.4 is published and PR #41 (next → develop) has green build, coverage, E2E, security, and publish checks. Stable release preparation cannot continue until the user performs the required GitHub PR merge; agents must never merge PRs."
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-003-waiting-planned",
+          "date": "2026-08-24T16:03:44.601Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "PR #41 was merged by the user into develop, clearing the user-only promotion gate. Resume the documented stable release flow from updated develop.",
+          "description": "PR #41 was merged by the user into develop, clearing the user-only promotion gate. Resume the documented stable release flow from updated develop."
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-004-planned-in-progress",
+          "date": "2026-08-24T16:03:47.783Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-005-in-progress-done",
+          "date": "2026-08-24T16:07:10.078Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -320,7 +344,7 @@
           "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-005-prepare-develop-stable-release-pr-without-merging-it",
           "number": 5,
           "title": "Prepare develop/stable release PR without merging it",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -328,17 +352,23 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-08-24T15:43:06.160Z",
-      "completedAt": "",
+      "completedAt": "2026-08-24T16:07:10.078Z",
       "createdAt": "2026-08-24T15:33:05.186Z",
-      "updatedAt": "2026-08-24T15:51:32.063Z"
+      "updatedAt": "2026-08-24T16:07:10.078Z"
     }
   ],
   "createdAt": "2026-08-24T15:32:36.148Z",
-  "updatedAt": "2026-08-24T15:51:32.063Z",
+  "updatedAt": "2026-08-24T16:07:10.078Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-08-24T15:54:29.732Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/4811416e-93d3-4919-8aaf-f056c4c470e7-2026-08-24T16-07-10-100Z.md",
+      "clearedAt": "2026-08-24T16:07:10.100Z",
+      "reason": "phase-done"
+    }
+  ],
   "statusLog": [
     {
       "id": "63a8e9e7-c1a5-4afa-bdf7-4adb846205d9",
@@ -346,6 +376,14 @@
       "fromStatus": "draft",
       "toStatus": "in-progress",
       "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "1a1a5282-39c2-44b3-a48f-4314bdea601b",
+      "date": "2026-08-24T16:07:10.138Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ]
