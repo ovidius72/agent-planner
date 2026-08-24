@@ -1,0 +1,179 @@
+{
+  "id": "2dbfeb21-6f00-4fdf-8869-60614887706d",
+  "featureId": "7e59af5d-dc62-4f50-8dc2-38038d6e88b1",
+  "number": 48,
+  "shortId": "ZTD7X",
+  "priority": 1,
+  "slug": "add-project-folder-to-page-title",
+  "title": "Add project folder to page title",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Implement the page title suffix based on the project root directory name.\n\nCode references:\n- `packages/plan-web-ui/src/app/root.tsx:26` — current title assignment\n- `packages/plan-web-ui/src/lib/api.ts` — `getProject()` returns project including `projectRoot`\n- `packages/plan-server/src/serve.ts:207` — `projectRoot` is exposed in UI config\n\nCurrent state:\n- Title is `Project Name · Agent Plan`.\n- `project.projectRoot` is available in the root loader.\n\nWork to do:\n1. Compute folder name from `project.projectRoot` (last path segment or via `basename`).\n2. Update title logic to prefer `Project Name · folder` when folder differs from project name.\n3. Keep existing fallback and error boundary titles unchanged.\n4. Build and type-check.\n5. Push to feature branch and open PR to `next`.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6",
+    "329f9995-b830-426f-a796-27c793dad905",
+    "d179fc40-f193-45de-b8ed-3c9b4eb29c25"
+  ],
+  "tasks": [
+    {
+      "id": "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6",
+      "phaseId": "2dbfeb21-6f00-4fdf-8869-60614887706d",
+      "number": 204,
+      "shortId": "28U68",
+      "priority": 1,
+      "shortName": "implement-project-folder-suffi",
+      "title": "Implement project folder suffix in root title",
+      "status": "done",
+      "description": "Update the Web UI root route to include the project directory basename in `document.title`.\n\nConcrete steps:\n1. In `packages/plan-web-ui/src/app/root.tsx`, compute `folder` from `project.projectRoot` using the last segment of the path (avoid importing `node:path` in the browser bundle).\n2. Change title assignment to:\n   - If `project.name` exists and `folder` differs from it: `${project.name} · ${folder}`\n   - Else if `project.name` exists: `${project.name} · Agent Plan`\n   - Else: `Agent Plan`\n3. Keep the error boundary title as `Agent Plan`.\n4. Run `pnpm --filter @agent-plan/web-ui build` and `pnpm check`.\n5. Push to branch and create PR to `next`.\n\n---\n**Completion summary:**\nUpdated packages/plan-web-ui/src/app/root.tsx to derive folder name from project.projectRoot and set document.title to 'Project Name · folder' when folder differs from project name. Build and type-check pass. Branch feat/web-ui-page-title-project-folder pushed.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6-check-001-compute-folder-from-projectroot",
+          "number": 1,
+          "title": "Compute folder from projectRoot",
+          "checked": false
+        },
+        {
+          "id": "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6-check-002-update-document-title-logic",
+          "number": 2,
+          "title": "Update document.title logic",
+          "checked": false
+        },
+        {
+          "id": "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6-check-003-preserve-error-boundary-title",
+          "number": 3,
+          "title": "Preserve error boundary title",
+          "checked": false
+        },
+        {
+          "id": "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6-check-004-build-web-ui",
+          "number": 4,
+          "title": "Build web-ui",
+          "checked": false
+        },
+        {
+          "id": "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6-check-005-type-check-monorepo",
+          "number": 5,
+          "title": "Type-check monorepo",
+          "checked": false
+        },
+        {
+          "id": "2c0ad49a-bcaf-45ec-8f53-0ea3931769e6-check-006-push-and-open-pr",
+          "number": 6,
+          "title": "Push and open PR",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T15:42:40.916Z",
+      "completedAt": "2026-08-06T15:50:55.097Z",
+      "createdAt": "2026-08-06T15:42:38.691Z",
+      "updatedAt": "2026-08-06T15:50:55.097Z"
+    },
+    {
+      "id": "329f9995-b830-426f-a796-27c793dad905",
+      "phaseId": "2dbfeb21-6f00-4fdf-8869-60614887706d",
+      "number": 209,
+      "shortId": "NZNHT",
+      "priority": 2,
+      "shortName": "show-project-folder-in-web-ui",
+      "title": "Show project folder in Web UI page title",
+      "status": "done",
+      "description": "The Web UI page title currently shows only `${project.name} · Agent Plan`. User requests that the project folder path be included in the page title (e.g. 'projectName · /path/to/project · Agent Plan' or similar).\n\nCode references:\n- packages/plan-web-ui/src/app/root.tsx (where document.title is set)\n- packages/plan-web-ui/src/lib/api.ts (Project type, normalizeProject)\n- packages/plan-web-ui/src/lib/types.ts (Project interface)\n\nAcceptance: browser tab title includes the project folder when a project is loaded. Keep it readable and not too long for narrow tabs. Use projectRoot or project.projectRoot.\n\n---\n**Completion summary:**\nImplemented project folder in Web UI page title in packages/plan-web-ui/src/app/root.tsx. Title now shows 'ProjectName · folder' when project.projectRoot basename differs from project name, otherwise 'ProjectName · Agent Plan'. Rebuilt web-ui and copied bundle to pi-adapter/server web-ui-dist via scripts/copy-web-ui.sh. Browser reload required.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "329f9995-b830-426f-a796-27c793dad905-check-001-inspect-current-title-logic-and-project-type",
+          "number": 1,
+          "title": "Inspect current title logic and Project type",
+          "checked": true
+        },
+        {
+          "id": "329f9995-b830-426f-a796-27c793dad905-check-002-design-compact-title-format-with-folder-path",
+          "number": 2,
+          "title": "Design compact title format with folder path",
+          "checked": true
+        },
+        {
+          "id": "329f9995-b830-426f-a796-27c793dad905-check-003-implement-title-update-in-root-tsx",
+          "number": 3,
+          "title": "Implement title update in root.tsx",
+          "checked": true
+        },
+        {
+          "id": "329f9995-b830-426f-a796-27c793dad905-check-004-build-and-verify",
+          "number": 4,
+          "title": "Build and verify",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T22:50:50.052Z",
+      "completedAt": "2026-08-06T22:51:25.889Z",
+      "createdAt": "2026-08-06T22:50:48.161Z",
+      "updatedAt": "2026-08-06T22:51:25.889Z"
+    },
+    {
+      "id": "d179fc40-f193-45de-b8ed-3c9b4eb29c25",
+      "phaseId": "2dbfeb21-6f00-4fdf-8869-60614887706d",
+      "number": 213,
+      "shortId": "SLZG9",
+      "priority": 3,
+      "shortName": "reorder-page-title-to-folder-f",
+      "title": "Reorder page title to folder first then project name",
+      "status": "done",
+      "description": "User wants the browser page title order reversed: folder name first, then project name. Currently it shows 'name · folder'. Change it to 'folder · name' when both are present and differ.\n\n---\n**Completion summary:**\nReversed page title order in packages/plan-web-ui/src/app/root.tsx. Title now shows 'folder · projectName' when projectRoot basename differs from project name. Rebuilt and copied bundle.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d179fc40-f193-45de-b8ed-3c9b4eb29c25-check-001-reverse-title-order-in-root-tsx",
+          "number": 1,
+          "title": "Reverse title order in root.tsx",
+          "checked": false
+        },
+        {
+          "id": "d179fc40-f193-45de-b8ed-3c9b4eb29c25-check-002-build-and-copy-bundle",
+          "number": 2,
+          "title": "Build and copy bundle",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T23:01:02.274Z",
+      "completedAt": "2026-08-06T23:01:14.221Z",
+      "createdAt": "2026-08-06T23:00:59.637Z",
+      "updatedAt": "2026-08-06T23:01:14.221Z"
+    }
+  ],
+  "createdAt": "2026-08-06T15:42:33.202Z",
+  "updatedAt": "2026-08-06T23:01:14.221Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

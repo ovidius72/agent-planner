@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   SortableContext,
@@ -13,6 +13,7 @@ import {
 } from "../ui/badges";
 import { StatusBadge, StatusCluster2 } from "../ui/status-badge";
 import { StatusItem } from "../ui/status-item";
+import { LastUpdated } from "../ui/last-updated";
 import { DragHandle, SortableItem } from "./sortable";
 import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
 import {
@@ -96,6 +97,7 @@ export function FeatureTreeRow({
   isPhaseRecentlyChanged,
   isTaskRecentlyChanged,
   highlightedTaskIds,
+  resumeRequiredIds = new Set<string>(),
 }: {
   entry: WorkTreeFeature;
   expanded: boolean;
@@ -106,6 +108,7 @@ export function FeatureTreeRow({
   isPhaseRecentlyChanged: (phaseId: string) => boolean;
   isTaskRecentlyChanged: (taskId: string) => boolean;
   highlightedTaskIds: Set<string> | undefined;
+  resumeRequiredIds?: Set<string>;
 }) {
   const { feature, totalTasks, doneTasks, allPhases, hasActiveTask } = entry;
 
@@ -171,6 +174,7 @@ export function FeatureTreeRow({
             >
               {feature.name}
             </Link>
+            <LastUpdated value={feature.updatedAt} className="mt-1 block" />
           </div>
         </div>
         <StatusCluster2
@@ -202,6 +206,7 @@ export function FeatureTreeRow({
                   onToggle={() => onTogglePhase(phaseEntry.phase.id)}
                   isTaskRecentlyChanged={isTaskRecentlyChanged}
                   highlightedTaskIds={highlightedTaskIds}
+                  resumeRequiredIds={resumeRequiredIds}
                 />
               </SortableItem>
             ))}
@@ -220,6 +225,7 @@ export function PhaseTreeRow({
   onToggle,
   isTaskRecentlyChanged,
   highlightedTaskIds,
+  resumeRequiredIds = new Set<string>(),
 }: {
   feature: Feature;
   phaseEntry: WorkTreePhase;
@@ -228,6 +234,7 @@ export function PhaseTreeRow({
   onToggle: () => void;
   isTaskRecentlyChanged: (taskId: string) => boolean;
   highlightedTaskIds: Set<string> | undefined;
+  resumeRequiredIds?: Set<string>;
 }) {
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
   const phaseStatusNoPattern = "";
@@ -308,6 +315,7 @@ export function PhaseTreeRow({
             >
               {phase.title}
             </Link>
+            <LastUpdated value={phase.updatedAt} className="mt-1 block" />
           </div>
         </div>
         <StatusCluster2
@@ -342,6 +350,7 @@ export function PhaseTreeRow({
                     task={task}
                     recentlyChanged={isTaskRecentlyChanged(task.id)}
                     highlighted={highlightedTaskIds?.has(task.id)}
+                    resumeRequiredIds={resumeRequiredIds}
                   />
                 </SortableItem>
               ))}
@@ -363,12 +372,14 @@ export function TaskTreeRow({
   task,
   recentlyChanged,
   highlighted,
+  resumeRequiredIds = new Set<string>(),
 }: {
   feature: Feature;
   phase: Phase;
   task: Task;
   recentlyChanged: boolean;
   highlighted: boolean | undefined;
+  resumeRequiredIds?: Set<string>;
 }) {
   return (
     <StatusItem
@@ -401,6 +412,15 @@ export function TaskTreeRow({
           {task.status === "in-progress" ? (
             <span aria-hidden="true" className="ap-progress-dot" />
           ) : null}
+          {resumeRequiredIds?.has(task.id) ? (
+            <span
+              title="Paused and ready for resume — resume this task before starting new work."
+              aria-label="Resume required"
+              className="inline-flex items-center text-[var(--accent)]"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </span>
+          ) : null}
         </div>
         <StatusCluster
           status={task.status}
@@ -413,6 +433,7 @@ export function TaskTreeRow({
         >
           {task.title}
         </Link>
+        <LastUpdated value={task.updatedAt} className="mt-1 block" />
       </div>
       <StatusCluster
         status={task.status}

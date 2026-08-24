@@ -35,6 +35,8 @@ export const taskStatuses: Array<{ value: TaskStatus; label: string }> = [
   { value: "waiting", label: "Waiting" },
 ];
 
+export const taskTransitionStatuses = taskStatuses;
+
 export const requirementStatuses: Array<{ value: RequirementStatus; label: string }> = [
   { value: "planned", label: "Planned" },
   { value: "in-progress", label: "In progress" },

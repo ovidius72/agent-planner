@@ -11,6 +11,7 @@ describe("deriveParentDisplay — truth table", () => {
   const cases = [
     // [label, input, expected displayStatus]
     ["done + planned → started", ["done", "planned"], "started"],
+    ["done + paused → paused", ["done", "paused"], "paused"],
     ["done + waiting → waiting", ["done", "waiting"], "waiting"],
     ["done + blocked → blocked", ["done", "blocked"], "blocked"],
     ["done + deferred → deferred", ["done", "deferred"], "deferred"],
@@ -40,7 +41,7 @@ describe("deriveParentDisplay — breakdown + hasStarted", () => {
   test("breakdown counts all children including canceled/rejected", () => {
     const result = deriveParentDisplay(["done", "planned", "canceled", "rejected"]);
     assert.deepEqual(result.breakdown, {
-      planned: 1, inProgress: 0, waiting: 0, blocked: 0,
+      planned: 1, inProgress: 0, paused: 0, waiting: 0, blocked: 0,
       deferred: 0, done: 1, canceled: 1, rejected: 1,
     });
     assert.equal(result.totalChildren, 4);
@@ -79,11 +80,12 @@ describe("deriveParentDisplay — breakdown + hasStarted", () => {
 describe("countBreakdown", () => {
   test("counts every status", () => {
     const b = countBreakdown([
-      "planned", "in-progress", "waiting", "blocked",
+      "planned", "in-progress", "paused", "waiting", "blocked",
       "deferred", "done", "canceled", "rejected", "planned",
     ]);
     assert.equal(b.planned, 2);
     assert.equal(b.inProgress, 1);
+    assert.equal(b.paused, 1);
     assert.equal(b.waiting, 1);
     assert.equal(b.blocked, 1);
     assert.equal(b.deferred, 1);
@@ -95,7 +97,7 @@ describe("countBreakdown", () => {
   test("empty input → zero counts", () => {
     const b = countBreakdown([]);
     assert.deepEqual(b, {
-      planned: 0, inProgress: 0, waiting: 0, blocked: 0,
+      planned: 0, inProgress: 0, paused: 0, waiting: 0, blocked: 0,
       deferred: 0, done: 0, canceled: 0, rejected: 0,
     });
   });
@@ -105,6 +107,7 @@ describe("toWorkflowStatus", () => {
   test("accepts canonical statuses", () => {
     assert.equal(toWorkflowStatus("planned"), "planned");
     assert.equal(toWorkflowStatus("in-progress"), "in-progress");
+    assert.equal(toWorkflowStatus("paused"), "paused");
     assert.equal(toWorkflowStatus("done"), "done");
   });
 

@@ -225,6 +225,13 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     // lifecycle: start (T002 is the only ready task) → complete → reopen needs motivation
     const started = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(started), /Task started: P001\(F001\)\/T002/);
+    const paused = await callTool(session, "planner-task-pause", {
+      task: "T002", reason: "Temporary review interruption", what_was_being_done: "Validating the provider contract",
+      resume_location: "src/provider.ts:20", how_to_resume: "Continue validation and rerun provider tests", paused_by: "mcp-test",
+    });
+    assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T002/);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
+    assert.match(toolText(await callTool(session, "planner-task-start", { task: "T002" })), /Task started/);
     const done = await callTool(session, "planner-task-complete", { task: "T002", force: true });
     assert.match(toolText(done), /\(done\)/);
     const doneTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
@@ -326,15 +333,15 @@ test("planner-phase-show gives structured-content clients the full phase read mo
   }
 });
 
-test("planner-task-start honors explicit priority overrides and multiple active tasks", async () => {
+test("priority is overridable but active task switches require a snapshot and deterministic return", async () => {
   const session = await startMcpFixture({ name: "t281-explicit-start" });
   try {
-    for (const title of ["Explicit lower-priority task", "Explicit task after an active-work conflict"]) {
+    for (const title of ["Explicit lower-priority task", "Another temporary task"]) {
       await callTool(session, "planner-task-add", {
         feature: "F001",
         phase: "P001",
         title,
-        description: "src/task-start.ts:1 start this user-selected task despite a different automatic priority recommendation.",
+        description: "src/task-start.ts:1 deliberately select temporary work while preserving the prior checkpoint.",
       });
     }
 
@@ -342,14 +349,53 @@ test("planner-task-start honors explicit priority overrides and multiple active 
     assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
     assert.match(toolText(priorityOverride), /Priority advisory/);
 
-    const secondActive = await callTool(session, "planner-task-start", { task: "T001" });
-    assert.match(toolText(secondActive), /✅ Task started: P001\(F001\)\/T001/);
-    assert.match(toolText(secondActive), /Active-task advisory.*Explicit task request honored/i);
+    const denied = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.match(toolText(denied), /Task start denied.*planner-task-switch/i);
 
-    const multiActive = await callTool(session, "planner-task-start", { task: "T003" });
-    assert.match(toolText(multiActive), /✅ Task started: P001\(F001\)\/T003/);
-    assert.match(toolText(multiActive), /active-work conflict.*Explicit task request honored/i);
-    assert.deepEqual((await session.store.loadAllPhases())[0].tasks.map((task) => task.status), ["in-progress", "in-progress", "in-progress"]);
+    const switched = await callTool(session, "planner-task-switch", {
+      from_task: "T002", to_task: "T001", reason: "Seed task must unblock temporary implementation",
+      what_was_being_done: "Editing the lower-priority implementation", resume_location: "src/task-start.ts:20",
+      how_to_resume: "Continue implementation and rerun focused tests", switched_by: "mcp-test",
+    });
+    assert.match(toolText(switched), /Task switched: P001\(F001\)\/T002 → P001\(F001\)\/T001/);
+    let tasks = (await session.store.loadAllPhases())[0].tasks;
+    assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
+    assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
+
+    const done = await callTool(session, "planner-task-complete", { task: "T001", force: true });
+    assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
+    assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resume-required");
+
+    const shownResume = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.match(toolText(shownResume), /Resume advisory:/);
+    assert.match(toolText(shownResume), /Work checkpoint: Editing the lower-priority implementation/);
+    assert.match(toolText(shownResume), /Resume from: src\/task-start\.ts:20/);
+
+    const skipAdvisory = await callTool(session, "planner-task-start", { task: "T003" });
+    assert.match(toolText(skipAdvisory), /✅ Task started: P001\(F001\)\/T003/);
+    assert.match(toolText(skipAdvisory), /RESUME REQUIRED before starting a different task: P001\(F001\)\/T002/);
+    const skipStructured = toolStructured(skipAdvisory);
+    assert.ok(skipStructured?.resumeRequired, "task_start while a resume-required is pending must return an explicit structured resumeRequired proposal");
+    assert.equal(skipStructured.resumeRequired.taskId, tasks[1].id);
+    assert.equal(skipStructured.resumeRequired.snapshot?.resumeLocation, "src/task-start.ts:20");
+    let project = await session.store.loadProject();
+    assert.equal(project.workDeviations.at(-1).state, "resume-required");
+
+    await callTool(session, "planner-task-complete", { task: "T003", force: true });
+    const resumed = await callTool(session, "planner-task-start", { task: "T002" });
+    assert.match(toolText(resumed), /Task started/);
+    tasks = (await session.store.loadAllPhases())[0].tasks;
+    assert.equal(tasks[1].status, "in-progress");
+    assert.equal(tasks[1].pauseSnapshot, null);
+    project = await session.store.loadProject();
+    assert.equal(project.workDeviations.at(-1).state, "resumed");
+
+    const finishedResumeTarget = await callTool(session, "planner-task-complete", { task: "T002", force: true });
+    assert.doesNotMatch(toolText(finishedResumeTarget), /RESUME REQUIRED:/);
+    project = await session.store.loadProject();
+    assert.equal(project.workDeviations.length, 0);
+    const shownDone = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.doesNotMatch(toolText(shownDone), /Resume advisory:/);
   } finally {
     await closeMcpFixture(session);
   }

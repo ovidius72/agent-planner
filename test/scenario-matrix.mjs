@@ -18,7 +18,12 @@
  *   expects    — normalized outcome contract:
  *                ok: boolean
  *                errorMatch?: string | RegExp  (tested against the normalized error)
+ *                errorCategory?: string | RegExp | ((v)=>boolean)
+ *                status?: string | RegExp | ((v)=>boolean)
+ *                reference?: string | RegExp | ((v)=>boolean)
+ *                textIncludes?: string | RegExp | Array<string|RegExp>
  *                data?: Record<string, unknown|((v)=>boolean|void)>  (named checks on normalized data)
+ *                snapshot?: Record<string, unknown|((v)=>boolean|void)> (named checks on normalized persisted snapshots)
  *                verify?: (ctx) => Promise<void> — deeper cross-checks; ctx exposes
  *                  { store, api, mcp, pi } for the harnesses the runner activated.
  */
@@ -147,7 +152,7 @@ export const scenarios = [
       "Attempt to create a phase without a title.",
       "Assert a clear error mentioning the title requirement.",
     ],
-    expects: { ok: false, errorMatch: /(title required|title)/i },
+    expects: { ok: false, errorCategory: "validation", errorMatch: /(title required|title)/i },
   },
   {
     id: "create.phase.missingFeature",
@@ -204,7 +209,7 @@ export const scenarios = [
       "Attempt to create a task without a title.",
       "Assert a clear error mentioning the title requirement.",
     ],
-    expects: { ok: false, errorMatch: /(title required|title)/i },
+    expects: { ok: false, errorCategory: "validation", errorMatch: /(title required|title)/i },
   },
   {
     id: "create.task.unknownPhase",
@@ -280,7 +285,7 @@ export const scenarios = [
       "Request a feature/phase/task by a UUID that does not exist.",
       "Assert a not-found style error and no state change.",
     ],
-    expects: { ok: false, errorMatch: /(not found|no .* found)/i },
+    expects: { ok: false, errorCategory: "not_found", errorMatch: /(not found|no .* found)/i },
   },
   {
     id: "refs.ambiguous.rejected",
@@ -295,7 +300,7 @@ export const scenarios = [
       "Resolve by the ambiguous substring.",
       "Assert the error names both matches and asks for F00x/shortId/UUID.",
     ],
-    expects: { ok: false, errorMatch: /(ambiguous|use a specific)/i },
+    expects: { ok: false, errorCategory: "ambiguous_ref", errorMatch: /(ambiguous|use a specific)/i },
   },
 
   // ════════════════════════════════════════════════════════════════════
@@ -797,7 +802,7 @@ export const scenarios = [
       "Invoke planner load on a seeded plan.",
       "Assert the recap contains the project title, progress counts, and a Web UI URL line.",
     ],
-    expects: { ok: true, data: { recap: (text) => typeof text === "string" && text.includes("http") } },
+    expects: { ok: true, textIncludes: /Web UI:/, data: { recap: (text) => typeof text === "string" && text.includes("http") } },
   },
   {
     id: "loadstop.stop.disable",

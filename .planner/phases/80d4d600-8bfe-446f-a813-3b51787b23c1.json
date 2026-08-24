@@ -1,0 +1,216 @@
+{
+  "id": "80d4d600-8bfe-446f-a813-3b51787b23c1",
+  "featureId": "bd655486-e048-47ae-b06c-2bed511d89c6",
+  "number": 53,
+  "shortId": "6KQ7J",
+  "priority": 2,
+  "slug": "core-domain-and-validation-coverage",
+  "title": "Core domain and validation coverage",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Exercise PlanStore schemas, CRUD, references, lifecycle, repair, and persistence invariants.",
+  "description": "Expand the existing packages/plan-core/test suite into a complete domain contract suite. Cover project initialization and loading; feature creation with valid, missing, empty, duplicate, and malformed fields; phase creation with feature ownership validation; task creation with phase ownership, shortName, global sequence, checklist, priority, and status validation; updates, deletes, reorder, requirements links, dependencies, tags/custom values where exposed by core, export/import, integrity, orphan cleanup, and generated output. Include positive and negative assertions for every schema and referential-integrity boundary. Verify status rollups, status history, display status, handoff replacement/archival, terminal-phase write rejection, repair cleanup, and restart persistence using isolated fixture directories. Preserve migration and backward-compatibility behavior while ensuring malformed input cannot partially write plan state.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "e213555e-be23-4d27-ae82-2570eba38087",
+    "0eabe610-6f93-4afe-8446-a57473897289",
+    "9cd7bb96-4c8d-4864-9847-1701fc4f1449",
+    "f5f5b613-8689-4d77-8929-666bae79e516",
+    "9a404940-4032-4295-b8a2-9cf0cb169ac1"
+  ],
+  "tasks": [
+    {
+      "id": "e213555e-be23-4d27-ae82-2570eba38087",
+      "phaseId": "80d4d600-8bfe-446f-a813-3b51787b23c1",
+      "number": 228,
+      "shortId": "VW2E4",
+      "priority": 1,
+      "shortName": "feature-validation-suite",
+      "title": "Test project and feature creation validation",
+      "status": "done",
+      "description": "Expand packages/plan-core tests around project initialization and feature creation/update/delete. Cover valid names/descriptions, missing and empty required values, long and malformed values, duplicate references/names where prohibited, explicit IDs/shortIds/priorities, persistence after reload, generated markdown, and error messages. Assert invalid operations do not mutate files and valid operations return stable composite and short references.\n\n---\n**Completion summary:**\nIndependent review approved. Added `packages/plan-core/test/project-feature-create-validation.test.mjs` with 16 real PlanStore/filesystem tests for project initialization and persistence, counters, feature validation and persistence, invalid-write immutability, explicit generated-view behavior, and feature deletion/orphan behavior. Tests document actual core-level contracts (API gates remain responsible for stricter normalization/UUID enforcement). Personally verified `pnpm test`: 234/234 passed. No commit/push.",
+      "notes": "P053/F015 — T228 project/feature creation validation. Progresso round 1 (in attesa review):\n\nDeliverable: packages/plan-core/test/project-feature-create-validation.test.mjs (16 test, fixture reali via test/helpers, zero mock, zero modifiche a UI/core).\n\nCoperto:\n- Project init: tree completo deterministico (manifest/project/requirements/features/resume/generated views, counter=1); doppio init rifiutato (stessa store + fresh store); init con nome vuoto → rifiuto in saveProject, project.json assente, e il tree parziale creato rende il re-init \"already exists\" (pinnato); nome whitespace ACCETTATO (min(1) conta caratteri, no trim al core — gate API).\n- Project update/persist: updateProject ricco (goal/desc/webPort/scope/tecnologie/regole) persiste via reopen(); saveProject round-trip deep-equal; update invalido (nome vuoto, webPort>65535, scope con stringa vuota) rifiutato con project.json byte-identico; counter non-positivi rifiutati senza mutazione.\n- Feature create: id/shortId/priority espliciti verbatim + ref composito stabile (formatFeatureRef F003) + file features/<id>.json; name mancante/vuoto rifiutati SENZA scrivere file; whitespace e nomi lunghi (2000 char) accettati (no trim/max al core); malformati rifiutati (number/priority negativi, shortId non-Crockford, phaseIds [\"\"]); shortId vuoto default; timestamp mancanti/invalidi rifiutati (datetime); nomi duplicati ammessi (no unicità al core); id non-UUID e phaseIds non-UUID accettati in scrittura — i phaseIds non risolvibili sono PRUNED al load (normalizeStructureSnapshot, self-healing — contract allineato a T230).\n- Feature update/delete via updateFeatures: rename+workDone persistono; delete rimuove il file della feature; le phase restano su disco → orphan (listOrphanPhases, no cascade al core — pinnato); documento invalido in updateFeatures rifiutato senza toccare file/view.\n- Generated views: PINNATO che saveFeature/updateFeatures/updateProject NON rigenerano PLAN.md (solo init/repair/sync/cleanup lo fanno) — writeGenerated esplicito richiesto; dopo regen PLAN.md riflette il JSON canonico (label \"F00x — Name\").\n\nFix durante lo sviluppo: PLAN.md header \"# <name> — Project Plan\"; min(1) accetta whitespace (non solo \"\"); makeFeature reso raw (parse sincrono rompeva assert.rejects); phaseIds non-UUID pruned al load (asserzione invertita su file raw); match PLAN.md spostato su label composita (il titolo phase \"Auth API phase\" conteneva la substring \"Auth API\" — falso positivo evitato); init fallito lascia il tree (re-init \"already exists\" — usato 2 root distinti).\n\nVerifiche: file isolato 16/16 (core line 50.64%); pnpm test:unit 217/217 exit 0 (46.84/74.86/63.98 ≥ 44/72/59); pnpm test 234/234 exit 0 (46.93/75.58/64.12 ≥ 45/74/61); matrix 12/12; tsc -b exit 0. Nota: +7 test da 2 file del lavoro parallelo del coordinatore (non miei, verdi). Nessun commit/push.",
+      "statusLog": [
+        {
+          "id": "e213555e-be23-4d27-ae82-2570eba38087-check-001-in-progress-planned",
+          "date": "2026-08-09T18:09:21.668Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "Riporto a planned: il proprietario ha imposto la regola operativa \"una task alla volta con stop dopo ogni task e attesa di review esplicita\". Il task era stato avviato ma non è stato scritto alcun codice (la prima write del core-harness è fallita per limite di output). In attesa di conferma del proprietario su come procedere (da T228 o da un task precedente).",
+          "description": "Riporto a planned: il proprietario ha imposto la regola operativa \"una task alla volta con stop dopo ogni task e attesa di review esplicita\". Il task era stato avviato ma non è stato scritto alcun codice (la prima write del core-harness è fallita per limite di output). In attesa di conferma del proprietario su come procedere (da T228 o da un task precedente)."
+        },
+        {
+          "id": "e213555e-be23-4d27-ae82-2570eba38087-check-002-planned-in-progress",
+          "date": "2026-08-09T18:10:18.685Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "Allineamento allo stato dichiarato dal parent nel review gate: T228 resta IN-PROGRESS ma parcheggiato senza codice, in attesa della review indipendente di T224-T227 e di istruzioni esplicite. Nessun lavoro avviato su T228.",
+          "description": "Allineamento allo stato dichiarato dal parent nel review gate: T228 resta IN-PROGRESS ma parcheggiato senza codice, in attesa della review indipendente di T224-T227 e di istruzioni esplicite. Nessun lavoro avviato su T228."
+        },
+        {
+          "id": "e213555e-be23-4d27-ae82-2570eba38087-check-003-in-progress-planned",
+          "date": "2026-08-09T20:51:11.091Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "T228 was left in-progress as a parked review-gate placeholder without code work. The user explicitly requested the linkedPhaseIds validation fix, which belongs to T230's requirements/link scope; returning T228 to planned keeps lifecycle state truthful before starting T230.",
+          "description": "T228 was left in-progress as a parked review-gate placeholder without code work. The user explicitly requested the linkedPhaseIds validation fix, which belongs to T230's requirements/link scope; returning T228 to planned keeps lifecycle state truthful before starting T230."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T18:07:29.906Z",
+      "completedAt": "2026-08-10T07:54:27.582Z",
+      "createdAt": "2026-08-09T17:40:28.180Z",
+      "updatedAt": "2026-08-10T07:54:27.582Z"
+    },
+    {
+      "id": "0eabe610-6f93-4afe-8446-a57473897289",
+      "phaseId": "80d4d600-8bfe-446f-a813-3b51787b23c1",
+      "number": 229,
+      "shortId": "SFC43",
+      "priority": 2,
+      "shortName": "phase-task-validation",
+      "title": "Test phase and task validation matrix",
+      "status": "done",
+      "description": "Cover phase and task create/update/delete behavior in the core schemas and PlanStore. Test required and optional names/descriptions, empty input, invalid status/priority/due-date/checklist values, unknown featureId/phaseId, cross-parent mismatches, shortName clamping, global numbering, duplicate refs, task parent/subtask semantics, and persistence after reload. Verify each rejected write is atomic and each successful response exposes the expected F/P/T references.\n\n---\n**Completion summary:**\nIndependent review approved. Added `packages/plan-core/test/phase-task-validation-matrix.test.mjs` with 15 real PlanStore/filesystem tests for phase/task validation, atomic failed writes, taskIds normalization, status/checklist transforms, containment repair, updates, deletion cleanup, and stable global numbering. Core contracts for legacy orphaning/mismatched parent data are documented without widening scope. Personally verified isolated 15/15 and `pnpm test` 249/249. No commit/push.",
+      "notes": "P053/F015 — T229 phase/task validation matrix. Progresso round 1 (in attesa review):\n\nDeliverable: packages/plan-core/test/phase-task-validation-matrix.test.mjs (15 test, fixture reali via test/helpers, zero mock, zero modifiche a UI/core).\n\nCoperto:\n- Phase create: verbatim (number/shortId/priority/slug) + composite stabile formatPhaseRef P005(F001) + md per-phase con label composita; title mancante/vuoto e number richiesto positivo (missing/0/neg) rifiutati atomicamente; featureId non-UUID rifiutato, UUID valido inesistente rifiutato con PlanStoreError, undefined permesso (legacy); slug invalidi rifiutati e clampSlug ok; shortId/priority/timestamp invalidi rifiutati; taskIds DERIVED da tasks al save (normalizePhaseDocument).\n- Task create: verbatim + numero globale preservato (sequenza stabile, mai rinumerato); title mancante/vuoto rifiutati; phaseId DEVE essere UUID (P003/\"\"/abc rifiutati); status invalidi rifiutati e tutti gli 8 validi accettati; shortName slug invalidi rifiutati, clampSlug ok; number/priority negativi, checklist [\"\"], dependsOn [\"\"], timestamp invalidi rifiutati — tutto con phase file byte-identico (atomicità).\n- Checklist transform: input string [\"  Add route  \", \"Write tests\", \"   \"] → id deterministici (…-check-001-add-route), numeri 1..n, titoli trimmati, item whitespace-only filtrati, checked=false; persistito al reload.\n- Cross-parent: task.phaseId verso ALTRA phase accettato al save (schema valida solo il formato), resta al plain load, rebuildContainment lo riloca nel phase proprietario (changed/tasks=1, contenuto preservato, taskIds allineati).\n- Task update via updatePhase: rename/status/priority/notes/starterAt persistono via reopen; update invalidi (status urgente, title \"\", phaseId P003) rifiutati con file byte-identico.\n- Phase delete: file rimosso, loadAllPhases lo droppa, feature.phaseIds su disco lo conserva (no cascade) e la load PRUNA il dangling id (normalizeStructureSnapshot — self-healing coerente con T228/T230).\n- Numbering: numeri espliciti mai rinumerati; duplicati ammessi al core (enforcement API-level P054); formatPhaseRef stabile anche con duplicati.\n\nFix durante lo sviluppo: seedFeaturePhase mescolava store parametro e fixture (riscritto); placeholder featureId rifiutato prima dei check title/slug (passato featureId reale); il seed crea già 1 file phase (asserzioni su byte-identity invece di conteggio); loop status sovrascriveva lo stesso file (accumulo + save singola); phaseIds inferita dalla normalization (includes invece di deepEqual).\n\nVerifiche: file isolato 15/15 (core line 50.01%); pnpm test:unit 232/232 exit 0 (46.92/75.43/64.12 ≥ 44/72/59); pnpm test 249/249 exit 0 (46.97/76.02/64.26 ≥ 45/74/61); matrix 12/12; tsc -b exit 0. Nessun commit/push.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-10T07:57:19.248Z",
+      "completedAt": "2026-08-10T08:08:04.997Z",
+      "createdAt": "2026-08-09T17:40:35.953Z",
+      "updatedAt": "2026-08-10T08:08:04.997Z"
+    },
+    {
+      "id": "9cd7bb96-4c8d-4864-9847-1701fc4f1449",
+      "phaseId": "80d4d600-8bfe-446f-a813-3b51787b23c1",
+      "number": 230,
+      "shortId": "NKF8D",
+      "priority": 3,
+      "shortName": "core-relations-operations",
+      "title": "Test requirements, checklists, reorder, and links",
+      "status": "done",
+      "description": "Exercise requirements CRUD and phase links, checklist creation/items/nesting/resolution, task links/dependencies where available, feature/phase/task reorder and midpoint insertion, priority and shortId backfill, and integrity checks. Include missing-target, duplicate-link, malformed-reference, and deletion-cleanup cases. Assert ordering and relation data survive reload and that generated views remain consistent with canonical PlanStore JSON.\n\n---\n**Completion summary:**\nIndependent review approved. Added `packages/plan-core/test/requirements-checklists-reorder-links.test.mjs` with 18 real-PlanStore/real-filesystem tests covering requirements/phase links, checklist helpers and persistence, subtasks, reorder contracts, dependencies, deletion consistency, shortId backfill, integrity/repair, and generated views. Review corrections removed a misleading root-directory unlink and made the fixture timestamp deterministic. Personally verified isolated 18/18, `pnpm test:unit` 194/194, `pnpm test:matrix` 12/12, and `pnpm test` 211/211. No commit/push.",
+      "notes": "P053/F015 — T230 core domain tests: requirements/checklists/reorder/links. Progresso round 1 (in attesa review):\n\nDeliverable: packages/plan-core/test/requirements-checklists-reorder-links.test.mjs (18 test, fixture reali via test/helpers/fixtures.mjs, zero mock, zero modifiche a UI/core).\n\nCoperto:\n- Requirements CRUD + phase links: persist/reload via fresh PlanStore (reopen()), linkedRequirementsForPhase, missing-target (raw includes, no resolution at core), duplicate links stored verbatim, no-cascade on phase delete (documented).\n- Checklist: addChecklistItem è PURO (non pusha — il caller appende), id deterministici (createChecklistItemId: <taskId>-check-<num>-<slug>), selettori C{n}/id/title esatto/parziale/case-insensitive, toggle esplicito+flip, remove con renumber 1..n, transform TaskSchema da stringhe, persistenza checked via reload; nesting = task.subtasks (ChecklistItemSchema NON ha parent — documentato).\n- Reorder/midpoint: nextPriority scope (feature global max+1=31 su full; phase per-feature; task per-phase), midpoint insert tra vicini (floor((before+after)/2)) con ordine canonico (priority||number) persistito al reload, taskIds specchiato da normalizePhaseDocument, reindex fallback (i+1)*10 con gap esauriti.\n- Links/dependencies: dependsOn round-trip su reload, refs malformati non corrompono load/render (writeGenerated ok), deletion-cleanup task → tasks+taskIds in lockstep.\n- Backfill: ensureShortIdsAndPriority assegna shortId mancanti (Crockford 5-char, unici), NON sovrascrive esistenti, NON ri-prioritizza (identity), idempotente (2a run 0 assegnati), duplicati riportati non silenziosi (validateIntegrity concorda).\n- Integrity: healthy full → clean; dangling feature→phase ref scritto via API viene PRUNED dalla normalization in load (self-healing reads, integrity resta clean — comportamento pinnato); orphan phase (file raw con featureId inesistente, savePhase lo rifiuta → simulato via fs) rilevato da listOrphanPhases e rimosso da cleanupOrphanPhases.\n- Generated views: writeGenerated → PLAN.md + phases/<id>.md; checklist [x]/[ ] e ordine task canonico coerenti con loadAllPhases.\n\nFix durante lo sviluppo: addChecklistItem non muta l'array (3 asserzioni corrette); nextPriority su full = 31 (non 40); regex id checklist; dangling ref pruned on load (test riscritto su contract reale).\n\nVerifiche: test file isolato 18/18 (coverage core line 60.00% sul file); pnpm test:unit 194/194 exit 0 (46.10/74.83/62.89 ≥ 44/72/59); pnpm test 211/211 exit 0 (46.14/75.51/63.18 ≥ 45/74/61); pnpm test:matrix 12/12; pnpm check (tsc -b) exit 0. Nota: nel tree sono comparsi 2 file test del lavoro parallelo del coordinatore (requirement-groups, task-search) — inclusi nei conteggi, verdi. Nessun commit/push.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-09T20:51:14.830Z",
+      "completedAt": "2026-08-10T07:37:43.262Z",
+      "createdAt": "2026-08-09T17:40:41.191Z",
+      "updatedAt": "2026-08-10T07:37:43.262Z"
+    },
+    {
+      "id": "f5f5b613-8689-4d77-8929-666bae79e516",
+      "phaseId": "80d4d600-8bfe-446f-a813-3b51787b23c1",
+      "number": 231,
+      "shortId": "CQPHL",
+      "priority": 4,
+      "shortName": "core-lifecycle-repair",
+      "title": "Test status rollups, handoff archival, repair, and persistence",
+      "status": "done",
+      "description": "Extend lifecycle regression tests for task and phase status transitions, derived display status, status logs, active-task detection, handoff replacement and auto-archive reasons, terminal-phase write rejection, stale cleanup from listHandoffs and repair, reopen behavior, orphan cleanup, export/import, and restart persistence. Verify handoffHistory retention and archive metadata while ensuring no stale active handoff remains after completion or cancellation.\n\n---\n**Completion summary:**\nIndependent review approved. Added `packages/plan-core/test/status-rollup-handoff-repair-persistence.test.mjs` with 7 real PlanStore/filesystem tests covering derived status-log audit trails, status persistence, handoff archival/history cap, repair idempotence and short-ID backfill, and resume refresh persistence. Current all-canceled→rejected handoff-retention behavior is explicitly pinned as a product gap, not changed in this test task. Personally verified isolated 7/7 and `pnpm test` 256/256. No commit/push.",
+      "notes": "P053/F015 — T231 status rollups, handoff archival, repair, persistence. Progresso round 1 (in attesa review):\n\nDeliverable: packages/plan-core/test/status-rollup-handoff-repair-persistence.test.mjs (7 test, fixture reali via test/helpers, zero mock, zero modifiche a UI/core).\n\nCoperto:\n- statusLog audit trail: syncTaskStatusRollup appende entry quando lo stato DERIVATO cambia (baseline \"draft\" → prima transizione), idempotente su sync ripetuti senza transizione, entries fromStatus/toStatus/title/date/id; rollup sul feature.statusLog (baseline \"planned\"); persistito via reopen.\n- Handoff archival: task→done → syncTaskStatusRollup auto-clear con reason \"phase-done\", ritorna P001(F001); contenuto archiviato in .local/handoff-archive/<phaseId>-<ts>.md; handoffHistory entry {file,clearedAt,reason}; listArchivedHandoffs espone contenuto; listHandoffs esclude fasi done; cap a 5 con DELETE del file più vecchio; persistito via reopen.\n- Contract pinned: phase all-canceled deriva \"rejected\" (non \"canceled\") → syncTaskStatusRollup NON la auto-clear (ritorna null) e listHandoffs la mostra ancora attiva. GAP vs intent AGENTS.md (\"no stale handoff after cancellation\") — NON fixato (serve decisione prodotto), segnalato nel report come follow-up candidate.\n- repair end-to-end: una sola repair() su fixture con handoff stale su phase done + shortId mancanti (feature+phase+task) → handoffs.archived=1, backfill.shortIdsAssigned=3, integrity {dup:[],dangling:[],dupshort:[]}; seconda repair no-op (idempotente); persistito via reopen.\n- refreshResume: currentPhaseId/inProgressTaskIds/blockers seguono le transizioni (blocked task → blockers; all-done → inProgressTaskIds [] e blockers [], MA currentPhaseId RETAINED come contesto via existing fallback — contratto pinnato); resume.json persistito via reopen.\n\nFix durante sviluppo: backfill assegna shortId anche a phase+task (3, non 1); refreshResume conserva l'ultimo phaseId (assert allineato al contratto reale).\n\nVerifiche: file isolato 7/7 (core 59.46/64.07/61.98); test:unit 239/239 exit 0 (46.83/75.62/64.39 ≥ 44/72/59); pnpm test 256/256 exit 0 (47.00/76.22/64.53 ≥ 45/74/61); matrix 12/12; tsc -b exit 0. Nessun commit/push.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-10T08:09:32.363Z",
+      "completedAt": "2026-08-10T08:17:58.325Z",
+      "createdAt": "2026-08-09T17:40:48.330Z",
+      "updatedAt": "2026-08-10T08:17:58.325Z"
+    },
+    {
+      "id": "9a404940-4032-4295-b8a2-9cf0cb169ac1",
+      "phaseId": "80d4d600-8bfe-446f-a813-3b51787b23c1",
+      "number": 267,
+      "shortId": "KYYKY",
+      "priority": 5,
+      "shortName": "correct-coverage-report-thresh",
+      "title": "Correct coverage report threshold label for gated runs",
+      "status": "done",
+      "description": "`scripts/report.mjs` renders the coverage heading as “Coverage (baseline thresholds)” unconditionally, while `scripts/test-all.mjs --gate` applies `COVERAGE.gate` final thresholds. Extend the report input or output metadata so HTML accurately identifies the threshold mode and values used by the run. Preserve deterministic report output, baseline behavior, existing JSON schema compatibility where possible, and the report test suite. Add regression coverage for both baseline and gated render modes. This follow-up was found during review of P052/T227 and is intentionally scheduled after the current active T230 work.\n\n---\n**Completion summary:**\nIndependent review approved. Corrected report metadata/rendering so baseline and final gated runs report the actual threshold mode and values: additive `thresholdMode`, correct `met` calculation, final-gate HTML/log labeling, and `test-all --gate` forwarding. Added baseline/gate CLI and determinism regressions while retaining schemaVersion 2 compatibility. Personally verified `test/report.test.mjs` 7/7 and `pnpm test` 258/258. No commit/push.",
+      "notes": "P053/F015 — T267 coverage report threshold label. Progresso round 1 (in attesa review):\n\nDeliverable (3 file, diff minimo, nessun commit/push):\n1. scripts/report.mjs:\n   - parseArgs: nuovo flag booleano --gate.\n   - buildReport({results, lcovText, scope, gate=false}): thresholdMode \"gate\"|\"baseline\" (campo ADDITIVO, schemaVersion resta 2, backward-compatible); thresholds = gate ? COVERAGE.gate : COVERAGE.baseline[scope] ?? baseline.all; `met` calcolato contro i threshold del run (prima era sempre baseline).\n   - renderHtml: heading \"Coverage (FINAL gate thresholds)\" vs \"Coverage (baseline thresholds)\".\n   - summaryOf: suffisso \"(FINAL gate)\"/\"(baseline)\" nel log.\n2. scripts/test-all.mjs: forwarding di --gate alla spawn di report.mjs (una riga).\n3. test/report.test.mjs: 2 regression test nuovi + assert additivi su baseline:\n   - gated mode: buildReport gate:true → thresholds = COVERAGE.gate (80/80/70), thresholdMode \"gate\", met vs gate (85.71 line ok, 66.67 func < 80 red, 50 branch < 70 red), HTML \"FINAL gate thresholds\", ≥ 80% renderizzato; baseline diverso byte-level.\n   - CLI: report.mjs con e senza --gate → report.json thresholdMode/thresholds corretti, exit 0, determinismo byte-identico tra due run gated.\n\nVerifiche:\n- test/report.test.mjs: 7/7 (5 esistenti + 2 nuovi, e2e incluso).\n- Wiring reale: node scripts/test-all.mjs unit --no-build --gate → report.html \"Coverage (FINAL gate thresholds)\", report.json thresholdMode \"gate\" thresholds 80/80/70, exit 1 (atteso: coverage reale sotto gate 80 — il gate si chiude a P060).\n- pnpm test:unit 239/239 exit 0 (46.98/75.83/64.39 ≥ 44/72/59) — log ora con suffisso \"(baseline)\".\n- pnpm test 258/258 exit 0 (46.88/76.18/64.53 ≥ 45/74/61) — 256 + 2 nuovi.\n- pnpm test:matrix 12/12; pnpm check (tsc -b) exit 0.\n\nCompatibilità: JSON schema invariato (campo aggiuntivo thresholdMode; old consumers ignorano campi sconosciuti); determinismo preservato (stessi input + stesso flag → byte identici, testato in entrambe le mode).",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9a404940-4032-4295-b8a2-9cf0cb169ac1-check-001-carry-threshold-mode-from-the-test-runner-into-report-generation",
+          "number": 1,
+          "title": "Carry threshold mode from the test runner into report generation",
+          "checked": true
+        },
+        {
+          "id": "9a404940-4032-4295-b8a2-9cf0cb169ac1-check-002-render-the-accurate-baseline-final-threshold-label",
+          "number": 2,
+          "title": "Render the accurate baseline/final threshold label",
+          "checked": true
+        },
+        {
+          "id": "9a404940-4032-4295-b8a2-9cf0cb169ac1-check-003-add-baseline-and-gate-regression-coverage",
+          "number": 3,
+          "title": "Add baseline and gate regression coverage",
+          "checked": true
+        },
+        {
+          "id": "9a404940-4032-4295-b8a2-9cf0cb169ac1-check-004-run-focused-report-tests-and-the-relevant-test-command",
+          "number": 4,
+          "title": "Run focused report tests and the relevant test command",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-10T08:19:07.995Z",
+      "completedAt": "2026-08-10T08:26:58.697Z",
+      "createdAt": "2026-08-10T07:14:13.521Z",
+      "updatedAt": "2026-08-10T08:26:58.697Z"
+    }
+  ],
+  "createdAt": "2026-08-09T17:37:25.906Z",
+  "updatedAt": "2026-08-10T08:26:58.697Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-10T07:31:23.869Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/80d4d600-8bfe-446f-a813-3b51787b23c1-2026-08-11T07-57-28-704Z.md",
+      "clearedAt": "2026-08-11T07:57:28.704Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/80d4d600-8bfe-446f-a813-3b51787b23c1-2026-08-09T22-01-11-350Z.md",
+      "clearedAt": "2026-08-09T22:01:11.350Z",
+      "reason": "manual"
+    },
+    {
+      "file": "handoff-archive/80d4d600-8bfe-446f-a813-3b51787b23c1-2026-08-09T20-50-58-400Z.md",
+      "clearedAt": "2026-08-09T20:50:58.400Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": []
+}

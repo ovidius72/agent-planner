@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "../ui/card";
-import { EntityBadge, ParentBadge } from "../ui/badges";
+import { CompositeRef, ParentBadge } from "../ui/badges";
 import { StatusBadge } from "../ui/status-badge";
 import type { Feature, Phase } from "../../lib/types";
 
@@ -85,24 +85,38 @@ export function NewAddedTasks({ features, phases }: { features: Feature[]; phase
 
       <div className="grid gap-3">
         {rows.map(({ task, phase, feature, featureName, createdAt }) => (
-          <Link
+          <div
             key={task.id}
-            to={phase.featureId ? `/features/${phase.featureId}/phases/${phase.id}/tasks/${task.id}` : "/features"}
             className="surface-card grid min-w-0 grid-cols-1 gap-1 border-[color:color-mix(in_srgb,var(--color-status-done)_0%,transparent)] px-4 py-3 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <EntityBadge type="task" number={task.number} />
-              <ParentBadge type="task" phaseNum={phase.number} featureNum={feature?.number} />
+              <CompositeRef
+                featureNum={feature?.number}
+                phaseNum={phase.number}
+                taskNum={task.number}
+                featureId={feature?.id}
+                phaseId={phase.id}
+                taskId={task.id}
+                shortId={task.shortId}
+                featureName={feature?.name}
+                phaseName={phase.title}
+                taskTitle={task.title}
+              />
               <span className="inline-flex items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_18%,transparent)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">New</span>
-              <span className="shrink-0"><StatusBadge status={task.status} /></span>
+              <span className="ml-auto shrink-0"><StatusBadge status={task.status} /></span>
             </div>
-            <span className="entity-link--task min-w-0 break-words text-sm font-semibold underline-offset-4 [overflow-wrap:anywhere]">{task.title}</span>
+            <Link
+              to={phase.featureId ? `/features/${phase.featureId}/phases/${phase.id}/tasks/${task.id}` : "/features"}
+              className="entity-link--task min-w-0 break-words text-sm font-semibold underline-offset-4 [overflow-wrap:anywhere]"
+            >
+              {task.title}
+            </Link>
             <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--text-muted)]">
               <ParentBadge type="phase" featureNum={feature?.number} />
               <span className="min-w-0 truncate">{featureName} · {phase.title}</span>
             </div>
             <div className="text-[11px] text-[var(--text-subtle)]">Added {formatRelative(createdAt)}</div>
-          </Link>
+          </div>
         ))}
       </div>
     </Card>

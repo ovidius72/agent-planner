@@ -1,6 +1,6 @@
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Form, Link, useFetcher } from "react-router-dom";
-import { taskStatuses } from "../../lib/statuses";
+import { taskStatuses, taskTransitionStatuses } from "../../lib/statuses";
 import { formatStatusSummary, summarizeSubtaskStatuses } from "../../lib/status-summary";
 import { toDisplayStatus } from "../../lib/display-status-tokens";
 import type { Task } from "../../lib/types";
@@ -8,14 +8,7 @@ import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
-
-function formatDateTime(value: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
+import { LastUpdated, formatDateTime } from "../ui/last-updated";
 
 export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { featureId: string; featureNum?: number; phaseId: string; phaseNum?: number; task: Task }) {
   const statusFetcher = useFetcher();
@@ -70,8 +63,8 @@ export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { fe
 
         <statusFetcher.Form method="post" action={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}/status`} className="w-full lg:w-auto">
           <div className="relative">
-            <select name="status" value={status} disabled={isUpdatingStatus || isDeleting} aria-busy={isUpdatingStatus} className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]" onChange={(event) => statusFetcher.submit(event.currentTarget.form)}>
-              {taskStatuses.map((option) => (
+            <select name="status" value={status} disabled={isUpdatingStatus || isDeleting || Boolean(task.pauseSnapshot)} aria-busy={isUpdatingStatus} title={task.pauseSnapshot ? "Resume checkpointed work through task_start so its checkpoint is preserved." : undefined} className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]" onChange={(event) => statusFetcher.submit(event.currentTarget.form)}>
+              {taskTransitionStatuses.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
@@ -95,6 +88,7 @@ export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { fe
       </div>
 
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--text-subtle)]">
+        <LastUpdated value={task.updatedAt} />
         {task.startedAt ? <span>Started {formatDateTime(task.startedAt)}</span> : null}
         {task.completedAt ? <span>Completed {formatDateTime(task.completedAt)}</span> : null}
       </div>

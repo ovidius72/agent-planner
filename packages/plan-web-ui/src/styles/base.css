@@ -102,6 +102,7 @@ a { color: inherit; text-decoration: none; }
 .status-discovery { background: color-mix(in srgb, var(--color-status-discovery) 14%, transparent); color: var(--color-status-discovery); }
 .status-planned { background: color-mix(in srgb, var(--color-status-planned) 14%, transparent); color: var(--color-status-planned); }
 .status-in-progress { background: color-mix(in srgb, var(--color-status-in-progress) 16%, transparent); color: var(--color-status-in-progress); }
+.status-paused { background: color-mix(in srgb, var(--color-status-paused) 14%, transparent); color: var(--color-status-paused); }
 .status-done { background: color-mix(in srgb, var(--color-status-done) 16%, transparent); color: var(--color-status-done); }
 .status-blocked { background: color-mix(in srgb, var(--color-status-blocked) 15%, transparent); color: var(--color-status-blocked); }
 .status-canceled { background: color-mix(in srgb, var(--color-status-canceled) 12%, transparent); color: var(--color-status-canceled); }
@@ -135,6 +136,10 @@ a { color: inherit; text-decoration: none; }
 .status-pattern-dashed-started {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--color-status-started) 70%, transparent);
+}
+.status-pattern-dashed-paused {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-status-paused) 70%, transparent);
 }
 .status-pattern-dashed-waiting {
   border-style: dashed;
@@ -545,13 +550,14 @@ textarea:disabled {
 .status-card-time-initial { font-style: italic; opacity: 0.6; }
 /* Reuse the .status-* color classes (bg tint + colored text) on filled cards */
 .status-card.status-draft, .status-card.status-discovery, .status-card.status-planned,
-.status-card.status-in-progress, .status-card.status-done, .status-card.status-blocked,
+.status-card.status-in-progress, .status-card.status-paused, .status-card.status-done, .status-card.status-blocked,
 .status-card.status-canceled, .status-card.status-rejected, .status-card.status-deferred,
 .status-card.status-waiting {
   background: color-mix(in srgb, var(--surface) 60%, transparent);
   border-color: color-mix(in srgb, currentColor 40%, var(--border-strong));
 }
 .status-card.status-in-progress { background: color-mix(in srgb, var(--color-status-in-progress) 14%, transparent); color: var(--color-status-in-progress); }
+.status-card.status-paused { background: color-mix(in srgb, var(--color-status-paused) 14%, transparent); color: var(--color-status-paused); }
 .status-card.status-done { background: color-mix(in srgb, var(--color-status-done) 16%, transparent); color: var(--color-status-done); }
 .status-card.status-blocked { background: color-mix(in srgb, var(--color-status-blocked) 16%, transparent); color: var(--color-status-blocked); }
 .status-card.status-planned { background: color-mix(in srgb, var(--color-status-planned) 14%, transparent); color: var(--color-status-planned); }

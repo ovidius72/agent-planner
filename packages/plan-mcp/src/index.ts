@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, parentReadAdvisory, requirementReadAdvisory, markRequirementRead, invalidateReads } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -19,6 +19,9 @@ type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredCo
 function text(textValue: string, structuredContent?: Record<string, unknown>): ToolResult {
   return structuredContent ? { content: [{ type: "text", text: textValue }], structuredContent } : { content: [{ type: "text", text: textValue }] };
 }
+
+const MCP_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/mcp");
+const CORE_PACKAGE = resolvedPackageVersion("@agent-plan/core", import.meta.url);
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -130,7 +133,7 @@ async function writeAndSummarize(st: PlanStore, message: string, structuredConte
 
 const server = new McpServer({
   name: "agent-plan-planner",
-  version: "0.1.0",
+  version: MCP_PACKAGE.version,
 });
 
 // Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
@@ -158,6 +161,20 @@ async function resolvePhaseForHandoff(st: PlanStore, ref: string | undefined): P
   const feat = phase.featureId ? features.find((f) => f.id === phase.featureId) : undefined;
   return { ok: true, phase, compositeRef: formatPhaseRef(phase.number, feat?.number) };
 }
+
+server.registerTool("planner-version", {
+  description: "Report the versions of the Agent Plan MCP server and core package actually loaded by this process. Available without an initialized .planner/ workspace.",
+}, async () => {
+  const versions = {
+    [MCP_PACKAGE.name]: MCP_PACKAGE.version,
+    [CORE_PACKAGE.name]: CORE_PACKAGE.version,
+  };
+  return text([
+    "Agent Plan runtime versions",
+    `${MCP_PACKAGE.name}: ${MCP_PACKAGE.version}`,
+    `${CORE_PACKAGE.name}: ${CORE_PACKAGE.version}`,
+  ].join("\n"), { versions });
+});
 
 server.registerTool("planner-export", {
   description: "Export the project plan as a Markdown report. Supports a concise summary or full hierarchical detail.",
@@ -414,6 +431,7 @@ server.registerTool("planner-feature-add", {
     priority,
     name: name.trim(),
     description: description?.trim() ?? "",
+    descriptionUpdatedAt: timestamp,
     status: effectiveStatus,
     discussedAt: "",
     contextReady: false,
@@ -445,6 +463,7 @@ server.registerTool("planner-feature-show", {
   const resolvedFeature = resolveFeatureRefStrict(features, ref);
   if (!resolvedFeature.ok) return text(resolvedFeature.error);
   const feature = resolvedFeature.feature;
+  markFeatureRead(feature.id);
   const phases = (await st.loadAllPhases()).filter((phase) => phase.featureId === feature.id);
     const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases)`;
     return text(full ? `${summary}\n\n${feature.description || ""}` : summary);
@@ -589,6 +608,7 @@ server.registerTool("planner-phase-add", {
       contextReadyReason: "",
       summary: summary?.trim() ?? "",
       description: description?.trim() ?? "",
+      descriptionUpdatedAt: timestamp,
       notes: "",
       goals: [],
       nonGoals: [],
@@ -631,6 +651,7 @@ server.registerTool("planner-phase-show", {
     const features = (await st.loadFeatures()).features;
     const phase = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!phase) return text(`Phase not found: ${ref}`);
+    markPhaseRead(phase.id, phase.featureId);
     const linkedRequirements = await st.linkedRequirementsForPhase(phase.id);
     const reqCount = linkedRequirements.length;
     const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
@@ -769,6 +790,7 @@ server.registerTool("planner-task-add", {
     title: title.trim(),
     status: "planned",
     description: description?.trim() ?? "",
+    descriptionUpdatedAt: timestamp,
     notes: "",
     statusLog: [],
     decisions: [],
@@ -776,6 +798,8 @@ server.registerTool("planner-task-add", {
     checklist: (checklist ?? []).map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), number: index + 1, title: item, checked: false })),
     subtasks: [],
     dependsOn: [],
+    pauseSnapshot: null,
+    pauseHistory: [],
     startedAt: "",
     completedAt: "",
     createdAt: timestamp,
@@ -793,16 +817,39 @@ server.registerTool("planner-task-add", {
 
 server.registerTool("planner-task-show", {
   description: "Show a task by id or name.",
-    inputSchema: { task: z.string().min(1).describe("Task ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the task description + statusLog. Default: compact identity only (saves tokens).") },
+    inputSchema: { task: z.string().min(1).describe("Task ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the task description, resume checkpoint/advisory, and statusLog. Default: compact identity only (saves tokens).") },
   }, async ({ task: ref, full }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
+    markTaskRead(found.task.id, found.phase.id, found.phase.featureId);
     const features = (await st.loadFeatures()).features;
     const summary = `${found.task.title} — ${taskCompositeRef(found.task, found.phase, features)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status}; phase ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))})`;
     if (!full) return text(summary);
+    const project = await st.loadProject();
+    const pendingDeviation = found.task.status === "done" || found.task.status === "canceled" || found.task.status === "rejected"
+      ? undefined
+      : project.workDeviations
+        .filter((deviation) => deviation.resumeTaskId === found.task.id
+          && (deviation.state === "resume-required" || deviation.state === "resolved"))
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    const snapshot = found.task.pauseSnapshot ?? pendingDeviation?.snapshot ?? null;
     const log = (found.task.statusLog ?? []).map((e) => `  - ${e.date.slice(0,10)} ${e.title}`).join("\n");
-    return text(`${summary}\n\n${found.task.description || ""}${log ? `\n\nStatus log:\n${log}` : ""}`);
+    const sections = [summary];
+    if (found.task.description?.trim()) sections.push(found.task.description.trim());
+    if (snapshot || pendingDeviation) {
+      sections.push([
+        pendingDeviation
+          ? "Resume advisory: this task has a saved checkpoint that should be evaluated before selecting other work."
+          : "Resume checkpoint:",
+        snapshot ? `Checkpoint reason: ${snapshot.reason}` : "",
+        snapshot ? `Work checkpoint: ${snapshot.whatWasBeingDone}` : "",
+        snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
+        snapshot ? `How to resume: ${snapshot.howToResume}` : "",
+      ].filter(Boolean).join("\n"));
+    }
+    if (log) sections.push(`Status log:\n${log}`);
+    return text(sections.join("\n\n"));
 });
 
 server.registerTool("planner-task-discuss", {
@@ -849,6 +896,10 @@ server.registerTool("planner-task-update", {
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
 
+  if (found.task.pauseSnapshot && status === "in-progress" && status !== found.task.status) {
+    return text("Resume checkpoint lifecycle transitions require planner-task-start so the checkpoint and return stack remain consistent.");
+  }
+
   // Validate motivation requirement for status transitions.
   if (status !== undefined && needsMotivation(found.task.status, status)) {
     if (!motivation || !motivation.trim()) {
@@ -888,7 +939,22 @@ server.registerTool("planner-task-update", {
   await st.syncTaskStatusRollup(found.phase.id);
   const features = (await st.loadFeatures()).features;
   const t = updatedTask ?? found.task;
-  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}`);
+  let resumeNotice = "";
+  let resumeRequired: Record<string, unknown> | undefined;
+  if (status && status !== "in-progress" && status !== found.task.status) {
+    const deviation = (await st.loadProject()).workDeviations
+      .filter((entry) => (entry.state === "approved" || entry.state === "active") && entry.temporaryTaskId === found.task.id)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    if (deviation) {
+      await st.setWorkDeviationState(deviation.id, "resume-required", timestamp);
+      const resume = findTaskByRef(await st.loadAllPhases(), features, deviation.resumeTaskId);
+      if (resume) {
+        resumeNotice = `\n↩️ RESUME REQUIRED: ${taskCompositeRef(resume.task, resume.phase, features)} — ${resume.task.title}`;
+        resumeRequired = { taskId: resume.task.id, phaseId: resume.phase.id, snapshot: resume.task.pauseSnapshot ?? deviation.snapshot };
+      }
+    }
+  }
+  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}${resumeNotice}`, resumeRequired ? { resumeRequired } : undefined);
 });
 
 server.registerTool("planner-task-checklist-toggle", {
@@ -1018,13 +1084,180 @@ server.registerTool("planner-task-deviation", {
   if (temporary.task.id === resume.task.id) return text("A temporary task must differ from its resume target.");
   if (temporary.task.status !== "planned") return text(`Temporary task is not startable: ${temporary.task.status}.`);
   const timestamp = nowISO();
-  const record = { id: crypto.randomUUID(), recommendedTaskId: selected.candidate?.task.id ?? resume.task.id, temporaryTaskId: temporary.task.id, resumeTaskId: resume.task.id, reason, requestedBy: "user" as const, approvedBy: "user", state: "approved" as const, createdAt: timestamp, activatedAt: "", resolvedAt: "" };
+  const record = {
+    id: crypto.randomUUID(), recommendedTaskId: selected.candidate?.task.id ?? resume.task.id,
+    temporaryTaskId: temporary.task.id, resumeTaskId: resume.task.id, reason, snapshot: null,
+    requestedBy: "user" as const, approvedBy: "user", state: "approved" as const,
+    createdAt: timestamp, activatedAt: "", resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
+  };
   await st.addWorkDeviation(record);
   return writeAndSummarize(st, `✅ Approved deviation: ${taskCompositeRef(temporary.task, temporary.phase, features.features)} temporarily overrides ${taskCompositeRef(resume.task, resume.phase, features.features)}. Resume target retained.`, { deviation: record });
 });
 
+server.registerTool("planner-task-pause", {
+  description: "Pause an in-progress task with a mandatory durable checkpoint describing why work stopped, what was underway, the exact resume location, and how to continue.",
+  inputSchema: {
+    task: z.string().min(1),
+    reason: z.string().min(1),
+    what_was_being_done: z.string().min(1),
+    resume_location: z.string().min(1),
+    how_to_resume: z.string().min(1),
+    paused_by: z.string().optional(),
+  },
+}, async ({ task: ref, reason, what_was_being_done, resume_location, how_to_resume, paused_by }) => {
+  const st = await requireStore();
+  const features = (await st.loadFeatures()).features;
+  const found = findTaskByRef(await st.loadAllPhases(), features, ref);
+  if (!found) return text(`Task not found: ${ref}`);
+  if (found.task.status !== "in-progress") return text(`Task pause denied: ${taskCompositeRef(found.task, found.phase, features)} is ${found.task.status}, not in-progress.`);
+  const snapshot = {
+    id: crypto.randomUUID(), reason, whatWasBeingDone: what_was_being_done,
+    resumeLocation: resume_location, howToResume: how_to_resume, relatedTaskId: "",
+    pausedAt: nowISO(), pausedBy: paused_by?.trim() ?? "",
+  };
+  invalidateReads();
+  const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
+  await st.syncTaskStatusRollup(found.phase.id);
+  const activeDeviation = (await st.loadProject()).workDeviations
+    .filter((deviation) => (deviation.state === "approved" || deviation.state === "active")
+      && deviation.temporaryTaskId === found.task.id)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  if (activeDeviation) await st.setWorkDeviationState(activeDeviation.id, "resume-required", snapshot.pausedAt);
+  const resume = activeDeviation
+    ? findTaskByRef(await st.loadAllPhases(), features, activeDeviation.resumeTaskId)
+    : undefined;
+  const resumeNotice = resume
+    ? `\n↩️ RESUME REQUIRED: ${taskCompositeRef(resume.task, resume.phase, features)} — ${resume.task.title}`
+    : "";
+  return writeAndSummarize(st, [
+    `💾 Resume checkpoint saved: ${taskCompositeRef(checkpointed, found.phase, features)} — ${checkpointed.title}`,
+    `Why: ${snapshot.reason}`,
+    `Checkpoint: ${snapshot.whatWasBeingDone}`,
+    `Resume from: ${snapshot.resumeLocation}`,
+    `How to resume: ${snapshot.howToResume}${resumeNotice}`,
+  ].join("\n"), { task: checkpointed, snapshot, ...(resume ? { resumeRequired: { taskId: resume.task.id } } : {}) });
+});
+
+server.registerTool("planner-task-switch", {
+  description: "Atomically switch from active work to a temporary task, even outside normal priority order. Pauses the source with a mandatory snapshot, starts the target, and pushes a durable LIFO return target.",
+  inputSchema: {
+    from_task: z.string().min(1),
+    to_task: z.string().min(1),
+    reason: z.string().min(1),
+    what_was_being_done: z.string().min(1),
+    resume_location: z.string().min(1),
+    how_to_resume: z.string().min(1),
+    switched_by: z.string().optional(),
+  },
+}, async ({ from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume, switched_by }) => {
+  const st = await requireStore();
+  const [featuresDoc, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+  const features = featuresDoc.features;
+  const source = findTaskByRef(phases, features, from_task);
+  const target = findTaskByRef(phases, features, to_task);
+  if (!source) return text(`Task not found: ${from_task}`);
+  if (!target) return text(`Task not found: ${to_task}`);
+  if (source.task.id === target.task.id) return text("Source and temporary task must differ.");
+  if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
+    return text(`Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.`);
+  }
+  const eligibility = checkExplicitTaskStart(features, phases, target.task.id, project.workDeviations);
+  if (!eligibility.eligible) return text(`Task switch denied: ${eligibility.reason}`);
+
+  const timestamp = nowISO();
+  const snapshot = {
+    id: crypto.randomUUID(), reason, whatWasBeingDone: what_was_being_done,
+    resumeLocation: resume_location, howToResume: how_to_resume,
+    relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: switched_by?.trim() ?? "",
+  };
+  const selection = recommendNextTask(features, phases, project.workDeviations);
+  const record = {
+    id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
+    temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason, snapshot,
+    requestedBy: "agent" as const, approvedBy: switched_by?.trim() || "explicit task_switch",
+    state: "active" as const, createdAt: timestamp, activatedAt: timestamp,
+    resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
+  };
+
+  const sourceWasActive = source.task.status === "in-progress";
+  let sourceCheckpointed = false;
+  let targetStarted = false;
+  try {
+    if (sourceWasActive) {
+      await st.pauseTask(source.phase.id, source.task.id, snapshot);
+    } else {
+      await st.updatePhase(source.phase.id, (phase) => {
+        const task = phase.tasks.find((entry) => entry.id === source.task.id);
+        if (!task) throw new Error(`Checkpointed source task disappeared: ${from_task}`);
+        task.pauseSnapshot = snapshot;
+        task.pauseHistory = [...task.pauseHistory, snapshot];
+        task.updatedAt = timestamp;
+        return phase;
+      });
+    }
+    sourceCheckpointed = true;
+    if (target.task.pauseSnapshot) {
+      await st.resumeTask(target.phase.id, target.task.id, timestamp);
+    } else {
+      await st.updatePhase(target.phase.id, (phase) => {
+        const task = phase.tasks.find((entry) => entry.id === target.task.id);
+        if (!task) throw new Error(`Temporary task disappeared: ${to_task}`);
+        const previousStatus = task.status;
+        applyTaskLifecycleDates(task, "in-progress", timestamp);
+        task.statusLog = [...task.statusLog, {
+          id: createChecklistItemId(task.id, task.statusLog.length + 1, `${previousStatus}-in-progress`),
+          date: timestamp, fromStatus: previousStatus, toStatus: "in-progress",
+          title: `${previousStatus} → in-progress`, description: `Temporary switch from ${source.task.title}.`,
+        }];
+        task.updatedAt = timestamp;
+        phase.updatedAt = timestamp;
+        return phase;
+      });
+    }
+    targetStarted = true;
+    await st.addWorkDeviation(record);
+    if (target.task.pauseSnapshot) {
+      const resumedDeviation = project.workDeviations
+        .filter((deviation) => deviation.resumeTaskId === target.task.id
+          && (deviation.state === "resume-required" || deviation.state === "resolved"))
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+      if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
+    }
+  } catch (error) {
+    if (targetStarted) {
+      await st.updatePhase(target.phase.id, (phase) => {
+        phase.tasks = phase.tasks.map((task) => task.id === target.task.id ? target.task : task);
+        return phase;
+      }).catch(() => {});
+    }
+    if (sourceCheckpointed) {
+      if (sourceWasActive) await st.resumeTask(source.phase.id, source.task.id, nowISO()).catch(() => {});
+      else await st.updatePhase(source.phase.id, (phase) => {
+        phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
+        return phase;
+      }).catch(() => {});
+    }
+    throw error;
+  }
+  await st.syncTaskStatusRollup(source.phase.id);
+  if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
+  const targetReadAdvisory = parentReadAdvisory(target.phase.featureId, target.phase.id);
+  const targetRequirementAdvisory = requirementReadAdvisory([
+    ...(await st.linkedRequirementsForPhase(target.phase.id)).map((r) => r.id),
+    ...(target.phase.featureId ? (await st.linkedRequirementsForFeature(target.phase.featureId)).map((r) => r.id) : []),
+  ]);
+  return writeAndSummarize(st, [
+    `🔀 Task switched: ${taskCompositeRef(source.task, source.phase, features)} → ${taskCompositeRef(target.task, target.phase, features)}`,
+    `Resume checkpoint: ${snapshot.whatWasBeingDone}`,
+    `Return target: ${taskCompositeRef(source.task, source.phase, features)} from ${snapshot.resumeLocation}`,
+    `Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.`,
+    ...(targetReadAdvisory ? [targetReadAdvisory.trimStart()] : []),
+    ...(targetRequirementAdvisory ? [targetRequirementAdvisory.trimStart()] : []),
+  ].join("\n"), { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id, ...(targetReadAdvisory || targetRequirementAdvisory ? { readRequired: true } : {}) });
+});
+
 server.registerTool("planner-task-start", {
-  description: "Set a task to in-progress. BEFORE calling, use planner-task-show with full=true and planner-phase-show with full=true for the parent phase, including linked requirements. Continue an already in-progress task; otherwise select ready work by feature → phase → task priority (lower number first), respecting dependencies and blocked/waiting states. Returns a phase/requirements briefing.",
+  description: "Set a task to in-progress or resume checkpointed work. BEFORE calling, use planner-task-show with full=true and planner-phase-show with full=true for the parent phase, including linked requirements. A different active task must be suspended through planner-task-switch first. Otherwise follow active/pending-resume/feature → phase → task priority guidance.",
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
   const st = await requireStore();
@@ -1039,6 +1272,38 @@ server.registerTool("planner-task-start", {
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
   if (!eligibility.eligible) return text(`Task start denied: ${eligibility.reason}`, { reason: eligibility.reason });
   const selection = recommendNextTask(features, phases, project.workDeviations);
+  if (selection.kind === "conflict") {
+    return text(`${selection.reason} Pause/reconcile active tasks before starting another task.`, {
+      activeTaskIds: selection.activeCandidates?.map((candidate) => candidate.task.id) ?? [],
+    });
+  }
+  if (selection.kind === "active" && selection.candidate?.task.id !== found.task.id) {
+    return text(`Task start denied: ${taskCompositeRef(selection.candidate!.task, selection.candidate!.phase, features)} is active. Use planner-task-switch to snapshot and pause it before starting ${taskCompositeRef(found.task, found.phase, features)}.`);
+  }
+  let resumeProposal:
+    | { text: string; structured: { taskId: string; phaseId: string; snapshot: { reason: string; resumeLocation: string; howToResume: string } | null } }
+    | undefined;
+  if (selection.kind === "resume" && selection.candidate && selection.candidate.task.id !== found.task.id) {
+    // Advisory only: a pending resume must be surfaced loudly, but it must
+    // not hard-block an explicit start of a different task. Capture a
+    // structured proposal so the resume-first guidance is explicit and
+    // machine-readable for the host/agent.
+    const resumeTask = selection.candidate;
+    const resumeSnapshot = resumeTask.task.pauseSnapshot
+      ?? project.workDeviations.find((deviation) =>
+        deviation.resumeTaskId === resumeTask.task.id
+        && (deviation.state === "resume-required" || deviation.state === "resolved"))?.snapshot
+      ?? null;
+    resumeProposal = buildResumeRequiredProposal({
+      ref: taskCompositeRef(resumeTask.task, resumeTask.phase, features),
+      title: resumeTask.task.title,
+      taskId: resumeTask.task.id,
+      phaseId: resumeTask.phase.id,
+      snapshot: resumeSnapshot
+        ? { reason: resumeSnapshot.reason, resumeLocation: resumeSnapshot.resumeLocation, howToResume: resumeSnapshot.howToResume }
+        : null,
+    });
+  }
   // Assemble the mandatory parent context before changing task lifecycle state.
   const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
   const [phaseWithRequirements, featureRequirements] = await Promise.all([
@@ -1055,43 +1320,60 @@ server.registerTool("planner-task-start", {
   // A pending handoff is context, not a lock: task start RETAINS it. It is
   // archived only when the phase completes (auto) or the user explicitly
   // clears it.
-  const advisory = selection.kind === "conflict"
-    ? `\n\n⚠️ ${selection.reason} Explicit task request honored; reconcile active work before relying on automatic recommendations.`
-    : selection.candidate && selection.candidate.task.id !== found.task.id
-      ? selection.kind === "active"
-        ? `\n\n⚠️ Active-task advisory: ${taskCompositeRef(selection.candidate.task, selection.candidate.phase, features)} is already in progress. Explicit task request honored.`
-        : `\n\n⚠️ Priority advisory: ${taskCompositeRef(selection.candidate.task, selection.candidate.phase, features)} is the automatic recommendation. Explicit task request honored.`
-      : "";
+  const advisory = selection.candidate && selection.candidate.task.id !== found.task.id
+    ? selection.kind === "resume"
+      ? `\n\n${(() => {
+          if (resumeProposal) return resumeProposal.text;
+          return `⚠️ Resume advisory: ${taskCompositeRef(selection.candidate!.task, selection.candidate!.phase, features)} has a saved checkpoint. Evaluate its resume context before continuing with this explicit task request. Explicit task request honored.`;
+        })()}`
+      : `\n\n⚠️ Priority advisory: ${taskCompositeRef(selection.candidate.task, selection.candidate.phase, features)} is the automatic recommendation. Explicit task request honored.`
+    : "";
   const timestamp = nowISO();
 
   let updatedTask: Task | undefined;
-  await st.updatePhase(found.phase.id, (phase) => {
-    const task = phase.tasks.find((entry) => entry.id === found.task.id);
-    if (!task) return phase;
-    applyTaskLifecycleDates(task, "in-progress", timestamp);
-    if (task.status !== "in-progress") {
+  if (found.task.pauseSnapshot) {
+    updatedTask = await st.resumeTask(found.phase.id, found.task.id, timestamp);
+  } else {
+    await st.updatePhase(found.phase.id, (phase) => {
+      const task = phase.tasks.find((entry) => entry.id === found.task.id);
+      if (!task) return phase;
+      const previousStatus = task.status;
+      applyTaskLifecycleDates(task, "in-progress", timestamp);
       const entry: StatusLogEntry = {
-        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-in-progress`),
+        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${previousStatus}-in-progress`),
         date: timestamp,
-        fromStatus: task.status as any,
-        toStatus: "in-progress" as any,
-        title: task.status === "done" ? "Reopened" : `→ in-progress`,
-        description: task.status === "done" ? "Task reopened from done status." : "",
+        fromStatus: previousStatus,
+        toStatus: "in-progress",
+        title: `${previousStatus} → in-progress`,
+        description: "",
       };
       task.statusLog = [...(task.statusLog ?? []), entry];
-    }
-    task.updatedAt = timestamp;
-    phase.updatedAt = timestamp;
-    updatedTask = task;
-    return phase;
-  });
+      task.updatedAt = timestamp;
+      phase.updatedAt = timestamp;
+      updatedTask = task;
+      return phase;
+    });
+  }
   await st.syncTaskStatusRollup(found.phase.id);
   const approvedDeviation = project.workDeviations.find((deviation) =>
     deviation.temporaryTaskId === found.task.id && deviation.state === "approved",
   );
   if (approvedDeviation) await st.setWorkDeviationState(approvedDeviation.id, "active", timestamp);
+  const resumedDeviation = project.workDeviations
+    .filter((deviation) => deviation.resumeTaskId === found.task.id
+      && (deviation.state === "resume-required" || deviation.state === "resolved"))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
   const t = updatedTask ?? found.task;
-  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}`);
+  const readAdvisory = parentReadAdvisory(parentFeature?.id, found.phase.id);
+  const requirementAdvisory = requirementReadAdvisory([
+    ...(phaseWithRequirements.linkedRequirements ?? []).map((r) => r.id),
+    ...featureRequirements.map((r) => r.id),
+  ]);
+  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}${readAdvisory}${requirementAdvisory}`, {
+    ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
+    ...(readAdvisory || requirementAdvisory ? { readRequired: true } : {}),
+  });
 });
 
 server.registerTool("planner-task-complete", {
@@ -1105,6 +1387,7 @@ server.registerTool("planner-task-complete", {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
+  if (found.task.pauseSnapshot) return text("Task completion denied: resume checkpointed work with planner-task-start before completing it, or cancel it explicitly with motivation.");
   const unchecked = found.task.checklist.filter((item) => !item.checked);
   if (unchecked.length > 0 && !force) return text(`${unchecked.length} checklist item(s) not done. Re-run with force=true to complete anyway.`);
   const timestamp = nowISO();
@@ -1112,18 +1395,17 @@ server.registerTool("planner-task-complete", {
   await st.updatePhase(found.phase.id, (phase) => {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
+    const previousStatus = task.status;
     applyTaskLifecycleDates(task, "done", timestamp);
-    if (task.status !== "done") {
-      const entry: StatusLogEntry = {
-        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-done`),
-        date: timestamp,
-        fromStatus: task.status as any,
-        toStatus: "done" as any,
-        title: `→ done`,
-        description: "",
-      };
-      task.statusLog = [...(task.statusLog ?? []), entry];
-    }
+    const entry: StatusLogEntry = {
+      id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${previousStatus}-done`),
+      date: timestamp,
+      fromStatus: previousStatus,
+      toStatus: "done",
+      title: `${previousStatus} → done`,
+      description: "",
+    };
+    task.statusLog = [...(task.statusLog ?? []), entry];
     if (description_update) {
       const sep = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
       task.description = task.description + sep + description_update;
@@ -1137,10 +1419,27 @@ server.registerTool("planner-task-complete", {
   const completedDeviation = (await st.loadProject()).workDeviations
     .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === found.task.id)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-  if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resolved", timestamp);
+  if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resume-required", timestamp);
   const features = (await st.loadFeatures()).features;
   const t = updatedTask ?? found.task;
-  return writeAndSummarize(st, `✅ Task completed: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (done)${t.shortId ? ` · ${t.shortId}` : ""}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}`);
+  let resumeNotice = "";
+  let resumeRequired: Record<string, unknown> | undefined;
+  if (completedDeviation) {
+    const resume = findTaskByRef(await st.loadAllPhases(), features, completedDeviation.resumeTaskId);
+    if (resume) {
+      const snapshot = resume.task.pauseSnapshot ?? completedDeviation.snapshot;
+      resumeNotice = [
+        "",
+        `↩️ RESUME REQUIRED: ${taskCompositeRef(resume.task, resume.phase, features)} — ${resume.task.title}`,
+        snapshot ? `Checkpoint reason: ${snapshot.reason}` : "Return to the preserved task before selecting new priority work.",
+        snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
+        snapshot ? `How to resume: ${snapshot.howToResume}` : "",
+        `Next action: planner-task-start ${taskCompositeRef(resume.task, resume.phase, features)}`,
+      ].filter(Boolean).join("\n");
+      resumeRequired = { taskId: resume.task.id, phaseId: resume.phase.id, snapshot };
+    }
+  }
+  return writeAndSummarize(st, `✅ Task completed: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (done)${t.shortId ? ` · ${t.shortId}` : ""}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}${resumeNotice}`, resumeRequired ? { resumeRequired } : undefined);
 });
 
 server.registerTool("planner-handoff-list", {
@@ -1165,6 +1464,16 @@ server.registerTool("planner-handoff-show", {
   return text(`Handoff for ${r.compositeRef}:\n\n${content}`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
 });
 
+server.registerTool("planner-requirement-list", {
+  description: "List all top-level requirements in requirements.json. Reading this list records the requirements as read for the start/resume read-enforcement (explicit requirement read, required alongside feature/phase reads).",
+  inputSchema: {},
+}, async () => {
+  const st = await requireStore();
+  const requirements = await st.loadRequirements();
+  requirements.requirements.forEach((req) => markRequirementRead(req.id));
+  return text(requirements.requirements.map((req) => `- ${req.id} — ${req.title} (${req.status})`).join("\n") || "No requirements", { requirements });
+});
+
 server.registerTool("planner-handoff-write", {
   description: "Write/refresh the entity-scoped handoff on a phase. phaseRef is required and must be the exact phase selected with the user. Never guess from in-progress status or stale context; completed/canceled phases reject new handoffs. Pass content (markdown) and a meaningful title.",
   inputSchema: {
@@ -1178,8 +1487,10 @@ server.registerTool("planner-handoff-write", {
   let body = content.trim();
   const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
   const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
-  const isGeneric = !firstHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(firstHeadingText);
-  if (!title && isGeneric) {
+  const genericTitlePattern = /^(handoff|canonical handoff|session handoff)$/i;
+  const effectiveHeadingText = title?.trim() ? title.trim() : firstHeadingText;
+  const isGeneric = !effectiveHeadingText || genericTitlePattern.test(effectiveHeadingText);
+  if (isGeneric) {
     return text("❌ Generic handoff title. Provide a meaningful `title` (or start your markdown with a descriptive H1) summarizing the work — e.g. 'P049 — featureId validation: tests + adapter wiring'. Generic titles like 'Handoff' or 'Canonical handoff' are not accepted.");
   }
   if (title && title.trim()) {

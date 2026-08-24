@@ -14,8 +14,8 @@
  *
  * These are NEVER persisted: they are computed on demand from children's
  * canonical workflow statuses. The canonical workflow model
- * (`planned | in-progress | waiting | blocked | deferred | done | canceled |
- * rejected`) is unchanged.
+ * (`planned | in-progress | waiting | blocked | deferred | done |
+ * canceled | rejected`) includes paused leaf work without implying active execution.
  */
 
 import type { TaskStatus, PhaseStatus } from "./schema.js";

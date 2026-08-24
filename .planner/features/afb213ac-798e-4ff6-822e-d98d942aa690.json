@@ -1,0 +1,107 @@
+{
+  "id": "afb213ac-798e-4ff6-822e-d98d942aa690",
+  "number": 1,
+  "shortId": "",
+  "priority": 0,
+  "name": "Claude Code Plugin & Multi-Plugin Structure",
+  "description": "Add harness-specific plugin bundles to Agent Plan so it integrates natively with multiple coding-agent harnesses, starting with Claude Code and followed by Codex.\n\n## Current state\n- Monorepo (pnpm) under `packages/`: plan-core, plan-mcp, plan-server, plan-web-ui, agent-plan (CLI), pi-adapter (Pi extension).\n- @agent-plan/mcp exposes planner-* tools via stdio MCP; already used by Claude Code via manual `agent-plan setup claude-code` command-file install.\n- pi-adapter implements session_start notify, /planner load/stop, web lifecycle, recap with URL (Pi-only via message_end hook).\n- No plugin/ directory exists yet. The Claude Code integration currently relies on a manually-installed command file (~/.claude/commands/planner.md) + standalone MCP config.\n\n## Goal\n- Top-level `plugins/` dir with one subdirectory per harness (claude-code/, codex/, _shared/).\n- A self-hosted Claude Code plugin bundling: .mcp.json (@agent-plan/mcp), skills/planner/SKILL.md (/planner routing), hooks/hooks.json (SessionStart non-blocking notify), marketplace.json.\n- Distribution via self-hosted marketplace (channel 2, no Anthropic approval): `/plugin marketplace add ovidius72/agent-planner` → `/plugin install agent-plan@agent-plan-marketplace`.\n- Reusable _shared/ templates so Codex (and future harnesses) reuse the /planner routing and SessionStart notify.\n\n## Behaviors to preserve\n- Planner disabled by default; web does NOT auto-start (user constraint: \"non parte in automatico\").\n- /planner load = enable + web(LAN) + recap with Web UI address; /planner stop = disable + stop web.\n- Web UI address only on /planner load recap or /planner web status (not appended to every message — Claude Code has no message_end equivalent).\n- Planner operations (handoff, CRUD) are NOT code edits; allowed regardless of task state.\n- Composite IDs F00x/P00x/T00x in chat, never raw UUIDs.\n\n## Code references\n- packages/plan-mcp/src/index.ts — planner-* MCP tools, planner-web stub→implemented (PR #11 merged), planner-load/stop (PR #16 in flight on fix/mcp-parity-recap-web-ui).\n- packages/agent-plan/src/index.ts:plannerCommandTemplate — current Claude Code command-file template (source to port into SKILL.md).\n- packages/pi-adapter/src/index.ts — reference for session_start notify, /planner load/stop, web lifecycle, recap behavior.\n- .github/workflows/publish.yml — npm publish on main; plugins are NOT npm packages so not covered by it.\n\n## Non-goals\n- Submitting to the official claude-plugins-official directory (optional future, not this feature).\n- Building the Codex plugin (placeholder only; separate feature later).\n- Changing @agent-plan/mcp tool semantics (already aligned in PR #11/#16).",
+  "descriptionUpdatedAt": "2026-07-14T20:36:42.294Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "2026-07-14",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [
+    {
+      "id": "D1",
+      "title": "Plugins separated from packages",
+      "decision": "Plugin bundles live in a top-level plugins/ directory, separate from packages/ (which holds publishable npm libraries).",
+      "rationale": "Plugins are static bundles (JSON+Markdown+shell), not npm packages; keeping them out of the pnpm workspace avoids polluting the publishable set and cleanly separates 'libraries' from 'harness bundles'.",
+      "implementationNotes": "plugins/ at repo root; packages/ unchanged. Each plugin is self-contained and distributable via its harness mechanism.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D2",
+      "title": "One subdirectory per harness + _shared/ templates",
+      "decision": "plugins/ has one subdirectory per harness (claude-code/, codex/) plus _shared/ holding single-source-of-truth templates.",
+      "rationale": "Supports multiple harnesses without duplication; _shared/ ensures the /planner routing and SessionStart notify stay consistent across harnesses.",
+      "implementationNotes": "plugins/_shared/planner-skill.md.in and notify-session-start.sh.in use {{HARNESS}}/{{LOAD_COMMAND}} placeholders substituted by a sync script.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D3",
+      "title": "Planner logic stays in @agent-plan/mcp",
+      "decision": "The planner tools remain in the @agent-plan/mcp npm package; plugins reference it via .mcp.json using `npx -y @agent-plan/mcp`.",
+      "rationale": "Single implementation of planner-* tools reused by every harness plugin; no logic duplication across plugins; consistent with the harness-agnostic core principle (AGENTS.md §3).",
+      "implementationNotes": "plugins/claude-code/.mcp.json declares the stdio MCP server; auto-starts when the plugin is enabled.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D4",
+      "title": "Planner disabled by default; web does not auto-start",
+      "decision": "The planner and its web dashboard are disabled by default at startup. Nothing starts automatically.",
+      "rationale": "Explicit user constraint: 'il planner non deve partire automaticamente ma solo se l'utente chiama load'. Avoids unwanted server processes and respects user control.",
+      "implementationNotes": "SessionStart hook is notification-only; the planner is enabled only via /planner load.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D5",
+      "title": "/planner load and /planner stop semantics",
+      "decision": "/planner load enables the planner, starts the web dashboard LAN-bound, and emits a recap (status + handoff + Web UI address). /planner stop (alias disable) disables the planner and stops the web dashboard.",
+      "rationale": "Mirrors the Pi adapter behavior (PR #16) for cross-harness parity; gives the user a single explicit on/off switch.",
+      "implementationNotes": "Routes to planner-load and planner-stop MCP tools (post-PR #16). Web binds to 0.0.0.0 with a dynamic OS-assigned port.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D6",
+      "title": "Web UI address only on load recap or web status",
+      "decision": "The Web UI address is shown only in the /planner load recap and via /planner web status. It is NOT appended to every assistant message.",
+      "rationale": "Claude Code has no message_end hook equivalent to modify the final assistant message (unlike Pi). This matches the user's accepted behavior (URL only on load/status) and avoids noisy repetition on every turn.",
+      "implementationNotes": "Recap URL comes from the planner-load tool response; /planner web status from planner-web status action.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D7",
+      "title": "SessionStart hook is non-blocking notification only",
+      "decision": "The SessionStart hook prints a non-blocking notification ('Planner available — run /planner load') and does NOT start the planner, the web, or inject a recap.",
+      "rationale": "Parity with the Pi session_start notify; respects the no-auto-start constraint; gives discoverability without forcing startup.",
+      "implementationNotes": "hooks/hooks.json SessionStart → command running scripts/notify-session-start.sh; exit 0 always.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D8",
+      "title": "Self-hosted marketplace distribution (no approval)",
+      "decision": "Distribute via a self-hosted marketplace (channel 2): marketplace.json in the repo, users add via /plugin marketplace add ovidius72/agent-planner. The official directory (channel 3) is an optional future step.",
+      "rationale": "Channel 2 requires no Anthropic approval and is immediate; channel 3 requires public repo + automated review and only adds reach, not functionality.",
+      "implementationNotes": "plugins/claude-code/marketplace.json lists the agent-plan plugin. Future channel-3 submission uses the same artifacts.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D9",
+      "title": "Planner operations are not code edits",
+      "decision": "Planner operations (plan_write_handoff, plan_get, feature/phase/task CRUD) are NOT code edits and are always allowed regardless of task state.",
+      "rationale": "Prevents the guard from blocking handoff writing or planning when no task is in-progress (user-reported blocker). Aligns with AGENTS.md operational protocol.",
+      "implementationNotes": "Documented in SKILL.md operational protocol; the PostToolUse guard (if added later) skips .planner/ paths.",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    },
+    {
+      "id": "D10",
+      "title": "Composite IDs in chat, never raw UUIDs",
+      "decision": "Entity references in chat use human composite IDs (F001, P001(F001), T001(P001/F001)); tools emit composite IDs; findTaskByRef/findPhaseByRef/findFeatureByRef accept composite IDs and short forms.",
+      "rationale": "AGENTS.md §9 communication rule; eliminates agents referencing UUIDs invisible in the Web UI (user-reported issue).",
+      "implementationNotes": "Routing in SKILL.md instructs composite IDs; relies on the core composite-ID tooling (post global-uniqueness decision).",
+      "acceptedAt": "2026-07-14T22:35:00.000Z"
+    }
+  ],
+  "phaseIds": [
+    "6d0220f2-f38b-4a7c-b480-50e709afd445",
+    "164f53ba-a2f7-47fa-b9fe-cbd851a7ce9c",
+    "9894a082-23f2-409f-bdcb-83ff3275d853"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-14T20:36:42.294Z",
+  "updatedAt": "2026-07-27T12:01:51.734Z"
+}

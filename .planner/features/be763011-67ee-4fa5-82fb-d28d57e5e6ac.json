@@ -1,0 +1,25 @@
+{
+  "id": "be763011-67ee-4fa5-82fb-d28d57e5e6ac",
+  "number": 6,
+  "shortId": "",
+  "priority": 0,
+  "name": "Web UI in-progress animation + handoff resilience",
+  "description": "Two improvements surfaced during heca testing.\n\n**(A) Web UI animation fix** — the `ap-in-progress` animated background glow + pinging dot (orange border/bg pulse) is currently gated on the DERIVED phase/feature status (`phase.status === \"in-progress\"`). Because derive logic returns `in-progress` whenever ANY task is `done` or `in-progress`, a phase that is partially done but currently idle (e.g. 13 done, 0 actively in-progress) gets the full pulse animation — misleading, since nothing is actively being worked on. Fix: gate the animation on `hasActiveTask` (`tasks.some(t => t.status === \"in-progress\")`), and give the derived-`in-progress`-but-idle state only a subtle static border/bg (no animation). Files: `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx` (feature row ~L99, phase row ~L201). Task rows already correct (gated on `task.status`).\n\n**(B) Handoff resilience** — the current handoff lifecycle deletes the handoff content (`phase.handoff = \"\"`) the moment the agent reads it on recap (`handoff clear`). If a restart/crash/extension-update happens between read and actual resume, the handoff is lost and the restarted agent cannot resume (user hit exactly this: agent cleared handoff → extension update → restart → no handoff → agent lost). Redesign:\n- Keep `phase.handoff` intact across reads; track read state with a new `phase.handoffReadAt` timestamp so recap doesn't re-prompt every turn.\n- Auto-clear the handoff only when a task IN THE PHASE moves to `in-progress` (work actually started) — not on read. Keep the existing auto-clear on phase `done`.\n- Archive cleared handoffs to a subfolder `.planner/handoff-archive/<phaseId>-<ISO>.md` (gitignored), keeping the last 5 per phase. Phase stores light metadata (`handoffHistory: [{ file, clearedAt, reason }]`, capped 5) so tools/UI can list + recover without scanning.\n- Keep the manual `handoff clear` tool for explicit cleanup (archives too).\n- Update recap/protocol text so agents do NOT auto-clear on read; they set `handoffReadAt` instead.\nFiles: `packages/plan-core/src/schema.ts` (PhaseSchema + new HandoffHistoryEntrySchema), `packages/plan-core/src/plan-store.ts` (clearPhaseHandoff → archive+clear, auto-clear on task-start, rotation, gitignore template), `packages/pi-adapter/src/index.ts` + `packages/plan-mcp/src/index.ts` (handoff tools + recap protocol text), `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx` (animation fix). Behaviors to preserve: existing `listHandoffs` API, auto-clear-on-done, handoffUpdatedAt audit trail.\n\nStack: React + TypeScript (web-ui), Hono (server), Zod (schema), Pi adapter (TypeScript). Branch: `next` (deploy @next for testing before merge to develop).",
+  "descriptionUpdatedAt": "2026-07-27T12:01:51.679Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "f56b3f03-3d70-4bb4-a991-35ff41a0a546",
+    "1e6b3ec9-c0c8-401a-9e4c-e590a5b2b920"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-27T12:01:51.679Z",
+  "updatedAt": "2026-07-27T12:02:09.345Z"
+}

@@ -1,0 +1,25 @@
+{
+  "id": "957f4acd-f885-4429-a191-89cbd9899ba2",
+  "number": 11,
+  "shortId": "KQN4N",
+  "priority": 11,
+  "name": "MCP cross-harness setup & registry listing",
+  "description": "Make Agent Plan discoverable and installable across MCP-capable harnesses (Claude Code, Codex/Copilot CLI, Cursor, Zed, etc.). Includes: 1) project/user setup commands that generate local MCP server config (`agent-plan setup claude-code`, `agent-plan setup codex`), and 2) publishing a public listing to the official Model Context Protocol registry so clients can install without a harness-specific plugin.\n\nCode references:\n- packages/agent-plan/src/index.ts — setup claude-code / setup codex commands and config helpers.\n- packages/plan-mcp/src/index.ts — stdio MCP server implementation.\n- npm package `@agent-plan/mcp` — the published artifact referenced by configs and registry.\n- External: registry.modelcontextprotocol.io submission flow.\n\nAcceptance criteria:\n- `agent-plan setup codex` writes a valid `.codex/mcp.json` (project or user scope).\n- `agent-plan setup claude-code` keeps working with the full command surface.\n- Agent Plan appears in the official MCP registry search/listing.\n- README/docs mention install-from-registry once live.\n- Build, type-check, and existing harness tests pass.",
+  "descriptionUpdatedAt": "2026-08-06T11:35:50.127Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "2026-08-06",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "440cfc4a-4e1d-4449-a3a2-b25c7342c04a",
+    "d070f000-3354-4210-bd53-4d5eeb86349f"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-08-06T11:35:50.127Z",
+  "updatedAt": "2026-08-06T16:30:23.411Z"
+}

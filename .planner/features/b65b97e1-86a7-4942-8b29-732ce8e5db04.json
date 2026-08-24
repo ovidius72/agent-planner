@@ -1,0 +1,24 @@
+{
+  "id": "b65b97e1-86a7-4942-8b29-732ce8e5db04",
+  "number": 16,
+  "shortId": "J5D6Q",
+  "priority": 16,
+  "name": "Requirement-aware navigation and agent work protocol",
+  "description": "Current requirement links in `.planner/requirements.json` use public phase refs such as `P052`, while the Web UI resolves links only by internal phase UUID: `packages/plan-web-ui/src/routes/requirements/route.tsx:27-32,66`, `packages/plan-web-ui/src/routes/phase-detail/loader.ts:7-9`, and `packages/plan-web-ui/src/components/requirements/linked-phase-selector.tsx:22-28`. `packages/plan-server/src/serve.ts:23-42` now canonicalizes new HTTP writes but existing records were not migrated, so requirement cards and phase detail report no links. Work Tree phase accordions are rendered by `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`; they need an accessible requirement indicator linking to an anchored requirements view grouped by phase. Agent lifecycle tools are in `packages/pi-adapter/src/index.ts:3701-3709` and `packages/plan-mcp/src/index.ts:985-989`; their operational guidance must require task and full phase/requirements context before work begins or resumes. Existing priority fields are assigned/edited in adapter tools (`packages/pi-adapter/src/index.ts:1504,1700,1918,3130,3355`); the cross-harness protocol must select ready work hierarchically by ascending priority while preserving any active task and dependency/block constraints. Preserve UUID-backed links, composite F/P/T chat references, phase-scoped handoffs, and harness-agnostic core behavior.",
+  "descriptionUpdatedAt": "2026-08-09T21:30:08.998Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "fd1e90e7-0744-40b1-842d-fffb75b81dea"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-08-09T21:30:08.998Z",
+  "updatedAt": "2026-08-09T21:30:08.998Z"
+}

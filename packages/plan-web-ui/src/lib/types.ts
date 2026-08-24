@@ -19,6 +19,7 @@ export interface Feature {
   priority: number;
   name: string;
   description: string;
+  descriptionUpdatedAt: string;
   status: FeatureStatus;
   discussedAt: string;
   contextReady: boolean;
@@ -70,6 +71,34 @@ export interface PhaseStatusLogEntry {
   description: string;
 }
 
+export interface TaskPauseSnapshot {
+  id: string;
+  reason: string;
+  whatWasBeingDone: string;
+  resumeLocation: string;
+  howToResume: string;
+  relatedTaskId: string;
+  pausedAt: string;
+  pausedBy: string;
+}
+
+export interface WorkDeviation {
+  id: string;
+  recommendedTaskId: string;
+  temporaryTaskId: string;
+  resumeTaskId: string;
+  reason: string;
+  snapshot: TaskPauseSnapshot | null;
+  requestedBy: "agent" | "user";
+  approvedBy: string;
+  state: "approved" | "active" | "resume-required" | "resolved" | "resumed" | "canceled";
+  createdAt: string;
+  activatedAt: string;
+  resumeRequiredAt: string;
+  resolvedAt: string;
+  resumedAt: string;
+}
+
 export interface Task {
   id: string;
   phaseId: string;
@@ -80,6 +109,7 @@ export interface Task {
   title: string;
   status: TaskStatus;
   description: string;
+  descriptionUpdatedAt: string;
   notes: string;
   statusLog: StatusLogEntry[];
   decisions: string[];
@@ -87,6 +117,8 @@ export interface Task {
   checklist: ChecklistItem[];
   subtasks: Subtask[];
   dependsOn: string[];
+  pauseSnapshot: TaskPauseSnapshot | null;
+  pauseHistory: TaskPauseSnapshot[];
   startedAt: string;
   completedAt: string;
   createdAt: string;
@@ -133,6 +165,7 @@ export interface Phase {
   contextReadyReason: string;
   summary: string;
   description: string;
+  descriptionUpdatedAt: string;
   notes: string;
   goals: string[];
   nonGoals: string[];
@@ -192,6 +225,7 @@ export interface Project {
   technologies: string[];
   tools: string[];
   acceptedDecisions: AcceptedDecision[];
+  workDeviations: WorkDeviation[];
   workflowRules: {
     beforePhaseStart: string[];
     beforeTaskStart: string[];

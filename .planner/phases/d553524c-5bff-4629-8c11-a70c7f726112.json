@@ -1,0 +1,485 @@
+{
+  "id": "d553524c-5bff-4629-8c11-a70c7f726112",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 24,
+  "shortId": "FY5YR",
+  "priority": 5,
+  "slug": "web-ui-header-mobile-fixes",
+  "title": "Web UI header + mobile fixes",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Fix 6 bug Web UI segnalati dall'utente, tutti nel frontend @agent-plan/web-ui, testabili su mobile (390px) e desktop.\n\n1. LOCATE sotto header (mobile/bassa altezza): packages/plan-web-ui/src/components/dashboard/work-tree.tsx — l'effect locate usa el.scrollIntoView({block:\"center\"}) che non contabilizza l'header sticky (TopNav + ActiveTasksHeader, fino a 35vh) né la .ap-search-sticky bar (top: headerH). Su viewport basso/mobile il task row finisce dietro gli elementi sticky. Fix: scroll manuale window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - headerH - stickyBarH - 12 }) usando gli offset già misurati (headerH) + misura .ap-search-sticky.\n\n2. LINK HANDOFF in header: packages/plan-web-ui/src/components/layout/top-nav.tsx — navItems ha solo Dashboard + Features. Aggiungere NavLink a /handoff (route esistente packages/plan-web-ui/src/app/router.tsx:65) con icona ScrollText (lucide).\n\n3. EXPORT dropdown mobile non visibile: packages/plan-web-ui/src/components/layout/top-nav.tsx — il dropdown (absolute right-0 z-50 mt-2) apre sotto il bottone; su mobile (flex-col) finisce nella zona ActiveTasksHeader. Fix: z-index robusto + su mobile aprire verso l'alto (bottom-full mb-2) o portare fuori dallo stacking. Verificare con puppeteer.\n\n4. BOTTONI header mobile troppo grandi: packages/plan-web-ui/src/components/layout/top-nav.tsx — LiveStatusBadge, NavLink, Export, theme button usano min-h-11 (44px). Ridurre a min-h-9 mobile, sm:min-h-11 desktop.\n\n5. RESET non pulisce elastic input: packages/plan-web-ui/src/hooks/use-dashboard-tree.ts resetFilters() (riga ~330) resetta hideDone/hidePlanned/onlyActiveBranches/statusFilters/treeOpenMode/showAllFeatures ma NON searchQuery. Fix: aggiungere setSearchQuery(\"\").\n\n6. HIDE Planned/Done ignorati quando l'elastic input ha testo: packages/plan-web-ui/src/hooks/use-dashboard-tree.ts displayedWorkTree useMemo — il branch `if (searchActive)` (riga ~283) filtra SOLO per matchedTaskIds, non applica effectiveTaskStatusFilters (che incorporano hideDone/hidePlanned). Fix: nel branch search, filtrare i task matched anche per matchesStatus(task.status, effectiveTaskStatusFilters) e feature/phase per i rispettivi effective filters.\n\nComportamenti da preservare: locate pulse (locatePulseId ap-search-hit), persistenza localStorage dei filtri, espansione smart-mode.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "1a6102fa-d28a-475e-afb4-8aaca8a08f18",
+    "9ff29ba1-8837-42e1-a88d-0568b171ca7d",
+    "6a217177-f7e1-4100-aeeb-fff21322e634",
+    "e2f39b0b-e34e-4174-86d9-a40f538ff1a4",
+    "c708ac04-7f5a-436f-b425-24edf8e7c6aa",
+    "31eec87b-6138-47ab-9fa2-bb3e34b9844a",
+    "a84cbf4b-8d81-4f89-a01e-0f5df26a4641",
+    "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8",
+    "7262e0c9-515c-44d3-9ebe-f828d7573c2c",
+    "89a9cb17-86d8-43ea-9e07-6d39598b457a",
+    "783bec04-be03-4250-af9e-e2f2819eaf7d"
+  ],
+  "tasks": [
+    {
+      "id": "1a6102fa-d28a-475e-afb4-8aaca8a08f18",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 94,
+      "shortId": "RUBJ3",
+      "priority": 1,
+      "shortName": "fix-locate-scroll-offset",
+      "title": "Locate scroll offset for sticky header (mobile/low-height)",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/components/dashboard/work-tree.tsx — L'effect locate usava el.scrollIntoView({block:\"center\"}) che non contabilizza l'header sticky (TopNav + ActiveTasksHeader, fino a 35vh) né la .ap-search-sticky bar (top: headerH). Su viewport basso/mobile il task row finiva dietro gli elementi sticky. Fix: scroll manuale window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - headerH - stickyBarH - 12 }) misurando header (cast HTMLElement) + .ap-search-sticky. Comportamento preservato: locatePulseId ap-search-hit (2500ms), force-expand feature+phase, clear param. Shippato in 0.2.19-next.9.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T13:14:30.760Z",
+      "completedAt": "2026-07-29T13:14:30.760Z",
+      "createdAt": "2026-07-29T13:14:07.050Z",
+      "updatedAt": "2026-07-29T13:14:30.760Z"
+    },
+    {
+      "id": "9ff29ba1-8837-42e1-a88d-0568b171ca7d",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 95,
+      "shortId": "WG5LW",
+      "priority": 2,
+      "shortName": "fix-handoff-header-link",
+      "title": "Restore Handoff link in TopNav header",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/components/layout/top-nav.tsx — navItems conteneva solo Dashboard + Features; il link /handoff (route esistente packages/plan-web-ui/src/app/router.tsx:65, HandoffRoute) era assente dall'header. Fix: aggiunto NavLink { to: \"/handoff\", label: \"Handoff\", icon: ScrollText } importando ScrollText da lucide-react. Shippato in 0.2.19-next.9.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T13:14:35.456Z",
+      "completedAt": "2026-07-29T13:14:35.456Z",
+      "createdAt": "2026-07-29T13:14:11.201Z",
+      "updatedAt": "2026-07-29T13:14:35.456Z"
+    },
+    {
+      "id": "6a217177-f7e1-4100-aeeb-fff21322e634",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 96,
+      "shortId": "BRWNZ",
+      "priority": 3,
+      "shortName": "fix-export-dropdown-mobile",
+      "title": "Export dropdown visible on mobile (open upward)",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/components/layout/top-nav.tsx — Il dropdown Export (absolute right-0 z-50 mt-2) apriva sotto il bottone; su mobile (TopNav flex-col) il menu finiva nella zona ActiveTasksHeader (bg surface-elevated) risultando non visibile. Fix: z-50→z-[60], mobile apre verso l'alto (bottom-full mb-2), desktop sm:bottom-auto sm:mb-0 sm:mt-2. Shippato in 0.2.19-next.9.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T13:14:38.344Z",
+      "completedAt": "2026-07-29T13:14:38.344Z",
+      "createdAt": "2026-07-29T13:14:15.160Z",
+      "updatedAt": "2026-07-29T13:14:38.344Z"
+    },
+    {
+      "id": "e2f39b0b-e34e-4174-86d9-a40f538ff1a4",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 97,
+      "shortId": "9U325",
+      "priority": 4,
+      "shortName": "fix-header-button-mobile-size",
+      "title": "Smaller header buttons on mobile (min-h-9)",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/components/layout/top-nav.tsx — LiveStatusBadge, NavLink, Export button, theme button usavano min-h-11 (44px) ovunque, troppo grandi su mobile. Fix: min-h-9 (36px) su mobile con sm:min-h-11 su desktop; theme button h-9 w-9 sm:h-11 sm:w-11; rounded-[12px] mobile sm:rounded-[14px]; padding ridotto su mobile (px-2.5 py-1.5) sm:px-3. Shippato in 0.2.19-next.9.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T13:14:41.194Z",
+      "completedAt": "2026-07-29T13:14:41.194Z",
+      "createdAt": "2026-07-29T13:14:18.725Z",
+      "updatedAt": "2026-07-29T13:14:41.194Z"
+    },
+    {
+      "id": "c708ac04-7f5a-436f-b425-24edf8e7c6aa",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 98,
+      "shortId": "QM324",
+      "priority": 5,
+      "shortName": "fix-reset-clears-elastic",
+      "title": "Reset filter clears elastic search input",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/hooks/use-dashboard-tree.ts — resetFilters() (riga ~330) resetta showAllFeatures/hideDone/hidePlanned/onlyActiveBranches/statusFilters/treeOpenMode ma NON searchQuery, quindi il testo dell'elastic input persisteva dopo Reset. Fix: aggiunto setSearchQuery(\"\") come prima riga di resetFilters. Shippato in 0.2.19-next.9.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T13:14:44.030Z",
+      "completedAt": "2026-07-29T13:14:44.030Z",
+      "createdAt": "2026-07-29T13:14:23.528Z",
+      "updatedAt": "2026-07-29T13:14:44.030Z"
+    },
+    {
+      "id": "31eec87b-6138-47ab-9fa2-bb3e34b9844a",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 99,
+      "shortId": "3BMDG",
+      "priority": 6,
+      "shortName": "fix-hide-filters-in-search",
+      "title": "Hide Planned/Done apply during elastic search",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/hooks/use-dashboard-tree.ts — displayedWorkTree useMemo branch `if (searchActive)` filtrava SOLO per matchedTaskIds, bypassando effectiveTaskStatusFilters (che incorporano hideDone/hidePlanned). Risultato: con testo nell'elastic input, Hide Planned/Done non avevano effetto. Fix: nel branch search, filtrare i task matched anche per matchesStatus(task.status, effectiveTaskStatusFilters) + feature per effectiveFeatureStatusFilters + phase per effectivePhaseStatusFilters; i phase vuoti vengono droppati come prima. Comportamento preservato: espansione smart-mode in search, persistenza localStorage. Shippato in 0.2.19-next.9.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-29T13:14:46.899Z",
+      "completedAt": "2026-07-29T13:14:46.899Z",
+      "createdAt": "2026-07-29T13:14:27.332Z",
+      "updatedAt": "2026-07-29T13:14:46.899Z"
+    },
+    {
+      "id": "a84cbf4b-8d81-4f89-a01e-0f5df26a4641",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 212,
+      "shortId": "8QZGH",
+      "priority": 7,
+      "shortName": "refine-edit-project-button-ver",
+      "title": "Refine Edit project button vertical alignment with Project Goal heading",
+      "status": "done",
+      "description": "User reports the 'Edit project' button on the dashboard Project Goal card is still visually misaligned after the previous fix. The current layout wraps the button in the same flex container as the entire content block (title + description), causing the button to align to the top of the block rather than to the heading baseline.\n\nA better layout is to place only the 'Project Goal' h2 and the button on the same flex line, so the button can be baseline-aligned with just the heading. The description then sits below.\n\nCode references:\n- packages/plan-web-ui/src/routes/dashboard/route.tsx\n\nAcceptance:\n- The Edit project button is visually aligned with the Project Goal heading.\n- The description text sits below and wraps normally.\n- Layout works on both desktop and mobile.\n- Build and copy bundle pass.\n\n---\n**Completion summary:**\nRefined Edit project button alignment in packages/plan-web-ui/src/routes/dashboard/route.tsx. Instead of placing the button in the same flex container as the entire content block (title + description), the heading 'Project Goal' and the button now share their own flex row with items-baseline, so the button text baseline aligns with the heading baseline. The description sits below. This should resolve the perceived misalignment caused by the button content being padded/centered within a larger box aligned to the top of the content block. Build and bundle copy pass.\n\n---\n**Completion summary:**\nSecond attempt at fixing Edit project button alignment. Changed the heading/button row from items-baseline to items-center in packages/plan-web-ui/src/routes/dashboard/route.tsx. This vertically centers the 'Project Goal' heading with the button, which is typically the expected visual alignment for a heading + action button pair. Built and copied bundle.\n\n---\n**Completion summary:**\nFixed internal button content alignment in packages/plan-web-ui/src/components/ui/button.tsx. The inner <span> wrapping children (icon + text) now uses inline-flex items-center, so icons and labels are vertically centered relative to each other. This fixes the visual misalignment of the Edit project button specifically and improves all buttons with icons. Built and copied bundle.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a84cbf4b-8d81-4f89-a01e-0f5df26a4641-check-001-done-in-progress",
+          "date": "2026-08-06T23:01:36.849Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "User reports the Edit project button is still misaligned. Screenshot shows the button in isolation; need to try a more robust vertical center alignment (items-center) between the heading and button, as baseline alignment can still look off when one element is a padded button.",
+          "description": "User reports the Edit project button is still misaligned. Screenshot shows the button in isolation; need to try a more robust vertical center alignment (items-center) between the heading and button, as baseline alignment can still look off when one element is a padded button."
+        },
+        {
+          "id": "a84cbf4b-8d81-4f89-a01e-0f5df26a4641-check-002-done-in-progress",
+          "date": "2026-08-06T23:02:04.581Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "User reports button still looks misaligned after items-center change. Screenshot shows only the button itself, not its position relative to the Project Goal heading. Need clarification on what exactly looks wrong and a wider screenshot.",
+          "description": "User reports button still looks misaligned after items-center change. Screenshot shows only the button itself, not its position relative to the Project Goal heading. Need clarification on what exactly looks wrong and a wider screenshot."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a84cbf4b-8d81-4f89-a01e-0f5df26a4641-check-001-reinspect-current-dashboard-layout",
+          "number": 1,
+          "title": "Reinspect current dashboard layout",
+          "checked": true
+        },
+        {
+          "id": "a84cbf4b-8d81-4f89-a01e-0f5df26a4641-check-002-separate-heading-button-row-from-description",
+          "number": 2,
+          "title": "Separate heading/button row from description",
+          "checked": true
+        },
+        {
+          "id": "a84cbf4b-8d81-4f89-a01e-0f5df26a4641-check-003-build-and-copy-bundle",
+          "number": 3,
+          "title": "Build and copy bundle",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T22:58:12.478Z",
+      "completedAt": "2026-08-06T23:04:18.395Z",
+      "createdAt": "2026-08-06T22:58:10.478Z",
+      "updatedAt": "2026-08-06T23:04:18.395Z"
+    },
+    {
+      "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 214,
+      "shortId": "PDTRK",
+      "priority": 8,
+      "shortName": "uniform-filter-buttons-and-con",
+      "title": "Uniform filter buttons and convert expand/collapse to single toggle",
+      "status": "done",
+      "description": "User requests improvements to the Work Tree filter/controls bar:\n1. The 5 buttons under the filters (Hide done, Hide planned, Only active, Reset, Repair) look inconsistent — last 2 have different borders. Make them smaller and uniform in style.\n2. Replace the Expand all + Collapse all pair above the filters with a single toggle button.\n\nCode references:\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx (controls and filter buttons)\n- packages/plan-web-ui/src/hooks/use-dashboard-tree.ts (expandAll, setTreeOpenMode)\n\nAcceptance:\n- All 5 filter/action buttons share the same base style (size, border, padding) with only color/state differences to indicate active/inactive.\n- Expand/collapse controls become one button that toggles between Expand all and Collapse all.\n- Layout remains responsive.\n- Build and copy bundle pass.\n\n---\n**Completion summary:**\nReworked Work Tree controls in packages/plan-web-ui/src/components/dashboard/work-tree.tsx.\n\n1. Added local ToolbarButton component: uniform h-8 min-h-8, rounded-[10px], px-2.5 py-1, text-xs, full-width grid cell. Active state uses solid accent background; inactive state uses surface-card background with border.\n\n2. Replaced the 5 inconsistent filter/action buttons (Hide done, Hide planned, Only active, Reset, Repair) with ToolbarButton instances, all sharing the same base style. The active toggles now show accent fill instead of status-specific classes.\n\n3. Replaced Expand all + Collapse all pair with a single toggle ToolbarButton that shows 'Expand all' / 'Collapse all' based on tree.treeOpenMode === 'all'. Clicking toggles between tree.expandAll() and tree.setTreeOpenMode('none').\n\nBuild and copy-web-ui.sh pass. Browser reload required.\n\n---\n**Completion summary:**\nMoved Expand/Collapse button into the same filter toolbar row in packages/plan-web-ui/src/components/dashboard/work-tree.tsx. The Work Tree header no longer has a separate controls area; all 6 actions (Expand all / Collapse all, Hide done, Hide planned, Only active, Reset, Repair) are now in a single 6-column grid (lg:grid-cols-6). Removed the previous separate top-right button block. Build and bundle copy pass.\n\n---\n**Completion summary:**\nFixed two issues:\n\n1. Expand all toggle now works both ways. Previously the button compared tree.treeOpenMode === 'all', but expandAll() set mode to 'smart', so the label never switched. Added collapseAll() and isAllExpanded (derived from actual expandedFeatureIds/expandedPhaseIds vs displayedWorkTree) to useDashboardTree. The toolbar button now toggles expandAll/collapseAll and correctly shows 'Collapse all' when everything is expanded.\n\n2. Matched detail page accordion border radius to Work Tree. Changed packages/plan-web-ui/src/components/ui/accordion.tsx from rounded-lg to rounded-[10px], matching the Work Tree rows.\n\nBuild and bundle copy pass.\n\n---\n**Completion summary:**\nVerified the accordion border-radius change is present in both packages/plan-web-ui/dist and packages/pi-adapter/web-ui-dist bundles. The generated CSS shows rounded-[10px]{border-radius:10px} and the Accordion component no longer uses rounded-lg. User may be seeing a cached build; recommended hard refresh. No further code change needed unless cache busting is required.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8-check-001-done-in-progress",
+          "date": "2026-08-06T23:08:36.210Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "User clarifies: Expand all should not be a separate button at the top of the Work Tree card. It should be moved into the same filter/action toolbar row as the other 5 buttons (Hide done, Hide planned, Only active, Reset, Repair) just modified. Also Expand all currently does nothing, likely because treeOpenMode='all' does not expand done features by default.",
+          "description": "User clarifies: Expand all should not be a separate button at the top of the Work Tree card. It should be moved into the same filter/action toolbar row as the other 5 buttons (Hide done, Hide planned, Only active, Reset, Repair) just modified. Also Expand all currently does nothing, likely because treeOpenMode='all' does not expand done features by default."
+        },
+        {
+          "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8-check-002-done-in-progress",
+          "date": "2026-08-06T23:11:49.383Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "User reports two issues: 1) Expand all expands but the button label stays 'Expand all' and does not switch to 'Collapse all', so toggling back doesn't work. 2) Detail page accordions for features and phases don't match Work Tree styling (border radius). Need to fix both.",
+          "description": "User reports two issues: 1) Expand all expands but the button label stays 'Expand all' and does not switch to 'Collapse all', so toggling back doesn't work. 2) Detail page accordions for features and phases don't match Work Tree styling (border radius). Need to fix both."
+        },
+        {
+          "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8-check-003-done-in-progress",
+          "date": "2026-08-06T23:14:55.482Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "Toggle fixed confirmed by user. Border radius change in Accordion component is not visible on detail pages; need to investigate if detail pages override className or use a different component/structure that masks the rounded corners.",
+          "description": "Toggle fixed confirmed by user. Border radius change in Accordion component is not visible on detail pages; need to investigate if detail pages override className or use a different component/structure that masks the rounded corners."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8-check-001-inspect-current-control-filter-button-markup",
+          "number": 1,
+          "title": "Inspect current control/filter button markup",
+          "checked": true
+        },
+        {
+          "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8-check-002-design-uniform-button-style-and-single-toggle",
+          "number": 2,
+          "title": "Design uniform button style and single toggle",
+          "checked": true
+        },
+        {
+          "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8-check-003-implement-changes-in-work-tree-tsx",
+          "number": 3,
+          "title": "Implement changes in work-tree.tsx",
+          "checked": true
+        },
+        {
+          "id": "ee4a26e6-7b89-40a2-9971-4e8fbd92f7d8-check-004-build-and-copy-bundle",
+          "number": 4,
+          "title": "Build and copy bundle",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T23:06:12.652Z",
+      "completedAt": "2026-08-06T23:15:34.984Z",
+      "createdAt": "2026-08-06T23:06:09.998Z",
+      "updatedAt": "2026-08-06T23:15:34.984Z"
+    },
+    {
+      "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 215,
+      "shortId": "36NCB",
+      "priority": 9,
+      "shortName": "uniform-detail-page-header-ide",
+      "title": "Uniform detail page header identifiers with Work Tree EntityPathBadge",
+      "status": "done",
+      "description": "User requests detail pages (feature, phase, task) show entity identifiers the same way as the Work Tree:\n- show shortId\n- show entity number/path (F00x/P00x/T00x)\n- copyable badge\n- clicking a segment navigates to that entity's detail page\n\nCurrent detail pages use separate CopyableBadge + ShortIdBadge + DisplayStatusBadge. Work Tree uses EntityPathBadge which shows colored segments and is copyable/clickable.\n\nCode references:\n- packages/plan-web-ui/src/components/ui/badges.tsx (EntityPathBadge, CopyableBadge, ShortIdBadge)\n- packages/plan-web-ui/src/routes/feature-detail/route.tsx\n- packages/plan-web-ui/src/routes/phase-detail/route.tsx\n- packages/plan-web-ui/src/routes/task-detail/route.tsx\n\nAcceptance:\n- Feature detail header shows F00x segment (clickable to feature itself), shortId badge, status badge.\n- Phase detail header shows F00x (clickable to feature) + P00x (clickable to phase itself), shortId badge, status badge.\n- Task detail header shows F00x (clickable to feature) + P00x (clickable to phase) + T00x (clickable to task itself), shortId badge, status badge.\n- EntityPathBadge supports copy on click (existing behavior) and segment links.\n- Responsive and builds cleanly.\n\n---\n**Completion summary:**\nCreated a reusable DetailEntityBar component (packages/plan-web-ui/src/components/detail/detail-entity-bar.tsx) that renders EntityPathBadge + CopyableBadge + ShortIdBadge in the same order as the Work Tree, plus a trailing children slot for status/handoff badges.\n\nUpdated all three detail routes to use it:\n- packages/plan-web-ui/src/routes/feature-detail/route.tsx\n- packages/plan-web-ui/src/routes/phase-detail/route.tsx\n- packages/plan-web-ui/src/routes/task-detail/route.tsx\n\nThis makes the detail page headers uniform with the Work Tree: colored F/P/T segments are clickable (navigate to the entity), the full path is copyable, and the shortId is shown.\n\nBuild and bundle copy pass. Hard refresh needed.\n\n---\n**Completion summary:**\nRealized the actual mismatch was in the list rows (not just headers). Detail pages were using old EntityBadge/ParentBadge pills, while Work Tree uses EntityPathBadge. Updated both headers AND list rows:\n\nHeaders:\n- Created DetailEntityBar component and used it in feature-detail, phase-detail, task-detail routes.\n- Shows EntityPathBadge (clickable F/P/T segments) + CopyableBadge + ShortIdBadge + status/handoff badges.\n\nList rows (the real difference):\n- packages/plan-web-ui/src/components/features/feature-row.tsx: replaced EntityBadge with EntityPathBadge + CopyableBadge + ShortIdBadge.\n- packages/plan-web-ui/src/components/phases/phase-row.tsx: replaced EntityBadge + ParentBadge with EntityPathBadge + CopyableBadge + ShortIdBadge.\n- packages/plan-web-ui/src/components/tasks/task-row.tsx: replaced EntityBadge with EntityPathBadge + CopyableBadge + ShortIdBadge; added featureNum/phaseNum props.\n- packages/plan-web-ui/src/routes/phase-detail/route.tsx: passes featureNum/phaseNum to TaskRow.\n\nNow detail page lists and headers use the same segmented, copyable, clickable entity identifiers as the Work Tree.\n\nBuild, type-check (pnpm check), and bundle copy all pass. Hard refresh required.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-001-done-in-progress",
+          "date": "2026-08-06T23:28:47.797Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "User clarifies: actions should stay on the right/own row. The segment badges in detail pages are visually different from Work Tree. Need to make the EntityPathBadge in detail pages match the Work Tree styling exactly (likely visual difference is due to inline-flex vs block, background, border-radius, or hover states). Need to inspect CSS and component differences.",
+          "description": "User clarifies: actions should stay on the right/own row. The segment badges in detail pages are visually different from Work Tree. Need to make the EntityPathBadge in detail pages match the Work Tree styling exactly (likely visual difference is due to inline-flex vs block, background, border-radius, or hover states). Need to inspect CSS and component differences."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-001-inspect-entitypathbadge-implementation",
+          "number": 1,
+          "title": "Inspect EntityPathBadge implementation",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-002-inspect-current-detail-page-headers",
+          "number": 2,
+          "title": "Inspect current detail page headers",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-003-add-segment-links-to-entitypathbadge-if-missing",
+          "number": 3,
+          "title": "Add segment links to EntityPathBadge if missing",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-004-update-feature-detail-header",
+          "number": 4,
+          "title": "Update feature-detail header",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-005-update-phase-detail-header",
+          "number": 5,
+          "title": "Update phase-detail header",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-006-update-task-detail-header",
+          "number": 6,
+          "title": "Update task-detail header",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-007-build-and-copy-bundle",
+          "number": 7,
+          "title": "Build and copy bundle",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-008-update-feature-row-phase-row-task-row-to-use-entitypathbadge-copyablebadge-shortidbadge",
+          "number": 8,
+          "title": "Update feature-row, phase-row, task-row to use EntityPathBadge + CopyableBadge + ShortIdBadge",
+          "checked": true
+        },
+        {
+          "id": "7262e0c9-515c-44d3-9ebe-f828d7573c2c-check-009-pass-featurenum-phasenum-to-taskrow-in-phase-detail-route",
+          "number": 9,
+          "title": "Pass featureNum/phaseNum to TaskRow in phase-detail route",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T23:16:40.946Z",
+      "completedAt": "2026-08-06T23:31:51.020Z",
+      "createdAt": "2026-08-06T23:16:38.705Z",
+      "updatedAt": "2026-08-06T23:31:51.020Z"
+    },
+    {
+      "id": "89a9cb17-86d8-43ea-9e07-6d39598b457a",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 216,
+      "shortId": "CJJSM",
+      "priority": 10,
+      "shortName": "add-border-radius-to-statusite",
+      "title": "Add border radius to StatusItem surfaces",
+      "status": "done",
+      "description": "User reports that status-item status-item--surface (the colored wrapper used in Work Tree rows) lacks border radius. Need to add border-radius to the .status-item class in base.css so the colored status rows/accordions in the Work Tree have rounded corners consistent with other cards/rows.\n\nCode references:\n- packages/plan-web-ui/src/components/ui/status-item.tsx\n- packages/plan-web-ui/src/styles/base.css\n\nAcceptance:\n- .status-item has border-radius (likely 10px to match Work Tree rows).\n- Header and surface variants both rounded consistently.\n- Build and copy bundle pass.\n\n---\n**Completion summary:**\nAdded .status-item border-radius rules to packages/plan-web-ui/src/styles/base.css:\n- .status-item default border-radius: 10px\n- .status-item--header: 10px 10px 0 0 (rounded top corners only, sits inside an accordion)\n- .status-item--surface: 10px (full rounded corners for standalone rows like Work Tree task rows)\n\nBuild and bundle copy pass. Hard refresh needed.\n\n---\n**Completion summary:**\nFixed regression: removed the .status-item--header rule that was forcing flat bottom corners (border-radius: 10px 10px 0 0). Reverted to a single .status-item { border-radius: 10px; overflow: hidden; } so all StatusItem variants keep rounded corners. This restores the bottom border radius of Work Tree feature/phase/task rows while still giving rounded corners to status surfaces. Build and bundle copy pass. Hard refresh needed.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "89a9cb17-86d8-43ea-9e07-6d39598b457a-check-001-done-in-progress",
+          "date": "2026-08-06T23:22:21.342Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "User reports bottom border radius missing in Work Tree after adding .status-item CSS. Need to investigate if new styles accidentally clipped or overrode the row's rounded corners.",
+          "description": "User reports bottom border radius missing in Work Tree after adding .status-item CSS. Need to investigate if new styles accidentally clipped or overrode the row's rounded corners."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "89a9cb17-86d8-43ea-9e07-6d39598b457a-check-001-add-border-radius-to-status-item-in-base-css",
+          "number": 1,
+          "title": "Add border-radius to .status-item in base.css",
+          "checked": false
+        },
+        {
+          "id": "89a9cb17-86d8-43ea-9e07-6d39598b457a-check-002-build-and-copy-bundle",
+          "number": 2,
+          "title": "Build and copy bundle",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T23:17:29.365Z",
+      "completedAt": "2026-08-06T23:22:52.215Z",
+      "createdAt": "2026-08-06T23:17:25.757Z",
+      "updatedAt": "2026-08-06T23:22:52.215Z"
+    },
+    {
+      "id": "783bec04-be03-4250-af9e-e2f2819eaf7d",
+      "phaseId": "d553524c-5bff-4629-8c11-a70c7f726112",
+      "number": 217,
+      "shortId": "NBFJW",
+      "priority": 11,
+      "shortName": "stack-badge-cluster-above-titl",
+      "title": "Stack badge cluster above title in list rows",
+      "status": "done",
+      "description": "User requested that list rows on feature-detail and phase-detail pages show the entity badge cluster (EntityPathBadge + CopyableBadge + ShortIdBadge + status) on its own top line and the title on a second line, matching the Work Tree row layout. Current PhaseRow and TaskRow use a flex container that becomes row on desktop, placing the title beside the badges. We need to keep the column layout at all breakpoints so the title always sits below the badge cluster. FeatureRow should be aligned as well for consistency across all list rows.\n\nFiles to modify:\n- packages/plan-web-ui/src/components/features/feature-row.tsx\n- packages/plan-web-ui/src/components/phases/phase-row.tsx\n- packages/plan-web-ui/src/components/tasks/task-row.tsx\n\nAfter editing, build web-ui, run pnpm check, and sync to pi-adapter/web-ui-dist and plan-server/web-ui-dist via scripts/copy-web-ui.sh.\n\n---\n**Completion summary:**\nModified list rows so the badge cluster (EntityPathBadge + CopyableBadge + ShortIdBadge + status) always sits on its own top line and the title wraps on a second line, matching the Work Tree layout.\n\nFiles changed:\n- packages/plan-web-ui/src/components/features/feature-row.tsx\n- packages/plan-web-ui/src/components/phases/phase-row.tsx\n- packages/plan-web-ui/src/components/tasks/task-row.tsx\n\nEach row's inner container switched from `flex-col lg:flex-row` to a fixed `flex-col`, and the title link now uses `[overflow-wrap:anywhere]` instead of `lg:truncate` for consistent wrapping.\n\nBuild, type-check, and bundle copy all pass.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "783bec04-be03-4250-af9e-e2f2819eaf7d-check-001-change-phaserow-inner-container-to-always-stack-badges-above-title",
+          "number": 1,
+          "title": "Change PhaseRow inner container to always stack badges above title",
+          "checked": true
+        },
+        {
+          "id": "783bec04-be03-4250-af9e-e2f2819eaf7d-check-002-change-taskrow-inner-container-to-always-stack-badges-above-title",
+          "number": 2,
+          "title": "Change TaskRow inner container to always stack badges above title",
+          "checked": true
+        },
+        {
+          "id": "783bec04-be03-4250-af9e-e2f2819eaf7d-check-003-change-featurerow-inner-container-to-always-stack-badges-above-title",
+          "number": 3,
+          "title": "Change FeatureRow inner container to always stack badges above title",
+          "checked": true
+        },
+        {
+          "id": "783bec04-be03-4250-af9e-e2f2819eaf7d-check-004-rebuild-and-sync-bundle",
+          "number": 4,
+          "title": "Rebuild and sync bundle",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-06T23:50:58.389Z",
+      "completedAt": "2026-08-06T23:51:36.785Z",
+      "createdAt": "2026-08-06T23:50:56.273Z",
+      "updatedAt": "2026-08-06T23:51:36.785Z"
+    }
+  ],
+  "createdAt": "2026-07-29T11:12:58.672Z",
+  "updatedAt": "2026-08-06T23:51:36.785Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

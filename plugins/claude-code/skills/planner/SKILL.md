@@ -4,11 +4,11 @@ description: Agent Plan planner — manage project plans, features, phases, task
 
 # /planner — Agent Plan planner
 
-You are the Agent Plan planner. The `@agent-plan/mcp` server exposes the
-`planner-*` tools (35 public tools: `planner-init`, `planner-show`,
+You are the Agent Plan planner. The `@agent-plan/mcp` server exposes
+`planner-*` tools including `planner-init`, `planner-show`, `planner-version`,
 `planner-feature-*`, `planner-phase-*`, `planner-task-*`, `planner-handoff-*`,
 `planner-web`, `planner-load`, `planner-disable`, `planner-export`,
-`planner-authorize-bypass`, etc.). Route the `/planner <subcommand>` request
+`planner-authorize-bypass`, etc. Route the `/planner <subcommand>` request
 to the appropriate MCP tool call(s).
 
 ## Behavior contract
@@ -32,6 +32,7 @@ show this routing table and ask which subcommand they want.
 ### Core
 - `init` → `planner-init` (gather title + short description, create `.planner/`)
 - `show` → `planner-show`
+- `version` → `planner-version` (report the MCP/core versions actually loaded by this process)
 - `repair` → `planner-repair` (fix dangling refs, duplicate phase ids)
 - `load` → `planner-load` (enable planner + start web + recap)
 - `stop` / `disable` → `planner-disable` (disable planner + stop web)
@@ -61,13 +62,18 @@ show this routing table and ask which subcommand they want.
 - `task show <T00x>` → `planner-task-show`
 - `task add <P00x>` → `planner-task-add` (rich description required)
 - `task discuss <T00x>` → `planner-task-discuss`
+- `task recommend` → `planner-task-recommend` (active task → pending resume → feature/phase/task priority)
 - `task start <T00x>` → `planner-task-start` (set in-progress BEFORE editing code)
-- `task complete <T00x>` → `planner-task-complete`
-- `task update <T00x>` → `planner-task-update` (use `motivation` for blocking/canceled/etc.)
+- `task pause <T00x>` → `planner-task-pause` (mandatory reason, work checkpoint, exact resume location, and resume instructions)
+- `task switch <from> <to>` → `planner-task-switch` (deliberately override priority, pause/snapshot the source, start temporary work, and preserve a LIFO return target)
+- `task complete <T00x>` → `planner-task-complete` (a temporary task emits `RESUME REQUIRED` for its preserved source)
+- `task update <T00x>` → `planner-task-update` (use `motivation` for blocking/canceled/etc.; never enter `paused` through generic update)
 - `task delete <T00x>` → `planner-task-delete` (confirm first)
 - `task checklist-add <T00x> <title>` → `planner-task-checklist-add` — append ONE step (next C{n}, stable id, unchecked).
 - `task checklist-remove <T00x> <C{n}|id|title>` → `planner-task-checklist-remove` — remove ONE step; remaining renumber C1..Cn (ids stable).
 - `task checklist-toggle <T00x> <C{n}|id|title> [checked]` → `planner-task-checklist-toggle` — tick/untick ONE step WITHOUT rewriting the list. Accepts `C1`/`C2`…, item id, or title. Omit `checked` to toggle, or pass `true`/`false`.
+
+Normal task selection follows feature → phase → task priority. A lower-priority or cross-feature detour is valid when necessary, but it MUST use `planner-task-switch`; never start a second task while silently leaving another `in-progress`. Temporary switches form a LIFO return stack (A→B→C resumes C→B→A). When temporary work completes, treat `RESUME REQUIRED` as the next mandatory action. If another detour is still necessary, call `planner-task-switch` again from the paused resume target with a new checkpoint and reason.
 
 **Task checklist = implementation steps — use it to subdivide a task, not to spawn sub-tasks.** When a task needs to be broken into smaller steps, add them as checklist items (C1, C2, …) on the SAME task — do NOT create new child tasks just to track steps: sub-tasks disperse the information and context that belong together in one task. The checklist keeps everything (description, notes, statusLog, steps) concentrated in the single task.
 

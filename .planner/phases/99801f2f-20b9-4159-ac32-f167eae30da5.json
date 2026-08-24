@@ -1,0 +1,271 @@
+{
+  "id": "99801f2f-20b9-4159-ac32-f167eae30da5",
+  "featureId": "bd655486-e048-47ae-b06c-2bed511d89c6",
+  "number": 58,
+  "shortId": "9WWMZ",
+  "priority": 7,
+  "slug": "playwright-end-to-end-scenarios",
+  "title": "Playwright end-to-end scenarios",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Verify real server and browser workflows from bootstrap through resume and archive.",
+  "description": "Create Playwright scenarios against a real plan-server instance backed by an isolated temporary planner and the built Web UI. Cover first launch/project bootstrap, dashboard loading, feature/phase/task creation, required and optional fields, invalid submissions and blocked inserts, editing/deleting entities, requirements linked to phases, status changes and derived parent states, task completion, handoff visibility and archive navigation, repair, export, copyable composite IDs, live refresh, and mobile layouts. Seed handoffs through real API/MCP/Pi setup where the UI has no authoring control, then verify browser-visible results. Use fixtures for clean projects, populated projects, stale handoffs, and terminal phases; capture traces/screenshots only on failure and ensure server/browser processes are cleaned up.",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "b0865396-c4cb-427a-9062-d634464722c9",
+    "02940b16-7481-441e-a0b1-1a7968fe1720",
+    "44af3359-cc1c-4229-9d18-7b38a55a6b47",
+    "74b4e298-1cb8-4529-ad3c-97427f2dbe8a",
+    "69bf8270-6313-4517-a7ac-d5cc61d645a4",
+    "723a448c-ad9f-4d2f-98c3-d18d9375eb50"
+  ],
+  "tasks": [
+    {
+      "id": "b0865396-c4cb-427a-9062-d634464722c9",
+      "phaseId": "99801f2f-20b9-4159-ac32-f167eae30da5",
+      "number": 248,
+      "shortId": "AQYSC",
+      "priority": 1,
+      "shortName": "playwright-fixture",
+      "title": "Create Playwright server/browser fixture and project reset",
+      "status": "done",
+      "description": "Configure Playwright to build or consume the current Web UI, start a real plan-server on a dynamic port, create isolated temporary planner directories, and reset state per test or scenario. Add trace/video/screenshot-on-failure handling, API request helpers for controlled seeding, browser cleanup, and mobile/desktop projects. Never point Playwright at a user's real `.planner` directory.\n\n---\n**Completion summary:**\nCreated `e2e/fixtures.ts`: each browser scenario provisions an isolated temporary `.planner` root through the shared real PlanStore fixture factory, starts the compiled real plan-server plus built Web UI on an OS-assigned port, offers real `/api` request/seed helpers, and always closes server handles and removes the temp root. Added root Playwright dependency and installed the local Chromium runner. No user project planner is ever referenced. Base Playwright config/smoke validation follows in T261.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T22:48:46.253Z",
+      "completedAt": "2026-08-13T22:51:13.704Z",
+      "createdAt": "2026-08-09T17:42:39.148Z",
+      "updatedAt": "2026-08-13T22:51:13.704Z"
+    },
+    {
+      "id": "02940b16-7481-441e-a0b1-1a7968fe1720",
+      "phaseId": "99801f2f-20b9-4159-ac32-f167eae30da5",
+      "number": 249,
+      "shortId": "9JTK9",
+      "priority": 2,
+      "shortName": "playwright-bootstrap-crud",
+      "title": "Test bootstrap and entity CRUD through the browser",
+      "status": "done",
+      "description": "Automate opening the dashboard, verifying the empty/bootstrap state, creating features, phases, tasks, and requirements, and navigating to their detail/list pages. Cover valid optional descriptions and fields, missing/empty/invalid submissions, blocked inserts, edit/delete actions, confirmation dialogs, visible composite IDs, and persistence after reload. Assert browser-visible errors correspond to API validation without relying only on DOM snapshots.\n\n---\n**Completion summary:**\nAdded `e2e/bootstrap-crud.spec.ts` against real browser/server fixtures. Scenarios cover empty dashboard/bootstrap navigation; browser creation of feature, phase, task (including checklist), and linked requirement with composite F/P identifiers plus persistence after reload; browser-visible 400 validation failure with unchanged persistence; and feature edit/delete via native confirmation. Verified 4 Chromium scenarios pass.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T22:51:24.526Z",
+      "completedAt": "2026-08-13T22:56:00.028Z",
+      "createdAt": "2026-08-09T17:42:44.832Z",
+      "updatedAt": "2026-08-13T22:56:00.028Z"
+    },
+    {
+      "id": "44af3359-cc1c-4229-9d18-7b38a55a6b47",
+      "phaseId": "99801f2f-20b9-4159-ac32-f167eae30da5",
+      "number": 250,
+      "shortId": "Z73NV",
+      "priority": 3,
+      "shortName": "playwright-status-requirements",
+      "title": "Test status transitions, requirements, and dashboard behavior",
+      "status": "done",
+      "description": "Use the browser to link requirements to phases, update task/phase statuses, verify derived parent status and status history, inspect active task highlighting, filter/sort/expand the Work Tree, reorder where supported, and reload to confirm persistence. Include invalid transition/error states and ensure completed entities retain readable status and collapse behavior without hiding explicit user expansion choices.\n\n---\n**Completion summary:**\nAdded `e2e/status-dashboard.spec.ts`. Browser scenarios seed real plans, prepare governance through real API writes, then verify task planned→in-progress→done lifecycle, active-work header, persisted timestamps after reload, and no stale active display. A motivation-gated blocked transition visibly fails and leaves the task planned. Full-seed dashboard coverage verifies Work Tree expansion/filter/reset and requirement grouping by linked phase. Verified 3 Chromium scenarios pass.\n\n---\n**Completion summary:**\nRevalidated and corrected the status/dashboard browser scenarios for both configured viewports. The active-task count remains explicitly visible on desktop and mobile; the task link is asserted present in the banner DOM without incorrectly requiring visibility where the compact header intentionally hides its label. Final verification: `pnpm test:e2e` rebuilt the repository and passed all 22 Playwright scenarios across desktop and mobile Chromium.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "44af3359-cc1c-4229-9d18-7b38a55a6b47-check-001-done-planned",
+          "date": "2026-08-13T23:14:27.041Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Riapertura necessaria dopo la validazione completa della fase: `pnpm test:e2e` ha rilevato che lo scenario lifecycle richiede erroneamente la visibilità del titolo task nel banner mobile, dove il layout compatto lo mantiene intenzionalmente nascosto pur mostrando il contatore active. Correggere l'asserzione responsive e rieseguire l'intera suite desktop/mobile.",
+          "description": "Riapertura necessaria dopo la validazione completa della fase: `pnpm test:e2e` ha rilevato che lo scenario lifecycle richiede erroneamente la visibilità del titolo task nel banner mobile, dove il layout compatto lo mantiene intenzionalmente nascosto pur mostrando il contatore active. Correggere l'asserzione responsive e rieseguire l'intera suite desktop/mobile."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T22:56:11.084Z",
+      "completedAt": "2026-08-13T23:15:18.016Z",
+      "createdAt": "2026-08-09T17:42:50.482Z",
+      "updatedAt": "2026-08-13T23:15:18.016Z"
+    },
+    {
+      "id": "74b4e298-1cb8-4529-ad3c-97427f2dbe8a",
+      "phaseId": "99801f2f-20b9-4159-ac32-f167eae30da5",
+      "number": 251,
+      "shortId": "NHENX",
+      "priority": 4,
+      "shortName": "playwright-handoff-resume",
+      "title": "Test handoff archive and resume-visible workflows",
+      "status": "done",
+      "description": "Seed a handoff through a real API/MCP/Pi setup, verify it appears on `/handoff`, complete the final task through the browser, and assert it disappears from active results and appears under `/handoff/archive` with content, reason, timestamp, and composite phase reference. Verify replacement/clear behavior, archive expansion, stale cleanup, and resume-visible content after a fresh server/session load.\n\n---\n**Completion summary:**\nAdded `e2e/handoff-resume.spec.ts` using real API seeding plus browser lifecycle actions. It verifies pending handoff content persists across reload, browser completion of the final task removes it from pending and archives it with `phase-done`, reason/timestamp/composite reference UI; replacement creates a `superseded` archive; browser Clear confirms and creates `manual` archive. Verified 2 Chromium scenarios pass.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T23:01:06.579Z",
+      "completedAt": "2026-08-13T23:01:06.579Z",
+      "createdAt": "2026-08-09T17:42:56.497Z",
+      "updatedAt": "2026-08-13T23:01:06.579Z"
+    },
+    {
+      "id": "69bf8270-6313-4517-a7ac-d5cc61d645a4",
+      "phaseId": "99801f2f-20b9-4159-ac32-f167eae30da5",
+      "number": 252,
+      "shortId": "29XDB",
+      "priority": 5,
+      "shortName": "playwright-responsive-diagnost",
+      "title": "Test responsive layouts and browser diagnostics",
+      "status": "done",
+      "description": "Run key workflows at desktop and mobile viewports, especially create/edit modals, Work Tree, detail headers, project goal/latest tasks, handoff archive, filters, and navigation. Assert no horizontal overflow, titles wrap, controls remain reachable, dialogs scroll within the dynamic viewport, copyable badges work, and accessibility roles/names remain present. Retain Playwright traces and a concise overflow diagnostic on failure.\n\n---\n**Completion summary:**\nAdded `e2e/responsive.spec.ts` with desktop and mobile Chromium coverage for core navigation accessibility, dashboard goal/latest-task and Work Tree controls, copyable composite IDs, create-requirement modal reachability and dynamic-viewport scrolling, handoff archive navigation, and horizontal-overflow checks. Failure-only diagnostics attach viewport/document/body dimensions and the first overflowing elements. Fixed icon-only mobile navigation and Export controls in `packages/plan-web-ui/src/components/layout/top-nav.tsx` by adding stable accessible names. Verified `pnpm build:web-ui` and all 4 responsive Playwright scenarios pass across desktop and mobile projects.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "69bf8270-6313-4517-a7ac-d5cc61d645a4-check-001-in-progress-canceled",
+          "date": "2026-08-13T23:08:48.842Z",
+          "fromStatus": "in-progress",
+          "toStatus": "canceled",
+          "title": "User explicitly directed that P058(F015) be closed and that work stop immediately. Responsive-layout/diagnostic scenario work is discontinued; no further validation or code changes will be performed in this task.",
+          "description": "User explicitly directed that P058(F015) be closed and that work stop immediately. Responsive-layout/diagnostic scenario work is discontinued; no further validation or code changes will be performed in this task."
+        },
+        {
+          "id": "69bf8270-6313-4517-a7ac-d5cc61d645a4-check-002-canceled-planned",
+          "date": "2026-08-13T23:09:54.404Z",
+          "fromStatus": "canceled",
+          "toStatus": "planned",
+          "title": "Correzione immediata: avevo interpretato erroneamente la richiesta dell'utente di chiudere la fase come cancellazione delle attività. L'utente ha chiarito che intendeva eseguirle e completarle. Il task viene quindi ripristinato per essere portato a termine.",
+          "description": "Correzione immediata: avevo interpretato erroneamente la richiesta dell'utente di chiudere la fase come cancellazione delle attività. L'utente ha chiarito che intendeva eseguirle e completarle. Il task viene quindi ripristinato per essere portato a termine."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T23:03:06.970Z",
+      "completedAt": "2026-08-13T23:12:50.747Z",
+      "createdAt": "2026-08-09T17:43:05.386Z",
+      "updatedAt": "2026-08-13T23:12:50.747Z"
+    },
+    {
+      "id": "723a448c-ad9f-4d2f-98c3-d18d9375eb50",
+      "phaseId": "99801f2f-20b9-4159-ac32-f167eae30da5",
+      "number": 261,
+      "shortId": "7UBVD",
+      "priority": 6,
+      "shortName": "playwright-setup",
+      "title": "Set up Playwright dependencies and base configuration",
+      "status": "done",
+      "description": "Add the Playwright test dependency and configure the repository for browser E2E execution before implementing scenarios. Define `playwright.config.ts` with desktop/mobile projects, dynamic server startup or reusable webServer hooks, test timeouts, trace/screenshot/video-on-failure behavior, browser installation commands, temporary planner fixture isolation, and local/CI scripts. Verify the smallest smoke test can launch a browser, reach the real plan-server Web UI, and cleanly terminate all resources without touching a user project.\n\n---\n**Completion summary:**\nEstablished Playwright browser E2E infrastructure: root `@playwright/test` dependency and lockfile entries; `playwright.config.ts` with desktop/mobile Chromium projects, CI retries/workers, timeouts, failure-only trace/screenshot/video artifacts; root `test:e2e`, `test:e2e:ui`, and `test:e2e:install` commands; ignored Playwright reports/artifacts; and `e2e/fixtures.ts` with per-test temporary PlanStore projects, dynamic real plan-server ports, real built Web UI, request/seed helpers, and deterministic server/temp-directory cleanup. Verified `pnpm check` and the minimal real-browser bootstrap smoke scenario in desktop and mobile Chromium (2 passed), without touching a user planner.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "723a448c-ad9f-4d2f-98c3-d18d9375eb50-check-001-planned-canceled",
+          "date": "2026-08-13T23:08:52.905Z",
+          "fromStatus": "planned",
+          "toStatus": "canceled",
+          "title": "User explicitly directed that P058(F015) be closed and that work stop immediately. Playwright setup work is discontinued with the phase; no implementation will be performed.",
+          "description": "User explicitly directed that P058(F015) be closed and that work stop immediately. Playwright setup work is discontinued with the phase; no implementation will be performed."
+        },
+        {
+          "id": "723a448c-ad9f-4d2f-98c3-d18d9375eb50-check-002-canceled-planned",
+          "date": "2026-08-13T23:09:59.783Z",
+          "fromStatus": "canceled",
+          "toStatus": "planned",
+          "title": "Correzione immediata: avevo interpretato erroneamente la richiesta dell'utente di chiudere la fase come cancellazione delle attività. L'utente ha chiarito che intendeva eseguirle e completarle. Il task viene quindi ripristinato per essere portato a termine.",
+          "description": "Correzione immediata: avevo interpretato erroneamente la richiesta dell'utente di chiudere la fase come cancellazione delle attività. L'utente ha chiarito che intendeva eseguirle e completarle. Il task viene quindi ripristinato per essere portato a termine."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-13T23:13:03.978Z",
+      "completedAt": "2026-08-13T23:13:44.954Z",
+      "createdAt": "2026-08-09T18:02:03.366Z",
+      "updatedAt": "2026-08-13T23:13:44.954Z"
+    }
+  ],
+  "createdAt": "2026-08-09T17:39:39.020Z",
+  "updatedAt": "2026-08-13T23:15:18.016Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-13T23:02:04.504Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/99801f2f-20b9-4159-ac32-f167eae30da5-2026-08-13T23-08-52-909Z.md",
+      "clearedAt": "2026-08-13T23:08:52.909Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "bad2eff3-6f3b-4ac0-9d40-0a2aa1b53087",
+      "date": "2026-08-13T22:48:46.258Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "83495ccc-b5e6-424a-baa6-aa3a11935501",
+      "date": "2026-08-13T23:08:52.925Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "278da06e-7f1f-47f4-b90c-b4c4da00873f",
+      "date": "2026-08-13T23:09:54.409Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "adeaa372-1cb7-4d7a-8fee-9e4c452852a2",
+      "date": "2026-08-13T23:13:44.960Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "3c14afd3-bda5-4d46-8c14-e95b5149578e",
+      "date": "2026-08-13T23:14:27.047Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "726b48f0-c201-4e10-93c1-d20df1890c8f",
+      "date": "2026-08-13T23:15:18.021Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

@@ -19,6 +19,16 @@ import { FeatureTreeRow } from "./work-tree-rows";
 import { SortableItem } from "./sortable";
 import { SearchBar } from "./search-bar";
 
+// Strip the ?locate= query param from the URL WITHOUT a router navigation, so
+// React Router's <ScrollRestoration /> doesn't fire and reset the page scroll
+// to the top after we've already scrolled the located task into view.
+function clearLocateParam(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("locate")) return;
+  url.searchParams.delete("locate");
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 /**
  * The collapsible feature → phase → task Work Tree, plus its filter bar
  * (status chips, hide-done/planned, active-only, expand/collapse, repair).
@@ -74,7 +84,7 @@ function ToolbarButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex h-8 min-h-8 w-full items-center justify-center rounded-[10px] border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+      className={`inline-flex h-7 min-h-7 shrink-0 items-center justify-center whitespace-nowrap rounded-[9px] border px-2 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] sm:h-8 sm:min-h-8 sm:rounded-[10px] sm:px-2.5 ${
         active
           ? "border-transparent bg-[var(--accent)] text-white"
           : "border-[var(--border)] bg-[var(--surface-card)] text-[var(--text-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
@@ -90,11 +100,13 @@ export function WorkTree({
   phases,
   activeTasks,
   projectStorageScope,
+  resumeRequiredIds = new Set<string>(),
 }: {
   features: Feature[];
   phases: Phase[];
   activeTasks: ActiveTaskSummary[];
   projectStorageScope: string;
+  resumeRequiredIds?: Set<string>;
 }) {
   const tree = useDashboardTree({ features, phases, projectStorageScope });
   // Optimistic reorder: a transient per-scope order applied on drag-end so the
@@ -198,7 +210,7 @@ export function WorkTree({
   // locatePulseId (independent of recentTaskIds, which the hook prunes on data
   // change), then strips the param. Re-runs after expansion/filter renders until
   // the row is in the DOM. ──────────────────────────────────────────────
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [locatePulseId, setLocatePulseId] = useState<string | null>(null);
   const locateParam = searchParams.get("locate");
   const locateNum = locateParam ? parseInt(locateParam.replace(/^T/i, ""), 10) : null;
@@ -208,7 +220,12 @@ export function WorkTree({
       .flatMap((p) => p.tasks.map((t) => ({ t, p })))
       .find(({ t }) => t.number === locateNum);
     if (!found) {
-      setSearchParams((prev) => { prev.delete("locate"); return prev; }, { replace: true });
+      // `phases` may not be loaded yet (fresh mount or cross-route navigation
+      // into /?locate=…): keep the param so this effect retries once the data
+      // arrives, instead of stripping it prematurely and never scrolling.
+      // Only strip when the data is present and the task genuinely doesn't exist.
+      if (phases.length === 0) return;
+      clearLocateParam();
       return;
     }
     const { t, p } = found;
@@ -243,7 +260,7 @@ export function WorkTree({
       window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
       setLocatePulseId(t.id);
       const pulse = window.setTimeout(() => setLocatePulseId(null), 2500);
-      setSearchParams((prev) => { prev.delete("locate"); return prev; }, { replace: true });
+      clearLocateParam();
       return () => window.clearTimeout(pulse);
     }
     // else: expansion/filter change just requested → effect re-runs after render
@@ -315,18 +332,12 @@ export function WorkTree({
         </div>
       </div>
 
-      <div className="ap-search-sticky z-20 grid gap-3" style={{ top: headerH }}>
+      <div className="ap-search-sticky z-20 grid gap-2" style={{ top: headerH }}>
         <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SortControl sort={tree.sort} onChange={tree.setSort} />
-          {tree.searchActive ? (
-            <p className="text-xs text-[var(--text-muted)]">
-              {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
-            </p>
-          ) : null}
-        </div>
-        <div className="grid grid-cols-2 gap-2 rounded-[14px] border border-[var(--border)] bg-[var(--surface-card)] px-3 py-2 sm:grid-cols-3 sm:rounded-[18px] sm:px-4 sm:py-3 lg:grid-cols-6">
-          <ToolbarButton active={tree.isAllExpanded} onClick={() => tree.isAllExpanded ? tree.collapseAll() : tree.expandAll()}>
+          <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-[var(--border)] bg-[var(--surface-card)] px-2 py-1.5 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 sm:gap-2 sm:rounded-[14px] sm:px-3 sm:py-2">
+            <ToolbarButton active={tree.isAllExpanded} onClick={() => tree.isAllExpanded ? tree.collapseAll() : tree.expandAll()}>
             {tree.isAllExpanded ? "Collapse all" : "Expand all"}
           </ToolbarButton>
           <ToolbarButton active={tree.hideDone} onClick={() => tree.setHideDone((value) => !value)}>
@@ -361,8 +372,14 @@ export function WorkTree({
           >
             {repairing ? "Repairing…" : "Repair"}
           </ToolbarButton>
-          {repairMsg ? <span className="hidden text-xs text-[var(--text-muted)] sm:inline sm:truncate">{repairMsg}</span> : null}
+          </div>
         </div>
+        {tree.searchActive ? (
+          <p className="text-xs text-[var(--text-muted)]">
+            {tree.matchedTaskIds.size} match{tree.matchedTaskIds.size === 1 ? "" : "es"} — clear the box to reset.
+          </p>
+        ) : null}
+        {repairMsg ? <span className="text-xs text-[var(--text-muted)] sm:truncate">{repairMsg}</span> : null}
       </div>
 
       <div className="grid gap-3">
@@ -381,6 +398,7 @@ export function WorkTree({
                     isPhaseRecentlyChanged={isPhaseRecentlyChanged}
                     isTaskRecentlyChanged={isTaskRecentlyChanged}
                     highlightedTaskIds={(() => { const base = tree.searchActive ? tree.matchedTaskIds : undefined; if (!locatePulseId) return base; const set = new Set(base ?? []); set.add(locatePulseId); return set; })()}
+                    resumeRequiredIds={resumeRequiredIds}
                   />
                 </SortableItem>
               ))}

@@ -51,6 +51,13 @@ export function checkExplicitTaskStart(
     (deviation.state === "approved" || deviation.state === "active")
     && deviation.temporaryTaskId === taskId,
   );
+  const isPreservedResumeTarget = deviations.some((deviation) =>
+    (deviation.state === "approved"
+      || deviation.state === "active"
+      || deviation.state === "resume-required"
+      || deviation.state === "resolved")
+    && deviation.resumeTaskId === taskId,
+  );
   const startableStatus = candidate.task.status === "planned"
     || (candidate.task.status === "waiting" && isTemporaryOverride);
   if (!startableStatus) return { eligible: false, reason: `Task is not startable from ${candidate.task.status}.` };
@@ -88,38 +95,40 @@ export function recommendNextTask(
   const resumable = (candidate: TaskCandidate | undefined) => candidate
     && (candidate.task.status === "planned" || candidate.task.status === "waiting");
   const open = deviations
-    .filter((deviation) => deviation.state === "approved" || deviation.state === "active")
+    .filter((deviation) => deviation.state === "approved"
+      || deviation.state === "active"
+      || deviation.state === "resume-required"
+      || deviation.state === "resolved")
     .sort(newestFirst);
   const top = open[0];
   if (top) {
     const temporary = byTaskId.get(top.temporaryTaskId);
     const resume = byTaskId.get(top.resumeTaskId);
-    if (temporary && terminal.has(temporary.task.status) && resume && (resume.task.status === "planned" || resume.task.status === "waiting")) {
-      return { kind: "resume", candidate: resume, deviation: top, reason: "Resume the task preserved by the most recent approved deviation." };
+    const returnIsRequired = top.state === "resume-required"
+      || top.state === "resolved"
+      || (temporary && terminal.has(temporary.task.status));
+    if (returnIsRequired && resume && resumable(resume)) {
+      return { kind: "resume", candidate: resume, deviation: top, reason: "Resume required: return to the task preserved by the most recent deviation." };
     }
     // A deviation explicitly makes its temporary task eligible while it is
-    // planned or paused. Normal priority selection still excludes waiting work.
-    if (temporary && (temporary.task.status === "planned" || temporary.task.status === "waiting")) {
+    // planned or waiting. Normal priority selection excludes these
+    // states unless the deviation deliberately selected them.
+    if (temporary && resumable(temporary)) {
       return { kind: "resume", candidate: temporary, deviation: top, reason: "Continue the temporary task of the most recent approved deviation." };
     }
   }
 
-  // A completed temporary task resolves its record, but its explicit resume
-  // target remains the next recommendation until that target itself changes.
-  const resolved = deviations
-    .filter((deviation) => deviation.state === "resolved")
-    .sort(newestFirst)
-    .find((deviation) => resumable(byTaskId.get(deviation.resumeTaskId)));
-  if (resolved) {
-    const candidate = byTaskId.get(resolved.resumeTaskId);
-    if (candidate && resumable(candidate)) {
-      return {
-        kind: "resume",
-        candidate,
-        deviation: resolved,
-        reason: "Resume the task preserved by the most recently resolved deviation.",
-      };
-    }
+  // A saved checkpoint without a surviving deviation must never disappear
+  // behind new priority work. Select the most recent checkpoint (LIFO).
+  const checkpointed = candidates
+    .filter(({ task }) => task.status === "planned" && task.pauseSnapshot)
+    .sort((left, right) => right.task.pauseSnapshot!.pausedAt.localeCompare(left.task.pauseSnapshot!.pausedAt));
+  if (checkpointed[0]) {
+    return {
+      kind: "resume",
+      candidate: checkpointed[0],
+      reason: "Resume the most recent checkpoint before selecting new priority work.",
+    };
   }
 
   const ready = candidates.filter(({ feature, phase, task }) => {
@@ -131,4 +140,67 @@ export function recommendNextTask(
   return ready[0]
     ? { kind: "priority", candidate: ready[0], reason: "Highest-priority ready task by feature, phase, then task." }
     : { kind: "none", reason: "No ready task is available." };
+}
+
+/**
+ * Snapshot fields surfaced in the explicit resume-required proposal. Derived
+ * from {@link TaskPauseSnapshot}; kept structural so adapters can build it
+ * without importing the full snapshot type.
+ */
+export interface ResumeRequiredSnapshot {
+  reason: string;
+  resumeLocation: string;
+  howToResume: string;
+}
+
+/**
+ * Structured, harness-agnostic resume-required proposal. A pending resume must
+ * be surfaced loudly (force awareness) but must NOT hard-block an explicit
+ * start of a different task. The caller keeps the start advisory/non-blocking;
+ * this only standardizes the human-readable message and the machine-readable
+ * payload so every harness (Pi, MCP, Web UI) proposes resume the same way.
+ */
+export interface ResumeRequiredProposal {
+  text: string;
+  structured: {
+    taskId: string;
+    phaseId: string;
+    snapshot: ResumeRequiredSnapshot | null;
+  };
+}
+
+/**
+ * Build an explicit resume-required proposal. `ref` is the already-formatted
+ * composite reference (F00x/P00x/T00x) supplied by the caller; `snapshot` is
+ * the task's checkpoint (or the deviation's stored snapshot) when present.
+ */
+export function buildResumeRequiredProposal(params: {
+  ref: string;
+  title: string;
+  taskId: string;
+  phaseId: string;
+  snapshot: ResumeRequiredSnapshot | null;
+}): ResumeRequiredProposal {
+  const { ref, title, taskId, phaseId, snapshot } = params;
+  const reason = snapshot?.reason ?? "A preserved task is waiting to be resumed before new work begins.";
+  const resumeFrom = snapshot?.resumeLocation ?? "The preserved task's last checkpoint.";
+  const howToResume = snapshot?.howToResume ?? "Re-open the task detail and resume from its checkpoint.";
+  const text = [
+    `↩️ RESUME REQUIRED before starting a different task: ${ref} — ${title}`,
+    `Checkpoint reason: ${reason}`,
+    `Resume from: ${resumeFrom}`,
+    `How to resume: ${howToResume}`,
+    `Next action: task_start ${ref}`,
+    "Explicit task request honored — but resume the preserved work first, or explicitly confirm you intend to skip it.",
+  ].join("\n");
+  return {
+    text,
+    structured: {
+      taskId,
+      phaseId,
+      snapshot: snapshot
+        ? { reason: snapshot.reason, resumeLocation: snapshot.resumeLocation, howToResume: snapshot.howToResume }
+        : null,
+    },
+  };
 }

@@ -1,0 +1,33 @@
+{
+  "id": "f5152519-a5b4-4c15-a09f-398f77fb0e3d",
+  "number": 2,
+  "shortId": "",
+  "priority": 0,
+  "name": "Expose planner web lifecycle as agent tools (pi-adapter)",
+  "description": "Expose the planner web lifecycle (start/stop/status) and enable/disable (load/stop) as agent tools in the pi-adapter, so the Pi agent can manage the web dashboard directly — parity with @agent-plan/mcp's planner-web tool in Claude Code.\n\n## Current state\n- packages/pi-adapter/src/index.ts exposes the data CRUD tools as agent tools (plan_init, feature_*, phase_*, task_*, plan_get, project_update, etc.) via pi.registerTool.\n- The web lifecycle (start/stop/status) and planner enable/disable (load/stop) are ONLY available as /planner slash commands (handlers around lines 1094-1105, 3555). They are NOT registered as agent tools.\n- In Claude Code, @agent-plan/mcp exposes planner-web (start/status/stop) and planner-load/stop as MCP tools (PR #11, PR #16).\n- Problem demonstrated this session: when the planner is disabled (default), /planner slash commands are not intercepted, so neither the user nor the agent can start the web. The agent has no tool to do it.\n\n## Goal\n- Register 3 agent tools in pi-adapter that wrap the SAME internal functions used by the slash commands:\n  - planner-web (action: start | stop | status) — start binds LAN (0.0.0.0) with dynamic OS port; returns local URL, LAN URL, port.\n  - planner-load — enable planner + start web (LAN) + return recap (project status + handoff summary + Web UI address). Equivalent to the /planner load slash command.\n  - planner-stop (alias planner-disable) — disable planner + stop web.\n- Tool descriptions must state that planner operations are NOT code edits and the web does NOT auto-start.\n\n## Behaviors to preserve\n- Planner disabled by default; web does NOT auto-start (D4).\n- /planner load = enable + web(LAN) + recap; /planner stop = disable + stop web (D5).\n- Web UI address returned by the tool response (and surfaced on load recap); NOT appended to every message (D6).\n- Composite IDs in any recap (D10).\n\n## Code references\n- packages/pi-adapter/src/index.ts:2328+ — existing pi.registerTool registrations (pattern to follow).\n- packages/pi-adapter/src/index.ts:1094-1105, 3555 — slash command handlers for web/load/stop (internal functions to wrap: startServer, stopServer, getWebStatus, buildStartupResumeSummary).\n- packages/plan-mcp/src/index.ts — planner-web/planner-load/planner-stop MCP tool definitions (reference for tool names/signatures/return shapes to match for parity).\n\n## Non-goals\n- Changing plan-mcp (already has these tools).\n- Auto-starting the web (still explicit only).\n- Message_end URL append behavior (unchanged).",
+  "descriptionUpdatedAt": "2026-07-14T20:46:57.483Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [
+    {
+      "id": "F002-D1",
+      "title": "Web lifecycle exposed as agent tools",
+      "decision": "Register planner-web, planner-load, planner-stop as agent tools in pi-adapter wrapping the same internal helpers used by the /planner slash commands.",
+      "rationale": "The /planner slash commands are not intercepted when the planner is disabled (default), so neither user nor agent can start the web. Exposing the lifecycle as agent tools lets the Pi agent manage the web directly, matching Claude Code's plan-mcp planner-web tool.",
+      "implementationNotes": "3 new pi.registerTool calls in packages/pi-adapter/src/index.ts; reuse startServer/stopServer/getWebStatus/buildStartupResumeSummary; return shapes mirror @agent-plan/mcp for cross-harness parity.",
+      "acceptedAt": "2026-07-14T22:50:00.000Z"
+    }
+  ],
+  "phaseIds": [
+    "074c415c-e6c2-475f-849f-17ba1559676a"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-14T20:46:57.483Z",
+  "updatedAt": "2026-07-27T12:01:51.734Z"
+}

@@ -1,0 +1,241 @@
+{
+  "id": "63d46374-4f7f-4857-ab03-89b0c4a04a62",
+  "featureId": "66e695a2-70cc-4916-8a29-99fedb40cbd1",
+  "number": 43,
+  "shortId": "YEPYK",
+  "priority": 2,
+  "slug": "relocate-backups-and-generated-output-to-local",
+  "title": "Relocate backups and generated output to .local/",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "",
+  "description": "Move atomic-write crash backups and rendered markdown output from the tracked `.planner/` tree into `.planner/.local/`.\n\nCode references:\n- `packages/plan-core/src/plan-store.ts:169` — `atomicWriteText()` creates `path.bak` and `path.tmp.*`\n- `packages/plan-core/src/plan-store.ts:1917` — `writeGenerated()` writes to `generatedDir()`\n- `packages/plan-core/src/plan-store.ts:918` — `createSpaApp()` in `@agent-plan/server` serves static files\n- `packages/pi-adapter/src/index.ts:725` — `startServer()` / `resolveStaticDir()`\n- `packages/plan-web-ui` — build output copied to `packages/pi-adapter/web-ui-dist` and served via server\n\nCurrent state:\n- Every `atomicWriteJson` creates a `.bak` next to the source file, producing git churn.\n- `generated/` is inside `.planner/` and is regenerated entirely on many operations.\n\nWork to do:\n1. Add path helpers:\n   - `localRoot()` → `.planner/.local/`\n   - `backupPath(sourcePath)` → `.planner/.local/backups/<relative>.bak`\n   - `generatedDir()` → `.planner/.local/generated/`\n2. Update `atomicWriteText()` to copy the backup into `.local/backups/` instead of next to the source, and to write the temp file into `.local/tmp/` (or keep temp next to target but gitignored).\n3. Update `writeGenerated()` to write into `.local/generated/`.\n4. Update `serve.ts` (`@agent-plan/server`) and `pi-adapter` static resolution to serve generated markdown and the web bundle from the new paths.\n5. Update `scripts/copy-web-ui.sh` if it copies to a path under `pi-adapter/web-ui-dist`; verify it still serves from the relocated location.\n6. Add cleanup logic for stale backups (e.g. keep last N or age-based prune) to prevent unbounded disk growth.\n\nBehaviors to preserve:\n- Crash recovery must still work: if `atomicWriteText` fails mid-write, the previous version must be recoverable from `.local/backups/`.\n- Web UI must continue to see live updates when `.planner/` files change (watcher points to `.planner/` root; verify it still covers `.local/` if needed).\n- Generated markdown must remain human-readable and reachable for debugging.",
+  "descriptionUpdatedAt": "2026-08-06T15:26:12.949Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "e4c37e6e-2d9d-466f-99ba-c936e63f202b",
+    "08998390-d5c1-4bc9-ba0d-b4c793ab9eaa",
+    "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f"
+  ],
+  "tasks": [
+    {
+      "id": "e4c37e6e-2d9d-466f-99ba-c936e63f202b",
+      "phaseId": "63d46374-4f7f-4857-ab03-89b0c4a04a62",
+      "number": 202,
+      "shortId": "VSZ6D",
+      "priority": 1,
+      "shortName": "move-generated-to-local-genera",
+      "title": "Move generated/ to .local/generated/",
+      "status": "done",
+      "description": "Relocate rendered markdown output from `.planner/generated/` to `.planner/.local/generated/`.\n\nConcrete steps:\n1. Update `generatedDir()` path helper to return `.planner/.local/generated/`.\n2. Update `PlanStore.writeGenerated()` to write into the new directory.\n3. Update `@agent-plan/server` `createSpaApp()` and static file serving to look for generated markdown in the new path (if applicable).\n4. Update any code in `@agent-plan/pi-adapter`, `@agent-plan/mcp`, or scripts that references `.planner/generated/`.\n5. Update `scripts/copy-web-ui.sh` if needed.\n6. Verify Web UI live reload still works when generated files change.\n\n---\n**Completion summary:**\nImplemented as part of P042 commit: generatedDir() now returns .planner/.local/generated/, and PlanRenderer writes generated markdown views there. Verified via two-worktree test.",
+      "descriptionUpdatedAt": "2026-08-06T15:27:09.261Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e4c37e6e-2d9d-466f-99ba-c936e63f202b-check-001-update-generateddir-path",
+          "number": 1,
+          "title": "Update generatedDir path",
+          "checked": false
+        },
+        {
+          "id": "e4c37e6e-2d9d-466f-99ba-c936e63f202b-check-002-update-writegenerated-output-path",
+          "number": 2,
+          "title": "Update writeGenerated output path",
+          "checked": false
+        },
+        {
+          "id": "e4c37e6e-2d9d-466f-99ba-c936e63f202b-check-003-update-server-static-serving-path",
+          "number": 3,
+          "title": "Update server static serving path",
+          "checked": false
+        },
+        {
+          "id": "e4c37e6e-2d9d-466f-99ba-c936e63f202b-check-004-update-pi-adapter-mcp-script-references",
+          "number": 4,
+          "title": "Update pi-adapter/mcp/script references",
+          "checked": false
+        },
+        {
+          "id": "e4c37e6e-2d9d-466f-99ba-c936e63f202b-check-005-verify-web-ui-live-reload",
+          "number": 5,
+          "title": "Verify web UI live reload",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-06T16:22:52.611Z",
+      "completedAt": "2026-08-06T16:22:52.611Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:22:52.611Z"
+    },
+    {
+      "id": "08998390-d5c1-4bc9-ba0d-b4c793ab9eaa",
+      "phaseId": "63d46374-4f7f-4857-ab03-89b0c4a04a62",
+      "number": 196,
+      "shortId": "K2REA",
+      "priority": 1,
+      "shortName": "move-atomic-backups-to-local-b",
+      "title": "Move atomic backups to .local/backups/",
+      "status": "done",
+      "description": "Relocate crash backups from source-adjacent `.bak` files into `.planner/.local/backups/`.\n\nConcrete steps:\n1. Add `backupPath(sourcePath)` helper that maps a source path under `.planner/` to a backup path under `.planner/.local/backups/` (preserve relative directory structure).\n2. Update `atomicWriteText()` to write the backup to `.local/backups/` instead of `${path}.bak`.\n3. Keep temp files next to target but ensure they are written into `.local/tmp/` or continue to be gitignored; avoid `.bak` churn.\n4. Update backup cleanup / orphan removal logic to scan `.local/backups/`.\n5. Verify crash recovery still works: previous version must be restorable from `.local/backups/`.\n6. Update existing `.gitignore` handling (`.local/` already covers backups).\n\n---\n**Completion summary:**\nImplemented as part of P042 commit: atomicWriteText and atomicUpdateJson now compute backup paths under .planner/.local/backups/ from the local root. Verified via migration test.",
+      "descriptionUpdatedAt": "2026-08-06T15:27:09.261Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "08998390-d5c1-4bc9-ba0d-b4c793ab9eaa-check-001-add-backuppath-helper",
+          "number": 1,
+          "title": "Add backupPath helper",
+          "checked": false
+        },
+        {
+          "id": "08998390-d5c1-4bc9-ba0d-b4c793ab9eaa-check-002-update-atomicwritetext-backup-destination",
+          "number": 2,
+          "title": "Update atomicWriteText backup destination",
+          "checked": false
+        },
+        {
+          "id": "08998390-d5c1-4bc9-ba0d-b4c793ab9eaa-check-003-decide-temp-file-location",
+          "number": 3,
+          "title": "Decide temp file location",
+          "checked": false
+        },
+        {
+          "id": "08998390-d5c1-4bc9-ba0d-b4c793ab9eaa-check-004-update-orphan-backup-cleanup",
+          "number": 4,
+          "title": "Update orphan backup cleanup",
+          "checked": false
+        },
+        {
+          "id": "08998390-d5c1-4bc9-ba0d-b4c793ab9eaa-check-005-test-crash-recovery",
+          "number": 5,
+          "title": "Test crash recovery",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-06T16:22:52.611Z",
+      "completedAt": "2026-08-06T16:22:52.611Z",
+      "createdAt": "2026-08-06T15:27:09.261Z",
+      "updatedAt": "2026-08-06T16:22:52.611Z"
+    },
+    {
+      "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f",
+      "phaseId": "63d46374-4f7f-4857-ab03-89b0c4a04a62",
+      "number": 301,
+      "shortId": "36P47",
+      "priority": 2,
+      "shortName": "relocate-updatephase-crash-bac",
+      "title": "Relocate updatePhase crash-backups into .local/backups (stop inline .bak leak)",
+      "status": "done",
+      "description": "## Current state\nPlanStore writes a previous-version crash backup on every atomic write. The backup target is decided by the optional `root` arg in `atomicWriteText` / `atomicUpdateJson` (packages/plan-core/src/plan-store.ts:233-300):\n- when `root` is passed → backup at `<root>/.local/backups/<rel>.bak` (correct, per P043)\n- when `root` is omitted → backup INLINE at `<dir>/<file>.bak` (leaks into the working tree)\n\nEvery write passes `this.root` EXCEPT `updatePhase` (plan-store.ts:2065-2071), which calls `atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, …)` without `this.root`. Result: every phase *update* leaves `.planner/phases/<id>.json.bak` inline next to the source file, while phase *creates* (line 2057), project/requirements/feature writes all correctly land in `.local/backups`. The file is gitignored (`*.bak`) so it is never committed, but it pollutes the working tree and is inconsistent with P043's goal of relocating backups into `.local/`.\n\n## Coupling (must keep crash-recovery working)\n- `readJson` fallback (plan-store.ts:553-558) reads `${path}.bak` (INLINE) to recover a corrupted/missing main file. Moving updatePhase backups to `.local/backups` would break that recovery unless readJson also checks `.local/backups`.\n- `deletePhase` (plan-store.ts:2396-2397) unlinks the inline `${path}.bak`; must also remove the `.local/backups` copy or it orphans.\n- `cleanupOrphanBackups` (plan-store.ts:1544+) scans `.planner/` + phasesDir for inline `*.json.bak`/`*.tmp.*`; extend to `.local/backups` orphans.\n\n## Steps\n1. `updatePhase` (line 2071): pass `this.root` as the 4th arg to `atomicUpdateJson`.\n2. `readJson`: add optional `root?` param; on read failure try (a) legacy inline `${path}.bak`, then (b) `join(root, \".local\", \"backups\", rel + \".bak\")` when `root` is a prefix of `path`. Thread `this.root` at the key read call sites (`getPhase` 1187, `loadFeatures`, `loadAllPhases`, `loadRequirements`).\n3. `deletePhase` (line 2397): also `unlink` the `.local/backups/phases/<id>.json.bak` copy.\n4. `cleanupOrphanBackups`: also scan `.local/backups` and drop `*.json.bak` whose main file no longer exists.\n\n## Edge cases\n- Old repos may still contain inline `.planner/phases/<id>.json.bak` from before this fix — keep the legacy inline fallback in readJson so they still recover; cleanupOrphanBackups removes them once stale.\n- `rel` must preserve the subpath (`phases/<id>.json`) so backups do not collide in `.local/backups` root.\n- Do NOT change `.gitignore` (already ignores `*.bak` and `.local/`).\n- Re-run `pnpm check` + plan-core/web-ui tests; verify no inline `.bak` appears after a phase update and that a corrupted phase file still recovers from `.local/backups`.\n\n---\n**Completion summary:**\nFixato il leak di `.bak` inline in plan-store.ts (T301 / P043). Causa: `updatePhase` chiamava `atomicUpdateJson` senza `this.root`, quindi il backup finiva inline in `.planner/phases/<id>.json.bak` invece che in `.local/backups`. Modifiche: (1) `updatePhase` ora passa `this.root`; (2) `readJson` tenta prima il `.bak` inline legacy, poi `.planner/.local/backups/<rel>.bak` (root derivato risalendo il path, senza toccare i 14 call site); (3) `deletePhase` rimuove anche la copia in `.local/backups`; (4) `cleanupOrphanBackups` scandisce ricorsivamente `.local/backups` e rimuove gli orfani. Verifiche: `pnpm check` verde su plan-core e plan-web-ui; test backup (read-diagnostics) 4/4 verdi (recovery da inline e da `.local/backups` funzionante). I 9 fallimenti residui nella suite di plan-core sono in display-status/task-selection/phase-task-validation (P059/T253, già modificati sul branch e estranei ai backup). File toccati: packages/plan-core/src/plan-store.ts. Non committato (regole di progetto).",
+      "descriptionUpdatedAt": "2026-08-21T15:44:09.786Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f-check-001-planned-in-progress",
+          "date": "2026-08-21T15:39:00.442Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Move resume-awareness runtime state to worktree-local storage."
+        },
+        {
+          "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f-check-002-in-progress-done",
+          "date": "2026-08-21T15:44:09.784Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f-check-001-updatephase-passes-this-root-to-atomicupdatejson",
+          "number": 1,
+          "title": "updatePhase passes this.root to atomicUpdateJson",
+          "checked": true
+        },
+        {
+          "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f-check-002-readjson-fallback-checks-local-backups-thread-root",
+          "number": 2,
+          "title": "readJson fallback checks .local/backups (thread root)",
+          "checked": true
+        },
+        {
+          "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f-check-003-deletephase-removes-local-backups-copy",
+          "number": 3,
+          "title": "deletePhase removes .local/backups copy",
+          "checked": true
+        },
+        {
+          "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f-check-004-cleanuporphanbackups-scans-local-backups",
+          "number": 4,
+          "title": "cleanupOrphanBackups scans .local/backups",
+          "checked": true
+        },
+        {
+          "id": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f-check-005-pnpm-check-tests-green-verify-recovery",
+          "number": 5,
+          "title": "pnpm check + tests green; verify recovery",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T15:39:00.442Z",
+      "completedAt": "2026-08-21T15:44:09.784Z",
+      "createdAt": "2026-08-21T15:38:23.805Z",
+      "updatedAt": "2026-08-21T15:44:09.784Z"
+    }
+  ],
+  "createdAt": "2026-08-06T15:26:12.949Z",
+  "updatedAt": "2026-08-21T15:44:09.784Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "563f8b92-c3dc-452b-bc94-b5b97fd18447",
+      "date": "2026-08-21T15:39:00.483Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "16567c62-49af-4d63-9ef4-2b876601ae9d",
+      "date": "2026-08-21T15:44:09.790Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

@@ -26,6 +26,8 @@ import {
   PhaseSchema,
   type Phase,
   type Task,
+  type TaskPauseSnapshot,
+  TaskPauseSnapshotSchema,
   type PlanWorkspace,
   PlanWorkspaceSchema,
   type Project,
@@ -41,9 +43,11 @@ import {
   type CodebaseProfile,
   type ResumeFocus,
   type WorkDeviation,
+  WorkDeviationSchema,
 } from "./schema.js";
 import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
+import { loadExtensionRules, PLANNER_EXTENSION_RULES } from "./planner-rules.js";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -516,6 +520,40 @@ export async function migrateToGlobalSequence(store: PlanStore): Promise<{ migra
   });
 }
 
+/** Map legacy/removed status strings to their canonical replacements before
+ * schema validation. Canonical task status "paused" was removed from the
+ * domain; persisted entities (tasks, statusLog entries) may still carry it.
+ * Rewriting on read keeps legacy data loadable without a one-time migration
+ * pass, and the normalized value is persisted on the next save. Scoped to
+ * status-bearing fields so unrelated string values are never touched. */
+function migrateLegacyStatuses(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(migrateLegacyStatuses);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if ((key === "status" || key === "fromStatus" || key === "toStatus") && child === "paused") {
+        out[key] = "planned";
+      } else {
+        out[key] = migrateLegacyStatuses(child);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Walk up from `path` to find the owning `.planner` root, so crash-recovery
+ *  can locate `.local/backups/<rel>.bak` without every readJson caller threading
+ *  `root`. Returns undefined if no `.planner` ancestor exists. */
+function findPlannerRoot(path: string): string | undefined {
+  let dir = dirname(path);
+  while (dir !== dirname(dir)) {
+    if (basename(dir) === ".planner") return dir;
+    dir = dirname(dir);
+  }
+  return undefined;
+}
+
 async function readJson<T>(path: string, schema: { parse(v: unknown): T }): Promise<T> {
   let backupTried = false;
   let backupFailed = false;
@@ -524,18 +562,32 @@ async function readJson<T>(path: string, schema: { parse(v: unknown): T }): Prom
   try {
     const raw = await readFile(path, "utf-8");
     rawPreview = raw.slice(0, 240);
-    return schema.parse(JSON.parse(raw));
+    return schema.parse(migrateLegacyStatuses(JSON.parse(raw)));
   } catch (cause) {
-    // Try the .bak backup before giving up (recover from external-write corruption).
+    // Recover from the previous-version backup before giving up:
+    //  1) legacy inline `<file>.bak` (next to the source), then
+    //  2) the relocated `.planner/.local/backups/<rel>.bak` (P043).
     backupTried = true;
-    try {
-      const bak = await readFile(`${path}.bak`, "utf-8");
-      rawPreview = bak.slice(0, 240);
-      return schema.parse(JSON.parse(bak));
-    } catch {
-      backupFailed = true;
-      // fall through to original error
+    const tryBackup = async (bakPath: string): Promise<T | undefined> => {
+      try {
+        const bak = await readFile(bakPath, "utf-8");
+        rawPreview = bak.slice(0, 240);
+        return schema.parse(migrateLegacyStatuses(JSON.parse(bak)));
+      } catch {
+        return undefined;
+      }
+    };
+    const inline = await tryBackup(`${path}.bak`);
+    if (inline !== undefined) return inline;
+    let local: T | undefined;
+    const plannerRoot = findPlannerRoot(path);
+    if (plannerRoot) {
+      const rel = path.slice(plannerRoot.length).replace(/^\//, "");
+      local = await tryBackup(join(plannerRoot, ".local", "backups", rel + ".bak"));
     }
+    if (local !== undefined) return local;
+    backupFailed = true;
+    // fall through to original error
 
     const details: PlanStoreErrorDetails = {
       path,
@@ -633,25 +685,84 @@ export class PlanStore {
   private normalizeTasks(tasks: Task[]): { tasks: Task[]; changed: boolean } {
     // Numbers are a STABLE global sequence (assigned once at create from project.nextTaskNumber).
     // Do NOT renumber here — renumbering would break references after deletions.
-    return { tasks, changed: false };
+    const normalized = tasks.map((task) => {
+      const descriptionUpdatedAt = task.description && !task.descriptionUpdatedAt
+        ? task.createdAt
+        : task.descriptionUpdatedAt;
+      const normalizedStatus = (task.status as string) === "paused" ? "planned" : task.status;
+      const pauseSnapshot = this.isTerminalTaskStatus(normalizedStatus) ? null : task.pauseSnapshot;
+      const statusLog = (task.statusLog ?? []).map((entry) => ({
+        ...entry,
+        fromStatus: (entry.fromStatus as string) === "paused" ? "planned" : entry.fromStatus,
+        toStatus: (entry.toStatus as string) === "paused" ? "planned" : entry.toStatus,
+      }));
+      if (
+        descriptionUpdatedAt !== task.descriptionUpdatedAt
+        || normalizedStatus !== task.status
+        || pauseSnapshot !== task.pauseSnapshot
+        || statusLog.some((entry, index) => entry !== task.statusLog[index])
+      ) {
+        return { ...task, descriptionUpdatedAt, status: normalizedStatus, pauseSnapshot, statusLog };
+      }
+      return task;
+    });
+    return { tasks: normalized, changed: normalized.some((task, index) => task !== tasks[index]) };
+  }
+
+  private isTerminalTaskStatus(status: Task["status"] | undefined): boolean {
+    return status === "done" || status === "canceled" || status === "rejected";
+  }
+
+  private async pruneObsoleteWorkDeviations(): Promise<void> {
+    const phases = await this.loadAllPhases();
+    const taskStatusById = new Map(phases.flatMap((phase) => phase.tasks.map((task) => [task.id, task.status] as const)));
+    const current = await this.loadWorkDeviations();
+    const next = current.filter((deviation) => {
+      const resumeStatus = taskStatusById.get(deviation.resumeTaskId);
+      return Boolean(resumeStatus) && !this.isTerminalTaskStatus(resumeStatus);
+    });
+    if (next.length === current.length) return;
+    await this.saveWorkDeviations(next);
+    await this.refreshResume();
+  }
+
+  /** Stamp description edits independently from generic entity mutations.
+   * Legacy entities cannot reveal their historical description-edit time, so
+   * their creation time is the earliest truthful fallback. */
+  private stampDescriptionUpdatedAt<T extends { description: string; descriptionUpdatedAt: string; createdAt: string }>(
+    entity: T,
+    previousDescription: string | undefined,
+    timestamp: string,
+  ): T {
+    if (!entity.description) return { ...entity, descriptionUpdatedAt: "" };
+    if (previousDescription === undefined || previousDescription !== entity.description) {
+      return { ...entity, descriptionUpdatedAt: timestamp };
+    }
+    return entity.descriptionUpdatedAt ? entity : { ...entity, descriptionUpdatedAt: entity.createdAt };
   }
 
   private normalizeFeaturesDocument(doc: FeaturesDocument): { doc: FeaturesDocument; changed: boolean } {
     // Numbers are a STABLE global sequence (assigned once at create from project.nextFeatureNumber).
-    return { doc, changed: false };
+    const features = doc.features.map((feature) => feature.description && !feature.descriptionUpdatedAt
+      ? { ...feature, descriptionUpdatedAt: feature.createdAt }
+      : feature);
+    return { doc: { ...doc, features }, changed: features.some((feature, index) => feature !== doc.features[index]) };
   }
 
   private normalizePhaseDocument(phase: RawPhase): { phase: RawPhase; changed: boolean } {
     const { tasks, changed } = this.normalizeTasks(phase.tasks);
     const nextTaskIds = tasks.map((task) => task.id);
     const taskIdsChanged = nextTaskIds.length !== phase.taskIds.length || nextTaskIds.some((id, index) => id !== phase.taskIds[index]);
+    const descriptionUpdatedAt = phase.description && !phase.descriptionUpdatedAt ? phase.createdAt : phase.descriptionUpdatedAt;
+    const descriptionTimestampChanged = descriptionUpdatedAt !== phase.descriptionUpdatedAt;
     return {
       phase: {
         ...phase,
+        descriptionUpdatedAt,
         tasks,
         taskIds: nextTaskIds,
       },
-      changed: changed || taskIdsChanged,
+      changed: changed || taskIdsChanged || descriptionTimestampChanged,
     };
   }
 
@@ -834,7 +945,28 @@ export class PlanStore {
     return join(this.localRoot(), "activity.json");
   }
   private localRoot(): string {
+    // Worktree-local, git-ignored runtime state. The shared-vs-local boundary
+    // and the invariants every harness relies on are documented in
+    // packages/plan-core/docs/runtime-boundaries.md.
     return join(this.root, ".local");
+  }
+  private deviationsPath(): string {
+    return join(this.localRoot(), "deviations.json");
+  }
+
+  /** Runtime work deviations, persisted in worktree-local `.local/deviations.json`
+   *  (never in shared `project.json`). Falls back to `[]` on a missing/corrupt file. */
+  private async loadWorkDeviations(): Promise<WorkDeviation[]> {
+    try {
+      return await readJson(this.deviationsPath(), WorkDeviationSchema.array());
+    } catch {
+      return [];
+    }
+  }
+
+  private async saveWorkDeviations(deviations: WorkDeviation[]): Promise<void> {
+    await atomicWriteJson(this.deviationsPath(), deviations, this.root);
+    await this.maybeAutoSync();
   }
   private timestampPath(): string {
     return join(this.localRoot(), "timestamp.json");
@@ -924,6 +1056,9 @@ export class PlanStore {
 
     await atomicWriteJson(this.manifestPath(), manifest, this.root);
     await atomicWriteJson(this.timestampPath(), { updatedAt: manifest.updatedAt }, this.root);
+    // Seed the worktree-local runtime-deviation store (T299). Empty for new
+    // projects; migrateWorkDeviations (loadProject) backfills legacy data.
+    await atomicWriteJson(this.deviationsPath(), [], this.root);
     await this.saveProject({
       name: projectName,
       goal: "",
@@ -963,6 +1098,16 @@ export class PlanStore {
     });
     await this.writeGenerated();
 
+    // Write the STATIC planner extension rules. Content is fixed (no timestamps,
+    // no dynamic data) so the file is identical across worktrees/branches and
+    // never causes git conflicts. The canonical source is plan-core; this file
+    // is the per-project copy / override point, loaded at planner startup.
+    await writeFile(
+      join(this.root, "rules.json"),
+      JSON.stringify({ extensionRules: PLANNER_EXTENSION_RULES }, null, 2),
+      "utf-8",
+    );
+
     // Write a README stub
     const readme = [
       "# Project Plan",
@@ -987,6 +1132,16 @@ export class PlanStore {
     //   timestamp (guardBypassUntil must NOT leak into git/other clones)
     // - generated/: auto-regenerated markdown views (derived from JSON; churn)
     await writeFile(join(this.root, ".gitignore"), PLANNER_GITIGNORE, "utf-8");
+  }
+
+  /**
+   * Planner extension rules — the agent-behavior contract for every project
+   * using the extension. Loaded from the static .planner/rules.json if present,
+   * otherwise the canonical code set. Static (no timestamps), safe across
+   * worktrees/branches.
+   */
+  async extensionRules(): Promise<string[]> {
+    return loadExtensionRules(this.root);
   }
 
   /** Idempotently ensure `.planner/.gitignore` ignores `.local/` (and the
@@ -1031,7 +1186,19 @@ export class PlanStore {
   }
 
   async loadProject(): Promise<Project> {
-    return readJson(this.projectPath(), ProjectSchema);
+    const project = await readJson(this.projectPath(), ProjectSchema);
+    // One-time migration (T299): move runtime workDeviations from the shared
+    // project.json into worktree-local .local/deviations.json, then clear them
+    // in project.json so runtime state never churns shared metadata.
+    // Idempotent: a non-empty .local file is never overwritten.
+    if (project.workDeviations.length > 0 && (await this.loadWorkDeviations()).length === 0) {
+      await this.saveWorkDeviations(project.workDeviations);
+      await atomicUpdateJson(this.projectPath(), ProjectSchema, (p) => ({ ...p, workDeviations: [] }), this.root);
+    }
+    // Read-view merge: readers keep using `project.workDeviations`, but the
+    // values now come from worktree-local storage.
+    const deviations = await this.loadWorkDeviations();
+    return { ...project, workDeviations: deviations };
   }
 
   /**
@@ -1144,7 +1311,10 @@ export class PlanStore {
     const raws = await this.loadRawFeatures();
     const phases = await this.loadAllPhases();
     const features: Feature[] = raws.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
-    return this.normalizeStructureSnapshot({ features }, phases).features;
+    // Keep legacy feature descriptions displayable without rewriting on read.
+    // Phase/task reads already apply the equivalent creation-date fallback.
+    const normalizedFeatures = this.normalizeFeaturesDocument({ features }).doc.features;
+    return this.normalizeStructureSnapshot({ features: normalizedFeatures }, phases).features;
   }
 
   async loadCodebaseProfile(): Promise<CodebaseProfile | null> {
@@ -1466,6 +1636,22 @@ export class PlanStore {
           try { await unlink(full); removed += 1; } catch { /* ignore */ }
         }
       }
+      const backupsRoot = join(this.root, ".local", "backups");
+      const walkBackups = async (dir: string): Promise<void> => {
+        let entries: string[] = [];
+        try { entries = await readdir(dir); } catch { return; }
+        for (const name of entries) {
+          const full = join(dir, name);
+          let st;
+          try { st = await stat(full); } catch { continue; }
+          if (st.isDirectory()) { await walkBackups(full); continue; }
+          if (!name.endsWith(".json.bak")) continue;
+          const rel = full.slice(backupsRoot.length).replace(/^\//, "");
+          const mainPath = join(this.root, rel.slice(0, -".bak".length));
+          try { await stat(mainPath); } catch { try { await unlink(full); removed += 1; } catch { /* ignore */ } }
+        }
+      };
+      await walkBackups(backupsRoot);
     } catch { /* best-effort */ }
     return { removed };
   }
@@ -1700,13 +1886,11 @@ export class PlanStore {
     const hasDeferred = meaningful.some((s) => s === "deferred");
 
     if (hasActive) return "in-progress";
-    // If completed work exists and the ONLY remaining meaningful work is deferred,
-    // surface deferred instead of implying active execution.
     if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
     // Partial completion with remaining planned/blocked/waiting work still means
     // the phase has genuinely started and is not terminal yet.
     if (hasDone) return "in-progress";
-    // No progress at all ⇒ surface the stall / not-started state (blocked > waiting > deferred > planned).
+    // No progress at all ⇒ surface the stall / not-started state.
     if (hasBlocked) return "blocked";
     if (hasWaiting) return "waiting";
     if (hasDeferred) return "deferred";
@@ -1731,7 +1915,6 @@ export class PlanStore {
     const hasDeferred = meaningful.some((s) => s === "deferred");
 
     if (hasActive) return "in-progress";
-    // Same rule as phases: done + deferred-only remainder is deferred, not active.
     if (hasDone && !hasPlanned && !hasBlocked && !hasWaiting && hasDeferred) return "deferred";
     if (hasDone) return "in-progress";
     // No progress at all ⇒ surface the stall / not-started state.
@@ -1827,30 +2010,43 @@ export class PlanStore {
 
   /** Persist an explicitly approved work deviation without coupling it to a harness. */
   async addWorkDeviation(deviation: WorkDeviation): Promise<Project> {
-    return this.updateProject((project) => ({
-      ...project,
-      workDeviations: [...project.workDeviations, deviation],
-    }));
+    const deviations = [...(await this.loadWorkDeviations()), deviation];
+    await this.saveWorkDeviations(deviations);
+    return this.loadProject();
   }
 
-  /** Mark an approved/active deviation as resolved or canceled while retaining its audit record. */
-  async setWorkDeviationState(id: string, state: "active" | "resolved" | "canceled", timestamp = nowISO()): Promise<Project> {
-    return this.updateProject((project) => ({
-      ...project,
-      workDeviations: project.workDeviations.map((deviation) => deviation.id !== id ? deviation : {
-        ...deviation,
-        state,
-        activatedAt: state === "active" ? timestamp : deviation.activatedAt,
-        resolvedAt: state === "resolved" || state === "canceled" ? timestamp : deviation.resolvedAt,
-      }),
-    }));
+  /** Advance a deviation while retaining its complete audit and return stack. */
+  async setWorkDeviationState(
+    id: string,
+    state: "active" | "resume-required" | "resolved" | "resumed" | "canceled",
+    timestamp = nowISO(),
+  ): Promise<Project> {
+    const deviations = await this.loadWorkDeviations();
+    const next = deviations.map((deviation) => deviation.id !== id ? deviation : {
+      ...deviation,
+      state,
+      activatedAt: state === "active" ? timestamp : deviation.activatedAt,
+      resumeRequiredAt: state === "resume-required" ? timestamp : deviation.resumeRequiredAt,
+      resolvedAt: state === "resolved" || state === "canceled" ? timestamp : deviation.resolvedAt,
+      resumedAt: state === "resumed" ? timestamp : deviation.resumedAt,
+    });
+    await this.saveWorkDeviations(next);
+    return this.loadProject();
   }
 
   async updateFeatures(updater: (f: FeaturesDocument) => FeaturesDocument): Promise<FeaturesDocument> {
     const updated = await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
       const current = await this.loadFeatures();
-      const upd = this.normalizeFeaturesDocument(updater(current)).doc;
+      // Updaters commonly mutate `current` in place, so snapshot descriptions
+      // before invoking them rather than comparing object references afterward.
+      const previousDescriptions = new Map(current.features.map((feature) => [feature.id, feature.description]));
+      const timestamp = nowISO();
+      const candidate = updater(current);
+      const stamped: FeaturesDocument = {
+        features: candidate.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), timestamp)),
+      };
+      const upd = this.normalizeFeaturesDocument(stamped).doc;
       await this.saveFeaturesRaw(upd);
       return upd;
     });
@@ -1865,7 +2061,9 @@ export class PlanStore {
   }
 
   async saveProject(project: Project): Promise<void> {
-    const parsed = ProjectSchema.parse(project);
+    // Runtime workDeviations live in .local/deviations.json (T299); never
+    // persist them here so shared project.json stays stable across worktrees.
+    const parsed = ProjectSchema.parse({ ...project, workDeviations: [] });
     await atomicWriteJson(this.projectPath(), parsed, this.root);
     await this.touchTimestamp();
     await this.maybeAutoSync();
@@ -1874,7 +2072,11 @@ export class PlanStore {
   async saveFeatures(features: FeaturesDocument): Promise<void> {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
-      await this.saveFeaturesRaw(features);
+      const previousDescriptions = new Map((await this.loadRawFeatures()).map((feature) => [feature.id, feature.description]));
+      const timestamp = nowISO();
+      await this.saveFeaturesRaw({
+        features: features.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), timestamp)),
+      });
     });
     await this.touchTimestamp();
     await this.maybeAutoSync();
@@ -1907,8 +2109,9 @@ export class PlanStore {
   async saveFeature(feature: Feature): Promise<void> {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
+      const previous = await readJson(this.featurePath(feature.id), FeatureSchema).catch(() => null);
       await mkdir(this.featuresDir(), { recursive: true });
-      const parsed = FeatureSchema.parse(feature);
+      const parsed = FeatureSchema.parse(this.stampDescriptionUpdatedAt(feature, previous?.description, nowISO()));
       await atomicWriteJson(this.featurePath(parsed.id), parsed, this.root);
     });
     await this.touchTimestamp();
@@ -1922,6 +2125,8 @@ export class PlanStore {
   }
 
     async savePhase(phase: Phase): Promise<void> {
+    const previous = await this.loadPhase(phase.id).catch(() => null);
+    const timestamp = nowISO();
     const features = await this.loadRawFeatures();
     const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
     // Referential integrity: if a featureId is present but cannot be resolved
@@ -1939,7 +2144,10 @@ export class PlanStore {
     const normalizedInput = resolvedFeatureId && resolvedFeatureId !== phase.featureId
       ? { ...phase, featureId: resolvedFeatureId }
       : phase;
-    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(normalizedInput).phase);
+    const previousTaskDescriptions = new Map((previous?.tasks ?? []).map((task) => [task.id, task.description]));
+    const timestamped = this.stampDescriptionUpdatedAt(normalizedInput, previous?.description, timestamp);
+    timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), timestamp));
+    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(timestamped).phase);
     await mkdir(this.phasesDir(), { recursive: true });
     await atomicWriteJson(this.phasePath(parsed.id), parsed, this.root);
     await this.touchTimestamp();
@@ -1957,21 +2165,99 @@ export class PlanStore {
     // not persisted); the return value is re-derived for the caller.
     const raw = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (rawPhase) => {
       const current: Phase = { ...rawPhase, status: this.derivePhaseStatus(rawPhase.tasks) };
+      // The updater may mutate `current`, therefore snapshot descriptions first.
+      const previousDescription = current.description;
+      const previousTaskDescriptions = new Map(current.tasks.map((task) => [task.id, task.description]));
+      const timestamp = nowISO();
       const next = updater(current);
-      const resolvedFeatureId = resolveStoredFeatureId(features, next.featureId);
+      const timestamped = this.stampDescriptionUpdatedAt(next, previousDescription, timestamp);
+      timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), timestamp));
+      const resolvedFeatureId = resolveStoredFeatureId(features, timestamped.featureId);
       // Referential integrity: reject orphan featureId.
-      if (next.featureId && next.featureId.trim() && !resolvedFeatureId) {
+      if (timestamped.featureId && timestamped.featureId.trim() && !resolvedFeatureId) {
         throw new PlanStoreError(
-          `Cannot update phase: featureId "${next.featureId}" does not match any existing feature.`,
+          `Cannot update phase: featureId "${timestamped.featureId}" does not match any existing feature.`,
         );
       }
-      const normalizedInput = resolvedFeatureId && resolvedFeatureId !== next.featureId
-        ? { ...next, featureId: resolvedFeatureId }
-        : next;
+      const normalizedInput = resolvedFeatureId && resolvedFeatureId !== timestamped.featureId
+        ? { ...timestamped, featureId: resolvedFeatureId }
+        : timestamped;
       return this.normalizePhaseDocument(normalizedInput).phase;
-    });
+    }, this.root);
+    await this.pruneObsoleteWorkDeviations();
     await this.maybeAutoSync();
     return { ...raw, status: this.derivePhaseStatus(raw.tasks) };
+  }
+
+  /** Save a durable resume checkpoint without introducing a separate canonical task status. */
+  async pauseTask(phaseId: string, taskId: string, input: TaskPauseSnapshot): Promise<Task> {
+    const snapshot = TaskPauseSnapshotSchema.parse(input);
+    let paused: Task | undefined;
+    await this.updatePhase(phaseId, (phase) => {
+      const task = phase.tasks.find((candidate) => candidate.id === taskId);
+      if (!task) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`);
+      if (task.status !== "in-progress") {
+        throw new PlanStoreError(`Task ${taskId} cannot be checkpointed from ${task.status}; only in-progress work can capture a pause snapshot.`);
+      }
+      const description = [
+        `Reason: ${snapshot.reason}`,
+        `What was being done: ${snapshot.whatWasBeingDone}`,
+        `Resume location: ${snapshot.resumeLocation}`,
+        `How to resume: ${snapshot.howToResume}`,
+      ].join("\n");
+      paused = {
+        ...task,
+        status: "planned",
+        pauseSnapshot: snapshot,
+        pauseHistory: [...task.pauseHistory, snapshot],
+        statusLog: [...task.statusLog, {
+          id: createStatusLogEntryId(),
+          date: snapshot.pausedAt,
+          fromStatus: "in-progress",
+          toStatus: "planned",
+          title: "in-progress → planned (checkpoint saved)",
+          description,
+        }],
+        updatedAt: snapshot.pausedAt,
+      };
+      phase.tasks = phase.tasks.map((candidate) => candidate.id === taskId ? paused! : candidate);
+      return phase;
+    });
+    return paused!;
+  }
+
+  /** Resume a checkpointed task without resetting its original startedAt. */
+  async resumeTask(phaseId: string, taskId: string, timestamp = nowISO()): Promise<Task> {
+    let resumed: Task | undefined;
+    await this.updatePhase(phaseId, (phase) => {
+      const task = phase.tasks.find((candidate) => candidate.id === taskId);
+      if (!task) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`);
+      if (!task.pauseSnapshot) {
+        throw new PlanStoreError(`Task ${taskId} has no saved checkpoint to resume.`);
+      }
+      if (task.status === "done" || task.status === "canceled" || task.status === "rejected") {
+        throw new PlanStoreError(`Task ${taskId} cannot be resumed from ${task.status}.`);
+      }
+      const snapshot = task.pauseSnapshot;
+      resumed = {
+        ...task,
+        status: "in-progress",
+        pauseSnapshot: null,
+        startedAt: task.startedAt || timestamp,
+        statusLog: [...task.statusLog, {
+          id: createStatusLogEntryId(),
+          date: timestamp,
+          fromStatus: task.status,
+          toStatus: "in-progress",
+          title: `${task.status} → in-progress (resume checkpoint)`,
+          description: `Resumed from ${snapshot.resumeLocation}. ${snapshot.howToResume}`,
+        }],
+        updatedAt: timestamp,
+      };
+      phase.tasks = phase.tasks.map((candidate) => candidate.id === taskId ? resumed! : candidate);
+      return phase;
+    });
+    return resumed!;
   }
 
   // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────
@@ -2194,16 +2480,16 @@ export class PlanStore {
     await this.touchTimestamp();
   }
 
-  /** Remove a phase file AND its inline .bak backup. atomicUpdateJson (used by
-   *  updatePhase without root) writes the backup inline at phases/<id>.json.bak,
-   *  and readJson falls back to `${path}.bak` on a missing main file — so a
-   *  delete that leaves the .bak behind would RESURRECT the deleted phase on
-   *  the next read. Feature backups (written with root) live under
-   *  .local/backups/ and are never read by readJson, so only the inline .bak
-   *  needs removing here. */
+  /** Remove a phase file and BOTH of its previous-version backups: the legacy
+   *  inline `phases/<id>.json.bak` (kept for backward compat) and the relocated
+   *  `.local/backups/phases/<id>.json.bak` (written once updatePhase passes root,
+   *  per P043). Leaving either behind would RESURRECT the deleted phase on the
+   *  next read, since readJson falls back to both locations. */
   private async unlinkPhaseFiles(phaseId: string): Promise<void> {
-    await unlink(this.phasePath(phaseId)).catch(() => {});
-    await unlink(`${this.phasePath(phaseId)}.bak`).catch(() => {});
+    const phaseFile = this.phasePath(phaseId);
+    await unlink(phaseFile).catch(() => {});
+    await unlink(`${phaseFile}.bak`).catch(() => {});
+    await unlink(join(this.root, ".local", "backups", "phases", `${phaseId}.json.bak`)).catch(() => {});
   }
 
   // ── Workspace-level operations ─────────────────────────────────────

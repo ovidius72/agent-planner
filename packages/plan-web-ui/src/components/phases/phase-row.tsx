@@ -9,6 +9,7 @@ import { DisplayStatusBadge } from "../ui/status-badge";
 import { CopyableBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
 import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
+import { LastUpdated } from "../ui/last-updated";
 
 export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
   const statusFetcher = useFetcher();
@@ -92,6 +93,9 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
         </deleteFetcher.Form>
       </div>
 
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <LastUpdated value={phase.updatedAt} />
+      </div>
       {phase.summary ? <div className="mt-1 min-w-0 break-words line-clamp-2 text-[11px] text-[var(--text-muted)]">{phase.summary}</div> : null}
     </StatusItem>
   );

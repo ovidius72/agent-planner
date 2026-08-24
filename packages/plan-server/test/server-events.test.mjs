@@ -179,6 +179,84 @@ test("API-only mode (staticDir disabled): root is not served, API still works", 
   assert.ok(Array.isArray(features.body));
 });
 
+test("task focus endpoint keeps checkpointed work in pending resume and marks pending resume", async () => {
+  const fx = await startServerFixture({ name: "t289-task-focus" });
+  const phase = (await fx.store.loadAllPhases())[0];
+  const task = phase.tasks[0];
+  const now = "2026-08-18T12:34:56.000Z";
+  const snapshot = {
+    id: "snapshot-1", reason: "Temporary prerequisite", whatWasBeingDone: "Implementing focus endpoint",
+    resumeLocation: "src/serve.ts:640", howToResume: "Finish endpoint and rerun server tests",
+    relatedTaskId: "temporary-task", pausedAt: now, pausedBy: "server-test",
+  };
+  await fx.store.updatePhase(phase.id, (stored) => {
+    const target = stored.tasks.find((entry) => entry.id === task.id);
+    target.status = "planned";
+    target.pauseSnapshot = snapshot;
+    target.pauseHistory = [snapshot];
+    return stored;
+  });
+  await fx.store.addWorkDeviation({
+    id: "deviation-1", recommendedTaskId: task.id, temporaryTaskId: "temporary-task",
+    resumeTaskId: task.id, reason: snapshot.reason, snapshot, requestedBy: "agent", approvedBy: "test",
+    state: "resume-required", createdAt: now, activatedAt: now, resumeRequiredAt: now, resolvedAt: "", resumedAt: "",
+  });
+
+  const focus = (await request(fx, "/tasks/focus")).body;
+  assert.deepEqual(focus.active, []);
+  assert.equal(focus.paused, undefined);
+  assert.equal(focus.pendingResume.length, 1);
+  assert.equal(focus.pendingResume[0].id, task.id);
+  assert.equal(focus.pendingResume[0].pendingResume, true);
+  assert.equal(focus.pendingResume[0].pauseSnapshot.resumeLocation, "src/serve.ts:640");
+
+  const unsafeResume = await request(fx, `/tasks/${task.id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...task, phaseId: phase.id, status: "in-progress" }), expectStatus: 400,
+  });
+  assert.match(unsafeResume.body.error, /Resume checkpoint lifecycle transitions require/);
+  const unsafeCreate = await request(fx, `/phases/${phase.id}/tasks`, {
+    ...json({ title: "Invalid paused task", status: "paused" }), expectStatus: 400,
+  });
+  assert.match(unsafeCreate.body.error, /cannot be created paused/);
+});
+
+test("task focus endpoint ignores done resume targets and stale deviations", async () => {
+  const fx = await startServerFixture({ name: "t289-task-focus-done" });
+  const phase = (await fx.store.loadAllPhases())[0];
+  const task = phase.tasks[0];
+  const now = "2026-08-18T12:34:56.000Z";
+  const snapshot = {
+    id: "snapshot-2", reason: "Temporary prerequisite", whatWasBeingDone: "Implementing focus endpoint",
+    resumeLocation: "src/serve.ts:640", howToResume: "Finish endpoint and rerun server tests",
+    relatedTaskId: "temporary-task", pausedAt: now, pausedBy: "server-test",
+  };
+  await fx.store.updatePhase(phase.id, (stored) => {
+    const target = stored.tasks.find((entry) => entry.id === task.id);
+    target.status = "planned";
+    target.pauseSnapshot = snapshot;
+    target.pauseHistory = [snapshot];
+    return stored;
+  });
+  await fx.store.addWorkDeviation({
+    id: "deviation-2", recommendedTaskId: task.id, temporaryTaskId: "temporary-task",
+    resumeTaskId: task.id, reason: snapshot.reason, snapshot, requestedBy: "agent", approvedBy: "test",
+    state: "resume-required", createdAt: now, activatedAt: now, resumeRequiredAt: now, resolvedAt: "", resumedAt: "",
+  });
+  await fx.store.updatePhase(phase.id, (stored) => {
+    const target = stored.tasks.find((entry) => entry.id === task.id);
+    target.status = "done";
+    target.completedAt = now;
+    return stored;
+  });
+
+  const focus = (await request(fx, "/tasks/focus")).body;
+  assert.deepEqual(focus.active, []);
+  assert.equal(focus.paused, undefined);
+  assert.deepEqual(focus.pendingResume, []);
+  assert.equal((await fx.store.loadProject()).workDeviations.length, 0);
+});
+
 // ── Live-sync events (real WebSocket) ──────────────────────────────────────
 
 test("WS events on feature/requirement/phase/task mutations carry revalidation identifiers", async () => {
@@ -303,8 +381,13 @@ test("closing the server tears down the WebSocket connection", async () => {
   // the WS client must observe the server-side close
   await new Promise((resolve, reject) => {
     if (ws.state.closed) return resolve();
-    ws.ws.once("close", () => resolve());
-    setTimeout(() => reject(new Error("WS not closed by server teardown within 2s")), 2000);
+    // Capture the watchdog so it is cleared on close (no leaked 2s timer kept
+    // alive after the test resolves).
+    const timer = setTimeout(() => reject(new Error("WS not closed by server teardown within 2s")), 2000);
+    ws.ws.once("close", () => {
+      clearTimeout(timer);
+      resolve();
+    });
   });
   assert.equal(ws.state.closed, true, "server close tears down the WebSocket");
 });

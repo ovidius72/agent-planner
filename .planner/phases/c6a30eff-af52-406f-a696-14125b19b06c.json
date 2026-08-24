@@ -1,0 +1,125 @@
+{
+  "id": "c6a30eff-af52-406f-a696-14125b19b06c",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 68,
+  "shortId": "KZ5B5",
+  "priority": 17,
+  "slug": "runtime-package-version-reporting",
+  "title": "Runtime package version reporting",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Expose authoritative installed versions from the Agent Plan CLI and Pi adapter.",
+  "description": "Implement runtime version visibility consistently across every published harness boundary. `packages/agent-plan/src/index.ts:1-390` currently treats `--version` and `-v` as unknown positional commands, while `packages/agent-plan/package.json:2-3` contains the authoritative CLI package version. `packages/pi-adapter/src/index.ts:109-151,1157-1159,2474-2488` owns `/planner` completion/help/dispatch but exposes no version action; `packages/pi-adapter/package.json:2-3` contains the installed adapter version. `packages/plan-mcp/src/index.ts` owns the shared MCP tool surface used by Claude Code and Codex but exposes no `planner-version` tool. `plugins/_shared/planner-skill.md.in` and generated `plugins/claude-code/skills/planner/SKILL.md` own Claude `/planner` routing. Add CLI `-v`/`--version`, Pi `/planner version`, and MCP `planner-version`; route Claude `/planner version` to the MCP tool, while Codex can invoke the same MCP tool directly through natural-language/tool use until its setup gains a slash-command layer. Resolve versions from each installed package manifest rather than hardcoding release numbers, report the actual loaded adapter plus relevant core dependency versions, add package-local/cross-surface tests, update help/docs, and preserve existing command behavior, npm packaging, and harness-agnostic PlanStore semantics.",
+  "notes": "",
+  "goals": [
+    "CLI `agent-plan -v` and `agent-plan --version` report the installed CLI version.",
+    "Pi `/planner version` reports the loaded Pi adapter and relevant runtime package versions.",
+    "Claude `/planner version` and the shared Claude/Codex MCP tool report the loaded MCP/core versions.",
+    "Version values come from installed package manifests and automatically follow package releases.",
+    "Focused tests, surface inventory, generated plugin files, and documentation remain synchronized."
+  ],
+  "nonGoals": [
+    "Change package release numbering or dist-tag behavior.",
+    "Add a Codex-specific slash command mechanism beyond the shared MCP tool.",
+    "Couple PlanStore domain behavior to harness package metadata."
+  ],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "9e322971-76f8-4c40-acee-a2c970dcff0c",
+      "title": "Version reporting follows the loaded harness package",
+      "decision": "Expose version reporting at each runtime boundary: `agent-plan -v|--version` for the CLI, `/planner version` for Pi, and `planner-version` for the shared MCP surface used by Claude Code and Codex. Claude's `/planner version` routes to the MCP tool; Codex uses that MCP tool directly until it has a slash-command layer.",
+      "rationale": "Users need to distinguish globally installed CLI, Pi adapter, and MCP package versions because they can update independently and stale runtime processes or package caches otherwise make diagnosis ambiguous.",
+      "implementationNotes": "Read package versions from the installed package manifests adjacent to each runtime module rather than hardcoding constants. Include the relevant loaded dependency versions where useful, keep PlanStore harness-agnostic, synchronize the shared Claude skill template and generated plugin artifact, and cover registrations and output with focused tests.",
+      "acceptedAt": "2026-08-20T15:18:45.511Z"
+    }
+  ],
+  "completionCriteria": [
+    "Both CLI flags exit successfully and report the installed `agent-plan` version.",
+    "Pi `/planner version` reports the installed `@agent-plan/pi-adapter` version.",
+    "MCP `planner-version` is registered and returns loaded MCP/core versions in Claude and Codex.",
+    "Claude planner skill routes `version` to `planner-version`.",
+    "Build, typecheck, focused tests, plugin sync check, and root test suite pass."
+  ],
+  "taskIds": [
+    "0b9c78ab-b591-4375-85d1-038d4648dfd0"
+  ],
+  "tasks": [
+    {
+      "id": "0b9c78ab-b591-4375-85d1-038d4648dfd0",
+      "phaseId": "c6a30eff-af52-406f-a696-14125b19b06c",
+      "number": 293,
+      "shortId": "8YAY8",
+      "priority": 1,
+      "shortName": "runtime-version-reporting",
+      "title": "Expose installed versions across CLI, Pi, Claude and Codex",
+      "status": "done",
+      "description": "Implement the accepted runtime version-reporting contract. In `packages/agent-plan/src/index.ts`, add early `-v`/`--version` handling that reads `packages/agent-plan/package.json` relative to the installed `dist/index.js` and exits successfully without initializing planner state. In `packages/pi-adapter/src/index.ts`, add `/planner version` to completion/help/dispatch and report the installed `@agent-plan/pi-adapter` version plus relevant loaded runtime dependencies using package manifests, without requiring `.planner/`. In `packages/plan-mcp/src/index.ts`, register `planner-version` so both Claude Code and Codex receive actual loaded `@agent-plan/mcp` and `@agent-plan/core` versions. Update `plugins/_shared/planner-skill.md.in`, regenerate `plugins/claude-code/skills/planner/SKILL.md`, update CLI/Pi/root documentation, and register any new public surface in `test/surfaces.mjs`. Add tests under `packages/agent-plan/test/`, existing MCP tests, and Pi adapter tests for successful outputs, aliases, registration, and no-plan behavior. Preserve current CLI commands, MCP protocol behavior, Pi planner lifecycle, npm packaging, and release-number ownership; do not hardcode `0.2.21` or a future version.\n\n---\n**Completion summary:**\nCompleted runtime version reporting across CLI, Pi, Claude Code, and Codex MCP. Added `packages/plan-core/src/package-version.ts`; updated `packages/agent-plan/src/index.ts`, `packages/plan-mcp/src/index.ts`, and `packages/pi-adapter/src/index.ts`; synchronized `plugins/_shared/planner-skill.md.in` and `plugins/claude-code/skills/planner/SKILL.md`; updated root/package READMEs and `test/surfaces.mjs`; added `packages/agent-plan/test/version.test.mjs` plus MCP/Pi coverage. `agent-plan -v|--version`, Pi `/planner version`, and MCP `planner-version` resolve installed manifests rather than hardcoded release numbers; MCP handshake now advertises the real package version. Validation: `pnpm check`, `pnpm plugins:check`, `pnpm test` (380/380; 82.01% line, 72.18% branch, 76.63% function coverage), `git diff --check`, and npm pack manifest checks all pass. Changes remain uncommitted on `feature/runtime-version-reporting`; resume target is P059(F015)/T253.",
+      "notes": "Implemented manifest-derived runtime version reporting across all requested harnesses. Added `packages/plan-core/src/package-version.ts` with `packageVersionFromModule` and `resolvedPackageVersion`; exported it from core. `packages/agent-plan/src/index.ts` now supports global `-v`/`--version`, reports the CLI package manifest, documents the flags, and generated Claude setup commands route `version` to `planner-version`. `packages/plan-mcp/src/index.ts` now advertises the real MCP package version during handshake and registers workspace-independent `planner-version` returning loaded MCP/core versions. `packages/pi-adapter/src/index.ts` now exposes `/planner version` before PlanStore initialization and reports adapter/core/server versions. Updated shared/generated Claude skill, surface inventory, root/package READMEs, and added CLI/MCP/Pi tests. Final validation: `pnpm check`, `pnpm plugins:check`, `pnpm test`, and `git diff --check` pass; root suite 380/380 with 82.01% lines, 72.18% branches, 76.63% functions. npm pack dry-runs confirm package.json is present in agent-plan, plan-mcp, and pi-adapter tarballs.",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0b9c78ab-b591-4375-85d1-038d4648dfd0-check-001-implement-manifest-based-version-resolution-and-cli-v-version",
+          "number": 1,
+          "title": "Implement manifest-based version resolution and CLI `-v`/`--version`.",
+          "checked": true
+        },
+        {
+          "id": "0b9c78ab-b591-4375-85d1-038d4648dfd0-check-002-expose-pi-planner-version-and-mcp-planner-version-with-loaded-package-versions",
+          "number": 2,
+          "title": "Expose Pi `/planner version` and MCP `planner-version` with loaded package versions.",
+          "checked": true
+        },
+        {
+          "id": "0b9c78ab-b591-4375-85d1-038d4648dfd0-check-003-synchronize-claude-skill-routing-public-surface-inventory-help-and-documentation",
+          "number": 3,
+          "title": "Synchronize Claude skill routing, public-surface inventory, help, and documentation.",
+          "checked": true
+        },
+        {
+          "id": "0b9c78ab-b591-4375-85d1-038d4648dfd0-check-004-run-builds-typechecks-focused-tests-plugin-sync-check-and-full-root-test-suite",
+          "number": 4,
+          "title": "Run builds, typechecks, focused tests, plugin sync check, and full root test suite.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-20T15:19:14.065Z",
+      "completedAt": "2026-08-20T15:33:30.244Z",
+      "createdAt": "2026-08-20T15:18:59.133Z",
+      "updatedAt": "2026-08-20T15:33:30.244Z"
+    }
+  ],
+  "createdAt": "2026-08-20T15:16:22.930Z",
+  "updatedAt": "2026-08-20T15:33:30.244Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "86309437-ffc9-4802-a668-86f2b92ce58c",
+      "date": "2026-08-20T15:19:14.069Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "24b7f974-128f-4b7a-932c-7e845688f44d",
+      "date": "2026-08-20T15:33:30.248Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

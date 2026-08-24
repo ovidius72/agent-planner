@@ -13,8 +13,11 @@ function normalizeTask(task: Task): Task {
     acceptedDecisions: task.acceptedDecisions ?? [],
     checklist: task.checklist ?? [],
     subtasks: task.subtasks ?? [],
+    pauseSnapshot: task.pauseSnapshot ?? null,
+    pauseHistory: task.pauseHistory ?? [],
     startedAt: task.startedAt ?? "",
     completedAt: task.completedAt ?? "",
+    descriptionUpdatedAt: task.descriptionUpdatedAt ?? "",
   };
 }
 
@@ -38,6 +41,7 @@ function normalizePhase(phase: Phase): Phase {
     linkedRequirements: phase.linkedRequirements ?? [],
     handoff: phase.handoff ?? "",
     handoffUpdatedAt: phase.handoffUpdatedAt ?? "",
+    descriptionUpdatedAt: phase.descriptionUpdatedAt ?? "",
   };
 }
 
@@ -50,6 +54,7 @@ function normalizeFeature(feature: Feature): Feature {
     contextReadyReason: feature.contextReadyReason ?? "",
     acceptedDecisions: feature.acceptedDecisions ?? [],
     phaseIds: feature.phaseIds ?? [],
+    descriptionUpdatedAt: feature.descriptionUpdatedAt ?? "",
   };
 }
 
@@ -63,6 +68,7 @@ function normalizeProject(project: Project): Project {
     technologies: project.technologies ?? [],
     tools: project.tools ?? [],
     acceptedDecisions: project.acceptedDecisions ?? [],
+    workDeviations: project.workDeviations ?? [],
     planRoot: project.planRoot ?? "",
     projectRoot: project.projectRoot ?? "",
     workflowRules: {
@@ -83,11 +89,15 @@ function normalizeRequirement(requirement: Requirement): Requirement {
 }
 
 async function fetchOrThrow(path: string, init?: RequestInit): Promise<Response> {
+  // Every call from the web UI is the human supervisor. Tag it so the server
+  // skips agent-only governance gates (e.g. feature/phase discuss-before-work).
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Planner-Source": "web-ui",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
   try {
-    return await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...init,
-    });
+    return await fetch(`${API_BASE}${path}`, { ...init, headers });
   } catch {
     throw new Response("Planner web server unavailable. Pi or planner-web may have stopped. Restart the planner web UI or Pi, then reload this page.", {
       status: 503,
@@ -140,12 +150,26 @@ export interface ActiveTaskSummary {
   status: string;
 }
 
+export interface FocusTaskSummary extends ActiveTaskSummary {
+  status: Task["status"];
+  pauseSnapshot: Task["pauseSnapshot"];
+  pendingResume: boolean;
+  deviationId: string;
+}
+
+export interface TaskFocusSummary {
+  active: FocusTaskSummary[];
+  pendingResume: FocusTaskSummary[];
+}
+
 export async function getProject(): Promise<Project> {
   return normalizeProject(await request("/project"));
 }
 
 export async function updateProject(project: Project): Promise<Project> {
-  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify(project) }));
+  // Runtime workDeviations live in .local/deviations.json (T299); the project
+  // editor must never round-trip them into shared project.json.
+  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify({ ...project, workDeviations: [] }) }));
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -242,6 +266,11 @@ export async function deleteTask(taskId: string): Promise<{ deleted: string }> {
 
 export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
   return request("/tasks/active");
+}
+
+export async function getTaskFocus(): Promise<TaskFocusSummary> {
+  const result = await request<TaskFocusSummary>("/tasks/focus");
+  return { active: result.active ?? [], pendingResume: result.pendingResume ?? [] };
 }
 
 export async function listHandoffs(): Promise<HandoffSummary[]> {

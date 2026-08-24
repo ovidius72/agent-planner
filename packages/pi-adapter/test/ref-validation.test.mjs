@@ -412,9 +412,9 @@ describe("pi-adapter strict ref validation", () => {
     assert.ok(startedText.indexOf("Feature F001") < startedText.indexOf("Phase P001"), "task start briefs feature before phase");
     project = await st.loadProject();
     assert.equal(project.workDeviations.at(-1)?.state, "active");
-    assert.match(toolText(await tools.get("task_complete").execute("id", { taskId: temporaryId }, undefined, undefined, ctx)), /Task completed/);
+    assert.match(toolText(await tools.get("task_complete").execute("id", { taskId: temporaryId }, undefined, undefined, ctx)), /Task completed.*RESUME REQUIRED/s);
     project = await st.loadProject();
-    assert.equal(project.workDeviations.at(-1)?.state, "resolved");
+    assert.equal(project.workDeviations.at(-1)?.state, "resume-required");
     assert.match(toolText(await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx)), /Recommended \(resume\): P001\(F001\)\/T001/);
   });
 });

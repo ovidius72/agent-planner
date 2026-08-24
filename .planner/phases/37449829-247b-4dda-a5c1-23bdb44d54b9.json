@@ -1,0 +1,469 @@
+{
+  "id": "37449829-247b-4dda-a5c1-23bdb44d54b9",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 69,
+  "shortId": "3TKV8",
+  "priority": 18,
+  "slug": "resume-awareness-prompts-context-re-read-and-worktree-safe-runtime-isolation",
+  "title": "Resume-awareness prompts, context re-read, and worktree-safe runtime isolation",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make resume-required awareness explicit in recap/task-start flows, require context re-read when resuming active work, and isolate volatile runtime state across worktrees and branches.",
+  "description": "This phase follows the resume/deviation behavior introduced around `packages/plan-core/src/task-selection.ts`, `packages/plan-core/src/recap.ts`, `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and the Web UI focus surfaces in `packages/plan-web-ui/src/components/layout/app-shell.tsx` plus task detail routes. Current implementation knows about `resume-required` / `pendingResume`, but it treats them mostly as advisory display text or optional warnings: the recap prints a resume advisory, `task_start` can honor an explicit start while only appending warning text, and a task already `in-progress` can be resumed in practice without forcing a fresh read of parent feature/phase descriptions. Additionally, runtime state such as resume awareness and active session context must remain safe when the same planner is consumed from multiple worktrees, branches, or cloned folders; work on one feature/phase must not create unnecessary conflicts for another branch or worktree. This phase defines the boundary between shared planner state and local runtime/session state, ensures every recap and task-entry flow proposes outstanding resume-required work explicitly without hard-blocking it, extends the protocol so agents must re-read feature/phase/task context when re-entering already in-progress work even if no `task_start` occurs, and verifies the whole behavior with cross-worktree / cross-branch isolation tests. Preserve harness-agnostic core behavior, avoid introducing new global planner hotspots, prefer feature-local or phase-local writes over shared root churn, and keep canonical workflow status separate from resume markers in the UI.",
+  "descriptionUpdatedAt": "2026-08-21T11:56:33.532Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "758a8760-5617-49f6-a309-e91d18fb58d2",
+      "title": "Resume-required is mandatory awareness, not a hard block",
+      "decision": "Outstanding resume-required work must always be proposed explicitly after recap and before task-entry decisions, but it must not hard-block starting other work when the user chooses to continue elsewhere.",
+      "rationale": "The current advisory-only rendering allows agents to forget pending resume context, while a hard denial would be too rigid for real operational flow. The correct behavior is explicit awareness plus user choice.",
+      "implementationNotes": "Update recap and task-entry flows so they surface a visible resume proposal and checkpoint context every time resume-required work exists. Preserve explicit user override and keep canonical workflow status separate from resume markers.",
+      "acceptedAt": "2026-08-21T11:57:07.063Z"
+    },
+    {
+      "id": "4240c139-52a1-4b73-b761-2df3a33ed813",
+      "title": "Runtime resume awareness must be safe across worktrees and branches",
+      "decision": "Volatile runtime/session awareness for resume and task re-entry must avoid shared planner hotspots and be isolatable per worktree or equivalent local context, while canonical planner entities remain mergeable across branches and folders.",
+      "rationale": "Multiple worktrees, branches, or cloned folders may work on different features/phases concurrently. Shared runtime state in global planner files creates unnecessary conflicts and breaks safe parallel consumption.",
+      "implementationNotes": "Define shared-vs-local storage boundaries in core, prefer local overlay state under `.planner/.local/*` for session/runtime awareness, and verify at least feature-level isolation with tests, ideally phase-level where achievable.",
+      "acceptedAt": "2026-08-21T11:57:12.341Z"
+    },
+    {
+      "id": "65b09c38-b2b8-4c04-9d9e-120c20c8324c",
+      "title": "Remove paused from canonical lifecycle statuses",
+      "decision": "Tasks, phases, features, and requirements must not use a canonical `paused` workflow status. Resume checkpoints stay in `pauseSnapshot`/`workDeviations`, while the task lifecycle remains on canonical statuses such as `planned` and `in-progress`. Header/focus surfaces must list only live checkpointed or resume-required work, never resumed or terminal tasks.",
+      "rationale": "Introducing `paused` as a canonical status broke consumers that assumed the historical lifecycle set, including the real Pi adapter dist path used by the user. Keeping checkpoint state separate preserves resume semantics without making task trees, lists, filters, and adapters silently drop tasks or miscompute activity.",
+      "implementationNotes": "Schema/type unions remove `paused`; core normalizes legacy persisted `paused` tasks back to `planned` with checkpoint metadata preserved; pause/resume APIs now save and restore checkpoints without persisting a separate status; `/tasks/focus`, Pi, MCP, and Web UI only surface live `pendingResume` work from active checkpoints/deviations and exclude resumed/done targets.",
+      "acceptedAt": "2026-08-21T14:24:18.410Z"
+    },
+    {
+      "id": "35acf68a-f56f-4f5a-9abc-a19bf55f612d",
+      "title": "T299 runtime-deviation storage split (.local/backups-free)",
+      "decision": "Resume-awareness runtime state (workDeviations) moves from shared .planner/project.json into worktree-local .planner/.local/deviations.json. plan-core loadProject() returns a read-view merge so all existing readers (recap.ts, serve.ts /tasks/focus, web-ui loader.ts, loadProject().workDeviations assertions) keep working unchanged; mutations (addWorkDeviation/setWorkDeviationState/pruneObsoleteWorkDeviations) and init seed .local; saveProject() strips workDeviations and api.ts updateProject() strips it from the PUT /project body, so project.json workDeviations stays [] and never churns across worktrees/branches. A one-time idempotent copy-then-clear migration runs lazily inside loadProject() for legacy projects, preserving all deviation data.",
+      "rationale": "project.json carries createdAt/updatedAt and is shared across git worktrees/branches; persisting per-session runtime state (task-switch deviations, pauseSnapshot, resume-required markers) there causes timestamp churn and cross-branch merge conflicts. The .local/ transient root (already home to resume.json, allocations/, backups/, tmp/) is the documented worktree-local home; rules.json is a static code constant (T304), so deviations are the remaining runtime state to relocate. Readers must not change to minimize cross-harness (Pi/MCP/server/Web UI) blast radius.",
+      "implementationNotes": "plan-store.ts: deviationsPath()/loadWorkDeviations()/saveWorkDeviations() at 956-971; loadProject migration+merge at 1191-1203; saveProject strip at 2063; addWorkDeviation@2010, setWorkDeviationState@2021, pruneObsoleteWorkDeviations@716-725 all use .local; init seeds .local/deviations.json=[] @1062-1064. api.ts: updateProject strips PUT body @165-167. Verified: pnpm check + web-ui check clean; plan-core 193/9 (0 new failures); plan-mcp+pi-adapter integration 51/0; mkdtemp migration+read-view+no-churn smoke PASS. Live migration is lazy (runs on first loadProject with rebuilt code) and safe; verified only in throwaway mkdtemp per no-live-mutation rule.",
+      "acceptedAt": "2026-08-21T22:48:16.035Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "c043a60f-c339-42a8-b934-00f9ae79d453",
+    "9482470c-3ff7-4e15-a2dd-d9eac37ae971",
+    "72ec0368-ed0e-409f-9e6b-32aa57c8cc1d",
+    "7c29a5c3-ddfd-4b98-a119-fda8ecf4071c",
+    "6a81be75-b052-4c3c-9d47-7c3d91a0697d",
+    "8a96a899-bc59-4161-b56e-6f08e3595510"
+  ],
+  "tasks": [
+    {
+      "id": "c043a60f-c339-42a8-b934-00f9ae79d453",
+      "phaseId": "37449829-247b-4dda-a5c1-23bdb44d54b9",
+      "number": 295,
+      "shortId": "47424",
+      "priority": 1,
+      "shortName": "fix-web-ui-resume-awareness-su",
+      "title": "Fix Web UI resume-awareness surfaces without sticky-header overload",
+      "status": "done",
+      "description": "Refine the Web UI surfaces in `packages/plan-web-ui/src/components/layout/app-shell.tsx`, `packages/plan-web-ui/src/components/task/resume-snapshot.tsx`, and task detail routes/loaders so resume-required work is proposed clearly without overloading the sticky focus header. Current state already has a dedicated follow-up task concept from P059/F015: the header can still become an oversized carrier for checkpoint narrative while the task detail view is the correct place for the full Why paused / Work checkpoint / Resume from / How to resume content. Keep canonical task status primary, keep resume-required as a secondary marker/proposal, surface compact awareness in the header, and preserve the full checkpoint narrative in task detail. Ensure the UI wording aligns with the new advisory proposal model rather than a hard block.\n\n---\n**Completion summary:**\nRefactor mobile-first delle superfici sticky/header Web UI: `packages/plan-web-ui/src/components/layout/top-nav.tsx` riorganizzata in brand+status/actions su prima riga, project path separato su small, nav full-label scrollabile orizzontalmente e azione export staccata dal cluster principale per evitare compressioni/sovrapposizioni; `packages/plan-web-ui/src/components/layout/app-shell.tsx` aggiornata con `FocusTaskRow` a layout stacked/wrapping (badge/status prima, titolo sotto, locate action separata) così l’header task resta leggibile su viewport stretti. Aggiunto smoke test in `packages/plan-web-ui/test/entity-references-and-updates.test.tsx`. Validazione: `pnpm --filter @agent-plan/web-ui test -- --run test/entity-references-and-updates.test.tsx` e `pnpm --filter @agent-plan/web-ui build` verdi.",
+      "descriptionUpdatedAt": "2026-08-21T13:52:41.022Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "c043a60f-c339-42a8-b934-00f9ae79d453-check-001-planned-in-progress",
+          "date": "2026-08-21T13:47:58.961Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Move resume-awareness runtime state to worktree-local storage."
+        },
+        {
+          "id": "c043a60f-c339-42a8-b934-00f9ae79d453-check-002-in-progress-done",
+          "date": "2026-08-21T13:52:41.018Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T13:47:58.961Z",
+      "completedAt": "2026-08-21T13:52:41.018Z",
+      "createdAt": "2026-08-21T11:56:56.743Z",
+      "updatedAt": "2026-08-21T13:52:41.018Z"
+    },
+    {
+      "id": "9482470c-3ff7-4e15-a2dd-d9eac37ae971",
+      "phaseId": "37449829-247b-4dda-a5c1-23bdb44d54b9",
+      "number": 296,
+      "shortId": "7366H",
+      "priority": 2,
+      "shortName": "propose-outstanding-resume-req",
+      "title": "Propose outstanding resume-required work after recap and before task start",
+      "status": "done",
+      "description": "Update the recap and explicit task-start flows in `packages/plan-core/src/recap.ts`, `packages/pi-adapter/src/index.ts`, and `packages/plan-mcp/src/index.ts` so outstanding resume-required work is always proposed explicitly to the agent/user after the initial recap and again before starting a different task. Current behavior only prints advisory text such as \"Resume advisory\" while still honoring explicit starts, which allows the agent to forget the pending resume context. Keep the behavior advisory rather than blocking: the user must still be able to continue with different work, but the flow must force awareness and a visible proposal to resume first. Preserve existing distinction between active conflict denial, priority recommendation, and resume-required awareness.\n\n---\n**Completion summary:**\nImplemented P069(F005)/T296 — explicit resume-required proposal in the explicit task-start flow (both adapters), advisory/non-blocking.\n\nRoot behavior before: when an agent started a DIFFERENT task while a resume-required was pending, both `task_start` (Pi, packages/pi-adapter/src/index.ts ~4241) and `planner-task-start` (MCP, packages/plan-mcp/src/index.ts ~1272) emitted only a trailing one-line \"⚠️ Resume advisory\" — easy to ignore, not machine-readable.\n\nChanges:\n1. packages/plan-core/src/task-selection.ts — added `buildResumeRequiredProposal({ref,title,taskId,phaseId,snapshot})` returning `{ text, structured }` (the structured form mirrors the existing `task_complete`/`task_update` `resumeRequired` payload). Pure, harness-agnostic, additive (no change to `recommendNextTask`).\n2. pi-adapter/src/index.ts task_start — when `selection.kind === \"resume\" && selection.candidate.task.id !== task.id`: build `resumeProposal` (ref via formatPhaseRef, snapshot from task.pauseSnapshot or the resume-required/resolved deviation snapshot), replace the weak advisory with the explicit \"↩️ RESUME REQUIRED before starting a different task: <ref> — <title> … Next action: task_start <ref> … Explicit task request honored\" block, and return `resumeRequired: resumeProposal.structured` alongside `details`. Start still succeeds (advisory).\n3. plan-mcp/src/index.ts planner-task-start — identical, returning `resumeRequired` via writeAndSummarize's structuredContent.\n4. recap.ts left unchanged — it already proposes resume-required explicitly after recap (pendingResume block), satisfying the \"after recap\" half; this task strengthens the \"before task start\" half.\n\nTests: updated packages/pi-adapter/test/mutations.test.mjs and packages/plan-mcp/test/mcp-crud.test.mjs skipAdvisory assertions to require the structured `resumeRequired` proposal + the new explicit text while the requested task still starts. Full suites: pi-adapter 47/47, plan-mcp 50/50, core check clean.\n\nNote: packages/plan-core/test/task-selection.test.mjs has a pre-existing failing assertion (recommendNextTask returns 'none' instead of 'resume') caused by the uncommitted T253 \"normalized outcomes\" branch work in recommendNextTask (paused→checkpointed refactor); unrelated to this change (T296 only added helper functions). No commit made (project rules).",
+      "descriptionUpdatedAt": "2026-08-22T13:39:32.526Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "9482470c-3ff7-4e15-a2dd-d9eac37ae971-check-001-planned-in-progress",
+          "date": "2026-08-22T07:16:28.999Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "9482470c-3ff7-4e15-a2dd-d9eac37ae971-check-002-in-progress-done",
+          "date": "2026-08-22T13:39:32.525Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-22T07:16:28.999Z",
+      "completedAt": "2026-08-22T13:39:32.525Z",
+      "createdAt": "2026-08-21T11:56:56.777Z",
+      "updatedAt": "2026-08-22T13:39:32.525Z"
+    },
+    {
+      "id": "72ec0368-ed0e-409f-9e6b-32aa57c8cc1d",
+      "phaseId": "37449829-247b-4dda-a5c1-23bdb44d54b9",
+      "number": 297,
+      "shortId": "NXPPH",
+      "priority": 3,
+      "shortName": "add-cross-worktree-and-resume",
+      "title": "Add cross-worktree and resume-protocol isolation tests",
+      "status": "done",
+      "description": "Add verification for the new work-resumption protocol and storage boundaries using tests around `packages/plan-core`, adapters, server contracts, and any fixture infrastructure needed for multiple worktrees or cloned planner directories. The suite must prove that resume-required proposals remain visible across recap/task-entry flows, that re-entering already in-progress work triggers the required context awareness, and that concurrent work on different features/phases from separate worktrees or branches does not create avoidable planner conflicts. Prefer tests that exercise real persisted planner state with isolated temporary roots/worktrees over mocks, and verify at least feature-level isolation, with phase-level isolation where the implementation makes it possible.\n\n---\n**Completion summary:**\nImplemented P069(F005)/T297 — cross-worktree and resume-protocol isolation tests.\n\nDeliverable: NEW packages/plan-core/test/resume-protocol-isolation.test.mjs (6 tests, all passing) exercising real persisted planner state in isolated temp roots/worktrees. Three areas:\n\n1. Resume-required visibility across recap flows (harness-agnostic buildRecap, same core feeds Pi + MCP):\n   - recap surfaces a pending resume-required task with `Current focus: resume required — P001(F001)/T01 — task 1 (planned)` + `Resume advisory` (pi harness).\n   - same assertion for mcp harness.\n   - no resume-required text when nothing is pending.\n   - completing the resume target clears its live deviations AND keeps shared project.json free of runtime state (workDeviations:[]).\n\n2. Re-entry context awareness: a pending resume-required recap tells the agent to `Read its checkpoint before deciding` and carries the target ref `P001(F001)/T01`, satisfying the \"re-read feature/phase/task context when re-entering in-progress work\" requirement.\n\n3. Cross-worktree runtime-state isolation (T299 boundary): cloning canonical planner data into a second worktree while EXCLUDING `.planner/.local` yields a worktree that does NOT see the first worktree's resume-required deviation (runtime state isolated per worktree); each worktree owns its own runtime state without affecting the other. Proves concurrent work on different features/phases from separate worktrees creates no avoidable planner conflicts.\n\nAlso (user-authorized live cleanup, \"1. sistema\"): resolved 2 stale `resume-required` deviations in the live `.planner/.local/deviations.json` (ids 77aed945…, 7d4923d0…) that pointed at T299 after it was completed — leftover task_switch checkpoints, never cleared on completion. Now 0 resume-required, audit preserved (4 total: 2 resolved, 2 resumed). This is why the live UI no longer shows T299 in the worktree/Resume Required section: T299 is `done` and the recap correctly excludes resume-required deviations whose target task is no longer planned/waiting/in-progress.\n\nNo source-code changes (T297 is test-only + the authorized live data cleanup). Verification: T297 file 6/6; core 200/209 (9 pre-existing T253 branch failures in task-selection.test.mjs, unchanged); pi-adapter 47/47; plan-mcp 50/50. No commit (project rules).",
+      "descriptionUpdatedAt": "2026-08-22T13:51:52.220Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "72ec0368-ed0e-409f-9e6b-32aa57c8cc1d-check-001-planned-in-progress",
+          "date": "2026-08-22T13:44:52.330Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "72ec0368-ed0e-409f-9e6b-32aa57c8cc1d-check-002-in-progress-done",
+          "date": "2026-08-22T13:51:52.218Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-22T13:44:52.330Z",
+      "completedAt": "2026-08-22T13:51:52.218Z",
+      "createdAt": "2026-08-21T11:56:56.813Z",
+      "updatedAt": "2026-08-22T13:51:52.218Z"
+    },
+    {
+      "id": "7c29a5c3-ddfd-4b98-a119-fda8ecf4071c",
+      "phaseId": "37449829-247b-4dda-a5c1-23bdb44d54b9",
+      "number": 298,
+      "shortId": "WCKSD",
+      "priority": 4,
+      "shortName": "define-shared-vs-local-planner",
+      "title": "Define shared-vs-local planner runtime boundaries",
+      "status": "done",
+      "description": "Map the runtime data involved in resume awareness and active work entry across `packages/plan-core/src/plan-store.ts`, `packages/plan-core/src/schema.ts`, `.planner/project.json`, and `.planner/.local/*`. Current state mixes canonical planner data with volatile runtime/session concerns such as `workDeviations`, current focus, resume prompts, and local activity context. Define which data must remain shared and mergeable across branches/worktrees versus which data must become worktree-local or derivable at runtime. The output must explicitly cover resume-required markers, task-entry awareness, current focus/session context, and any advisory bookkeeping needed so two worktrees working on different features/phases do not create unnecessary conflicts. Preserve harness-agnostic core semantics and document invariants that downstream adapters and UI can rely on.\n\n---\n**Completion summary:**\nImplemented P069(F005)/T298 — define shared-vs-local planner runtime boundaries.\n\nDeliverable: NEW packages/plan-core/docs/runtime-boundaries.md (authoritative spec of the shared vs worktree-local boundary + the invariants every harness relies on) plus a one-line pointer comment at PlanStore.localRoot() (packages/plan-core/src/plan-store.ts:947) linking to the doc.\n\nContent of the doc:\n- Principle: canonical planner data in `.planner/` is shared+mergeable; volatile runtime/session state in `.planner/.local/` is worktree-local, git-ignored, never merged.\n- Shared/mergeable table: manifest.json, project.json (counters + rules/scope/decisions; workDeviations always []/absent after T299), features/, phases/, tasks/, requirements.json, handoffs/, rules.json (static, timestamp-free).\n- Worktree-local table: deviations.json (resume-required stack, T299), resume.json (per-session focus + guard-bypass), activity.json, timestamp.json, generated/, backups/, tmp/, handoff-archive/ (terminal-phase auto-archive).\n- 8 invariants adapters/UI rely on: (1) canonical status is sole source of truth, resume markers derived; (2) loadProject().workDeviations is a merged read-view, writers use addWorkDeviation/setWorkDeviationState/pruneObsoleteWorkDeviations, saveProject strips workDeviations; (3) resume-required derived at read time and excludes done targets; (4) counters stay shared (never localize); (5) resume.json/activity.json machine-local; (6) handoff archive local; (7) read-view merge is the single integration contract (recap/buildRecap, serve /tasks/focus, recommendNextTask); (8) proposing resume is advisory, standardized via buildResumeRequiredProposal.\n- Cross-worktree isolation section (matches the T297 test).\n- Open items: webPort shared-by-convenience (not a merge conflict); entity timestamps shared (inherent canonical-data conflicts, out of scope).\n\nNo functional code changes — the boundary already exists (T299 relocated deviations to .local; T304 made rules.json static/timestamp-free). This task documents the contract so future adapters/UI and other projects consuming the extensions rely on stable invariants. Core check clean. No commit (project rules).\n\nNote on ordering: no task reorder was needed — the only dependency inversion (T297 tests ← T299 impl) was moot because T299 was already done, so the sequence T296→T297→T298→T258 had no live inversion. Optionally the intended dependency order (T298 design → T299 impl → T297 tests) can be recorded as a phase note for future readers.",
+      "descriptionUpdatedAt": "2026-08-22T14:04:45.467Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "7c29a5c3-ddfd-4b98-a119-fda8ecf4071c-check-001-planned-in-progress",
+          "date": "2026-08-22T14:00:37.182Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7c29a5c3-ddfd-4b98-a119-fda8ecf4071c-check-002-in-progress-done",
+          "date": "2026-08-22T14:04:45.465Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-22T14:00:37.182Z",
+      "completedAt": "2026-08-22T14:04:45.465Z",
+      "createdAt": "2026-08-21T11:56:56.850Z",
+      "updatedAt": "2026-08-22T14:04:45.465Z"
+    },
+    {
+      "id": "6a81be75-b052-4c3c-9d47-7c3d91a0697d",
+      "phaseId": "37449829-247b-4dda-a5c1-23bdb44d54b9",
+      "number": 299,
+      "shortId": "MA23W",
+      "priority": 5,
+      "shortName": "move-resume-awareness-runtime",
+      "title": "Move resume-awareness runtime state to worktree-local storage",
+      "status": "done",
+      "description": "Implement the storage split decided for this phase by moving or deriving resume-awareness/session-specific runtime state out of shared planner hotspots and into worktree-local state under `.planner/.local/*` or equivalent infrastructure in `packages/plan-core/src/plan-store.ts`. Current state risks coupling runtime awareness to shared files such as `.planner/project.json`, which is unsafe when multiple worktrees, branches, or cloned folders consume the same planner. Ensure the resulting design keeps canonical feature/phase/task data mergeable, avoids introducing new root-level churn, and remains consumable by Pi, MCP, server, and Web UI surfaces without breaking existing planner semantics.\n\n---\n**Completion summary:**\nT299 done. Implemented the resume-awareness storage split: runtime workDeviations now live in worktree-local .local/deviations.json (plan-core plan-store.ts: deviationsPath/loadWorkDeviations/saveWorkDeviations @956-971; addWorkDeviation @2010, setWorkDeviationState @2021, pruneObsoleteWorkDeviations @716 all write .local; loadProject @1191 does one-time copy-then-clear migration from project.json then returns a read-view merge; saveProject @2063 strips workDeviations:[] to prevent shared-file churn; init @1062 seeds .local/deviations.json=[]). plan-web-ui api.ts @165 strips workDeviations from the PUT /project body so the editor cannot round-trip runtime state. No other readers changed (recap.ts, serve.ts /tasks/focus, web-ui loader.ts, loadProject().workDeviations assertions all read the merged .local view). Verified: pnpm check (tsc -b) + web-ui check clean; plan-core 193/9 (9 pre-existing T253 failures, 0 new; deviation tests pass); plan-mcp + pi-adapter integration 51/0 pass; mkdtemp migration + read-view + no-churn smoke test PASS. No commit (project rules). Live migration is lazy+safe (runs on next loadProject with rebuilt code); not run against the live .planner per no-live-mutation policy — verified in throwaway mkdtemp instead.",
+      "descriptionUpdatedAt": "2026-08-21T22:48:16.037Z",
+      "notes": "## Visibility root cause #2 — legacy \"paused\" status breaks loading (FIXED 2026-08-21)\n\n**Symptom:** after restart, P069/T299/T253 not visible in Web UI, even via search. Two stale `pi` processes were running: 54532 on :56321 (OLD bundle B97B4wii) and 82542 on :51556 (NEW bundle but incomplete in-memory load: 67 phases, P069 404).\n\n**Real root cause (deeper than the bundle staleness):** removing canonical `\"paused\"` from the Zod enums meant any persisted `statusLog` entry with `fromStatus`/`toStatus` = `\"paused\"` (or `task.status` = `\"paused\"`) failed `PhaseSchema` validation **at read time, before** `normalizeTasks` could rewrite it. `loadAllPhases()` swallows per-phase errors (`catch { /* skip corrupted files */ }`), so the whole phase was silently dropped. P069 had such an entry in `tasks.[4].statusLog`. The old dist tolerated `\"paused\"` (still in enum), hence 68 phases there; the new dist dropped P069 → 67.\n\n**Fix:** `packages/plan-core/src/plan-store.ts` — `readJson()` now runs `migrateLegacyStatuses()` (maps `\"paused\"`→`\"planned\"` on `status`/`fromStatus`/`toStatus` fields) on the parsed JSON **before** `schema.parse`. Safe because `\"paused\"` is fully removed from the domain; normalized value persists on next save. Rebuilt `@agent-plan/core` + `@agent-plan/pi-adapter`.\n\n**Verified:** `loadAllPhases()` → 68 phases, P069 present, zero `\"paused\"` remaining. `loadAll()` loads cleanly.\n\n**Stale tests aligned to checkpoint model (rename debt):** `packages/plan-core/test/task-pause.test.mjs` (status `planned`, displayStatus `planned`, `fromStatus planned`, `/cannot be checkpointed from planned/`) and `packages/plan-core/test/recap.test.mjs` (`checkpoint to evaluate`, `Saved checkpoints`, `with checkpoints`, standalone-list labels `Why:`/`Checkpoint:`/`How:`). `node --test` on these 3 files: 22/22 pass.\n\n**Required user action:** quit BOTH stale pi processes (54532 on :56321 and 82542 on :51556) and start ONE fresh `pi --no-extensions -e packages/pi-adapter/dist/index.js`. The new dist loads all 68 phases (P069, T299, T253 visible) and serves the fresh bundle. Do not point the browser at :56321 until it is the fresh single session.\n\n**Not committed** (per workflow: no commit without explicit approval). Working tree on feature/p059-t253-normalized-outcomes.",
+      "statusLog": [
+        {
+          "id": "6a81be75-b052-4c3c-9d47-7c3d91a0697d-check-001-planned-in-progress",
+          "date": "2026-08-21T13:29:53.121Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "c5387b0a-9341-42c0-ba73-0f5319f1f997",
+          "date": "2026-08-21T13:47:58.961Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → paused",
+          "description": "Reason: L’utente ha chiesto di sistemare subito l’header/topbar in chiave mobile-first e lo screenshot mostra un problema UI prioritario separato dal cleanup runtime resume-state già implementato in T299.\nWhat was being done: Implementata e validata la slice runtime che pulisce pauseSnapshot e workDeviations quando un resume target diventa terminale, con guardrail nelle read surfaces server/web-ui/pi/mcp e test mirati verdi.\nResume location: packages/plan-core/src/plan-store.ts + packages/plan-server/src/serve.ts + packages/plan-web-ui/src/routes/task-detail/loader.ts + packages/pi-adapter/src/index.ts + packages/plan-mcp/src/index.ts; note aggiornate su T299.\nHow to resume: Ripartire da T299 per completare la parte ampia sullo spostamento/derivazione dello stato runtime resume-awareness verso storage worktree-local, mantenendo la pulizia dei task terminali già validata come base."
+        },
+        {
+          "id": "0d83ae55-394b-4de0-873e-b9fe9726d97c",
+          "date": "2026-08-21T14:04:59.932Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "paused → in-progress",
+          "description": "Resumed from packages/plan-core/src/plan-store.ts + packages/plan-server/src/serve.ts + packages/plan-web-ui/src/routes/task-detail/loader.ts + packages/pi-adapter/src/index.ts + packages/plan-mcp/src/index.ts; note aggiornate su T299.. Ripartire da T299 per completare la parte ampia sullo spostamento/derivazione dello stato runtime resume-awareness verso storage worktree-local, mantenendo la pulizia dei task terminali già validata come base."
+        },
+        {
+          "id": "5ed443e5-1e29-4c40-a9a6-2aaca101ab95",
+          "date": "2026-08-21T15:39:00.442Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → paused",
+          "description": "Reason: Pivoting to unrelated planner-core/Web UI work: header+filter compaction (done) and the .bak backup-location fix T301. T299 (resume-awareness runtime state → worktree-local storage) is set aside as-is.\nWhat was being done: T299 — move resume-awareness runtime state to worktree-local storage (P069/F005). No progress made this session; left at its prior in-progress state.\nResume location: packages/plan-core/src (resume-awareness runtime-state store); see P069(F005) handoff for details.\nHow to resume: Resume T299 from its phase handoff (P069/F005): re-read feature/phase/task, then continue relocating resume-awareness runtime state to worktree-local storage."
+        },
+        {
+          "id": "6a81be75-b052-4c3c-9d47-7c3d91a0697d-check-005-planned-in-progress",
+          "date": "2026-08-21T17:04:00.528Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "26f6e542-33a6-4f41-8e3f-950273024939",
+          "date": "2026-08-21T17:04:07.677Z",
+          "fromStatus": "in-progress",
+          "toStatus": "paused",
+          "title": "in-progress → paused",
+          "description": "Reason: Pivoting to the Web UI header slimming + dedicated Resume Required section work (T302) at the user's direction; T299 (resume-awareness runtime state → worktree-local storage) is set aside as-is.\nWhat was being done: Relocating resume-awareness runtime state to worktree-local storage (P069/F005/T299). No progress made this session; left at its prior in-progress state.\nResume location: packages/plan-core/src (resume-awareness runtime-state store); see P069(F005) handoff for details.\nHow to resume: Resume T299 from its phase handoff (P069/F005): re-read feature/phase/task, then continue relocating resume-awareness runtime state to worktree-local storage."
+        },
+        {
+          "id": "ec736550-113c-4333-89f7-ef161b168322",
+          "date": "2026-08-21T20:08:00.354Z",
+          "fromStatus": "paused",
+          "toStatus": "in-progress",
+          "title": "paused → in-progress",
+          "description": "Resumed from packages/plan-core/src/plan-store.ts (worktree-local storage section) + T299 description.. Resume T299 via task_start P069(F005)/T299 after T304 completes; re-read feature/phase/task context first."
+        },
+        {
+          "id": "6a81be75-b052-4c3c-9d47-7c3d91a0697d-check-008-in-progress-done",
+          "date": "2026-08-21T22:48:16.034Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "e472e7ad-95f6-4f9f-b4e2-64685d8d9343",
+          "reason": "L’utente ha chiesto di sistemare subito l’header/topbar in chiave mobile-first e lo screenshot mostra un problema UI prioritario separato dal cleanup runtime resume-state già implementato in T299.",
+          "whatWasBeingDone": "Implementata e validata la slice runtime che pulisce pauseSnapshot e workDeviations quando un resume target diventa terminale, con guardrail nelle read surfaces server/web-ui/pi/mcp e test mirati verdi.",
+          "resumeLocation": "packages/plan-core/src/plan-store.ts + packages/plan-server/src/serve.ts + packages/plan-web-ui/src/routes/task-detail/loader.ts + packages/pi-adapter/src/index.ts + packages/plan-mcp/src/index.ts; note aggiornate su T299.",
+          "howToResume": "Ripartire da T299 per completare la parte ampia sullo spostamento/derivazione dello stato runtime resume-awareness verso storage worktree-local, mantenendo la pulizia dei task terminali già validata come base.",
+          "relatedTaskId": "c043a60f-c339-42a8-b934-00f9ae79d453",
+          "pausedAt": "2026-08-21T13:47:58.961Z",
+          "pausedBy": "pi"
+        },
+        {
+          "id": "a068fcf6-1e05-4420-ad19-d059224d65e7",
+          "reason": "Pivoting to unrelated planner-core/Web UI work: header+filter compaction (done) and the .bak backup-location fix T301. T299 (resume-awareness runtime state → worktree-local storage) is set aside as-is.",
+          "whatWasBeingDone": "T299 — move resume-awareness runtime state to worktree-local storage (P069/F005). No progress made this session; left at its prior in-progress state.",
+          "resumeLocation": "packages/plan-core/src (resume-awareness runtime-state store); see P069(F005) handoff for details.",
+          "howToResume": "Resume T299 from its phase handoff (P069/F005): re-read feature/phase/task, then continue relocating resume-awareness runtime state to worktree-local storage.",
+          "relatedTaskId": "ce11e9f1-49dc-47c7-a1af-e46f5f803e7f",
+          "pausedAt": "2026-08-21T15:39:00.442Z",
+          "pausedBy": ""
+        },
+        {
+          "id": "f93f5de9-1a27-4152-96a8-6eb7f3e3a094",
+          "reason": "Pivoting to the Web UI header slimming + dedicated Resume Required section work (T302) at the user's direction; T299 (resume-awareness runtime state → worktree-local storage) is set aside as-is.",
+          "whatWasBeingDone": "Relocating resume-awareness runtime state to worktree-local storage (P069/F005/T299). No progress made this session; left at its prior in-progress state.",
+          "resumeLocation": "packages/plan-core/src (resume-awareness runtime-state store); see P069(F005) handoff for details.",
+          "howToResume": "Resume T299 from its phase handoff (P069/F005): re-read feature/phase/task, then continue relocating resume-awareness runtime state to worktree-local storage.",
+          "relatedTaskId": "36d38180-d81b-4768-b474-682a30431bb3",
+          "pausedAt": "2026-08-21T17:04:07.677Z",
+          "pausedBy": ""
+        },
+        {
+          "id": "3f592455-d8b6-4f9e-8fb4-7bde706496a4",
+          "reason": "User redirected to the Web UI resume-required icon work (T303) in the Work Tree; T299 (resume-awareness runtime state → worktree-local storage) is set aside as-is.",
+          "whatWasBeingDone": "Exploring where resume-awareness runtime state lives: workDeviations array in project.json (the resume-required/paused/switch state) and resume.json under .planner/.local (per-session resume focus + guard-bypass). No code changes made to T299 yet this session; T299 still at its prior in-progress state.",
+          "resumeLocation": "packages/plan-core/src/plan-store.ts (workDeviations storage in project.json, resumePath()/localRoot() for .local files) and packages/plan-core/src/task-selection.ts (getTaskFocus → pendingResume). See P069(F005) handoff for full context.",
+          "howToResume": "Resume T299 from its phase handoff (P069/F005): re-read feature/phase/task, then continue relocating resume-awareness runtime state to worktree-local storage (move workDeviations out of shared project.json into .planner/.local/*).",
+          "relatedTaskId": "916f49c6-f3bd-4915-8736-10fab905fb63",
+          "pausedAt": "2026-08-21T18:48:31.753Z",
+          "pausedBy": ""
+        },
+        {
+          "id": "0517a5af-8062-4c49-a035-2538065bb91b",
+          "reason": "User directed to start T304 (relocate extension rules from AGENTS.md into planner-loaded ruleset). T299 remains resume-required and is suspended with a checkpoint.",
+          "whatWasBeingDone": "T299 — Move resume-awareness runtime state to worktree-local storage (plan-store.ts worktree-local split for workDeviations/resume.json).",
+          "resumeLocation": "packages/plan-core/src/plan-store.ts (worktree-local storage section) + T299 description.",
+          "howToResume": "Resume T299 via task_start P069(F005)/T299 after T304 completes; re-read feature/phase/task context first.",
+          "relatedTaskId": "f2ee4136-51d6-40f0-ae66-a136195f2589",
+          "pausedAt": "2026-08-21T19:17:30.673Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-08-21T13:29:53.121Z",
+      "completedAt": "2026-08-21T22:48:16.034Z",
+      "createdAt": "2026-08-21T11:56:56.887Z",
+      "updatedAt": "2026-08-21T22:48:16.034Z"
+    },
+    {
+      "id": "8a96a899-bc59-4161-b56e-6f08e3595510",
+      "phaseId": "37449829-247b-4dda-a5c1-23bdb44d54b9",
+      "number": 300,
+      "shortId": "4JLJW",
+      "priority": 6,
+      "shortName": "require-feature-and-phase-re-r",
+      "title": "Require feature and phase re-read when resuming already in-progress work",
+      "status": "done",
+      "description": "Close the protocol gap where an agent can continue working on a task already marked `in-progress` without re-reading parent context because no `task_start` occurs. Review the task-entry/read-path rules implemented around `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and recap/task context surfaces, then add the logic needed so re-entering an already in-progress task still triggers explicit awareness of the task context and a fresh read of `feature_get(full=true)`, `phase_get(full=true)`, and the relevant task/checkpoint context. The rule must shift from \"before task_start\" to \"before resuming or continuing execution on active work\" while remaining compatible with advisory resume-required behavior and local runtime isolation.\n\n---\n**Completion summary:**\nT300 done. Closed the resume-awareness protocol gap: re-entering an already in-progress task (no task_start fires) now explicitly triggers context re-read. Edit in packages/plan-core/src/recap.ts buildRecap(): the focusTask (in-progress) branch now appends a re-read advisory + suggested reads after the \"Current focus … (in-progress)\" line — 'This task is in-progress (work started in a previous session). Before continuing, re-read the full context: feature show Fxx, phase show Pxx(Fxx), task show Txx (full)' — harness-correct via the existing cmd() helper (Pi: /planner <entity> show … ; MCP: planner-<entity>-show …). Added featureShowCmd/phaseShowCmd/taskShowCmd to the cmd-var block. No new exports; both pi-adapter and plan-mcp inherit automatically (single surface). Advisory-only (non-blocking), compatible with existing advisory resume-required behavior — the rule shifted from \"before task_start\" to \"before resuming/continuing active work\". Tests: extended recap.test.mjs active-task block with Pi + MCP assertions (13/13 pass); full plan-core 203 tests / 9 pre-existing T253 failures (display-status/task-selection/phase-task-validation, unrelated), +1 new green; pnpm check (root tsc -b) exit 0. No commit.",
+      "descriptionUpdatedAt": "2026-08-21T23:20:38.349Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "8a96a899-bc59-4161-b56e-6f08e3595510-check-001-planned-in-progress",
+          "date": "2026-08-21T23:08:33.087Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "8a96a899-bc59-4161-b56e-6f08e3595510-check-002-in-progress-done",
+          "date": "2026-08-21T23:20:38.347Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T23:08:33.087Z",
+      "completedAt": "2026-08-21T23:20:38.347Z",
+      "createdAt": "2026-08-21T11:56:56.924Z",
+      "updatedAt": "2026-08-21T23:20:38.347Z"
+    }
+  ],
+  "createdAt": "2026-08-21T11:56:33.532Z",
+  "updatedAt": "2026-08-22T14:04:45.465Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-22T13:41:07.415Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/37449829-247b-4dda-a5c1-23bdb44d54b9-2026-08-22T14-04-45-469Z.md",
+      "clearedAt": "2026-08-22T14:04:45.469Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/37449829-247b-4dda-a5c1-23bdb44d54b9-2026-08-22T13-41-07-411Z.md",
+      "clearedAt": "2026-08-22T13:41:07.411Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/37449829-247b-4dda-a5c1-23bdb44d54b9-2026-08-22T09-10-18-952Z.md",
+      "clearedAt": "2026-08-22T09:10:18.952Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/37449829-247b-4dda-a5c1-23bdb44d54b9-2026-08-21T22-49-02-698Z.md",
+      "clearedAt": "2026-08-21T22:49:02.698Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/37449829-247b-4dda-a5c1-23bdb44d54b9-2026-08-21T20-06-48-633Z.md",
+      "clearedAt": "2026-08-21T20:06:48.633Z",
+      "reason": "manual"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "83c517ac-b6e1-4ec1-b473-2076512ab981",
+      "date": "2026-08-21T13:29:53.128Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "7d202ad8-98b5-48e3-bc6e-989e92fb464d",
+      "date": "2026-08-22T14:04:45.488Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

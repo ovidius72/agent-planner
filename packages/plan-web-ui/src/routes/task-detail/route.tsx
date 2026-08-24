@@ -1,13 +1,5 @@
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useRef } from "react";
-
-function formatDateTime(value: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
 import { Form, Link, Outlet, useFetcher, useLoaderData, useNavigate } from "react-router-dom";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
@@ -15,12 +7,14 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
+import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
+import { ResumeSnapshot } from "../../components/task/resume-snapshot";
 import { useShortcut } from "../../lib/shortcuts";
 import type { Feature, Phase, Task, ChecklistItem } from "../../lib/types";
 
@@ -68,7 +62,7 @@ function ChecklistItemToggle({
 }
 
 export function TaskDetailRoute() {
-  const { feature, phase, task } = useLoaderData() as { feature: Feature; phase: Phase; task: Task };
+  const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
   const checklist = task.checklist ?? [];
@@ -122,9 +116,11 @@ export function TaskDetailRoute() {
 
       <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} createdAt={task.createdAt} updatedAt={task.updatedAt} startedAt={task.startedAt} completedAt={task.completedAt} />
 
+      {task.pauseSnapshot ? <ResumeSnapshot snapshot={task.pauseSnapshot} pendingResume={pendingResume} /> : null}
+
       <Card className="grid gap-4">
         {task.description ? (
-          <Accordion title="Description">
+          <Accordion title={<><span>Description</span><LastUpdated value={task.descriptionUpdatedAt} /></>}>
             <FormattedText text={task.description} className="plan-description" />
           </Accordion>
         ) : null}
@@ -154,6 +150,7 @@ export function TaskDetailRoute() {
 
         <DetailMetadataGrid
           items={[
+            { label: "Entity last updated", value: formatDateTime(task.updatedAt), visible: Boolean(task.updatedAt) },
             { label: "Priority", value: formatPriority(task.priority), visible: task.priority > 0 },
             { label: "Short name", value: task.shortName, visible: Boolean(task.shortName) },
             { label: "Started", value: formatDateTime(task.startedAt), visible: Boolean(task.startedAt) },

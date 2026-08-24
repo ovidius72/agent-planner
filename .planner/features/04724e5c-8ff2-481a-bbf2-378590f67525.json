@@ -1,0 +1,24 @@
+{
+  "id": "04724e5c-8ff2-481a-bbf2-378590f67525",
+  "number": 8,
+  "shortId": "78JAD",
+  "priority": 8,
+  "name": "Fix migrateToGlobalSequence task containment corruption",
+  "description": "CRITICAL hotfix. The `migrateToGlobalSequence` function (packages/plan-core/src/plan-store.ts, commit b41383c, first shipped @agent-plan/core 0.2.19-next.5) reassembles tasks into phase files using a misaligned index: `numberedTasks[i]` (sorted by createdAt) is paired with `allTasks[i]!.phase.id` (phase-iteration order), so the i-th task by createdAt gets filed under the phase of the i-th task by phase-order. Result: tasks land in wrong phase files (task.phaseId correct, containment wrong). Heca confirmed: 350/359 tasks misfiled after loading next.5.\n\nFix: reassemble by `task.phaseId` (the source of truth, confirmed correct on heca) instead of by position.\n\nAlso add a `rebuildContainment` repair step (group all tasks by their own phaseId, rewrite each phase file's tasks+taskIds) to PlanStore + expose via plan_repair in both adapters, so /planner repair heals corrupted projects. Audit other projects for the same corruption.\n\nBehaviors to preserve: migration idempotency (no-op when numbers already global); deterministic createdAt sort for numbering; phase task order (taskIds).",
+  "descriptionUpdatedAt": "2026-07-28T12:48:24.584Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "da02c456-d6fe-490e-84a7-15d3b0a1bd0f"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-28T12:48:24.584Z",
+  "updatedAt": "2026-07-28T12:48:29.508Z"
+}

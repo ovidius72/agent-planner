@@ -1,0 +1,307 @@
+{
+  "id": "309eaa59-03df-4bcd-b761-8e100e928e94",
+  "featureId": "bd655486-e048-47ae-b06c-2bed511d89c6",
+  "number": 60,
+  "shortId": "Q26T5",
+  "priority": 9,
+  "slug": "ci-coverage-gates-and-test-documentation",
+  "title": "CI coverage gates and test documentation",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make the complete suite repeatable in CI with enforceable coverage and contributor guidance.",
+  "description": "Wire package and root scripts for unit, integration, coverage, and Playwright runs. Publish package-level coverage reports and enforce agreed thresholds for source code while excluding generated assets and unavoidable bootstrap wrappers. Add CI services/setup for Node 25, browsers, temporary ports, and deterministic test data; make failures retain useful Playwright traces and coverage artifacts. Document how to run all suites, how to add a scenario to the shared matrix, how Pi host fakes work, how MCP transports are selected, and how to diagnose flaky filesystem/WebSocket/browser tests. Keep publication workflows separate from test execution and do not alter release behavior.",
+  "descriptionUpdatedAt": "2026-08-09T17:39:51.927Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "7b1a5923-24f7-48e6-bd18-7407a9d34018",
+    "435838bc-6747-4d2b-ab0c-19065de1e99a",
+    "a8116a83-1ebc-457f-a139-159be58c19ef",
+    "198679e2-262d-4dfd-a601-995e3c94a729"
+  ],
+  "tasks": [
+    {
+      "id": "7b1a5923-24f7-48e6-bd18-7407a9d34018",
+      "phaseId": "309eaa59-03df-4bcd-b761-8e100e928e94",
+      "number": 257,
+      "shortId": "BNSN2",
+      "priority": 1,
+      "shortName": "test-scripts-gates",
+      "title": "Wire package and root test scripts with coverage gates",
+      "status": "done",
+      "description": "Add consistent package scripts for unit, integration, coverage, and E2E suites, plus root orchestration commands that run the complete matrix in dependency order. Enforce package-level statement/line/function thresholds and branch thresholds agreed during baseline, exclude generated bundles only, and emit CI-readable summaries plus HTML/JSON artifacts. Ensure failures stop the pipeline and local commands remain usable without CI-only services.\n\n---\n**Completion summary:**\nChiuso il task in seguito alla rivalutazione della priorità di lavoro. Durante questa attivazione è stata svolta solo ricognizione read-only del wiring già esistente per script e coverage gates: package.json root con test/test:unit/test:integration/test:e2e/test:coverage/test:matrix/test:compatibility, scripts/test-all.mjs per l’orchestrazione, test/coverage.config.mjs per le soglie, e .github/workflows/ci.yml con build/check/test. Nessuna ulteriore modifica di codice o configurazione eseguita in questa fase.",
+      "descriptionUpdatedAt": "2026-08-21T13:16:18.541Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "7b1a5923-24f7-48e6-bd18-7407a9d34018-check-001-planned-in-progress",
+          "date": "2026-08-21T13:09:19.701Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7b1a5923-24f7-48e6-bd18-7407a9d34018-check-002-in-progress-done",
+          "date": "2026-08-21T13:16:18.539Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T13:09:19.701Z",
+      "completedAt": "2026-08-21T13:16:18.539Z",
+      "createdAt": "2026-08-09T17:43:38.804Z",
+      "updatedAt": "2026-08-21T13:16:18.539Z"
+    },
+    {
+      "id": "435838bc-6747-4d2b-ab0c-19065de1e99a",
+      "phaseId": "309eaa59-03df-4bcd-b761-8e100e928e94",
+      "number": 258,
+      "shortId": "9JG89",
+      "priority": 2,
+      "shortName": "ci-test-workflow",
+      "title": "Add CI workflow for browsers integration services and reports",
+      "status": "done",
+      "description": "Extend CI for Node 25, dependency installation, TypeScript checks, package tests, coverage collection, Playwright browser installation, real server/MCP/Pi integration fixtures, and artifact upload on failure. Keep publication workflow separate, use isolated temporary directories and dynamic ports, and make browser traces/screenshots/coverage available for diagnosis without leaking project data or secrets.\n\n---\n**Completion summary:**\nImplemented P060(F015)/T258 — extend CI for browser integration + coverage reports.\n\nChanged only `.github/workflows/ci.yml` (publish.yml left separate, as required).\n\n- `build` job: replaced `pnpm test` with `pnpm test:coverage` (enforces the FINAL coverage gate from test/coverage.config.mjs). Added an `actions/upload-artifact@v4` step (if: always) uploading `reports/**/coverage.lcov`, `reports/**/report.html`, `reports/**/results.json` for diagnosis.\n- new `e2e` job: checkout → pnpm/node25 setup → `pnpm install --frozen-lockfile` → `npx playwright install --with-deps chromium` → `pnpm build` → `pnpm exec playwright test` → on failure uploads `playwright-report/` + `test-results/` (traces/screenshots) via `actions/upload-artifact@v4`.\n\nIsolation / safety (per task requirements):\n- The e2e fixtures (e2e/fixtures.ts) spin up their OWN real plan-server with `port: 0` (dynamic) and an isolated `planRoot` from mkdtemp; they import `packages/plan-server/dist` + `packages/plan-web-ui/dist` directly. So CI never touches the project `.planner` and never reads secrets. Artifacts contain only generated traces/screenshots/coverage — no project data.\n- Browser install uses `--with-deps chromium` only; `forbidOnly`/retries/workers are already CI-gated in playwright.config.ts.\n\nVerification (local, no commit per project rules):\n- YAML parsed clean — jobs: [build, e2e]; triggers push[develop] + pull_request.\n- `pnpm exec playwright test --list` discovers 22 tests across 4 spec files (bootstrap-crud, handoff-resume, responsive, status-dashboard) in both chromium + mobile-chromium projects — config + specs wired correctly.\n- Root `pnpm check`/`pnpm build` already green from prior tasks in this sequence.\n\nThis closes the agreed sequence T296 → T297 → T298 → T258. No commit/push (project Pre-flight: git mutations require explicit per-action user permission).",
+      "descriptionUpdatedAt": "2026-08-22T14:16:19.300Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "435838bc-6747-4d2b-ab0c-19065de1e99a-check-001-planned-done",
+          "date": "2026-08-22T14:16:19.298Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-22T14:16:19.298Z",
+      "completedAt": "2026-08-22T14:16:19.298Z",
+      "createdAt": "2026-08-09T17:43:45.430Z",
+      "updatedAt": "2026-08-22T14:16:19.298Z"
+    },
+    {
+      "id": "a8116a83-1ebc-457f-a139-159be58c19ef",
+      "phaseId": "309eaa59-03df-4bcd-b761-8e100e928e94",
+      "number": 259,
+      "shortId": "68VLM",
+      "priority": 3,
+      "shortName": "test-documentation",
+      "title": "Document scenario authoring, adapters, fixtures, and troubleshooting",
+      "status": "done",
+      "description": "Document how to run each suite, interpret coverage, add shared scenarios, extend API/MCP/Pi runners, use the Pi host boundary, seed browser fixtures, debug WebSocket and dynamic-port failures, and update exclusions or thresholds responsibly. Include the full public-surface inventory workflow and rules for never touching real user `.planner` directories in tests.\n\n---\n**Completion summary:**\nCreato docs/testing.md (311 righe) che documenta: (1) come eseguire ogni suite via scripts/test-all.mjs + script root (test/test:unit/test:integration/test:coverage/test:e2e/test:matrix); (2) interpretazione coverage (test/coverage.config.mjs: include dist, exclude bundle/bootstrap/test, gate 80/80/70, baseline 79/76/72, reports/); (3) come aggiungere uno scenario condiviso (test/scenario-matrix.mjs: contratto id/group/category/harnesses/fixture/surfaces/steps/expects + ciclo add→registerExecutor→test:matrix); (4) workflow inventory superfici pubbliche (test/surfaces.mjs core/api/mcp/pi/ui + test/matrix-consistency.test.mjs come guard); (5) Pi host boundary (packages/pi-adapter/test/helpers/pi-host-fixture.mjs: fake ExtensionAPI/Context, solo boundary mockata, PlanStore/filesystem reali, createPiHost/runTool/runCommand/emit/close/cleanupPiHosts); (6) fixture browser (e2e/fixtures.ts self-start plan-server port:0 + plan-web-ui/test/fixtures.tsx make*); (7) troubleshooting WebSocket/dynamic-port/flaky-FS/browser; (8) regola mai toccare .planner utente reali (mkdtemp, createPlannerFixture, trackedRoots, cleanupFixtures). Verificato che i file referenziati esistono e i comandi corrispondono a package.json. Nessun codice modificato (solo nuovo doc). Non committato.",
+      "descriptionUpdatedAt": "2026-08-23T19:18:15.961Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "67fb8f12-2492-4482-95ba-ba5878a0d2e9",
+          "date": "2026-08-23T09:59:14.233Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "defe3ded-86a1-44dd-ad96-905ccd6fcfbc",
+          "date": "2026-08-23T11:16:31.923Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned",
+          "description": ""
+        },
+        {
+          "id": "a8116a83-1ebc-457f-a139-159be58c19ef-check-003-planned-in-progress",
+          "date": "2026-08-23T19:16:51.430Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a8116a83-1ebc-457f-a139-159be58c19ef-check-004-in-progress-done",
+          "date": "2026-08-23T19:18:15.960Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T09:59:14.233Z",
+      "completedAt": "2026-08-23T19:18:15.960Z",
+      "createdAt": "2026-08-09T17:43:53.392Z",
+      "updatedAt": "2026-08-23T19:18:15.960Z"
+    },
+    {
+      "id": "198679e2-262d-4dfd-a601-995e3c94a729",
+      "phaseId": "309eaa59-03df-4bcd-b761-8e100e928e94",
+      "number": 260,
+      "shortId": "RYGFF",
+      "priority": 4,
+      "shortName": "test-stability-cleanup",
+      "title": "Harden deterministic cleanup and flaky-test diagnostics",
+      "status": "done",
+      "description": "Audit all new suites for leaked timers, ports, WebSocket listeners, child processes, browser contexts, temporary directories, and stale generated files. Add retries only where justified, failure diagnostics with scenario IDs and snapshots, deterministic clocks/IDs where needed, and a quarantine policy for genuinely environment-dependent Pi CLI smoke checks. Confirm repeated local and CI runs produce stable results without mutating repository planner state.\n\n---\n**Completion summary:**\nT260 completato. Audit hardening deterministic cleanup + flaky-test diagnostics:\n\n1) FIX reale (leak timer): packages/plan-server/test/server-events.test.mjs — il watchdog `setTimeout` nel test \"closing the server tears down the WebSocket connection\" non veniva cleared alla chiusura, tenendo vivo l'event loop ~2s dopo il test; ora cattura l'id e fa `clearTimeout(timer)` su `ws.ws` close. Test WS verde (run mirato plan-server: \"closing the server tears down the WebSocket connection\" ✔ e \"close() drains HTTP/WebSocket resources and cleanup removes temp roots\" ✔).\n\n2) DOC: docs/testing.md §12 \"Deterministic cleanup, quarantine & repeatability\" + arricchita §11 — contratto di cleanup (mkdtemp + registry tracked + after(cleanupFixtures)/after(cleanupPiHosts) in ogni file; close per-test in finally; blocker server chiuso; timer CLI smoke già cleared), quarantine policy per i check environment-dependent (Pi CLI reale/model: opt-in PLANNER_CLI_SMOKE=1 + self-probe skip, mai contati nel suite principale), retry policy (solo Playwright retries:2 in CI; node:test NON ritenta — un flaky node è bug reale), verifica repeatability (BASE_TIME + counter deterministici, port 0, git status pulito), diagnostica fallimenti (where: <scenarioId> (<harnesses>) + mismatch expected/got su snapshot/data).\n\n3) Audit isolamento: confermato che NESSUN test punta a cwd/.planner reale — tutti usano createPlannerFixture/createTempRoot (mkdtemp); serve() riceve sempre planRoot esplicito da fixture. Le mutazioni osservate su .planner del repo (shortId backfill \"\"→\"Z9MWF\" + statusLog da lifecycle) sono del runtime del planner (dashboard live + task_start/task_complete di sessione), NON delle suite.\n\n4) Stabilità confermata: integration run1 = 42/43, run2 = 42/43, identico (solo report.test.mjs e2e determinísticamente rosso perché `test-all unit --no-build` esce 1 per i 10 fallimenti pre-esistenti del branch T253). Non-flaky, deterministico.\n\nNOTA (fuori scope P060, non attribuibile a questo task): il branch feature/p059-t253-normalized-outcomes ha 10 fallimenti pre-esistenti in unit (display-status/task-selection normalization + 1 plan-store delete/.bak). Appartengono al lavoro P059, non a T259/T260. Non modificati.\n\nModifiche non committate (per regole progetto, serve approvazione esplicita): docs/testing.md (nuovo), packages/plan-server/test/server-events.test.mjs (timer fix).",
+      "descriptionUpdatedAt": "2026-08-24T07:27:28.477Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "1460274a-0ed7-4366-a075-912b0a557dba",
+          "date": "2026-08-23T10:39:41.761Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "69c988be-a6fe-44dc-a172-ba4e23005876",
+          "date": "2026-08-23T10:40:00.799Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned",
+          "description": ""
+        },
+        {
+          "id": "198679e2-262d-4dfd-a601-995e3c94a729-check-003-planned-in-progress",
+          "date": "2026-08-23T19:18:23.729Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "198679e2-262d-4dfd-a601-995e3c94a729-check-004-in-progress-done",
+          "date": "2026-08-24T07:27:28.475Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        },
+        {
+          "id": "9194463e-08cb-4a4a-8fc6-e10e693325bb",
+          "date": "2026-08-24T07:32:51.001Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "done → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f6ff0cf2-217d-49fa-bf77-451baa47d336",
+          "date": "2026-08-24T07:32:57.489Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-23T10:39:41.761Z",
+      "completedAt": "2026-08-24T07:32:57.489Z",
+      "createdAt": "2026-08-09T17:44:01.101Z",
+      "updatedAt": "2026-08-24T07:32:57.489Z"
+    }
+  ],
+  "createdAt": "2026-08-09T17:39:51.927Z",
+  "updatedAt": "2026-08-24T07:32:57.489Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-23T19:18:45.817Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-24T07-27-28-479Z.md",
+      "clearedAt": "2026-08-24T07:27:28.479Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T19-18-45-814Z.md",
+      "clearedAt": "2026-08-23T19:18:45.814Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T16-33-26-783Z.md",
+      "clearedAt": "2026-08-23T16:33:26.783Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T16-16-27-360Z.md",
+      "clearedAt": "2026-08-23T16:16:27.360Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T13-03-01-022Z.md",
+      "clearedAt": "2026-08-23T13:03:01.022Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "eecd0055-5695-49cf-a984-03931c0d4e14",
+      "date": "2026-08-21T13:09:19.706Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "a5a1b516-f1d7-414c-bdd3-70c31aa3b3ec",
+      "date": "2026-08-24T07:27:28.501Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "a9b85910-ea17-44a2-8b9c-a5e29bcfdce9",
+      "date": "2026-08-24T07:32:51.071Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "fbc7f775-67d7-4086-b4d1-ce9c89032f4a",
+      "date": "2026-08-24T07:32:57.534Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

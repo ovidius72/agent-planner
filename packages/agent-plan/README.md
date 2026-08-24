@@ -3,6 +3,7 @@
 CLI package for Agent Plan.
 
 ## What it provides
+- `agent-plan --version` / `agent-plan -v`
 - `agent-plan init`
 - `agent-plan mcp`
 - `agent-plan export`

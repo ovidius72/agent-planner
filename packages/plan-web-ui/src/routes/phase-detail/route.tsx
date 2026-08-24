@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link, Outlet, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
 import { TaskRow } from "../../components/tasks/task-row";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
@@ -8,10 +8,11 @@ import { Card } from "../../components/ui/card";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
 import { CompactCard } from "../../components/ui/compact-card";
 import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
+import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { HandoffBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
-import { ListFilters } from "../../components/ui/list-filters";
+import { DetailFilters } from "../../components/ui/detail-filters";
 import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
@@ -19,7 +20,7 @@ import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { clearPhaseHandoff } from "../../lib/api";
 import { compareEntities, type WorkTreeSortConfig } from "../../lib/dashboard-tree";
-import { matchesListQuery } from "../../lib/list-filtering";
+import { matchesListQuery, passesDetailFilters, type DetailFilterValue } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { taskStatuses } from "../../lib/statuses";
 import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
@@ -49,10 +50,30 @@ export function PhaseDetailRoute() {
   const taskSummary = summarizeTasks(phase);
   const phaseDisplay = derivePhaseDisplayFromTasks(phase.tasks);
   const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchParams.get("q")?.trim() ?? "";
-  const status = searchParams.get("status")?.trim() ?? "";
   const sortParam = searchParams.get("sort")?.trim() ?? "priority";
   const dirParam = searchParams.get("dir")?.trim() ?? "asc";
+  const [filters, setFilters] = useState<DetailFilterValue>(() => ({
+    query: searchParams.get("q")?.trim() ?? "",
+    status: searchParams.get("status")?.trim() ?? "",
+    hideDone: searchParams.get("hideDone") === "1",
+    hidePlanned: searchParams.get("hidePlanned") === "1",
+    onlyActive: searchParams.get("onlyActive") === "1",
+  }));
+  // Keep the URL in sync (deep-link / share) via replaceState — no router
+  // navigation, so the window scroll position is preserved while filtering.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const sync = (key: string, on: boolean, val = "1") => {
+      if (on) url.searchParams.set(key, val);
+      else url.searchParams.delete(key);
+    };
+    sync("q", filters.query.trim() !== "", filters.query.trim());
+    sync("status", filters.status !== "", filters.status);
+    sync("hideDone", filters.hideDone);
+    sync("hidePlanned", filters.hidePlanned);
+    sync("onlyActive", filters.onlyActive);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [filters]);
   const sort: WorkTreeSortConfig = {
     key: sortParam === "priority" || sortParam === "number" || sortParam === "createdAt" || sortParam === "updatedAt" || sortParam === "title" || sortParam === "shortId" || sortParam === "status" || sortParam === "startedAt" || sortParam === "completedAt"
       ? sortParam
@@ -64,10 +85,10 @@ export function PhaseDetailRoute() {
     () =>
       sortedTasks.filter(
         (task) =>
-          (!status || task.status === status) &&
-          matchesListQuery(query, [task.title, task.id, task.description, task.shortName]),
+          passesDetailFilters(task, filters, ["in-progress"])
+          && matchesListQuery(filters.query, [task.title, String(task.number), task.shortId]),
       ),
-    [sortedTasks, query, status],
+    [sortedTasks, filters],
   );
   const navigate = useNavigate();
   const deleteFormRef = useRef<HTMLFormElement>(null);
@@ -131,7 +152,6 @@ export function PhaseDetailRoute() {
         <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} createdAt={phase.createdAt} updatedAt={phase.updatedAt} />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit phase</Button></Link>
-          <Link to="tasks/new"><Button type="button" variant="primary" shortcut="create">Create task</Button></Link>
           <Form
             ref={deleteFormRef}
             method="post"
@@ -207,6 +227,7 @@ export function PhaseDetailRoute() {
 
         <DetailMetadataGrid
           items={[
+            { label: "Entity last updated", value: formatDateTime(phase.updatedAt), visible: Boolean(phase.updatedAt) },
             { label: "Priority", value: formatPriority(phase.priority), visible: phase.priority > 0 },
             { label: "Linked requirements", value: linkedRequirements.length, visible: linkedRequirements.length > 0, valueClassName: "text-2xl font-black" },
             { label: "Risks", value: phase.risks.length, visible: phase.risks.length > 0, valueClassName: "text-2xl font-black" },
@@ -246,7 +267,7 @@ export function PhaseDetailRoute() {
           )}
         </Accordion>
         {phase.description ? (
-          <Accordion title="Description">
+          <Accordion title={<><span>Description</span><LastUpdated value={phase.descriptionUpdatedAt} /></>}>
             <FormattedText text={phase.description} className="plan-description" />
           </Accordion>
         ) : null}
@@ -288,32 +309,27 @@ export function PhaseDetailRoute() {
       ) : null}
 
       <Card className="grid gap-5">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks</p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Filter and sort this phase's tasks.
-          </p>
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks ({phase.tasks.length})</p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Filter and sort this phase's tasks.
+            </p>
+          </div>
+          <Link to="tasks/new"><Button type="button" variant="primary" shortcut="create">Create task</Button></Link>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
+        <DetailFilters
+          entityKind="task"
+          statusOptions={taskStatuses}
+          value={filters}
+          onChange={setFilters}
+          sortSlot={<SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
             prev.set("sort", next.key);
             prev.set("dir", next.direction);
             return prev;
-          })} />
-          <ListFilters
-            query={query}
-            status={status}
-            statusOptions={taskStatuses}
-            placeholder="Search task title, id, or description"
-            clearTo={`/features/${feature.id}/phases/${phase.id}`}
-            resultsLabel={
-              filteredTasks.length === phase.tasks.length
-                ? `${phase.tasks.length} tasks`
-                : `${filteredTasks.length} of ${phase.tasks.length} tasks`
-            }
-          />
-        </div>
+          })} />}
+        />
 
         <div className="grid gap-3">
           {phase.tasks.length === 0 ? (

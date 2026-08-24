@@ -1,0 +1,764 @@
+{
+  "id": "63237b26-8b36-4818-87db-ef619566ea83",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 38,
+  "shortId": "ZEP3Y",
+  "priority": 1,
+  "slug": "derived-parent-display-statuses-web-ui-status-readability",
+  "title": "Derived parent display statuses + Web UI status readability",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Introduce a parent-only derived display-status layer and improve Web UI readability with color/icon/pattern semantics.",
+  "description": "Current parent status derivation in `packages/plan-core/src/plan-store.ts` is optimized for workflow rollup but does not always read clearly in the Web UI when a phase/feature has mixed child outcomes and no active child. Recent fixes already tightened one misleading case (`done + deferred -> deferred`), but the broader reading problem remains: parent entities need a display-oriented summary that communicates whether work is active now, started but idle, uniformly waiting/blocked/deferred, or fully closed with mixed terminal outcomes. The main affected UI surfaces are the Work Tree and dashboard rows in `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`, reusable status/badge primitives in `packages/plan-web-ui/src/components/ui/badges.tsx`, and entity detail/list surfaces that currently depend on a single status color to communicate state.\n\nThis phase should define and implement a parent-only derived display layer for `feature` and `phase`, keeping workflow statuses as the canonical operational model while introducing presentation semantics better suited for fast scanning. Locked direction from discussion: do NOT add `started` as a persisted workflow status alongside `in-progress`; instead, derive presentation statuses such as `started` and `closed` for parent entities only. `in-progress` should mean active child work exists now. `waiting`, `blocked`, and `deferred` should be surfaced directly only when the unfinished meaningful remainder is homogeneous. `closed` should summarize entities whose children are all terminal but with mixed outcomes such as `done/canceled/rejected`. Mixed non-active remainder that cannot honestly collapse to one specific workflow label should render as `started` in the display layer rather than overloading `planned` or `in-progress`.\n\nThe implementation should preserve the planner’s source-of-truth discipline: task/phase/feature canonical workflow state remains in the structured planner data, while display status, breakdown counts, and optional `hasStarted`/activity metadata are derived at read time or adapter/UI boundary. The Web UI must not rely on color alone; similar states should also differ via iconography, border/pattern treatment, and accessible tooltip/breakdown text. Behavior to preserve: task lifecycle semantics, existing planner data compatibility, current terminal statuses (`done`, `canceled`, `rejected`), and the ability to reason about parent rollups without making the core harness-specific.",
+  "notes": "",
+  "goals": [
+    "Define a parent-only derived display-status model that improves readability of `feature` and `phase` state in the Web UI without changing canonical task workflow semantics.",
+    "Specify precise rollup/display semantics for `in-progress`, `started`, `waiting`, `blocked`, `deferred`, `done`, `closed`, `canceled`, and `rejected` at parent level.",
+    "Expose enough derived metadata (for example breakdown counts and/or `hasStarted`) to let the UI explain mixed states instead of hiding them behind a single badge.",
+    "Update key Web UI surfaces so status readability comes from a combination of color, icon, border/pattern, and tooltip/popover breakdown rather than color alone."
+  ],
+  "nonGoals": [
+    "Do not add `started` as a persisted workflow status editable by users on tasks.",
+    "Do not replace the planner JSON source of truth with UI-only ad-hoc state.",
+    "Do not make the core harness-specific or couple display semantics to Pi-only behavior.",
+    "Do not redesign every route in the Web UI during this phase; focus on status-bearing surfaces first."
+  ],
+  "dependencies": [
+    "`packages/plan-core/src/plan-store.ts` existing parent rollup logic and recent `done + deferred -> deferred` fix.",
+    "`packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx` and related dashboard/list rendering.",
+    "`packages/plan-web-ui/src/components/ui/badges.tsx` plus any existing shared status badge/token utilities.",
+    "Status-bearing detail/list/dashboard views introduced in earlier improvement phases such as P033(F005) and related UI polish phases."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Confusing canonical workflow status with derived display status if naming and API shape are not explicit.",
+    "Status-history drift if derived display states are accidentally persisted or logged as canonical transitions.",
+    "UI inconsistency if some routes use canonical status colors while others use the new display layer.",
+    "Accessibility regressions if the design relies on hue alone without pattern/icon reinforcement or explanatory text."
+  ],
+  "openQuestions": [
+    "Should derived display status be computed centrally in core/shared helpers and returned to clients, or should the Web UI compute it from child data using a shared imported utility?",
+    "Should filters/search operate on canonical workflow status, derived display status, or both?",
+    "Should `hasStarted` be a first-class derived field, or is `displayStatus + breakdown` sufficient for the first iteration?"
+  ],
+  "decisions": [
+    "Keep existing workflow statuses (`planned`, `in-progress`, `waiting`, `blocked`, `deferred`, `done`, `canceled`, `rejected`) as the canonical operational model.",
+    "Introduce `started` and `closed` only as parent-level derived presentation states, not as persisted workflow statuses.",
+    "Interpret `in-progress` at parent level as 'there is active child work now', not merely 'some work was done in the past'.",
+    "Surface `waiting`, `blocked`, and `deferred` directly only when the unfinished meaningful remainder is homogeneous; otherwise use `started` for mixed non-active remainder.",
+    "Represent fully terminal mixed outcomes (`done/canceled/rejected`) as `closed` in the display layer rather than overloading `done`.",
+    "Improve Web UI readability with combined color + icon + border/pattern + tooltip/popover breakdown, not color alone."
+  ],
+  "acceptedDecisions": [
+    {
+      "id": "display-status-parent-only",
+      "title": "Parent-only derived display status layer",
+      "decision": "`started` and `closed` will exist as derived presentation states for parent entities (`feature`, `phase`) rather than persisted workflow statuses.",
+      "rationale": "This preserves the clarity of the canonical workflow model while solving the Web UI readability problem where mixed child outcomes and non-active states are currently hard to scan.",
+      "implementationNotes": "Add shared derivation logic near existing rollup helpers; keep planner JSON/source-of-truth unchanged and feed the UI derived fields from shared code.",
+      "acceptedAt": "2026-08-05T00:00:00.000Z"
+    },
+    {
+      "id": "in-progress-means-active-now",
+      "title": "Parent `in-progress` means active child work exists now",
+      "decision": "A parent should render `in-progress` only when at least one child is actively running (and optionally `discovery` where that concept applies), not just because some sibling child is already `done`.",
+      "rationale": "The main goal is to improve readability: users scanning the Web UI should be able to trust that `in-progress` means active work, not historical partial completion.",
+      "implementationNotes": "Revisit parent derivation logic and/or add a display-layer derivation that separates active work from historical progress.",
+      "acceptedAt": "2026-08-05T00:00:00.000Z"
+    },
+    {
+      "id": "homogeneous-remainder-specific-states",
+      "title": "Specific non-active states only when remainder is homogeneous",
+      "decision": "`waiting`, `blocked`, and `deferred` should be shown directly only when the unfinished meaningful remainder is homogeneous; mixed non-active remainder should display as `started`.",
+      "rationale": "This avoids lying with an overly specific label when the remaining child states actually point in different directions.",
+      "implementationNotes": "Treat `canceled` and `rejected` as terminal outcomes in the terminal/closed logic rather than as active unfinished remainder drivers.",
+      "acceptedAt": "2026-08-05T00:00:00.000Z"
+    },
+    {
+      "id": "ui-status-readability-multi-signal",
+      "title": "Web UI status readability uses multiple signals",
+      "decision": "Status rendering should use color, iconography, border/pattern treatment, and textual breakdown/tooltip support instead of color alone.",
+      "rationale": "The problem being solved is primarily Web UI readability; multiple visual channels reduce ambiguity, improve accessibility, and help distinguish similar non-active states quickly.",
+      "implementationNotes": "Define a reusable display-status token mapping and apply it consistently across badges, tree rows, and detail/list headers.",
+      "acceptedAt": "2026-08-05T00:00:00.000Z"
+    }
+  ],
+  "completionCriteria": [
+    "A shared specification exists for deriving parent display status and any supporting metadata such as breakdown counts or `hasStarted`.",
+    "The implementation preserves canonical workflow statuses and does not persist `started`/`closed` into planner source-of-truth fields.",
+    "At least the main Web UI status-bearing surfaces (Work Tree plus one additional shared badge/list/detail surface) render parent states using the new display layer consistently.",
+    "Mixed terminal parents such as `done + canceled` no longer present as plain `done`; they render as `closed` with an explanatory breakdown.",
+    "Visual differentiation between `started`, `in-progress`, `waiting`, `blocked`, `deferred`, `closed`, and terminal statuses is possible without relying only on color."
+  ],
+  "taskIds": [
+    "e5b1e9bf-d8fa-428e-8077-785e8f896a16",
+    "e512c8bb-e9b5-4ca8-b6ad-1228f491bbe1",
+    "76e3b5fe-b146-46c8-8cc9-c5db096a143e",
+    "ad417635-f5f8-48c9-b440-01e17f1964d7",
+    "ec3bb49a-cebf-46a1-a003-f3a9ecf5bd5d",
+    "2d7911ec-4a46-4a00-abae-1c94f8db1257",
+    "e3571084-1746-4825-975b-8db59448f18b",
+    "c5cd8bbc-1284-4860-a9ec-37aff510cf88",
+    "53a9bbea-1f0a-4cd8-b115-d1c8381a3ef6",
+    "ef101a39-8b42-4a1a-bd8b-4b0e326494da",
+    "1eb9db97-af67-46f4-9203-b31b99fb816e",
+    "f3f10cde-3865-408e-a690-b852738aea26"
+  ],
+  "tasks": [
+    {
+      "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 167,
+      "shortId": "ANHAK",
+      "priority": 1,
+      "shortName": "display-status-headers-rows",
+      "title": "Web UI: detail headers + list rows use display layer for parents",
+      "status": "done",
+      "description": "Extend the display layer to detail page headers and list rows so parent status is consistent across all surfaces.\n\nRequirements:\n- Detail headers (`feature-detail/route.tsx`, `phase-detail/route.tsx`): the status badge for the feature/phase uses `DisplayStatusBadge` with computed `displayStatus` + `breakdown`. Task-detail header keeps canonical task status (leaf), but uses new token styling.\n- List rows (`feature-row.tsx`, `phase-row.tsx`): parent badge uses display layer; `task-row.tsx` keeps canonical status with new token styling.\n- Dashboard summaries (`stat-cards.tsx`, `ai-consolidated-context.tsx`): counts/badges that summarize parent state use `displayStatus` where appropriate.\n- Ensure the filter status options still operate on canonical workflow status (per open question, default to canonical unless decided otherwise); do not silently change filter semantics.\n\nReference:\n- `packages/plan-web-ui/src/routes/feature-detail/route.tsx`\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx`\n- `packages/plan-web-ui/src/routes/task-detail/route.tsx`\n- `packages/plan-web-ui/src/components/features/feature-row.tsx`\n- `packages/plan-web-ui/src/components/phases/phase-row.tsx`\n- `packages/plan-web-ui/src/components/tasks/task-row.tsx`\n- `packages/plan-web-ui/src/components/dashboard/stat-cards.tsx`\n\nBehaviors to preserve: the header redesign (badge row → title → actions row), copyable entity badges, mobile column layout, and existing filter/clear behavior.\n\n---\n**Completion summary:**\nExtended the derived display-status layer to detail page headers and list rows.\n\nChanges:\n- `packages/plan-web-ui/src/routes/feature-detail/route.tsx`:\n  - Computes `featureDisplay` from the loaded phases via `deriveFeatureDisplayFromPhases`.\n  - Replaces the canonical `StatusBadge` in the header with `DisplayStatusBadge` showing `displayStatus` + `breakdown` tooltip.\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx`:\n  - Computes `phaseDisplay` from `phase.tasks` via `derivePhaseDisplayFromTasks`.\n  - Replaces the canonical `StatusBadge` in the header with `DisplayStatusBadge`.\n- `packages/plan-web-ui/src/components/features/feature-row.tsx`:\n  - Added optional `phases?: Phase[]` prop.\n  - Computes and renders `DisplayStatusBadge` with breakdown for the parent feature.\n- `packages/plan-web-ui/src/routes/features/route.tsx`:\n  - Updated `buildCounts` to keep the grouped `Phase[]` per feature and pass it to `FeatureRow`.\n- `packages/plan-web-ui/src/components/phases/phase-row.tsx`:\n  - Computes display status from `phase.tasks` and renders `DisplayStatusBadge` with breakdown.\n- `packages/plan-web-ui/src/components/tasks/task-row.tsx`:\n  - Kept canonical workflow status badge (which now uses the new token styling via `StatusBadge`).\n- `packages/plan-web-ui/src/lib/derive-display.ts`:\n  - Added convenience helpers `deriveFeatureDisplayFromPhases` and `derivePhaseDisplayFromTasks`.\n\nFilters in `ListFilters` continue to operate on canonical workflow status (no semantic change).\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui check` is clean.\n- `pnpm --filter @agent-plan/web-ui build` is green.\n- Ran `bash scripts/copy-web-ui.sh` to sync the bundle.\n- Full monorepo `pnpm check` is clean.\n\nNext: dashboard summaries and docs/release notes (T171).",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-001-done-planned",
+          "date": "2026-08-05T09:22:02.592Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Reopening: task was force-completed while checklist still had unchecked items (dashboard summaries not implemented).",
+          "description": "Reopening: task was force-completed while checklist still had unchecked items (dashboard summaries not implemented)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-001-update-feature-detail-phase-detail-header-badges-to-display-layer",
+          "number": 1,
+          "title": "Update feature-detail + phase-detail header badges to display layer",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-002-update-feature-row-phase-row-list-badges-to-display-layer",
+          "number": 2,
+          "title": "Update feature-row + phase-row list badges to display layer",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-003-keep-task-detail-task-row-on-canonical-status-with-new-token-styling",
+          "number": 3,
+          "title": "Keep task-detail + task-row on canonical status with new token styling",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-004-verify-dashboard-summary-badges-consistency",
+          "number": 4,
+          "title": "Verify dashboard summary badges consistency",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-005-build-web-ui-green-and-verify-0px-overflow-at-390px",
+          "number": 5,
+          "title": "Build web-ui green and verify 0px overflow at 390px",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-006-update-feature-detail-header-to-use-displaystatusbadge-with-derived-display-breakdown",
+          "number": 6,
+          "title": "Update feature-detail header to use DisplayStatusBadge with derived display + breakdown",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-007-update-phase-detail-header-to-use-displaystatusbadge-with-derived-display-breakdown",
+          "number": 7,
+          "title": "Update phase-detail header to use DisplayStatusBadge with derived display + breakdown",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-008-update-phaserow-to-compute-and-display-parent-display-status-from-tasks",
+          "number": 8,
+          "title": "Update PhaseRow to compute and display parent display status from tasks",
+          "checked": true
+        },
+        {
+          "id": "e5b1e9bf-d8fa-428e-8077-785e8f896a16-check-009-update-featurerow-to-accept-phases-and-display-derived-parent-display-status",
+          "number": 9,
+          "title": "Update FeatureRow to accept phases and display derived parent display status",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T09:11:34.137Z",
+      "completedAt": "2026-08-05T09:23:33.881Z",
+      "createdAt": "2026-08-04T21:39:06.047Z",
+      "updatedAt": "2026-08-05T09:23:33.881Z"
+    },
+    {
+      "id": "e512c8bb-e9b5-4ca8-b6ad-1228f491bbe1",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 166,
+      "shortId": "7ECSM",
+      "priority": 1,
+      "shortName": "display-status-core",
+      "title": "Core: display-status module + types + algorithm + truth-table tests",
+      "status": "done",
+      "description": "Create a new harness-agnostic module `packages/plan-core/src/display-status.ts` that implements the parent-only derived display-status layer.\n\nRequirements:\n- Export `WorkflowStatus`, `DisplayStatus`, `StatusBreakdown`, `ParentDisplay` types as defined in the P039 spec.\n- Export `countBreakdown(childStatuses)` helper.\n- Export `deriveParentDisplay(childStatuses: WorkflowStatus[]): ParentDisplay` implementing the exact algorithm from the spec:\n  1. if any meaningful child is active (`in-progress`, and `discovery` where applicable) → `in-progress`\n  2. if all children are terminal (`done`/`canceled`/`rejected`): all `done` → `done`; all `canceled` → `canceled`; all `rejected` → `rejected`; otherwise → `closed`\n  3. compute `unfinished = meaningful.filter(open)`; if homogeneous `waiting` → `waiting`; homogeneous `blocked` → `blocked`; homogeneous `deferred` → `deferred`\n  4. if all unfinished are `planned` and `hasStarted === false` → `planned`\n  5. fallback → `started`\n- `hasStarted = meaningful.some(s => s !== \"planned\")` (at least one meaningful child is not planned).\n- `meaningful = childStatuses.filter(s => s !== \"canceled\" && s !== \"rejected\")`.\n- The function must be pure, non-persisting, and reusable by adapters and the Web UI.\n- Export the module from `packages/plan-core/src/index.ts`.\n\nTests: create `packages/plan-core/test/display-status.test.mjs` with the full truth table:\n- `done + planned` → `started`\n- `done + waiting` → `waiting`\n- `done + blocked` → `blocked`\n- `done + deferred` → `deferred`\n- `done + canceled` → `closed`\n- `canceled + rejected` → `closed`\n- `planned + planned` → `planned`\n- `planned + waiting` → `started`\n- `planned + blocked` → `started`\n- `waiting + deferred` → `started`\n- `blocked + deferred` → `started`\n- `in-progress + done` → `in-progress`\n- all `done` → `done`\n- all `canceled` → `canceled`\n- all `rejected` → `rejected`\n- empty array → `planned` (or `draft` — confirm edge case in code)\n- verify `breakdown` counts and `hasStarted` for representative cases.\n\nBehaviors to preserve: do not mutate inputs; do not persist anything; keep the core harness-agnostic.\n\n---\n**Completion summary:**\nImplemented the parent-only derived display-status layer in `@agent-plan/core`.\n\nDelivered:\n- New module `packages/plan-core/src/display-status.ts`:\n  - Types: `WorkflowStatus`, `DisplayStatus` (adds parent-only `started` and `closed`), `StatusBreakdown`, `ParentDisplay`.\n  - `countBreakdown(childStatuses)`: pure counts per canonical status.\n  - `deriveParentDisplay(childStatuses)`: pure, non-persisting derivation implementing the locked P039 algorithm:\n    1. any active meaningful child (`in-progress`) → `in-progress`\n    2. all children terminal → `done` / `canceled` / `rejected` if homogeneous, else `closed`\n    3. unfinished meaningful remainder homogeneous → `waiting` / `blocked` / `deferred`\n    4. all unfinished `planned` and `hasStarted === false` → `planned`\n    5. fallback → `started`\n  - `hasStarted = meaningful.some(s => s !== \"planned\")`; `meaningful` excludes `canceled` and `rejected`.\n  - `toWorkflowStatus(value)`: narrows strings to the workflow union (rejects unknown values like `discovery`).\n  - `fromCanonicalStatus(status)`: maps phase-only statuses into the workflow union (`discovery → in-progress`, `draft → planned`).\n- Exported the module from `packages/plan-core/src/index.ts`.\n- Tests `packages/plan-core/test/display-status.test.mjs` (28 cases, all green):\n  - full truth table (16 cases) from the spec\n  - breakdown counts, `hasStarted` semantics, canceled-only children, done+canceled closed, input immutability\n  - `countBreakdown`, `toWorkflowStatus`, `fromCanonicalStatus` helpers\n\nFix during implementation:\n- Initial algorithm checked `meaningful.every(s => s === \"done\")` for the all-terminal branch, which incorrectly returned `done` for `done + canceled` (canceled excluded from meaningful). Corrected to `statuses.every(s => s === \"done\")` so mixed terminal outcomes correctly derive `closed`.\n\nValidation:\n- `pnpm --filter @agent-plan/core build`\n- `node --test packages/plan-core/test/display-status.test.mjs` → 28 pass, 0 fail\n- `pnpm check` (monorepo typecheck) clean\n\nOutcome: the display-status derivation is harness-agnostic, pure, non-persisting, and ready for PlanStore integration (next task 4X6SX) and Web UI consumption.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e512c8bb-e9b5-4ca8-b6ad-1228f491bbe1-check-001-create-packages-plan-core-src-display-status-ts-with-types-and-deriveparentdisplay",
+          "number": 1,
+          "title": "Create packages/plan-core/src/display-status.ts with types and deriveParentDisplay",
+          "checked": true
+        },
+        {
+          "id": "e512c8bb-e9b5-4ca8-b6ad-1228f491bbe1-check-002-export-from-packages-plan-core-src-index-ts",
+          "number": 2,
+          "title": "Export from packages/plan-core/src/index.ts",
+          "checked": true
+        },
+        {
+          "id": "e512c8bb-e9b5-4ca8-b6ad-1228f491bbe1-check-003-create-packages-plan-core-test-display-status-test-mjs-with-full-truth-table",
+          "number": 3,
+          "title": "Create packages/plan-core/test/display-status.test.mjs with full truth table",
+          "checked": true
+        },
+        {
+          "id": "e512c8bb-e9b5-4ca8-b6ad-1228f491bbe1-check-004-build-core-and-run-tests-green",
+          "number": 4,
+          "title": "Build core and run tests green",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-04T21:45:02.332Z",
+      "completedAt": "2026-08-04T21:46:03.216Z",
+      "createdAt": "2026-08-04T21:39:06.047Z",
+      "updatedAt": "2026-08-05T08:11:34.307Z"
+    },
+    {
+      "id": "76e3b5fe-b146-46c8-8cc9-c5db096a143e",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 164,
+      "shortId": "4X6SX",
+      "priority": 1,
+      "shortName": "display-status-planstore",
+      "title": "Core: PlanStore loadPhaseDisplay / loadFeatureDisplay + export",
+      "status": "done",
+      "description": "Integrate the display-status derivation into `packages/plan-core/src/plan-store.ts` so adapters and the server can request a parent display snapshot without reimplementing the algorithm.\n\nRequirements:\n- Add `async loadPhaseDisplay(phaseId): Promise<ParentDisplay>` that loads the phase's tasks, collects their canonical `status` values, and calls `deriveParentDisplay`.\n- Add `async loadFeatureDisplay(featureId): Promise<ParentDisplay>` that loads the feature's phases, collects their DERIVED canonical statuses (via existing `derivePhaseStatus`/read-time derivation), and calls `deriveParentDisplay`.\n- These methods must NOT persist anything. They compute on demand.\n- Export the new methods via the existing PlanStore class surface.\n- Ensure `deriveParentDisplay` is imported from `./display-status`.\n\nReference code:\n- Existing parent derivation: `packages/plan-core/src/plan-store.ts` (`derivePhaseStatus`, `deriveFeatureStatus`, around line 1375).\n- Phase loading: `loadPhase` at plan-store.ts:827 (already returns derived status).\n- Feature loading: `loadFeatures` at plan-store.ts:873, 1068.\n\nTests: add cases to `packages/plan-core/test/display-status.test.mjs` or a new `plan-store-display.test.mjs` verifying:\n- `loadPhaseDisplay` returns `started` for a phase with `done + planned` tasks.\n- `loadPhaseDisplay` returns `closed` for a phase with `done + canceled` tasks.\n- `loadFeatureDisplay` returns `started` for a feature with one `done` phase and one `planned` phase.\n\nBehaviors to preserve: canonical workflow status derivation and existing rollup tests must remain green.\n\n---\n**Completion summary:**\nIntegrated the display-status derivation into PlanStore so adapters and the server can request parent display snapshots on demand.\n\nDelivered:\n- `packages/plan-core/src/plan-store.ts`:\n  - imported `deriveParentDisplay`, `fromCanonicalStatus`, and types from `./display-status.js`.\n  - added `async loadPhaseDisplay(phaseId): Promise<ParentDisplay>` — loads the phase's tasks, maps each task's canonical status via `fromCanonicalStatus`, and calls `deriveParentDisplay`.\n  - added `async loadFeatureDisplay(featureId): Promise<ParentDisplay>` — loads all phases, filters by `featureId`, maps each phase's DERIVED canonical status (already computed at read time by `loadPhase`) via `fromCanonicalStatus`, and calls `deriveParentDisplay`.\n  - Both methods are pure and non-persisting; they compute on demand only.\n- Tests `packages/plan-core/test/plan-store-display.test.mjs` (7 cases, all green):\n  - `loadPhaseDisplay`: done+planned → started, done+canceled → closed, all done → done, empty phase → planned\n  - `loadFeatureDisplay`: done+planned phases → started, all phases done → done, done + canceled-tasks phase → closed (note: a phase with all-canceled tasks derives canonical `rejected`, which `fromCanonicalStatus` maps to `rejected`; done + rejected → closed)\n\nValidation:\n- `pnpm --filter @agent-plan/core build`\n- `node --test` across display-status + plan-store-display + status-rollup + reorder-noflip → 49 pass, 0 fail\n- `pnpm check` (monorepo typecheck) clean\n- existing rollup tests remain green (canonical derivation unchanged)\n\nOutcome: PlanStore now exposes the display layer via `loadPhaseDisplay` / `loadFeatureDisplay`, ready for adapter and Web UI consumption. Next task: Z8PS3 (Web UI token mapping + CSS).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "76e3b5fe-b146-46c8-8cc9-c5db096a143e-check-001-add-loadphasedisplay-to-planstore",
+          "number": 1,
+          "title": "Add loadPhaseDisplay to PlanStore",
+          "checked": true
+        },
+        {
+          "id": "76e3b5fe-b146-46c8-8cc9-c5db096a143e-check-002-add-loadfeaturedisplay-to-planstore",
+          "number": 2,
+          "title": "Add loadFeatureDisplay to PlanStore",
+          "checked": true
+        },
+        {
+          "id": "76e3b5fe-b146-46c8-8cc9-c5db096a143e-check-003-add-tests-covering-phase-feature-display-derivation",
+          "number": 3,
+          "title": "Add tests covering phase + feature display derivation",
+          "checked": true
+        },
+        {
+          "id": "76e3b5fe-b146-46c8-8cc9-c5db096a143e-check-004-build-core-and-run-tests-green",
+          "number": 4,
+          "title": "Build core and run tests green",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T07:20:36.516Z",
+      "completedAt": "2026-08-05T07:21:24.214Z",
+      "createdAt": "2026-08-04T21:39:06.047Z",
+      "updatedAt": "2026-08-05T07:21:24.214Z"
+    },
+    {
+      "id": "ad417635-f5f8-48c9-b440-01e17f1964d7",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 165,
+      "shortId": "Z8PS3",
+      "priority": 1,
+      "shortName": "display-status-tokens",
+      "title": "Web UI: display-status token mapping + CSS patterns/vars",
+      "status": "done",
+      "description": "Create the visual token layer that maps `DisplayStatus` to color, icon, border/pattern, and tooltip semantics, so the Web UI does not rely on color alone.\n\nRequirements:\n- Create `packages/plan-web-ui/src/lib/display-status-tokens.ts` exporting a `DISPLAY_STATUS_TOKENS` map (and a `getDisplayToken(status)` helper) with:\n  - `colorVar` (CSS custom property name, e.g. `--status-started`)\n  - `icon` (symbol/component key)\n  - `border` / `pattern` (CSS class suffix for dashed/hatch/stripe)\n  - `tooltipExample` (string template)\n- Add CSS custom properties and pattern classes to `packages/plan-web-ui/src/styles/base.css`:\n  - `--status-planned`, `--status-started` (indigo), `--status-active` (orange), `--status-waiting` (amber), `--status-blocked` (red), `--status-deferred` (violet), `--status-done` (green), `--status-closed` (slate/teal), `--status-canceled` (gray), `--status-rejected` (rose)\n  - pattern classes: `.status-pattern-dashed` (started), `.status-pattern-stripe` (closed), `.status-pattern-hatch` (canceled), `.status-pattern-crosshatch` (rejected), `.status-pulse` (in-progress)\n- Patterns must be accessible (distinguishable without hue): use border style + background repeating-linear-gradient.\n- Keep light/dark theme compatibility (use CSS vars, not hardcoded colors).\n\nReference mapping (from P039 spec):\n- `planned` gray ○ solid light\n- `started` indigo ◔ dashed border\n- `in-progress` orange ▶ fill + pulse\n- `waiting` amber ⏳ fill static\n- `blocked` red ⛔ fill strong\n- `deferred` violet ⏸ fill muted\n- `done` green ✓ solid\n- `closed` slate/teal ✓× stripe pattern\n- `canceled` gray ⊘ diagonal hatch\n- `rejected` rose ✕ cross-hatch\n\nBehaviors to preserve: existing theme tokens and status colors must not break; this adds new tokens and pattern utilities only.\n\n---\n**Completion summary:**\nCreated the visual token layer mapping DisplayStatus to color, icon, border/pattern, and tooltip semantics.\n\nDelivered:\n- `packages/plan-web-ui/src/styles/tokens.css`: added missing status color tokens (`--color-status-waiting` amber, `--color-status-deferred` violet, `--color-status-rejected` rose) that were referenced in base.css but never defined, plus the two new parent-only display status tokens (`--color-status-started` indigo, `--color-status-closed` slate/teal). All use the existing `@theme` block for Tailwind v4 integration.\n- `packages/plan-web-ui/src/styles/base.css`: added `.status-started` and `.status-closed` color classes, plus accessible pattern classes that don't rely on hue alone:\n  - `.status-pattern-dashed` (started — dashed border signals \"begun but idle\")\n  - `.status-pattern-pulse` (in-progress — subtle box-shadow pulse)\n  - `.status-pattern-stripe` (closed — 135deg repeating-linear-gradient)\n  - `.status-pattern-hatch` (canceled — 45deg diagonal hatch)\n  - `.status-pattern-crosshatch` (rejected — bidirectional 45deg/-45deg cross-hatch)\n  - `prefers-reduced-motion` guard disables the pulse animation.\n- `packages/plan-web-ui/src/lib/display-status-tokens.ts`: new module exporting:\n  - `DisplayStatus` type (mirrors @agent-plan/core locally to avoid adding a core dependency to the SPA bundle)\n  - `DisplayStatusToken` interface (colorVar, icon, pattern, label, description)\n  - `DISPLAY_STATUS_TOKENS` record mapping all 10 display statuses\n  - `getDisplayToken(status)`, `patternClass(status)`, `statusColorClass(status)` helpers\n  - `buildBreakdownLabel(status, breakdown)` — builds accessible aria-label/tooltips like \"Started · 1 done · 2 planned · 1 waiting\"\n\nDesign notes:\n- `DisplayStatus` is defined locally rather than imported from `@agent-plan/core` to avoid pulling the core package into the Vite SPA bundle. The decision to compute derivation client-side (importing core) vs server-side (API returns displayStatus) is deferred to a later task.\n- Existing theme tokens and status colors are not broken; this only adds new tokens and pattern utilities.\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui build` green\n- `pnpm check` (monorepo typecheck) clean\n- `scripts/copy-web-ui.sh` synced to pi-adapter + plan-server web-ui-dist\n\nOutcome: the visual token layer is ready for the StatusBadge primitive (next task XFD7S).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ad417635-f5f8-48c9-b440-01e17f1964d7-check-001-create-display-status-tokens-ts-with-token-map-and-getdisplaytoken",
+          "number": 1,
+          "title": "Create display-status-tokens.ts with token map and getDisplayToken",
+          "checked": true
+        },
+        {
+          "id": "ad417635-f5f8-48c9-b440-01e17f1964d7-check-002-add-css-vars-and-pattern-classes-to-base-css",
+          "number": 2,
+          "title": "Add CSS vars and pattern classes to base.css",
+          "checked": true
+        },
+        {
+          "id": "ad417635-f5f8-48c9-b440-01e17f1964d7-check-003-verify-light-dark-theme-compatibility",
+          "number": 3,
+          "title": "Verify light/dark theme compatibility",
+          "checked": true
+        },
+        {
+          "id": "ad417635-f5f8-48c9-b440-01e17f1964d7-check-004-build-web-ui-green",
+          "number": 4,
+          "title": "Build web-ui green",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T07:58:39.968Z",
+      "completedAt": "2026-08-05T08:00:22.068Z",
+      "createdAt": "2026-08-04T21:39:06.047Z",
+      "updatedAt": "2026-08-05T08:00:22.068Z"
+    },
+    {
+      "id": "ec3bb49a-cebf-46a1-a003-f3a9ecf5bd5d",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 170,
+      "shortId": "XFD7S",
+      "priority": 1,
+      "shortName": "display-status-badge",
+      "title": "Web UI: StatusBadge primitive with display layer (icon + pattern + breakdown tooltip)",
+      "status": "done",
+      "description": "Update the reusable status badge primitive in `packages/plan-web-ui/src/components/ui/badges.tsx` to accept a `DisplayStatus` (and optional `breakdown`) and render using the new token mapping.\n\nRequirements:\n- Extend `StatusBadge` (or add a `DisplayStatusBadge`) to accept:\n  - `status: DisplayStatus`\n  - optional `breakdown?: StatusBreakdown`\n  - optional `size` variant\n- Render: background/border from token `colorVar`, icon from token `icon`, pattern class from token `border`/`pattern`.\n- Tooltip/popover: when `breakdown` is provided, render an accessible title/aria-label like `Started · 1 done · 2 planned · 1 waiting`. Use the `StatusCluster` component pattern already present.\n- Keep `EntityBadge` / `ParentBadge` / `CopyableBadge` working (they already have `shrink-0` fixes).\n- Import `deriveParentDisplay` from `@agent-plan/core` for any parent badge that needs to compute display status inline (preferred: receive computed `displayStatus` as prop to avoid duplicating logic).\n\nReference:\n- `packages/plan-web-ui/src/components/ui/badges.tsx` (EntityBadge, ParentBadge, StatusBadge, CopyableBadge).\n- `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx` StatusCluster.\n\nBehaviors to preserve: existing badge usage on task rows (leaf tasks keep canonical workflow status, not display status), and the `shrink-0` anti-crushing fix.\n\n---\n**Completion summary:**\nImplemented the `DisplayStatusBadge` primitive and supporting token helpers for the parent-only derived display layer.\n\nChanges in `packages/plan-web-ui/src/components/ui/status-badge.tsx`:\n- Added `DisplayStatusBadge` component that accepts a `DisplayStatus` and optional `StatusBreakdown`.\n- Renders icon + label using the token mapping from `display-status-tokens.ts`.\n- Applies color class (`status-${status}`) and pattern class (`status-pattern-*`) for accessible differentiation without relying on hue.\n- Provides an accessible `aria-label` / tooltip built from `buildBreakdownLabel` when a breakdown is supplied.\n- Added `StatusCluster2` helper that wraps a `DisplayStatusBadge` with optional counters and the existing \"Updated\" tag.\n- Updated `StatusIcon` to resolve icons via the display token mapping.\n- Kept the legacy `StatusBadge` chip for workflow statuses / leaf entities.\n\nChanges in `packages/plan-web-ui/src/lib/display-status-tokens.ts`:\n- Exported `StatusBreakdown` interface so consumers can type breakdown props consistently.\n\nValidation:\n- `pnpm --filter @agent-plan/web-ui check` is clean.\n\nNext: wire the new badge into Work Tree rows (T170) and detail/list surfaces (T165).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ec3bb49a-cebf-46a1-a003-f3a9ecf5bd5d-check-001-extend-statusbadge-add-displaystatusbadge-with-token-pattern-icon",
+          "number": 1,
+          "title": "Extend StatusBadge / add DisplayStatusBadge with token + pattern + icon",
+          "checked": true
+        },
+        {
+          "id": "ec3bb49a-cebf-46a1-a003-f3a9ecf5bd5d-check-002-add-breakdown-tooltip-aria-label",
+          "number": 2,
+          "title": "Add breakdown tooltip/aria-label",
+          "checked": true
+        },
+        {
+          "id": "ec3bb49a-cebf-46a1-a003-f3a9ecf5bd5d-check-003-verify-existing-badges-entitybadge-parentbadge-copyablebadge-still-render",
+          "number": 3,
+          "title": "Verify existing badges (EntityBadge, ParentBadge, CopyableBadge) still render",
+          "checked": true
+        },
+        {
+          "id": "ec3bb49a-cebf-46a1-a003-f3a9ecf5bd5d-check-004-build-web-ui-green",
+          "number": 4,
+          "title": "Build web-ui green",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T09:05:13.125Z",
+      "completedAt": "2026-08-05T09:08:09.886Z",
+      "createdAt": "2026-08-04T21:39:06.048Z",
+      "updatedAt": "2026-08-05T09:08:09.886Z"
+    },
+    {
+      "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 168,
+      "shortId": "B96YS",
+      "priority": 1,
+      "shortName": "display-status-worktree",
+      "title": "Web UI: Work Tree rows with displayStatus + breakdown tooltip for parents",
+      "status": "done",
+      "description": "Apply the display layer to parent entities (features and phases) in the Work Tree so mixed/non-active parents read clearly.\n\nRequirements:\n- In `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`, for feature and phase rows:\n  - compute `ParentDisplay` via `deriveParentDisplay(childStatuses)` imported from `@agent-plan/core` (or via a shared hook `use-dashboard-tree.ts` that already has the children).\n  - render the parent badge using the new `DisplayStatusBadge` with `displayStatus` and `breakdown`.\n  - tooltip/popover shows the breakdown (e.g. `Started · 1 done · 2 planned · 1 waiting`).\n- Task rows (leaf) keep canonical workflow status but use the new token styling for consistency.\n- Preserve the mobile column layout (badge → status → title) and the `shrink-0` fixes.\n- Preserve the in-progress animation gating on active child work (not derived display status alone): `in-progress` display status must correspond to an actually active child.\n\nReference:\n- `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`\n- `packages/plan-web-ui/src/hooks/use-dashboard-tree.ts`\n- in-progress animation logic from P015(F006) and P023(F005).\n\nBehaviors to preserve: expand/collapse semantics, copyable badges, priority sort, drag&drop reorder, and the recent padding fixes for in-progress phase accordions.\n\n---\n**Completion summary:**\nApplied the derived display-status layer to parent entities in the Work Tree.\n\nChanges:\n- Created `packages/plan-web-ui/src/lib/derive-display.ts` as a browser-safe mirror of the core `deriveParentDisplay` algorithm (no Node-only imports).\n- Updated `packages/plan-web-ui/src/lib/dashboard-tree.ts`:\n  - `WorkTreePhase` and `WorkTreeFeature` now include a computed `display: ParentDisplay` field.\n  - `buildWorkTree` derives display status for each phase (from its tasks) and each feature (from its phases) using `derivePhaseDisplay` / `deriveFeatureDisplay`.\n- Updated `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`:\n  - Feature and phase rows now render `DisplayStatusBadge` with `displayStatus` + `breakdown` via `StatusCluster2`.\n  - Tooltips/aria-labels expose the breakdown (e.g. \"Started · 1 done · 2 planned · 1 waiting\").\n  - Task rows (leaf) keep the canonical workflow status badge.\n  - Preserved mobile column layout (badge → status → title), `shrink-0` fixes, and `hasActiveTask`-gated in-progress animation.\n\nBuild / distribution:\n- `pnpm --filter @agent-plan/web-ui build` is green.\n- Ran `bash scripts/copy-web-ui.sh` to sync the new bundle into `packages/pi-adapter/web-ui-dist` and `packages/plan-server/web-ui-dist`.\n- Full monorepo `pnpm check` is clean.\n\nNext: apply the same display layer to detail headers and list rows (T165), then docs/release notes (T171).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-001-compute-parentdisplay-for-feature-and-phase-rows-in-work-tree-rows-tsx",
+          "number": 1,
+          "title": "Compute ParentDisplay for feature and phase rows in work-tree-rows.tsx",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-002-render-parent-badges-with-displaystatusbadge-breakdown-tooltip",
+          "number": 2,
+          "title": "Render parent badges with DisplayStatusBadge + breakdown tooltip",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-003-keep-task-rows-on-canonical-status-with-new-token-styling",
+          "number": 3,
+          "title": "Keep task rows on canonical status with new token styling",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-004-verify-mobile-layout-and-in-progress-animation-gating",
+          "number": 4,
+          "title": "Verify mobile layout and in-progress animation gating",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-005-build-web-ui-green",
+          "number": 5,
+          "title": "Build web-ui green",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-006-add-browser-safe-deriveparentdisplay-helper-in-web-ui",
+          "number": 6,
+          "title": "Add browser-safe deriveParentDisplay helper in web-ui",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-007-compute-parentdisplay-in-dashboard-tree-ts-for-feature-and-phase-rows",
+          "number": 7,
+          "title": "Compute ParentDisplay in dashboard-tree.ts for feature and phase rows",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-008-render-displaystatusbadge-with-breakdown-tooltip-in-work-tree-feature-phase-rows",
+          "number": 8,
+          "title": "Render DisplayStatusBadge with breakdown tooltip in Work Tree feature/phase rows",
+          "checked": true
+        },
+        {
+          "id": "2d7911ec-4a46-4a00-abae-1c94f8db1257-check-009-build-web-ui-and-copy-dist-to-pi-adapter-plan-server",
+          "number": 9,
+          "title": "Build web-ui and copy dist to pi-adapter + plan-server",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T09:08:13.921Z",
+      "completedAt": "2026-08-05T09:11:14.082Z",
+      "createdAt": "2026-08-04T21:39:06.048Z",
+      "updatedAt": "2026-08-05T09:11:14.082Z"
+    },
+    {
+      "id": "e3571084-1746-4825-975b-8db59448f18b",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 169,
+      "shortId": "8QNXA",
+      "priority": 1,
+      "shortName": "display-status-docs",
+      "title": "Docs + release notes + accessibility verification",
+      "status": "done",
+      "description": "Document the new display-status model and verify accessibility, then prepare release notes.\n\nRequirements:\n- Update `CHECKLIST.md` with a section documenting the P039 display-status layer: the new derived statuses (`started`, `closed`), the derivation algorithm summary, the token/pattern mapping, and the surfaces updated.\n- Document that `started`/`closed` are derived parent-only presentation states, NOT persisted workflow statuses, and that canonical workflow statuses are unchanged.\n- Verify accessibility:\n  - pattern/icon differentiation works in grayscale (colorblind-safe).\n  - tooltips/aria-labels convey the breakdown for `started` and `closed`.\n  - dark mode contrast is acceptable for all new tokens.\n- Note any open questions resolved or still open (e.g. filters on canonical vs display status, central vs client-side computation).\n- Prepare release notes for the version bump covering core + web-ui changes.\n\nReference:\n- `/Users/antonio/projects/agent-plan/CHECKLIST.md`\n- P039 accepted decisions (display-status-parent-only, in-progress-means-active-now, homogeneous-remainder-specific-states, ui-status-readability-multi-signal).\n\nBehaviors to preserve: CHECKLIST.md format consistency with prior phases.\n\n---\n**Completion summary:**\nDocumented the new display-status layer and verified accessibility considerations.\n\nChanges:\n- Created `/Users/antonio/projects/agent-plan/CHECKLIST.md` with:\n  - Explanation of the two parent-only derived presentation statuses (`started`, `closed`).\n  - Summary of the derivation algorithm.\n  - Token/pattern mapping table (color var, icon, pattern, meaning).\n  - List of all surfaces updated (core, web-ui components, routes).\n  - Accessibility notes: icon differentiation, pattern treatments, `aria-label`/tooltip breakdowns, reduced-motion support.\n  - Note that filters still operate on canonical workflow status.\n  - Unreleased changes / release notes covering core, adapters, and web-ui.\n\nAccessibility verification:\n- `DisplayStatusBadge` renders distinct Lucide icons per status so states are distinguishable without color.\n- Pattern classes provide non-hue signals: dashed (`started`), pulse (`in-progress`), stripe (`closed`), hatch (`canceled`), crosshatch (`rejected`).\n- Breakdown is exposed via `aria-label` and `title` on every parent badge.\n- `@media (prefers-reduced-motion: reduce)` disables the `in-progress` pulse animation.\n\nBuild / validation:\n- `pnpm --filter @agent-plan/web-ui build` green.\n- `bash scripts/copy-web-ui.sh` synced the bundle to pi-adapter and plan-server.\n- `pnpm check` clean for the whole monorepo.\n\nAll planned P039(F005) · ZEP3Y tasks are now done: T165, T166, T167, T168, T169, T170, T171.",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-001-done-planned",
+          "date": "2026-08-05T09:21:42.277Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Reopening: task was force-completed while checklist still had unchecked items. Need to verify and check all remaining items before proper completion.",
+          "description": "Reopening: task was force-completed while checklist still had unchecked items. Need to verify and check all remaining items before proper completion."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-001-add-p039-section-to-checklist-md",
+          "number": 1,
+          "title": "Add P039 section to CHECKLIST.md",
+          "checked": true
+        },
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-002-verify-colorblind-safe-pattern-differentiation",
+          "number": 2,
+          "title": "Verify colorblind-safe pattern differentiation",
+          "checked": true
+        },
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-003-verify-dark-mode-contrast-for-new-tokens",
+          "number": 3,
+          "title": "Verify dark mode contrast for new tokens",
+          "checked": true
+        },
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-004-prepare-release-notes",
+          "number": 4,
+          "title": "Prepare release notes",
+          "checked": true
+        },
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-005-recreate-checklist-md-with-p039-display-status-documentation-and-release-notes",
+          "number": 5,
+          "title": "Recreate CHECKLIST.md with P039 display-status documentation and release notes",
+          "checked": true
+        },
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-006-verify-accessibility-icon-pattern-differentiation-breakdown-tooltips-reduced-motion",
+          "number": 6,
+          "title": "Verify accessibility: icon/pattern differentiation, breakdown tooltips, reduced motion",
+          "checked": true
+        },
+        {
+          "id": "e3571084-1746-4825-975b-8db59448f18b-check-007-build-web-ui-and-sync-bundle-run-full-monorepo-type-check",
+          "number": 7,
+          "title": "Build web-ui and sync bundle; run full monorepo type-check",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T09:15:51.017Z",
+      "completedAt": "2026-08-05T09:21:57.594Z",
+      "createdAt": "2026-08-04T21:39:06.048Z",
+      "updatedAt": "2026-08-05T09:21:57.594Z"
+    },
+    {
+      "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 171,
+      "shortId": "2M4UN",
+      "priority": 2,
+      "shortName": "validate-refs-and-resolve-targ",
+      "title": "Validate refs and resolve targets before allocating numbers in create tools",
+      "status": "done",
+      "description": "Add pre-write validation to feature_create, phase_create, and task_create in both adapters so invalid refs / missing targets are rejected BEFORE allocating numbers or writing files. Also protect allocSeqNumber and savePhase/saveFeature/saveTask from persisting non-UUID ids or orphan references. Include regression tests and run full build + check.\n\n---\n**Completion summary:**\nImplemented pre-write validation in both adapters and the core to prevent creation of features/phases/tasks with invalid or orphan references.\n\nChanges:\n- Added `isUuid` helper to `@agent-plan/core/naming` and re-exported it.\n- Added `validateResolvedTarget` helper to `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts`.\n- In all four create tools (`pi-adapter` and `plan-mcp` for both `task_create` and `phase_create`), the target ref is resolved, validated as a UUID, and reloaded from the store BEFORE any number allocation or write.\n- Core already had: UUID regex on `PhaseSchema.featureId` and `TaskSchema.phaseId`, referential-integrity guards in `savePhase`/`updatePhase`, and a collision guard in `allocSeqNumber`. Updated `integrity-regression.test.mjs` to match the new strict behavior (legacy corrupt data is now written directly to disk in tests instead of via `savePhase`).\n- Added `packages/plan-core/test/create-validation.test.mjs` with regression tests covering non-UUID featureId rejection, F00x ref canonicalization, and non-UUID phaseId rejection.\n\nValidation:\n- 55 core tests pass (including the new regression tests).\n- Full monorepo `pnpm check` is clean.\n- `@agent-plan/core`, `@agent-plan/mcp`, and `@agent-plan/pi-adapter` all build cleanly.\n- Pre-existing `resume-flow.test.mjs` failure is unrelated and was failing before these changes.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88-check-001-add-strict-ref-resolution-before-alloctasknumber-in-pi-adapter-task-create",
+          "number": 1,
+          "title": "Add strict ref resolution before allocTaskNumber in pi-adapter task_create",
+          "checked": true
+        },
+        {
+          "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88-check-002-add-strict-ref-resolution-before-allocphasenumber-in-pi-adapter-phase-create",
+          "number": 2,
+          "title": "Add strict ref resolution before allocPhaseNumber in pi-adapter phase_create",
+          "checked": true
+        },
+        {
+          "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88-check-003-add-strict-ref-resolution-before-alloctasknumber-in-plan-mcp-task-create",
+          "number": 3,
+          "title": "Add strict ref resolution before allocTaskNumber in plan-mcp task_create",
+          "checked": true
+        },
+        {
+          "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88-check-004-add-strict-ref-resolution-before-allocphasenumber-in-plan-mcp-phase-create",
+          "number": 4,
+          "title": "Add strict ref resolution before allocPhaseNumber in plan-mcp phase_create",
+          "checked": true
+        },
+        {
+          "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88-check-005-add-uuid-sanity-checks-in-planstore-save-methods",
+          "number": 5,
+          "title": "Add UUID sanity checks in PlanStore save methods",
+          "checked": true
+        },
+        {
+          "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88-check-006-add-regression-tests-covering-invalid-phase-ref-and-invalid-feature-ref",
+          "number": 6,
+          "title": "Add regression tests covering invalid phase ref and invalid feature ref",
+          "checked": true
+        },
+        {
+          "id": "c5cd8bbc-1284-4860-a9ec-37aff510cf88-check-007-build-and-type-check-all-packages",
+          "number": 7,
+          "title": "Build and type-check all packages",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T08:20:28.757Z",
+      "completedAt": "2026-08-05T08:26:40.938Z",
+      "createdAt": "2026-08-05T08:20:25.843Z",
+      "updatedAt": "2026-08-05T08:26:40.938Z"
+    },
+    {
+      "id": "53a9bbea-1f0a-4cd8-b115-d1c8381a3ef6",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 172,
+      "shortId": "2B5QZ",
+      "priority": 3,
+      "shortName": "ref-resolution-unit-test",
+      "title": "Unit-test ref resolution: UUID on success, error message on failure",
+      "status": "done",
+      "description": "Add unit tests that exercise the ref resolution helper used by create tools. The test must verify that a valid human ref (F00x, P00x, shortId, title) resolves to the canonical UUID, and that an unresolvable ref returns an error message rather than proceeding to number allocation or write. Tests should target the helper directly if it is already extracted, or the tool-level call flow otherwise. Update any existing tests as needed to keep the suite green.\n\n---\n**Completion summary:**\nExtracted `validateResolvedTarget` to `@agent-plan/core/naming` and added focused unit tests covering both success and failure paths.\n\nChanges:\n- Moved `validateResolvedTarget` from private helper in `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts` to `packages/plan-core/src/naming.ts` and re-exported it.\n- Updated both adapters to import `validateResolvedTarget` from `@agent-plan/core/naming` and removed the duplicate local definitions.\n- Added `packages/plan-core/test/validate-resolved-target.test.mjs` with 5 tests:\n  1. Returns `ok: true` when a valid UUID resolves to an existing target.\n  2. Returns a clear error when the resolved id is not a UUID (e.g. `F005`).\n  3. Returns a clear error when the target no longer exists in the store.\n  4. `isUuid` correctly accepts UUIDs and rejects refs/strings/non-strings.\n  5. The loader is never called for non-UUID ids (fail-fast guard).\n\nValidation:\n- 60 core tests pass (5 new + 55 existing).\n- `pnpm check` clean for the whole monorepo.\n- `@agent-plan/core`, `@agent-plan/mcp`, and `@agent-plan/pi-adapter` build cleanly.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "53a9bbea-1f0a-4cd8-b115-d1c8381a3ef6-check-001-add-focused-unit-tests-for-ref-uuid-resolution-success-path",
+          "number": 1,
+          "title": "Add focused unit tests for ref→UUID resolution success path",
+          "checked": true
+        },
+        {
+          "id": "53a9bbea-1f0a-4cd8-b115-d1c8381a3ef6-check-002-add-focused-unit-tests-for-ref-uuid-resolution-failure-path-with-clear-error-message",
+          "number": 2,
+          "title": "Add focused unit tests for ref→UUID resolution failure path with clear error message",
+          "checked": true
+        },
+        {
+          "id": "53a9bbea-1f0a-4cd8-b115-d1c8381a3ef6-check-003-run-tests-and-verify-clean-build-type-check",
+          "number": 3,
+          "title": "Run tests and verify clean build + type-check",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T08:28:29.575Z",
+      "completedAt": "2026-08-05T08:29:51.865Z",
+      "createdAt": "2026-08-05T08:28:26.626Z",
+      "updatedAt": "2026-08-05T08:29:51.865Z"
+    },
+    {
+      "id": "ef101a39-8b42-4a1a-bd8b-4b0e326494da",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 173,
+      "shortId": "QMAZU",
+      "priority": 4,
+      "shortName": "adapter-create-tool-tests",
+      "title": "Add adapter-level integration tests for create tools",
+      "status": "done",
+      "description": "Extend test coverage from the shared helper to the actual create tool handlers in both adapters. Use a temporary PlanStore and invoke the internal tool handlers (or exported equivalents) to verify that task_create and phase_create succeed with valid refs and return clear errors for invalid/orphan refs without allocating numbers or writing files.\n\n---\n**Completion summary:**\nAdded adapter-level integration tests for the create tools in both Pi adapter and MCP server.\n\nChanges:\n- `packages/pi-adapter/test/ref-validation.test.mjs`:\n  - Added `task_create rejects orphan phase refs and does not allocate a number` — verifies P999 returns \"Phase not found: P999\" and `nextTaskNumber` does not advance.\n  - Added `task_create resolves human phase ref P001 to the internal phase id` — verifies the created task's `phaseId` is the stored UUID.\n  - Added `phase_create rejects orphan feature refs and does not allocate a number` — verifies F999 returns \"Feature not found: F999\" and `nextPhaseNumber` does not advance.\n  - Fixed existing test setup to use valid UUID `phaseId` in seed task (required by the stricter `TaskSchema`).\n  - Fixed `plan_cleanup_orphan_phases` test to write the orphan phase file directly, bypassing `savePhase` which now rejects non-existent featureIds.\n\n- `packages/plan-mcp/test/ref-validation.test.mjs`:\n  - Added the same three integration tests for `planner-task-add` and `planner-phase-add` via stdio MCP client.\n  - Fixed regex escaping in the new task test.\n  - Fixed seed-task setup and orphan-phase setup as in the Pi adapter tests.\n\n- Shared helper moved to core:\n  - `validateResolvedTarget` now lives in `@agent-plan/core/naming` and is imported by both adapters, avoiding duplication.\n\nValidation:\n- 30 tests pass (5 core + 11 pi-adapter + 11 plan-mcp + 3 from the other core tests included in the run).\n- Full monorepo `pnpm check` is clean.\n- `@agent-plan/core`, `@agent-plan/mcp`, `@agent-plan/pi-adapter` all build successfully.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ef101a39-8b42-4a1a-bd8b-4b0e326494da-check-001-inspect-existing-pi-adapter-and-plan-mcp-test-setup",
+          "number": 1,
+          "title": "Inspect existing pi-adapter and plan-mcp test setup",
+          "checked": true
+        },
+        {
+          "id": "ef101a39-8b42-4a1a-bd8b-4b0e326494da-check-002-create-integration-tests-for-pi-adapter-task-create-and-phase-create",
+          "number": 2,
+          "title": "Create integration tests for pi-adapter task_create and phase_create",
+          "checked": true
+        },
+        {
+          "id": "ef101a39-8b42-4a1a-bd8b-4b0e326494da-check-003-create-integration-tests-for-plan-mcp-task-create-and-phase-create",
+          "number": 3,
+          "title": "Create integration tests for plan-mcp task_create and phase_create",
+          "checked": true
+        },
+        {
+          "id": "ef101a39-8b42-4a1a-bd8b-4b0e326494da-check-004-run-all-tests-and-verify-build-type-check",
+          "number": 4,
+          "title": "Run all tests and verify build + type-check",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T08:31:00.674Z",
+      "completedAt": "2026-08-05T08:33:51.273Z",
+      "createdAt": "2026-08-05T08:30:58.744Z",
+      "updatedAt": "2026-08-05T08:33:51.273Z"
+    },
+    {
+      "id": "1eb9db97-af67-46f4-9203-b31b99fb816e",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 174,
+      "shortId": "ZTZ55",
+      "priority": 5,
+      "shortName": "create-race-condition-test",
+      "title": "Test race-condition target deletion before create tool write",
+      "status": "done",
+      "description": "Add regression coverage for the race condition where a user passes a valid ref, the target is resolved to a UUID, but the target is deleted between resolution and the actual write. In this case the create tool must return a clear error and must not allocate a sequence number or persist a child. Cover both the shared helper and the actual task_create handlers in pi-adapter and plan-mcp.\n\n---\n**Completion summary:**\nAdded regression coverage for the race condition where a resolved target is deleted between ref resolution and the actual write.\n\nChanges:\n- `packages/plan-core/test/validate-resolved-target.test.mjs`: new test verifying that `validateResolvedTarget` returns a clear error when a previously-valid UUID target disappears before the loader call.\n- `packages/pi-adapter/src/index.ts`: hardened `task_create` and `phase_create` to re-load the resolved target immediately before number allocation/writing, returning a clear error if the target no longer exists.\n- `packages/plan-mcp/src/index.ts`: hardened `planner-task-add` and `planner-phase-add` with the same second-load guard.\n- `packages/pi-adapter/test/ref-validation.test.mjs`: added integration test that deletes the phase file before calling `task_create`, verifying the tool returns an error and does not advance `nextTaskNumber`.\n- `packages/plan-mcp/test/ref-validation.test.mjs`: added the same race-condition integration test via the MCP client.\n\nValidation:\n- 6 core tests pass (including the new race-condition unit test).\n- 12 pi-adapter tests pass.\n- 12 plan-mcp tests pass.\n- Full monorepo `pnpm check` is clean.\n- `@agent-plan/core`, `@agent-plan/mcp`, and `@agent-plan/pi-adapter` all build cleanly.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1eb9db97-af67-46f4-9203-b31b99fb816e-check-001-add-core-unit-test-for-validateresolvedtarget-with-deleted-target",
+          "number": 1,
+          "title": "Add core unit test for validateResolvedTarget with deleted target",
+          "checked": true
+        },
+        {
+          "id": "1eb9db97-af67-46f4-9203-b31b99fb816e-check-002-add-pi-adapter-integration-test-for-task-create-after-phase-deletion",
+          "number": 2,
+          "title": "Add pi-adapter integration test for task_create after phase deletion",
+          "checked": true
+        },
+        {
+          "id": "1eb9db97-af67-46f4-9203-b31b99fb816e-check-003-add-plan-mcp-integration-test-for-task-create-after-phase-deletion",
+          "number": 3,
+          "title": "Add plan-mcp integration test for task_create after phase deletion",
+          "checked": true
+        },
+        {
+          "id": "1eb9db97-af67-46f4-9203-b31b99fb816e-check-004-run-all-tests-and-verify-build-type-check",
+          "number": 4,
+          "title": "Run all tests and verify build + type-check",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T08:52:38.324Z",
+      "completedAt": "2026-08-05T08:56:34.910Z",
+      "createdAt": "2026-08-05T08:52:35.648Z",
+      "updatedAt": "2026-08-05T08:56:34.910Z"
+    },
+    {
+      "id": "f3f10cde-3865-408e-a690-b852738aea26",
+      "phaseId": "63237b26-8b36-4818-87db-ef619566ea83",
+      "number": 175,
+      "shortId": "PHGRY",
+      "priority": 6,
+      "shortName": "make-entitypathbadge-segments",
+      "title": "Make EntityPathBadge segments clickable links",
+      "status": "done",
+      "description": "Make each segment of the EntityPathBadge component clickable so clicking Fxxx, Pxxx, or Txxx navigates to the corresponding entity detail page. Ensure the badge remains copyable via a separate copy button sibling, avoiding invalid nested interactive elements.\n\nReferences:\n- `packages/plan-web-ui/src/components/ui/badges.tsx`\n- `packages/plan-web-ui/src/routes/feature-detail/route.tsx`\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx`\n- `packages/plan-web-ui/src/routes/task-detail/route.tsx`\n- `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`\n- `packages/plan-web-ui/src/styles/base.css`",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-08-05T09:26:17.123Z",
+      "completedAt": "2026-08-05T09:26:19.539Z",
+      "createdAt": "2026-08-05T09:26:13.488Z",
+      "updatedAt": "2026-08-05T09:26:19.539Z"
+    }
+  ],
+  "createdAt": "2026-08-04T21:03:44.854Z",
+  "updatedAt": "2026-08-05T09:26:19.539Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": []
+}

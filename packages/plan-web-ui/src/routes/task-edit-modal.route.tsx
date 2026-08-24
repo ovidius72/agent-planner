@@ -7,7 +7,7 @@ import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
-import { taskStatuses } from "../lib/statuses";
+import { taskStatuses, taskTransitionStatuses } from "../lib/statuses";
 import { useShortcut } from "../lib/shortcuts";
 import type { Feature, Phase, Task } from "../lib/types";
 
@@ -29,8 +29,8 @@ export function TaskEditModalRoute() {
       <Form ref={formRef} method="post" className="grid gap-4">
         <Field label="Title"><Input name="title" defaultValue={task.title} required /></Field>
         <Field label="Status">
-          <Select name="status" defaultValue={task.status}>
-            {taskStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          <Select name="status" defaultValue={task.status} disabled={Boolean(task.pauseSnapshot)} title={task.pauseSnapshot ? "Resume checkpointed work through task_start so its checkpoint is preserved." : undefined}>
+            {taskTransitionStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
         <Field label="Priority"><Input type="number" name="priority" defaultValue={task.priority ?? 0} min={0} /></Field>

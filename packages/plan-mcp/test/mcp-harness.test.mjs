@@ -21,6 +21,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import {
   startMcpFixture,
   startMcpClient,
@@ -40,6 +41,8 @@ after(async () => {
 });
 
 const LONG_DESCRIPTION = "src/harness.ts:10 existing state and the concrete goal for this harness validation entity; include file refs and behaviors to preserve so the description clears the 50-char minimum.";
+const MCP_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")).version;
+const CORE_VERSION = JSON.parse(readFileSync(new URL("../../plan-core/package.json", import.meta.url), "utf-8")).version;
 
 // ── Tool discovery: published schema surface ───────────────────────────────
 
@@ -50,7 +53,7 @@ test("listTools exposes the full published tool set with actionable input schema
     const names = tools.map((tool) => tool.name);
 
     const expected = [
-      "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init",
+      "planner-version", "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init", "planner-requirement-list",
       "planner-show", "planner-repair", "planner-cleanup-orphan-phases",
       "planner-project-language", "planner-project-discuss",
       "planner-feature-list", "planner-phase-list", "planner-task-list",
@@ -62,7 +65,7 @@ test("listTools exposes the full published tool set with actionable input schema
       "planner-task-update", "planner-task-checklist-toggle",
       "planner-task-checklist-add", "planner-task-checklist-remove",
       "planner-task-delete", "planner-task-recommend", "planner-task-deviation",
-      "planner-task-start", "planner-task-complete",
+      "planner-task-pause", "planner-task-switch", "planner-task-start", "planner-task-complete",
       "planner-handoff-list", "planner-handoff-show", "planner-handoff-write",
       "planner-handoff-prepare", "planner-handoff-clear",
       "planner-web", "planner-load", "planner-disable",
@@ -111,6 +114,23 @@ test("listTools exposes the full published tool set with actionable input schema
     const web = schema("planner-web");
     assert.deepEqual(web.properties.action.enum, ["start", "stop", "status"]);
     assert.equal(web.properties.action.default, "status");
+    assert.equal(session.client.getServerVersion()?.version, MCP_VERSION, "MCP handshake advertises the installed package version");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-version works without a planner workspace and reports loaded package manifests", async () => {
+  const root = await createTempRoot("agent-plan-mcp-version-");
+  const session = await startMcpClient({ planRoot: join(root, ".planner"), name: "t293-version" });
+  try {
+    const result = await callTool(session, "planner-version", {});
+    assert.match(toolText(result), new RegExp(`@agent-plan/mcp: ${MCP_VERSION.replaceAll(".", "\\.")}`));
+    assert.match(toolText(result), new RegExp(`@agent-plan/core: ${CORE_VERSION.replaceAll(".", "\\.")}`));
+    assert.deepEqual(toolStructured(result)?.versions, {
+      "@agent-plan/mcp": MCP_VERSION,
+      "@agent-plan/core": CORE_VERSION,
+    });
   } finally {
     await closeMcpFixture(session);
   }

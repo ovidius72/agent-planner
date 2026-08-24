@@ -1,0 +1,29 @@
+{
+  "id": "7005a4bb-4325-44c8-b2eb-1b28c0c41746",
+  "number": 4,
+  "shortId": "",
+  "priority": 0,
+  "name": "Entity-scoped handoff (phase) + per-feature file storage + Web UI handoff viewer",
+  "description": "Sostituire l'handoff file-based (.planner/HANDOFF.md, singolo file) con un handoff **per-entity a livello fase**, e rifattorizzare lo storage delle feature a **un file per feature**. Aggiungere un viewer handoff nella Web UI.\n\n## Stato attuale (codice)\n- **Handoff = file singolo** `.planner/HANDOFF.md`: `PlanStore.loadHandoff()`/`handoffPath()` (plan-core/plan-store.ts); pi-adapter `buildHandoffMarkdown` (index.ts:366) + tool `plan_write_handoff` (index.ts:572) + hygiene gate non-bloccante (index.ts:899/2024/2060) + comandi show/prepare (index.ts:2145-2170); plan-mcp `planner-handoff-show/write/prepare/clear` (index.ts:795-817) + hygiene notice (index.ts:719); plan-server `GET/DELETE /handoff` (serve.ts:767-777).\n- **Problema handoff file-based**: un solo file → merge PR multi-agente si sovrascrivono a vicenda; una sola voce alla volta; non coesiste per-fase; l'agente al load non sa quale fase riprendere se più work in corso.\n- **Storage feature**: `FeaturesDocumentSchema` (schema.ts:235) = `{features: Feature[]}` in **un solo** `features.json`; `PlanStore.featuresPath()` (plan-store.ts:409), `loadFeatures` (:547) legge un file, `saveFeatures` riscrive **tutto** il file per ogni edit (write amplification + lock globale su features.json). Consumer (plan-server, plan-mcp, pi-adapter) passano dall'API `loadFeatures`/`saveFeatures` → API stabile.\n- **Storage fase**: `phases/<phaseId>.json` **un file per fase** (PhaseSchema:183, task embeddati :208). La fase è già il confine git-conflict-free naturale.\n- `PhaseSchema` NON ha campo `handoff`.\n\n## Obiettivi\n1. **Refactor A — un file per feature** (`features/<featureId>.json`): git-safe tra feature + bonus perf (edit di una feature non riscrive tutte; lock per-feature). Migrazione idempotente `features.json`→`features/*` (legge vecchio layout se `features/` assente).\n2. **Campo handoff su Phase** (`handoff: string` + `handoffUpdatedAt` su PhaseSchema) + operazioni PlanStore core-only (`listHandoffs/getPhaseHandoff/setPhaseHandoff/clearPhaseHandoff`). Harness-agnostic.\n3. **Tool handoff negli adapter** (`handoff_list/show/write/clear`) in pi-adapter E plan-mcp; deprecation del file-based `HANDOFF.md` (redirect `plan_write_handoff`→scrivi su fase corrente con warn).\n4. **Resume flow**: al `/planner load` inietta `handoff_list` (numerata, P00x(F00x)+data+prima riga) nel contesto resume; protocollo presenta→raccomanda→show→delete→resume; **delete-on-resume**; **auto-clear-on-done** (fase done → handoff svuotato); fallback a `resume.json` se 0 handoff; hygiene gate aggiornata (warn non-bloccante se una fase ha handoff, rimuovi warn file-based).\n5. **Web UI**: badge su fasi con handoff pendente (Work Tree, lista fasi, detail) + viewer handoff (lista pending → leggi full → clear) + API server (`GET /handoffs`, `GET/PUT/DELETE /phases/:id/handoff`) + WS live update.\n6. **Docs + release**: AGENTS.md §11 (hygiene → entity handoff), CHECKLIST, version bump (core schema → core; adapter; web-ui), build+check, publish, PR a develop.\n\n## Comportamenti da preservare\n- Le operazioni planner NON sono code edit (sempre permesse, anche senza task in-progress).\n- ID compositi in chat (P00x/F00x/T00x), mai UUID nudi.\n- Core harness-agnostic (Pi è un adapter).\n- `/planner load` recap + URL Web UI; hygiene non-bloccante.\n\n## Non-goal (questa feature)\n- Storage un-file-per-task (refactor B) — deferito.\n- Campo handoff su Feature/Task (solo fase ora; feature-level abilitato dallo storage P1 ma campo aggiunto successivamente).\n- Database/SQLite come store (rifiutato — binario non mergeabile in git).",
+  "descriptionUpdatedAt": "2026-07-15T17:53:11.564Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "6703294b-a164-4bfb-9d73-8aa265abefab",
+    "7a520d69-c943-4fea-8ff2-ac8f69cfa7d1",
+    "8ffe1ab1-b6ba-4067-839d-48a2c042012c",
+    "e81efa87-7856-4644-9cec-4a9e3ba499a0",
+    "ecc86593-21a4-4806-a435-fed4bc162618",
+    "2535f354-bb9d-4f70-8fb8-322fb67066d4"
+  ],
+  "dependsOn": [],
+  "statusLog": [],
+  "createdAt": "2026-07-15T17:53:11.564Z",
+  "updatedAt": "2026-07-27T12:01:51.734Z"
+}

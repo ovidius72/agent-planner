@@ -117,7 +117,7 @@ Per-harness behavior (consistent across harnesses):
 
 ### Update
 
-The plugin version is bumped by `pnpm release` together with the npm packages (the plugin has its own version track, independent from the npm package versions). The MCP server auto-updates because `.mcp.json` runs `npx -y @agent-plan/mcp`, which fetches the latest published `@agent-plan/mcp` from npm.
+The plugin version is bumped by the release scripts together with the npm packages — `pnpm release` for the stable channel and `pnpm release:next` for the `next` prerelease channel (the plugin has its own version track, independent from the npm package versions). Both `plugins/claude-code/.claude-plugin/plugin.json` and the repo-root `.claude-plugin/marketplace.json` are updated, so `/plugin marketplace update` detects the new version and refreshes the plugin files. The MCP server auto-updates independently because `.mcp.json` runs `npx -y @agent-plan/mcp`, which fetches the latest published `@agent-plan/mcp` from npm.
 
 **As a user** — after a new release is merged to `main`, refresh in Claude Code:
 
@@ -127,7 +127,7 @@ The plugin version is bumped by `pnpm release` together with the npm packages (t
 
 Then restart Claude Code in the project so the MCP server re-launches with the new `@agent-plan/mcp`.
 
-**As a maintainer** — push plugin changes to the repo's default branch (`main`, where `.claude-plugin/marketplace.json` lives). The release script bumps the plugin version in `plugins/claude-code/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` so `/plugin marketplace update` detects the new version.
+**As a maintainer** — run the release script for the target channel (`pnpm release` for stable, `pnpm release:next` for `next`). It bumps the plugin version in `plugins/claude-code/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` so `/plugin marketplace update` detects the new version and refreshes the plugin files. Do not edit the `version` fields by hand: the scripts own them, and an unchanged pinned version makes Claude Code report "already at the latest" and skip the refresh (see anthropics/claude-code#79950).
 
 ### Local development / testing
 
@@ -429,11 +429,39 @@ The CLI package is `agent-plan`.
 
 ```bash
 agent-plan help
+agent-plan --version       # alias: -v
 agent-plan mcp
 agent-plan init
 agent-plan export [--full]
 agent-plan setup claude-code --user
 agent-plan setup claude-code --project
+```
+
+### Version reporting
+
+Report the installed CLI package:
+
+```bash
+agent-plan --version       # alias: agent-plan -v
+```
+
+Report the versions loaded by each harness:
+
+```text
+# Pi
+/planner version
+
+# Claude Code plugin
+/planner version
+
+# Claude Code or Codex through MCP
+planner-version
+```
+
+The MCP result identifies the loaded `@agent-plan/mcp` and `@agent-plan/core` packages. Pi also identifies the loaded `@agent-plan/pi-adapter` and `@agent-plan/server` packages. To inspect Pi's installed package directly from a shell:
+
+```bash
+npm --prefix "$HOME/.pi/agent/npm" list @agent-plan/pi-adapter --depth=0
 ```
 
 ### `agent-plan mcp`
@@ -680,6 +708,14 @@ Before implementation work:
 /planner task start <task-id>
 ```
 
+Before temporarily changing focus:
+
+```text
+task_switch(from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume)
+```
+
+This deliberately allows necessary non-priority work while changing the source task to `paused` with a durable checkpoint. Temporary switches form a LIFO return stack; completing the temporary task emits `RESUME REQUIRED` and makes the preserved source the next recommendation. Use `task_pause` when no temporary target is being started.
+
 After completed work:
 
 ```text
@@ -697,9 +733,11 @@ Why this matters:
 
 For this reason, Agent Plan provides dedicated lifecycle tools and blocks the wrong path:
 
-- use `task_start` / `planner-task-start` / `/planner task start` to begin work;
-- use `task_complete` / `planner-task-complete` / `/planner task complete` to finish work;
-- do **not** use `task_update` to move a task directly to `in-progress` or `done`.
+- use `task_start` / `planner-task-start` / `/planner task start` to begin or resume work;
+- use `task_pause` / `planner-task-pause` to save why work stopped, what was underway, the exact resume location, and how to continue;
+- use `task_switch` / `planner-task-switch` to override normal feature → phase → task priority without losing the active task context;
+- use `task_complete` / `planner-task-complete` / `/planner task complete` to finish work and surface any required return target;
+- do **not** use `task_update` to move a task directly to `in-progress`, `paused`, or `done`.
 
 ### Write guard and temporary bypass
 
