@@ -1,0 +1,142 @@
+{
+  "id": "64805f9b-e2fa-4ae7-8fed-b583ffda23ac",
+  "featureId": "e9ec811f-0052-4ca6-8841-a2d8129f71a9",
+  "number": 78,
+  "shortId": "E6GKH",
+  "priority": 1,
+  "slug": "make-context-reads-enforceable",
+  "title": "Make context reads enforceable",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Hard-gate ordered full reads and correct language/handoff contracts.",
+  "description": "Implement the F018 contract across the harness-agnostic read-tracking core and Pi/MCP/Claude adapters. `packages/plan-core/src/read-tracking.ts:37-80` must track a target task's own full read separately from phase and feature reads, preserve their order, and expose an eligibility result suitable for adapters to reject mutations before writes. Update `packages/pi-adapter/src/index.ts` task start/switch handlers near 4138-4357 and `packages/plan-mcp/src/index.ts` near 1154-1375; direct browser lifecycle behavior remains available to the human Web UI. Correct the injected context rule at `pi-adapter/src/index.ts:4774-4776` plus canonical `packages/plan-core/src/planner-rules.ts` and generated Claude command text in `packages/agent-plan/src/index.ts` to require task(full), phase(full), feature(full). Address blank-language fallback at `pi-adapter/src/index.ts:1552-1554`. Test the real tool content contract for phase handoffs in Pi/MCP and ensure no source change weakens public TypeScript contracts or cross-harness support.",
+  "descriptionUpdatedAt": "2026-08-24T14:32:59.916Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "1b823396-f04b-4d01-b506-8ff93a8926c9",
+      "title": "Hard-gate ordered full context reads",
+      "decision": "Agent lifecycle operations must require task_get(full=true) → phase_get(full=true) → feature_get(full=true) for the exact target lineage, in that order, before task_start or task_switch can mutate planner state.",
+      "rationale": "Advisory-only parent-read tracking allowed agents to start work without reading the task, phase, or feature descriptions and even treated a task read as implicitly reading its parents.",
+      "implementationNotes": "Keep this enforcement session-local in harness adapters, invalidate it on session start, pause, and switch, require linked requirements separately, and preserve Web UI access for the human supervisor.",
+      "acceptedAt": "2026-08-24T14:45:39.179Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "9134cab7-6edc-4eca-bf4d-d5a2f30a7677"
+  ],
+  "tasks": [
+    {
+      "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677",
+      "phaseId": "64805f9b-e2fa-4ae7-8fed-b583ffda23ac",
+      "number": 326,
+      "shortId": "Q7BCV",
+      "priority": 1,
+      "shortName": "enforce-ordered-full-context-r",
+      "title": "Enforce ordered full context reads and English defaults",
+      "status": "done",
+      "description": "Replace the advisory-only read-tracking behavior with an enforceable, session-local readiness check. In `packages/plan-core/src/read-tracking.ts`, distinguish compact from full reads and record timestamps/sequence for the exact task ID, parent phase ID, and parent feature ID; only task(full) → phase(full) → feature(full) qualifies a target task. Reset/invalidate this eligibility on pause and switch and on normal session reset. In Pi (`packages/pi-adapter/src/index.ts`) and MCP (`packages/plan-mcp/src/index.ts`), evaluate the gate before `task_start` / `task_switch` state writes and return actionable missing-read messages without changing task status. Maintain Web UI human controls, but do not permit agent adapters to bypass the gate. Update canonical rules and generated adapter/Claude prompt text to precisely state the sequence and full reads. Change the blank chat language fallback from Italian to English in the Pi project-language flow, retaining an explicit content-language selection as the chat fallback. Extend core, Pi, MCP, Claude/agent-plan, and handoff tests; build the UI bundle and run workspace validation. Preserve the existing `handoff_show` text body behavior and test it at adapter/harness level rather than changing its successful handler.\n\n---\n**Completion summary:**\nImplemented F018 context enforcement and language-default fixes. `packages/plan-core/src/read-tracking.ts` now tracks task, phase, and feature full reads independently and validates the exact task → phase → feature sequence. Pi and MCP `task_start`/`task_switch` hard-reject before mutation when sequence or linked-requirement reads are missing; Pi invalidates reads at session start and after switches, and pause already invalidates them. Compact reads no longer count. Corrected canonical rules, Pi context, MCP descriptions, Claude generated command, and active-task recap guidance. Pi language prompts now fall back to English, and legacy Pi task update/create paths cannot bypass lifecycle start. Confirmed existing Pi/MCP harness tests consume handoff text content. Reviewer findings on legacy bypasses and reversed recap order were corrected and personally revalidated. Validation passed: `pnpm test:unit` (391/391), `pnpm build`, `pnpm check`, and `git diff --check`. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-08-24T14:53:08.668Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677-check-001-planned-in-progress",
+          "date": "2026-08-24T14:33:39.651Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677-check-002-in-progress-done",
+          "date": "2026-08-24T14:53:08.666Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677-check-001-inspect-all-read-marking-and-lifecycle-mutation-paths-across-pi-mcp-core-and-generated-claude-command",
+          "number": 1,
+          "title": "Inspect all read-marking and lifecycle mutation paths across Pi, MCP, core, and generated Claude command",
+          "checked": true
+        },
+        {
+          "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677-check-002-implement-exact-full-read-sequence-tracking-and-hard-pre-mutation-gates",
+          "number": 2,
+          "title": "Implement exact full-read sequence tracking and hard pre-mutation gates",
+          "checked": true
+        },
+        {
+          "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677-check-003-correct-language-fallback-and-all-shared-context-prompt-wording",
+          "number": 3,
+          "title": "Correct language fallback and all shared context/prompt wording",
+          "checked": true
+        },
+        {
+          "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677-check-004-add-regression-coverage-for-ordering-mutation-rejection-and-handoff-tool-text",
+          "number": 4,
+          "title": "Add regression coverage for ordering, mutation rejection, and handoff tool text",
+          "checked": true
+        },
+        {
+          "id": "9134cab7-6edc-4eca-bf4d-d5a2f30a7677-check-005-build-and-run-check-plus-full-unit-suite",
+          "number": 5,
+          "title": "Build and run check plus full unit suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T14:33:39.651Z",
+      "completedAt": "2026-08-24T14:53:08.666Z",
+      "createdAt": "2026-08-24T14:33:09.230Z",
+      "updatedAt": "2026-08-24T14:53:08.666Z"
+    }
+  ],
+  "createdAt": "2026-08-24T14:32:59.915Z",
+  "updatedAt": "2026-08-24T14:53:08.666Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-24T14:48:55.422Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/64805f9b-e2fa-4ae7-8fed-b583ffda23ac-2026-08-24T14-53-08-683Z.md",
+      "clearedAt": "2026-08-24T14:53:08.683Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "a24e9eeb-e373-410a-b6f4-0fd1985d1f1f",
+      "date": "2026-08-24T14:33:39.669Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "a730d90f-b124-4bac-b217-487f0ce47ec9",
+      "date": "2026-08-24T14:53:08.718Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

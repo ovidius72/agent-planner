@@ -44,6 +44,13 @@ const LONG_DESCRIPTION = "src/harness.ts:10 existing state and the concrete goal
 const MCP_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")).version;
 const CORE_VERSION = JSON.parse(readFileSync(new URL("../../plan-core/package.json", import.meta.url), "utf-8")).version;
 
+async function readTaskContext(session, task, phase, feature) {
+  await callTool(session, "planner-task-show", { task, full: true });
+  await callTool(session, "planner-phase-show", { phase, full: true });
+  await callTool(session, "planner-feature-show", { feature, full: true });
+  await callTool(session, "planner-requirement-list", {});
+}
+
 // ── Tool discovery: published schema surface ───────────────────────────────
 
 test("listTools exposes the full published tool set with actionable input schemas", async () => {
@@ -182,6 +189,7 @@ test("harness drives a CRUD round trip; composite refs in output, state persiste
     // highest-priority ready work so the recommended task matches)
     await callTool(session, "planner-feature-update", { feature: "F002", priority: 5 });
     await callTool(session, "planner-task-update", { task: "T002", priority: 5 });
+    await readTaskContext(session, "T002", "P002", "F002");
     const started = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(started), /Task started: P\d+\(F002\)\/T002/);
 

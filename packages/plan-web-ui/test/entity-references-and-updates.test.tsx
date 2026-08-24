@@ -63,7 +63,7 @@ describe("entity references and timestamps", () => {
     expect(screen.queryByText("Finish branch and rerun tests")).not.toBeInTheDocument();
   });
 
-  it("shows planned resume targets as planned plus a secondary resume-required marker", () => {
+  it("shows planned resume targets without duplicating the section label", () => {
     renderRoute([{ path: "/", element: (
       <ResumeRequiredSection tasks={[{
         id: "task-5", number: 5, shortId: "TSK05", title: "Return target",
@@ -74,7 +74,7 @@ describe("entity references and timestamps", () => {
 
     expect(screen.getByRole("heading", { name: "Resume required (1)" })).toBeInTheDocument();
     expect(screen.getByText("Planned")).toBeInTheDocument();
-    expect(screen.getAllByText("Resume required")).toHaveLength(1);
+    expect(screen.queryByText("Resume required")).not.toBeInTheDocument();
     expect(screen.queryByText("Return to this preserved task before selecting new priority work.")).not.toBeInTheDocument();
   });
 

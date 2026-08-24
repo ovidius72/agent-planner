@@ -39,11 +39,6 @@ export function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
           <Link to={to} className="min-w-0 flex-1 truncate font-medium hover:text-[var(--accent)]">
             {task.title}
           </Link>
-          {task.pendingResume ? (
-            <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--accent)]">
-              Resume required
-            </span>
-          ) : null}
         </div>
         <button
           type="button"

@@ -214,11 +214,52 @@ test("task focus endpoint keeps checkpointed work in pending resume and marks pe
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...task, phaseId: phase.id, status: "in-progress" }), expectStatus: 400,
   });
-  assert.match(unsafeResume.body.error, /Resume checkpoint lifecycle transitions require/);
+  assert.match(unsafeResume.body.error, /POST \/tasks\/:id\/start/);
+
+  const resumed = await request(fx, `/tasks/${task.id}/start`, { method: "POST" });
+  assert.equal(resumed.body.status, "in-progress");
+  assert.equal(resumed.body.pauseSnapshot, null);
+  const afterResume = (await request(fx, "/tasks/focus")).body;
+  assert.deepEqual(afterResume.pendingResume, []);
+  assert.equal(afterResume.active[0].id, task.id);
+
   const unsafeCreate = await request(fx, `/phases/${phase.id}/tasks`, {
     ...json({ title: "Invalid paused task", status: "paused" }), expectStatus: 400,
   });
   assert.match(unsafeCreate.body.error, /cannot be created paused/);
+});
+
+test("task start lifecycle resolves deviation-only Resume Required work", async () => {
+  const fx = await startServerFixture({ name: "t325-task-start-lifecycle" });
+  const phase = (await fx.store.loadAllPhases())[0];
+  const task = phase.tasks[0];
+  const now = "2026-08-19T12:34:56.000Z";
+  const snapshot = {
+    id: "snapshot-start-1", reason: "Temporary prerequisite", whatWasBeingDone: "Implementing focus endpoint",
+    resumeLocation: "src/serve.ts:640", howToResume: "Finish endpoint and rerun server tests",
+    relatedTaskId: "temporary-task", pausedAt: now, pausedBy: "server-test",
+  };
+  // A deviation can preserve a resume target before that task gets its own
+  // pause snapshot. This is the path generic updates used to leave dangling.
+  await fx.store.addWorkDeviation({
+    id: "deviation-start-1", recommendedTaskId: task.id, temporaryTaskId: "temporary-task",
+    resumeTaskId: task.id, reason: snapshot.reason, snapshot, requestedBy: "agent", approvedBy: "test",
+    state: "resume-required", createdAt: now, activatedAt: now, resumeRequiredAt: now, resolvedAt: "", resumedAt: "",
+  });
+
+  const unsafe = await request(fx, `/tasks/${task.id}`, {
+    ...put({ ...task, phaseId: phase.id, status: "in-progress" }), expectStatus: 400,
+  });
+  assert.match(unsafe.body.error, /POST \/tasks\/:id\/start/);
+
+  const started = await request(fx, `/tasks/${task.id}/start`, { method: "POST" });
+  assert.equal(started.body.status, "in-progress");
+  const focus = (await request(fx, "/tasks/focus")).body;
+  assert.deepEqual(focus.pendingResume, []);
+  assert.equal(focus.active.length, 1);
+  assert.equal(focus.active[0].id, task.id);
+  const deviation = (await fx.store.loadProject()).workDeviations.find((entry) => entry.id === "deviation-start-1");
+  assert.equal(deviation?.state, "resumed");
 });
 
 test("task focus endpoint ignores done resume targets and stale deviations", async () => {

@@ -485,6 +485,10 @@ describe("plan-mcp strict ref validation", () => {
       const recorded = await session.client.callTool({ name: "planner-task-deviation", arguments: { temporary_task: temporaryId, resume_task: resumeId, reason: "Approved urgent work" } });
       assert.match(toolText(recorded), /Approved deviation/);
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.resumeTaskId, resumeId);
+      await session.client.callTool({ name: "planner-task-show", arguments: { task: temporaryId, full: true } });
+      await session.client.callTool({ name: "planner-phase-show", arguments: { phase: "P001", full: true } });
+      await session.client.callTool({ name: "planner-feature-show", arguments: { feature: "F001", full: true } });
+      await session.client.callTool({ name: "planner-requirement-list", arguments: {} });
       assert.match(toolText(await session.client.callTool({ name: "planner-task-start", arguments: { task: temporaryId } })), /Task started/);
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "active");
       assert.match(toolText(await session.client.callTool({ name: "planner-task-complete", arguments: { task: temporaryId } })), /Task completed.*RESUME REQUIRED/s);

@@ -7,7 +7,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -699,6 +699,70 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json({ active, pendingResume });
   });
 
+  /** Canonical HTTP task-entry path. Generic task updates must never start work,
+   * because start/resume is responsible for clearing checkpoints and closing
+   * any matching return-stack deviation. */
+  app.post(route("/tasks/:id/start"), async (c) => {
+    const taskId = c.req.param("id");
+    const [phases, featuresDoc, project] = await Promise.all([
+      store.loadAllPhases(), store.loadFeatures(), store.loadProject(),
+    ]);
+    const phase = phases.find((entry) => entry.tasks.some((task) => task.id === taskId));
+    const existing = phase?.tasks.find((task) => task.id === taskId);
+    if (!phase || !existing) return c.json({ error: "task not found" }, 404);
+    if (existing.status === "in-progress") return c.json({ error: "task is already in-progress" }, 400);
+
+    const eligibility = checkExplicitTaskStart(featuresDoc.features, phases, existing.id, project.workDeviations);
+    if (!eligibility.eligible) return c.json({ error: `Task start denied: ${eligibility.reason}` }, 400);
+    const selection = recommendNextTask(featuresDoc.features, phases, project.workDeviations);
+    if (selection.kind === "conflict") return c.json({ error: selection.reason }, 409);
+    if (selection.kind === "active" && selection.candidate?.task.id !== existing.id) {
+      return c.json({ error: `Task start denied: another task is active. Use task_switch to checkpoint it before starting this task.` }, 409);
+    }
+
+    const now = nowISO();
+    let updated: Task | undefined;
+    if (existing.pauseSnapshot) {
+      updated = await store.resumeTask(phase.id, existing.id, now);
+    } else {
+      await store.updatePhase(phase.id, (current) => {
+        const task = current.tasks.find((entry) => entry.id === existing.id);
+        if (!task) return current;
+        const previousStatus = task.status;
+        applyTaskLifecycleDates(task, "in-progress", now);
+        task.statusLog = [...(task.statusLog ?? []), {
+          id: createTaskId(),
+          date: now,
+          fromStatus: previousStatus,
+          toStatus: "in-progress",
+          title: `${previousStatus} → in-progress`,
+          description: "",
+        }];
+        task.updatedAt = now;
+        current.updatedAt = now;
+        updated = task;
+        return current;
+      });
+    }
+
+    const approvedDeviation = project.workDeviations.find((deviation) =>
+      deviation.temporaryTaskId === existing.id && deviation.state === "approved",
+    );
+    if (approvedDeviation) await store.setWorkDeviationState(approvedDeviation.id, "active", now);
+    const resumedDeviation = project.workDeviations
+      .filter((deviation) => deviation.resumeTaskId === existing.id
+        && (deviation.state === "resume-required" || deviation.state === "resolved"))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    if (resumedDeviation) await store.setWorkDeviationState(resumedDeviation.id, "resumed", now);
+
+    await store.syncTaskStatusRollup(phase.id);
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "phases-updated", data: { action: "task-started", id: phase.id, phaseId: phase.id, featureId: phase.featureId ?? "", taskId } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    await store.appendActivity("task_status", existing.id, `Task ${existing.id} → in-progress`);
+    return c.json(updated ?? existing);
+  });
+
   app.get(route("/tasks/:id"), async (c) => {
     const taskId = c.req.param("id");
     const phases = await store.loadAllPhases();
@@ -719,8 +783,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const existing = phase.tasks.find((t) => t.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
 
-    if (body.status && body.status !== existing.status && (((body.status as string) === "paused") || ((existing.status as string) === "paused") || (existing.pauseSnapshot && body.status === "in-progress"))) {
-      return c.json({ error: "Resume checkpoint lifecycle transitions require task_pause/task_switch/task_start so the checkpoint and return stack remain consistent." }, 400);
+    if (body.status && body.status !== existing.status && (body.status === "in-progress" || (body.status as string) === "paused" || (existing.status as string) === "paused")) {
+      return c.json({ error: "Task start/resume transitions require POST /tasks/:id/start so lifecycle state, checkpoints, and return stacks remain consistent." }, 400);
     }
 
     // Validate motivation requirement for status transitions. The Web UI is the

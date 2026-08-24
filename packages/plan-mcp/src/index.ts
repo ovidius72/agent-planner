@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, parentReadAdvisory, requirementReadAdvisory, markRequirementRead, invalidateReads } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, contextReadEligibility, hasReadRequirements, markRequirementRead, invalidateReads } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -463,7 +463,7 @@ server.registerTool("planner-feature-show", {
   const resolvedFeature = resolveFeatureRefStrict(features, ref);
   if (!resolvedFeature.ok) return text(resolvedFeature.error);
   const feature = resolvedFeature.feature;
-  markFeatureRead(feature.id);
+  if (full) markFeatureRead(feature.id);
   const phases = (await st.loadAllPhases()).filter((phase) => phase.featureId === feature.id);
     const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases)`;
     return text(full ? `${summary}\n\n${feature.description || ""}` : summary);
@@ -651,7 +651,7 @@ server.registerTool("planner-phase-show", {
     const features = (await st.loadFeatures()).features;
     const phase = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!phase) return text(`Phase not found: ${ref}`);
-    markPhaseRead(phase.id, phase.featureId);
+    if (full) markPhaseRead(phase.id, phase.featureId);
     const linkedRequirements = await st.linkedRequirementsForPhase(phase.id);
     const reqCount = linkedRequirements.length;
     const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
@@ -822,7 +822,7 @@ server.registerTool("planner-task-show", {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
-    markTaskRead(found.task.id, found.phase.id, found.phase.featureId);
+    if (full) markTaskRead(found.task.id, found.phase.id, found.phase.featureId);
     const features = (await st.loadFeatures()).features;
     const summary = `${found.task.title} — ${taskCompositeRef(found.task, found.phase, features)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status}; phase ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))})`;
     if (!full) return text(summary);
@@ -896,8 +896,8 @@ server.registerTool("planner-task-update", {
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
 
-  if (found.task.pauseSnapshot && status === "in-progress" && status !== found.task.status) {
-    return text("Resume checkpoint lifecycle transitions require planner-task-start so the checkpoint and return stack remain consistent.");
+  if (status === "in-progress" && status !== found.task.status) {
+    return text("Task start/resume transitions require planner-task-start so lifecycle state, checkpoints, and return stacks remain consistent.");
   }
 
   // Validate motivation requirement for status transitions.
@@ -1161,6 +1161,15 @@ server.registerTool("planner-task-switch", {
   if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
     return text(`Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.`);
   }
+  const contextEligibility = contextReadEligibility(target.task.id, target.phase.id, target.phase.featureId);
+  if (!contextEligibility.eligible) return text(`Task switch denied: context reads required. ${contextEligibility.reason}`, contextEligibility);
+  const linkedRequirementIds = [
+    ...(await st.linkedRequirementsForPhase(target.phase.id)).map((requirement) => requirement.id),
+    ...(target.phase.featureId ? (await st.linkedRequirementsForFeature(target.phase.featureId)).map((requirement) => requirement.id) : []),
+  ];
+  if (!hasReadRequirements(linkedRequirementIds)) {
+    return text("Task switch denied: read the requirements linked to the target phase and feature before switching.", { requirementIds: linkedRequirementIds });
+  }
   const eligibility = checkExplicitTaskStart(features, phases, target.task.id, project.workDeviations);
   if (!eligibility.eligible) return text(`Task switch denied: ${eligibility.reason}`);
 
@@ -1241,23 +1250,17 @@ server.registerTool("planner-task-switch", {
   }
   await st.syncTaskStatusRollup(source.phase.id);
   if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
-  const targetReadAdvisory = parentReadAdvisory(target.phase.featureId, target.phase.id);
-  const targetRequirementAdvisory = requirementReadAdvisory([
-    ...(await st.linkedRequirementsForPhase(target.phase.id)).map((r) => r.id),
-    ...(target.phase.featureId ? (await st.linkedRequirementsForFeature(target.phase.featureId)).map((r) => r.id) : []),
-  ]);
+  invalidateReads();
   return writeAndSummarize(st, [
     `🔀 Task switched: ${taskCompositeRef(source.task, source.phase, features)} → ${taskCompositeRef(target.task, target.phase, features)}`,
     `Resume checkpoint: ${snapshot.whatWasBeingDone}`,
     `Return target: ${taskCompositeRef(source.task, source.phase, features)} from ${snapshot.resumeLocation}`,
     `Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.`,
-    ...(targetReadAdvisory ? [targetReadAdvisory.trimStart()] : []),
-    ...(targetRequirementAdvisory ? [targetRequirementAdvisory.trimStart()] : []),
-  ].join("\n"), { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id, ...(targetReadAdvisory || targetRequirementAdvisory ? { readRequired: true } : {}) });
+  ].join("\n"), { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id });
 });
 
 server.registerTool("planner-task-start", {
-  description: "Set a task to in-progress or resume checkpointed work. BEFORE calling, use planner-task-show with full=true and planner-phase-show with full=true for the parent phase, including linked requirements. A different active task must be suspended through planner-task-switch first. Otherwise follow active/pending-resume/feature → phase → task priority guidance.",
+  description: "Set a task to in-progress or resume checkpointed work. BEFORE calling, use planner-task-show(full=true), then planner-phase-show(full=true), then planner-feature-show(full=true) for the same lineage, in that exact order. Read linked requirements with planner-requirement-list when present. A different active task must first be suspended through planner-task-switch.",
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
   const st = await requireStore();
@@ -1267,6 +1270,15 @@ server.registerTool("planner-task-start", {
   if (!found) return text(`Task not found: ${ref}`);
   if (found.task.status === "in-progress") return text(`Task ${found.task.id} is already in-progress.`);
   if (found.task.status === "done") return text(`Task ${found.task.id} is done. Use planner-task-update to reopen.`);
+  const contextEligibility = contextReadEligibility(found.task.id, found.phase.id, found.phase.featureId);
+  if (!contextEligibility.eligible) return text(`Task start denied: context reads required. ${contextEligibility.reason}`, contextEligibility);
+  const linkedRequirementIds = [
+    ...(await st.linkedRequirementsForPhase(found.phase.id)).map((requirement) => requirement.id),
+    ...(found.phase.featureId ? (await st.linkedRequirementsForFeature(found.phase.featureId)).map((requirement) => requirement.id) : []),
+  ];
+  if (!hasReadRequirements(linkedRequirementIds)) {
+    return text("Task start denied: read the requirements linked to the task's phase and feature first.", { requirementIds: linkedRequirementIds });
+  }
   const project = await st.loadProject();
   const phases = await st.loadAllPhases();
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
@@ -1365,14 +1377,8 @@ server.registerTool("planner-task-start", {
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
   const t = updatedTask ?? found.task;
-  const readAdvisory = parentReadAdvisory(parentFeature?.id, found.phase.id);
-  const requirementAdvisory = requirementReadAdvisory([
-    ...(phaseWithRequirements.linkedRequirements ?? []).map((r) => r.id),
-    ...featureRequirements.map((r) => r.id),
-  ]);
-  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}${readAdvisory}${requirementAdvisory}`, {
+  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}`, {
     ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
-    ...(readAdvisory || requirementAdvisory ? { readRequired: true } : {}),
   });
 });
 

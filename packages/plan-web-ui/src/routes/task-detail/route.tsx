@@ -63,6 +63,7 @@ function ChecklistItemToggle({
 
 export function TaskDetailRoute() {
   const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
+  const canStart = task.status === "planned" || task.status === "waiting";
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
   const checklist = task.checklist ?? [];
@@ -105,6 +106,11 @@ export function TaskDetailRoute() {
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{task.title}</h2>
         <div className="mt-4 flex flex-wrap items-center gap-2">
+          {canStart ? (
+            <Form method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/start`} className="inline-flex">
+              <Button type="submit" variant="primary">{task.pauseSnapshot || pendingResume ? "Resume task" : "Start task"}</Button>
+            </Form>
+          ) : null}
           <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>
           <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/delete`} className="inline-flex" onSubmit={(event) => {
             if (!window.confirm(`Delete task \"${task.title}\"?`)) event.preventDefault();

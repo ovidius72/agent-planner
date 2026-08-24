@@ -80,19 +80,15 @@ describe("buildRecap — active task", () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "planned" }] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
     assert.ok(r.includes("Current focus: F01 — Feat One / P001(F001) — Phase 1 / T01 — task 1 (in-progress)"), "focus line with composite IDs");
-    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context:"), "context-re-read advisory for in-progress task");
-    assert.ok(r.includes("/planner feature show F01"), "pi feature show suggestion");
-    assert.ok(r.includes("/planner phase show P001(F001)"), "pi phase show suggestion");
-    assert.ok(r.includes("/planner task show T01 (full)"), "pi task show suggestion");
+    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context in this order:"), "context-re-read advisory for in-progress task");
+    assert.ok(r.includes("/planner task show T01 (full=true), /planner phase show P001(F001) (full=true), /planner feature show F01 (full=true)"), "pi advisory uses required read order");
   });
 
   test("context-re-read advisory uses MCP command form", async () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "planned" }] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
-    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context:"), "context-re-read advisory for in-progress task");
-    assert.ok(r.includes("planner-feature-show F01"), "mcp feature show suggestion");
-    assert.ok(r.includes("planner-phase-show P001(F001)"), "mcp phase show suggestion");
-    assert.ok(r.includes("planner-task-show T01 (full)"), "mcp task show suggestion");
+    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context in this order:"), "context-re-read advisory for in-progress task");
+    assert.ok(r.includes("planner-task-show T01 (full=true), planner-phase-show P001(F001) (full=true), planner-feature-show F01 (full=true)"), "MCP advisory uses required read order");
   });
 });
 

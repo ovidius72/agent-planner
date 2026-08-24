@@ -127,6 +127,10 @@ test("planner-task-start retains a pending handoff", async () => {
       confirmed: true,
     });
 
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", {});
     await callTool(session, "planner-task-start", { task: "T001" });
     const phase = (await session.store.loadAllPhases())[0];
     assert.equal(phase.tasks[0].status, "in-progress");

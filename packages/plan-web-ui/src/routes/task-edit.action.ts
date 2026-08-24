@@ -25,12 +25,16 @@ export async function action({ request, params }: { request: Request; params: Re
   const taskId = requiredParam(params, "taskId");
   const current = await getTask(taskId);
   const formData = await request.formData();
+  const status = requiredString(formData, "status") as TaskStatus;
+  if (status === "in-progress" && current.status !== "in-progress") {
+    throw new Response("Use Start task or Resume task to enter in-progress.", { status: 400 });
+  }
 
   await updateTask({
     ...current,
     phaseId,
     title: requiredString(formData, "title"),
-    status: requiredString(formData, "status") as TaskStatus,
+    status,
     priority: optionalNumber(formData, "priority"),
     description: optionalString(formData, "description"),
     checklist: mergeChecklist(current.checklist, stringList(formData, "checklist")),

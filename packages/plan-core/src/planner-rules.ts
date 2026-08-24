@@ -35,9 +35,9 @@ export const PLANNER_EXTENSION_RULES: string[] = [
   // Avvio del planner
   "The planner and Web UI never start automatically. Do not start the Web UI or show its URL unless the user runs load/recap/web-status. The Web UI URL appears only in the recap after load, or on explicit web status.",
   // Regola dettagli
-  "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge; read the task description and notes (and parent phase/feature) before starting work; cite entities with composite IDs, not bare UUIDs.",
-  // Comportamento atteso 2-5
-  "When you begin work: read the relevant planner entities (feature_get/phase_get/task_get/handoff_show), read the relevant documents, and update the planner before and after significant changes. If you change an architectural decision, document it explicitly.",
+  "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge. Before starting, resuming, or switching to a task, read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order; read linked requirements explicitly when present. Cite entities with composite IDs, not bare UUIDs.",
+  // Expected operational behavior
+  "When you begin work, task_start and task_switch enforce the required ordered full reads. Read any relevant phase handoff as additional context, then update the planner before and after significant changes. If you change an architectural decision, document it explicitly.",
 ];
 
 export interface ExtensionRulesFile {

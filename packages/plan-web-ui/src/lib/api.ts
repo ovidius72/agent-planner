@@ -260,6 +260,11 @@ export async function updateTask(task: Task): Promise<Task> {
   return normalizeTask(await request(`/tasks/${task.id}`, { method: "PUT", body: JSON.stringify(task) }));
 }
 
+/** Start planned work or resume a checkpoint through the canonical lifecycle. */
+export async function startTask(taskId: string): Promise<Task> {
+  return normalizeTask(await request(`/tasks/${taskId}/start`, { method: "POST" }));
+}
+
 export async function deleteTask(taskId: string): Promise<{ deleted: string }> {
   return request(`/tasks/${taskId}`, { method: "DELETE" });
 }

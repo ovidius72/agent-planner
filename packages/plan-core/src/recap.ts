@@ -116,8 +116,8 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     lines.push(
       "",
       italian
-        ? `Questo task è in-progress (lavoro iniziato in una sessione precedente). Prima di continuare, rileggi il contesto completo: ${featureShowCmd} ${fr}, ${phaseShowCmd} ${pr}, ${taskShowCmd} ${tr} (full).`
-        : `⚠️ This task is in-progress (work started in a previous session). Before continuing, re-read the full context: ${featureShowCmd} ${fr}, ${phaseShowCmd} ${pr}, ${taskShowCmd} ${tr} (full).`,
+        ? `Questo task è in-progress (lavoro iniziato in una sessione precedente). Prima di continuare, rileggi il contesto completo: ${taskShowCmd} ${tr} (full=true), ${phaseShowCmd} ${pr} (full=true), ${featureShowCmd} ${fr} (full=true).`
+        : `⚠️ This task is in-progress (work started in a previous session). Before continuing, re-read the full context in this order: ${taskShowCmd} ${tr} (full=true), ${phaseShowCmd} ${pr} (full=true), ${featureShowCmd} ${fr} (full=true).`,
     );
   } else if (pendingResume) {
     const feature = feats.find((entry) => entry.id === pendingResume.phase.featureId);

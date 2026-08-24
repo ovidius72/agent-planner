@@ -1,58 +1,90 @@
 /**
- * T307 (P072/F005) — tracked, deduplicated parent read-enforcement.
+ * Per-session, ordered context-read enforcement for agent lifecycle operations.
  *
- * Analogous to the existing NO ACTIVE TASK advisory: an in-memory, per-session
- * record of which feature/phase refs the agent has actually read (via the
- * feature/phase/task get/show tools). Starting, resuming, or switching a task
- * checks that the target's parent feature + phase are in the read set; a missing
- * read yields an unavoidable (non-blocking) advisory instead of a silent skip.
+ * An agent must read the exact task, then its parent phase, then its parent
+ * feature with full=true before it can start, resume, or switch to that task.
+ * Compact list/identity reads never count. The state is process-local and is
+ * cleared on pause, switch, and session startup by the harness adapters.
  *
- * Dedupe: reading a phase (or any task inside it) records both its phase and
- * feature, so 10 sibling tasks need a single feature + phase read. Switching to
- * a different phase/feature naturally fails (that phase is not recorded). A
- * pause invalidates the set, so resuming forces a fresh read.
- *
- * T319 (P072/F005) extends the set with requirements: starting/resuming/switching
- * also requires the requirements linked to the phase (and, when present, the
- * feature) to have been explicitly read. Requirements are NOT auto-recorded by a
- * phase/feature/task read (per project decision: explicit separate read); they
- * are recorded only via the requirement list tool (markRequirementRead). An empty
- * linked-requirement list means nothing is required.
+ * Linked requirements remain a separate explicit-read gate. They are recorded
+ * only through the requirement list tool and never by an entity read.
  */
 
 type ReadState = {
-  features: Set<string>;
-  phases: Set<string>;
+  tasks: Map<string, number>;
+  phases: Map<string, number>;
+  features: Map<string, number>;
   requirements: Set<string>;
+  nextSequence: number;
 };
 
-let state: ReadState = { features: new Set(), phases: new Set(), requirements: new Set() };
+export type ContextReadEligibility = {
+  eligible: boolean;
+  reason: string;
+};
 
-/** Record that a feature was read. Does NOT imply any phase was read. */
+let state: ReadState = {
+  tasks: new Map(),
+  phases: new Map(),
+  features: new Map(),
+  requirements: new Set(),
+  nextSequence: 0,
+};
+
+function record(map: Map<string, number>, id: string): void {
+  state.nextSequence += 1;
+  map.set(id, state.nextSequence);
+}
+
+/** Record a full feature read. */
 export function markFeatureRead(featureId: string): void {
-  state.features.add(featureId);
+  record(state.features, featureId);
 }
 
-/** Record that a phase (and, when known, its feature) was read. */
-export function markPhaseRead(phaseId: string, featureId?: string): void {
-  state.phases.add(phaseId);
-  if (featureId) state.features.add(featureId);
+/** Record a full phase read. The parent feature is intentionally not implied. */
+export function markPhaseRead(phaseId: string, _featureId?: string): void {
+  record(state.phases, phaseId);
 }
 
-/** Record that a task (and, by context, its parent phase + feature) was read. */
-export function markTaskRead(_taskId: string, phaseId: string, featureId?: string): void {
-  state.phases.add(phaseId);
-  if (featureId) state.features.add(featureId);
+/** Record a full task read. Its parent phase and feature are intentionally not implied. */
+export function markTaskRead(taskId: string, _phaseId?: string, _featureId?: string): void {
+  record(state.tasks, taskId);
 }
 
-/** Record that a requirement was explicitly read (via the requirement list tool). */
+/** Record that a requirement was explicitly read via the requirement list tool. */
 export function markRequirementRead(requirementId: string): void {
   state.requirements.add(requirementId);
 }
 
 /**
- * Whether the target task's parent feature + phase have both been read.
- * `featureId` is optional: an orphan phase (no feature) only requires the phase.
+ * Verify the required task(full) → phase(full) → feature(full) order for one
+ * exact task lineage. Orphan phases do not require a feature read.
+ */
+export function contextReadEligibility(taskId: string, phaseId: string, featureId?: string): ContextReadEligibility {
+  const taskSequence = state.tasks.get(taskId);
+  if (taskSequence === undefined) {
+    return { eligible: false, reason: "Read this exact task with full=true first." };
+  }
+
+  const phaseSequence = state.phases.get(phaseId);
+  if (phaseSequence === undefined || phaseSequence <= taskSequence) {
+    return { eligible: false, reason: "After reading the task, read its parent phase with full=true." };
+  }
+
+  if (!featureId) return { eligible: true, reason: "" };
+
+  const featureSequence = state.features.get(featureId);
+  if (featureSequence === undefined || featureSequence <= phaseSequence) {
+    return { eligible: false, reason: "After reading the phase, read its parent feature with full=true." };
+  }
+
+  return { eligible: true, reason: "" };
+}
+
+/**
+ * Legacy parent-read check retained for callers that only need to know whether
+ * both parent entities have been read. Lifecycle gates must use
+ * contextReadEligibility so the task and ordering cannot be bypassed.
  */
 export function hasReadParents(featureId: string | undefined, phaseId: string): boolean {
   const phaseOk = state.phases.has(phaseId);
@@ -60,40 +92,41 @@ export function hasReadParents(featureId: string | undefined, phaseId: string): 
   return phaseOk && featureOk;
 }
 
-/** Whether every linked requirement (phase + feature) has been explicitly read. */
+/** Whether every linked requirement has been explicitly read. */
 export function hasReadRequirements(requirementIds: string[]): boolean {
   return requirementIds.every((id) => state.requirements.has(id));
 }
 
-/** Clear the read set (e.g. on pause, so resuming forces a fresh read). */
+/** Clear all read state so later lifecycle work requires fresh context. */
 export function invalidateReads(): void {
-  state = { features: new Set(), phases: new Set(), requirements: new Set() };
+  state = {
+    tasks: new Map(),
+    phases: new Map(),
+    features: new Map(),
+    requirements: new Set(),
+    nextSequence: 0,
+  };
 }
 
-/**
- * Non-blocking advisory (mirrors the NO ACTIVE TASK pattern): empty when the
- * target's parent feature + phase have both been read, otherwise a loud
- * READ REQUIRED notice the agent cannot silently skip.
- */
+/** Compatibility advisory for non-lifecycle callers. */
 export function parentReadAdvisory(featureId: string | undefined, phaseId: string): string {
   if (hasReadParents(featureId, phaseId)) return "";
-  return "\n\n⚠️ READ REQUIRED before proceeding: read the parent feature and phase (full=true) for this task before starting or resuming it. One feature+phase read covers every task in that phase; a pause/resume invalidates the read and requires re-reading.";
+  return "\n\n⚠️ READ REQUIRED before proceeding: read the parent phase and feature with full=true.";
 }
 
-/**
- * Non-blocking advisory (mirrors parentReadAdvisory): empty when every linked
- * requirement (phase + feature) has been explicitly read, otherwise a loud
- * REQUIREMENTS READ REQUIRED notice. An empty list means the phase/feature has
- * no linked requirements, so nothing is required.
- */
+/** Advisory text for the separate linked-requirements gate. */
 export function requirementReadAdvisory(requirementIds: string[]): string {
   if (requirementIds.length === 0) return "";
   const unread = requirementIds.filter((id) => !state.requirements.has(id));
   if (unread.length === 0) return "";
-  return "\n\n⚠️ REQUIREMENTS READ REQUIRED before proceeding: read the requirements linked to this phase (and feature) before starting or resuming the task. Use the requirement list tool to read them (one read covers every task in that phase; a pause/resume invalidates the read).";
+  return "\n\n⚠️ REQUIREMENTS READ REQUIRED before proceeding: read the requirements linked to this phase and feature.";
 }
 
-/** Snapshot for diagnostics/tests. */
+/** Snapshot for diagnostics and tests. */
 export function readTrackingSnapshot(): { features: string[]; phases: string[]; requirements: string[] } {
-  return { features: [...state.features], phases: [...state.phases], requirements: [...state.requirements] };
+  return {
+    features: [...state.features.keys()],
+    phases: [...state.phases.keys()],
+    requirements: [...state.requirements],
+  };
 }

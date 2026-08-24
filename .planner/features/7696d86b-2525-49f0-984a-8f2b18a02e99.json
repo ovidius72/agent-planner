@@ -1,0 +1,41 @@
+{
+  "id": "7696d86b-2525-49f0-984a-8f2b18a02e99",
+  "number": 17,
+  "shortId": "WNSAE",
+  "priority": 17,
+  "name": "Resume lifecycle integrity",
+  "description": "Current resume-required state is exposed by `packages/plan-server/src/serve.ts:652` when a task retains `pauseSnapshot` or a work deviation remains in `resume-required`/`resolved`; `task_start` in `packages/pi-adapter/src/index.ts:4320` and `packages/plan-mcp/src/index.ts:1334` clears checkpoints and resolves deviations. Generic task updates still permit some status-to-in-progress paths, allowing lifecycle cleanup to be bypassed. The dashboard renders a redundant per-row resume badge in `packages/plan-web-ui/src/components/layout/app-shell.tsx:42`. Establish one guarded start/resume flow for Pi, MCP, server, and Web UI while preserving non-lifecycle status updates and testable pending-resume behavior.",
+  "descriptionUpdatedAt": "2026-08-24T14:06:05.135Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "a1096ef9-3428-4a99-a27f-15494a36ade4"
+  ],
+  "dependsOn": [],
+  "statusLog": [
+    {
+      "id": "5a147404-a5cc-4fcd-87e3-6b939c42a652",
+      "date": "2026-08-24T14:06:30.318Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "3ed5a5b3-f102-46fb-979f-f7d3db025c10",
+      "date": "2026-08-24T14:15:42.055Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-08-24T14:06:05.015Z",
+  "updatedAt": "2026-08-24T14:06:05.015Z"
+}

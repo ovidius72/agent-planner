@@ -30,6 +30,13 @@ after(async () => {
 const LONG_DESC =
   "src/harness.ts:10 existing state and the concrete goal for this mutation-test entity; include file refs and behaviors to preserve so the description clears the minimum.";
 
+async function readTaskContext(host, taskId, phaseId = "P001", featureId = "F001") {
+  await host.runTool("task_get", { taskId, full: true });
+  await host.runTool("phase_get", { phaseId, full: true });
+  await host.runTool("feature_get", { featureId, full: true });
+  await host.runTool("requirement_list", {});
+}
+
 describe("pi-adapter mutations, validation, requirements, handoffs", () => {
   test("creation round-trip: feature → phase → task → requirement with composite IDs", async () => {
     const host = await createPiHost({ name: "t242-create", seed: "minimal" });
@@ -79,6 +86,38 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     }
   });
 
+  test("task creation cannot bypass lifecycle reads with an in-progress status", async () => {
+    const host = await createPiHost({ name: "t326-create-planned", seed: "minimal" });
+    try {
+      const before = await host.store.loadProject();
+      const rejected = await host.runTool("task_create", {
+        featureId: "F001",
+        phaseId: "P001",
+        title: "Bypass attempt",
+        description: LONG_DESC,
+        status: "in-progress",
+      });
+      assert.match(toolText(rejected), /Tasks must be created planned/);
+      assert.equal((await host.store.loadAllPhases())[0].tasks.length, 1);
+      assert.equal((await host.store.loadProject()).nextTaskNumber, before.nextTaskNumber);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("blank project language choices default content and chat to English", async () => {
+    const host = await createPiHost({ name: "t326-language-default", seed: "minimal" });
+    try {
+      host.ui.inputAnswers.push("", "");
+      await host.runCommand("project language");
+      const project = await host.store.loadProject();
+      assert.equal(project.contentLanguage, "English");
+      assert.equal(project.chatLanguage, "English");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
   test("invalid writes are rejected and leave the phase file byte-for-byte unchanged", async () => {
     const host = await createPiHost({ name: "t242-invalid", seed: "minimal" });
     try {
@@ -108,6 +147,11 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       await assertFileUntouched("restrictive status without motivation");
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, beforeStatus);
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].statusLog.length, beforeLog);
+
+      // Starting is a dedicated lifecycle operation, not a generic update.
+      const genericStart = await host.runTool("task_update", { taskId: "T001", status: "in-progress" });
+      assert.match(toolText(genericStart), /require task_start/);
+      await assertFileUntouched("generic task start");
 
       // Missing/invalid refs handled gracefully.
       const missingTask = await host.runTool("task_start", { taskId: "   " });
@@ -147,7 +191,18 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
   test("lifecycle + rollup: start, complete gate, force-complete rolls phase and feature to done", async () => {
     const host = await createPiHost({ name: "t242-lifecycle", seed: "minimal" });
     try {
+      // A lifecycle start must not mutate before the exact full-read sequence.
+      const deniedWithoutReads = await host.runTool("task_start", { taskId: "T001" });
+      assert.match(toolText(deniedWithoutReads), /context reads required.*exact task/i);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
+      await host.runTool("task_get", { taskId: "T001" });
+      await host.runTool("phase_get", { phaseId: "P001" });
+      await host.runTool("feature_get", { featureId: "F001" });
+      const deniedAfterCompactReads = await host.runTool("task_start", { taskId: "T001" });
+      assert.match(toolText(deniedAfterCompactReads), /context reads required.*exact task/i);
+
       // Start — response carries the composite ref via the phase context block.
+      await readTaskContext(host, "T001");
       const started = await host.runTool("task_start", { taskId: "T001" });
       assert.match(toolText(started), /✅ Task started:/);
       assert.match(toolText(started), /P001\(F001\)/);
@@ -160,6 +215,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       });
       assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T001/);
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
+      await readTaskContext(host, "T001");
       assert.match(toolText(await host.runTool("task_start", { taskId: "T001" })), /Task started/);
 
       // Complete without force is gated by the unchecked checklist item.
@@ -194,13 +250,16 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         });
       }
 
+      await readTaskContext(host, "T002");
       const priorityOverride = await host.runTool("task_start", { taskId: "T002" });
       assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
       assert.match(toolText(priorityOverride), /Priority advisory/);
 
+      await readTaskContext(host, "T001");
       const denied = await host.runTool("task_start", { taskId: "T001" });
       assert.match(toolText(denied), /Task start denied.*task_switch/i);
 
+      await readTaskContext(host, "T001");
       const switched = await host.runTool("task_switch", {
         from_task: "T002", to_task: "T001", reason: "Seed task must unblock the temporary implementation",
         what_was_being_done: "Editing the lower-priority implementation", resume_location: "src/task-start.ts:20",
@@ -220,6 +279,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolText(shownResume), /Work checkpoint: Editing the lower-priority implementation/);
       assert.match(toolText(shownResume), /Resume from: src\/task-start\.ts:20/);
 
+      await readTaskContext(host, "T003");
       const skipAdvisory = await host.runTool("task_start", { taskId: "T003" });
       assert.match(toolText(skipAdvisory), /✅ Task started: P001\(F001\)\/T003/);
       assert.match(toolText(skipAdvisory), /RESUME REQUIRED before starting a different task: P001\(F001\)\/T002/);
@@ -230,6 +290,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(project.workDeviations.at(-1).state, "resume-required");
 
       await host.runTool("task_complete", { taskId: "T003", force: true });
+      await readTaskContext(host, "T002");
       const resumed = await host.runTool("task_start", { taskId: "T002" });
       assert.match(toolText(resumed), /Task started/);
       tasks = (await host.store.loadAllPhases())[0].tasks;

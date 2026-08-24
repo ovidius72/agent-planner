@@ -1,91 +1,92 @@
 /**
- * T307 (P072/F005) — tracked, deduplicated parent read-enforcement.
+ * T326 (P078/F018) — ordered full-context read enforcement.
  *
- * The read set is module-level and shared across tests in the process, so each
- * test calls invalidateReads() first to stay isolated.
+ * The read state is module-level and shared across tests in the process, so
+ * every test clears it first.
  */
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { markFeatureRead, markPhaseRead, markTaskRead, hasReadParents, hasReadRequirements, requirementReadAdvisory, markRequirementRead, invalidateReads, readTrackingSnapshot } from "../dist/index.js";
+import {
+  contextReadEligibility,
+  hasReadParents,
+  hasReadRequirements,
+  invalidateReads,
+  markFeatureRead,
+  markPhaseRead,
+  markRequirementRead,
+  markTaskRead,
+  readTrackingSnapshot,
+  requirementReadAdvisory,
+} from "../dist/index.js";
 
-test("a fresh read set requires both feature and phase", () => {
+const eligible = () => contextReadEligibility("T1", "P1", "F1");
+
+test("a fresh read state denies lifecycle work until the task is read", () => {
   invalidateReads();
-  assert.equal(hasReadParents("F1", "P1"), false);
+  assert.deepEqual(eligible(), { eligible: false, reason: "Read this exact task with full=true first." });
 });
 
-test("reading a feature alone does NOT satisfy the phase requirement", () => {
-  invalidateReads();
-  markFeatureRead("F1");
-  assert.equal(hasReadParents("F1", "P1"), false); // phase still missing
-});
-
-test("reading a phase records feature + phase, covering all its tasks", () => {
-  invalidateReads();
-  markPhaseRead("P1", "F1");
-  assert.equal(hasReadParents("F1", "P1"), true);
-  // a sibling task in the same phase is covered without re-reading
-  markTaskRead("T2", "P1", "F1");
-  assert.equal(hasReadParents("F1", "P1"), true);
-});
-
-test("reading a task records its parent feature + phase", () => {
+test("a task read does not imply its parent phase or feature", () => {
   invalidateReads();
   markTaskRead("T1", "P1", "F1");
-  assert.equal(hasReadParents("F1", "P1"), true);
-});
-
-test("a different phase/feature fails until it is read", () => {
-  invalidateReads();
-  markPhaseRead("P1", "F1");
-  assert.equal(hasReadParents("F2", "P2"), false);
-});
-
-test("an orphan phase (no feature) only requires the phase", () => {
-  invalidateReads();
-  markPhaseRead("P1"); // no featureId
-  assert.equal(hasReadParents(undefined, "P1"), true);
-});
-
-test("invalidateReads clears the set", () => {
-  invalidateReads();
-  markPhaseRead("P1", "F1");
-  markRequirementRead("R1");
-  assert.equal(hasReadParents("F1", "P1"), true);
-  assert.equal(hasReadRequirements(["R1"]), true);
-  invalidateReads();
+  assert.deepEqual(eligible(), { eligible: false, reason: "After reading the task, read its parent phase with full=true." });
   assert.equal(hasReadParents("F1", "P1"), false);
+});
+
+test("the required context order is task, then phase, then feature", () => {
+  invalidateReads();
+  markFeatureRead("F1");
+  markTaskRead("T1", "P1", "F1");
+  markPhaseRead("P1", "F1");
+  assert.deepEqual(eligible(), { eligible: false, reason: "After reading the phase, read its parent feature with full=true." });
+
+  markFeatureRead("F1");
+  assert.deepEqual(eligible(), { eligible: true, reason: "" });
+});
+
+test("reading another task, phase, or feature cannot satisfy the target lineage", () => {
+  invalidateReads();
+  markTaskRead("T2", "P1", "F1");
+  markPhaseRead("P2", "F1");
+  markFeatureRead("F2");
+  assert.deepEqual(eligible(), { eligible: false, reason: "Read this exact task with full=true first." });
+});
+
+test("orphan phases require only task then phase", () => {
+  invalidateReads();
+  markTaskRead("T1", "P1");
+  markPhaseRead("P1");
+  assert.deepEqual(contextReadEligibility("T1", "P1"), { eligible: true, reason: "" });
+});
+
+test("hasReadParents remains a compatibility check for independent parent reads", () => {
+  invalidateReads();
+  markPhaseRead("P1", "F1");
+  markFeatureRead("F1");
+  assert.equal(hasReadParents("F1", "P1"), true);
+});
+
+test("invalidateReads clears context sequence and linked requirements", () => {
+  invalidateReads();
+  markTaskRead("T1", "P1", "F1");
+  markPhaseRead("P1", "F1");
+  markFeatureRead("F1");
+  markRequirementRead("R1");
+  assert.equal(eligible().eligible, true);
+  assert.equal(hasReadRequirements(["R1"]), true);
+
+  invalidateReads();
+  assert.equal(eligible().eligible, false);
   assert.equal(hasReadRequirements(["R1"]), false);
   assert.deepEqual(readTrackingSnapshot(), { features: [], phases: [], requirements: [] });
 });
 
-test("T319 — a fresh read set requires linked requirements", () => {
-  invalidateReads();
-  assert.equal(hasReadRequirements(["R1", "R2"]), false);
-});
-
-test("T319 — markRequirementRead records a requirement", () => {
-  invalidateReads();
-  markRequirementRead("R1");
-  assert.equal(hasReadRequirements(["R1"]), true);
-  assert.equal(hasReadRequirements(["R1", "R2"]), false); // R2 still unread
-});
-
-test("T319 — requirementReadAdvisory warns when any linked requirement is unread", () => {
+test("requirements remain an independent explicit-read gate", () => {
   invalidateReads();
   assert.equal(requirementReadAdvisory([]), "", "empty list means nothing required");
   assert.notEqual(requirementReadAdvisory(["R1"]), "", "unread requirement warns");
   markRequirementRead("R1");
-  assert.equal(requirementReadAdvisory(["R1"]), "", "all read → no advisory");
-  assert.notEqual(requirementReadAdvisory(["R1", "R2"]), "", "partial read still warns");
-});
-
-test("T319 — requirement read is independent from feature/phase read", () => {
-  invalidateReads();
-  markRequirementRead("R1");
   assert.equal(hasReadRequirements(["R1"]), true);
-  assert.equal(hasReadParents("F1", "P1"), false, "reading a requirement does NOT satisfy feature/phase");
-  markPhaseRead("P1", "F1");
-  assert.equal(hasReadParents("F1", "P1"), true);
-  assert.equal(hasReadRequirements(["R1"]), true, "requirement read persists across phase read");
+  assert.equal(requirementReadAdvisory(["R1"]), "");
 });

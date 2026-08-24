@@ -209,8 +209,12 @@ test("task update: rename, motivation gate on restricted transitions, statusLog 
     ...put({ phaseId: phase.id, status: "blocked" }),
     expectStatus: 400,
   });
-  // in-progress (not restricted) → 200, sets startedAt
-  const started = await request(fx, `/tasks/${task.body.id}`, put({ phaseId: phase.id, status: "in-progress" }));
+  // Generic updates cannot start work; the lifecycle endpoint sets startedAt.
+  await request(fx, `/tasks/${task.body.id}`, {
+    ...put({ phaseId: phase.id, status: "in-progress" }),
+    expectStatus: 400,
+  });
+  const started = await request(fx, `/tasks/${task.body.id}/start`, { method: "POST" });
   assert.ok(started.body.startedAt);
   assert.equal(started.body.statusLog.length, 1, "statusLog entry appended");
   assert.equal(started.body.statusLog[0].title, "planned → in-progress");

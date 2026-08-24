@@ -5,6 +5,7 @@ import { action as createPhase } from "../src/routes/phase-create.action";
 import { action as editPhase } from "../src/routes/phase-edit.action";
 import { action as createTask } from "../src/routes/task-create.action";
 import { action as editTask } from "../src/routes/task-edit.action";
+import { action as startTask } from "../src/routes/task-start.action";
 import { action as createRequirement } from "../src/routes/requirement-create.action";
 import { action as editRequirement } from "../src/routes/requirement-edit.action";
 import { formRequest, installFetchMock, jsonResponse, makeFeature, makePhase, makeRequirement, makeTask, requestJson, textResponse } from "./fixtures";
@@ -123,6 +124,18 @@ describe("entity form actions", () => {
     expect(payloads[1]).toMatchObject({ id: "phase-1", title: "Updated phase", status: "discovery", priority: 0, goals: ["One", "Two"] });
   });
 
+  it("starts a task through the lifecycle endpoint", async () => {
+    const fetchMock = installFetchMock(async (path, init) => {
+      expect(path).toBe("/api/tasks/task-1/start");
+      expect(init.method).toBe("POST");
+      return jsonResponse(makeTask({ status: "in-progress" }));
+    });
+
+    const result = await startTask({ params });
+    expect((result as Response).headers.get("Location")).toBe("/features/feature-1/phases/phase-1/tasks/task-1");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("edits a task without losing checklist completion state", async () => {
     const task = makeTask({ checklist: [{ id: "keep", number: 1, title: "Keep", checked: true }] });
     let updatePayload: Record<string, unknown> | undefined;
@@ -135,11 +148,11 @@ describe("entity form actions", () => {
       throw new Error(`Unexpected request ${path}`);
     });
 
-    const result = await editTask({ request: formRequest({ title: "Retitled", status: "in-progress", priority: "2", checklist: "Keep\nNew item" }), params });
+    const result = await editTask({ request: formRequest({ title: "Retitled", status: "planned", priority: "2", checklist: "Keep\nNew item" }), params });
     expect((result as Response).headers.get("Location")).toBe("/features/feature-1/phases/phase-1/tasks/task-1");
     expect(updatePayload).toMatchObject({
       title: "Retitled",
-      status: "in-progress",
+      status: "planned",
       priority: 2,
       checklist: [
         { id: "keep", number: 1, title: "Keep", checked: true },

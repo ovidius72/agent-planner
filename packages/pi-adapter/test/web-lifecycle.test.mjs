@@ -18,6 +18,13 @@ after(async () => {
 });
 
 /** Run before_agent_start and return the injected systemPrompt (or undefined). */
+async function readTaskContext(host) {
+  await host.runTool("task_get", { taskId: "T001", full: true });
+  await host.runTool("phase_get", { phaseId: "P001", full: true });
+  await host.runTool("feature_get", { featureId: "F001", full: true });
+  await host.runTool("requirement_list", {});
+}
+
 async function injectedPrompt(host, prompt = "continue") {
   const before = await host.emit("before_agent_start", {
     type: "before_agent_start",
@@ -185,7 +192,8 @@ describe("pi-adapter web lifecycle", () => {
 
       // Real plan mutation (task_start through the adapter) invalidates the
       // cache: the next turn's block shows the in-progress task.
-      await host.runTool("task_start", { taskId: "T001" });
+      await readTaskContext(host);
+  await host.runTool("task_start", { taskId: "T001" });
       const mutatedPrompt = await injectedPrompt(host);
       assert.match(mutatedPrompt, /in-progress tasks: P001\(F001\)\/T001 — Implement login/);
       assert.match(mutatedPrompt, /current task pointer: P001\(F001\)\/T001 — Implement login/);
