@@ -18,6 +18,13 @@ after(async () => {
 });
 
 /** Run before_agent_start and return the injected systemPrompt (or undefined). */
+async function readTaskContext(host) {
+  await host.runTool("task_get", { taskId: "T001", full: true });
+  await host.runTool("phase_get", { phaseId: "P001", full: true });
+  await host.runTool("feature_get", { featureId: "F001", full: true });
+  await host.runTool("requirement_list", {});
+}
+
 async function injectedPrompt(host, prompt = "continue") {
   const before = await host.emit("before_agent_start", {
     type: "before_agent_start",
@@ -46,6 +53,35 @@ describe("pi-adapter web lifecycle", () => {
       assert.equal(prompt, undefined);
       const status = await host.runTool("planner-web", {});
       assert.equal(toolDetails(status).running, false);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("planner-web start from a disabled session starts only the Web UI", async () => {
+    const host = await createPiHost({ name: "t321-web-only-start", seed: "minimal" });
+    try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
+      assert.equal(await injectedPrompt(host), undefined, "planner context is disabled at startup");
+
+      const started = await host.runTool("planner-web", { action: "start", visibility: "local" });
+      assert.equal(toolDetails(started).running, true, "Web UI starts independently");
+      assert.equal(await injectedPrompt(host), undefined, "Web UI startup does not enable planner context");
+      assert.equal(
+        host.sentMessages.filter((message) => message.message.customType === "planner-resume-trigger").length,
+        0,
+        "Web UI startup does not emit a planner recap",
+      );
+
+      const loaded = await host.runTool("planner-load", {});
+      assert.equal(toolDetails(loaded).enabled, true, "explicit planner-load enables the planner");
+      assert.match(toolText(loaded), /## Planner recap/);
+      assert.match(await injectedPrompt(host), /\[Plan Context/);
+      assert.equal(
+        host.sentMessages.filter((message) => message.message.customType === "planner-resume-trigger").length,
+        0,
+        "tool-based planner load returns the recap directly without a hidden trigger turn",
+      );
     } finally {
       await closePiHost(host);
     }
@@ -156,7 +192,8 @@ describe("pi-adapter web lifecycle", () => {
 
       // Real plan mutation (task_start through the adapter) invalidates the
       // cache: the next turn's block shows the in-progress task.
-      await host.runTool("task_start", { taskId: "T001" });
+      await readTaskContext(host);
+  await host.runTool("task_start", { taskId: "T001" });
       const mutatedPrompt = await injectedPrompt(host);
       assert.match(mutatedPrompt, /in-progress tasks: P001\(F001\)\/T001 — Implement login/);
       assert.match(mutatedPrompt, /current task pointer: P001\(F001\)\/T001 — Implement login/);

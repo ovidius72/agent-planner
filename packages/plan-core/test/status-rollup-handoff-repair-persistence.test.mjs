@@ -353,3 +353,39 @@ test("refreshResume: current phase, in-progress task ids and blockers follow tra
   assert.deepEqual(r2.inProgressTaskIds, []);
   void reopened;
 });
+
+test("refreshResume prefers the phase containing actual active work over another derived in-progress phase", async () => {
+  const { store, featureId, phaseId: progressedPhaseId } = await fixture("resume-active-phase");
+  const activePhaseId = createPhaseId();
+  const completedTaskId = createTaskId();
+  const remainingTaskId = createTaskId();
+  const activeTaskId = createTaskId();
+
+  await store.savePhase({
+    id: progressedPhaseId, featureId, number: 1, shortId: "CCCCC", priority: 1,
+    slug: "progressed", title: "Progressed phase", summary: "", description: "",
+    tasks: [
+      makeTask({ id: completedTaskId, phaseId: progressedPhaseId, status: "done", startedAt: NOW, completedAt: NOW }),
+      makeTask({ id: remainingTaskId, phaseId: progressedPhaseId, status: "planned" }),
+    ],
+    taskIds: [completedTaskId, remainingTaskId], ...TS, handoff: "",
+  });
+  await store.savePhase({
+    id: activePhaseId, featureId, number: 2, shortId: "DDDDD", priority: 2,
+    slug: "active", title: "Actually active phase", summary: "", description: "",
+    tasks: [makeTask({ id: activeTaskId, phaseId: activePhaseId, status: "in-progress", startedAt: NOW })],
+    taskIds: [activeTaskId], ...TS, handoff: "",
+  });
+
+  const resume = await store.refreshResume();
+  assert.equal(resume.currentPhaseId, activePhaseId);
+  assert.deepEqual(resume.inProgressTaskIds, [activeTaskId]);
+
+  await store.updatePhase(activePhaseId, (phase) => {
+    phase.tasks[0].status = "done";
+    phase.tasks[0].completedAt = NOW;
+    return phase;
+  });
+  const afterCompletion = await store.refreshResume();
+  assert.equal(afterCompletion.currentPhaseId, activePhaseId, "the last active phase remains the continuity focus after completion");
+});

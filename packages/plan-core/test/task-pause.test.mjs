@@ -54,20 +54,20 @@ const checkpoint = (relatedTaskId = "temporary-task") => ({
   pausedBy: "test-session",
 });
 
-test("pauseTask persists a structured checkpoint and truthful paused status", async () => {
+test("pauseTask persists a structured checkpoint and truthful checkpointed status", async () => {
   const { store, phaseId, taskId, createdAt } = await setup();
   const paused = await store.pauseTask(phaseId, taskId, checkpoint());
 
-  assert.equal(paused.status, "paused");
+  assert.equal(paused.status, "planned");
   assert.equal(paused.startedAt, createdAt);
   assert.equal(paused.pauseSnapshot.resumeLocation, checkpoint().resumeLocation);
   assert.equal(paused.pauseHistory.length, 1);
-  assert.equal(paused.statusLog.at(-1).toStatus, "paused");
+  assert.equal(paused.statusLog.at(-1).toStatus, "planned");
   assert.match(paused.statusLog.at(-1).description, /How to resume/);
 
   const phase = await store.loadPhase(phaseId);
-  assert.equal(phase.status, "paused");
-  assert.equal((await store.loadPhaseDisplay(phaseId)).displayStatus, "paused");
+  assert.equal(phase.status, "planned");
+  assert.equal((await store.loadPhaseDisplay(phaseId)).displayStatus, "planned");
 });
 
 test("resumeTask clears only the active checkpoint and preserves history and startedAt", async () => {
@@ -79,13 +79,13 @@ test("resumeTask clears only the active checkpoint and preserves history and sta
   assert.equal(resumed.startedAt, createdAt);
   assert.equal(resumed.pauseSnapshot, null);
   assert.equal(resumed.pauseHistory.length, 1);
-  assert.equal(resumed.statusLog.at(-1).fromStatus, "paused");
+  assert.equal(resumed.statusLog.at(-1).fromStatus, "planned");
   assert.match(resumed.statusLog.at(-1).description, /task-selection\.ts:75/);
 });
 
 test("pauseTask rejects non-active work and incomplete checkpoints", async () => {
   const { store, phaseId, taskId } = await setup("planned");
-  await assert.rejects(() => store.pauseTask(phaseId, taskId, checkpoint()), /cannot be paused from planned/);
+  await assert.rejects(() => store.pauseTask(phaseId, taskId, checkpoint()), /cannot be checkpointed from planned/);
 
   const active = await setup();
   await assert.rejects(

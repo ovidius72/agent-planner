@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Form, Link, Outlet, useLoaderData, useNavigate, useSearchParams } from "react-router-dom";
 import { PhaseRow } from "../../components/phases/phase-row";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
@@ -11,13 +11,13 @@ import { DetailMetadataGrid, formatPriority, formatTimeline } from "../../compon
 import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
-import { ListFilters } from "../../components/ui/list-filters";
+import { DetailFilters } from "../../components/ui/detail-filters";
 import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
-import { matchesListQuery } from "../../lib/list-filtering";
+import { matchesListQuery, passesDetailFilters, type DetailFilterValue } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
 import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
@@ -58,10 +58,30 @@ export function FeatureDetailRoute() {
   const currentPhase = findCurrentPhase(phases);
   const featureDisplay = deriveFeatureDisplayFromPhases(phases);
   const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchParams.get("q")?.trim() ?? "";
-  const status = searchParams.get("status")?.trim() ?? "";
   const sortParam = searchParams.get("sort")?.trim() ?? "priority";
   const dirParam = searchParams.get("dir")?.trim() ?? "asc";
+  const [filters, setFilters] = useState<DetailFilterValue>(() => ({
+    query: searchParams.get("q")?.trim() ?? "",
+    status: searchParams.get("status")?.trim() ?? "",
+    hideDone: searchParams.get("hideDone") === "1",
+    hidePlanned: searchParams.get("hidePlanned") === "1",
+    onlyActive: searchParams.get("onlyActive") === "1",
+  }));
+  // Keep the URL in sync (deep-link / share) via replaceState — no router
+  // navigation, so the window scroll position is preserved while filtering.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const sync = (key: string, on: boolean, val = "1") => {
+      if (on) url.searchParams.set(key, val);
+      else url.searchParams.delete(key);
+    };
+    sync("q", filters.query.trim() !== "", filters.query.trim());
+    sync("status", filters.status !== "", filters.status);
+    sync("hideDone", filters.hideDone);
+    sync("hidePlanned", filters.hidePlanned);
+    sync("onlyActive", filters.onlyActive);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [filters]);
   const sort: WorkTreeSortConfig = {
     key: sortParam === "priority" || sortParam === "number" || sortParam === "createdAt" || sortParam === "updatedAt" || sortParam === "title" || sortParam === "shortId" || sortParam === "status" || sortParam === "startedAt" || sortParam === "completedAt"
       ? sortParam
@@ -70,11 +90,11 @@ export function FeatureDetailRoute() {
   };
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => compareEntities(a, b, sort.key, sort.direction)), [phases, sort]);
   const filteredPhases = useMemo(
-    () => sortedPhases.filter((phase) => (
-      (!status || phase.status === status)
-      && matchesListQuery(query, [phase.title, phase.id, phase.summary, phase.description])
-    )),
-    [sortedPhases, query, status],
+    () => sortedPhases.filter(
+      (phase) => passesDetailFilters(phase, filters, ["in-progress", "discovery"])
+        && matchesListQuery(filters.query, [phase.title, String(phase.number), phase.shortId]),
+    ),
+    [sortedPhases, filters],
   );
   const navigate = useNavigate();
   const deleteFormRef = useRef<HTMLFormElement>(null);
@@ -161,27 +181,23 @@ export function FeatureDetailRoute() {
       <Card className="grid gap-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases ({phases.length})</p>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Filter and sort this feature's phases.</p>
           </div>
           <Link to="phases/new"><Button type="button" variant="primary" shortcut="create">Create phase</Button></Link>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
+        <DetailFilters
+          entityKind="phase"
+          statusOptions={phaseStatuses}
+          value={filters}
+          onChange={setFilters}
+          sortSlot={<SortControl sort={sort} onChange={(next) => setSearchParams((prev) => {
             prev.set("sort", next.key);
             prev.set("dir", next.direction);
             return prev;
-          })} />
-          <ListFilters
-            query={query}
-            status={status}
-            statusOptions={phaseStatuses}
-            placeholder="Search phase title, id, or summary"
-            clearTo={`/features/${feature.id}`}
-            resultsLabel={filteredPhases.length === phases.length ? `${phases.length} phases` : `${filteredPhases.length} of ${phases.length} phases`}
-          />
-        </div>
+          })} />}
+        />
 
         <div className="grid gap-3">
           {phases.length === 0 ? (

@@ -202,6 +202,10 @@ test("task completion rollup and active-task summaries", async () => {
     // Clear the seed work first: planner-task-start on a P002 task would
     // otherwise be denied by the priority recommendation (F001/P001/T001
     // sorts before F002/P002). Completing T001 makes P001 derived-done.
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", {});
     await callTool(session, "planner-task-start", { task: "T001" });
     await callTool(session, "planner-task-complete", { task: "T001", force: true });
 
@@ -238,12 +242,20 @@ test("task completion rollup and active-task summaries", async () => {
     assert.match(toolText(pageShow), /\(planned; 2 tasks\)/);
 
     // Complete one task → the remaining planned task keeps the phase in-progress
+    await callTool(session, "planner-task-show", { task: "T002", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P002", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F002", full: true });
+    await callTool(session, "planner-requirement-list", {});
     await callTool(session, "planner-task-start", { task: "T002" });
     await callTool(session, "planner-task-complete", { task: "T002", force: true });
     const pageShowAfter = await callTool(session, "planner-phase-show", { phase: "P002" });
     assert.match(toolText(pageShowAfter), /\(in-progress; 2 tasks\)/);
 
     // Start the second task → the recap surfaces it as the active focus
+    await callTool(session, "planner-task-show", { task: "T003", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P002", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F002", full: true });
+    await callTool(session, "planner-requirement-list", {});
     await callTool(session, "planner-task-start", { task: "T003" });
     const recap = await callTool(session, "planner-load", {});
     const recapText = toolText(recap);

@@ -1,0 +1,390 @@
+{
+  "id": "4811416e-93d3-4919-8aaf-f056c4c470e7",
+  "featureId": "7dfde1d8-1410-4a08-b0a8-e63cf51ab6e2",
+  "number": 79,
+  "shortId": "HDWL7",
+  "priority": 1,
+  "slug": "restore-workflow-continuity-and-release-readiness",
+  "title": "Restore workflow continuity and release readiness",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Fix phase-continuous recommendation, lifecycle E2E coverage, and stable version/tag automation before promotion.",
+  "description": "This phase addresses the release blockers rooted in `packages/plan-core/src/task-selection.ts:134-141`, `packages/plan-core/src/plan-store.ts:1425-1440`, `e2e/status-dashboard.spec.ts:20-46`, `scripts/release.cjs`, and `.github/workflows/publish.yml`. Current selection abandons the last active phase for global priority, resume focus may select an unrelated derived in-progress phase, Playwright uses a prohibited generic in-progress transition, and stable version discovery has no Git tag source. Work must preserve active/resume/deviation/checkpoint precedence, explicit task-start eligibility, unified package versions, `next` as the experimental channel, `develop` as stable staging, and user-only GitHub PR merges. Dependencies: existing T325 lifecycle endpoint/UI and T326 context gates. Complete only after focused regressions, full unit/coverage, Playwright E2E, build, check, and whitespace validation pass.",
+  "descriptionUpdatedAt": "2026-08-24T15:32:36.148Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "a4623efb-0587-4a4c-bafb-8d7a27cbac58",
+      "title": "Current phase continuity precedes global priority",
+      "decision": "After active work, deviations, and checkpoints are handled, task recommendation must continue a ready task in resume.currentPhaseId before considering global feature → phase → task priority. The resume pointer must follow the phase containing actual active task work and remain as continuity context after completion.",
+      "rationale": "T438 completion incorrectly led to T374 in another phase while T439 remained ready in P082 because the selector ignored phase continuity and refreshResume could choose the first merely derived in-progress phase.",
+      "implementationNotes": "Keep TaskRecommendationKind unchanged for public compatibility. Pass currentPhaseId as an optional fourth recommendNextTask argument. Fall back globally only when the current phase has no ready task. Preserve explicit-start behavior and active/resume/deviation/checkpoint precedence.",
+      "acceptedAt": "2026-08-24T15:36:38.361Z"
+    },
+    {
+      "id": "f2bd1505-39e2-45bc-b59f-0c8d1e902c53",
+      "title": "Stable versions are anchored by annotated Git tags",
+      "decision": "Stable releases use the latest strict annotated `vX.Y.Z` Git tag as their version base and automatically bump it when no explicit version is supplied. Until the first canonical tag exists, release.cjs falls back to stable unified package versions on origin/main. Successful main publication creates the tag; next publication never does.",
+      "rationale": "Develop may legitimately contain `-next.N` versions, so deriving a stable default from current workspace package strings is ambiguous. Tags represent completed stable releases, while the origin/main fallback safely bootstraps the repository because no tags currently exist.",
+      "implementationNotes": "Fetch origin develop/main plus tags during release preflight. Abort if an existing latest stable tag disagrees with origin/main. Keep explicit X.Y.Z and patch/minor/major modes with downgrade guards. GitHub Actions receives contents:write only to push the stable tag after all npm publish steps succeed.",
+      "acceptedAt": "2026-08-24T15:42:21.374Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "2033ff04-c068-4bb7-98dd-fb038946fbf2",
+    "c3140614-a9f7-4dfe-9552-3cc805f7f4ba",
+    "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576",
+    "1a477a6c-4a0b-48fe-ae28-52f91451d8dc"
+  ],
+  "tasks": [
+    {
+      "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2",
+      "phaseId": "4811416e-93d3-4919-8aaf-f056c4c470e7",
+      "number": 327,
+      "shortId": "9LJ8L",
+      "priority": 1,
+      "shortName": "phase-continuity",
+      "title": "Keep next-task recommendations in the current phase",
+      "status": "done",
+      "description": "Modify `packages/plan-core/src/task-selection.ts:82-142` so active/resume/deviation/checkpoint precedence remains unchanged, then prefer ready tasks belonging to an explicitly supplied current phase before global feature → phase → task priority. Correct `packages/plan-core/src/plan-store.ts:1425-1440` so `resume.currentPhaseId` follows the phase containing the actual active task and remains stable after task completion rather than selecting the first derived in-progress phase. Pass validated resume focus through Pi, MCP, and server recommendation call sites. Add regression tests proving that a lower-numbered/high-global-priority task in another phase cannot displace the next ready task in the phase just worked, while blocked/exhausted current phases fall back globally. Preserve explicit task starts, deviations, checkpoints, and public recommendation result kinds.\n\n---\n**Completion summary:**\nImplemented phase-continuous task recommendation. `packages/plan-core/src/task-selection.ts` accepts an optional currentPhaseId and, after active/resume/deviation/checkpoint precedence, selects the highest-priority ready task in that phase before global priority without changing public recommendation kinds. `packages/plan-core/src/plan-store.ts` now sets resume.currentPhaseId from the phase containing actual in-progress task work, preserving it after completion. Pi, MCP, and HTTP lifecycle callers pass persisted resume focus. Added core regressions reproducing T374 vs T439, fallback behavior, precedence preservation, active-phase resume focus, and MCP structured behavior. Focused builds, 39 tests, and pnpm check passed.",
+      "descriptionUpdatedAt": "2026-08-24T15:37:24.230Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2-check-001-planned-in-progress",
+          "date": "2026-08-24T15:33:24.943Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2-check-002-in-progress-done",
+          "date": "2026-08-24T15:37:24.229Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2-check-001-add-current-phase-preference-without-changing-active-resume-precedence",
+          "number": 1,
+          "title": "Add current-phase preference without changing active/resume precedence",
+          "checked": true
+        },
+        {
+          "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2-check-002-make-resume-focus-track-the-phase-of-actual-active-work",
+          "number": 2,
+          "title": "Make resume focus track the phase of actual active work",
+          "checked": true
+        },
+        {
+          "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2-check-003-wire-pi-mcp-and-server-call-sites-to-the-preferred-phase",
+          "number": 3,
+          "title": "Wire Pi, MCP, and server call sites to the preferred phase",
+          "checked": true
+        },
+        {
+          "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2-check-004-add-core-and-adapter-regressions-for-same-phase-continuation-and-fallback",
+          "number": 4,
+          "title": "Add core and adapter regressions for same-phase continuation and fallback",
+          "checked": true
+        },
+        {
+          "id": "2033ff04-c068-4bb7-98dd-fb038946fbf2-check-005-run-focused-tests-build-and-typecheck",
+          "number": 5,
+          "title": "Run focused tests, build, and typecheck",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T15:33:24.943Z",
+      "completedAt": "2026-08-24T15:37:24.229Z",
+      "createdAt": "2026-08-24T15:32:44.973Z",
+      "updatedAt": "2026-08-24T15:37:24.229Z"
+    },
+    {
+      "id": "c3140614-a9f7-4dfe-9552-3cc805f7f4ba",
+      "phaseId": "4811416e-93d3-4919-8aaf-f056c4c470e7",
+      "number": 328,
+      "shortId": "G3HZG",
+      "priority": 2,
+      "shortName": "start-task-e2e",
+      "title": "Update lifecycle browser coverage for Start task",
+      "status": "done",
+      "description": "Update `e2e/status-dashboard.spec.ts:20-46` to enter in-progress through the canonical Web UI Start task form introduced by T325 rather than selecting the now-prohibited generic `in-progress` status. Preserve assertions for Active tasks, derived parent display, persisted `startedAt`, lifecycle status history, completion, and both Chromium/mobile projects. Add any stable selector or response synchronization required without weakening the user-visible contract. Run the focused Playwright spec and the full E2E suite against isolated temporary planner roots.\n\n---\n**Completion summary:**\nUpdated `e2e/status-dashboard.spec.ts` to start planned work through the canonical task-detail Start task button, then return to the phase UI for the allowed in-progress → done status transition. Preserved Active tasks, banner task link, startedAt, completion display, completedAt, reload persistence, and derived lifecycle assertions. Validation passed for the focused spec on desktop/mobile (6/6) and the complete Playwright suite (22/22).",
+      "descriptionUpdatedAt": "2026-08-24T15:39:17.436Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "c3140614-a9f7-4dfe-9552-3cc805f7f4ba-check-001-planned-in-progress",
+          "date": "2026-08-24T15:37:45.138Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "c3140614-a9f7-4dfe-9552-3cc805f7f4ba-check-002-in-progress-done",
+          "date": "2026-08-24T15:39:17.434Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c3140614-a9f7-4dfe-9552-3cc805f7f4ba-check-001-replace-generic-in-progress-selection-with-start-task-interaction",
+          "number": 1,
+          "title": "Replace generic in-progress selection with Start task interaction",
+          "checked": true
+        },
+        {
+          "id": "c3140614-a9f7-4dfe-9552-3cc805f7f4ba-check-002-preserve-lifecycle-and-derived-status-assertions",
+          "number": 2,
+          "title": "Preserve lifecycle and derived-status assertions",
+          "checked": true
+        },
+        {
+          "id": "c3140614-a9f7-4dfe-9552-3cc805f7f4ba-check-003-run-focused-desktop-and-mobile-playwright-coverage",
+          "number": 3,
+          "title": "Run focused desktop and mobile Playwright coverage",
+          "checked": true
+        },
+        {
+          "id": "c3140614-a9f7-4dfe-9552-3cc805f7f4ba-check-004-run-the-complete-e2e-suite",
+          "number": 4,
+          "title": "Run the complete E2E suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T15:37:45.138Z",
+      "completedAt": "2026-08-24T15:39:17.434Z",
+      "createdAt": "2026-08-24T15:32:51.007Z",
+      "updatedAt": "2026-08-24T15:39:17.434Z"
+    },
+    {
+      "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576",
+      "phaseId": "4811416e-93d3-4919-8aaf-f056c4c470e7",
+      "number": 329,
+      "shortId": "4D29L",
+      "priority": 3,
+      "shortName": "stable-tag-versioning",
+      "title": "Derive stable releases from canonical Git tags",
+      "status": "done",
+      "description": "Harden `scripts/release.cjs` so a parameterless stable release fetches tags, discovers the latest canonical `vX.Y.Z` stable tag, and bumps it automatically; when no stable tags exist, fall back safely to unified versions read from `origin/main`. Preserve `patch|minor|major` and explicit `X.Y.Z` targets with downgrade guards, and ignore `-next.N` versions on develop for stable-base calculation. Add a pure version-selection helper and root integration tests. Update `.github/workflows/publish.yml` so a successful stable publish from main creates/pushes the matching tag if absent, while next publishes never tag. Align `README.md` and the explicitly user-requested `AGENTS.md` release rules. Do not change branch roles or allow automated PR merging.\n\n---\n**Completion summary:**\nAdded `scripts/release-version.cjs` with strict stable-semver parsing, numeric stable tag selection, stable-only origin/main fallback selection, level bumps, explicit targets, and downgrade guards. `scripts/release.cjs` now fetches develop/main/tags, uses canonical vX.Y.Z tags or origin/main bootstrap fallback, ignores develop prerelease suffixes, and aborts on tag/main disagreement. `.github/workflows/publish.yml` tags successful stable main publications only after all package publishes succeed and never tags next. Updated README.md and explicitly requested AGENTS.md release rules, including prior release-reading safeguards and correction of stale next/plugin documentation. Added `test/release-versioning.test.mjs` (6/6 passing); node syntax checks, YAML parse, and git diff whitespace validation passed.",
+      "descriptionUpdatedAt": "2026-08-24T15:42:51.421Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576-check-001-planned-in-progress",
+          "date": "2026-08-24T15:39:32.567Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576-check-002-in-progress-done",
+          "date": "2026-08-24T15:42:51.419Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576-check-001-implement-tested-stable-tag-discovery-with-origin-main-fallback",
+          "number": 1,
+          "title": "Implement tested stable tag discovery with origin/main fallback",
+          "checked": true
+        },
+        {
+          "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576-check-002-integrate-default-level-and-explicit-target-handling-into-release-cjs",
+          "number": 2,
+          "title": "Integrate default, level, and explicit target handling into release.cjs",
+          "checked": true
+        },
+        {
+          "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576-check-003-create-stable-tag-after-successful-main-publish-only",
+          "number": 3,
+          "title": "Create stable tag after successful main publish only",
+          "checked": true
+        },
+        {
+          "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576-check-004-update-readme-md-and-agents-md-canonical-release-documentation",
+          "number": 4,
+          "title": "Update README.md and AGENTS.md canonical release documentation",
+          "checked": true
+        },
+        {
+          "id": "2b9e348b-a8fa-4fd6-8de0-2ca830dbd576-check-005-run-versioning-tests-and-workflow-config-validation",
+          "number": 5,
+          "title": "Run versioning tests and workflow/config validation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T15:39:32.567Z",
+      "completedAt": "2026-08-24T15:42:51.419Z",
+      "createdAt": "2026-08-24T15:32:58.120Z",
+      "updatedAt": "2026-08-24T15:42:51.419Z"
+    },
+    {
+      "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc",
+      "phaseId": "4811416e-93d3-4919-8aaf-f056c4c470e7",
+      "number": 330,
+      "shortId": "PL7JF",
+      "priority": 4,
+      "shortName": "validate-promote",
+      "title": "Validate next and prepare stable promotion",
+      "status": "done",
+      "description": "After T327-T329 complete, run `pnpm test:unit`, the full Playwright E2E suite, `pnpm build`, `pnpm check`, and `git diff --check`; inspect the complete diff and ensure planner artifacts are synchronized. Commit the approved fixes on `next`, run `pnpm release:next`, and verify publish plus CI status. Prepare promotion toward `develop` and then use the documented stable `pnpm release` flow to create a release branch/PR toward main, but never merge a GitHub PR: only the user performs PR merges. Preserve all validation evidence and stop/report if any check is red.\n\n---\n**Completion summary:**\nValidated and published next prerelease 0.2.22-next.4; PR #41 (`next` → `develop`) passed build, coverage, E2E, security, and publish checks and was merged by the user as 40486850. From updated `develop`, `pnpm release -- --dry-run` resolved the stable target to 0.2.23 from the unified origin/main 0.2.22 fallback because no canonical stable tags exist yet. `pnpm release` created commit 5a8ac70 on `release/v0.2.23`, bumped all five packages to 0.2.23 and the Claude plugin/marketplace to 0.1.8, passed build and typecheck, pushed the branch, and opened PR #42 to `main`. PR #42 build, Playwright E2E, and GitGuardian checks passed. No PR was merged by the agent.",
+      "descriptionUpdatedAt": "2026-08-24T16:07:10.080Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-001-planned-in-progress",
+          "date": "2026-08-24T15:43:06.160Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-002-in-progress-waiting",
+          "date": "2026-08-24T15:51:32.063Z",
+          "fromStatus": "in-progress",
+          "toStatus": "waiting",
+          "title": "Validated next prerelease 0.2.22-next.4 is published and PR #41 (next → develop) has green build, coverage, E2E, security, and publish checks. Stable release preparation cannot continue until the user performs the required GitHub PR merge; agents must never merge PRs.",
+          "description": "Validated next prerelease 0.2.22-next.4 is published and PR #41 (next → develop) has green build, coverage, E2E, security, and publish checks. Stable release preparation cannot continue until the user performs the required GitHub PR merge; agents must never merge PRs."
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-003-waiting-planned",
+          "date": "2026-08-24T16:03:44.601Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "PR #41 was merged by the user into develop, clearing the user-only promotion gate. Resume the documented stable release flow from updated develop.",
+          "description": "PR #41 was merged by the user into develop, clearing the user-only promotion gate. Resume the documented stable release flow from updated develop."
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-004-planned-in-progress",
+          "date": "2026-08-24T16:03:47.783Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-005-in-progress-done",
+          "date": "2026-08-24T16:07:10.078Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-001-run-full-unit-e2e-build-check-and-whitespace-validation",
+          "number": 1,
+          "title": "Run full unit, E2E, build, check, and whitespace validation",
+          "checked": true
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-002-review-changed-files-and-synchronized-planner-state",
+          "number": 2,
+          "title": "Review changed files and synchronized planner state",
+          "checked": true
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-003-commit-and-publish-a-validated-next-prerelease",
+          "number": 3,
+          "title": "Commit and publish a validated next prerelease",
+          "checked": true
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-004-verify-github-publish-and-ci-outcomes",
+          "number": 4,
+          "title": "Verify GitHub publish and CI outcomes",
+          "checked": true
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-005-prepare-develop-stable-release-pr-without-merging-it",
+          "number": 5,
+          "title": "Prepare develop/stable release PR without merging it",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T15:43:06.160Z",
+      "completedAt": "2026-08-24T16:07:10.078Z",
+      "createdAt": "2026-08-24T15:33:05.186Z",
+      "updatedAt": "2026-08-24T16:07:10.078Z"
+    }
+  ],
+  "createdAt": "2026-08-24T15:32:36.148Z",
+  "updatedAt": "2026-08-24T16:07:10.078Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-24T15:54:29.732Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/4811416e-93d3-4919-8aaf-f056c4c470e7-2026-08-24T16-07-10-100Z.md",
+      "clearedAt": "2026-08-24T16:07:10.100Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "63a8e9e7-c1a5-4afa-bdf7-4adb846205d9",
+      "date": "2026-08-24T15:33:24.966Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "1a1a5282-39c2-44b3-a48f-4314bdea601b",
+      "date": "2026-08-24T16:07:10.138Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "id": "b381740f-9b2a-4cde-b150-875ad182fa86",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 71,
+  "shortId": "R8B8X",
+  "priority": 20,
+  "slug": "planner-loaded-extension-rules-agents-md-planner-core",
+  "title": "Planner-loaded extension rules (AGENTS.md → planner core)",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Move extension/agent-behavior rules from agent-plan AGENTS.md into a planner-loaded ruleset (plan-core + plan_init seeding + surfaced at load) so every project gets them.",
+  "description": "Separate planner **extension rules** (behavior that must apply to EVERY project using the agent-plan extension) from **agent-plan development-process rules** (how we build the extension). Today both live in agent-plan's `AGENTS.md`, so only agent-plan gets the extension rules; other projects consuming the extension (MCP, Codex, future harnesses) do not.\n\nCURRENT STATE (packages/agent-plan/AGENTS.md):\n- The file mixes two concerns. The header frames it as \"regole fondamentali per chiunque lavori su questo progetto\" and as \"governance indipendente del planner\".\n- Extension rules currently embedded (must MOVE to planner loading): §1 planner=source-of-truth + update on state change; §2 task lifecycle (task_start/task_complete immediate sync, status=truth); §3 markdown not source-of-truth; §5 plan lives in `.planner/`; §6 discuss plan per phase; §7 P/T global numbering + slug; §8 statusLog + motivation; §10 composite/shortId refs, no UUID, efficient list-search; §12 handoff per-entity + handoff hygiene + update discipline (proactive start, immediate close); the \"Avvio del planner\" block (web UI never auto-starts, URL only on recap/web-status); the \"Regola dettagli (task/phase/feature)\" block; the \"Comportamento atteso\" points 2–5 (read planner entities, update before/after).\n- Development-process rules that STAY in AGENTS.md (agent-plan only): §4 core harness-agnostic architecture; §9 stack; §11 requirement sources = AGENTS/PROJECT/ROADMAP.md; §13 Branching & Release (develop/main/next, pnpm release, CI); §14 AGENTS.md modification policy; §15 GSD ban (\"in questo progetto\"); the Pre-flight Protocol (git/CI/release/lockfile mutations); \"Comportamento atteso\" point 1 (\"leggi AGENTS.md\").\n\nGOAL / MECHANISM (agreed with user 2026-08-21):\n1. Canonical **ruleset in `plan-core`** — e.g. `packages/plan-core/src/planner-rules.ts` (structured data) holding the extension rules; the planner always has them, zero dependency on AGENTS.md.\n2. **`plan_init` seeds** them into `.planner/` (a `rules` field in `project.json` or a dedicated file) so a project can see/override them.\n3. **Load flow surfaces** them to the agent — the extension (pi-adapter / MCP) includes the rules in the agent context / recap at `planner load`, so every project receives them.\n4. **AGENTS.md shrinks** to only dev-process rules (§4, §9, §11, §13, §14, §15, Pre-flight, \"leggi AGENTS.md\"), and its header is rewritten to state it governs ONLY the development of the extension.\n\nBEHAVIORS TO PRESERVE: every current behavior described by the moved sections must remain identical after the move — the rules are relocated, not changed in meaning. This aligns with AGENTS.md §3 (markdown is a generated view, not source of truth) and §4 (core is harness-agnostic): the source of the rules becomes `.planner/`/plan-core, not the markdown.\n\nThis task is the planner-product counterpart of the task-ordering rule discussion: rules must come FROM the planner at load, portable across all projects.",
+  "descriptionUpdatedAt": "2026-08-21T19:16:25.624Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "d2429d17-21ea-472a-af37-71481b815b38",
+      "title": "Extension rules relocated to a static plan-core ruleset + .planner/rules.json",
+      "decision": "Le regole di comportamento del planner vivono come set canonico STATICO in packages/plan-core/src/planner-rules.ts e vengono riepilogate come file .planner/rules.json (senza timestamp) da plan_init. Vengono surface in buildRecap (usato da pi-adapter e plan-mcp al load). AGENTS.md non porta più le regole estensione.",
+      "rationale": "L'utente ha richiesto che le regole siano statiche (nessun timestamp) per evitare che worktree/branch diversi creino modifiche di data/timestamp che sfociano in conflitti. Tenerle fuori da project.json (ricco di timestamp) e in un file separato privo di timestamp impedisce qualsiasi divergenza.",
+      "implementationNotes": "init scrive rules.json (statico, {extensionRules:[...]}, nessun timestamp); loadExtensionRules(plannerRoot) lo legge con fallback al set canonico di codice; PlanStore.extensionRules() lo espone; buildRecap aggiunge la sezione '## Planner rules (extension)' nel recap. Schema ProjectSchema invariato (nessun campo in project.json). Verificato: 13 regole, nessun campo timestamp, file identico fra due init, recap contiene la sezione, pnpm check pulito, plan-core test 193/202 (9 pre-esistenti, non correlati).",
+      "acceptedAt": "2026-08-21T19:33:06.984Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "f2ee4136-51d6-40f0-ae66-a136195f2589"
+  ],
+  "tasks": [
+    {
+      "id": "f2ee4136-51d6-40f0-ae66-a136195f2589",
+      "phaseId": "b381740f-9b2a-4cde-b150-875ad182fa86",
+      "number": 304,
+      "shortId": "MAUL5",
+      "priority": 1,
+      "shortName": "relocate-extension-rules-from",
+      "title": "Relocate extension rules from AGENTS.md into planner-loaded ruleset",
+      "status": "done",
+      "description": "Implement the agreed split: planner **extension/agent-behavior rules** move out of agent-plan's `AGENTS.md` into a **planner-loaded ruleset** (plan-core + plan_init seeding + surfaced at `planner load`), while **agent-plan development-process rules** remain in AGENTS.md.\n\nCODE REFERENCES / TOUCH POINTS:\n- Source of rules to move: `/Users/antonio/projects/agent-plan/AGENTS.md` — sections §1, §2, §3, §5, §6, §7, §8, §10, §12, the \"Avvio del planner\" block, the \"Regola dettagli (task/phase/feature)\" block, and \"Comportamento atteso\" points 2–5.\n- New canonical ruleset: add `packages/plan-core/src/planner-rules.ts` (or equivalent) exporting the structured extension rules (status=truth, task lifecycle, naming, refs/shortId, handoff hygiene, web-not-auto-start, etc.).\n- Seeding: extend `plan_init` / the project schema so the rules are written into `.planner/` (e.g. a `rules` field in `project.json` or a dedicated `.planner/rules` file), defaulting from the plan-core canonical set.\n- Surfacing: the extension load flow (pi-adapter `src/index.ts` and/or `packages/plan-mcp/src/index.ts`) must include the loaded rules in the agent context / recap at `planner load`, so any project receives them without AGENTS.md.\n- Trimming: remove the moved sections from `AGENTS.md`, keep only §4, §9, §11, §13, §14, §15, Pre-flight, and \"Comportamento atteso\" point 1; rewrite the header to state AGENTS.md governs ONLY the development of the extension.\n\nCONCRETE STEPS:\n1. Enumerate the exact extension-rule text to relocate (use the phase description categorization as the source of truth).\n2. Define the canonical ruleset in plan-core as structured, loadable data (single source of truth for these rules).\n3. Have `plan_init` seed the rules into `.planner/` so projects can view/override; planner always falls back to the embedded canonical set.\n4. Wire the extension load to read + surface the rules to the agent (context/recap).\n5. Strip the moved sections from AGENTS.md and rewrite its header as dev-process-only.\n6. Verify in a throwaway project (mkdtemp, NOT a real project dir) that `plan_init` + `planner load` yields the rules WITHOUT any AGENTS.md present.\n7. `pnpm check` + existing plan-core/extension tests green.\n\nEDGE CASES:\n- A project may have an older `.planner/` without the `rules` field → planner must use the embedded canonical defaults (no crash, no AGENTS.md dependency).\n- Override semantics: project `.planner/` rules should be allowed to extend/override the canonical set; define that contract.\n- Do NOT change the *meaning* of any rule during relocation — only its source location.\n\nWHY: AGENTS.md is agent-plan-specific governance. The extension rules must be portable to every project that uses the extension (MCP, Codex, future harnesses), loaded by the planner at startup — consistent with AGENTS.md §3 (markdown is a generated view, not source of truth) and §4 (core harness-agnostic).\n\n---\n**Completion summary:**\nImplementata la localizzazione delle regole estensione. Nuovo packages/plan-core/src/planner-rules.ts con PLANNER_EXTENSION_RULES (13 regole statiche) + loadExtensionRules(plannerRoot) (legge .planner/rules.json con fallback al set canonico di codice). plan-store.ts: init() ora scrive .planner/rules.json STATICO ({extensionRules:[...]}, zero timestamp) e aggiunge metodo extensionRules(). recap.ts: buildRecap espone la sezione \"## Planner rules (extension)\". index.ts: export. AGENTS.md: riscritto mantenendo solo le regole di sviluppo (§4,§9,§11,§13,§14,§15,Pre-flight,Discuss), con header che rimanda a planner-rules.ts. Progettualmente le regole NON sono in project.json (evito divergenza timestamp). Verificato: pnpm --filter @agent-plan/core check pulito; recap.test.mjs 12/12; plan-core suite 193/202 (gli stessi 9 pre-esistenti del branch t253); test mkdtemp: rules.json con solo chiave extensionRules (nessun timestamp), identico fra due init, recap contiene la sezione regole. Per vedere le regole nel recap live di pi-adapter occorre ricostruire pi-adapter (pnpm build:pi-adapter) poiché l'adattatore importa plan-core a runtime.",
+      "descriptionUpdatedAt": "2026-08-21T19:33:17.496Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-001-planned-in-progress",
+          "date": "2026-08-21T19:17:30.673Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Move resume-awareness runtime state to worktree-local storage."
+        },
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-002-in-progress-done",
+          "date": "2026-08-21T19:33:17.484Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-001-define-canonical-extension-ruleset-module-in-plan-core",
+          "number": 1,
+          "title": "Define canonical extension-ruleset module in plan-core",
+          "checked": true
+        },
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-002-seed-rules-into-planner-via-plan-init-with-embedded-default-fallback",
+          "number": 2,
+          "title": "Seed rules into .planner/ via plan_init (with embedded-default fallback)",
+          "checked": true
+        },
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-003-surface-loaded-rules-to-agent-at-planner-load-pi-adapter-mcp",
+          "number": 3,
+          "title": "Surface loaded rules to agent at planner load (pi-adapter / MCP)",
+          "checked": true
+        },
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-004-strip-moved-sections-from-agents-md-rewrite-header-as-dev-process-only",
+          "number": 4,
+          "title": "Strip moved sections from AGENTS.md + rewrite header as dev-process-only",
+          "checked": true
+        },
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-005-verify-rules-load-in-a-throwaway-project-without-agents-md-mkdtemp",
+          "number": 5,
+          "title": "Verify rules load in a throwaway project without AGENTS.md (mkdtemp)",
+          "checked": true
+        },
+        {
+          "id": "f2ee4136-51d6-40f0-ae66-a136195f2589-check-006-pnpm-check-plan-core-extension-tests-green",
+          "number": 6,
+          "title": "pnpm check + plan-core/extension tests green",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-21T19:17:30.673Z",
+      "completedAt": "2026-08-21T19:33:17.484Z",
+      "createdAt": "2026-08-21T19:16:38.631Z",
+      "updatedAt": "2026-08-21T19:33:17.484Z"
+    }
+  ],
+  "createdAt": "2026-08-21T19:16:25.624Z",
+  "updatedAt": "2026-08-21T19:33:17.484Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "bfe5e752-8790-4931-b88c-f13cc75429c8",
+      "date": "2026-08-21T19:17:30.746Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "accd362b-a8a2-4cf3-88cb-fde309ccd0bc",
+      "date": "2026-08-21T19:33:17.500Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

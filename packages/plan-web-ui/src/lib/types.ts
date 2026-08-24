@@ -1,7 +1,7 @@
-export type FeatureStatus = "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
-export type PhaseStatus = "draft" | "discovery" | "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
-export type TaskStatus = "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
-export type RequirementStatus = "planned" | "in-progress" | "paused" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type FeatureStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type PhaseStatus = "draft" | "discovery" | "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type TaskStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type RequirementStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 
 export interface AcceptedDecision {
   id: string;

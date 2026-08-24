@@ -7,9 +7,16 @@ test.afterEach(async ({ page }, testInfo) => {
     document: { scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth },
     body: { scrollWidth: document.body.scrollWidth, clientWidth: document.body.clientWidth },
     overflowing: Array.from(document.querySelectorAll<HTMLElement>("body *"))
-      .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left < -1 || rect.right > document.documentElement.clientWidth + 1;
+      })
       .slice(0, 12)
-      .map((element) => ({ tag: element.tagName, className: element.className, text: element.innerText.slice(0, 100) })),
+      .map((element) => ({
+        tag: element.tagName,
+        className: element.className,
+        text: (element.innerText || element.textContent || "").slice(0, 100),
+      })),
   }));
   await testInfo.attach("layout-diagnostics.json", { body: JSON.stringify(diagnostics, null, 2), contentType: "application/json" });
 });
@@ -17,12 +24,21 @@ test.afterEach(async ({ page }, testInfo) => {
 test("desktop and mobile layouts keep core navigation, work tree controls, IDs, and dialogs reachable", async ({ page, planner }, testInfo) => {
   await planner.seed("full");
   const compact = testInfo.project.name.startsWith("mobile");
-  const viewport = compact ? { width: 390, height: 480 } : { width: 1280, height: 720 };
-  await page.setViewportSize(viewport);
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
   await page.goto(planner.url);
 
-  await expect(page.getByRole("navigation").getByRole("link", { name: "Dashboard" })).toBeVisible();
-  await expect(page.getByRole("navigation").getByRole("link", { name: "Features" })).toBeVisible();
+  if (compact) {
+    await page.getByRole("button", { name: "Open menu" }).click();
+    const menu = page.getByRole("menu");
+    const featuresLink = menu.getByRole("link", { name: "Features" });
+    await expect(featuresLink).toBeVisible();
+    await featuresLink.focus();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+  } else {
+    await expect(page.getByRole("navigation").getByRole("link", { name: "Features" })).toBeVisible();
+  }
   await expect(page.getByRole("heading", { name: "Project Goal" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Latest completed tasks" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Expand all|Collapse all/ })).toBeVisible();
@@ -44,7 +60,7 @@ test("desktop and mobile layouts keep core navigation, work tree controls, IDs, 
   await expect(dialog.getByLabel("Linked phases")).toBeVisible();
   const dialogBox = await dialog.boundingBox();
   expect(dialogBox).not.toBeNull();
-  expect(dialogBox!.height).toBeLessThanOrEqual(viewport.height - 32);
+  expect(dialogBox!.height).toBeLessThanOrEqual(viewport!.height - 32);
 
   const modalSize = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
@@ -55,9 +71,8 @@ test("desktop and mobile layouts keep core navigation, work tree controls, IDs, 
   if (compact) expect(modalSize.scrollableModal).toBe(true);
 });
 
-test("handoff archive stays navigable and horizontally contained", async ({ page, planner }, testInfo) => {
+test("handoff archive stays navigable and horizontally contained", async ({ page, planner }) => {
   await planner.seed("full");
-  await page.setViewportSize(testInfo.project.name.startsWith("mobile") ? { width: 390, height: 480 } : { width: 1280, height: 720 });
   await page.goto(`${planner.url}/handoff/archive`);
 
   await expect(page.getByRole("heading", { name: "Archived handoffs" })).toBeVisible();

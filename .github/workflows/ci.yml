@@ -1,7 +1,13 @@
 name: ci
 
-# Validates build + typecheck on develop and on every pull request.
-# Does NOT publish (that is publish.yml, on push to main only).
+# Validates build + typecheck + coverage + browser e2e on develop and on every
+# pull request. Does NOT publish (that is publish.yml, on push to main only).
+#
+# Coverage and browser traces/screenshots are uploaded as artifacts on
+# failure (or always for coverage) for diagnosis. The browser e2e fixtures
+# spin up their own real plan-server on a dynamic port (port: 0) with an
+# isolated temporary planner root (mkdtemp), so they never touch the project
+# .planner and never read secrets.
 
 on:
   push:
@@ -42,4 +48,54 @@ jobs:
         run: pnpm check
 
       - name: Test (unit + integration, coverage gate)
-        run: pnpm test
+        run: pnpm test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            reports/**/coverage.lcov
+            reports/**/report.html
+            reports/**/results.json
+          if-no-files-found: ignore
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '25'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build (core, mcp, server, agent-plan, web-ui)
+        run: pnpm build
+
+      - name: E2E (real plan-server, dynamic port, isolated temp root)
+        run: pnpm exec playwright test
+
+      - name: Upload e2e report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

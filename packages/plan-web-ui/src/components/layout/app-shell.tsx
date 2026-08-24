@@ -3,14 +3,14 @@ import { Link, Outlet, useNavigate, useNavigation } from "react-router-dom";
 import { LocateFixed } from "lucide-react";
 import { TopNav } from "./top-nav";
 import { FormattedText } from "../ui/formatted-text";
-import { ResumeSnapshot } from "../task/resume-snapshot";
 import type { ActiveTaskSummary, FocusTaskSummary, ServerInfo, TaskFocusSummary } from "../../lib/api";
 import { CopyableBadge, EntityPathBadge, formatEntityPath, ShortIdBadge } from "../ui/badges";
+import { StatusBadge } from "../ui/status-badge";
 import type { Project } from "../../lib/types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
-function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
+export function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
   const navigate = useNavigate();
   const to = task.featureId
     ? `/features/${task.featureId}/phases/${task.phaseId}/tasks/${task.id}`
@@ -22,10 +22,6 @@ function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
         : "border-[var(--border)]"}`}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <span
-          aria-hidden="true"
-          className={`inline-block h-2 w-2 shrink-0 rounded-full ${task.status === "in-progress" ? "bg-[var(--accent)]" : "border border-[var(--accent)] bg-transparent"}`}
-        />
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <EntityPathBadge
             featureNum={task.featureNumber}
@@ -39,14 +35,10 @@ function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
             <span className="sr-only">Copy task path</span>
           </CopyableBadge>
           {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
+          <span className="shrink-0"><StatusBadge status={task.status} /></span>
           <Link to={to} className="min-w-0 flex-1 truncate font-medium hover:text-[var(--accent)]">
             {task.title}
           </Link>
-          {task.pendingResume ? (
-            <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--accent)]">
-              Resume required
-            </span>
-          ) : null}
         </div>
         <button
           type="button"
@@ -62,13 +54,6 @@ function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
           <LocateFixed className="h-4 w-4" />
         </button>
       </div>
-      {task.pauseSnapshot ? (
-        <div className="mt-2">
-          <ResumeSnapshot snapshot={task.pauseSnapshot} pendingResume={task.pendingResume} compact />
-        </div>
-      ) : task.pendingResume ? (
-        <p className="mt-2 text-xs font-medium text-[var(--accent)]">Return to this preserved task before selecting new priority work.</p>
-      ) : null}
     </article>
   );
 }
@@ -85,38 +70,21 @@ export function TaskFocusHeader({ taskFocus }: { taskFocus: TaskFocusSummary }) 
     };
     return {
       active: dedupe(taskFocus.active),
-      paused: dedupe(taskFocus.paused),
       pendingResume: dedupe(taskFocus.pendingResume),
     };
-  }, [taskFocus.active, taskFocus.paused, taskFocus.pendingResume]);
+  }, [taskFocus.active, taskFocus.pendingResume]);
 
-  if (focus.active.length === 0 && focus.paused.length === 0 && focus.pendingResume.length === 0) return null;
+  if (focus.active.length === 0) return null;
 
   return (
     <div className="relative z-10 border-t border-[var(--border)] bg-[var(--surface-elevated)]/95 backdrop-blur-xl">
-      <div className="page-container grid max-h-[45vh] gap-3 overflow-y-auto py-2.5 pr-1">
-        {focus.pendingResume.length > 0 ? (
-          <section aria-labelledby="resume-task-heading" className="grid gap-1.5">
-            <h2 id="resume-task-heading" className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
-              Resume required ({focus.pendingResume.length})
-            </h2>
-            {focus.pendingResume.map((task) => <FocusTaskRow key={task.id} task={task} />)}
-          </section>
-        ) : null}
+      <div className="page-container grid gap-3 py-2.5">
         {focus.active.length > 0 ? (
           <section aria-labelledby="active-task-heading" className="grid gap-1.5">
             <h2 id="active-task-heading" className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
               Active tasks ({focus.active.length})
             </h2>
             {focus.active.map((task) => <FocusTaskRow key={task.id} task={task} />)}
-          </section>
-        ) : null}
-        {focus.paused.length > 0 ? (
-          <section aria-labelledby="paused-task-heading" className="grid gap-1.5">
-            <h2 id="paused-task-heading" className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Paused tasks ({focus.paused.length})
-            </h2>
-            {focus.paused.map((task) => <FocusTaskRow key={task.id} task={task} />)}
           </section>
         ) : null}
       </div>
@@ -133,7 +101,7 @@ export function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSumm
     pendingResume: false,
     deviationId: "",
   }));
-  return <TaskFocusHeader taskFocus={{ active, paused: [], pendingResume: [] }} />;
+  return <TaskFocusHeader taskFocus={{ active, pendingResume: [] }} />;
 }
 
 export function AppShell({ project, taskFocus, serverInfo }: { project: Project; taskFocus: TaskFocusSummary; serverInfo?: ServerInfo | undefined }) {

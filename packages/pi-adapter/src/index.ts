@@ -11,7 +11,8 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, packageVersionFromModule, resolvedPackageVersion } from "@agent-plan/core";
+import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, contextReadEligibility, hasReadRequirements, markRequirementRead, invalidateReads } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import { join, dirname } from "node:path";
@@ -267,10 +268,11 @@ async function getPlannerExecutionGuard(st: PlanStore): Promise<{
     ? allTasks.find(({ task }) => task.id === resume.inProgressTaskIds[0])
     : undefined;
   const focusFromCurrentPhase = resume?.currentPhaseId
-    ? allTasks.find(({ phase, task }) => phase.id === resume.currentPhaseId && task.status !== "done" && task.status !== "canceled")
+    ? allTasks.find(({ phase, task }) => phase.id === resume.currentPhaseId && task.status !== "done" && task.status !== "canceled" && task.status !== "rejected")
     : undefined;
-  const fallbackFocus = allTasks.find(({ task }) => task.status === "planned" || task.status === "blocked")
-    ?? allTasks.find(({ task }) => task.status !== "done" && task.status !== "canceled");
+  const fallbackFocus = allTasks.find(({ task }) => task.pauseSnapshot)
+    ?? allTasks.find(({ task }) => task.status === "planned" || task.status === "blocked" || task.status === "waiting")
+    ?? allTasks.find(({ task }) => task.status !== "done" && task.status !== "canceled" && task.status !== "rejected");
   const focus = focusFromResume ?? focusFromCurrentPhase ?? fallbackFocus;
 
   return {
@@ -361,7 +363,8 @@ async function buildHandoffMarkdown(
     ?? null;
   const currentTask = currentPhase?.tasks.find((task) => resume.inProgressTaskIds.includes(task.id))
     ?? currentPhase?.tasks.find((task) => task.status === "in-progress")
-    ?? [...(currentPhase?.tasks ?? [])].filter((task) => task.status !== "done" && task.status !== "canceled").sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
+    ?? currentPhase?.tasks.find((task) => task.pauseSnapshot)
+    ?? [...(currentPhase?.tasks ?? [])].filter((task) => task.status !== "done" && task.status !== "canceled" && task.status !== "rejected").sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
     ?? latestTaskUpdate?.task
     ?? null;
   const currentFeature = currentPhase?.featureId
@@ -631,6 +634,7 @@ function statusIcon(status: string): string {
   const icons: Record<string, string> = {
     draft: "📄", discovery: "🔍", planned: "📋",
     "in-progress": "🚧", done: "✅", blocked: "🚫", canceled: "❌",
+    rejected: "❌", deferred: "⏳", waiting: "⏱️",
   };
   return icons[status] ?? "❓";
 }
@@ -708,19 +712,35 @@ function resolveStaticDir(): string | undefined {
     const adapterDir = dirname(adapterFile);
     // When installed as Pi package: node_modules/@agent-plan/pi-adapter/web-ui-dist/
     const pkgWebUi = join(adapterDir, "..", "web-ui-dist");
-    if (existsSync(pkgWebUi)) return pkgWebUi;
-    // Fallback: monorepo dev — packages/plan-web-ui/dist/
-    return join(adapterDir, "..", "..", "plan-web-ui", "dist");
+    // Monorepo dev: packages/plan-web-ui/dist/ (rebuilt by `pnpm build:web-ui`)
+    const devWebUi = join(adapterDir, "..", "..", "plan-web-ui", "dist");
+    const candidates = [pkgWebUi, devWebUi].filter((d) => {
+      try {
+        return existsSync(join(d, "index.html"));
+      } catch {
+        return false;
+      }
+    });
+    if (candidates.length === 0) return undefined;
+    if (candidates.length === 1) return candidates[0];
+    // Prefer the most recently built bundle so a fresh `pnpm build:web-ui`
+    // (or copy-web-ui.sh) is picked up in dev instead of a stale vendored
+    // snapshot. Deterministic: compare index.html mtimes, newest wins.
+    const mtime = (d: string): number => {
+      try {
+        return statSync(join(d, "index.html")).mtimeMs;
+      } catch {
+        return 0;
+      }
+    };
+    return [...candidates].sort((a, b) => mtime(b) - mtime(a))[0];
   } catch {
     return undefined;
   }
 }
 
 async function maybeStartWeb(ctx: ExtensionContext): Promise<void> {
-  if (server) {
-    plannerSessionEnabled = true;
-    return;
-  }
+  if (server) return;
   ctx.ui.notify("Starting web server (LAN)…", "info");
   try {
     await startServer(ctx, undefined, "lan");
@@ -740,7 +760,6 @@ function normalizeVisibility(input: string | undefined): "local" | "lan" | undef
 }
 
 async function startServer(ctx: ExtensionContext, requestedPort?: number, visibility: "local" | "lan" = "lan"): Promise<void> {
-  plannerSessionEnabled = true;
   if (server) return;
   const host = visibility === "lan" ? "0.0.0.0" : "127.0.0.1";
   const port = await pickProjectPort(ctx, requestedPort);
@@ -805,6 +824,11 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
   }
 }
 
+function enablePlannerSession(): void {
+  plannerSessionEnabled = true;
+  contextBlockDirty = true;
+}
+
 function disablePlannerSession(): void {
   plannerSessionEnabled = false;
   startupResumePromptPending = false;
@@ -834,6 +858,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // ── Restore on session start/reload ─────────────────────────────────
   pi.on("session_start", async (_event, ctx) => {
+    invalidateReads();
     try {
     ctx.ui.addAutocompleteProvider((current) => ({
       triggerCharacters: ["/", " "],
@@ -1215,6 +1240,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.writeGenerated();
         await scanCodebase();
         ctx.ui.notify(`.planner/ initialized for "${name.trim()}". Starting project discuss…`, "info");
+        enablePlannerSession();
         await maybeStartWeb(ctx);
         await handlePlanner("project discuss", ctx);
         return;
@@ -1229,6 +1255,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.writeGenerated();
       await scanCodebase();
       ctx.ui.notify(`.planner/ initialized for "${name.trim()}". Starting project discuss…`, "info");
+      enablePlannerSession();
       await maybeStartWeb(ctx);
       await handlePlanner("project discuss", ctx);
       return;
@@ -1262,11 +1289,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         .slice()
         .sort((a, b) => a.number - b.number);
       if (features.length === 0) return null;
-      const options = features.map((f) => `  ${formatFeatureRef(f.number)} ${statusIcon(f.status)} ${f.name}${f.shortId ? ` · ${f.shortId}` : ""}`);
-      const chosen = await ctx.ui.select("Pick a feature", options);
-      if (chosen == null) return null;
-      const idx = options.indexOf(chosen);
-      return idx >= 0 ? features[idx]! : null;
+      return paginatedSelect(ctx, {
+        title: "Pick a feature",
+        items: features,
+        render: (f) => `  ${formatFeatureRef(f.number)} ${statusIcon(f.status)} ${f.name}${f.shortId ? ` · ${f.shortId}` : ""}`,
+        pageSize: 10,
+      });
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1276,11 +1304,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const phases = (await st.loadAllPhases().catch(() => [] as Phase[])).slice().sort((a, b) => a.number - b.number);
       if (phases.length === 0) { return null; }
       const features = (await st.loadFeatures().catch(() => ({ features: [] as Feature[] }))).features;
-      const options = phases.map((p) => `  ${formatPhaseRef(p.number, featureNumberOfPhase(p, features))} ${statusIcon(p.status)} ${p.title}${p.shortId ? ` · ${p.shortId}` : ""}`);
-      const chosen = await ctx.ui.select("Pick a phase", options);
-      if (chosen == null) return null;
-      const idx = options.indexOf(chosen);
-      return idx >= 0 ? phases[idx]! : null;
+      return paginatedSelect(ctx, {
+        title: "Pick a phase",
+        items: phases,
+        render: (p) => `  ${formatPhaseRef(p.number, featureNumberOfPhase(p, features))} ${statusIcon(p.status)} ${p.title}${p.shortId ? ` · ${p.shortId}` : ""}`,
+        pageSize: 10,
+      });
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1289,11 +1318,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         async function pickTask(phase: Phase): Promise<Task | null> {
       if (phase.tasks.length === 0) return null;
       const tasks = phase.tasks.slice().sort((a, b) => a.number - b.number);
-      const options = tasks.map((t) => `  T${String(t.number).padStart(3, "0")} ${statusIcon(t.status)} ${t.title}${t.shortId ? ` · ${t.shortId}` : ""}`);
-      const chosen = await ctx.ui.select(`Pick a task from "${phase.title}"`, options);
-      if (chosen == null) return null;
-      const idx = options.indexOf(chosen);
-      return idx >= 0 ? tasks[idx]! : null;
+      return paginatedSelect(ctx, {
+        title: `Pick a task from "${phase.title}"`,
+        items: tasks,
+        render: (t) => `  T${String(t.number).padStart(3, "0")} ${statusIcon(t.status)} ${t.title}${t.shortId ? ` · ${t.shortId}` : ""}`,
+        pageSize: 10,
+      });
     }
 
     function parseMultilineList(value: string | undefined): string[] {
@@ -1520,9 +1550,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (b === "language") {
         const project = await st.loadProject();
         const contentLanguage = await ctx.ui.input(`Plan content language [${project.contentLanguage || "English"}]`);
-        const chatLanguage = await ctx.ui.input(`Chat language [${project.chatLanguage || contentLanguage?.trim() || project.contentLanguage || "Italian"}]`);
+        const chatLanguage = await ctx.ui.input(`Chat language [${project.chatLanguage || contentLanguage?.trim() || project.contentLanguage || "English"}]`);
         project.contentLanguage = contentLanguage?.trim() || project.contentLanguage || "English";
-        project.chatLanguage = chatLanguage?.trim() || project.chatLanguage || project.contentLanguage || "Italian";
+        project.chatLanguage = chatLanguage?.trim() || project.chatLanguage || project.contentLanguage || "English";
         await st.saveProject(project);
         await st.writeGenerated();
         ctx.ui.notify(`Saved language preferences: content=${project.contentLanguage}, chat=${project.chatLanguage}`, "info");
@@ -1547,11 +1577,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return;
         }
         const phases = await st.loadAllPhases();
-        ctx.ui.notify(features.map((feature) => {
+        const lines = features.map((feature) => {
           const featurePhases = phases.filter((phase) => phase.featureId === feature.id);
           const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
           return `${statusIcon(feature.status)} ${feature.name} (${feature.id}) — ${featurePhases.length} phases, ${taskCount} tasks`;
-        }).join("\n"), "info");
+        });
+        await paginatedNotify(ctx, { title: "features", lines, pageSize: 10 });
         return;
       }
       if (b === "add") {
@@ -2121,8 +2152,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (!valid.includes(normalizedStatus)) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
-          if (normalizedStatus === "in-progress" && (await st.listHandoffs()).length > 0) {
-            ctx.ui.notify("ℹ️  One or more phases have a pending handoff — if relevant to this task, read it with /planner handoff show <ref>, then clear with /planner handoff clear. Proceeding with the status change.", "info");
+          if (normalizedStatus === "in-progress" && normalizedStatus !== task.status) {
+            ctx.ui.notify("Task start/resume transitions require /planner task start so ordered full context reads and lifecycle state remain consistent.", "warning");
+            return;
           }
           applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
@@ -2149,6 +2181,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (phase.tasks.length === 0) { ctx.ui.notify(`No tasks in "${phase.title}"`, "info"); return; }
           task = await pickTask(phase);
           if (!task) { ctx.ui.notify("Aborted", "warning"); return; }
+        }
+        if (phase) {
+          const contextEligibility = contextReadEligibility(task.id, phase.id, phase.featureId);
+          if (!contextEligibility.eligible) {
+            ctx.ui.notify(`Task start denied: context reads required. ${contextEligibility.reason}`, "warning");
+            return;
+          }
+          const linkedRequirementIds = [
+            ...(await st.linkedRequirementsForPhase(phase.id)).map((r) => r.id),
+            ...(phase.featureId ? (await st.linkedRequirementsForFeature(phase.featureId)).map((r) => r.id) : []),
+          ];
+          if (!hasReadRequirements(linkedRequirementIds)) {
+            ctx.ui.notify("Task start denied: read the requirements linked to this phase and feature first.", "warning");
+            return;
+          }
         }
         if (task.status === "in-progress") {
           ctx.ui.notify(`Task "${task.title}" is already in-progress.`, "info");
@@ -2283,7 +2330,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (action === "list") {
         const list = await st.listHandoffs();
         if (list.length === 0) { ctx.ui.notify("No phase handoffs set.", "info"); return; }
-        ctx.ui.notify(list.map((e) => `• ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`).join("\n"), "info");
+        await paginatedNotify(ctx, {
+          title: "phase handoffs",
+          lines: list.map((e) => `• ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt})`),
+          pageSize: 10,
+        });
         return;
       }
       if (action === "show") {
@@ -2432,7 +2483,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
 
     if (a === "load") {
-      plannerSessionEnabled = true;
+      enablePlannerSession();
       if (!server) {
         ctx.ui.notify("Starting web server (LAN) …", "info");
         await startServer(ctx, undefined, "lan").catch(() => {});
@@ -2656,6 +2707,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const requirements = await st.loadRequirements();
+      requirements.requirements.forEach((req) => markRequirementRead(req.id));
       return {
         content: [{ type: "text", text: requirements.requirements.map((req) => `- ${req.id} — ${req.title} (${req.status})`).join("\n") || "No requirements" }],
         details: requirements,
@@ -2676,15 +2728,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const title = params.title?.trim();
+      if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
+      const links = await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
+      if (!links.ok) return { content: [{ type: "text", text: links.error }], details: {} };
       const requirements = await st.loadRequirements();
       const now = nowISO();
       const requirement: Requirement = {
         id: createRequirementId(),
-        title: params.title.trim(),
+        title,
         description: params.description?.trim() ?? "",
         status: (params.status?.trim() as Requirement["status"] | undefined) ?? "planned",
         macroTasks: [],
-        linkedPhaseIds: (params.linkedPhaseIds ?? []).map((entry) => entry.trim()).filter(Boolean),
+        linkedPhaseIds: links.linkedPhaseIds,
         createdAt: now,
         updatedAt: now,
       };
@@ -2712,10 +2768,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const requirements = await st.loadRequirements();
       const requirement = requirements.requirements.find((entry) => entry.id === params.requirementId);
       if (!requirement) return { content: [{ type: "text", text: `Requirement not found: ${params.requirementId}` }], details: {} };
-      if (params.title !== undefined) requirement.title = params.title.trim();
+      if (params.title !== undefined) {
+        const title = params.title.trim();
+        if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
+        requirement.title = title;
+      }
       if (params.description !== undefined) requirement.description = params.description.trim();
       if (params.status !== undefined) requirement.status = params.status.trim() as Requirement["status"];
-      if (params.linkedPhaseIds !== undefined) requirement.linkedPhaseIds = params.linkedPhaseIds.map((entry) => entry.trim()).filter(Boolean);
+      if (params.linkedPhaseIds !== undefined) {
+        const links = await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
+        if (!links.ok) return { content: [{ type: "text", text: links.error }], details: {} };
+        requirement.linkedPhaseIds = links.linkedPhaseIds;
+      }
       requirement.updatedAt = nowISO();
       await st.saveRequirements(requirements);
       await st.writeGenerated();
@@ -2930,6 +2994,27 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     return { ok: true, phase, compositeRef: formatPhaseRef(phase.number, feat?.number) };
   }
 
+  async function resolveRequirementPhaseRefs(
+    st: PlanStore,
+    refs: string[] | undefined,
+  ): Promise<{ ok: true; linkedPhaseIds: string[] } | { ok: false; error: string }> {
+    if (!Array.isArray(refs) || refs.length === 0) {
+      return { ok: false, error: "linkedPhaseIds must contain at least one phase" };
+    }
+    const trimmed = refs.map((entry) => entry.trim()).filter(Boolean);
+    if (trimmed.length === 0) {
+      return { ok: false, error: "linkedPhaseIds must contain non-empty phase references" };
+    }
+    const phases = await st.loadAllPhases();
+    const features = (await st.loadFeatures()).features;
+    const resolved = trimmed.map((ref) => findPhaseByRef(phases, features, ref));
+    const missingIndex = resolved.findIndex((phase) => !phase);
+    if (missingIndex !== -1) {
+      return { ok: false, error: `linked phase not found: ${trimmed[missingIndex]}` };
+    }
+    return { ok: true, linkedPhaseIds: [...new Set(resolved.map((phase) => phase!.id))] };
+  }
+
   pi.registerTool({
     name: "handoff_list",
     label: "Handoff List",
@@ -2981,11 +3066,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // Derive the current first non-empty line (H1) of the supplied body.
       const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
       const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
-      const isGeneric = !firstHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(firstHeadingText);
-      if (!title && isGeneric) {
+      const genericTitlePattern = /^(handoff|canonical handoff|session handoff)$/i;
+      const effectiveHeadingText = (title && title.length > 0) ? title : firstHeadingText;
+      const isGeneric = !effectiveHeadingText || genericTitlePattern.test(effectiveHeadingText);
+      if (isGeneric) {
         return {
           content: [{ type: "text", text: "❌ Generic handoff title. Provide a meaningful `title` (or start your markdown with a descriptive H1) summarizing the work — e.g. 'P049 — featureId validation: tests + adapter wiring'. Generic titles like 'Handoff' or 'Canonical handoff' are not accepted." }],
-          details: { error: "generic title", firstHeadingText },
+          details: { error: "generic title", firstHeadingText: effectiveHeadingText || firstHeadingText },
         };
       }
       // Normalize: if a title is provided, replace or prepend the H1 so the first line is the title.
@@ -3092,6 +3179,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const resolvedFeature = resolveFeatureRefStrict(features, ref);
         if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
         const feature = resolvedFeature.feature;
+        if (params.full) markFeatureRead(feature.id);
         const phases = (await st.loadAllPhases()).filter((p) => p.featureId === feature.id);
         const linkedRequirements = await st.linkedRequirementsForFeature(feature.id);
         const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases${linkedRequirements.length ? `; ${linkedRequirements.length} linked requirement${linkedRequirements.length === 1 ? "" : "s"}` : ""})`;
@@ -3372,6 +3460,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const features = (await st.loadFeatures()).features;
         const phase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
         if (!phase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
+        if (params.full) markPhaseRead(phase.id, phase.featureId);
         const linkedRequirements = await st.linkedRequirementsForPhase(phase.id);
         const reqCount = linkedRequirements.length;
         const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
@@ -3396,6 +3485,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const title = params.title?.trim();
+      if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
       if (!params.featureId?.trim()) return { content: [{ type: "text", text: "featureId is required: a phase must belong to a feature." }], details: {} };
       const createPhaseFeatures = (await st.loadFeatures()).features;
       const resolvedFeature = resolveFeatureRefStrict(createPhaseFeatures, params.featureId);
@@ -3412,7 +3503,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const priority = await st.nextPriority("phase", featureId);
         const now = nowISO();
         phase = {
-          id, number: identity.number, shortId: identity.shortId, priority, slug: normalizeSlug(params.title), title: params.title,
+          id, number: identity.number, shortId: identity.shortId, priority, slug: normalizeSlug(title), title,
           featureId,
           status: (params.status as Phase["status"] | undefined) ?? "draft",
           discussedAt: "",
@@ -3676,10 +3767,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "task_get",
       label: "Task Get",
-      description: "Show a task. Compact identity by default (saves tokens); pass full=true to include the description + statusLog.",
+      description: "Show a task. Compact identity by default (saves tokens); pass full=true to include the description, resume checkpoint/advisory, and statusLog.",
       parameters: Type.Object({
         taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
-        full: Type.Optional(Type.Boolean({ description: "If true, include the task description + statusLog. Default: compact identity only." })),
+        full: Type.Optional(Type.Boolean({ description: "If true, include the task description, resume checkpoint/advisory, and statusLog. Default: compact identity only." })),
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
         const st = await requirePlan(ctx);
@@ -3687,10 +3778,33 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const features = (await st.loadFeatures()).features;
         const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
         if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+        if (params.full) markTaskRead(found.task.id, found.phase.id, found.phase.featureId);
         const summary = `${found.task.title} — ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status})`;
         if (!params.full) return { content: [{ type: "text", text: summary }], details: {} };
+        const project = await st.loadProject();
+        const pendingDeviation = found.task.status === "done" || found.task.status === "canceled" || found.task.status === "rejected"
+          ? undefined
+          : project.workDeviations
+            .filter((deviation) => deviation.resumeTaskId === found.task.id
+              && (deviation.state === "resume-required" || deviation.state === "resolved"))
+            .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+        const snapshot = found.task.pauseSnapshot ?? pendingDeviation?.snapshot ?? null;
         const log = (found.task.statusLog ?? []).map((e) => `  - ${e.date.slice(0,10)} ${e.title}`).join("\n");
-        return { content: [{ type: "text", text: `${summary}\n\n${found.task.description || ""}${log ? `\n\nStatus log:\n${log}` : ""}` }], details: {} };
+        const sections = [summary];
+        if (found.task.description?.trim()) sections.push(found.task.description.trim());
+        if (snapshot || pendingDeviation) {
+          sections.push([
+            pendingDeviation
+              ? "Resume advisory: this task has a saved checkpoint that should be evaluated before selecting other work."
+              : "Resume checkpoint:",
+            snapshot ? `Checkpoint reason: ${snapshot.reason}` : "",
+            snapshot ? `Work checkpoint: ${snapshot.whatWasBeingDone}` : "",
+            snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
+            snapshot ? `How to resume: ${snapshot.howToResume}` : "",
+          ].filter(Boolean).join("\n"));
+        }
+        if (log) sections.push(`Status log:\n${log}`);
+        return { content: [{ type: "text", text: sections.join("\n\n") }], details: {} };
       },
     });
 
@@ -3710,6 +3824,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const title = params.title?.trim();
+      if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
       if (!params.featureId?.trim()) return { content: [{ type: "text", text: "featureId is required: a task must belong to a feature." }], details: {} };
       const features = (await st.loadFeatures()).features;
       const resolvedFeature = resolveFeatureRefStrict(features, params.featureId.trim());
@@ -3728,18 +3844,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!phaseValidation.ok) return { content: [{ type: "text", text: phaseValidation.error }], details: {} };
       const existingPhase = await st.loadPhase(phaseId);
       if (!existingPhase) return { content: [{ type: "text", text: `Resolved phase ${phaseId} no longer exists. Refusing to create task.` }], details: {} };
-      const shortName = clampSlug(params.shortName ?? params.title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
+      const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
+      if (initialStatus !== "planned") {
+        return { content: [{ type: "text", text: "Tasks must be created planned. Use task_start for in-progress work and task_update for other justified status changes." }], details: {} };
+      }
+      const shortName = clampSlug(params.shortName ?? title, 30, `task-${Date.now().toString(36)}`); // clamp+strip trailing dash; never empty
       const taskId = createTaskId();
       const identity = await st.allocateEntityIdentity("task", taskId);
       const priority = await st.nextPriority("task", phaseId);
       const now = nowISO();
-      const initialStatus = (params.status as Task["status"] | undefined) ?? "planned";
-      if (initialStatus === "paused") {
-        return { content: [{ type: "text", text: "A task cannot be created paused without an in-progress checkpoint. Create it planned, then use task_pause/task_switch." }], details: {} };
-      }
       const task: Task = {
         id: taskId, phaseId, number: identity.number, shortId: identity.shortId, priority, shortName,
-        title: params.title,
+        title,
         status: initialStatus,
         description: params.description ?? "",
         descriptionUpdatedAt: now,
@@ -3754,8 +3870,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         dependsOn: [],
         pauseSnapshot: null,
         pauseHistory: [],
-        startedAt: initialStatus === "in-progress" || initialStatus === "done" ? now : "",
-        completedAt: initialStatus === "done" ? now : "",
+        startedAt: "",
+        completedAt: "",
         createdAt: now, updatedAt: now,
       };
       // Atomic read-modify-write on the phase file: serializes concurrent
@@ -3808,6 +3924,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // Validate the motivation requirement for restrictive status transitions,
       // mirroring the MCP adapter and the /planner task update command
       // (AGENTS.md rule 8 — rejected writes must leave the files unchanged).
+      if (params.status === "in-progress" && params.status !== found.task.status) {
+        return {
+          content: [{ type: "text", text: "Task start/resume transitions require task_start so lifecycle state, checkpoints, and return stacks remain consistent." }],
+          details: {},
+        };
+      }
       if (
         params.status !== undefined &&
         params.status !== found.task.status &&
@@ -3896,13 +4018,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_recommend",
     label: "Task Recommend",
-    description: "Return the recommended next task without starting work: continue one active task, otherwise choose ready work by feature → phase → task priority. Reports approved deviation/resume context and never blocks an explicit user choice.",
+    description: "Return the recommended next task without starting work: continue one active task or the current phase, otherwise choose ready work by feature → phase → task priority. Reports approved deviation/resume context and never blocks an explicit user choice.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
-      const result = recommendNextTask(features.features, phases, project.workDeviations);
+      const [features, phases, project, resume] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
+      const result = recommendNextTask(features.features, phases, project.workDeviations, resume?.currentPhaseId);
       if (!result.candidate) return { content: [{ type: "text", text: `No task recommendation: ${result.reason}` }], details: result };
       const { candidate } = result;
       const reference = `${formatPhaseRef(candidate.phase.number, featureNumberOfPhase(candidate.phase, features.features))}/T${String(candidate.task.number).padStart(3, "0")}`;
@@ -3925,10 +4047,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [features, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+      const [features, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
       const temporary = findTaskByRef(phases, features.features, params.temporary_task.trim());
       if (!temporary) return { content: [{ type: "text", text: `Task not found: ${params.temporary_task}` }], details: {} };
-      const selected = recommendNextTask(features.features, phases, project.workDeviations);
+      const selected = recommendNextTask(features.features, phases, project.workDeviations, focus?.currentPhaseId);
       const resume = params.resume_task ? findTaskByRef(phases, features.features, params.resume_task.trim()) : selected.candidate;
       if (!resume) return { content: [{ type: "text", text: `No resume task is available. Provide resume_task explicitly. ${selected.reason}` }], details: selected };
       if (temporary.task.id === resume.task.id) return { content: [{ type: "text", text: "A temporary task must differ from its resume target." }], details: {} };
@@ -3972,7 +4094,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(), relatedTaskId: "",
         pausedAt: nowISO(), pausedBy: params.paused_by?.trim() ?? "",
       };
-      const paused = await st.pauseTask(found.phase.id, found.task.id, snapshot);
+      invalidateReads();
+      const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
       await st.syncTaskStatusRollup(found.phase.id);
       const activeDeviation = (await st.loadProject()).workDeviations
         .filter((deviation) => (deviation.state === "approved" || deviation.state === "active")
@@ -3983,20 +4106,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ? findTaskByRef(await st.loadAllPhases(), features, activeDeviation.resumeTaskId)
         : undefined;
       await st.writeGenerated();
-      const reference = `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(paused.number).padStart(3, "0")}`;
+      const reference = `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(checkpointed.number).padStart(3, "0")}`;
       const resumeRef = resume
         ? `${formatPhaseRef(resume.phase.number, featureNumberOfPhase(resume.phase, features))}/T${String(resume.task.number).padStart(3, "0")}`
         : "";
       return {
         content: [{ type: "text", text: [
-          `⏸️ Task paused: ${reference} — ${paused.title}`,
+          `💾 Resume checkpoint saved: ${reference} — ${checkpointed.title}`,
           `Why: ${snapshot.reason}`,
           `Checkpoint: ${snapshot.whatWasBeingDone}`,
           `Resume from: ${snapshot.resumeLocation}`,
           `How to resume: ${snapshot.howToResume}`,
           resume ? `↩️ RESUME REQUIRED: ${resumeRef} — ${resume.task.title}` : "",
         ].filter(Boolean).join("\n") }],
-        details: { task: paused, snapshot, ...(resume ? { resumeRequired: { taskId: resume.task.id } } : {}) },
+        details: { task: checkpointed, snapshot, ...(resume ? { resumeRequired: { taskId: resume.task.id } } : {}) },
       };
     },
   });
@@ -4017,15 +4140,26 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [featuresDoc, phases, project] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject()]);
+      const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
       const features = featuresDoc.features;
       const source = findTaskByRef(phases, features, params.from_task.trim());
       const target = findTaskByRef(phases, features, params.to_task.trim());
       if (!source) return { content: [{ type: "text", text: `Task not found: ${params.from_task}` }], details: {} };
       if (!target) return { content: [{ type: "text", text: `Task not found: ${params.to_task}` }], details: {} };
       if (source.task.id === target.task.id) return { content: [{ type: "text", text: "Source and temporary task must differ." }], details: {} };
-      if (source.task.status !== "in-progress" && source.task.status !== "paused") {
-        return { content: [{ type: "text", text: `Task switch denied: source is ${source.task.status}; only in-progress or pending-resume paused work can be switched.` }], details: {} };
+      if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
+        return { content: [{ type: "text", text: `Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.` }], details: {} };
+      }
+      const contextEligibility = contextReadEligibility(target.task.id, target.phase.id, target.phase.featureId);
+      if (!contextEligibility.eligible) {
+        return { content: [{ type: "text", text: `Task switch denied: context reads required. ${contextEligibility.reason}` }], details: contextEligibility };
+      }
+      const linkedRequirementIds = [
+        ...(await st.linkedRequirementsForPhase(target.phase.id)).map((requirement) => requirement.id),
+        ...(target.phase.featureId ? (await st.linkedRequirementsForFeature(target.phase.featureId)).map((requirement) => requirement.id) : []),
+      ];
+      if (!hasReadRequirements(linkedRequirementIds)) {
+        return { content: [{ type: "text", text: "Task switch denied: read the requirements linked to the target phase and feature before switching." }], details: { requirementIds: linkedRequirementIds } };
       }
       const eligibility = checkExplicitTaskStart(features, phases, target.task.id, project.workDeviations);
       if (!eligibility.eligible) return { content: [{ type: "text", text: `Task switch denied: ${eligibility.reason}` }], details: eligibility };
@@ -4036,7 +4170,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(),
         relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: params.switched_by?.trim() ?? "",
       };
-      const selection = recommendNextTask(features, phases, project.workDeviations);
+      const selection = recommendNextTask(features, phases, project.workDeviations, focus?.currentPhaseId);
       const record = {
         id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
         temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason: snapshot.reason, snapshot,
@@ -4053,7 +4187,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         } else {
           await st.updatePhase(source.phase.id, (phase) => {
             const task = phase.tasks.find((entry) => entry.id === source.task.id);
-            if (!task) throw new Error(`Paused source task disappeared: ${params.from_task}`);
+            if (!task) throw new Error(`Checkpointed source task disappeared: ${params.from_task}`);
             task.pauseSnapshot = snapshot;
             task.pauseHistory = [...task.pauseHistory, snapshot];
             task.updatedAt = timestamp;
@@ -4061,7 +4195,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           });
         }
         sourceCheckpointed = true;
-        if (target.task.status === "paused") {
+        if (target.task.pauseSnapshot) {
           await st.resumeTask(target.phase.id, target.task.id, timestamp);
         } else {
           await st.updatePhase(target.phase.id, (phase) => {
@@ -4081,7 +4215,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
         targetStarted = true;
         await st.addWorkDeviation(record);
-        if (target.task.status === "paused") {
+        if (target.task.pauseSnapshot) {
           const resumedDeviation = project.workDeviations
             .filter((deviation) => deviation.resumeTaskId === target.task.id
               && (deviation.state === "resume-required" || deviation.state === "resolved"))
@@ -4107,12 +4241,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.syncTaskStatusRollup(source.phase.id);
       if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
       await st.writeGenerated();
+      invalidateReads();
       const sourceRef = `${formatPhaseRef(source.phase.number, featureNumberOfPhase(source.phase, features))}/T${String(source.task.number).padStart(3, "0")}`;
       const targetRef = `${formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features))}/T${String(target.task.number).padStart(3, "0")}`;
       return {
         content: [{ type: "text", text: [
           `🔀 Task switched: ${sourceRef} → ${targetRef}`,
-          `Paused snapshot: ${snapshot.whatWasBeingDone}`,
+          `Resume checkpoint: ${snapshot.whatWasBeingDone}`,
           `Return target: ${sourceRef} from ${snapshot.resumeLocation}`,
           "Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.",
         ].join("\n") }],
@@ -4124,7 +4259,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_start",
     label: "Task Start",
-    description: "Set a task to in-progress or resume paused work. BEFORE calling, read feature_get(full=true), phase_get(full=true), then task_get(full=true). A different active task must first be suspended through task_switch. Otherwise follow active/pending-resume/feature → phase → task priority guidance.",
+    description: "Set a task to in-progress or resume checkpointed work. BEFORE calling, read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order. Read linked requirements with requirement_list when present. A different active task must first be suspended through task_switch.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
     }),
@@ -4137,11 +4272,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const task = found.task;
       if (task.status === "in-progress") return { content: [{ type: "text", text: `Task ${task.id} is already in-progress.` }], details: task };
       if (task.status === "done") return { content: [{ type: "text", text: `Task ${task.id} is done. Use task_update to reopen.` }], details: task };
-      const project = await st.loadProject();
-      const phases = await st.loadAllPhases();
+      const contextEligibility = contextReadEligibility(task.id, found.phase.id, found.phase.featureId);
+      if (!contextEligibility.eligible) {
+        return { content: [{ type: "text", text: `Task start denied: context reads required. ${contextEligibility.reason}` }], details: contextEligibility };
+      }
+      const linkedRequirementIds = [
+        ...(await st.linkedRequirementsForPhase(found.phase.id)).map((requirement) => requirement.id),
+        ...(found.phase.featureId ? (await st.linkedRequirementsForFeature(found.phase.featureId)).map((requirement) => requirement.id) : []),
+      ];
+      if (!hasReadRequirements(linkedRequirementIds)) {
+        return { content: [{ type: "text", text: "Task start denied: read the requirements linked to the task's phase and feature first." }], details: { requirementIds: linkedRequirementIds } };
+      }
+      const [project, phases, focus] = await Promise.all([st.loadProject(), st.loadAllPhases(), st.loadResume()]);
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
       if (!eligibility.eligible) return { content: [{ type: "text", text: `Task start denied: ${eligibility.reason}` }], details: eligibility };
-      const selection = recommendNextTask(features, phases, project.workDeviations);
+      const selection = recommendNextTask(features, phases, project.workDeviations, focus?.currentPhaseId);
       if (selection.kind === "conflict") {
         return { content: [{ type: "text", text: `${selection.reason} Pause/reconcile active tasks before starting another task.` }], details: selection };
       }
@@ -4149,9 +4294,28 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const activeRef = `${formatPhaseRef(selection.candidate!.phase.number, featureNumberOfPhase(selection.candidate!.phase, features))}/T${String(selection.candidate!.task.number).padStart(3, "0")}`;
         return { content: [{ type: "text", text: `Task start denied: ${activeRef} is active. Use task_switch to snapshot and pause it before starting another task.` }], details: selection };
       }
-      if (selection.kind === "resume" && selection.candidate?.task.id !== task.id) {
-        const resumeRef = `${formatPhaseRef(selection.candidate!.phase.number, featureNumberOfPhase(selection.candidate!.phase, features))}/T${String(selection.candidate!.task.number).padStart(3, "0")}`;
-        return { content: [{ type: "text", text: `Task start denied: ${resumeRef} is pending resume. Resume it now, or use task_switch from that paused task with a new checkpoint and reason.` }], details: selection };
+      let resumeProposal: ReturnType<typeof buildResumeRequiredProposal> | undefined;
+      if (selection.kind === "resume" && selection.candidate && selection.candidate.task.id !== task.id) {
+        // Advisory only: a pending resume must be surfaced loudly, but it must
+        // not hard-block an explicit start of a different task. Capture a
+        // structured proposal so the resume-first guidance is explicit and
+        // machine-readable for the host/agent.
+        const resumeTask = selection.candidate;
+        const resumeRef = `${formatPhaseRef(resumeTask.phase.number, featureNumberOfPhase(resumeTask.phase, features))}/T${String(resumeTask.task.number).padStart(3, "0")}`;
+        const resumeSnapshot = resumeTask.task.pauseSnapshot
+          ?? project.workDeviations.find((deviation) =>
+            deviation.resumeTaskId === resumeTask.task.id
+            && (deviation.state === "resume-required" || deviation.state === "resolved"))?.snapshot
+          ?? null;
+        resumeProposal = buildResumeRequiredProposal({
+          ref: resumeRef,
+          title: resumeTask.task.title,
+          taskId: resumeTask.task.id,
+          phaseId: resumeTask.phase.id,
+          snapshot: resumeSnapshot
+            ? { reason: resumeSnapshot.reason, resumeLocation: resumeSnapshot.resumeLocation, howToResume: resumeSnapshot.howToResume }
+            : null,
+        });
       }
       // Assemble the mandatory parent context before changing task lifecycle state.
       // The output order is feature + its requirements, then phase + its requirements.
@@ -4167,11 +4331,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         featureRequirements,
       );
       const advisory = selection.candidate && selection.candidate.task.id !== task.id
-        ? `\n\n⚠️ ${selection.kind === "resume" ? "Resume" : "Priority"} advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} is the automatic recommendation. Explicit task request honored.`
+        ? selection.kind === "resume"
+          ? `\n\n${resumeProposal ? resumeProposal.text : `⚠️ Resume advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} has a saved checkpoint. Evaluate its resume context before continuing with this explicit task request. Explicit task request honored.`}`
+          : `\n\n⚠️ Priority advisory: ${formatPhaseRef(selection.candidate.phase.number, featureNumberOfPhase(selection.candidate.phase, features))}/T${String(selection.candidate.task.number).padStart(3, "0")} is the automatic recommendation. Explicit task request honored.`
         : "";
       const now = nowISO();
       let startedTask: Task | undefined;
-      if (task.status === "paused") {
+      if (task.pauseSnapshot) {
         startedTask = await st.resumeTask(found.phase.id, found.task.id, now);
       } else {
         await st.updatePhase(found.phase.id, (phase) => {
@@ -4202,7 +4368,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", now);
       await st.writeGenerated();
       if (!startedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-      return { content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}` }], details: startedTask };
+      return {
+        content: [{ type: "text", text: `✅ Task started: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(startedTask.number).padStart(3, "0")} — ${startedTask.title} (in-progress)${startedTask.shortId ? ` · ${startedTask.shortId}` : ""}${phaseContext}${advisory}` }],
+        details: startedTask,
+        ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
+      };
     },
   });
 
@@ -4223,7 +4393,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
       const task = found.task;
       if (task.status === "done") return { content: [{ type: "text", text: `Task ${task.id} is already done.` }], details: task };
-      if (task.status === "paused") return { content: [{ type: "text", text: "Task completion denied: resume paused work with task_start before completing it, or cancel it explicitly with motivation." }], details: task };
+      if (task.pauseSnapshot) return { content: [{ type: "text", text: "Task completion denied: resume checkpointed work with task_start before completing it, or cancel it explicitly with motivation." }], details: task };
       const unchecked = task.checklist.filter((item) => !item.checked);
       if (unchecked.length > 0 && !params.force) {
         return {
@@ -4269,7 +4439,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           resumeNotice = [
             "",
             `↩️ RESUME REQUIRED: ${resumeRef} — ${resume.task.title}`,
-            snapshot ? `Paused because: ${snapshot.reason}` : "Return to the preserved task before selecting new priority work.",
+            snapshot ? `Checkpoint reason: ${snapshot.reason}` : "Return to the preserved task before selecting new priority work.",
             snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
             snapshot ? `How to resume: ${snapshot.howToResume}` : "",
             `Next action: task_start ${resumeRef}`,
@@ -4430,7 +4600,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { enabled: false, running: false } };
-      plannerSessionEnabled = true;
+      enablePlannerSession();
       if (!server) {
         await startServer(ctx, undefined, "lan").catch(() => {});
       }
@@ -4499,6 +4669,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const activity = await st.loadActivityLog();
       const recentActivity = activity.entries.slice(-3).reverse();
       const handoffs = await st.listHandoffs();
+      const extensionRules = await st.extensionRules();
 
       const featureById = new Map(plan.features.features.map((feature) => [feature.id, feature]));
       const phaseById = new Map(plan.phases.map((phase) => [phase.id, phase]));
@@ -4615,12 +4786,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "",
         "Operational rules:",
         "- Handoffs are context, not locks. Read the relevant handoff with handoff show <ref> before resuming.",
-        "- BEFORE work: read feature_get(full=true) for the parent feature and its linked requirements, then phase_get(full=true) for the parent phase and its linked requirements, then task_get(full=true); only then call task_start before any code edit/write. AFTER finishing a task: task_complete.",
+        "- BEFORE work: read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order. Read linked requirements with requirement_list when present. task_start and task_switch reject work until these reads are complete; only then touch code. AFTER finishing a task: task_complete.",
         "- Record every new decision or user-agreed modification in both the relevant feature and phase before treating the discussion as complete.",
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
         "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Prefer shortId or F00x/P00x/T00x refs. Find via feature_list / phase_list / task_list; read one entity via *_get(full=true).",
         "- If edit/write guard blocks you, start the right task or use an explicit bypass.",
+        ...(extensionRules.length > 0
+          ? [
+            "",
+            "Planner rules (extension; agent-only):",
+            ...extensionRules.map((rule, index) => `${index + 1}. ${rule}`),
+          ]
+          : []),
         "",
         `Goal: ${project.goal || "(not set)"}`,
         project.description ? `Description: ${project.description}` : "",

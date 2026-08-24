@@ -1,0 +1,127 @@
+{
+  "id": "cd3fd548-a183-448c-9a87-cf804bcdb075",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 75,
+  "shortId": "HQWNK",
+  "priority": 24,
+  "slug": "agent-only-delivery-of-planner-extension-rules",
+  "title": "Agent-only delivery of planner extension rules",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Stop exposing internal agent rules in planner load while preserving them in Pi's system context.",
+  "description": "Regression fix for the T304 rules relocation. Current state: packages/plan-core/src/recap.ts:149-160 appends PLANNER_EXTENSION_RULES to buildRecap(), which is user-facing and therefore dumps internal agent instructions during /planner load. Pi already has an agent-only system-prompt channel in packages/pi-adapter/src/index.ts:4612-4830 via before_agent_start and contextBlockCache. Modify recap.ts to remove the rules section, inject await st.extensionRules() into Pi's cached system context instead, and update/add tests proving recap output excludes internal rules while agent context retains them. Preserve static timestamp-free rules.json loading and canonical fallback behavior.",
+  "descriptionUpdatedAt": "2026-08-24T08:33:45.005Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "b7afbb8d-60c1-4881-88a4-931ca814a649"
+  ],
+  "tasks": [
+    {
+      "id": "b7afbb8d-60c1-4881-88a4-931ca814a649",
+      "phaseId": "cd3fd548-a183-448c-9a87-cf804bcdb075",
+      "number": 320,
+      "shortId": "RBZLD",
+      "priority": 1,
+      "shortName": "agent-only-rules",
+      "title": "Move extension rules from user-facing recap to Pi agent system context",
+      "status": "done",
+      "description": "Move internal planner extension rules out of every human-facing recap path. Current state: packages/plan-core/src/recap.ts appends PLANNER_EXTENSION_RULES to buildRecap(), whose output is returned to humans by Pi /planner load, the planner-load tool, and MCP resume. The user did not manually run /planner load in this project; that fact is unrelated to the channel contract and must not be used as the root-cause claim. Keep PlanStore.extensionRules() and packages/plan-core/src/planner-rules.ts unchanged. Remove the rules from buildRecap(), load them in packages/pi-adapter/src/index.ts while constructing the before_agent_start cached system context, and inject them only into the agent system prompt. Add regression coverage proving the human recap excludes internal rules while the Pi agent context includes them. Preserve empty-rules behavior and context caching.\n\n---\n**Completion summary:**\nCompleted the channel separation for planner extension rules. packages/plan-core/src/recap.ts no longer calls PlanStore.extensionRules() or appends internal agent instructions to buildRecap(), so Pi and MCP human-facing recaps exclude them. packages/pi-adapter/src/index.ts now loads extensionRules while rebuilding the before_agent_start cache and injects them under `Planner rules (extension; agent-only):` only in the agent system prompt, with no heading when the effective list is empty. packages/plan-core/test/recap.test.mjs covers absence for both Pi and MCP recap harnesses; packages/pi-adapter/test/host-registration.test.mjs verifies the real load trigger excludes the rules while the injected system prompt includes them. Verification: core check/build clean; recap tests 14/14; pi-adapter check/build clean; host test 12/12; complete pi-adapter unit suite 55/55. The package runner still exits non-zero only for the known repository-wide baseline coverage shortfall (70.24/65.66/66.25 versus 79/72/76), with zero test failures. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-08-24T08:44:25.289Z",
+      "notes": "Corrected diagnosis: a separate verified lifecycle bug (P063/T321) can enable planner context through planner-web start without planner-load. T320 remains focused only on channel separation: internal rules must never be included in human-facing recap output.",
+      "statusLog": [
+        {
+          "id": "b7afbb8d-60c1-4881-88a4-931ca814a649-check-001-planned-in-progress",
+          "date": "2026-08-24T08:34:05.934Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b7afbb8d-60c1-4881-88a4-931ca814a649-check-002-in-progress-done",
+          "date": "2026-08-24T08:44:25.287Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b7afbb8d-60c1-4881-88a4-931ca814a649-check-001-remove-extension-rules-block-from-buildrecap-user-output",
+          "number": 1,
+          "title": "Remove extension-rules block from buildRecap user output",
+          "checked": true
+        },
+        {
+          "id": "b7afbb8d-60c1-4881-88a4-931ca814a649-check-002-inject-extension-rules-into-pi-before-agent-start-system-context",
+          "number": 2,
+          "title": "Inject extension rules into Pi before_agent_start system context",
+          "checked": true
+        },
+        {
+          "id": "b7afbb8d-60c1-4881-88a4-931ca814a649-check-003-add-regression-coverage-for-absence-in-recap-and-presence-in-agent-context",
+          "number": 3,
+          "title": "Add regression coverage for absence in recap and presence in agent context",
+          "checked": true
+        },
+        {
+          "id": "b7afbb8d-60c1-4881-88a4-931ca814a649-check-004-run-core-and-pi-adapter-checks-build-tests",
+          "number": 4,
+          "title": "Run core and pi-adapter checks/build/tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T08:34:05.934Z",
+      "completedAt": "2026-08-24T08:44:25.287Z",
+      "createdAt": "2026-08-24T08:33:54.574Z",
+      "updatedAt": "2026-08-24T08:44:25.287Z"
+    }
+  ],
+  "createdAt": "2026-08-24T08:33:45.005Z",
+  "updatedAt": "2026-08-24T08:44:25.287Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-24T08:34:53.446Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/cd3fd548-a183-448c-9a87-cf804bcdb075-2026-08-24T08-44-25-305Z.md",
+      "clearedAt": "2026-08-24T08:44:25.305Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "d53572da-dab7-42f6-b5ba-abcf61a3751d",
+      "date": "2026-08-24T08:34:05.954Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "c5092ea5-8cd4-4856-86ac-c85ba281e06c",
+      "date": "2026-08-24T08:44:25.336Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

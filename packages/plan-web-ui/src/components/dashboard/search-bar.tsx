@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef } from "react";
 import { ElasticInput, type FieldConfig, type SuggestionItem, type ElasticInputAPI } from "elastic-input";
 import type { Feature, Phase } from "../../lib/types";
 
-const STATUS_VALUES = ["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
+const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
 
 /** Caret offset (in characters) within the contentEditable editor. */
 function getCaretCharOffset(editor: HTMLElement): number {

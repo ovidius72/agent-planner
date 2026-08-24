@@ -1,0 +1,127 @@
+{
+  "id": "a1096ef9-3428-4a99-a27f-15494a36ade4",
+  "featureId": "7696d86b-2525-49f0-984a-8f2b18a02e99",
+  "number": 77,
+  "shortId": "8Q88X",
+  "priority": 1,
+  "slug": "guard-start-resume-transitions",
+  "title": "Guard start/resume transitions",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Route all task starts through lifecycle cleanup and simplify Resume Required presentation.",
+  "description": "`packages/pi-adapter/src/index.ts:3922` and `packages/plan-mcp/src/index.ts:899` only reject generic in-progress updates when `pauseSnapshot` exists, while `packages/plan-server/src/serve.ts:722` has the same narrow API guard. `task_start` is the canonical lifecycle implementation: it resumes checkpoints and marks matching deviations resumed (`packages/pi-adapter/src/index.ts:4320-4348`; `packages/plan-mcp/src/index.ts:1334-1366`). The Web UI task editor currently exposes generic status selection in `packages/plan-web-ui/src/routes/task-edit-modal.route.tsx:30` and submits generic updates via `task-edit.action.ts:29`. Add a dedicated server start/resume path, make generic updates refuse entering in-progress, use the lifecycle action in the Web UI, and remove the redundant row-level label from `components/layout/app-shell.tsx`. Preserve valid pause behavior: a paused task is planned with a checkpoint until lifecycle resume; preserve non-lifecycle status editing. Add server, adapter/MCP, and UI regression coverage.",
+  "descriptionUpdatedAt": "2026-08-24T14:06:12.569Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "f0172791-b02a-4619-b243-dfeaf01a826e"
+  ],
+  "tasks": [
+    {
+      "id": "f0172791-b02a-4619-b243-dfeaf01a826e",
+      "phaseId": "a1096ef9-3428-4a99-a27f-15494a36ade4",
+      "number": 325,
+      "shortId": "M6DY9",
+      "priority": 1,
+      "shortName": "implement-guarded-start-resume",
+      "title": "Implement guarded start/resume lifecycle",
+      "status": "done",
+      "description": "Implement the resume integrity fix across the adapters, HTTP server, and Web UI. In `packages/pi-adapter/src/index.ts:3922` and `packages/plan-mcp/src/index.ts:899`, reject every generic transition into `in-progress`, not only checkpoint-backed transitions; retain `task_start` as the path that calls `PlanStore.resumeTask` and `setWorkDeviationState(..., \"resumed\")` (`pi-adapter/src/index.ts:4320-4348`, `plan-mcp/src/index.ts:1334-1366`). In `packages/plan-server/src/serve.ts:710`, provide a dedicated guarded start/resume endpoint that performs equivalent lifecycle cleanup and prevents conflict with existing active work; generic PUT must reject entering in-progress. Update `packages/plan-web-ui/src/routes/task-edit-modal.route.tsx` and actions/API to use an explicit Start/Resume control rather than a status dropdown transition. Remove the redundant Resume Required badge in `packages/plan-web-ui/src/components/layout/app-shell.tsx:42`, keeping only the section heading. Add regression tests for a deviation-only pending resume: generic start attempt fails; lifecycle start makes it active and removes it from `/tasks/focus` pendingResume. Preserve pause semantics and non-lifecycle status changes.\n\n---\n**Completion summary:**\nImplemented and validated the guarded start/resume lifecycle. Changed `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts` so generic status updates cannot enter in-progress. Added `POST /tasks/:id/start` in `packages/plan-server/src/serve.ts`, resolving checkpoints and matching resume deviations atomically with lifecycle status updates; generic HTTP PUT now refuses in-progress transitions. Added Web UI Start/Resume action route/API and task-detail control in `packages/plan-web-ui/src/routes/task-start.action.ts`, `src/lib/api.ts`, `src/app/router.tsx`, and `src/routes/task-detail/route.tsx`; removed in-progress selection for non-active tasks and the duplicate per-row Resume Required badge. Rebuilt bundled Web UI assets. Regression coverage updated across server, MCP, Pi adapter, and Web UI. Validated with `pnpm build`, `pnpm check`, `pnpm test:unit` (392 tests passed), and `node --test packages/plan-server/test/server-events.test.mjs` (9 tests passed). No commit or push performed.",
+      "descriptionUpdatedAt": "2026-08-24T14:15:41.986Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f0172791-b02a-4619-b243-dfeaf01a826e-check-001-planned-in-progress",
+          "date": "2026-08-24T14:06:30.238Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f0172791-b02a-4619-b243-dfeaf01a826e-check-002-in-progress-done",
+          "date": "2026-08-24T14:15:41.984Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f0172791-b02a-4619-b243-dfeaf01a826e-check-001-inspect-existing-server-api-ui-test-conventions-and-choose-lifecycle-endpoint-contract",
+          "number": 1,
+          "title": "Inspect existing server/API/UI test conventions and choose lifecycle endpoint contract",
+          "checked": true
+        },
+        {
+          "id": "f0172791-b02a-4619-b243-dfeaf01a826e-check-002-guard-pi-and-mcp-generic-status-updates",
+          "number": 2,
+          "title": "Guard Pi and MCP generic status updates",
+          "checked": true
+        },
+        {
+          "id": "f0172791-b02a-4619-b243-dfeaf01a826e-check-003-implement-guarded-http-lifecycle-start-resume-endpoint-and-generic-update-rejection",
+          "number": 3,
+          "title": "Implement guarded HTTP lifecycle start/resume endpoint and generic update rejection",
+          "checked": true
+        },
+        {
+          "id": "f0172791-b02a-4619-b243-dfeaf01a826e-check-004-wire-explicit-web-ui-start-resume-control-and-remove-redundant-row-badge",
+          "number": 4,
+          "title": "Wire explicit Web UI Start/Resume control and remove redundant row badge",
+          "checked": true
+        },
+        {
+          "id": "f0172791-b02a-4619-b243-dfeaf01a826e-check-005-add-regression-coverage-and-run-focused-plus-workspace-validation",
+          "number": 5,
+          "title": "Add regression coverage and run focused plus workspace validation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T14:06:30.238Z",
+      "completedAt": "2026-08-24T14:15:41.984Z",
+      "createdAt": "2026-08-24T14:06:22.107Z",
+      "updatedAt": "2026-08-24T14:15:41.984Z"
+    }
+  ],
+  "createdAt": "2026-08-24T14:06:12.569Z",
+  "updatedAt": "2026-08-24T14:15:41.984Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "c9adcf1f-a713-4b8a-8d89-14beb515dedd",
+      "date": "2026-08-24T14:06:30.258Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "c3ab8b4f-c3d9-46e1-87b9-d128318e99a0",
+      "date": "2026-08-24T14:15:42.004Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

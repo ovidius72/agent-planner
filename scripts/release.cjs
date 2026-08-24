@@ -15,7 +15,9 @@
 // Model (AGENTS.md §12, unified versioning):
 //   - ALL 5 packages share ONE version per release.
 //   - Must run on a clean `develop`, up to date with origin.
-//   - Target version = bump(max(current versions), level). Downgrades rejected.
+//   - Target version = bump(latest stable vX.Y.Z tag, level), falling back
+//     to origin/main package versions while the tag history is bootstrapped.
+//     Explicit versions remain supported and downgrades are rejected.
 //   - Creates release/v<target> from develop, commits the bump, pushes, PRs → main.
 //   - After the PR merges to main, publish.yml publishes to npm. Then sync
 //     develop: `git switch develop && git pull && git merge origin/main`.
@@ -26,6 +28,13 @@ const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
+const {
+  bumpStableVersion,
+  compareStableVersions,
+  latestStableTag,
+  maxStableVersion,
+  resolveReleaseTarget,
+} = require("./release-version.cjs");
 
 const root = path.resolve(__dirname, "..");
 const PACKAGES = [
@@ -77,14 +86,6 @@ function writePluginVersion(version) {
   if (Array.isArray(mkj.plugins) && mkj.plugins[0]) mkj.plugins[0].version = version;
   fs.writeFileSync(mk, JSON.stringify(mkj, null, 2) + "\n");
 }
-function parse(v) { return v.split(".").map(Number); }
-function cmp(a, b) { for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] - b[i]; } return 0; }
-function bumpVer(v, level) {
-  const [M, m, p] = parse(v);
-  if (level === "major") return `${M + 1}.0.0`;
-  if (level === "minor") return `${M}.${m + 1}.0`;
-  return `${M}.${m}.${p + 1}`;
-}
 
 // --- parse args ---
 const args = process.argv.slice(2);
@@ -104,26 +105,41 @@ if (status) { console.error("✗ Working tree not clean. Commit or stash changes
 const branch = sh("git rev-parse --abbrev-ref HEAD");
 if (branch !== "develop") { console.error(`✗ Must be on 'develop' (currently on '${branch}'). Run: git switch develop`); process.exit(1); }
 
-console.log("› Updating develop from origin...");
-run("git fetch origin develop");
+console.log("› Updating release refs and stable tags from origin...");
+run("git fetch origin --prune --tags");
 const behind = sh("git rev-list --count HEAD..origin/develop");
 if (Number(behind) > 0) { console.error(`✗ develop is ${behind} commit(s) behind origin/develop. Run: git pull --ff-only origin develop`); process.exit(1); }
 
-// --- compute unified target version ---
-const current = PACKAGES.map((p) => parse(readVersion(p.dir))).reduce((mx, v) => (cmp(v, mx) > 0 ? v : mx));
-const currentStr = current.join(".");
-let target;
-if (/^\d+\.\d+\.\d+$/.test(level)) {
-  target = level;
-} else {
-  target = bumpVer(currentStr, level);
+// --- compute unified target version from canonical stable history ---
+const remoteTags = sh("git ls-remote --tags --refs origin 'v*'")
+  .split("\n")
+  .filter(Boolean)
+  .map((line) => line.split("refs/tags/")[1] ?? "");
+const taggedStable = latestStableTag(remoteTags);
+const mainVersions = PACKAGES.map((p) => {
+  const contents = sh(`git show origin/main:packages/${p.dir}/package.json`);
+  return JSON.parse(contents).version;
+});
+const mainStable = maxStableVersion(mainVersions);
+if (!mainStable || mainVersions.some((version) => version !== mainStable)) {
+  console.error(`✗ origin/main package versions are not one unified stable version: ${mainVersions.join(", ")}. Repair main before releasing.`);
+  process.exit(1);
 }
-if (cmp(parse(target), current) <= 0) {
-  console.error(`✗ Target ${target} is not greater than current max ${currentStr}. Aborting (downgrade guard).`);
+if (taggedStable && compareStableVersions(taggedStable, mainStable) !== 0) {
+  console.error(`✗ Latest stable tag v${taggedStable} disagrees with origin/main package version ${mainStable}. Repair the release tags before continuing.`);
+  process.exit(1);
+}
+const stableBase = taggedStable ?? mainStable;
+let target;
+try {
+  target = resolveReleaseTarget(stableBase, level);
+} catch (error) {
+  console.error(`✗ ${error.message}`);
   process.exit(1);
 }
 
-console.log(`\n› Release: ${currentStr} → ${target}  (${dryRun ? "DRY-RUN" : "LIVE"})`);
+console.log(`\n› Release: ${stableBase} → ${target}  (${dryRun ? "DRY-RUN" : "LIVE"})`);
+console.log(`  Stable source: ${taggedStable ? `Git tag v${taggedStable}` : `origin/main fallback (${mainStable}; no stable tags yet)`}`);
 console.log("  Packages:");
 for (const p of PACKAGES) console.log(`    ${p.name.padEnd(26)} ${readVersion(p.dir)} → ${target}`);
 
@@ -132,11 +148,11 @@ const pluginCurrent = readPluginVersion();
 let pluginTarget;
 if (/^\d+\.\d+\.\d+$/.test(level)) {
   // explicit version applies to packages only; bump plugin by same level from its current
-  pluginTarget = bumpVer(pluginCurrent, levelArg ? level : "patch");
+  pluginTarget = bumpStableVersion(pluginCurrent, levelArg ? level : "patch");
 } else {
-  pluginTarget = bumpVer(pluginCurrent, level);
+  pluginTarget = bumpStableVersion(pluginCurrent, level);
 }
-if (cmp(parse(pluginTarget), parse(pluginCurrent)) <= 0) {
+if (compareStableVersions(pluginTarget, pluginCurrent) <= 0) {
   console.error(`✗ Plugin target ${pluginTarget} is not greater than current ${pluginCurrent}. Aborting (downgrade guard).`);
   process.exit(1);
 }

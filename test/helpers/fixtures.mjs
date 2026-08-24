@@ -368,13 +368,31 @@ export async function readPlanSnapshot(planRoot) {
       features.push(JSON.parse(await readFile(join(planRoot, "features", file), "utf-8")));
     }
   } catch {}
+  const handoffArchive = [];
+  try {
+    const files = await readdir(join(planRoot, ".local", "handoff-archive"));
+    for (const file of files) {
+      const fullPath = join(planRoot, ".local", "handoff-archive", file);
+      if (file.endsWith(".json")) {
+        handoffArchive.push(JSON.parse(await readFile(fullPath, "utf-8")));
+        continue;
+      }
+      if (file.endsWith(".md")) {
+        const content = await readFile(fullPath, "utf-8");
+        handoffArchive.push({ file, content, firstLine: content.split(/\r?\n/, 1)[0] ?? "" });
+      }
+    }
+  } catch {}
   return {
     manifest: await read("manifest.json"),
     project: await read("project.json"),
     requirements: await read("requirements.json"),
     legacyFeatures: await read("features.json"),
+    resume: await read(join(".local", "resume.json")),
+    activity: await read(join(".local", "activity.json")),
     features: features.sort((a, b) => a.number - b.number),
     phases: phases.sort((a, b) => a.number - b.number),
+    handoffArchive,
   };
 }
 
