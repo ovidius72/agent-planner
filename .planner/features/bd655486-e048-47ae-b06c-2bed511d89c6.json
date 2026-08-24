@@ -51,6 +51,30 @@
       "toStatus": "in-progress",
       "title": "planned → in-progress",
       "description": ""
+    },
+    {
+      "id": "b2db267c-2039-4631-894b-1586b7c2f5c1",
+      "date": "2026-08-24T07:27:28.536Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "adf802d7-fef3-4a5f-97d4-472c9d5999b9",
+      "date": "2026-08-24T07:32:51.125Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "cd67440d-b166-4a65-89e3-80926f915bcc",
+      "date": "2026-08-24T07:32:57.586Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-08-09T17:37:06.764Z",

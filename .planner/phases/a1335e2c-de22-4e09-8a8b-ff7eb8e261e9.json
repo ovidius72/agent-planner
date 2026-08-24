@@ -365,9 +365,9 @@
       "priority": 6,
       "shortName": "enforce-phase-feature-linked-r",
       "title": "Enforce phase/feature linked-requirements read on task start and resume",
-      "status": "in-progress",
-      "description": "Estensione di T307 (P072/F005): il read-enforcement attuale traccia SOLO feature+fase. Estendere l'obbligo (advisory non-bloccante, stile NO ACTIVE TASK) anche ai requirements collegati alla FASE e, se presenti, alla FEATURE.\n\nDecisioni approvate dall'utente (2026-08-22):\n(a) Richiedere i requirements della fase; richiedere anche quelli della feature SE la feature ha requirements collegati (linkedRequirementsForFeature restituisce [] se assenti → vacuo).\n(b) Lettura ESPICITA A PARTE: NON auto-derivare il requirement-read dalla lettura della fase/feature/task. L'unico tool di lettura requirements negli adapter e' requirement_list (non esiste requirement_get) → agganciare markRequirementRead a requirement_list (lettura esplicita dell'elenco requirements).\n(c) Entrambi gli harness (pi-adapter + plan-mcp), simmetrici a T307.\n\nModello dati (verificato): Requirement top-level; RequirementSchema.linkedPhaseIds (schema.ts:363) collega requirement→fase. PlanStore.linkedRequirementsForPhase(phaseId) (plan-store.ts:1455) e linkedRequirementsForFeature(featureId) (1459). task-context.ts buildPhaseContextBlock gia' mostra i requirements nel context (ma cio' NON conta come read esplicito, per (b)).\n\nPiano implementazione:\n1. read-tracking.ts: aggiungere `requirements: Set<string>`, `markRequirementRead(reqId)`, `hasReadRequirements(reqIds: string[]): boolean`, `requirementReadAdvisory(reqIds: string[]): string` (vuoto se tutti letti, altrimenti avviso READ REQUIRED requirements, stile parentReadAdvisory). Esportare da index.ts (verificare export * da read-tracking.js).\n2. requirement_list handler (pi-adapter ~2685, plan-mcp): dopo aver caricato i requirements, chiamare markRequirementRead(r.id) per ogni requirement restituito (read esplicito).\n3. start/resume/switch + /planner start: raccogliere phaseReqIds = linkedRequirementsForPhase(phase.id).map(id) e featureReqIds = parentFeature ? linkedRequirementsForFeature(feature.id).map(id) : []; appendere requirementReadAdvisory([...phaseReqIds, ...featureReqIds]) al readAdvisory esistente; se non vuoto, aggiungere readRequired:true al details. Punti: task_start (pi:4333 / mcp:1363), task_switch return (pi:4217 / mcp:1244), /planner start (pi:2180).\n4. Verifica: estendere i test read-tracking (T307) con requirements (markRequirementRead/hasReadRequirements/requirementReadAdvisory); core check; build pi-adapter + plan-mcp; web-ui non toccata. Nessun commit senza approvazione.\n\n---\n**Completion summary:**\nEsteso il read-enforcement T307 ai requirements (P072/F005). Decisioni utente: (a) richiedere i requirements della fase + quelli della feature se presenti; (b) lettura ESPICITA a parte (NON auto-derivata da phase/feature/task show); (c) entrambi gli harness.\n\nImplementazione:\n- read-tracking.ts: aggiunti `requirements: Set`, `markRequirementRead(reqId)`, `hasReadRequirements(reqIds)`, `requirementReadAdvisory(reqIds)` (vuoto se tutti letti o lista vuota, altrimenti REQUIREMENTS READ REQUIRED), snapshot + invalidateReads aggiornati. Export via index.ts.\n- pi-adapter: `requirement_list` marca i requirements letti; task_start/task_switch appendono requirementReadAdvisory; /planner start notifica se requirements non letti.\n- plan-mcp: NUOVO tool `planner-requirement-list` (read esplicito, prima assente); task_start/task_switch appendono requirementReadAdvisory.\n- Ricostruito plan-core dist (pi-adapter lo risolve dal dist).\n\nVerifica: check puliti (core/pi/mcp); core read-tracking 11/11; plan-mcp 50/50; pi-adapter 55/55. Residui 10 fallimenti core = pre-esistenti T253. Non committato.",
-      "descriptionUpdatedAt": "2026-08-23T16:33:15.684Z",
+      "status": "done",
+      "description": "Estensione di T307 (P072/F005): il read-enforcement attuale traccia SOLO feature+fase. Estendere l'obbligo (advisory non-bloccante, stile NO ACTIVE TASK) anche ai requirements collegati alla FASE e, se presenti, alla FEATURE.\n\nDecisioni approvate dall'utente (2026-08-22):\n(a) Richiedere i requirements della fase; richiedere anche quelli della feature SE la feature ha requirements collegati (linkedRequirementsForFeature restituisce [] se assenti → vacuo).\n(b) Lettura ESPICITA A PARTE: NON auto-derivare il requirement-read dalla lettura della fase/feature/task. L'unico tool di lettura requirements negli adapter e' requirement_list (non esiste requirement_get) → agganciare markRequirementRead a requirement_list (lettura esplicita dell'elenco requirements).\n(c) Entrambi gli harness (pi-adapter + plan-mcp), simmetrici a T307.\n\nModello dati (verificato): Requirement top-level; RequirementSchema.linkedPhaseIds (schema.ts:363) collega requirement→fase. PlanStore.linkedRequirementsForPhase(phaseId) (plan-store.ts:1455) e linkedRequirementsForFeature(featureId) (1459). task-context.ts buildPhaseContextBlock gia' mostra i requirements nel context (ma cio' NON conta come read esplicito, per (b)).\n\nPiano implementazione:\n1. read-tracking.ts: aggiungere `requirements: Set<string>`, `markRequirementRead(reqId)`, `hasReadRequirements(reqIds: string[]): boolean`, `requirementReadAdvisory(reqIds: string[]): string` (vuoto se tutti letti, altrimenti avviso READ REQUIRED requirements, stile parentReadAdvisory). Esportare da index.ts (verificare export * da read-tracking.js).\n2. requirement_list handler (pi-adapter ~2685, plan-mcp): dopo aver caricato i requirements, chiamare markRequirementRead(r.id) per ogni requirement restituito (read esplicito).\n3. start/resume/switch + /planner start: raccogliere phaseReqIds = linkedRequirementsForPhase(phase.id).map(id) e featureReqIds = parentFeature ? linkedRequirementsForFeature(feature.id).map(id) : []; appendere requirementReadAdvisory([...phaseReqIds, ...featureReqIds]) al readAdvisory esistente; se non vuoto, aggiungere readRequired:true al details. Punti: task_start (pi:4333 / mcp:1363), task_switch return (pi:4217 / mcp:1244), /planner start (pi:2180).\n4. Verifica: estendere i test read-tracking (T307) con requirements (markRequirementRead/hasReadRequirements/requirementReadAdvisory); core check; build pi-adapter + plan-mcp; web-ui non toccata. Nessun commit senza approvazione.\n\n---\n**Completion summary:**\nEsteso il read-enforcement T307 ai requirements (P072/F005). Decisioni utente: (a) richiedere i requirements della fase + quelli della feature se presenti; (b) lettura ESPICITA a parte (NON auto-derivata da phase/feature/task show); (c) entrambi gli harness.\n\nImplementazione:\n- read-tracking.ts: aggiunti `requirements: Set`, `markRequirementRead(reqId)`, `hasReadRequirements(reqIds)`, `requirementReadAdvisory(reqIds)` (vuoto se tutti letti o lista vuota, altrimenti REQUIREMENTS READ REQUIRED), snapshot + invalidateReads aggiornati. Export via index.ts.\n- pi-adapter: `requirement_list` marca i requirements letti; task_start/task_switch appendono requirementReadAdvisory; /planner start notifica se requirements non letti.\n- plan-mcp: NUOVO tool `planner-requirement-list` (read esplicito, prima assente); task_start/task_switch appendono requirementReadAdvisory.\n- Ricostruito plan-core dist (pi-adapter lo risolve dal dist).\n\nVerifica: check puliti (core/pi/mcp); core read-tracking 11/11; plan-mcp 50/50; pi-adapter 55/55. Residui 10 fallimenti core = pre-esistenti T253. Non committato.\n\n---\n**Completion summary:**\nEsteso il read-enforcement T307 ai requirements (P072/F005). Decisioni utente: (a) richiedere i requirements della fase + quelli della feature se presenti; (b) lettura ESPICITA a parte (NON auto-derivata da phase/feature/task show); (c) entrambi gli harness.\n\nImplementazione:\n- read-tracking.ts (core): aggiunti `requirements: Set`, `markRequirementRead(reqId)`, `hasReadRequirements(reqIds)`, `requirementReadAdvisory(reqIds)` (vuoto se tutti letti o lista vuota), snapshot + `invalidateReads` aggiornati; export via index.ts.\n- pi-adapter: `requirement_list` marca i requirements letti; task_start/task_switch appendono requirementReadAdvisory; /planner start notifica REQUIREMENTS READ REQUIRED se la fase/feature ha requirements non letti.\n- plan-mcp: NUOVO tool `planner-requirement-list` (read esplicito, prima assente); task_start/task_switch appendono requirementReadAdvisory.\n- Ricostruito plan-core dist (pi-adapter lo risolve dal dist).\n\nNota operativa: il primo edit di plan-mcp è fallito silenziosamente (Edit tool, difetto noto) e rilevato solo con grep; riapplicato via script node e aggiunto `planner-requirement-list` all'elenco atteso in mcp-harness.test.mjs (prima il test falliva per tool non noto). T319 è stato riaperto e completato correttamente dopo la verifica.\n\nVerifica: check puliti (core/pi/mcp); core read-tracking 11/11 (risolta regressione snapshot + test T319); plan-mcp 50/50; pi-adapter 55/55. Residui 10 fallimenti core = pre-esistenti T253. Non committato.\n\nCommit: f8e053c su feature/p059-t253-normalized-outcomes (17 file, +1098/-101), pushato su origin (branch in sync).",
+      "descriptionUpdatedAt": "2026-08-23T19:13:19.060Z",
       "notes": "",
       "statusLog": [
         {
@@ -392,6 +392,14 @@
           "fromStatus": "done",
           "toStatus": "in-progress",
           "title": "done → in-progress",
+          "description": ""
+        },
+        {
+          "id": "75695788-afdb-4cad-9651-4442c16403df-check-004-in-progress-done",
+          "date": "2026-08-23T19:13:19.059Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
           "description": ""
         }
       ],
@@ -428,13 +436,13 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-08-23T16:26:51.781Z",
-      "completedAt": "",
+      "completedAt": "2026-08-23T19:13:19.059Z",
       "createdAt": "2026-08-23T16:22:03.526Z",
-      "updatedAt": "2026-08-23T19:12:55.419Z"
+      "updatedAt": "2026-08-23T19:13:19.059Z"
     }
   ],
   "createdAt": "2026-08-22T07:15:53.104Z",
-  "updatedAt": "2026-08-23T19:12:55.419Z",
+  "updatedAt": "2026-08-23T19:13:19.059Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-08-22T20:20:05.852Z",
   "handoffReadAt": "",
@@ -504,6 +512,14 @@
       "fromStatus": "done",
       "toStatus": "in-progress",
       "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "fd028983-7edf-4406-ba3f-573ca61bc3b9",
+      "date": "2026-08-23T19:13:19.064Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ]

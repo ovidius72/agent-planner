@@ -381,8 +381,13 @@ test("closing the server tears down the WebSocket connection", async () => {
   // the WS client must observe the server-side close
   await new Promise((resolve, reject) => {
     if (ws.state.closed) return resolve();
-    ws.ws.once("close", () => resolve());
-    setTimeout(() => reject(new Error("WS not closed by server teardown within 2s")), 2000);
+    // Capture the watchdog so it is cleared on close (no leaked 2s timer kept
+    // alive after the test resolves).
+    const timer = setTimeout(() => reject(new Error("WS not closed by server teardown within 2s")), 2000);
+    ws.ws.once("close", () => {
+      clearTimeout(timer);
+      resolve();
+    });
   });
   assert.equal(ws.state.closed, true, "server close tears down the WebSocket");
 });

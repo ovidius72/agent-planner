@@ -113,9 +113,9 @@
       "priority": 3,
       "shortName": "test-documentation",
       "title": "Document scenario authoring, adapters, fixtures, and troubleshooting",
-      "status": "planned",
-      "description": "Document how to run each suite, interpret coverage, add shared scenarios, extend API/MCP/Pi runners, use the Pi host boundary, seed browser fixtures, debug WebSocket and dynamic-port failures, and update exclusions or thresholds responsibly. Include the full public-surface inventory workflow and rules for never touching real user `.planner` directories in tests.",
-      "descriptionUpdatedAt": "2026-08-09T17:43:53.392Z",
+      "status": "done",
+      "description": "Document how to run each suite, interpret coverage, add shared scenarios, extend API/MCP/Pi runners, use the Pi host boundary, seed browser fixtures, debug WebSocket and dynamic-port failures, and update exclusions or thresholds responsibly. Include the full public-surface inventory workflow and rules for never touching real user `.planner` directories in tests.\n\n---\n**Completion summary:**\nCreato docs/testing.md (311 righe) che documenta: (1) come eseguire ogni suite via scripts/test-all.mjs + script root (test/test:unit/test:integration/test:coverage/test:e2e/test:matrix); (2) interpretazione coverage (test/coverage.config.mjs: include dist, exclude bundle/bootstrap/test, gate 80/80/70, baseline 79/76/72, reports/); (3) come aggiungere uno scenario condiviso (test/scenario-matrix.mjs: contratto id/group/category/harnesses/fixture/surfaces/steps/expects + ciclo add→registerExecutor→test:matrix); (4) workflow inventory superfici pubbliche (test/surfaces.mjs core/api/mcp/pi/ui + test/matrix-consistency.test.mjs come guard); (5) Pi host boundary (packages/pi-adapter/test/helpers/pi-host-fixture.mjs: fake ExtensionAPI/Context, solo boundary mockata, PlanStore/filesystem reali, createPiHost/runTool/runCommand/emit/close/cleanupPiHosts); (6) fixture browser (e2e/fixtures.ts self-start plan-server port:0 + plan-web-ui/test/fixtures.tsx make*); (7) troubleshooting WebSocket/dynamic-port/flaky-FS/browser; (8) regola mai toccare .planner utente reali (mkdtemp, createPlannerFixture, trackedRoots, cleanupFixtures). Verificato che i file referenziati esistono e i comandi corrispondono a package.json. Nessun codice modificato (solo nuovo doc). Non committato.",
+      "descriptionUpdatedAt": "2026-08-23T19:18:15.961Z",
       "notes": "",
       "statusLog": [
         {
@@ -133,6 +133,22 @@
           "toStatus": "planned",
           "title": "in-progress → planned",
           "description": ""
+        },
+        {
+          "id": "a8116a83-1ebc-457f-a139-159be58c19ef-check-003-planned-in-progress",
+          "date": "2026-08-23T19:16:51.430Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a8116a83-1ebc-457f-a139-159be58c19ef-check-004-in-progress-done",
+          "date": "2026-08-23T19:18:15.960Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -143,9 +159,9 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-08-23T09:59:14.233Z",
-      "completedAt": "",
+      "completedAt": "2026-08-23T19:18:15.960Z",
       "createdAt": "2026-08-09T17:43:53.392Z",
-      "updatedAt": "2026-08-23T11:16:31.923Z"
+      "updatedAt": "2026-08-23T19:18:15.960Z"
     },
     {
       "id": "198679e2-262d-4dfd-a601-995e3c94a729",
@@ -155,9 +171,9 @@
       "priority": 4,
       "shortName": "test-stability-cleanup",
       "title": "Harden deterministic cleanup and flaky-test diagnostics",
-      "status": "planned",
-      "description": "Audit all new suites for leaked timers, ports, WebSocket listeners, child processes, browser contexts, temporary directories, and stale generated files. Add retries only where justified, failure diagnostics with scenario IDs and snapshots, deterministic clocks/IDs where needed, and a quarantine policy for genuinely environment-dependent Pi CLI smoke checks. Confirm repeated local and CI runs produce stable results without mutating repository planner state.",
-      "descriptionUpdatedAt": "2026-08-09T17:44:01.101Z",
+      "status": "done",
+      "description": "Audit all new suites for leaked timers, ports, WebSocket listeners, child processes, browser contexts, temporary directories, and stale generated files. Add retries only where justified, failure diagnostics with scenario IDs and snapshots, deterministic clocks/IDs where needed, and a quarantine policy for genuinely environment-dependent Pi CLI smoke checks. Confirm repeated local and CI runs produce stable results without mutating repository planner state.\n\n---\n**Completion summary:**\nT260 completato. Audit hardening deterministic cleanup + flaky-test diagnostics:\n\n1) FIX reale (leak timer): packages/plan-server/test/server-events.test.mjs — il watchdog `setTimeout` nel test \"closing the server tears down the WebSocket connection\" non veniva cleared alla chiusura, tenendo vivo l'event loop ~2s dopo il test; ora cattura l'id e fa `clearTimeout(timer)` su `ws.ws` close. Test WS verde (run mirato plan-server: \"closing the server tears down the WebSocket connection\" ✔ e \"close() drains HTTP/WebSocket resources and cleanup removes temp roots\" ✔).\n\n2) DOC: docs/testing.md §12 \"Deterministic cleanup, quarantine & repeatability\" + arricchita §11 — contratto di cleanup (mkdtemp + registry tracked + after(cleanupFixtures)/after(cleanupPiHosts) in ogni file; close per-test in finally; blocker server chiuso; timer CLI smoke già cleared), quarantine policy per i check environment-dependent (Pi CLI reale/model: opt-in PLANNER_CLI_SMOKE=1 + self-probe skip, mai contati nel suite principale), retry policy (solo Playwright retries:2 in CI; node:test NON ritenta — un flaky node è bug reale), verifica repeatability (BASE_TIME + counter deterministici, port 0, git status pulito), diagnostica fallimenti (where: <scenarioId> (<harnesses>) + mismatch expected/got su snapshot/data).\n\n3) Audit isolamento: confermato che NESSUN test punta a cwd/.planner reale — tutti usano createPlannerFixture/createTempRoot (mkdtemp); serve() riceve sempre planRoot esplicito da fixture. Le mutazioni osservate su .planner del repo (shortId backfill \"\"→\"Z9MWF\" + statusLog da lifecycle) sono del runtime del planner (dashboard live + task_start/task_complete di sessione), NON delle suite.\n\n4) Stabilità confermata: integration run1 = 42/43, run2 = 42/43, identico (solo report.test.mjs e2e determinísticamente rosso perché `test-all unit --no-build` esce 1 per i 10 fallimenti pre-esistenti del branch T253). Non-flaky, deterministico.\n\nNOTA (fuori scope P060, non attribuibile a questo task): il branch feature/p059-t253-normalized-outcomes ha 10 fallimenti pre-esistenti in unit (display-status/task-selection normalization + 1 plan-store delete/.bak). Appartengono al lavoro P059, non a T259/T260. Non modificati.\n\nModifiche non committate (per regole progetto, serve approvazione esplicita): docs/testing.md (nuovo), packages/plan-server/test/server-events.test.mjs (timer fix).",
+      "descriptionUpdatedAt": "2026-08-24T07:27:28.477Z",
       "notes": "",
       "statusLog": [
         {
@@ -175,6 +191,38 @@
           "toStatus": "planned",
           "title": "in-progress → planned",
           "description": ""
+        },
+        {
+          "id": "198679e2-262d-4dfd-a601-995e3c94a729-check-003-planned-in-progress",
+          "date": "2026-08-23T19:18:23.729Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "198679e2-262d-4dfd-a601-995e3c94a729-check-004-in-progress-done",
+          "date": "2026-08-24T07:27:28.475Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        },
+        {
+          "id": "9194463e-08cb-4a4a-8fc6-e10e693325bb",
+          "date": "2026-08-24T07:32:51.001Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "done → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f6ff0cf2-217d-49fa-bf77-451baa47d336",
+          "date": "2026-08-24T07:32:57.489Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -185,17 +233,27 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-08-23T10:39:41.761Z",
-      "completedAt": "",
+      "completedAt": "2026-08-24T07:32:57.489Z",
       "createdAt": "2026-08-09T17:44:01.101Z",
-      "updatedAt": "2026-08-23T10:40:00.799Z"
+      "updatedAt": "2026-08-24T07:32:57.489Z"
     }
   ],
   "createdAt": "2026-08-09T17:39:51.927Z",
-  "updatedAt": "2026-08-23T11:16:31.923Z",
-  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-23T16:33:26.782Z\nUpdated at: 2026-08-23T16:33:26.782Z\nReason: before compact\n\n## Progress snapshot\n- Features: 15/16 done, 1 active\n- Phases: 72/73 done, 1 active/discovery\n- Tasks: 316/318 done, 0 active\n\n## Current focus\n- Feature: `bd655486-e048-47ae-b06c-2bed511d89c6` — Integration Test & Cross-Harness Verification (in-progress)\n- Phase: `309eaa59-03df-4bcd-b761-8e100e928e94` — CI coverage gates and test documentation (in-progress)\n- Task: `a8116a83-1ebc-457f-a139-159be58c19ef` — Document scenario authoring, adapters, fixtures, and troubleshooting (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 309eaa59-03df-4bcd-b761-8e100e928e94)\n- ✅ `7b1a5923-24f7-48e6-bd18-7407a9d34018` — Wire package and root test scripts with coverage gates (done)\n- ✅ `435838bc-6747-4d2b-ab0c-19065de1e99a` — Add CI workflow for browsers integration services and reports (done)\n- 📋 `a8116a83-1ebc-457f-a139-159be58c19ef` — Document scenario authoring, adapters, fixtures, and troubleshooting (planned)\n- 📋 `198679e2-262d-4dfd-a601-995e3c94a729` — Harden deterministic cleanup and flaky-test diagnostics (planned)\n\n## How to resume\n1. Open task a8116a83-1ebc-457f-a139-159be58c19ef (Document scenario authoring, adapters, fixtures, and troubleshooting).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start a8116a83-1ebc-457f-a139-159be58c19ef (or call task_start).\n4. Continue with the next activity: Start task a8116a83-1ebc-457f-a139-159be58c19ef — Document scenario authoring, adapters, fixtures, and troubleshooting with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/309eaa59-03df-4bcd-b761-8e100e928e94.json\n- .planner/phases/a1335e2c-de22-4e09-8a8b-ff7eb8e261e9.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task a8116a83-1ebc-457f-a139-159be58c19ef — Document scenario authoring, adapters, fixtures, and troubleshooting with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase 309eaa59-03df-4bcd-b761-8e100e928e94.\n\n## Recent activity\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n- 2026-07-30T08:14:39.219Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n- 2026-07-30T08:14:38.600Z [task_updated] 6cf74348-9c59-4a17-be5e-ab29c7cb38ab: Task updated: Status history + checklist toggle test\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
-  "handoffUpdatedAt": "2026-08-23T16:33:26.786Z",
+  "updatedAt": "2026-08-24T07:32:57.489Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-23T19:18:45.817Z",
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-24T07-27-28-479Z.md",
+      "clearedAt": "2026-08-24T07:27:28.479Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T19-18-45-814Z.md",
+      "clearedAt": "2026-08-23T19:18:45.814Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T16-33-26-783Z.md",
       "clearedAt": "2026-08-23T16:33:26.783Z",
@@ -210,16 +268,6 @@
       "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T13-03-01-022Z.md",
       "clearedAt": "2026-08-23T13:03:01.022Z",
       "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T10-09-38-404Z.md",
-      "clearedAt": "2026-08-23T10:09:38.404Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/309eaa59-03df-4bcd-b761-8e100e928e94-2026-08-23T08-43-35-136Z.md",
-      "clearedAt": "2026-08-23T08:43:35.136Z",
-      "reason": "superseded"
     }
   ],
   "statusLog": [
@@ -229,6 +277,30 @@
       "fromStatus": "draft",
       "toStatus": "in-progress",
       "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "a5a1b516-f1d7-414c-bdd3-70c31aa3b3ec",
+      "date": "2026-08-24T07:27:28.501Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "a9b85910-ea17-44a2-8b9c-a5e29bcfdce9",
+      "date": "2026-08-24T07:32:51.071Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "fbc7f775-67d7-4086-b4d1-ce9c89032f4a",
+      "date": "2026-08-24T07:32:57.534Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
       "description": ""
     }
   ]
