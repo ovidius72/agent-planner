@@ -45,16 +45,7 @@
     "cd3fd548-a183-448c-9a87-cf804bcdb075"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "ab1171eb-c1dc-44fc-9149-1832a4b14fbc",
-      "date": "2026-08-24T08:50:35.567Z",
-      "fromStatus": "planned",
-      "toStatus": "done",
-      "title": "planned → done",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z"
 }

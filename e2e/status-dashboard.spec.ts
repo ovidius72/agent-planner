@@ -26,7 +26,7 @@ test("task status changes update active work, derived parents, and persisted lif
   await page.goto(`${planner.url}/features/${phase.featureId}/phases/${phase.id}`);
   const status = page.locator('select[name="status"]').last();
   await status.selectOption("in-progress");
-  await expect(page.getByText("In-progress tasks (1)")).toBeVisible();
+  await expect(page.getByText("Active tasks (1)")).toBeVisible();
   await expect(page.getByRole("banner").getByRole("link", { name: "Implement login", exact: true })).toHaveCount(1);
 
   const started = await planner.request(`/tasks/${taskId}`);
@@ -35,7 +35,7 @@ test("task status changes update active work, derived parents, and persisted lif
 
   await status.selectOption("done");
   await expect(page.getByText(/Completed /)).toBeVisible();
-  await expect(page.getByText("In-progress tasks (1)")).toHaveCount(0);
+  await expect(page.getByText("Active tasks (1)")).toHaveCount(0);
 
   await page.reload();
   const completed = await planner.request(`/tasks/${taskId}`);
@@ -44,18 +44,21 @@ test("task status changes update active work, derived parents, and persisted lif
   await expect(page.getByText(/Completed /)).toBeVisible();
 });
 
-test("a status transition requiring motivation is surfaced by the browser without a partial write", async ({ page, planner }) => {
+test("the Web UI supervisor can apply a motivated status without an agent motivation field", async ({ page, planner }) => {
   await planner.seed("minimal");
   const phase = ((await planner.request("/phases")).body as Array<{ id: string; featureId: string; tasks: Array<{ id: string }> }>)[0]!;
   const taskId = phase.tasks[0]!.id;
-  await prepareTaskGovernance(planner, phase.featureId, phase.id);
 
   await page.goto(`${planner.url}/features/${phase.featureId}/phases/${phase.id}`);
-  await page.locator('select[name="status"]').last().selectOption("blocked");
+  const status = page.locator('select[name="status"]').last();
+  await status.selectOption("blocked");
 
-  await expect(page.getByRole("heading", { name: /Request failed \(400\)/ })).toBeVisible();
-  await expect(page.getByText(/motivation/i)).toBeVisible();
-  expect((await planner.request(`/tasks/${taskId}`)).body).toMatchObject({ status: "planned" });
+  await expect(status).toHaveValue("blocked");
+  await expect.poll(async () => {
+    const task = (await planner.request(`/tasks/${taskId}`)).body as { status: string };
+    return task.status;
+  }).toBe("blocked");
+  await expect(page.getByRole("heading", { name: /Request failed/ })).toHaveCount(0);
 });
 
 test("dashboard filtering, expansion, and requirement grouping work against a populated real plan", async ({ page, planner }) => {

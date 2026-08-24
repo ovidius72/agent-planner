@@ -68,7 +68,7 @@ export const test = base.extend<{ planner: BrowserPlanner }>({
       });
     } finally {
       await handle?.close().catch(() => {});
-      await rm(fixture.root, { recursive: true, force: true });
+      await rm(fixture.root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
     }
   },
 });

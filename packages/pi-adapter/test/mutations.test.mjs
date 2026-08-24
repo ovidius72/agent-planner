@@ -390,6 +390,119 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     }
   });
 
+  test("public management handlers exercise real reads, writes, deletes, and compatibility aliases", async () => {
+    const host = await createPiHost({ name: "t324-public-handlers", seed: "minimal" });
+    try {
+      assert.match(
+        toolText(await host.runTool("project_set_language_preferences", {})),
+        /Nothing to update/,
+      );
+      const language = await host.runTool("project_set_language_preferences", {
+        contentLanguage: "",
+        chatLanguage: "English",
+      });
+      assert.match(toolText(language), /Saved language preferences: content=English, chat=English/);
+
+      const project = await host.runTool("project_update", {
+        description: "Updated through the public Pi management handler.",
+        goal: "Exercise the real management surface.",
+        scope: ["public handlers", " "],
+        outOfScope: ["production behavior changes", " "],
+        technologies: ["TypeScript", " "],
+        tools: ["Node.js test runner", " "],
+        globalRules: ["Keep integration fixtures isolated", " "],
+        decisions: ["Exercise handlers through the public adapter", " "],
+      });
+      assert.match(toolText(project), /Project updated:/);
+      assert.equal(toolDetails(project).goal, "Exercise the real management surface.");
+
+      assert.match(toolText(await host.runTool("requirement_list", {})), /Users can authenticate|No requirements/);
+      assert.match(toolText(await host.runTool("plan_get", {})), /Plan "/);
+      assert.match(toolText(await host.runTool("plan_render", {})), /Regenerated \d+ files/);
+      assert.match(toolText(await host.runTool("phase_list", { featureRef: "F001" })), /P001\(F001\)/);
+      assert.match(toolText(await host.runTool("phase_list", { status: "planned" })), /P001\(F001\)/);
+      assert.match(toolText(await host.runTool("phase_list", { status: "done" })), /No phases/);
+      assert.match(toolText(await host.runTool("phase_get", { phaseId: "P001", full: true })), /Auth API phase/);
+      assert.match(toolText(await host.runTool("feature_get", { featureId: "F001", full: true })), /Authentication/);
+      assert.match(toolText(await host.runTool("feature_get", { featureId: "F001" })), /F001/);
+
+      assert.match(toolText(await host.runTool("plan_get_handoff", {})), /no phase handoffs set/);
+      const proposedHandoff = await host.runTool("plan_write_handoff", {
+        phaseRef: "P001",
+        confirmed: false,
+        title: "P001 — public handler compatibility coverage",
+        reason: "Exercise the proposal branch.",
+      });
+      assert.match(toolText(proposedHandoff), /Proposal only/);
+      const writtenHandoff = await host.runTool("plan_write_handoff", {
+        phaseRef: "P001",
+        confirmed: true,
+        title: "P001 — public handler compatibility coverage",
+        reason: "Exercise the deprecated compatibility alias.",
+        whatWasBeingDone: "Validating the public compatibility surface.",
+        howToResume: "Run the adapter integration suite.",
+        extraSections: [
+          { heading: "Files touched", body: "packages/pi-adapter/test/mutations.test.mjs" },
+          { heading: "", body: "This empty heading is intentionally filtered." },
+        ],
+      });
+      assert.match(toolText(writtenHandoff), /plan_write_handoff is deprecated — wrote handoff/);
+      const deprecatedList = await host.runTool("plan_get_handoff", {});
+      assert.match(toolText(deprecatedList), /Phase handoffs \(1\)/);
+      const deletedHandoff = await host.runTool("plan_delete_handoff", { phaseRef: "P001" });
+      assert.match(toolText(deletedHandoff), /plan_delete_handoff is deprecated/);
+
+      assert.match(toolText(await host.runTool("plan_authorize_bypass", { durationMinutes: 1 })), /Guard bypass authorized/);
+      assert.match(toolText(await host.runTool("plan_clear_bypass", {})), /Guard bypass revoked/);
+
+      const createdFeature = await host.runTool("feature_create", {
+        name: "Disposable management feature",
+        description: LONG_DESC,
+      });
+      assert.match(toolText(createdFeature), /Feature created: F002/);
+      const createdPhase = await host.runTool("phase_create", {
+        featureId: "F002",
+        title: "Disposable management phase",
+        description: LONG_DESC,
+      });
+      assert.match(toolText(createdPhase), /Phase created: P002\(F002\)/);
+      const createdTask = await host.runTool("task_create", {
+        featureId: "F001",
+        phaseId: "P001",
+        title: "Disposable management task",
+        description: LONG_DESC,
+      });
+      assert.match(toolText(createdTask), /T002/);
+      const createdRequirement = await host.runTool("requirement_create", {
+        title: "Disposable management requirement",
+        description: "A requirement used to exercise the public deletion handler.",
+        linkedPhaseIds: ["P001"],
+      });
+      const requirementId = toolDetails(createdRequirement).id;
+      assert.ok(requirementId);
+      assert.match(
+        toolText(await host.runTool("task_list", { featureRef: "F001", phaseRef: "P001", status: "planned" })),
+        /T002/,
+      );
+
+      assert.match(toolText(await host.runTool("task_delete", { taskId: "T002" })), /Task deleted: T002/);
+      assert.match(toolText(await host.runTool("requirement_delete", { requirementId })), /Requirement deleted:/);
+      assert.match(toolText(await host.runTool("phase_delete", { phaseId: "P002" })), /Phase deleted: P002/);
+      const cascadePhase = await host.runTool("phase_create", {
+        featureId: "F002",
+        title: "Cascade deletion phase",
+        description: LONG_DESC,
+      });
+      assert.match(toolText(cascadePhase), /Phase created: P003\(F002\)/);
+      assert.match(toolText(await host.runTool("feature_delete", { featureId: "F002", cascade: true })), /cascade: 1 phases/);
+
+      const stopped = await host.runTool("planner-stop", {});
+      assert.match(toolText(stopped), /Planner disabled\. Web UI shut down/);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
   test("plan_repair runs and reports a healthy integrity matrix", async () => {
     const host = await createPiHost({ name: "t242-repair", seed: "minimal" });
     try {

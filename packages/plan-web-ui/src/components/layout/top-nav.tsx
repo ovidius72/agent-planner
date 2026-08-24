@@ -71,7 +71,7 @@ export function TopNav({
         <Link
           to="/"
           title={projectRoot ?? projectName ?? "Agent Plan"}
-          className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-2.5"
+          className="flex min-w-0 shrink items-center gap-2 sm:gap-2.5"
         >
           <div className="surface-card flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--accent)] sm:h-9 sm:w-9">
             <Layers className="h-4 w-4" />

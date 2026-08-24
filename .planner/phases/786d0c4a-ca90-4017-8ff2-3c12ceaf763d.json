@@ -1,0 +1,290 @@
+{
+  "id": "786d0c4a-ca90-4017-8ff2-3c12ceaf763d",
+  "featureId": "bd655486-e048-47ae-b06c-2bed511d89c6",
+  "number": 76,
+  "shortId": "PXESK",
+  "priority": 10,
+  "slug": "ci-contract-alignment-for-next-develop-promotion",
+  "title": "CI contract alignment for next → develop promotion",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Restore green coverage and browser checks by aligning stale assertions with validated planner behavior.",
+  "description": "Stabilize PR #40 (next → develop) without changing validated planner semantics. Current CI failures are stale contracts in packages/plan-core/test/display-status.test.mjs, packages/plan-core/test/phase-task-validation-matrix.test.mjs, packages/plan-core/test/task-selection.test.mjs, packages/plan-server/test/server-crud.test.mjs, and Playwright scenarios under e2e/. Align tests with the normalized paused-task representation (planned/waiting plus pauseSnapshot), .planner/.local/backups storage, supervisor-only Web UI governance exemptions, the compact top navigation with mobile hamburger, and the Active tasks heading. Correct mobile test setup by applying the compact viewport when the browser context is created instead of resizing an already emulated Pixel page, which currently produces a false layout viewport mismatch. Preserve coverage thresholds, real PlanStore/server fixtures, temporary planner roots, dynamic ports, current UI styling, the agent-facing governance gates, and the rule that only the user merges pull requests.",
+  "descriptionUpdatedAt": "2026-08-24T10:35:48.908Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2",
+    "5f9150a9-e574-4821-97d0-081df135f0d9",
+    "59c005c7-92d9-4c44-aa17-2812373bd0ff"
+  ],
+  "tasks": [
+    {
+      "id": "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2",
+      "phaseId": "786d0c4a-ca90-4017-8ff2-3c12ceaf763d",
+      "number": 322,
+      "shortId": "6FGXP",
+      "priority": 1,
+      "shortName": "align-core-server-ci-contracts",
+      "title": "Align core and server tests with normalized runtime contracts",
+      "status": "done",
+      "description": "Update stale test expectations without changing production behavior. In packages/plan-core/test/display-status.test.mjs remove paused as a canonical WorkflowStatus and remove the paused breakdown field; in phase-task-validation-matrix.test.mjs remove paused from accepted TaskStatus values; in task-selection.test.mjs represent resumable work as planned/waiting tasks with pauseSnapshot rather than the removed persisted paused status. In packages/plan-server/test/server-crud.test.mjs assert phase backup cleanup under .planner/.local/backups/phases/<id>.json.bak rather than the legacy inline phases/<id>.json.bak path. Update any directly related English comments/assertion descriptions, then run the targeted files and the complete coverage-gated test command. Preserve current normalized outcomes, PlanStore migrations, agent governance, backup behavior, and coverage thresholds.\n\n---\n**Completion summary:**\nAligned stale tests with the validated normalized runtime contracts. Updated packages/plan-core/test/display-status.test.mjs and packages/plan-core/src/display-status.ts so paused is not a canonical WorkflowStatus or breakdown field; updated phase-task-validation-matrix.test.mjs accepted statuses; represented resumable tasks as planned plus pauseSnapshot in task-selection.test.mjs; and updated packages/plan-server/test/server-crud.test.mjs to assert .planner/.local/backups/phases/<id>.json.bak cleanup. Targeted core/server run passed 68/68. After T324 closed the discovered function-coverage gap, the complete pnpm test:coverage gate passed 434/434 Node tests plus 43/43 Web UI tests at 85.13% lines, 72.81% branches, and 80.11% functions. No production behavior or thresholds changed; changes remain uncommitted on next.",
+      "descriptionUpdatedAt": "2026-08-24T11:13:51.553Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2-check-001-planned-in-progress",
+          "date": "2026-08-24T10:36:12.153Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a6f1c9e1-b399-48fb-83da-9a6f720c8d0c",
+          "date": "2026-08-24T11:05:43.556Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: The aligned contracts now pass 433/433 tests, but the complete final gate exposed a separate 77.50% function-coverage blocker that must be resolved before T322 can satisfy its final checklist item.\nWhat was being done: T322 test contracts were updated and all targeted tests passed; the full pnpm test:coverage run passed every test but failed only the 80% function threshold.\nResume location: packages/plan-core/test/display-status.test.mjs and reports/all/coverage.lcov; T322 checklist C1-C3 are complete and C4 remains open.\nHow to resume: After T324 raises function coverage and passes the final gate, re-read F015/P076/T322, resume T322, rerun or cite the fresh complete gate, check C4, and complete T322."
+        },
+        {
+          "id": "7fb023c2-88fb-4fcd-90fb-bf0c63dbe026",
+          "date": "2026-08-24T11:13:33.580Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from packages/plan-core/test/display-status.test.mjs and reports/all/coverage.lcov; T322 checklist C1-C3 are complete and C4 remains open.. After T324 raises function coverage and passes the final gate, re-read F015/P076/T322, resume T322, rerun or cite the fresh complete gate, check C4, and complete T322."
+        },
+        {
+          "id": "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2-check-004-in-progress-done",
+          "date": "2026-08-24T11:13:51.551Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2-check-001-update-display-status-and-validation-matrix-contracts",
+          "number": 1,
+          "title": "Update display-status and validation-matrix contracts",
+          "checked": true
+        },
+        {
+          "id": "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2-check-002-update-task-selection-resumable-state-fixtures",
+          "number": 2,
+          "title": "Update task-selection resumable-state fixtures",
+          "checked": true
+        },
+        {
+          "id": "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2-check-003-update-server-backup-path-contract",
+          "number": 3,
+          "title": "Update server backup-path contract",
+          "checked": true
+        },
+        {
+          "id": "dc5c97d1-245a-4d64-8ba0-c59adbddc8f2-check-004-run-targeted-tests-and-full-coverage-suite",
+          "number": 4,
+          "title": "Run targeted tests and full coverage suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "be039d6d-31f0-4dab-aa14-78b7f4378bcb",
+          "reason": "The aligned contracts now pass 433/433 tests, but the complete final gate exposed a separate 77.50% function-coverage blocker that must be resolved before T322 can satisfy its final checklist item.",
+          "whatWasBeingDone": "T322 test contracts were updated and all targeted tests passed; the full pnpm test:coverage run passed every test but failed only the 80% function threshold.",
+          "resumeLocation": "packages/plan-core/test/display-status.test.mjs and reports/all/coverage.lcov; T322 checklist C1-C3 are complete and C4 remains open.",
+          "howToResume": "After T324 raises function coverage and passes the final gate, re-read F015/P076/T322, resume T322, rerun or cite the fresh complete gate, check C4, and complete T322.",
+          "relatedTaskId": "59c005c7-92d9-4c44-aa17-2812373bd0ff",
+          "pausedAt": "2026-08-24T11:05:43.556Z",
+          "pausedBy": "pi"
+        }
+      ],
+      "startedAt": "2026-08-24T10:36:12.153Z",
+      "completedAt": "2026-08-24T11:13:51.551Z",
+      "createdAt": "2026-08-24T10:36:02.058Z",
+      "updatedAt": "2026-08-24T11:13:51.551Z"
+    },
+    {
+      "id": "5f9150a9-e574-4821-97d0-081df135f0d9",
+      "phaseId": "786d0c4a-ca90-4017-8ff2-3c12ceaf763d",
+      "number": 323,
+      "shortId": "MSNZE",
+      "priority": 2,
+      "shortName": "align-playwright-ci-contracts",
+      "title": "Align Playwright contracts and mobile viewport setup",
+      "status": "done",
+      "description": "Update browser integration tests to the validated Web UI contracts without restyling production UI. In e2e/responsive.spec.ts and e2e/bootstrap-crud.spec.ts stop expecting the removed Dashboard link and open the compact navigation through the accessible Open menu button before asserting mobile links. In e2e/status-dashboard.spec.ts expect Web UI supervisor status transitions to succeed without motivation and assert the current Active tasks heading. In playwright.config.ts create the mobile-chromium context at the intended 390x480 viewport and remove runtime page.setViewportSize calls that currently make the Pixel emulation layout viewport differ from documentElement.clientWidth, producing a false handoff overflow. Re-run responsive/status/bootstrap specs, investigate any remaining Reset pointer interception against the corrected viewport, and run the complete Playwright suite. Preserve real plan-server fixtures, temporary roots, dynamic ports, current UI layout/styles, and the agent-facing governance gates.\n\n---\n**Completion summary:**\nAligned Playwright contracts with the validated Web UI and stabilized mobile execution. Updated e2e/responsive.spec.ts to stop expecting the removed Dashboard link, exercise the accessible mobile menu, remove runtime viewport resizing, and emit safer overflow diagnostics. Updated e2e/bootstrap-crud.spec.ts to open the hamburger menu before following Features on mobile. Updated e2e/status-dashboard.spec.ts to assert the Active tasks heading and the Web UI supervisor governance exemption, waiting for persisted status writes. Updated playwright.config.ts so mobile-chromium is created directly at 390x480 with touch instead of resizing Pixel emulation. Hardened e2e/fixtures.ts cleanup with bounded rm retries. A corrected viewport exposed a real long-project-name TopNav overflow, so packages/plan-web-ui/src/components/layout/top-nav.tsx now allows the logo link to shrink while retaining its existing truncation and styling. Verification: targeted responsive/bootstrap/status scenarios passed 18/18; full pnpm test:e2e rebuilt all packages and passed 22/22 across desktop and mobile, including Reset interactions and handoff horizontal containment.",
+      "descriptionUpdatedAt": "2026-08-24T11:21:44.761Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "5f9150a9-e574-4821-97d0-081df135f0d9-check-001-planned-in-progress",
+          "date": "2026-08-24T11:14:13.840Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "5f9150a9-e574-4821-97d0-081df135f0d9-check-002-in-progress-done",
+          "date": "2026-08-24T11:21:44.758Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "5f9150a9-e574-4821-97d0-081df135f0d9-check-001-update-responsive-and-bootstrap-navigation-expectations",
+          "number": 1,
+          "title": "Update responsive and bootstrap navigation expectations",
+          "checked": true
+        },
+        {
+          "id": "5f9150a9-e574-4821-97d0-081df135f0d9-check-002-update-supervisor-status-and-active-task-expectations",
+          "number": 2,
+          "title": "Update supervisor status and active-task expectations",
+          "checked": true
+        },
+        {
+          "id": "5f9150a9-e574-4821-97d0-081df135f0d9-check-003-fix-mobile-viewport-setup-at-context-creation",
+          "number": 3,
+          "title": "Fix mobile viewport setup at context creation",
+          "checked": true
+        },
+        {
+          "id": "5f9150a9-e574-4821-97d0-081df135f0d9-check-004-run-targeted-and-complete-playwright-suites",
+          "number": 4,
+          "title": "Run targeted and complete Playwright suites",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T11:14:13.840Z",
+      "completedAt": "2026-08-24T11:21:44.758Z",
+      "createdAt": "2026-08-24T10:36:02.110Z",
+      "updatedAt": "2026-08-24T11:21:44.758Z"
+    },
+    {
+      "id": "59c005c7-92d9-4c44-aa17-2812373bd0ff",
+      "phaseId": "786d0c4a-ca90-4017-8ff2-3c12ceaf763d",
+      "number": 324,
+      "shortId": "CY32A",
+      "priority": 3,
+      "shortName": "raise-public-handler-function",
+      "title": "Raise public-handler function coverage to the 80% gate",
+      "status": "done",
+      "description": "Close the newly measured function-coverage gap without lowering thresholds or changing production behavior. The complete test run is green at 433/433 but reports 999/1289 covered functions (77.50%) against the required 80%, so at least 33 additional functions must be exercised. Add meaningful integration coverage for currently unexercised public handlers and lifecycle branches in packages/pi-adapter/test, packages/plan-mcp/test, and packages/agent-plan/test as needed, using the existing real PlanStore/temp-root harnesses and controlled adapter boundaries. Prefer safe read/list/render/lifecycle and validation scenarios over implementation-only unit mocks. Iterate with package-scoped coverage reports, then run pnpm test:coverage and require lines/functions >=80 and branches >=70. Preserve all current public contracts, coverage configuration, real persistence, deterministic cleanup, and the prohibition on using real consumer .planner directories.\n\n---\n**Completion summary:**\nAdded one real Pi-host integration scenario in packages/pi-adapter/test/mutations.test.mjs covering project language/metadata handlers, plan and entity reads, phase/task filters, deprecated handoff aliases, guard bypass lifecycle, task/requirement/phase/feature deletion (including cascade), and planner-stop against isolated temporary PlanStore fixtures. No production code or coverage threshold was changed. Verification: targeted mutations suite 10/10; unit baseline command passed at 85.01% lines, 72.24% branches, 79.88% functions; complete pnpm test:coverage passed 434/434 Node tests plus 43/43 Web UI tests at 85.13% lines, 72.81% branches, and 80.11% functions. Changes remain uncommitted on next.",
+      "descriptionUpdatedAt": "2026-08-24T11:13:17.756Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "59c005c7-92d9-4c44-aa17-2812373bd0ff-check-001-planned-in-progress",
+          "date": "2026-08-24T11:05:43.556Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Align core and server tests with normalized runtime contracts."
+        },
+        {
+          "id": "59c005c7-92d9-4c44-aa17-2812373bd0ff-check-002-in-progress-done",
+          "date": "2026-08-24T11:13:17.754Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "59c005c7-92d9-4c44-aa17-2812373bd0ff-check-001-measure-uncovered-public-handlers-by-package",
+          "number": 1,
+          "title": "Measure uncovered public handlers by package",
+          "checked": true
+        },
+        {
+          "id": "59c005c7-92d9-4c44-aa17-2812373bd0ff-check-002-add-meaningful-pi-mcp-cli-integration-scenarios",
+          "number": 2,
+          "title": "Add meaningful Pi/MCP/CLI integration scenarios",
+          "checked": true
+        },
+        {
+          "id": "59c005c7-92d9-4c44-aa17-2812373bd0ff-check-003-run-package-scoped-coverage-iterations",
+          "number": 3,
+          "title": "Run package-scoped coverage iterations",
+          "checked": true
+        },
+        {
+          "id": "59c005c7-92d9-4c44-aa17-2812373bd0ff-check-004-pass-the-complete-final-coverage-gate",
+          "number": 4,
+          "title": "Pass the complete final coverage gate",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-24T11:05:43.556Z",
+      "completedAt": "2026-08-24T11:13:17.754Z",
+      "createdAt": "2026-08-24T11:05:27.401Z",
+      "updatedAt": "2026-08-24T11:13:17.754Z"
+    }
+  ],
+  "createdAt": "2026-08-24T10:35:48.908Z",
+  "updatedAt": "2026-08-24T11:21:44.758Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-24T11:17:56.469Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/786d0c4a-ca90-4017-8ff2-3c12ceaf763d-2026-08-24T11-21-44-786Z.md",
+      "clearedAt": "2026-08-24T11:21:44.786Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "e8903747-9373-4860-b2ee-47dc1e15427e",
+      "date": "2026-08-24T10:36:12.173Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "92a395ca-c616-4d6b-8d69-b2e5c30f5c07",
+      "date": "2026-08-24T11:21:44.824Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

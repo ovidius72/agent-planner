@@ -64,7 +64,7 @@ after(async () => {
 const NOW = BASE_TIME;
 const TS = { createdAt: NOW, updatedAt: NOW };
 
-const VALID_STATUSES = ["planned", "in-progress", "paused", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
+const VALID_STATUSES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
 
 function makeTask(overrides = {}) {
   return {
