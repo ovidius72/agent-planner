@@ -267,7 +267,7 @@
       "priority": 4,
       "shortName": "validate-promote",
       "title": "Validate next and prepare stable promotion",
-      "status": "in-progress",
+      "status": "waiting",
       "description": "After T327-T329 complete, run `pnpm test:unit`, the full Playwright E2E suite, `pnpm build`, `pnpm check`, and `git diff --check`; inspect the complete diff and ensure planner artifacts are synchronized. Commit the approved fixes on `next`, run `pnpm release:next`, and verify publish plus CI status. Prepare promotion toward `develop` and then use the documented stable `pnpm release` flow to create a release branch/PR toward main, but never merge a GitHub PR: only the user performs PR merges. Preserve all validation evidence and stop/report if any check is red.",
       "descriptionUpdatedAt": "2026-08-24T15:33:05.188Z",
       "notes": "",
@@ -279,6 +279,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-002-in-progress-waiting",
+          "date": "2026-08-24T15:51:32.063Z",
+          "fromStatus": "in-progress",
+          "toStatus": "waiting",
+          "title": "Validated next prerelease 0.2.22-next.4 is published and PR #41 (next → develop) has green build, coverage, E2E, security, and publish checks. Stable release preparation cannot continue until the user performs the required GitHub PR merge; agents must never merge PRs.",
+          "description": "Validated next prerelease 0.2.22-next.4 is published and PR #41 (next → develop) has green build, coverage, E2E, security, and publish checks. Stable release preparation cannot continue until the user performs the required GitHub PR merge; agents must never merge PRs."
         }
       ],
       "decisions": [],
@@ -300,13 +308,13 @@
           "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-003-commit-and-publish-a-validated-next-prerelease",
           "number": 3,
           "title": "Commit and publish a validated next prerelease",
-          "checked": false
+          "checked": true
         },
         {
           "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-004-verify-github-publish-and-ci-outcomes",
           "number": 4,
           "title": "Verify GitHub publish and CI outcomes",
-          "checked": false
+          "checked": true
         },
         {
           "id": "1a477a6c-4a0b-48fe-ae28-52f91451d8dc-check-005-prepare-develop-stable-release-pr-without-merging-it",
@@ -322,11 +330,11 @@
       "startedAt": "2026-08-24T15:43:06.160Z",
       "completedAt": "",
       "createdAt": "2026-08-24T15:33:05.186Z",
-      "updatedAt": "2026-08-24T15:46:27.629Z"
+      "updatedAt": "2026-08-24T15:51:32.063Z"
     }
   ],
   "createdAt": "2026-08-24T15:32:36.148Z",
-  "updatedAt": "2026-08-24T15:46:27.629Z",
+  "updatedAt": "2026-08-24T15:51:32.063Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffReadAt": "",
