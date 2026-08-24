@@ -1,6 +1,6 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { PlanStore, PhaseSchema, FeatureSchema, createPhaseId, createFeatureId, createTaskId, buildRecap } from "../dist/index.js";
+import { PlanStore, PhaseSchema, FeatureSchema, createPhaseId, createFeatureId, createTaskId, buildRecap, PLANNER_EXTENSION_RULES } from "../dist/index.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,6 +46,17 @@ describe("buildRecap — plan complete", () => {
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
     assert.ok(!r.includes("plan complete"), "empty plan not flagged complete");
     assert.ok(r.includes("no active task"), "empty plan shows no-active focus");
+  });
+});
+
+describe("buildRecap — internal agent rules", () => {
+  test("never exposes planner extension rules in human-facing recaps", async () => {
+    const { store } = await makePlan({ tasks: [{ status: "planned" }] });
+    for (const harness of ["pi", "mcp"]) {
+      const recap = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness });
+      assert.doesNotMatch(recap, /Planner rules \(extension/);
+      assert.ok(!recap.includes(PLANNER_EXTENSION_RULES[0]), `${harness} recap excludes the canonical agent rule`);
+    }
   });
 });
 

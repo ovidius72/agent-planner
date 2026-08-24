@@ -740,10 +740,7 @@ function resolveStaticDir(): string | undefined {
 }
 
 async function maybeStartWeb(ctx: ExtensionContext): Promise<void> {
-  if (server) {
-    plannerSessionEnabled = true;
-    return;
-  }
+  if (server) return;
   ctx.ui.notify("Starting web server (LAN)…", "info");
   try {
     await startServer(ctx, undefined, "lan");
@@ -763,7 +760,6 @@ function normalizeVisibility(input: string | undefined): "local" | "lan" | undef
 }
 
 async function startServer(ctx: ExtensionContext, requestedPort?: number, visibility: "local" | "lan" = "lan"): Promise<void> {
-  plannerSessionEnabled = true;
   if (server) return;
   const host = visibility === "lan" ? "0.0.0.0" : "127.0.0.1";
   const port = await pickProjectPort(ctx, requestedPort);
@@ -826,6 +822,11 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
       }
     } catch {}
   }
+}
+
+function enablePlannerSession(): void {
+  plannerSessionEnabled = true;
+  contextBlockDirty = true;
 }
 
 function disablePlannerSession(): void {
@@ -1238,6 +1239,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.writeGenerated();
         await scanCodebase();
         ctx.ui.notify(`.planner/ initialized for "${name.trim()}". Starting project discuss…`, "info");
+        enablePlannerSession();
         await maybeStartWeb(ctx);
         await handlePlanner("project discuss", ctx);
         return;
@@ -1252,6 +1254,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.writeGenerated();
       await scanCodebase();
       ctx.ui.notify(`.planner/ initialized for "${name.trim()}". Starting project discuss…`, "info");
+      enablePlannerSession();
       await maybeStartWeb(ctx);
       await handlePlanner("project discuss", ctx);
       return;
@@ -2475,7 +2478,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
 
     if (a === "load") {
-      plannerSessionEnabled = true;
+      enablePlannerSession();
       if (!server) {
         ctx.ui.notify("Starting web server (LAN) …", "info");
         await startServer(ctx, undefined, "lan").catch(() => {});
@@ -4583,7 +4586,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { enabled: false, running: false } };
-      plannerSessionEnabled = true;
+      enablePlannerSession();
       if (!server) {
         await startServer(ctx, undefined, "lan").catch(() => {});
       }
@@ -4652,6 +4655,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const activity = await st.loadActivityLog();
       const recentActivity = activity.entries.slice(-3).reverse();
       const handoffs = await st.listHandoffs();
+      const extensionRules = await st.extensionRules();
 
       const featureById = new Map(plan.features.features.map((feature) => [feature.id, feature]));
       const phaseById = new Map(plan.phases.map((phase) => [phase.id, phase]));
@@ -4774,6 +4778,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
         "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Prefer shortId or F00x/P00x/T00x refs. Find via feature_list / phase_list / task_list; read one entity via *_get(full=true).",
         "- If edit/write guard blocks you, start the right task or use an explicit bypass.",
+        ...(extensionRules.length > 0
+          ? [
+            "",
+            "Planner rules (extension; agent-only):",
+            ...extensionRules.map((rule, index) => `${index + 1}. ${rule}`),
+          ]
+          : []),
         "",
         `Goal: ${project.goal || "(not set)"}`,
         project.description ? `Description: ${project.description}` : "",

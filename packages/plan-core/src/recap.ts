@@ -146,19 +146,6 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     lines.push(`${italian ? "Focus corrente" : "Current focus"}: ${italian ? "nessun task attivo — rivedi il piano e scegli il prossimo task concreto" : "no active task — review the plan and pick the next concrete task"}`);
   }
 
-  // Planner extension rules — the agent-behavior contract for every project
-  // using the extension. Static (no timestamps), loaded from .planner/rules.json
-  // or the canonical code set. Kept out of project.json so it never diverges
-  // across worktrees/branches.
-  const extensionRules = await st.extensionRules();
-  if (extensionRules.length > 0) {
-    lines.push(
-      "",
-      italian ? "## Regole del planner (estensione)" : "## Planner rules (extension)",
-    );
-    extensionRules.forEach((rule, i) => lines.push(`${i + 1}. ${rule}`));
-  }
-
   // Next step: the phase handoff (phase.handoff) is the authoritative,
   // actively-managed resume context. When a handoff is pending, point to it
   // instead of surfacing potentially-stale resume.json nextSteps. When no

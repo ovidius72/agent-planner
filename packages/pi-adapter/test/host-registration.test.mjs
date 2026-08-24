@@ -333,6 +333,8 @@ describe("pi-adapter host harness", () => {
       const recapContent = trigger.message.content;
       assert.match(recapContent, /## Planner recap/);
       assert.match(recapContent, /Progress: Features/);
+      assert.doesNotMatch(recapContent, /Planner rules \(extension/);
+      assert.doesNotMatch(recapContent, /Keep the planner as the single operational source of truth/);
       const urlMatch = recapContent.match(/Web UI: (http:\/\/127\.0\.0\.1:[0-9]+)/);
       assert.ok(urlMatch, "recap carries the real web UI URL");
 
@@ -359,6 +361,8 @@ describe("pi-adapter host harness", () => {
       assert.ok(before && typeof before.systemPrompt === "string");
       assert.match(before.systemPrompt, /base-system-prompt/);
       assert.match(before.systemPrompt, /Agent Plan|planner|F001/);
+      assert.match(before.systemPrompt, /Planner rules \(extension; agent-only\):/);
+      assert.match(before.systemPrompt, /Keep the planner as the single operational source of truth/);
 
       const end = await host.emit("message_end", {
         type: "message_end",

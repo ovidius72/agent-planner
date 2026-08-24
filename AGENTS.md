@@ -2,7 +2,7 @@
 
 Questo file definisce le regole di **sviluppo** dell'estensione Agent Plan (il prodotto): agenti Pi, Claude Code, Codex o contributor umani che lavorano SUL codice di agent-plan.
 
-Le **regole di comportamento del planner** (valide in *ogni* progetto che usa l'estensione: Pi, MCP / Claude Code / Codex, futuri harness) NON vivono qui. Sono caricate dal planner all'avvio da `.planner/rules.json` (o dal set canonico in `packages/plan-core/src/planner-rules.ts`) e mostrate nel recap. Sono statiche (nessun timestamp) così non divergono tra worktree/branch. AGENTS.md non deve duplicarle.
+Le **regole di comportamento del planner** (valide in *ogni* progetto che usa l'estensione: Pi, MCP / Claude Code / Codex, futuri harness) NON vivono qui. Sono caricate dal planner da `.planner/rules.json` (o dal set canonico in `packages/plan-core/src/planner-rules.ts`) e iniettate esclusivamente nel contesto interno dell'agente; non devono apparire nei recap o in altri output destinati all'utente. Sono statiche (nessun timestamp) così non divergono tra worktree/branch. AGENTS.md non deve duplicarle.
 
 Questo documento è un file di governance indipendente del planner. Viene modificato solo su esplicita richiesta dell'utente e non è tracciato come entità planner (`feature`/`phase`/`task`).
 
@@ -87,6 +87,10 @@ Regole:
 - non usare workflow GSD
 - non reinterpretare comandi `/planner * discuss` come workflow GSD
 - usare esclusivamente il modello dati `.planner/`, i tool del planner e le regole di Agent Plan
+
+### 16. Source code language
+
+All text written in source code must be in English. This includes identifiers, comments, documentation strings, test names, assertion messages, errors, logs, technical UI copy, configuration text, and generated developer-facing text. Never add Italian phrases to source code.
 
 ## Comportamento atteso dagli agenti
 

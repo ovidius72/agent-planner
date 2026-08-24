@@ -41,10 +41,20 @@
     "b381740f-9b2a-4cde-b150-875ad182fa86",
     "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
     "1ba31e0f-5ba3-4eba-9b6b-88f795ae499d",
-    "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2"
+    "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+    "cd3fd548-a183-448c-9a87-cf804bcdb075"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "ab1171eb-c1dc-44fc-9149-1832a4b14fbc",
+      "date": "2026-08-24T08:50:35.567Z",
+      "fromStatus": "planned",
+      "toStatus": "done",
+      "title": "planned → done",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z"
 }

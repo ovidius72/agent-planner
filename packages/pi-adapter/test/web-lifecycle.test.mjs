@@ -51,6 +51,35 @@ describe("pi-adapter web lifecycle", () => {
     }
   });
 
+  test("planner-web start from a disabled session starts only the Web UI", async () => {
+    const host = await createPiHost({ name: "t321-web-only-start", seed: "minimal" });
+    try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
+      assert.equal(await injectedPrompt(host), undefined, "planner context is disabled at startup");
+
+      const started = await host.runTool("planner-web", { action: "start", visibility: "local" });
+      assert.equal(toolDetails(started).running, true, "Web UI starts independently");
+      assert.equal(await injectedPrompt(host), undefined, "Web UI startup does not enable planner context");
+      assert.equal(
+        host.sentMessages.filter((message) => message.message.customType === "planner-resume-trigger").length,
+        0,
+        "Web UI startup does not emit a planner recap",
+      );
+
+      const loaded = await host.runTool("planner-load", {});
+      assert.equal(toolDetails(loaded).enabled, true, "explicit planner-load enables the planner");
+      assert.match(toolText(loaded), /## Planner recap/);
+      assert.match(await injectedPrompt(host), /\[Plan Context/);
+      assert.equal(
+        host.sentMessages.filter((message) => message.message.customType === "planner-resume-trigger").length,
+        0,
+        "tool-based planner load returns the recap directly without a hidden trigger turn",
+      );
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
   test("load enables, stop and its `disable` alias halt, unknown subcommand warns", async () => {
     const host = await createPiHost({ name: "t241-aliases", seed: "minimal" });
     try {
