@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   contextReadEligibility,
+  contextReadEligibilityForSession,
   hasReadParents,
   hasReadRequirements,
   invalidateReads,
@@ -16,8 +17,12 @@ import {
   markPhaseRead,
   markRequirementRead,
   markTaskRead,
+  markFeatureReadForSessionId,
+  markPhaseReadForSessionId,
+  markTaskReadForSessionId,
   readTrackingSnapshot,
   requirementReadAdvisory,
+  startReadSession,
 } from "../dist/index.js";
 
 const eligible = () => contextReadEligibility("T1", "P1", "F1");
@@ -89,4 +94,36 @@ test("requirements remain an independent explicit-read gate", () => {
   markRequirementRead("R1");
   assert.equal(hasReadRequirements(["R1"]), true);
   assert.equal(requirementReadAdvisory(["R1"]), "");
+});
+
+test("explicit sessions remain isolated", () => {
+  invalidateReads();
+  startReadSession("session-a");
+  markTaskReadForSessionId("session-a", "T1");
+  markPhaseReadForSessionId("session-a", "P1");
+  markFeatureReadForSessionId("session-a", "F1");
+  assert.deepEqual(contextReadEligibilityForSession({ sessionId: "session-a", taskId: "T1", phaseId: "P1", featureId: "F1" }), { eligible: true, reason: "" });
+  assert.deepEqual(contextReadEligibilityForSession({ sessionId: "session-b", taskId: "T1", phaseId: "P1", featureId: "F1" }), { eligible: false, reason: "Read this exact task with full=true first." });
+});
+
+test("a fresh ordered reread supersedes a stale persisted attestation", () => {
+  invalidateReads();
+  markTaskReadForSessionId("session-a", "T1");
+  markPhaseReadForSessionId("session-a", "P1");
+  markFeatureReadForSessionId("session-a", "F1");
+  const stale = {
+    updatedAt: "2026-01-03T00:00:00.000Z",
+    sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-02T00:00:00.000Z" }],
+  };
+  assert.deepEqual(contextReadEligibilityForSession({ sessionId: "session-a", taskId: "T1", phaseId: "P1", featureId: "F1", task: stale, phase: stale, feature: stale }), { eligible: true, reason: "" });
+});
+
+test("persisted session attestations remain valid until an entity changes", () => {
+  invalidateReads();
+  const entities = {
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-02T00:00:00.000Z" }],
+  };
+  assert.deepEqual(contextReadEligibilityForSession({ sessionId: "session-a", taskId: "T1", phaseId: "P1", featureId: "F1", task: entities, phase: entities, feature: entities }), { eligible: true, reason: "" });
+  assert.deepEqual(contextReadEligibilityForSession({ sessionId: "session-a", taskId: "T1", phaseId: "P1", featureId: "F1", task: { ...entities, updatedAt: "2026-01-03T00:00:00.000Z" }, phase: entities, feature: entities }), { eligible: false, reason: "Context changed since the last session read; reread the exact task, phase, feature, and linked requirements." });
 });

@@ -234,15 +234,35 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     // blocked is not startable → reopen to planned (motivation required) first
     await callTool(session, "planner-task-update", { task: "T002", status: "planned", motivation: "Provider contract signed; resume work." });
 
-    // Lifecycle work is rejected without the ordered full-read sequence.
-    const deniedWithoutReads = await callTool(session, "planner-task-start", { task: "T002" });
-    assert.match(toolText(deniedWithoutReads), /context reads required.*exact task/i);
+    // Generic updates cannot bypass the dedicated completion path.
+    const directDone = await callTool(session, "planner-task-update", { task: "T002", status: "done" });
+    assert.match(toolText(directDone), /completion transitions require planner-task-complete/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
 
-    // lifecycle: start (T002 is the only ready task) → complete → reopen needs motivation
-    await readTaskContext(session, "T002");
+    // Lifecycle work is rejected without the ordered full-read sequence.
+    const deniedWithoutReads = await callTool(session, "planner-task-start", { task: "T002" });
+    assert.equal(deniedWithoutReads.isError, true);
+    assert.equal(toolStructured(deniedWithoutReads).started, false);
+    assert.equal(toolStructured(deniedWithoutReads).errorCode, "CONTEXT_READ_REQUIRED");
+    assert.match(toolText(deniedWithoutReads), /TASK START FAILED.*started: false/s);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
+
+    await callTool(session, "planner-task-show", { task: "T002", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    const deniedWithoutRequirements = await callTool(session, "planner-task-start", { task: "T002" });
+    assert.equal(deniedWithoutRequirements.isError, true);
+    assert.equal(toolStructured(deniedWithoutRequirements).errorCode, "REQUIREMENTS_READ_REQUIRED");
+    assert.deepEqual(toolStructured(deniedWithoutRequirements).nextActions, ["planner-requirement-list", "Retry planner-task-start P001(F001)/T002"]);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
+
+    // lifecycle: requirement read + retry succeeds with a verified postcondition.
+    await callTool(session, "planner-requirement-list", {});
     const started = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(started), /Task started: P001\(F001\)\/T002/);
+    assert.equal(started.isError, undefined);
+    assert.equal(toolStructured(started).started, true);
+    assert.equal(toolStructured(started).status, "in-progress");
     const paused = await callTool(session, "planner-task-pause", {
       task: "T002", reason: "Temporary review interruption", what_was_being_done: "Validating the provider contract",
       resume_location: "src/provider.ts:20", how_to_resume: "Continue validation and rerun provider tests", paused_by: "mcp-test",
@@ -251,7 +271,10 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
     await readTaskContext(session, "T002");
     assert.match(toolText(await callTool(session, "planner-task-start", { task: "T002" })), /Task started/);
-    const done = await callTool(session, "planner-task-complete", { task: "T002", force: true });
+    const missingEvidence = await callTool(session, "planner-task-complete", { task: "T002", force: true }, { expectError: true });
+    assert.match(toolText(missingEvidence), /description_update/);
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "in-progress");
+    const done = await callTool(session, "planner-task-complete", { task: "T002", force: true, description_update: "Created task completed and verified through MCP CRUD coverage." });
     assert.match(toolText(done), /\(done\)/);
     const doneTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(doneTask.status, "done");
@@ -371,9 +394,15 @@ test("priority is overridable but active task switches require a snapshot and de
 
     await readTaskContext(session, "T001");
     const denied = await callTool(session, "planner-task-start", { task: "T001" });
-    assert.match(toolText(denied), /Task start denied.*planner-task-switch/i);
+    assert.equal(denied.isError, true);
+    assert.equal(toolStructured(denied).started, false);
+    assert.equal(toolStructured(denied).errorCode, "ACTIVE_TASK_CONFLICT");
+    assert.match(toolText(denied), /TASK START FAILED.*planner-task-switch/is);
 
-    await readTaskContext(session, "T001");
+    // The attestation created by the denied start is reusable without rereading parents.
+    const deniedAgain = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(deniedAgain).errorCode, "ACTIVE_TASK_CONFLICT");
+
     const switched = await callTool(session, "planner-task-switch", {
       from_task: "T002", to_task: "T001", reason: "Seed task must unblock temporary implementation",
       what_was_being_done: "Editing the lower-priority implementation", resume_location: "src/task-start.ts:20",
@@ -384,7 +413,7 @@ test("priority is overridable but active task switches require a snapshot and de
     assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
     assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
-    const done = await callTool(session, "planner-task-complete", { task: "T001", force: true });
+    const done = await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Temporary task completed and verified through MCP switch coverage." });
     assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
     assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 
@@ -404,7 +433,7 @@ test("priority is overridable but active task switches require a snapshot and de
     let project = await session.store.loadProject();
     assert.equal(project.workDeviations.at(-1).state, "resume-required");
 
-    await callTool(session, "planner-task-complete", { task: "T003", force: true });
+    await callTool(session, "planner-task-complete", { task: "T003", force: true, description_update: "Second temporary task completed and verified." });
     await readTaskContext(session, "T002");
     const resumed = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(resumed), /Task started/);
@@ -414,7 +443,7 @@ test("priority is overridable but active task switches require a snapshot and de
     project = await session.store.loadProject();
     assert.equal(project.workDeviations.at(-1).state, "resumed");
 
-    const finishedResumeTarget = await callTool(session, "planner-task-complete", { task: "T002", force: true });
+    const finishedResumeTarget = await callTool(session, "planner-task-complete", { task: "T002", force: true, description_update: "Resume target completed and verified." });
     assert.doesNotMatch(toolText(finishedResumeTarget), /RESUME REQUIRED:/);
     project = await session.store.loadProject();
     assert.equal(project.workDeviations.length, 0);

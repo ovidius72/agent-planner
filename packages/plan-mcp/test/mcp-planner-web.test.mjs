@@ -32,6 +32,40 @@ after(async () => {
 
 const LONG_DESCRIPTION = "src/harness.ts:10 existing state and the concrete goal for this harness validation entity; include file refs and behaviors to preserve so the description clears the 50-char minimum.";
 
+function canonicalHandoff(title, detail) {
+  return [
+    `# ${title}`,
+    "",
+    "Created at: 2026-08-24T00:00:00.000Z",
+    "Updated at: 2026-08-24T00:00:00.000Z",
+    "Reason: planner web fixture",
+    "",
+    "## Current focus", detail,
+    "## What was being done", detail,
+    "## How to resume", "Continue the fixture.",
+    "## Files touched", "- mcp-planner-web.test.mjs",
+    "## Blockers", "- None",
+    "## Next steps", "- Continue",
+    "## Recent decisions", "- Preserve durable context",
+  ].join("\n");
+}
+
+async function writePreparedHandoff(session, phaseRef, title, content) {
+  const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef });
+  const audit = toolStructured(prepared);
+  return callTool(session, "planner-handoff-write", {
+    phaseRef,
+    title,
+    content: canonicalHandoff(title, content),
+    confirmed: true,
+    expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
+    reconciledExistingHandoff: true,
+    taskUpdates: [],
+    phaseNoUpdateReason: "Fixture does not change durable phase context.",
+    featureNoUpdateReason: "Fixture does not change durable feature context.",
+  });
+}
+
 // Helper to wait briefly for server startup
 const waitForServer = async (ms = 100) => {
   await new Promise(resolve => setTimeout(resolve, ms));
@@ -164,7 +198,7 @@ test("planner repair archive counts", async () => {
     // only arrive from disk (legacy state / manual edits) — inject it directly
     // into the completed seed phase's JSON, exactly the state repair is for.
     await callTool(session, "planner-task-start", { task: "T001" });
-    await callTool(session, "planner-task-complete", { task: "T001", force: true });
+    await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified before stale handoff repair." });
     const allPhases = await session.store.loadAllPhases();
     const seedPhase = allPhases.find((p) => p.number === 1);
     assert.ok(seedPhase, "seed phase P001 must exist");
@@ -207,7 +241,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
     await callTool(session, "planner-requirement-list", {});
     await callTool(session, "planner-task-start", { task: "T001" });
-    await callTool(session, "planner-task-complete", { task: "T001", force: true });
+    await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified before rollup coverage." });
 
     // Create a feature, phase, and two tasks
     await callTool(session, "planner-feature-add", {
@@ -247,7 +281,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-feature-show", { feature: "F002", full: true });
     await callTool(session, "planner-requirement-list", {});
     await callTool(session, "planner-task-start", { task: "T002" });
-    await callTool(session, "planner-task-complete", { task: "T002", force: true });
+    await callTool(session, "planner-task-complete", { task: "T002", force: true, description_update: "First rollup task completed and verified." });
     const pageShowAfter = await callTool(session, "planner-phase-show", { phase: "P002" });
     assert.match(toolText(pageShowAfter), /\(in-progress; 2 tasks\)/);
 
@@ -263,7 +297,7 @@ test("task completion rollup and active-task summaries", async () => {
     assert.match(recapText, /T03 — Task 2 \(in-progress\)/);
 
     // Complete it → all tasks done, phase derived done
-    await callTool(session, "planner-task-complete", { task: "T003", force: true });
+    await callTool(session, "planner-task-complete", { task: "T003", force: true, description_update: "Second rollup task completed and verified." });
     const pageShowDone = await callTool(session, "planner-phase-show", { phase: "P002" });
     assert.match(toolText(pageShowDone), /\(done; 2 tasks\)/);
   } finally {
@@ -276,11 +310,7 @@ test("recap context and generated/export operations", async () => {
   try {
     // Write resume context before load. Loading it must remain read-only:
     // neither show nor clear is implicitly called by the MCP tool.
-    await callTool(session, "planner-handoff-write", {
-      phaseRef: "P001",
-      content: "# P001 — recap retention\n\nKeep this until an allowed lifecycle event.",
-      confirmed: true,
-    });
+    await writePreparedHandoff(session, "P001", "P001 — recap retention", "# P001 — recap retention\n\nKeep this until an allowed lifecycle event.");
     const phaseBeforeLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
     assert.ok(phaseBeforeLoad?.handoff, "fixture has a pending handoff before planner-load");
 
@@ -428,13 +458,8 @@ test("consistent status/handoff results after reopening MCP server", async () =>
     assert.match(toolText(handoffShow), /^No handoff set/);
     
     // Set a handoff
-    const handoffWrite = await callTool(session, "planner-handoff-write", {
-      phaseRef: "P002",
-      title: "Consistency Handoff",
-      content: "# Consistency Handoff\nTesting consistency.",
-      confirmed: true,
-    });
-    assert.match(toolText(handoffWrite), /Wrote handoff/);
+    const handoffWrite = await writePreparedHandoff(session, "P002", "Consistency Handoff", "# Consistency Handoff\nTesting consistency.");
+    assert.match(toolText(handoffWrite), /Reconciled handoff and durable context/);
     
     // Show handoff - should show our content
     handoffShow = await callTool(session, "planner-handoff-show", { phaseRef: "P002" });

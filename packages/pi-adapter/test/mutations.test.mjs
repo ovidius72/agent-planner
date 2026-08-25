@@ -37,6 +37,35 @@ async function readTaskContext(host, taskId, phaseId = "P001", featureId = "F001
   await host.runTool("requirement_list", {});
 }
 
+function canonicalHandoff(title, detail) {
+  return [
+    `# ${title}`,
+    "",
+    "Created at: 2026-08-24T00:00:00.000Z",
+    "Updated at: 2026-08-24T00:00:00.000Z",
+    "Reason: mutation fixture",
+    "",
+    "## Current focus", detail,
+    "## What was being done", detail,
+    "## How to resume", "Continue the fixture.",
+    "## Files touched", "- mutations.test.mjs",
+    "## Blockers", "- None",
+    "## Next steps", "- Continue",
+    "## Recent decisions", "- Preserve durable context",
+  ].join("\n");
+}
+
+async function preparedHandoffArgs(host, phaseRef = "P001") {
+  const prepared = await host.runTool("handoff_prepare", { phaseRef });
+  return {
+    expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
+    reconciledExistingHandoff: true,
+    taskUpdates: [],
+    phaseNoUpdateReason: "Fixture does not change durable phase context.",
+    featureNoUpdateReason: "Fixture does not change durable feature context.",
+  };
+}
+
 describe("pi-adapter mutations, validation, requirements, handoffs", () => {
   test("creation round-trip: feature → phase → task → requirement with composite IDs", async () => {
     const host = await createPiHost({ name: "t242-create", seed: "minimal" });
@@ -191,22 +220,44 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
   test("lifecycle + rollup: start, complete gate, force-complete rolls phase and feature to done", async () => {
     const host = await createPiHost({ name: "t242-lifecycle", seed: "minimal" });
     try {
+      // Generic updates cannot bypass the dedicated completion path or its evidence requirement.
+      const directDone = await host.runTool("task_update", { taskId: "T001", status: "done" });
+      assert.match(toolText(directDone), /completion transitions require task_complete/);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
+
       // A lifecycle start must not mutate before the exact full-read sequence.
       const deniedWithoutReads = await host.runTool("task_start", { taskId: "T001" });
-      assert.match(toolText(deniedWithoutReads), /context reads required.*exact task/i);
+      assert.equal(deniedWithoutReads.isError, true);
+      assert.equal(toolDetails(deniedWithoutReads).started, false);
+      assert.equal(toolDetails(deniedWithoutReads).errorCode, "CONTEXT_READ_REQUIRED");
+      assert.match(toolText(deniedWithoutReads), /TASK START FAILED.*started: false/s);
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
       await host.runTool("task_get", { taskId: "T001" });
       await host.runTool("phase_get", { phaseId: "P001" });
       await host.runTool("feature_get", { featureId: "F001" });
       const deniedAfterCompactReads = await host.runTool("task_start", { taskId: "T001" });
-      assert.match(toolText(deniedAfterCompactReads), /context reads required.*exact task/i);
+      assert.equal(deniedAfterCompactReads.isError, true);
+      assert.equal(toolDetails(deniedAfterCompactReads).errorCode, "CONTEXT_READ_REQUIRED");
 
-      // Start — response carries the composite ref via the phase context block.
-      await readTaskContext(host, "T001");
+      // Full hierarchy reads without requirements still produce a typed denial.
+      await host.runTool("task_get", { taskId: "T001", full: true });
+      await host.runTool("phase_get", { phaseId: "P001", full: true });
+      await host.runTool("feature_get", { featureId: "F001", full: true });
+      const deniedWithoutRequirements = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(deniedWithoutRequirements.isError, true);
+      assert.equal(toolDetails(deniedWithoutRequirements).started, false);
+      assert.equal(toolDetails(deniedWithoutRequirements).errorCode, "REQUIREMENTS_READ_REQUIRED");
+      assert.deepEqual(toolDetails(deniedWithoutRequirements).nextActions, ["requirement_list", "Retry task_start P001(F001)/T001"]);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
+
+      // Start — response carries the composite ref only after requirements are read.
+      await host.runTool("requirement_list", {});
       const started = await host.runTool("task_start", { taskId: "T001" });
       assert.match(toolText(started), /✅ Task started:/);
       assert.match(toolText(started), /P001\(F001\)/);
       assert.match(toolText(started), /Implement login/);
+      assert.equal(toolDetails(started).started, true);
+      assert.equal(toolDetails(started).status, "in-progress");
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress");
 
       const paused = await host.runTool("task_pause", {
@@ -218,8 +269,12 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       await readTaskContext(host, "T001");
       assert.match(toolText(await host.runTool("task_start", { taskId: "T001" })), /Task started/);
 
+      const missingEvidence = await host.runTool("task_complete", { taskId: "T001", force: true });
+      assert.match(toolText(missingEvidence), /durable completion and verification evidence/);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress");
+
       // Complete without force is gated by the unchecked checklist item.
-      const gated = await host.runTool("task_complete", { taskId: "T001" });
+      const gated = await host.runTool("task_complete", { taskId: "T001", description_update: "Fixture completion evidence is present." });
       assert.match(toolText(gated), /checklist item\(s\) not done/);
       assert.equal(toolDetails(gated).uncheckedChecklistItems.length, 1);
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress");
@@ -257,9 +312,15 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
 
       await readTaskContext(host, "T001");
       const denied = await host.runTool("task_start", { taskId: "T001" });
-      assert.match(toolText(denied), /Task start denied.*task_switch/i);
+      assert.equal(denied.isError, true);
+      assert.equal(toolDetails(denied).started, false);
+      assert.equal(toolDetails(denied).errorCode, "ACTIVE_TASK_CONFLICT");
+      assert.match(toolText(denied), /TASK START FAILED.*task_switch/is);
 
-      await readTaskContext(host, "T001");
+      // The attestation created by the denied start is reusable without rereading parents.
+      const deniedAgain = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(deniedAgain).errorCode, "ACTIVE_TASK_CONFLICT");
+
       const switched = await host.runTool("task_switch", {
         from_task: "T002", to_task: "T001", reason: "Seed task must unblock the temporary implementation",
         what_was_being_done: "Editing the lower-priority implementation", resume_location: "src/task-start.ts:20",
@@ -270,7 +331,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
       assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
-      const done = await host.runTool("task_complete", { taskId: "T001", force: true });
+      const done = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Temporary task completed and verified." });
       assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
       assert.equal((await host.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 
@@ -289,7 +350,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       let project = await host.store.loadProject();
       assert.equal(project.workDeviations.at(-1).state, "resume-required");
 
-      await host.runTool("task_complete", { taskId: "T003", force: true });
+      await host.runTool("task_complete", { taskId: "T003", force: true, description_update: "Second temporary task completed and verified." });
       await readTaskContext(host, "T002");
       const resumed = await host.runTool("task_start", { taskId: "T002" });
       assert.match(toolText(resumed), /Task started/);
@@ -299,7 +360,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       project = await host.store.loadProject();
       assert.equal(project.workDeviations.at(-1).state, "resumed");
 
-      const finishedResumeTarget = await host.runTool("task_complete", { taskId: "T002", force: true });
+      const finishedResumeTarget = await host.runTool("task_complete", { taskId: "T002", force: true, description_update: "Resume target completed and verified." });
       assert.doesNotMatch(toolText(finishedResumeTarget), /RESUME REQUIRED:/);
       project = await host.store.loadProject();
       assert.equal(project.workDeviations.length, 0);
@@ -383,10 +444,11 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const written = await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — Auth API phase: fixture handoff",
-        content: "Body of the handoff.",
+        content: canonicalHandoff("P001 — Auth API phase: fixture handoff", "Body of the handoff."),
         confirmed: true,
+        ...(await preparedHandoffArgs(host)),
       });
-      assert.match(toolText(written), /✅ Wrote handoff on P001\(F001\)/);
+      assert.match(toolText(written), /✅ Reconciled handoff and durable context on P001\(F001\)/);
       assert.match((await phase()).handoff, /^# P001 — Auth API phase: fixture handoff/);
 
       // List + show round-trip.
@@ -406,12 +468,13 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.ok(archived.length > 0, "archived handoff file exists");
 
       // Terminal phase (done) rejects new handoffs; the phase stays clean.
-      await host.runTool("task_complete", { taskId: "T001", force: true });
+      await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Fixture completed and verified through the adapter mutation test." });
       assert.equal((await phase()).status, "done");
-      await assert.rejects(
-        host.runTool("handoff_write", { phaseRef: "P001", title: "P001 — late handoff", content: "x", confirmed: true }),
-        /Cannot write a handoff on done phase/,
-      );
+      const late = await host.runTool("handoff_write", {
+        phaseRef: "P001", title: "P001 — late handoff", content: canonicalHandoff("P001 — late handoff", "Late handoff."), confirmed: true,
+        ...(await preparedHandoffArgs(host)),
+      });
+      assert.match(toolText(late), /Cannot write a handoff on done phase/);
       assert.equal((await phase()).handoff, "");
     } finally {
       await closePiHost(host);
@@ -507,9 +570,10 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
           { heading: "", body: "This empty heading is intentionally filtered." },
         ],
       });
-      assert.match(toolText(writtenHandoff), /plan_write_handoff is deprecated — wrote handoff/);
+      assert.match(toolText(writtenHandoff), /deprecated and write-disabled/);
+      assert.equal(toolDetails(writtenHandoff).writeDisabled, true);
       const deprecatedList = await host.runTool("plan_get_handoff", {});
-      assert.match(toolText(deprecatedList), /Phase handoffs \(1\)/);
+      assert.match(toolText(deprecatedList), /no phase handoffs set/);
       const deletedHandoff = await host.runTool("plan_delete_handoff", { phaseRef: "P001" });
       assert.match(toolText(deletedHandoff), /plan_delete_handoff is deprecated/);
 

@@ -1,0 +1,296 @@
+{
+  "id": "d7c3ad4b-8473-4985-9c0a-aff650635de0",
+  "featureId": "2f99bd64-b58c-4635-963e-31b45f0ccff6",
+  "number": 80,
+  "shortId": "B5QEK",
+  "priority": 1,
+  "slug": "enforce-durable-handoff-and-lifecycle-evidence",
+  "title": "Enforce durable handoff and lifecycle evidence",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Reconcile one active handoff with durable entity updates and make denied task starts impossible to mistake for success.",
+  "description": "Implement the approved workflow across `packages/plan-core/src/plan-store.ts`, a new core handoff refresh/audit helper, `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and `packages/agent-plan/src/index.ts`. Current handoff preparation is prompt-only, handoff refresh archives each previous body, completion evidence is optional, and start precondition denial is returned as ordinary success. Add an exact-phase prepare audit exposing the current handoff/version and missing completion context; atomically validate and apply structured task/phase/feature context updates with the reconciled handoff; keep `setPhaseHandoff()` compatible while built-in adapters use a new refresh API; archive only on manual clear or completed phase. Make agent task completion require durable evidence and reject generic agent transitions to done. Preserve explicit linked-requirement reads but return typed start failures (`started:false`, stable error code, exact retry sequence) and only report success after persisted in-progress verification. Add Pi/MCP/core regression tests and keep Web UI behavior unchanged unless canonical lifecycle consistency requires a dedicated completion path.",
+  "descriptionUpdatedAt": "2026-08-25T09:36:11.445Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "10a32e65-291f-4140-b967-79f40bd9b6da",
+      "title": "One reconciled active handoff with durable entity synchronization",
+      "decision": "Preparing and writing a handoff must audit and update durable task, phase, and feature context in the same workflow. If an active handoff already exists, the agent must reconcile and retain still-relevant information in one refreshed handoff rather than blindly replacing it or creating a superseded archive for every refresh.",
+      "rationale": "A handoff alone cannot compensate for completed tasks with empty summaries or stale parent context, and accumulating superseded handoffs makes the continuation source ambiguous. One current reconciled handoff plus durable entity state gives a resumer both immediate and long-lived context.",
+      "implementationNotes": "Add an exact-phase prepare audit with current handoff/version and missing-context findings; add structured entity updates and optimistic concurrency to built-in handoff write; preserve `PlanStore.setPhaseHandoff()` compatibility through a new refresh API; archive only on manual clear or phase completion.",
+      "acceptedAt": "2026-08-25T09:36:40.454Z"
+    },
+    {
+      "id": "5cf1783b-6771-42ba-a38c-82165fbaa611",
+      "title": "Denied task starts are typed failures, not apparent successes",
+      "decision": "Keep the ordered full-context and explicit linked-requirement read gates, but any denied task_start must return started=false with a stable error code and exact retry actions through the harness failure channel where supported. A success response may report started=true only after persisted in-progress state is verified.",
+      "rationale": "T326 made required reads enforceable but returned denials as ordinary tool results, allowing agents to claim a task started while it remained planned. The gate is valuable; the ambiguous outcome is the regression.",
+      "implementationNotes": "Align Pi and MCP response details and descriptions; include CONTEXT_READ_REQUIRED and REQUIREMENTS_READ_REQUIRED codes; instruct requirement_list then retry; add denial/no-mutation/retry/postcondition tests.",
+      "acceptedAt": "2026-08-25T09:36:47.490Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "ab8ce999-a5f8-424c-96f6-f5cf8b339a84",
+    "98716033-54c4-435d-81bc-5f0138c75633"
+  ],
+  "tasks": [
+    {
+      "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84",
+      "phaseId": "d7c3ad4b-8473-4985-9c0a-aff650635de0",
+      "number": 331,
+      "shortId": "HV6JR",
+      "priority": 1,
+      "shortName": "synchronize-durable-context-du",
+      "title": "Synchronize durable context during handoff refresh",
+      "status": "done",
+      "description": "Implement the handoff integrity contract in `packages/plan-core/src/plan-store.ts`, a new core helper/type module exported without removing or weakening existing public APIs, `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and `packages/agent-plan/src/index.ts`. Add exact-phase handoff preparation that returns the existing handoff body plus `handoffUpdatedAt`, audits done/worked tasks for missing completion and verification context, and requires reconciliation before write. Extend built-in handoff writes with structured context updates for affected tasks, the phase, and parent feature; validate all references and payloads before mutation and roll back on partial failure. Refresh one active handoff without archiving a superseded copy, while retaining `PlanStore.setPhaseHandoff()` compatibility and archive-on-manual-clear/phase-done behavior. Require task completion evidence and reject agent-side generic transitions into done so handoff preparation cannot discover silent completions after the fact. Preserve baseline scope descriptions by appending idempotent durable summaries or using semantic workDone/workRemaining/notes fields rather than destructive replacement. Add focused core/Pi/MCP tests for existing-handoff reconciliation, missing-context rejection, entity updates, rollback, and archive behavior.\n\n---\n**Completion summary:**\nImplemented the durable handoff refresh contract in `packages/plan-core/src/handoff-context.ts` and `packages/plan-core/src/plan-store.ts`: exact-phase audits expose the active body/version and missing completion evidence; refreshes validate canonical sections, reconcile optimistic tokens, synchronize task/phase/feature context with rollback, and keep one active handoff without superseded archives while preserving the legacy `setPhaseHandoff()` API. Pi/MCP now expose prepare audits and structured reconciled writes; direct/deprecated bypasses are disabled; agent completion requires evidence and generic agent transitions to done are rejected. Updated command/rule instructions and regression coverage. Verification: `pnpm check`, 400/400 unit tests, 44/44 Web UI tests, focused handoff/adapter/MCP suites, and `git diff --check` passed. Remaining work: T332 must make task-start read-gate denials typed harness failures with verified started=true success postconditions.",
+      "descriptionUpdatedAt": "2026-08-25T10:06:02.009Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84-check-001-planned-in-progress",
+          "date": "2026-08-25T09:37:11.917Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84-check-002-in-progress-done",
+          "date": "2026-08-25T10:06:02.008Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84-check-001-define-compatible-core-audit-refresh-types-and-merge-semantics",
+          "number": 1,
+          "title": "Define compatible core audit/refresh types and merge semantics",
+          "checked": true
+        },
+        {
+          "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84-check-002-implement-atomic-durable-entity-updates-plus-single-active-handoff-refresh",
+          "number": 2,
+          "title": "Implement atomic durable entity updates plus single-active-handoff refresh",
+          "checked": true
+        },
+        {
+          "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84-check-003-enforce-completion-evidence-and-agent-lifecycle-completion-path",
+          "number": 3,
+          "title": "Enforce completion evidence and agent lifecycle completion path",
+          "checked": true
+        },
+        {
+          "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84-check-004-update-pi-mcp-command-preparation-and-write-contracts",
+          "number": 4,
+          "title": "Update Pi/MCP/command preparation and write contracts",
+          "checked": true
+        },
+        {
+          "id": "ab8ce999-a5f8-424c-96f6-f5cf8b339a84-check-005-add-focused-tests-and-run-full-validation",
+          "number": 5,
+          "title": "Add focused tests and run full validation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-25T09:37:11.917Z",
+      "completedAt": "2026-08-25T10:06:02.008Z",
+      "createdAt": "2026-08-25T09:36:28.961Z",
+      "updatedAt": "2026-08-25T10:06:02.008Z"
+    },
+    {
+      "id": "98716033-54c4-435d-81bc-5f0138c75633",
+      "phaseId": "d7c3ad4b-8473-4985-9c0a-aff650635de0",
+      "number": 332,
+      "shortId": "MDDXJ",
+      "priority": 2,
+      "shortName": "make-denied-task-starts-unmist",
+      "title": "Make denied task starts unmistakable",
+      "status": "done",
+      "description": "Fix the T326 regression in `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts` where missing ordered context or linked requirement reads deny `task_start` but return an ordinary successful tool result that agents can mistake for a completed start. Preserve the approved hard gates and exact task_get(full=true) → phase_get(full=true) → feature_get(full=true) plus explicit requirement-list sequence. Return a stable typed denial (`started:false`, error code such as `REQUIREMENTS_READ_REQUIRED` or `CONTEXT_READ_REQUIRED`, exact next actions) through the harness error channel where supported; successful results must contain `started:true` only after reloading and verifying persisted task status is in-progress. Update tool descriptions, canonical/session instructions, and regression tests so agents must not claim work started until the success postcondition is present. Cover Pi and MCP requirement/context denial, retry success, and non-mutation of planned state.\n\n---\n**Completion summary:**\nImplemented typed task-start outcomes across the core, Pi adapter, and MCP adapter. Context and linked-requirement denials now return isError/started=false with stable error codes and exact retry actions without mutating planned tasks; successful starts reload persisted state and return started=true only after in-progress verification. Updated tool descriptions, Agent Plan instructions, and Pi notifications to forbid claiming denied starts succeeded. Added core, Pi, and MCP regression coverage for context denials, requirement denials, active-task conflicts, retry success, and non-mutation. Verification: pnpm check; pnpm test:unit passed 402/402 unit tests and 44/44 Web UI tests; focused lifecycle suites passed 21/21; git diff --check passed. Remaining: changes are intentionally uncommitted on next; no known verification gaps.\n\n---\n**Completion summary:**\nLifecycle test requested by the user: transitioned the completed task to planned, waited four seconds, then restored it through task_complete. The task is done again with its durable implementation, verification, file, and remaining-work evidence preserved; all checklist items remain complete.\n\n---\n**Completion summary:**\nCorrected lifecycle test requested by the user: transitioned T332 from done to planned, waited 2 seconds, started it through the guarded task_start lifecycle and verified in-progress persistence, waited 4 seconds, then completed it through task_complete. Durable completion evidence and all checklist items remain preserved.",
+      "descriptionUpdatedAt": "2026-08-25T11:34:25.566Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-001-planned-in-progress",
+          "date": "2026-08-25T10:06:35.321Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-002-in-progress-done",
+          "date": "2026-08-25T11:25:16.543Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-003-done-planned",
+          "date": "2026-08-25T11:32:31.682Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "User-requested lifecycle test: temporarily move the completed task back to planned before restoring it to done after a four-second delay.",
+          "description": "User-requested lifecycle test: temporarily move the completed task back to planned before restoring it to done after a four-second delay."
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-004-planned-done",
+          "date": "2026-08-25T11:32:49.841Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": ""
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-005-done-planned",
+          "date": "2026-08-25T11:33:42.719Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "User-requested corrected lifecycle test: temporarily move the completed task to planned, then start it through the guarded task-start lifecycle before completing it again.",
+          "description": "User-requested corrected lifecycle test: temporarily move the completed task to planned, then start it through the guarded task-start lifecycle before completing it again."
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-006-planned-in-progress",
+          "date": "2026-08-25T11:34:08.406Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-007-in-progress-done",
+          "date": "2026-08-25T11:34:25.564Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-001-define-cross-harness-start-outcome-contract",
+          "number": 1,
+          "title": "Define cross-harness start outcome contract",
+          "checked": true
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-002-implement-typed-pi-and-mcp-denials-and-verified-success",
+          "number": 2,
+          "title": "Implement typed Pi and MCP denials and verified success",
+          "checked": true
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-003-update-injected-rules-and-tool-descriptions",
+          "number": 3,
+          "title": "Update injected rules and tool descriptions",
+          "checked": true
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-004-add-regression-tests-for-denial-retry-and-persisted-state",
+          "number": 4,
+          "title": "Add regression tests for denial, retry, and persisted state",
+          "checked": true
+        },
+        {
+          "id": "98716033-54c4-435d-81bc-5f0138c75633-check-005-run-focused-and-full-validation",
+          "number": 5,
+          "title": "Run focused and full validation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-25T10:06:35.321Z",
+      "completedAt": "2026-08-25T11:34:25.564Z",
+      "createdAt": "2026-08-25T09:36:29.018Z",
+      "updatedAt": "2026-08-25T11:34:25.564Z"
+    }
+  ],
+  "createdAt": "2026-08-25T09:36:11.445Z",
+  "updatedAt": "2026-08-25T11:34:25.564Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-25T10:12:52.973Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/d7c3ad4b-8473-4985-9c0a-aff650635de0-2026-08-25T11-25-16-562Z.md",
+      "clearedAt": "2026-08-25T11:25:16.562Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "0f188ca2-c956-4b38-894d-46da381e1783",
+      "date": "2026-08-25T09:37:11.935Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "abfe361d-79c8-45a3-b543-85ac4af34715",
+      "date": "2026-08-25T11:25:16.598Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "04555b23-8de0-486f-8b73-b1fc08465100",
+      "date": "2026-08-25T11:32:31.704Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "5cfdf3cb-29a5-4943-9877-1a0b29dc79ad",
+      "date": "2026-08-25T11:32:49.860Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "2607a6c6-3518-4679-b746-8a9c55f0a9f2",
+      "date": "2026-08-25T11:33:42.738Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "c81f0645-867d-4139-b104-1affc6df3b95",
+      "date": "2026-08-25T11:34:25.582Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}
