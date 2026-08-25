@@ -48,9 +48,50 @@ import {
 import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
 import { loadExtensionRules, PLANNER_EXTENSION_RULES } from "./planner-rules.js";
+import {
+  applyHandoffContextSync,
+  auditPhaseHandoff,
+  type PhaseHandoffAudit,
+  type RefreshPhaseHandoffInput,
+  type RefreshPhaseHandoffResult,
+} from "./handoff-context.js";
 
 function nowISO(): string {
   return new Date().toISOString();
+}
+
+const MAX_SESSION_INFO_ENTRIES = 16;
+
+export interface RecordContextReadInput {
+  sessionId: string;
+  phaseId: string;
+  taskId: string;
+  featureId?: string;
+  requirementIds?: string[];
+  createdAt?: string;
+}
+
+export interface RecordContextReadResult {
+  phase: Phase;
+  feature?: Feature;
+  requirements: Requirement[];
+  createdAt: string;
+}
+
+function upsertSessionInfo<T extends { sessionInfo: Array<{ sessionId: string; createdAt: string }> }>(
+  entity: T,
+  sessionId: string,
+  createdAt: string,
+): { entity: T; changed: boolean } {
+  const nextInfo = [
+    ...entity.sessionInfo.filter((entry) => entry.sessionId !== sessionId),
+    { sessionId, createdAt },
+  ]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, MAX_SESSION_INFO_ENTRIES);
+  const changed = nextInfo.length !== entity.sessionInfo.length
+    || nextInfo.some((entry, index) => entry.sessionId !== entity.sessionInfo[index]?.sessionId || entry.createdAt !== entity.sessionInfo[index]?.createdAt);
+  return changed ? { entity: { ...entity, sessionInfo: nextInfo }, changed: true } : { entity, changed: false };
 }
 
 function resolveStoredFeatureId(
@@ -2061,6 +2102,87 @@ export class PlanStore {
     return updated;
   }
 
+  /**
+   * Persist completion of one full task → phase → feature → requirements read
+   * sequence. Session metadata is deliberately the only changed entity field:
+   * semantic updatedAt/descriptionUpdatedAt values are preserved exactly.
+   */
+  async recordContextRead(input: RecordContextReadInput): Promise<RecordContextReadResult> {
+    const sessionId = input.sessionId.trim();
+    if (!sessionId) throw new PlanStoreError("Context-read attestation requires a non-empty sessionId.");
+    const createdAt = TimestampSchema.parse(input.createdAt ?? nowISO());
+    const requirementIds = [...new Set((input.requirementIds ?? []).map((id) => id.trim()).filter(Boolean))];
+
+    return this.runAsBatch(async () => {
+      const originalPhase = await this.loadPhase(input.phaseId);
+      const taskIndex = originalPhase.tasks.findIndex((task) => task.id === input.taskId);
+      if (taskIndex < 0) throw new PlanStoreError(`Task ${input.taskId} does not belong to phase ${input.phaseId}.`);
+
+      const originalFeatures = await this.loadFeatures();
+      const featureId = input.featureId?.trim() || originalPhase.featureId;
+      const featureIndex = featureId
+        ? originalFeatures.features.findIndex((feature) => feature.id === featureId)
+        : -1;
+      if (featureId && featureIndex < 0) throw new PlanStoreError(`Feature ${featureId} was not found for context-read attestation.`);
+
+      const originalRequirements = await this.loadRequirements();
+      const missingRequirement = requirementIds.find((id) => !originalRequirements.requirements.some((requirement) => requirement.id === id));
+      if (missingRequirement) throw new PlanStoreError(`Requirement ${missingRequirement} was not found for context-read attestation.`);
+
+      const nextPhase = structuredClone(originalPhase);
+      const nextTask = upsertSessionInfo(nextPhase.tasks[taskIndex]!, sessionId, createdAt);
+      nextPhase.tasks[taskIndex] = nextTask.entity;
+      const nextPhaseInfo = upsertSessionInfo(nextPhase, sessionId, createdAt);
+      const phaseChanged = nextTask.changed || nextPhaseInfo.changed;
+
+      let nextFeature: Feature | undefined;
+      let featureChanged = false;
+      if (featureIndex >= 0) {
+        const featureResult = upsertSessionInfo(structuredClone(originalFeatures.features[featureIndex]!), sessionId, createdAt);
+        nextFeature = featureResult.entity;
+        featureChanged = featureResult.changed;
+      }
+
+      const nextRequirements = structuredClone(originalRequirements);
+      let requirementsChanged = false;
+      for (const requirement of nextRequirements.requirements) {
+        if (!requirementIds.includes(requirement.id)) continue;
+        const result = upsertSessionInfo(requirement, sessionId, createdAt);
+        if (result.changed) {
+          Object.assign(requirement, result.entity);
+          requirementsChanged = true;
+        }
+      }
+
+      if (!phaseChanged && !featureChanged && !requirementsChanged) {
+        return {
+          phase: originalPhase,
+          ...(featureIndex >= 0 ? { feature: originalFeatures.features[featureIndex] } : {}),
+          requirements: originalRequirements.requirements.filter((requirement) => requirementIds.includes(requirement.id)),
+          createdAt,
+        };
+      }
+
+      try {
+        if (featureChanged && nextFeature) await this.saveFeature(nextFeature);
+        if (phaseChanged) await this.savePhase(nextPhaseInfo.entity);
+        if (requirementsChanged) await this.saveRequirements(nextRequirements);
+      } catch (error) {
+        const rollbackErrors: unknown[] = [];
+        if (featureChanged && nextFeature) await this.saveFeature(originalFeatures.features[featureIndex]!).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        if (phaseChanged) await this.savePhase(originalPhase).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        if (requirementsChanged) await this.saveRequirements(originalRequirements).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        if (rollbackErrors.length > 0) throw new AggregateError([error, ...rollbackErrors], "Context-read attestation failed and rollback was incomplete.");
+        throw error;
+      }
+
+      const phase = await this.loadPhase(input.phaseId);
+      const feature = featureIndex >= 0 ? (await this.loadFeatures()).features.find((candidate) => candidate.id === featureId) : undefined;
+      const requirements = (await this.loadRequirements()).requirements.filter((requirement) => requirementIds.includes(requirement.id));
+      return { phase, ...(feature ? { feature } : {}), requirements, createdAt };
+    });
+  }
+
   async saveProject(project: Project): Promise<void> {
     // Runtime workDeviations live in .local/deviations.json (T299); never
     // persist them here so shared project.json stays stable across worktrees.
@@ -2266,6 +2388,53 @@ export class PlanStore {
   /** Get the handoff text for a phase ("" if none). Throws if phase missing. */
   async getPhaseHandoff(phaseId: string): Promise<string> {
     return (await this.loadPhase(phaseId)).handoff;
+  }
+
+  /** Audit one exact phase before preparing a handoff refresh. */
+  async preparePhaseHandoff(phaseId: string): Promise<PhaseHandoffAudit> {
+    const phase = await this.loadPhase(phaseId);
+    if (!phase.featureId) throw new PlanStoreError(`Phase ${phaseId} has no parent feature; durable handoff context cannot be synchronized.`);
+    const feature = (await this.loadFeatures()).features.find((candidate) => candidate.id === phase.featureId);
+    if (!feature) throw new PlanStoreError(`Parent feature ${phase.featureId} not found for phase ${phaseId}.`);
+    return auditPhaseHandoff(phase, feature);
+  }
+
+  /** Refresh the single active handoff and synchronize durable task/phase/feature
+   * context. Unlike setPhaseHandoff(), this deliberately does not archive the
+   * previous active body: callers must reconcile it using the optimistic
+   * handoffUpdatedAt token returned by preparePhaseHandoff(). */
+  async refreshPhaseHandoff(
+    phaseId: string,
+    input: RefreshPhaseHandoffInput,
+  ): Promise<RefreshPhaseHandoffResult> {
+    return this.runAsBatch(async () => {
+      const originalPhase = await this.loadPhase(phaseId);
+      if (!originalPhase.featureId) throw new PlanStoreError(`Phase ${phaseId} has no parent feature; durable handoff context cannot be synchronized.`);
+      const originalFeatures = await this.loadFeatures();
+      const featureIndex = originalFeatures.features.findIndex((candidate) => candidate.id === originalPhase.featureId);
+      if (featureIndex < 0) throw new PlanStoreError(`Parent feature ${originalPhase.featureId} not found for phase ${phaseId}.`);
+      const timestamp = nowISO();
+      const applied = applyHandoffContextSync(originalPhase, originalFeatures.features[featureIndex]!, input, timestamp);
+      const nextFeatures = structuredClone(originalFeatures);
+      nextFeatures.features[featureIndex] = applied.feature;
+
+      try {
+        await this.saveFeatures(nextFeatures);
+        await this.savePhase(applied.phase);
+      } catch (error) {
+        const rollbackErrors: unknown[] = [];
+        await this.saveFeatures(originalFeatures).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        await this.savePhase(originalPhase).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        if (rollbackErrors.length > 0) {
+          throw new AggregateError([error, ...rollbackErrors], "Handoff refresh failed and rollback was incomplete.");
+        }
+        throw error;
+      }
+
+      const phase = await this.loadPhase(phaseId);
+      const feature = (await this.loadFeatures()).features.find((candidate) => candidate.id === originalPhase.featureId)!;
+      return { phase, feature, updatedTaskIds: applied.updatedTaskIds, handoffUpdatedAt: phase.handoffUpdatedAt };
+    });
   }
 
   /** Set the handoff text for a phase + stamp handoffUpdatedAt. A completed or

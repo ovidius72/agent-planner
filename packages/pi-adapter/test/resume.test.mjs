@@ -30,13 +30,42 @@ import { readFile, readdir, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { createPiHost, closePiHost, cleanupPiHosts, toolText } from "./helpers/pi-host-fixture.mjs";
+import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 import { PlanStore } from "../../plan-core/dist/index.js";
 import { seedFixture, createTempRoot } from "../../../test/helpers/fixtures.mjs";
 
 after(async () => {
   await cleanupPiHosts();
 });
+
+function canonicalHandoff(title, detail) {
+  return [
+    `# ${title}`,
+    "",
+    "Created at: 2026-08-24T00:00:00.000Z",
+    "Updated at: 2026-08-24T00:00:00.000Z",
+    "Reason: resume fixture",
+    "",
+    "## Current focus", detail,
+    "## What was being done", detail,
+    "## How to resume", "Continue the fixture.",
+    "## Files touched", "- resume.test.mjs",
+    "## Blockers", "- None",
+    "## Next steps", "- Continue",
+    "## Recent decisions", "- Preserve the handoff",
+  ].join("\n");
+}
+
+async function preparedHandoffArgs(host, phaseRef = "P001") {
+  const prepared = await host.runTool("handoff_prepare", { phaseRef });
+  return {
+    expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
+    reconciledExistingHandoff: true,
+    taskUpdates: [],
+    phaseNoUpdateReason: "Resume fixture does not change durable phase context.",
+    featureNoUpdateReason: "Resume fixture does not change durable feature context.",
+  };
+}
 
 /** Run before_agent_start and return the injected systemPrompt (or undefined). */
 async function injectedPrompt(host) {
@@ -93,8 +122,9 @@ describe("pi-adapter resume flow and CLI smoke", () => {
       await host1.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — repeat session handoff",
-        content: "Repeat session body.",
+        content: canonicalHandoff("P001 — repeat session handoff", "Repeat session body."),
         confirmed: true,
+        ...(await preparedHandoffArgs(host1)),
       });
 
       // Session 1 ends; the project root is kept.
@@ -153,8 +183,9 @@ describe("pi-adapter resume flow and CLI smoke", () => {
       await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — work handoff",
-        content: "In-progress notes for the auth phase.",
+        content: canonicalHandoff("P001 — work handoff", "In-progress notes for the auth phase."),
         confirmed: true,
+        ...(await preparedHandoffArgs(host)),
       });
       assert.ok((await phase()).handoff, "handoff present before task start");
 
@@ -181,10 +212,11 @@ describe("pi-adapter resume flow and CLI smoke", () => {
       await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — final handoff",
-        content: "Final notes for the auth phase.",
+        content: canonicalHandoff("P001 — final handoff", "Final notes for the auth phase."),
         confirmed: true,
+        ...(await preparedHandoffArgs(host)),
       });
-      await host.runTool("task_complete", { taskId: "T001", force: true });
+      await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Authentication task completed and verified by the resume flow test." });
       p = await phase();
       assert.equal(p.status, "done", "phase rolled to done");
       assert.equal(p.handoff, "", "phase completion auto-archived the handoff");
@@ -193,10 +225,11 @@ describe("pi-adapter resume flow and CLI smoke", () => {
       assert.ok(archived.length >= 2, "both handoffs archived");
 
       // A done phase cannot receive a new handoff (terminal guard).
-      await assert.rejects(
-        host.runTool("handoff_write", { phaseRef: "P001", title: "P001 — late", content: "x", confirmed: true }),
-        /Cannot write a handoff on done phase/,
-      );
+      const late = await host.runTool("handoff_write", {
+        phaseRef: "P001", title: "P001 — late", content: canonicalHandoff("P001 — late", "Late handoff."), confirmed: true,
+        ...(await preparedHandoffArgs(host)),
+      });
+      assert.match(toolText(late), /Cannot write a handoff on done phase/);
     } finally {
       await closePiHost(host);
     }
@@ -208,8 +241,9 @@ describe("pi-adapter resume flow and CLI smoke", () => {
       await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — command retention handoff",
-        content: "Command start must keep this handoff.",
+        content: canonicalHandoff("P001 — command retention handoff", "Command start must keep this handoff."),
         confirmed: true,
+        ...(await preparedHandoffArgs(host)),
       });
 
       await readTaskContext(host);

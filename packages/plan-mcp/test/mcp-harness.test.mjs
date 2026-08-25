@@ -193,12 +193,12 @@ test("harness drives a CRUD round trip; composite refs in output, state persiste
     const started = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(started), /Task started: P\d+\(F002\)\/T002/);
 
-    const blocked = await callTool(session, "planner-task-complete", { task: "T002" });
+    const blocked = await callTool(session, "planner-task-complete", { task: "T002", description_update: "Completion evidence supplied while checklist remains open." });
     assert.match(toolText(blocked), /checklist item\(s\) not done/, "complete is guarded by unchecked checklist");
 
     await callTool(session, "planner-task-checklist-toggle", { task: "T002", item: "C1" });
     await callTool(session, "planner-task-checklist-toggle", { task: "T002", item: "C2" });
-    const done = await callTool(session, "planner-task-complete", { task: "T002" });
+    const done = await callTool(session, "planner-task-complete", { task: "T002", description_update: "Checklist task completed and verified through the MCP harness." });
     assert.match(toolText(done), /Task completed: P\d+\(F002\)\/T002.*\(done\)/);
     const completed = (await session.store.loadPhase(phase.id)).tasks.find((entry) => entry.id === task.id);
     assert.equal(completed.status, "done");
@@ -264,13 +264,33 @@ test("error helpers catch schema-level and semantic errors without mutating stat
 test("handoff write (confirmed) + show return structured phase identifiers", async () => {
   const session = await startMcpFixture({ name: "t236-handoff" });
   try {
+    const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001(F001)" });
+    const audit = toolStructured(prepared);
     const written = await callTool(session, "planner-handoff-write", {
       phaseRef: "P001(F001)",
       title: "T236 — confirmed handoff",
-      content: "Handoff body for the harness.",
+      content: [
+        "# T236 — confirmed handoff",
+        "",
+        "Created at: 2026-08-24T00:00:00.000Z",
+        "Updated at: 2026-08-24T00:00:00.000Z",
+        "Reason: harness fixture",
+        "## Current focus", "Handoff body for the harness.",
+        "## What was being done", "Testing the handoff harness.",
+        "## How to resume", "Continue the fixture.",
+        "## Files touched", "- mcp-harness.test.mjs",
+        "## Blockers", "- None",
+        "## Next steps", "- Continue",
+        "## Recent decisions", "- Preserve durable context",
+      ].join("\n"),
       confirmed: true,
+      expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
+      reconciledExistingHandoff: true,
+      taskUpdates: [],
+      phaseNoUpdateReason: "Harness does not change durable phase context.",
+      featureNoUpdateReason: "Harness does not change durable feature context.",
     });
-    assert.match(toolText(written), /✅ Wrote handoff on P001\(F001\)/);
+    assert.match(toolText(written), /✅ Reconciled handoff and durable context on P001\(F001\)/);
     const writtenStructured = toolStructured(written);
     assert.equal(writtenStructured.phaseRef, "P001(F001)", "structured phaseRef");
     assert.ok(writtenStructured.phaseId, "structured phaseId present");

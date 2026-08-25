@@ -15,7 +15,7 @@ export const PLANNER_EXTENSION_RULES: string[] = [
   // §1 — source of truth
   "Keep the planner as the single operational source of truth while working: read the relevant planner state before starting; update it when an activity starts, changes state, blocks, or concludes; and record next steps, blockers, and decisions in the relevant planner entities. Never leave work only in the conversation.",
   // §2 — task lifecycle
-  "Respect the task lifecycle strictly. Always call task_start before touching code, and task_complete when a deliverable is done. Sync state changes (start/complete/block) to the planner at the exact moment they happen — never batch updates at session end. If the extension reports 'no active task', immediately start the correct task. A task marked in-progress means you are actually working on it; if you stop, close or block it with a motivation in statusLog. Derived feature/phase status is computed from tasks, not stored in JSON.",
+  "Respect the task lifecycle strictly. Always call task_start before touching code, and task_complete with durable evidence of shipped work, verification (including partial verification), remaining/unverified work, files, and decisions when a deliverable is done. Never enter in-progress or done through task_update. Sync state changes (start/complete/block) to the planner at the exact moment they happen — never batch updates at session end. If task_start is denied, the task remains planned: satisfy the stated read prerequisites and retry, and never claim work started without an explicit successful start result. A task marked in-progress means you are actually working on it; if you stop, close or block it with a motivation in statusLog. Derived feature/phase status is computed from tasks, not stored in JSON.",
   // §3 — markdown not source of truth
   "Do not treat markdown as the source of truth for the plan. The plan's primary source is structured data in .planner/; markdown is a generated, human/agent-readable view.",
   // §5 — plan location
@@ -29,7 +29,7 @@ export const PLANNER_EXTENSION_RULES: string[] = [
   // §10 — references
   "Reference entities with human, unique, composite IDs — Feature 'F001 - Name', Phase 'P001(F001) - Title', Task 'T003 - Number'. Short forms P003/T007 and the 5-char global shortId (e.g. UUXD1) are also valid. Never reference raw UUIDs. To locate an entity, use the compact list tools (feature_list/phase_list/task_list), not by reading .planner/*.json files.",
   // §12 — handoff
-  "Handoff is per-phase (phase.handoff), not a file. Write it only on explicit user request; on resume, read it then clear it before starting work. A pending handoff never blocks task_start. Do not leave a handoff stale after processing it.",
+  "Handoff is per-phase (phase.handoff), not a file. Write it only on explicit user request and only after the exact feature+phase target is confirmed. Run handoff_prepare for that phase, reconcile all still-relevant existing content into one active handoff, and synchronize durable task/phase/feature context in the same handoff_write operation. A pending handoff never blocks task_start and is archived only when the phase completes or the user explicitly clears it; refreshing it must not create superseded copies.",
   // §12 — operational hygiene
   "Operational hygiene: start the task (task_start) before thinking about implementation; complete it (task_complete) as part of delivering the deliverable, not after; motivate every block so a third party can understand the impediment.",
   // Avvio del planner
