@@ -195,6 +195,11 @@ export function needsMotivation(fromStatus: string, toStatus: string): boolean {
   return false;
 }
 
+export const SessionInfoSchema = z.object({
+  sessionId: z.string().min(1),
+  createdAt: TimestampSchema,
+});
+
 export const StatusLogEntrySchema = z.object({
   id: z.string().min(1),
   date: TimestampSchema,
@@ -245,6 +250,8 @@ export const TaskSchema = z.object({
   completedAt: z.string().default(""),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  /** Durable attestations of completed full context reads by harness session. */
+  sessionInfo: z.array(SessionInfoSchema).default([]),
 }).transform((task) => ({
   ...task,
   checklist: task.checklist
@@ -311,6 +318,8 @@ export const PhaseSchema = z.object({
   handoffHistory: z.array(HandoffHistoryEntrySchema).default([]),
   /** Chronological audit trail of the DERIVED status (planned/in-progress/blocked/done/...). Appended ONLY when the derived status changes during a rollup; `status` itself is NOT persisted (still computed from child tasks at read time). Empty = no transition recorded yet (treated as "planned"). */
   statusLog: z.array(PhaseStatusLogEntrySchema).default([]),
+  /** Durable attestations of completed full context reads by harness session. */
+  sessionInfo: z.array(SessionInfoSchema).default([]),
 });
 
 export const FeatureSchema = z.object({
@@ -339,6 +348,8 @@ export const FeatureSchema = z.object({
   statusLog: z.array(StatusLogEntrySchema).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  /** Durable attestations of completed full context reads by harness session. */
+  sessionInfo: z.array(SessionInfoSchema).default([]),
 });
 
 export const FeaturesDocumentSchema = z.object({
@@ -363,6 +374,8 @@ export const RequirementSchema = z.object({
   linkedPhaseIds: z.array(z.string().min(1)).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  /** Durable attestations of completed full context reads by harness session. */
+  sessionInfo: z.array(SessionInfoSchema).default([]),
 });
 
 export const RequirementsDocumentSchema = z.object({
@@ -378,6 +391,7 @@ export const PlanWorkspaceSchema = z.object({
 });
 
 export type Timestamp = z.infer<typeof TimestampSchema>;
+export type SessionInfo = z.infer<typeof SessionInfoSchema>;
 export type CodebaseFile = z.infer<typeof CodebaseFileSchema>;
 export type CodebaseProfile = z.infer<typeof CodebaseProfileSchema>;
 export type AmbientFacts = z.infer<typeof AmbientFactsSchema>;

@@ -3,9 +3,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureRead, markPhaseRead, markTaskRead, contextReadEligibility, hasReadRequirements, markRequirementRead, invalidateReads } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -13,11 +14,31 @@ import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/sche
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
 const PHASE_STATUS_VALUES = ["draft", "discovery", ...STATUS_VALUES] as const;
+const plannerSessionId = randomUUID();
+startReadSession(plannerSessionId);
 
-type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredContent?: Record<string, unknown> };
+type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean };
 
 function text(textValue: string, structuredContent?: Record<string, unknown>): ToolResult {
   return structuredContent ? { content: [{ type: "text", text: textValue }], structuredContent } : { content: [{ type: "text", text: textValue }] };
+}
+
+function taskStartError(
+  outcome: ReturnType<typeof taskStartDenied>,
+  structuredContent: Record<string, unknown> = {},
+): ToolResult {
+  return {
+    isError: true,
+    content: [{ type: "text", text: [
+      `❌ TASK START FAILED [${outcome.errorCode}]`,
+      "started: false",
+      outcome.message,
+      "No task lifecycle transition was applied.",
+      "Next required actions:",
+      ...outcome.nextActions.map((action, index) => `${index + 1}. ${action}`),
+    ].join("\n") }],
+    structuredContent: { ...outcome, ...structuredContent },
+  };
 }
 
 const MCP_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/mcp");
@@ -444,6 +465,7 @@ server.registerTool("planner-feature-add", {
     phaseIds: [],
     dependsOn: [],
     statusLog: [],
+    sessionInfo: [],
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -463,7 +485,7 @@ server.registerTool("planner-feature-show", {
   const resolvedFeature = resolveFeatureRefStrict(features, ref);
   if (!resolvedFeature.ok) return text(resolvedFeature.error);
   const feature = resolvedFeature.feature;
-  if (full) markFeatureRead(feature.id);
+  if (full) markFeatureReadForSessionId(plannerSessionId, feature.id);
   const phases = (await st.loadAllPhases()).filter((phase) => phase.featureId === feature.id);
     const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases)`;
     return text(full ? `${summary}\n\n${feature.description || ""}` : summary);
@@ -628,6 +650,7 @@ server.registerTool("planner-phase-add", {
       handoffReadAt: "",
       handoffHistory: [],
       statusLog: [],
+      sessionInfo: [],
     };
     await st.savePhase(phase);
     if (feature) {
@@ -651,7 +674,7 @@ server.registerTool("planner-phase-show", {
     const features = (await st.loadFeatures()).features;
     const phase = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!phase) return text(`Phase not found: ${ref}`);
-    if (full) markPhaseRead(phase.id, phase.featureId);
+    if (full) markPhaseReadForSessionId(plannerSessionId, phase.id);
     const linkedRequirements = await st.linkedRequirementsForPhase(phase.id);
     const reqCount = linkedRequirements.length;
     const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
@@ -793,6 +816,7 @@ server.registerTool("planner-task-add", {
     descriptionUpdatedAt: timestamp,
     notes: "",
     statusLog: [],
+    sessionInfo: [],
     decisions: [],
     acceptedDecisions: [],
     checklist: (checklist ?? []).map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), number: index + 1, title: item, checked: false })),
@@ -822,7 +846,7 @@ server.registerTool("planner-task-show", {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
-    if (full) markTaskRead(found.task.id, found.phase.id, found.phase.featureId);
+    if (full) markTaskReadForSessionId(plannerSessionId, found.task.id);
     const features = (await st.loadFeatures()).features;
     const summary = `${found.task.title} — ${taskCompositeRef(found.task, found.phase, features)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status}; phase ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))})`;
     if (!full) return text(summary);
@@ -898,6 +922,9 @@ server.registerTool("planner-task-update", {
 
   if (status === "in-progress" && status !== found.task.status) {
     return text("Task start/resume transitions require planner-task-start so lifecycle state, checkpoints, and return stacks remain consistent.");
+  }
+  if (status === "done" && status !== found.task.status) {
+    return text("Task completion transitions require planner-task-complete with durable completion and verification evidence.");
   }
 
   // Validate motivation requirement for status transitions.
@@ -1115,7 +1142,7 @@ server.registerTool("planner-task-pause", {
     resumeLocation: resume_location, howToResume: how_to_resume, relatedTaskId: "",
     pausedAt: nowISO(), pausedBy: paused_by?.trim() ?? "",
   };
-  invalidateReads();
+  invalidateReads(plannerSessionId);
   const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
   await st.syncTaskStatusRollup(found.phase.id);
   const activeDeviation = (await st.loadProject()).workDeviations
@@ -1139,7 +1166,7 @@ server.registerTool("planner-task-pause", {
 });
 
 server.registerTool("planner-task-switch", {
-  description: "Atomically switch from active work to a temporary task, even outside normal priority order. Pauses the source with a mandatory snapshot, starts the target, and pushes a durable LIFO return target.",
+  description: "Atomically switch from active work to a temporary task, even outside normal priority order. Reuse the target's valid sessionInfo context or require the exact full tree when missing or stale. Pause the source with a mandatory snapshot, start the target, and push a durable LIFO return target.",
   inputSchema: {
     from_task: z.string().min(1),
     to_task: z.string().min(1),
@@ -1161,14 +1188,30 @@ server.registerTool("planner-task-switch", {
   if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
     return text(`Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.`);
   }
-  const contextEligibility = contextReadEligibility(target.task.id, target.phase.id, target.phase.featureId);
+  const targetFeature = target.phase.featureId ? features.find((feature) => feature.id === target.phase.featureId) : undefined;
+  const linkedRequirements = [
+    ...(await st.linkedRequirementsForPhase(target.phase.id)),
+    ...(target.phase.featureId ? await st.linkedRequirementsForFeature(target.phase.featureId) : []),
+  ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+  const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
+  const contextInput = {
+    sessionId: plannerSessionId,
+    taskId: target.task.id,
+    phaseId: target.phase.id,
+    ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}),
+    task: target.task,
+    phase: target.phase,
+    ...(targetFeature ? { feature: targetFeature } : {}),
+    requirements: linkedRequirements,
+    requirementIds: linkedRequirementIds,
+  };
+  const contextEligibility = contextReadEligibilityForSession(contextInput);
   if (!contextEligibility.eligible) return text(`Task switch denied: context reads required. ${contextEligibility.reason}`, contextEligibility);
-  const linkedRequirementIds = [
-    ...(await st.linkedRequirementsForPhase(target.phase.id)).map((requirement) => requirement.id),
-    ...(target.phase.featureId ? (await st.linkedRequirementsForFeature(target.phase.featureId)).map((requirement) => requirement.id) : []),
-  ];
-  if (!hasReadRequirements(linkedRequirementIds)) {
+  if (!hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements)) {
     return text("Task switch denied: read the requirements linked to the target phase and feature before switching.", { requirementIds: linkedRequirementIds });
+  }
+  if (!hasValidSessionAttestation(contextInput)) {
+    await st.recordContextRead({ sessionId: plannerSessionId, phaseId: target.phase.id, taskId: target.task.id, ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}), requirementIds: linkedRequirementIds });
   }
   const eligibility = checkExplicitTaskStart(features, phases, target.task.id, project.workDeviations);
   if (!eligibility.eligible) return text(`Task switch denied: ${eligibility.reason}`);
@@ -1250,7 +1293,7 @@ server.registerTool("planner-task-switch", {
   }
   await st.syncTaskStatusRollup(source.phase.id);
   if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
-  invalidateReads();
+  invalidateReads(plannerSessionId);
   return writeAndSummarize(st, [
     `🔀 Task switched: ${taskCompositeRef(source.task, source.phase, features)} → ${taskCompositeRef(target.task, target.phase, features)}`,
     `Resume checkpoint: ${snapshot.whatWasBeingDone}`,
@@ -1260,36 +1303,98 @@ server.registerTool("planner-task-switch", {
 });
 
 server.registerTool("planner-task-start", {
-  description: "Set a task to in-progress or resume checkpointed work. BEFORE calling, use planner-task-show(full=true), then planner-phase-show(full=true), then planner-feature-show(full=true) for the same lineage, in that exact order. Read linked requirements with planner-requirement-list when present. A different active task must first be suspended through planner-task-switch.",
+  description: "Set a task to in-progress or resume checkpointed work. Read the exact full task → phase → feature tree and linked requirements once per harness session; subsequent starts reuse persisted sessionInfo while entity updatedAt values remain unchanged. Every stale or denied start is an MCP isError result with started=false and exact retry actions; NEVER claim work started unless structuredContent.started is true. Success is returned only after persisted in-progress state is verified.",
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }) => {
-  const st = await requireStore();
+  let st: PlanStore;
+  try {
+    st = await requireStore();
+  } catch {
+    return taskStartError(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry planner-task-start."]));
+  }
 
   const features = (await st.loadFeatures()).features;
   const found = findTaskByRef(await st.loadAllPhases(), features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-  if (found.task.status === "in-progress") return text(`Task ${found.task.id} is already in-progress.`);
-  if (found.task.status === "done") return text(`Task ${found.task.id} is done. Use planner-task-update to reopen.`);
-  const contextEligibility = contextReadEligibility(found.task.id, found.phase.id, found.phase.featureId);
-  if (!contextEligibility.eligible) return text(`Task start denied: context reads required. ${contextEligibility.reason}`, contextEligibility);
-  const linkedRequirementIds = [
-    ...(await st.linkedRequirementsForPhase(found.phase.id)).map((requirement) => requirement.id),
-    ...(found.phase.featureId ? (await st.linkedRequirementsForFeature(found.phase.featureId)).map((requirement) => requirement.id) : []),
-  ];
-  if (!hasReadRequirements(linkedRequirementIds)) {
-    return text("Task start denied: read the requirements linked to the task's phase and feature first.", { requirementIds: linkedRequirementIds });
+  if (!found) return taskStartError(taskStartDenied("TASK_NOT_FOUND", `Task not found: ${ref}`, ["Resolve the task with planner-task-list or planner-task-show, then retry planner-task-start."]));
+  const taskRef = taskCompositeRef(found.task, found.phase, features);
+  const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
+  const parentFeature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
+  const featureRef = parentFeature ? formatFeatureRef(parentFeature.number) : "";
+  if (found.task.status === "in-progress") {
+    const outcome = taskStartSucceeded(found.task.id, true);
+    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true`, { ...outcome, task: found.task });
+  }
+  if (found.task.status === "done") return taskStartError(taskStartDenied(
+    "TASK_DONE",
+    `Task ${taskRef} is done and was not reopened.`,
+    [`Use planner-task-update with status=planned and a motivation to reopen ${taskRef}.`, `Repeat the required full context reads, then retry planner-task-start ${taskRef}.`],
+    { taskId: found.task.id },
+  ));
+  const linkedRequirements = [
+    ...(await st.linkedRequirementsForPhase(found.phase.id)),
+    ...(found.phase.featureId ? await st.linkedRequirementsForFeature(found.phase.featureId) : []),
+  ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+  const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
+  const contextInput = {
+    sessionId: plannerSessionId,
+    taskId: found.task.id,
+    phaseId: found.phase.id,
+    ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}),
+    task: found.task,
+    phase: found.phase,
+    ...(parentFeature ? { feature: parentFeature } : {}),
+    requirements: linkedRequirements,
+    requirementIds: linkedRequirementIds,
+  };
+  const contextEligibility = contextReadEligibilityForSession(contextInput);
+  if (!contextEligibility.eligible) return taskStartError(taskStartDenied(
+    "CONTEXT_READ_REQUIRED",
+    `Required context reads are incomplete or stale. ${contextEligibility.reason}`,
+    [
+      `planner-task-show ${taskRef} with full=true`,
+      `planner-phase-show ${phaseRef} with full=true`,
+      ...(featureRef ? [`planner-feature-show ${featureRef} with full=true`] : []),
+      ...(linkedRequirementIds.length > 0 ? ["planner-requirement-list"] : []),
+      `Retry planner-task-start ${taskRef}`,
+    ],
+    { taskId: found.task.id },
+  ), { contextEligibility });
+  if (!hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements)) {
+    return taskStartError(taskStartDenied(
+      "REQUIREMENTS_READ_REQUIRED",
+      "Linked requirements were not read; the task remains unchanged.",
+      ["planner-requirement-list", `Retry planner-task-start ${taskRef}`],
+      { taskId: found.task.id, requirementIds: linkedRequirementIds },
+    ));
+  }
+  if (!hasValidSessionAttestation(contextInput)) {
+    await st.recordContextRead({ sessionId: plannerSessionId, phaseId: found.phase.id, taskId: found.task.id, ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}), requirementIds: linkedRequirementIds });
   }
   const [project, phases, focus] = await Promise.all([st.loadProject(), st.loadAllPhases(), st.loadResume()]);
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
-  if (!eligibility.eligible) return text(`Task start denied: ${eligibility.reason}`, { reason: eligibility.reason });
+  if (!eligibility.eligible) return taskStartError(taskStartDenied(
+    "START_NOT_ALLOWED",
+    eligibility.reason,
+    ["Resolve the reported task readiness condition, then retry planner-task-start."],
+    { taskId: found.task.id },
+  ), { eligibility });
   const selection = recommendNextTask(features, phases, project.workDeviations, focus?.currentPhaseId);
   if (selection.kind === "conflict") {
-    return text(`${selection.reason} Pause/reconcile active tasks before starting another task.`, {
-      activeTaskIds: selection.activeCandidates?.map((candidate) => candidate.task.id) ?? [],
-    });
+    return taskStartError(taskStartDenied(
+      "ACTIVE_TASK_CONFLICT",
+      selection.reason,
+      ["Pause or reconcile the active tasks.", `Retry planner-task-start ${taskRef}.`],
+      { taskId: found.task.id },
+    ), { selection });
   }
   if (selection.kind === "active" && selection.candidate?.task.id !== found.task.id) {
-    return text(`Task start denied: ${taskCompositeRef(selection.candidate!.task, selection.candidate!.phase, features)} is active. Use planner-task-switch to snapshot and pause it before starting ${taskCompositeRef(found.task, found.phase, features)}.`);
+    const activeRef = taskCompositeRef(selection.candidate!.task, selection.candidate!.phase, features);
+    return taskStartError(taskStartDenied(
+      "ACTIVE_TASK_CONFLICT",
+      `${activeRef} is active; ${taskRef} was not started.`,
+      [`Use planner-task-switch to snapshot and pause ${activeRef}.`, `Retry planner-task-start ${taskRef}.`],
+      { taskId: found.task.id },
+    ), { selection });
   }
   let resumeProposal:
     | { text: string; structured: { taskId: string; phaseId: string; snapshot: { reason: string; resumeLocation: string; howToResume: string } | null } }
@@ -1316,7 +1421,6 @@ server.registerTool("planner-task-start", {
     });
   }
   // Assemble the mandatory parent context before changing task lifecycle state.
-  const parentFeature = found.phase.featureId ? features.find((f) => f.id === found.phase.featureId) : undefined;
   const [phaseWithRequirements, featureRequirements] = await Promise.all([
     st.loadPhaseWithRequirements(found.phase.id),
     parentFeature ? st.linkedRequirementsForFeature(parentFeature.id) : Promise.resolve([]),
@@ -1375,23 +1479,37 @@ server.registerTool("planner-task-start", {
       && (deviation.state === "resume-required" || deviation.state === "resolved"))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
-  const t = updatedTask ?? found.task;
-  return writeAndSummarize(st, `✅ Task started: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (in-progress)${t.shortId ? ` · ${t.shortId}` : ""}${phaseContext}${advisory}`, {
+  await st.writeGenerated();
+  const persistedTask = (await st.loadPhase(found.phase.id)).tasks.find((candidate) => candidate.id === found.task.id);
+  if (!updatedTask || persistedTask?.status !== "in-progress") {
+    return taskStartError(taskStartDenied(
+      "PERSISTENCE_VERIFICATION_FAILED",
+      `The lifecycle write could not be verified as in-progress for ${taskRef}.`,
+      ["Inspect planner-task-show for the persisted state and retry only after resolving the persistence failure."],
+      { taskId: found.task.id },
+    ));
+  }
+  const outcome = taskStartSucceeded(persistedTask.id);
+  return text(`✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}`, {
+    ...outcome,
+    task: persistedTask,
     ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
   });
 });
 
 server.registerTool("planner-task-complete", {
-  description: "Set a task to done. Fails if checklist is incomplete unless force=true.",
+  description: "Set a task to done with mandatory durable completion and verification evidence. Fails if checklist is incomplete unless force=true.",
   inputSchema: {
     task: z.string().min(1),
     force: z.boolean().optional(),
-    description_update: z.string().min(10).optional().describe("Post-hoc summary of what was done: commit hash(s), files touched, decisions made, updated code references with new line numbers. Keeps the planner alive and traceable."),
+    description_update: z.string().min(10).describe("Required evidence: shipped work, verification level including partial verification, remaining/unverified work, files, decisions, and updated code references."),
   },
 }, async ({ task: ref, force, description_update }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
+  const completionSummary = description_update.trim();
+  if (completionSummary.length < 10) return text("Task completion denied: provide at least 10 characters of durable completion and verification evidence.");
   if (found.task.pauseSnapshot) return text("Task completion denied: resume checkpointed work with planner-task-start before completing it, or cancel it explicitly with motivation.");
   const unchecked = found.task.checklist.filter((item) => !item.checked);
   if (unchecked.length > 0 && !force) return text(`${unchecked.length} checklist item(s) not done. Re-run with force=true to complete anyway.`);
@@ -1408,13 +1526,12 @@ server.registerTool("planner-task-complete", {
       fromStatus: previousStatus,
       toStatus: "done",
       title: `${previousStatus} → done`,
-      description: "",
+      description: completionSummary,
     };
     task.statusLog = [...(task.statusLog ?? []), entry];
-    if (description_update) {
-      const sep = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
-      task.description = task.description + sep + description_update;
-    }
+    const sep = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
+    task.description = task.description + sep + completionSummary;
+    task.descriptionUpdatedAt = timestamp;
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;
     updatedTask = task;
@@ -1475,56 +1592,126 @@ server.registerTool("planner-requirement-list", {
 }, async () => {
   const st = await requireStore();
   const requirements = await st.loadRequirements();
-  requirements.requirements.forEach((req) => markRequirementRead(req.id));
+  requirements.requirements.forEach((req) => markRequirementReadForSessionId(plannerSessionId, req.id));
   return text(requirements.requirements.map((req) => `- ${req.id} — ${req.title} (${req.status})`).join("\n") || "No requirements", { requirements });
 });
 
 server.registerTool("planner-handoff-write", {
-  description: "Write/refresh the entity-scoped handoff on a phase. phaseRef is required and must be the exact phase selected with the user. Never guess from in-progress status or stale context; completed/canceled phases reject new handoffs. Pass content (markdown) and a meaningful title.",
+  description: "Reconcile and refresh the single active phase handoff while synchronizing durable task, phase, and feature context. Run planner-handoff-prepare with the confirmed phaseRef first and pass its exact handoffUpdatedAt token.",
   inputSchema: {
     phaseRef: z.string().min(1).describe("Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title."),
-    title: z.string().min(3).optional().describe("Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). REQUIRED if your markdown's first heading is generic. Example: 'P049 — featureId validation: tests + adapter wiring'."),
+    title: z.string().min(3).optional().describe("Meaningful handoff title summarizing the work."),
     confirmed: z.boolean().describe("Set true only after the user explicitly confirms the proposed feature+phase target."),
-    content: z.string().min(1).describe("Handoff text (markdown)."),
+    content: z.string().min(1).describe("Full reconciled handoff text (markdown)."),
+    expectedHandoffUpdatedAt: z.string().optional().describe("Exact token returned by planner-handoff-prepare; empty when no handoff exists."),
+    reconciledExistingHandoff: z.boolean().optional().describe("Confirm that still-relevant existing handoff information was retained."),
+    taskUpdates: z.array(z.object({
+      taskRef: z.string().min(1),
+      completionSummary: z.string().min(1),
+      verification: z.string().min(1),
+      remainingWork: z.string().min(1),
+      filesTouched: z.array(z.string().min(1)).optional(),
+      decisions: z.array(z.string().min(1)).optional(),
+    })).optional(),
+    phaseUpdate: z.object({
+      progressSummary: z.string().min(1),
+      remainingWork: z.string().min(1),
+      decisions: z.array(z.string().min(1)).optional(),
+    }).optional(),
+    phaseNoUpdateReason: z.string().min(1).optional(),
+    featureUpdate: z.object({ workDone: z.string().min(1), workRemaining: z.string().min(1) }).optional(),
+    featureNoUpdateReason: z.string().min(1).optional(),
   },
-}, async ({ phaseRef, title, confirmed, content }) => {
+}, async ({ phaseRef, title, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
   const st = await requireStore();
   let body = content.trim();
-  const firstLine = body.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "";
+  const firstLine = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
   const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
-  const genericTitlePattern = /^(handoff|canonical handoff|session handoff)$/i;
-  const effectiveHeadingText = title?.trim() ? title.trim() : firstHeadingText;
-  const isGeneric = !effectiveHeadingText || genericTitlePattern.test(effectiveHeadingText);
-  if (isGeneric) {
-    return text("❌ Generic handoff title. Provide a meaningful `title` (or start your markdown with a descriptive H1) summarizing the work — e.g. 'P049 — featureId validation: tests + adapter wiring'. Generic titles like 'Handoff' or 'Canonical handoff' are not accepted.");
+  const effectiveHeadingText = title?.trim() || firstHeadingText;
+  if (!effectiveHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(effectiveHeadingText)) {
+    return text("❌ Generic handoff title. Provide a meaningful title summarizing the work.");
   }
-  if (title && title.trim()) {
-    const t = title.trim();
+  if (title?.trim()) {
     const lines = body.split(/\r?\n/);
-    const firstIdx = lines.findIndex((l) => l.trim().length > 0);
-    if (firstIdx !== -1 && /^#+\s/.test(lines[firstIdx] ?? "")) {
-      lines[firstIdx] = `# ${t}`;
-      body = lines.join("\n");
-    } else {
-      body = `# ${t}\n\n${body}`;
-    }
+    const firstIdx = lines.findIndex((line) => line.trim().length > 0);
+    if (firstIdx !== -1 && /^#+\s/.test(lines[firstIdx] ?? "")) lines[firstIdx] = `# ${title.trim()}`;
+    else lines.unshift(`# ${title.trim()}`, "");
+    body = lines.join("\n");
   }
   const r = await resolvePhaseForHandoff(st, phaseRef);
   if (!r.ok) return text(`❌ ${r.error}`);
-  if (!confirmed) return text(`Proposal only: I would write this handoff on ${r.compositeRef}. Ask the user to confirm this exact feature/phase, then retry with confirmed=true.`, { phaseRef: r.compositeRef, confirmationRequired: true });
-  await st.setPhaseHandoff(r.phase.id, body);
-  return text(`✅ Wrote handoff on ${r.compositeRef}.`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
+  if (!confirmed) return text(`Proposal only: I would refresh this handoff on ${r.compositeRef}. Ask the user to confirm, then run planner-handoff-prepare with the exact phaseRef.`, { phaseRef: r.compositeRef, confirmationRequired: true });
+  if (expectedHandoffUpdatedAt === undefined) return text("❌ Run planner-handoff-prepare first and pass expectedHandoffUpdatedAt.");
+
+  const phases = await st.loadAllPhases();
+  const features = (await st.loadFeatures()).features;
+  const resolvedTaskUpdates = [];
+  for (const update of taskUpdates ?? []) {
+    const found = findTaskByRef(phases, features, update.taskRef.trim());
+    if (!found || found.phase.id !== r.phase.id) return text(`❌ Task ${update.taskRef} does not belong to ${r.compositeRef}.`);
+    resolvedTaskUpdates.push({
+      taskId: found.task.id,
+      completionSummary: update.completionSummary,
+      verification: update.verification,
+      remainingWork: update.remainingWork,
+      ...(update.filesTouched ? { filesTouched: update.filesTouched } : {}),
+      ...(update.decisions ? { decisions: update.decisions } : {}),
+    });
+  }
+  try {
+    const result = await st.refreshPhaseHandoff(r.phase.id, {
+      content: body,
+      expectedHandoffUpdatedAt,
+      reconciledExistingHandoff: reconciledExistingHandoff === true,
+      contextSync: {
+        taskUpdates: resolvedTaskUpdates,
+        ...(phaseUpdate ? { phaseUpdate: {
+          progressSummary: phaseUpdate.progressSummary,
+          remainingWork: phaseUpdate.remainingWork,
+          ...(phaseUpdate.decisions ? { decisions: phaseUpdate.decisions } : {}),
+        } } : {}),
+        ...(phaseNoUpdateReason ? { phaseNoUpdateReason } : {}),
+        ...(featureUpdate ? { featureUpdate } : {}),
+        ...(featureNoUpdateReason ? { featureNoUpdateReason } : {}),
+      },
+    });
+    await st.writeGenerated();
+    return text(`✅ Reconciled handoff and durable context on ${r.compositeRef}; updated ${result.updatedTaskIds.length} task(s).`, { phaseRef: r.compositeRef, phaseId: r.phase.id, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return text(`❌ Handoff refresh denied: ${message}`, { error: message });
+  }
 });
 
 server.registerTool("planner-handoff-prepare", {
-  description: "Prepare a canonical handoff proposal. Do not write until the agent has identified the exact feature+phase from the conversation and the user has confirmed that target.",
-}, async () => text([
-  "First identify the exact feature and phase actually discussed/worked on in this session. Do not use the first in-progress phase and do not target a phase that just became done.",
-  "Before calling planner-handoff-write, tell the user: 'I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?' Wait for explicit confirmation.",
-  "After confirmation, call planner-handoff-write with that exact phaseRef. If the phase is done/canceled, do not write an operational handoff.",
-  "Pass a meaningful title. Required sections: Created at, Updated at, Reason, Current focus, What was being done, How to resume, Files touched, Blockers, Next steps, Recent decisions, Reminder.",
-  "Stored on phase.handoff; .planner/HANDOFF.md is deprecated.",
-].join("\n")));
+  description: "Identify or audit the exact handoff target. Without phaseRef, returns the confirmation workflow. With a confirmed phaseRef, returns the current handoff/version and done tasks missing durable completion evidence.",
+  inputSchema: { phaseRef: z.string().min(1).optional() },
+}, async ({ phaseRef }) => {
+  if (!phaseRef) return text([
+    "First identify the exact feature and phase actually discussed/worked on in this session. Do not use a stale resume pointer or target a phase that just became done.",
+    "Tell the user: 'I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?' Wait for explicit confirmation.",
+    "After confirmation, call planner-handoff-prepare again with that exact phaseRef, then reconcile its current handoff and missing task evidence through planner-handoff-write.",
+  ].join("\n"));
+  const st = await requireStore();
+  const r = await resolvePhaseForHandoff(st, phaseRef);
+  if (!r.ok) return text(`❌ ${r.error}`);
+  try {
+    const audit = await st.preparePhaseHandoff(r.phase.id);
+    const missing = audit.missingCompletionTasks.map((task) => `- T${String(task.number).padStart(3, "0")} — ${task.title}`).join("\n") || "- None";
+    return text([
+      `Handoff preparation audit for ${r.compositeRef}`,
+      `Base handoffUpdatedAt: ${audit.handoffUpdatedAt || "(empty)"}`,
+      "Done tasks missing durable completion/verification evidence:",
+      missing,
+      "",
+      "Existing active handoff (reconcile all still-relevant content):",
+      audit.handoff.trim() || "(none)",
+    ].join("\n"), { phaseRef: r.compositeRef, ...audit });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return text(`❌ Handoff preparation failed: ${message}`, { error: message });
+  }
+});
 
 server.registerTool("planner-handoff-clear", {
   description: "Clear/archive the entity-scoped handoff of a phase. phaseRef is required; never infer a phase automatically.",

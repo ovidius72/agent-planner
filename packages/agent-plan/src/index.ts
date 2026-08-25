@@ -182,9 +182,9 @@ Route common commands as follows:
 - \`task discuss <id|name>\` → call \`planner-task-discuss\`
 - \`task update <id|name>\` → call \`planner-task-update\`
 - \`task delete <id|name>\` → call \`planner-task-delete\`
-- \`task start <id|name>\` → call \`planner-task-start\`
-- \`task complete <id|name>\` → call \`planner-task-complete\`
-- \`handoff prepare\` → call \`planner-handoff-prepare\`, then draft the handoff and call \`planner-handoff-write\`
+- \`task start <id|name>\` → call \`planner-task-start\`. If it returns isError or structuredContent.started=false, follow its exact nextActions and retry; never tell the user the task started unless structuredContent.started=true.
+- \`task complete <id|name>\` → collect a durable summary of shipped work, verification (including partial verification), remaining/unverified work, files and decisions; call \`planner-task-complete\` with description_update. Never complete through \`planner-task-update\`.
+- \`handoff prepare\` → call \`planner-handoff-prepare\` without a phaseRef to get the target-confirmation workflow; after the user confirms the exact P00x(F00x), call it again with that phaseRef. Read the existing handoff/version and missing task evidence, then call \`planner-handoff-write\` with one fully reconciled handoff, the exact expectedHandoffUpdatedAt token, taskUpdates for every missing task, and durable phase/feature updates or explicit no-update reasons. Never blindly replace an existing handoff.
 - \`handoff show\` → call \`planner-handoff-show\`
 - \`handoff write\` → call \`planner-handoff-write\` after drafting or asking for content
 - \`handoff clear\` → call \`planner-handoff-clear\`

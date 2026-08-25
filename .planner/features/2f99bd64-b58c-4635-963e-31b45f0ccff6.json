@@ -1,0 +1,107 @@
+{
+  "id": "2f99bd64-b58c-4635-963e-31b45f0ccff6",
+  "number": 20,
+  "shortId": "48BCY",
+  "priority": 20,
+  "name": "Make handoffs and lifecycle outcomes trustworthy",
+  "description": "`packages/pi-adapter/src/index.ts:2349-2376` and `packages/plan-mcp/src/index.ts:1519-1527` currently instruct agents to draft a handoff but do not audit or atomically update durable task/phase/feature context. `packages/plan-core/src/plan-store.ts:2271-2284` archives every changed handoff as `superseded`, so repeated refreshes create multiple historical artifacts instead of maintaining one reconciled active handoff. `task_complete` completion summaries remain optional and agent-side `task_update` can still enter `done`, allowing completed tasks with no record of shipped work or partial verification. In addition, the ordered-context hard gate added in T326 returns denied `task_start` preconditions through an ordinary successful tool response; agents can falsely claim a task started while it remains planned. Goals: add a harness-agnostic audited handoff refresh contract that reconciles existing context, updates affected task/phase/feature durable fields in the same operation, avoids superseded archives during refresh, preserves archive-on-clear/phase-done, requires completion evidence, and returns unmistakable machine-readable start failures with retry instructions. Preserve existing public TypeScript exports and `PlanStore.setPhaseHandoff()` compatibility, explicit requirement reads, exact task→phase→feature read order, user-confirmed handoff targets, and human-readable composite refs.",
+  "descriptionUpdatedAt": "2026-08-25T09:36:01.056Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [
+    {
+      "id": "10a32e65-291f-4140-b967-79f40bd9b6da",
+      "title": "One reconciled active handoff with durable entity synchronization",
+      "decision": "Preparing and writing a handoff must audit and update durable task, phase, and feature context in the same workflow. If an active handoff already exists, the agent must reconcile and retain still-relevant information in one refreshed handoff rather than blindly replacing it or creating a superseded archive for every refresh.",
+      "rationale": "A handoff alone cannot compensate for completed tasks with empty summaries or stale parent context, and accumulating superseded handoffs makes the continuation source ambiguous. One current reconciled handoff plus durable entity state gives a resumer both immediate and long-lived context.",
+      "implementationNotes": "Add an exact-phase prepare audit with current handoff/version and missing-context findings; add structured entity updates and optimistic concurrency to built-in handoff write; preserve `PlanStore.setPhaseHandoff()` compatibility through a new refresh API; archive only on manual clear or phase completion.",
+      "acceptedAt": "2026-08-25T09:36:40.454Z"
+    },
+    {
+      "id": "5cf1783b-6771-42ba-a38c-82165fbaa611",
+      "title": "Denied task starts are typed failures, not apparent successes",
+      "decision": "Keep the ordered full-context and explicit linked-requirement read gates, but any denied task_start must return started=false with a stable error code and exact retry actions through the harness failure channel where supported. A success response may report started=true only after persisted in-progress state is verified.",
+      "rationale": "T326 made required reads enforceable but returned denials as ordinary tool results, allowing agents to claim a task started while it remained planned. The gate is valuable; the ambiguous outcome is the regression.",
+      "implementationNotes": "Align Pi and MCP response details and descriptions; include CONTEXT_READ_REQUIRED and REQUIREMENTS_READ_REQUIRED codes; instruct requirement_list then retry; add denial/no-mutation/retry/postcondition tests.",
+      "acceptedAt": "2026-08-25T09:36:47.490Z"
+    }
+  ],
+  "phaseIds": [
+    "d7c3ad4b-8473-4985-9c0a-aff650635de0",
+    "08e732e1-3120-44e1-a955-e53b16edb0aa"
+  ],
+  "dependsOn": [],
+  "statusLog": [
+    {
+      "id": "6d1bed0c-5ebe-4fb8-a04f-856aa3c910ce",
+      "date": "2026-08-25T09:37:11.988Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "9cf060ab-d20e-484a-ac2e-fbfa10b1c7f7",
+      "date": "2026-08-25T11:25:16.661Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "172ddd16-c22a-4e98-954d-78771ec44a9f",
+      "date": "2026-08-25T11:32:31.752Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "389b4dcd-6607-4519-83ae-e648d585f0ad",
+      "date": "2026-08-25T11:32:49.913Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "e1bfdfa2-da03-459c-9aa3-9c9df304ea7e",
+      "date": "2026-08-25T11:33:42.789Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "ab56ef23-1681-4d69-a24e-7098f4b5b859",
+      "date": "2026-08-25T11:34:25.636Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "61c9da85-7ee9-4905-abbe-faf1cc77d972",
+      "date": "2026-08-25T11:53:13.305Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "3d19f6d4-4263-48f7-a1fb-8deb5ee37b65",
+      "date": "2026-08-25T12:24:40.706Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-08-25T09:36:00.959Z",
+  "updatedAt": "2026-08-25T09:36:47.490Z"
+}

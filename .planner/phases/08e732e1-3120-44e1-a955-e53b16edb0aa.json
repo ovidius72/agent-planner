@@ -1,0 +1,325 @@
+{
+  "id": "08e732e1-3120-44e1-a955-e53b16edb0aa",
+  "featureId": "2f99bd64-b58c-4635-963e-31b45f0ccff6",
+  "number": 81,
+  "shortId": "CXXTV",
+  "priority": 2,
+  "slug": "persist-session-scoped-context-read-attestations",
+  "title": "Persist session-scoped context read attestations",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Avoid repeated context reads while invalidating sessions after real entity changes.",
+  "description": "Implement durable session-scoped context-read attestations without changing semantic entity timestamps. Current read tracking in packages/plan-core/src/read-tracking.ts is process-global despite per-session comments, while task/phase/feature/requirement documents already expose updatedAt fields used for lifecycle context. Add a bounded sessionInfo record to the relevant persisted entities or equivalent schema-owned metadata, preserving updatedAt when bookkeeping is written. The lifecycle gate in packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts must accept a current session only when its sessionInfo entry exists and the entity updatedAt has not advanced beyond the read timestamp; otherwise it must require the exact full context sequence and explicit linked-requirement read. Preserve public API compatibility, composite IDs, atomic PlanStore writes, WebSocket semantics, and task lifecycle behavior. Cover same-session reuse, real entity-change invalidation, session isolation, metadata-write timestamp preservation, stale-entry pruning, Pi/MCP parity, and no repeated parent reads after valid cached context.",
+  "descriptionUpdatedAt": "2026-08-25T11:51:01.542Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0",
+    "b3f56864-29af-4843-9910-7f2008cffc4c",
+    "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb",
+    "0375ded8-afc5-414a-adeb-52d6145fc2c3"
+  ],
+  "tasks": [
+    {
+      "id": "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0",
+      "phaseId": "08e732e1-3120-44e1-a955-e53b16edb0aa",
+      "number": 333,
+      "shortId": "WV8NQ",
+      "priority": 1,
+      "shortName": "sessioninfo-schema",
+      "title": "Define persisted sessionInfo and timestamp-preserving writes",
+      "status": "done",
+      "description": "Update packages/plan-core/src/schema.ts and packages/plan-core/src/plan-store.ts to define the persisted sessionInfo shape for task, phase, feature, and linked requirement context reads. Store opaque sessionId plus createdAt/read timestamp, deduplicate entries, bound or prune stale entries, and ensure metadata-only writes preserve each entity's semantic updatedAt and descriptionUpdatedAt. Add an atomic PlanStore API that records a completed context-read attestation without changing lifecycle status, generated content, or unrelated fields. Preserve schema compatibility for existing plans and verify rollback/atomicity under concurrent metadata updates.\n\n---\n**Completion summary:**\nAdded backward-compatible sessionInfo arrays to task, phase, feature, and requirement schemas and introduced PlanStore.recordContextRead. The API atomically records one completed context-read attestation across the target entities, deduplicates per session, caps history at 16 entries, validates referenced requirements, preserves updatedAt/descriptionUpdatedAt, and rolls back completed writes on failure. Added core tests for persistence, deduplication, bounded pruning, timestamp preservation, and missing-requirement non-mutation. Verification: pnpm check, core build, focused session-info tests 2/2, and git diff --check passed. Remaining: adapter/session-aware eligibility wiring is covered by T334-T335.",
+      "descriptionUpdatedAt": "2026-08-25T12:02:51.791Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0-check-001-planned-in-progress",
+          "date": "2026-08-25T11:53:13.235Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0-check-002-in-progress-done",
+          "date": "2026-08-25T12:02:51.789Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0-check-001-define-schema-and-backward-compatible-defaults-for-sessioninfo",
+          "number": 1,
+          "title": "Define schema and backward-compatible defaults for sessionInfo",
+          "checked": true
+        },
+        {
+          "id": "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0-check-002-implement-atomic-metadata-recording-without-changing-updatedat-fields",
+          "number": 2,
+          "title": "Implement atomic metadata recording without changing updatedAt fields",
+          "checked": true
+        },
+        {
+          "id": "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0-check-003-add-bounded-stale-entry-pruning-and-deduplication",
+          "number": 3,
+          "title": "Add bounded stale-entry pruning and deduplication",
+          "checked": true
+        },
+        {
+          "id": "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0-check-004-test-persistence-rollback-and-timestamp-preservation",
+          "number": 4,
+          "title": "Test persistence, rollback, and timestamp preservation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-25T11:53:13.235Z",
+      "completedAt": "2026-08-25T12:02:51.789Z",
+      "createdAt": "2026-08-25T11:51:10.479Z",
+      "updatedAt": "2026-08-25T12:02:51.789Z"
+    },
+    {
+      "id": "b3f56864-29af-4843-9910-7f2008cffc4c",
+      "phaseId": "08e732e1-3120-44e1-a955-e53b16edb0aa",
+      "number": 334,
+      "shortId": "M9EUT",
+      "priority": 2,
+      "shortName": "session-aware-gate",
+      "title": "Make context-read eligibility session-aware",
+      "status": "done",
+      "description": "Refactor packages/plan-core/src/read-tracking.ts and its callers so context readiness is scoped by an explicit agent session ID rather than one process-global singleton. Preserve the required initial task_get(full=true) → phase_get(full=true) → feature_get(full=true) ordering and separate requirement-list gate, then persist an attestation after the complete tree is read. On task_start, task resume, or task switch, reuse the phase/task/feature/requirement context only when the current sessionInfo entries exist and no entity updatedAt has advanced since the attestation; otherwise return the existing typed prerequisite denial. Keep session reset, pause/switch invalidation, orphan phases, and public compatibility behavior explicit and tested.\n\n---\n**Completion summary:**\nRefactored plan-core read tracking into explicit per-session state with compatibility wrappers. Added session-aware full-context and linked-requirement eligibility that can reuse persisted sessionInfo only while every current entity updatedAt remains at or before the attestation timestamp; changed entities fall back to the exact ordered read denial. Added explicit session initialization, per-session invalidation, session-isolation tests, persisted-attestation invalidation tests, and retained legacy APIs. Verification: pnpm check, core build, read-tracking/session-info focused tests 10/10, and git diff --check passed. Remaining: Pi/MCP session propagation and adapter read wiring are covered by T335.",
+      "descriptionUpdatedAt": "2026-08-25T12:06:22.758Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "b3f56864-29af-4843-9910-7f2008cffc4c-check-001-planned-in-progress",
+          "date": "2026-08-25T12:03:19.286Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b3f56864-29af-4843-9910-7f2008cffc4c-check-002-in-progress-done",
+          "date": "2026-08-25T12:06:22.755Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b3f56864-29af-4843-9910-7f2008cffc4c-check-001-introduce-explicit-session-identity-and-per-session-read-state",
+          "number": 1,
+          "title": "Introduce explicit session identity and per-session read state",
+          "checked": true
+        },
+        {
+          "id": "b3f56864-29af-4843-9910-7f2008cffc4c-check-002-preserve-exact-initial-read-ordering-and-requirement-gating",
+          "number": 2,
+          "title": "Preserve exact initial read ordering and requirement gating",
+          "checked": true
+        },
+        {
+          "id": "b3f56864-29af-4843-9910-7f2008cffc4c-check-003-validate-sessioninfo-timestamps-before-allowing-lifecycle-entry",
+          "number": 3,
+          "title": "Validate sessionInfo timestamps before allowing lifecycle entry",
+          "checked": true
+        },
+        {
+          "id": "b3f56864-29af-4843-9910-7f2008cffc4c-check-004-define-reset-behavior-for-new-sessions-pause-switch-and-stale-context",
+          "number": 4,
+          "title": "Define reset behavior for new sessions, pause, switch, and stale context",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-25T12:03:19.286Z",
+      "completedAt": "2026-08-25T12:06:22.755Z",
+      "createdAt": "2026-08-25T11:51:17.284Z",
+      "updatedAt": "2026-08-25T12:06:22.755Z"
+    },
+    {
+      "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb",
+      "phaseId": "08e732e1-3120-44e1-a955-e53b16edb0aa",
+      "number": 335,
+      "shortId": "8AUT9",
+      "priority": 3,
+      "shortName": "adapter-session-wire",
+      "title": "Wire Pi and MCP session context reuse",
+      "status": "done",
+      "description": "Update packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts to create and propagate stable session IDs for the lifetime of each harness session. Read handlers must complete and attest the task/phase/feature/requirement tree once; later task_start, resume, and switch calls must consult the session-aware core gate instead of instructing agents to reread unchanged parents. When an entity updatedAt changes, return the precise typed read-required failure and exact retry sequence. Update tool descriptions, injected planner rules, recap guidance, and lifecycle diagnostics to say reads are reused until session or entity invalidation, without weakening the hard gate.\n\n---\n**Completion summary:**\nWired stable per-harness session IDs through Pi session_start and the MCP server, converted full feature/phase/task/requirement reads to session-scoped tracking, and updated task_start, task_switch, resume paths to validate persisted sessionInfo against current updatedAt values. Valid context is reused without repeating parent reads; stale context returns typed retry guidance; fresh reads replace stale attestations. Updated lifecycle descriptions and injected Pi rules to say reads are reused until session or entity invalidation. Verification: pnpm check, production build, focused Pi lifecycle/switch tests 2/2, focused MCP lifecycle/switch tests 2/2, read-tracking/session-info tests 10/10, and git diff --check passed. Remaining: broader cross-harness invalidation and no-token-burn regression coverage is T336.",
+      "descriptionUpdatedAt": "2026-08-25T12:20:45.970Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb-check-001-planned-in-progress",
+          "date": "2026-08-25T12:06:52.998Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb-check-002-in-progress-done",
+          "date": "2026-08-25T12:20:45.968Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb-check-001-create-stable-pi-and-mcp-session-ids",
+          "number": 1,
+          "title": "Create stable Pi and MCP session IDs",
+          "checked": true
+        },
+        {
+          "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb-check-002-wire-full-read-completion-to-persisted-attestations",
+          "number": 2,
+          "title": "Wire full-read completion to persisted attestations",
+          "checked": true
+        },
+        {
+          "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb-check-003-reuse-valid-context-in-start-resume-switch-paths",
+          "number": 3,
+          "title": "Reuse valid context in start/resume/switch paths",
+          "checked": true
+        },
+        {
+          "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb-check-004-update-descriptions-rules-and-diagnostics",
+          "number": 4,
+          "title": "Update descriptions, rules, and diagnostics",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-25T12:06:52.998Z",
+      "completedAt": "2026-08-25T12:20:45.968Z",
+      "createdAt": "2026-08-25T11:51:24.368Z",
+      "updatedAt": "2026-08-25T12:20:45.968Z"
+    },
+    {
+      "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3",
+      "phaseId": "08e732e1-3120-44e1-a955-e53b16edb0aa",
+      "number": 336,
+      "shortId": "USUQA",
+      "priority": 4,
+      "shortName": "session-read-tests",
+      "title": "Add cross-harness session invalidation coverage",
+      "status": "done",
+      "description": "Add regression coverage across packages/plan-core/test, packages/pi-adapter/test, packages/plan-mcp/test, and relevant server or Web UI integration fixtures. Prove the first complete tree read is recorded, repeated starts/resumes in the same session do not require repeated parent reads, a different session is denied until it reads the tree, any real task/phase/feature/requirement update invalidates the matching attestation, sessionInfo writes do not alter updatedAt, stale entries are pruned, and concurrent sessions remain isolated. Preserve existing typed task-start outcomes, lifecycle non-mutation guarantees, WebSocket behavior, and full unit/Web UI validation gates.\n\n---\n**Completion summary:**\nCompleted cross-harness validation for persisted sessionInfo context reuse. Added core tests for session isolation, fresh reread superseding stale attestations, persisted invalidation, bounded history, timestamp preservation, and non-mutation. Extended Pi and MCP lifecycle tests so an initial denied start records reusable context and subsequent start/switch calls succeed through the cached session without rereading parents. Verification: pnpm test:unit passed 407/407 unit tests and 44/44 Web UI tests; pnpm build and pnpm check passed; focused Pi/MCP/core suites passed; existing WebSocket event coverage passed; git diff --check passed. No known verification gaps; changes remain uncommitted on next.",
+      "descriptionUpdatedAt": "2026-08-25T12:24:40.612Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3-check-001-planned-in-progress",
+          "date": "2026-08-25T12:21:23.538Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3-check-002-in-progress-done",
+          "date": "2026-08-25T12:24:40.610Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": ""
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3-check-001-test-same-session-reuse-and-new-session-denial",
+          "number": 1,
+          "title": "Test same-session reuse and new-session denial",
+          "checked": true
+        },
+        {
+          "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3-check-002-test-invalidation-after-each-entity-type-changes",
+          "number": 2,
+          "title": "Test invalidation after each entity type changes",
+          "checked": true
+        },
+        {
+          "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3-check-003-test-session-isolation-pruning-and-timestamp-preservation",
+          "number": 3,
+          "title": "Test session isolation, pruning, and timestamp preservation",
+          "checked": true
+        },
+        {
+          "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3-check-004-run-focused-unit-build-check-and-web-ui-validation",
+          "number": 4,
+          "title": "Run focused, unit, build, check, and Web UI validation",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-25T12:21:23.538Z",
+      "completedAt": "2026-08-25T12:24:40.610Z",
+      "createdAt": "2026-08-25T11:51:31.698Z",
+      "updatedAt": "2026-08-25T12:24:40.610Z"
+    }
+  ],
+  "createdAt": "2026-08-25T11:51:01.542Z",
+  "updatedAt": "2026-08-25T12:24:40.610Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "265f69f9-e8b3-46e7-b2cb-fa78b14d1761",
+      "date": "2026-08-25T11:53:13.255Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "12d7bd9f-697a-490b-a369-95a1c722dbca",
+      "date": "2026-08-25T12:24:40.638Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ]
+}

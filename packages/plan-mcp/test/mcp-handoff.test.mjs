@@ -42,6 +42,45 @@ after(async () => {
 
 const LONG = "src/mcp-handoff.ts:10 existing state and the concrete goal for this entity; include file refs and behaviors to preserve so the description clears the 50-char minimum.";
 
+async function preparedHandoffArgs(session, phaseRef = "P001") {
+  const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef });
+  const audit = prepared.structuredContent ?? {};
+  return {
+    expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
+    reconciledExistingHandoff: true,
+    taskUpdates: [],
+    phaseNoUpdateReason: "Fixture does not change durable phase context.",
+    featureNoUpdateReason: "Fixture does not change durable feature context.",
+  };
+}
+
+function canonicalHandoff(title, detail) {
+  return [
+    `# ${title}`,
+    "",
+    "Created at: 2026-08-24T00:00:00.000Z",
+    "Updated at: 2026-08-24T00:00:00.000Z",
+    "Reason: test fixture",
+    "",
+    "## Current focus", detail,
+    "## What was being done", detail,
+    "## How to resume", "Continue the fixture.",
+    "## Files touched", "- test fixture",
+    "## Blockers", "- None",
+    "## Next steps", "- Continue",
+    "## Recent decisions", "- Preserve relevant context",
+  ].join("\n");
+}
+
+async function writePreparedHandoff(session, input) {
+  return callTool(session, "planner-handoff-write", {
+    ...input,
+    content: canonicalHandoff(input.title, input.content),
+    confirmed: true,
+    ...(await preparedHandoffArgs(session, input.phaseRef)),
+  });
+}
+
 test("planner-handoff-prepare returns a generic proposal", async () => {
   const session = await startMcpFixture({ name: "t238-prepare" });
   try {
@@ -49,11 +88,10 @@ test("planner-handoff-prepare returns a generic proposal", async () => {
     const text = toolText(res);
     // Should contain the instructional lines
     assert.match(text, /First identify the exact feature and phase actually discussed/);
-    assert.match(text, /Before calling planner-handoff-write, tell the user:/);
+    assert.match(text, /Tell the user:/);
     assert.match(text, /I propose writing this handoff on P00x\(F00x\) — <phase title>\. Confirm\?/);
-    assert.match(text, /After confirmation, call planner-handoff-write with that exact phaseRef/);
-    assert.match(text, /Pass a meaningful title/);
-    assert.match(text, /Stored on phase\.handoff;/);
+    assert.match(text, /call planner-handoff-prepare again with that exact phaseRef/);
+    assert.match(text, /reconcile its current handoff and missing task evidence/);
   } finally {
     await closeMcpFixture(session);
   }
@@ -77,9 +115,9 @@ test("planner-handoff-write without confirmed returns a proposal with exact comp
     // Should be a proposal, not a success.
     assert.match(text, /^Proposal only:/);
     // Must contain the exact composite ref of the seed phase.
-    assert.match(text, /I would write this handoff on P001\(F001\)/);
+    assert.match(text, /I would refresh this handoff on P001\(F001\)/);
     // Must ask the user to confirm.
-    assert.match(text, /Ask the user to confirm this exact feature\/phase, then retry with confirmed=true/);
+    assert.match(text, /Ask the user to confirm/);
   } finally {
     await closeMcpFixture(session);
   }
@@ -89,14 +127,13 @@ test("planner-handoff-write with confirmed=true writes the handoff and can be re
   const session = await startMcpFixture({ name: "t238-write-confirmed" });
   try {
     // First, write a handoff with confirmed=true
-    const writeRes = await callTool(session, "planner-handoff-write", {
+    const writeRes = await writePreparedHandoff(session, {
       phaseRef: "P001",
       title: "P001 — Test handoff",
       content: "# Test handoff\nThis is a test handoff for T238.",
-      confirmed: true,
     });
     const writeText = toolText(writeRes);
-    assert.match(writeText, /Wrote handoff on P001\(F001\)\./);
+    assert.match(writeText, /Reconciled handoff and durable context on P001\(F001\)/);
 
     // Now show the handoff
     const showRes = await callTool(session, "planner-handoff-show", { phaseRef: "P001" });
@@ -120,11 +157,10 @@ test("planner-handoff-write with confirmed=true writes the handoff and can be re
 test("planner-task-start retains a pending handoff", async () => {
   const session = await startMcpFixture({ name: "t243-task-start-retention" });
   try {
-    await callTool(session, "planner-handoff-write", {
+    await writePreparedHandoff(session, {
       phaseRef: "P001",
       title: "P001 — MCP retention handoff",
       content: "MCP task start must keep this handoff.",
-      confirmed: true,
     });
 
     await callTool(session, "planner-task-show", { task: "T001", full: true });
@@ -150,14 +186,13 @@ test("planner-handoff-write rejects writing to a done phase", async () => {
     // Seed phase P001 has one task T001. We'll complete it.
     // Start and complete the task.
     await callTool(session, "planner-task-start", { task: "T001" });
-    await callTool(session, "planner-task-complete", { task: "T001", force: true });
+    await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified for terminal handoff coverage." });
     // Now the phase should be derived as done (since all tasks done).
     // Try to write handoff to P001.
-    const res = await callTool(session, "planner-handoff-write", {
+    const res = await writePreparedHandoff(session, {
       phaseRef: "P001",
       title: "Should not be written",
       content: "dummy",
-      confirmed: true,
     });
     const text = toolText(res);
     // Expect an error indicating that done/canceled phases reject new handoffs.
@@ -182,11 +217,10 @@ test("planner-handoff-list and handoff clear workflow", async () => {
     assert.match(toolText(listRes), /^No phase handoffs set\./);
 
     // Write a handoff
-    await callTool(session, "planner-handoff-write", {
+    await writePreparedHandoff(session, {
       phaseRef: "P001",
       title: "Handoff for list/clear",
       content: "---\n",
-      confirmed: true,
     });
 
     // Now list should show it
@@ -247,9 +281,9 @@ test("handoff proposal is actionable and contains exact target for user confirma
     });
     const text = toolText(res);
     // The proposal must contain the exact composite ref that the agent should present to the user.
-    assert.match(text, /I would write this handoff on P001\(F001\)\./);
+    assert.match(text, /I would refresh this handoff on P001\(F001\)\./);
     // The rest of the sentence tells the user what to do.
-    assert.match(text, /Ask the user to confirm this exact feature\/phase, then retry with confirmed=true/);
+    assert.match(text, /Ask the user to confirm/);
     // Ensure the proposal does NOT contain a raw UUID (should use composite ref).
     const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
     assert.ok(!uuidRegex.test(text), "proposal must not leak raw UUID");
@@ -258,22 +292,20 @@ test("handoff proposal is actionable and contains exact target for user confirma
   }
 });
 
-test("replacement write archives the superseded handoff; active list shows only the newest", async () => {
+test("refresh reconciles one active handoff without creating a superseded archive", async () => {
   const session = await startMcpFixture({ name: "t238-replacement-archive" });
   try {
     // H1 confirmed via MCP
-    await callTool(session, "planner-handoff-write", {
+    await writePreparedHandoff(session, {
       phaseRef: "P001",
       title: "H1 — first version",
       content: "First handoff content for the replacement test.",
-      confirmed: true,
     });
-    // H2 confirmed replaces H1 (different content → supersede)
-    await callTool(session, "planner-handoff-write", {
+    // H2 reconciles still-relevant H1 content into the same active handoff.
+    await writePreparedHandoff(session, {
       phaseRef: "P001",
       title: "H2 — second version",
-      content: "Second handoff content replacing the first one.",
-      confirmed: true,
+      content: "First handoff content remains relevant. Second handoff content adds the latest state.",
     });
 
     // Active list contains ONLY H2
@@ -284,15 +316,13 @@ test("replacement write archives the superseded handoff; active list shows only 
     assert.match(listText, /H2 — second version/);
     assert.doesNotMatch(listText, /H1 — first version/);
 
-    // Archive (store-only surface, not exposed by MCP tools): H1 recoverable
-    // with reason `superseded` and its full content.
+    // Refresh keeps a single active body and does not create superseded history.
     const archived = await session.store.listArchivedHandoffs();
-    const mine = archived.filter((e) => e.compositeRef === "P001(F001)");
-    assert.equal(mine.length, 1, "expected exactly one archived entry for P001(F001)");
-    assert.equal(mine[0].reason, "superseded");
-    assert.equal(mine[0].firstLine, "H1 — first version");
-    assert.match(mine[0].content, /First handoff content for the replacement test\./);
-    assert.doesNotMatch(mine[0].content, /Second handoff content/);
+    const mine = archived.filter((entry) => entry.compositeRef === "P001(F001)");
+    assert.equal(mine.length, 0);
+    const shown = toolText(await callTool(session, "planner-handoff-show", { phaseRef: "P001" }));
+    assert.match(shown, /First handoff content remains relevant/);
+    assert.match(shown, /Second handoff content adds the latest state/);
   } finally {
     await closeMcpFixture(session);
   }
@@ -302,11 +332,10 @@ test("clear archives the handoff with reason manual and empties the active list"
   const session = await startMcpFixture({ name: "t238-clear-archive" });
   try {
     // H1 confirmed via MCP
-    await callTool(session, "planner-handoff-write", {
+    await writePreparedHandoff(session, {
       phaseRef: "P001",
       title: "H1 — clear archive",
       content: "Content archived by a manual clear.",
-      confirmed: true,
     });
 
     const clearRes = await callTool(session, "planner-handoff-clear", { phaseRef: "P001" });
