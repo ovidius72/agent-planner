@@ -109,16 +109,17 @@ Rules: do NOT write "DONE" in step titles; do NOT put steps in `description`. Ea
 ## ID convention
 
 Always reference entities by human composite IDs, never raw UUIDs:
-- Feature: `F001 - Nome`
-- Phase: `P001(F001) - Titolo`
-- Task: `T001(P001/F001) - Titolo`
+- Feature: `F001 - Name`
+- Phase: `P001(F001) - Title`
+- Task: `T001(P001/F001) - Title`
 
 `findTaskByRef` / `findPhaseByRef` / `findFeatureByRef` accept composite IDs
 and short forms (`F00x`, `P00x`, `T00x`).
 
-## Operational protocol (from AGENTS.md)
+## Planner operational protocol
 
-- `planner-task-start` BEFORE touching code; `planner-task-complete` AS PART of delivery.
+- Call `planner-task-start` or `planner-task-switch` before reading context so valid session attestations can be reused. If denied, perform only the missing or stale full reads listed in `nextActions`, in order, retry the lifecycle operation, and touch code only after `started=true`.
+- Call `planner-task-complete` as part of delivering finished work.
 - Planner operations (handoff, `planner-show`, CRUD) are NOT code edits and are
   always allowed regardless of task state.
 - Status changes to `blocked`/`canceled`/`rejected`/`deferred`/`waiting`

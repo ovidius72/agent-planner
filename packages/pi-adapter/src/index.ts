@@ -19,7 +19,7 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { serve } from "@agent-plan/server/serve";
@@ -38,7 +38,7 @@ let capturedPi: ExtensionAPI | null = null;
 let store: PlanStore | null = null;
 let server: ServeHandle | null = null;
 let lastKnownWebPort: number | null = null;
-let plannerSessionId = randomUUID();
+let plannerSessionId = "pi:uninitialized";
 
 // True while the agent is mutating .planner/ files. The web server returns 503-busy
 // during this window so the UI doesn't render inconsistent data.
@@ -67,6 +67,22 @@ function taskStartFailure(
     ].join("\n") }],
     details: { ...outcome, ...details },
   };
+}
+
+function piContextReadActions(
+  eligibility: ReturnType<typeof contextReadEligibilityForSession>,
+  refs: { task: string; phase: string; feature?: string },
+  requirementReadRequired: boolean,
+  retryAction: string,
+): string[] {
+  const actions = (eligibility.requiredReads ?? []).flatMap((read) => {
+    if (read.kind === "task") return [`task_get ${refs.task} with full=true`];
+    if (read.kind === "phase") return [`phase_get ${refs.phase} with full=true`];
+    return refs.feature ? [`feature_get ${refs.feature} with full=true`] : [];
+  });
+  if (requirementReadRequired) actions.push("requirement_list");
+  actions.push(retryAction);
+  return actions;
 }
 
 // Helper to notify a running server in another process via HTTP.
@@ -877,8 +893,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // ── Restore on session start/reload ─────────────────────────────────
   pi.on("session_start", async (_event, ctx) => {
-    plannerSessionId = randomUUID();
-    invalidateReads();
+    plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+    invalidateReads(plannerSessionId);
     startReadSession(plannerSessionId);
     try {
     ctx.ui.addAutocompleteProvider((current) => ({
@@ -2230,11 +2246,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             requirementIds: linkedRequirementIds,
           };
           const contextEligibility = contextReadEligibilityForSession(contextInput);
+          const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+          const phaseRef = formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
+          const taskRef = `${phaseRef}/T${String(task.number).padStart(3, "0")}`;
+          const featureRef = feature ? formatFeatureRef(feature.number) : "";
           if (!contextEligibility.eligible) {
-            ctx.ui.notify(`❌ TASK START FAILED [CONTEXT_READ_REQUIRED]\nstarted: false\n${contextEligibility.reason}\nRead task(full), phase(full), feature(full) in order, then retry.`, "error");
+            const actions = piContextReadActions(
+              contextEligibility,
+              { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
+              !requirementsReady,
+              `/planner task start ${taskRef}`,
+            );
+            ctx.ui.notify(`❌ TASK START FAILED [CONTEXT_READ_REQUIRED]\nstarted: false\n${contextEligibility.reason}\nNext required actions:\n${actions.map((action, index) => `${index + 1}. ${action}`).join("\n")}`, "error");
             return;
           }
-          if (!hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements)) {
+          if (!requirementsReady) {
             ctx.ui.notify("❌ TASK START FAILED [REQUIREMENTS_READ_REQUIRED]\nstarted: false\nRun requirement_list, then retry /planner task start. The task remains unchanged.", "error");
             return;
           }
@@ -4219,7 +4245,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(), relatedTaskId: "",
         pausedAt: nowISO(), pausedBy: params.paused_by?.trim() ?? "",
       };
-      invalidateReads();
+      invalidateReads(plannerSessionId);
       const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
       await st.syncTaskStatusRollup(found.phase.id);
       const activeDeviation = (await st.loadProject()).workDeviations
@@ -4252,7 +4278,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_switch",
     label: "Task Switch",
-    description: "Switch from active work to a temporary task, even outside priority order. Reuse the target's valid sessionInfo context or require the exact full tree when missing or stale. Atomically snapshot/pause the source, start the target, and push a durable LIFO return target.",
+    description: "Switch from active work to a temporary task, even outside priority order. Call this tool first so valid sessionInfo context can be reused; on denial, perform only the missing/stale reads listed in nextActions and retry. Atomically snapshot/pause the source, start the target, and push a durable LIFO return target.",
     parameters: Type.Object({
       from_task: Type.String({ description: "Currently in-progress task ref" }),
       to_task: Type.String({ description: "Temporary task ref to start" }),
@@ -4293,11 +4319,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         requirementIds: linkedRequirementIds,
       };
       const contextEligibility = contextReadEligibilityForSession(contextInput);
+      const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+      const targetPhaseRef = formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features));
+      const targetTaskRef = `${targetPhaseRef}/T${String(target.task.number).padStart(3, "0")}`;
+      const targetFeatureRef = targetFeature ? formatFeatureRef(targetFeature.number) : "";
       if (!contextEligibility.eligible) {
-        return { content: [{ type: "text", text: `Task switch denied: context reads required. ${contextEligibility.reason}` }], details: contextEligibility };
+        const nextActions = piContextReadActions(
+          contextEligibility,
+          { task: targetTaskRef, phase: targetPhaseRef, ...(targetFeatureRef ? { feature: targetFeatureRef } : {}) },
+          !requirementsReady,
+          `Retry task_switch to ${targetTaskRef}`,
+        );
+        return { content: [{ type: "text", text: `Task switch denied: context reads required. ${contextEligibility.reason}` }], details: { ...contextEligibility, nextActions } };
       }
-      if (!hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements)) {
-        return { content: [{ type: "text", text: "Task switch denied: read the requirements linked to the target phase and feature before switching." }], details: { requirementIds: linkedRequirementIds } };
+      if (!requirementsReady) {
+        return { content: [{ type: "text", text: "Task switch denied: read the requirements linked to the target phase and feature before switching." }], details: { requirementIds: linkedRequirementIds, nextActions: ["requirement_list", `Retry task_switch to ${targetTaskRef}`] } };
       }
       if (!hasValidSessionAttestation(contextInput)) {
         await st.recordContextRead({ sessionId: plannerSessionId, phaseId: target.phase.id, taskId: target.task.id, ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}), requirementIds: linkedRequirementIds });
@@ -4382,7 +4418,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.syncTaskStatusRollup(source.phase.id);
       if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
       await st.writeGenerated();
-      invalidateReads();
+      invalidateReads(plannerSessionId);
       const sourceRef = `${formatPhaseRef(source.phase.number, featureNumberOfPhase(source.phase, features))}/T${String(source.task.number).padStart(3, "0")}`;
       const targetRef = `${formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features))}/T${String(target.task.number).padStart(3, "0")}`;
       return {
@@ -4400,7 +4436,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_start",
     label: "Task Start",
-    description: "Set a task to in-progress or resume checkpointed work. Read the exact full task → phase → feature tree and linked requirements once per harness session; subsequent starts reuse persisted sessionInfo while entity updatedAt values remain unchanged. A stale or denied start is an isError result with started=false and an exact retry sequence; NEVER claim work started unless details.started is true. Success is returned only after persisted in-progress state is verified.",
+    description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, in order, and retry. A denied start is an isError result with started=false; NEVER claim work started unless details.started is true. Success is returned only after persisted in-progress state is verified.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
     }),
@@ -4415,10 +4451,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const taskRef = `${phaseRef}/T${String(task.number).padStart(3, "0")}`;
       const feature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
       const featureRef = feature ? formatFeatureRef(feature.number) : "";
-      if (task.status === "in-progress") {
-        const outcome = taskStartSucceeded(task.id, true);
-        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true` }], details: { ...task, ...outcome, task } };
-      }
       if (task.status === "done") return taskStartFailure(taskStartDenied(
         "TASK_DONE",
         `Task ${taskRef} is done and was not reopened.`,
@@ -4442,21 +4474,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         requirementIds: linkedRequirementIds,
       };
       const contextEligibility = contextReadEligibilityForSession(contextInput);
+      const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
       if (!contextEligibility.eligible) {
         return taskStartFailure(taskStartDenied(
           "CONTEXT_READ_REQUIRED",
           `Required context reads are incomplete or stale. ${contextEligibility.reason}`,
-          [
-            `task_get ${taskRef} with full=true`,
-            `phase_get ${phaseRef} with full=true`,
-            ...(featureRef ? [`feature_get ${featureRef} with full=true`] : []),
-            ...(linkedRequirementIds.length > 0 ? ["requirement_list"] : []),
+          piContextReadActions(
+            contextEligibility,
+            { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
+            !requirementsReady,
             `Retry task_start ${taskRef}`,
-          ],
+          ),
           { taskId: task.id },
         ), { contextEligibility });
       }
-      if (!hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements)) {
+      if (!requirementsReady) {
         return taskStartFailure(taskStartDenied(
           "REQUIREMENTS_READ_REQUIRED",
           "Linked requirements were not read; the task remains unchanged.",
@@ -4472,6 +4504,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}),
           requirementIds: linkedRequirementIds,
         });
+      }
+      if (task.status === "in-progress") {
+        const outcome = taskStartSucceeded(task.id, true);
+        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true` }], details: { ...task, ...outcome, task } };
       }
       const [project, phases, focus] = await Promise.all([st.loadProject(), st.loadAllPhases(), st.loadResume()]);
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
@@ -5001,7 +5037,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "",
         "Operational rules:",
         "- Handoffs are context, not locks. Read the relevant handoff with handoff show <ref> before resuming.",
-        "- BEFORE work: read the exact task(full), parent phase(full), parent feature(full), and linked requirements once per harness session in that order. Later task_start, resume, or task_switch calls reuse valid sessionInfo; reread only after a new session, a lineage change, or an entity updatedAt change. A denial is an error with started=false: follow its nextActions and retry; only details.started=true proves the task is in-progress. Only then touch code. AFTER finishing: task_complete with durable completion/verification evidence.",
+        "- BEFORE work: call task_start or task_switch first so valid sessionInfo attestations are reused. If denied, perform only the missing/stale full reads listed in nextActions, in that order, then retry. A denial is an error with started=false; only details.started=true proves the task is in-progress. Only then touch code. AFTER finishing: task_complete with durable completion/verification evidence.",
         "- Record every new decision or user-agreed modification in both the relevant feature and phase before treating the discussion as complete.",
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",

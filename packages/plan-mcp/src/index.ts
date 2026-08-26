@@ -14,8 +14,17 @@ import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/sche
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
 const PHASE_STATUS_VALUES = ["draft", "discovery", ...STATUS_VALUES] as const;
-const plannerSessionId = randomUUID();
-startReadSession(plannerSessionId);
+const fallbackPlannerSessionId = `mcp-process:${randomUUID()}`;
+startReadSession(fallbackPlannerSessionId);
+
+type McpRequestExtra = { sessionId?: string };
+
+function plannerSessionIdFor(extra?: McpRequestExtra): string {
+  const transportSessionId = extra?.sessionId?.trim();
+  const sessionId = transportSessionId ? `mcp:${transportSessionId}` : fallbackPlannerSessionId;
+  startReadSession(sessionId);
+  return sessionId;
+}
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean };
 
@@ -39,6 +48,22 @@ function taskStartError(
     ].join("\n") }],
     structuredContent: { ...outcome, ...structuredContent },
   };
+}
+
+function mcpContextReadActions(
+  eligibility: ReturnType<typeof contextReadEligibilityForSession>,
+  refs: { task: string; phase: string; feature?: string },
+  requirementReadRequired: boolean,
+  retryAction: string,
+): string[] {
+  const actions = (eligibility.requiredReads ?? []).flatMap((read) => {
+    if (read.kind === "task") return [`planner-task-show ${refs.task} with full=true`];
+    if (read.kind === "phase") return [`planner-phase-show ${refs.phase} with full=true`];
+    return refs.feature ? [`planner-feature-show ${refs.feature} with full=true`] : [];
+  });
+  if (requirementReadRequired) actions.push("planner-requirement-list");
+  actions.push(retryAction);
+  return actions;
 }
 
 const MCP_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/mcp");
@@ -479,7 +504,8 @@ server.registerTool("planner-feature-add", {
 server.registerTool("planner-feature-show", {
   description: "Show a feature by id or name.",
     inputSchema: { feature: z.string().min(1).describe("Feature ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the feature description. Default: compact identity only (saves tokens).") },
-  }, async ({ feature: ref, full }) => {
+  }, async ({ feature: ref, full }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
   const features = (await st.loadFeatures()).features;
   const resolvedFeature = resolveFeatureRefStrict(features, ref);
@@ -669,7 +695,8 @@ server.registerTool("planner-phase-add", {
 server.registerTool("planner-phase-show", {
   description: "Show a phase by id or name, including derived linked requirements in the full view.",
     inputSchema: { phase: z.string().min(1).describe("Phase ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the phase description. Default: compact identity only (saves tokens).") },
-  }, async ({ phase: ref, full }) => {
+  }, async ({ phase: ref, full }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
     const features = (await st.loadFeatures()).features;
     const phase = findPhaseByRef(await st.loadAllPhases(), features, ref);
@@ -842,7 +869,8 @@ server.registerTool("planner-task-add", {
 server.registerTool("planner-task-show", {
   description: "Show a task by id or name.",
     inputSchema: { task: z.string().min(1).describe("Task ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."), full: z.boolean().optional().describe("If true, include the task description, resume checkpoint/advisory, and statusLog. Default: compact identity only (saves tokens).") },
-  }, async ({ task: ref, full }) => {
+  }, async ({ task: ref, full }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -1131,7 +1159,8 @@ server.registerTool("planner-task-pause", {
     how_to_resume: z.string().min(1),
     paused_by: z.string().optional(),
   },
-}, async ({ task: ref, reason, what_was_being_done, resume_location, how_to_resume, paused_by }) => {
+}, async ({ task: ref, reason, what_was_being_done, resume_location, how_to_resume, paused_by }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
   const features = (await st.loadFeatures()).features;
   const found = findTaskByRef(await st.loadAllPhases(), features, ref);
@@ -1166,7 +1195,7 @@ server.registerTool("planner-task-pause", {
 });
 
 server.registerTool("planner-task-switch", {
-  description: "Atomically switch from active work to a temporary task, even outside normal priority order. Reuse the target's valid sessionInfo context or require the exact full tree when missing or stale. Pause the source with a mandatory snapshot, start the target, and push a durable LIFO return target.",
+  description: "Atomically switch from active work to a temporary task, even outside normal priority order. Call this tool first so valid sessionInfo context can be reused; on denial, perform only the missing/stale reads listed in nextActions and retry. Pause the source with a mandatory snapshot, start the target, and push a durable LIFO return target.",
   inputSchema: {
     from_task: z.string().min(1),
     to_task: z.string().min(1),
@@ -1176,7 +1205,8 @@ server.registerTool("planner-task-switch", {
     how_to_resume: z.string().min(1),
     switched_by: z.string().optional(),
   },
-}, async ({ from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume, switched_by }) => {
+}, async ({ from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume, switched_by }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
   const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
   const features = featuresDoc.features;
@@ -1206,9 +1236,21 @@ server.registerTool("planner-task-switch", {
     requirementIds: linkedRequirementIds,
   };
   const contextEligibility = contextReadEligibilityForSession(contextInput);
-  if (!contextEligibility.eligible) return text(`Task switch denied: context reads required. ${contextEligibility.reason}`, contextEligibility);
-  if (!hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements)) {
-    return text("Task switch denied: read the requirements linked to the target phase and feature before switching.", { requirementIds: linkedRequirementIds });
+  const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+  const targetTaskRef = taskCompositeRef(target.task, target.phase, features);
+  const targetPhaseRef = formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features));
+  const targetFeatureRef = targetFeature ? formatFeatureRef(targetFeature.number) : "";
+  if (!contextEligibility.eligible) {
+    const nextActions = mcpContextReadActions(
+      contextEligibility,
+      { task: targetTaskRef, phase: targetPhaseRef, ...(targetFeatureRef ? { feature: targetFeatureRef } : {}) },
+      !requirementsReady,
+      `Retry planner-task-switch to ${targetTaskRef}`,
+    );
+    return text(`Task switch denied: context reads required. ${contextEligibility.reason}`, { ...contextEligibility, nextActions });
+  }
+  if (!requirementsReady) {
+    return text("Task switch denied: read the requirements linked to the target phase and feature before switching.", { requirementIds: linkedRequirementIds, nextActions: ["planner-requirement-list", `Retry planner-task-switch to ${targetTaskRef}`] });
   }
   if (!hasValidSessionAttestation(contextInput)) {
     await st.recordContextRead({ sessionId: plannerSessionId, phaseId: target.phase.id, taskId: target.task.id, ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}), requirementIds: linkedRequirementIds });
@@ -1303,9 +1345,10 @@ server.registerTool("planner-task-switch", {
 });
 
 server.registerTool("planner-task-start", {
-  description: "Set a task to in-progress or resume checkpointed work. Read the exact full task → phase → feature tree and linked requirements once per harness session; subsequent starts reuse persisted sessionInfo while entity updatedAt values remain unchanged. Every stale or denied start is an MCP isError result with started=false and exact retry actions; NEVER claim work started unless structuredContent.started is true. Success is returned only after persisted in-progress state is verified.",
+  description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, in order, and retry. Every denied start is an MCP isError result with started=false; NEVER claim work started unless structuredContent.started is true. Success is returned only after persisted in-progress state is verified.",
   inputSchema: { task: z.string().min(1) },
-}, async ({ task: ref }) => {
+}, async ({ task: ref }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   let st: PlanStore;
   try {
     st = await requireStore();
@@ -1320,10 +1363,6 @@ server.registerTool("planner-task-start", {
   const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
   const parentFeature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
   const featureRef = parentFeature ? formatFeatureRef(parentFeature.number) : "";
-  if (found.task.status === "in-progress") {
-    const outcome = taskStartSucceeded(found.task.id, true);
-    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true`, { ...outcome, task: found.task });
-  }
   if (found.task.status === "done") return taskStartError(taskStartDenied(
     "TASK_DONE",
     `Task ${taskRef} is done and was not reopened.`,
@@ -1347,19 +1386,19 @@ server.registerTool("planner-task-start", {
     requirementIds: linkedRequirementIds,
   };
   const contextEligibility = contextReadEligibilityForSession(contextInput);
+  const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
   if (!contextEligibility.eligible) return taskStartError(taskStartDenied(
     "CONTEXT_READ_REQUIRED",
     `Required context reads are incomplete or stale. ${contextEligibility.reason}`,
-    [
-      `planner-task-show ${taskRef} with full=true`,
-      `planner-phase-show ${phaseRef} with full=true`,
-      ...(featureRef ? [`planner-feature-show ${featureRef} with full=true`] : []),
-      ...(linkedRequirementIds.length > 0 ? ["planner-requirement-list"] : []),
+    mcpContextReadActions(
+      contextEligibility,
+      { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
+      !requirementsReady,
       `Retry planner-task-start ${taskRef}`,
-    ],
+    ),
     { taskId: found.task.id },
   ), { contextEligibility });
-  if (!hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements)) {
+  if (!requirementsReady) {
     return taskStartError(taskStartDenied(
       "REQUIREMENTS_READ_REQUIRED",
       "Linked requirements were not read; the task remains unchanged.",
@@ -1369,6 +1408,10 @@ server.registerTool("planner-task-start", {
   }
   if (!hasValidSessionAttestation(contextInput)) {
     await st.recordContextRead({ sessionId: plannerSessionId, phaseId: found.phase.id, taskId: found.task.id, ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}), requirementIds: linkedRequirementIds });
+  }
+  if (found.task.status === "in-progress") {
+    const outcome = taskStartSucceeded(found.task.id, true);
+    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true`, { ...outcome, task: found.task });
   }
   const [project, phases, focus] = await Promise.all([st.loadProject(), st.loadAllPhases(), st.loadResume()]);
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
@@ -1589,7 +1632,8 @@ server.registerTool("planner-handoff-show", {
 server.registerTool("planner-requirement-list", {
   description: "List all top-level requirements in requirements.json. Reading this list records the requirements as read for the start/resume read-enforcement (explicit requirement read, required alongside feature/phase reads).",
   inputSchema: {},
-}, async () => {
+}, async (_args, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
   const requirements = await st.loadRequirements();
   requirements.requirements.forEach((req) => markRequirementReadForSessionId(plannerSessionId, req.id));

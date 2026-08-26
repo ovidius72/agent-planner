@@ -11,6 +11,12 @@ import { join } from "node:path";
  * AGENTS.md governs ONLY the development of the agent-plan extension and must
  * not duplicate these rules.
  */
+const DETAIL_WRITING_RULE = "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge. For starting, resuming, or switching, call the lifecycle tool first so valid session attestations can be reused. If it denies the operation, perform only the missing or stale full reads listed in nextActions, in that exact order, then retry; read linked requirements explicitly only when requested. Cite entities with composite IDs, not bare UUIDs.";
+const EXPECTED_OPERATIONAL_RULE = "When you begin work, task_start and task_switch enforce session-scoped context reads and return precise missing/stale read actions when needed. Read any relevant phase handoff as additional context, then update the planner before and after significant changes. If you change an architectural decision, document it explicitly.";
+
+const LEGACY_DETAIL_WRITING_RULE = "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge. Before starting, resuming, or switching to a task, read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order; read linked requirements explicitly when present. Cite entities with composite IDs, not bare UUIDs.";
+const LEGACY_EXPECTED_OPERATIONAL_RULE = "When you begin work, task_start and task_switch enforce the required ordered full reads. Read any relevant phase handoff as additional context, then update the planner before and after significant changes. If you change an architectural decision, document it explicitly.";
+
 export const PLANNER_EXTENSION_RULES: string[] = [
   // §1 — source of truth
   "Keep the planner as the single operational source of truth while working: read the relevant planner state before starting; update it when an activity starts, changes state, blocks, or concludes; and record next steps, blockers, and decisions in the relevant planner entities. Never leave work only in the conversation.",
@@ -32,29 +38,39 @@ export const PLANNER_EXTENSION_RULES: string[] = [
   "Handoff is per-phase (phase.handoff), not a file. Write it only on explicit user request and only after the exact feature+phase target is confirmed. Run handoff_prepare for that phase, reconcile all still-relevant existing content into one active handoff, and synchronize durable task/phase/feature context in the same handoff_write operation. A pending handoff never blocks task_start and is archived only when the phase completes or the user explicitly clears it; refreshing it must not create superseded copies.",
   // §12 — operational hygiene
   "Operational hygiene: start the task (task_start) before thinking about implementation; complete it (task_complete) as part of delivering the deliverable, not after; motivate every block so a third party can understand the impediment.",
-  // Avvio del planner
+  // Planner startup
   "The planner and Web UI never start automatically. Do not start the Web UI or show its URL unless the user runs load/recap/web-status. The Web UI URL appears only in the recap after load, or on explicit web status.",
-  // Regola dettagli
-  "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge. Before starting, resuming, or switching to a task, read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order; read linked requirements explicitly when present. Cite entities with composite IDs, not bare UUIDs.",
+  // Detail-writing rule
+  DETAIL_WRITING_RULE,
   // Expected operational behavior
-  "When you begin work, task_start and task_switch enforce the required ordered full reads. Read any relevant phase handoff as additional context, then update the planner before and after significant changes. If you change an architectural decision, document it explicitly.",
+  EXPECTED_OPERATIONAL_RULE,
 ];
 
 export interface ExtensionRulesFile {
   extensionRules: string[];
 }
 
+function normalizeLegacyRules(rules: string[]): string[] {
+  return rules.map((rule) => {
+    if (rule === LEGACY_DETAIL_WRITING_RULE) return DETAIL_WRITING_RULE;
+    if (rule === LEGACY_EXPECTED_OPERATIONAL_RULE) return EXPECTED_OPERATIONAL_RULE;
+    return rule;
+  });
+}
+
 /**
  * Load the effective extension rules for a planner root. Returns the project's
  * own .planner/rules.json (static, user-overridable) when present and non-empty,
- * otherwise the canonical code set. Never returns timestamps or dynamic data.
+ * otherwise the canonical code set. Exact legacy canonical read-protocol rules
+ * are upgraded in memory without rewriting the project file; unrelated project
+ * overrides remain untouched. Never returns timestamps or dynamic data.
  */
 export async function loadExtensionRules(plannerRoot: string): Promise<string[]> {
   try {
     const raw = await readFile(join(plannerRoot, "rules.json"), "utf8");
     const parsed = JSON.parse(raw) as Partial<ExtensionRulesFile>;
     if (Array.isArray(parsed.extensionRules) && parsed.extensionRules.length > 0) {
-      return parsed.extensionRules.filter((r) => typeof r === "string" && r.length > 0);
+      return normalizeLegacyRules(parsed.extensionRules.filter((r) => typeof r === "string" && r.length > 0));
     }
   } catch {
     // Missing or malformed rules.json → fall back to the canonical code set.

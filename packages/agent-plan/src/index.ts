@@ -148,7 +148,7 @@ $ARGUMENTS
 
 Use the Agent Plan MCP tools. Do not treat this as a shell command.
 
-Before starting, resuming, or switching to a task, read the exact lineage in this order: \`planner-task-show\` with \`full=true\`, then \`planner-phase-show\` with \`full=true\`, then \`planner-feature-show\` with \`full=true\`. Read linked requirements with \`planner-requirement-list\` when present. These lifecycle operations reject requests until the reads are complete.
+Before starting, resuming, or switching to a task, call \`planner-task-start\` or \`planner-task-switch\` first so the MCP server can reuse valid session attestations. If the lifecycle operation is denied, perform only the missing or stale full reads listed in its \`nextActions\`, in that order, then retry. Read linked requirements only when \`nextActions\` requests \`planner-requirement-list\`.
 
 Route common commands as follows:
 

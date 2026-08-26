@@ -23,6 +23,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createPhaseId } from "../../plan-core/dist/index.js";
 import {
+  startMcpClient,
   startMcpFixture,
   closeMcpFixture,
   cleanupMcpFixtures,
@@ -269,7 +270,17 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     });
     assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T002/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
-    await readTaskContext(session, "T002");
+
+    // The stdio MCP process keeps one isolated fallback session ID. Pause
+    // invalidates only the changed task; parent and requirement attestations
+    // remain reusable, so the retry asks for task context only.
+    const deniedResume = await callTool(session, "planner-task-start", { task: "T002" });
+    assert.equal(toolStructured(deniedResume).errorCode, "CONTEXT_READ_REQUIRED");
+    assert.deepEqual(toolStructured(deniedResume).nextActions, [
+      "planner-task-show P001(F001)/T002 with full=true",
+      "Retry planner-task-start P001(F001)/T002",
+    ]);
+    await callTool(session, "planner-task-show", { task: "T002", full: true });
     assert.match(toolText(await callTool(session, "planner-task-start", { task: "T002" })), /Task started/);
     const missingEvidence = await callTool(session, "planner-task-complete", { task: "T002", force: true }, { expectError: true });
     assert.match(toolText(missingEvidence), /description_update/);
@@ -296,6 +307,33 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.equal(phase.taskIds.includes(id), false);
   } finally {
     await closeMcpFixture(session);
+  }
+});
+
+test("distinct MCP server processes cannot reuse each other's context attestations", async () => {
+  const first = await startMcpFixture({ name: "t337-mcp-session-isolation" });
+  const planRoot = first.planRoot;
+  try {
+    await readTaskContext(first, "T001");
+    assert.equal(toolStructured(await callTool(first, "planner-task-start", { task: "T001" })).started, true);
+  } finally {
+    await closeMcpFixture(first);
+  }
+
+  const second = await startMcpClient({ planRoot, name: "t337-second-mcp-process" });
+  try {
+    const denied = await callTool(second, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(denied).errorCode, "CONTEXT_READ_REQUIRED");
+    assert.deepEqual(toolStructured(denied).contextEligibility.requiredReads.map((read) => read.kind), ["task", "phase", "feature"]);
+    assert.deepEqual(toolStructured(denied).nextActions, [
+      "planner-task-show P001(F001)/T001 with full=true",
+      "planner-phase-show P001(F001) with full=true",
+      "planner-feature-show F001 with full=true",
+      "planner-requirement-list",
+      "Retry planner-task-start P001(F001)/T001",
+    ]);
+  } finally {
+    await closeMcpFixture(second);
   }
 });
 
@@ -392,7 +430,9 @@ test("priority is overridable but active task switches require a snapshot and de
     assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
     assert.match(toolText(priorityOverride), /Priority advisory/);
 
-    await readTaskContext(session, "T001");
+    // T002 already attested the shared phase, feature, and requirements.
+    // A sibling start requires only the exact new task read.
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
     const denied = await callTool(session, "planner-task-start", { task: "T001" });
     assert.equal(denied.isError, true);
     assert.equal(toolStructured(denied).started, false);
