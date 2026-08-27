@@ -69,6 +69,43 @@ function taskStartFailure(
   };
 }
 
+function derivedStatusReadOnlyResult(
+  entity: "feature" | "phase",
+  ref: string,
+  attemptedStatus: string,
+  effectiveStatus: string,
+) {
+  const childKind = entity === "feature" ? "phases" : "tasks";
+  const retryAction = entity === "feature"
+    ? `Retry feature_update ${ref} without the status field if you need to update metadata.`
+    : `Retry phase_update ${ref} without the status field if you need to update metadata.`;
+  const nextActions = [
+    `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind}; update the child ${childKind} instead of setting ${entity}.status.`,
+    retryAction,
+  ];
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text: [
+      `❌ ${entity.toUpperCase()} UPDATE FAILED [DERIVED_STATUS_READ_ONLY]`,
+      `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind} and cannot be set directly.`,
+      `Attempted status: ${attemptedStatus}`,
+      `Effective derived status: ${effectiveStatus}`,
+      "No planner data was changed.",
+      "Next required actions:",
+      ...nextActions.map((action, index) => `${index + 1}. ${action}`),
+    ].join("\n") }],
+    details: {
+      updated: false,
+      errorCode: "DERIVED_STATUS_READ_ONLY",
+      entity,
+      ref,
+      attemptedStatus,
+      effectiveStatus,
+      nextActions,
+    },
+  };
+}
+
 function piContextReadActions(
   eligibility: ReturnType<typeof contextReadEligibilityForSession>,
   refs: { task: string; phase: string; feature?: string },
@@ -3453,10 +3490,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const resolvedFeature = resolveFeatureRefStrict(features, params.featureId);
       if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
       const featureId = resolvedFeature.feature.id;
+      if (params.status !== undefined) {
+        return derivedStatusReadOnlyResult("feature", formatFeatureRef(resolvedFeature.feature.number), String(params.status), resolvedFeature.feature.status);
+      }
       const mutableFields = [
         "name",
         "description",
-        "status",
         "startDate",
         "endDate",
         "workDone",
@@ -3489,19 +3528,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (params.endDate !== undefined) feature.endDate = params.endDate;
           if (params.priority !== undefined) feature.priority = params.priority;
           if (params.acceptedDecisions !== undefined) feature.acceptedDecisions = params.acceptedDecisions;
-
-          if (params.status !== undefined) {
-            const status = params.status as Feature["status"];
-            if (feature.status !== status) {
-              if (status === "in-progress" && !feature.startDate) {
-                feature.startDate = new Date().toISOString().slice(0, 10);
-              }
-              if (status === "done" && !feature.endDate) {
-                feature.endDate = new Date().toISOString().slice(0, 10);
-              }
-            }
-            feature.status = status;
-          }
 
           feature.updatedAt = nowISO();
           return doc;
@@ -3723,10 +3749,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
       }
 
+      if (params.status !== undefined) {
+        return derivedStatusReadOnlyResult("phase", formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)), String(params.status), resolvedPhase.status);
+      }
       const prevFeatureId = phase.featureId;
       let nextFeatureIdForUpdate = prevFeatureId;
       if (params.title !== undefined) { phase.title = params.title; phase.slug = normalizeSlug(params.title); }
-      if (params.status !== undefined) phase.status = params.status as Phase["status"];
       if (params.summary !== undefined) phase.summary = params.summary;
       if (params.description !== undefined) phase.description = params.description;
       if (params.priority !== undefined) phase.priority = params.priority;

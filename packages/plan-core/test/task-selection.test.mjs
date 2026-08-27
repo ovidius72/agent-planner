@@ -95,10 +95,28 @@ test("explicit starts preserve readiness gates but do not enforce priority or si
   assert.equal(checkExplicitTaskStart(features, phases, "dependent").eligible, false, "unfinished dependencies still block an explicit start");
 });
 
-test("approved deviations preserve their waiting-task exception", () => {
+test("waiting parents do not block planned sibling starts", () => {
+  const features = [feature(1, 10, "waiting")];
+  const phases = [phase("p", "feature-1", 1, 1, [task("waiting-sibling", 1, 1, "waiting"), task("planned-sibling", 2)], "waiting")];
+
+  assert.equal(checkExplicitTaskStart(features, phases, "planned-sibling").eligible, true, "a planned sibling stays startable when the parent derives waiting only from other work");
+  assert.equal(recommendNextTask(features, phases).candidate.task.id, "planned-sibling", "priority selection can continue planned sibling work under a waiting parent");
+});
+
+test("waiting tasks still need an approved deviation", () => {
   const features = [feature(1, 10, "waiting")];
   const phases = [phase("p", "feature-1", 1, 1, [task("resume", 1), task("temporary", 2, 2, "waiting", ["unfinished"])], "waiting")];
-  assert.equal(checkExplicitTaskStart(features, phases, "temporary", [deviation("temporary", "resume")]).eligible, true);
+
+  assert.equal(checkExplicitTaskStart(features, phases, "temporary").eligible, false, "the waiting task itself is not startable without an override");
+  assert.equal(checkExplicitTaskStart(features, phases, "temporary", [deviation("temporary", "resume")]).eligible, true, "approved deviations preserve their waiting-task exception");
+});
+
+test("hard parent statuses still block explicit starts", () => {
+  for (const status of ["blocked", "deferred", "canceled", "rejected"]) {
+    const features = [feature(1, 10, status)];
+    const phases = [phase("p", "feature-1", 1, 1, [task("planned", 1)], status)];
+    assert.equal(checkExplicitTaskStart(features, phases, "planned").eligible, false, `${status} parent remains unavailable`);
+  }
 });
 
 test("excludes unavailable work and waits for completed dependencies", () => {

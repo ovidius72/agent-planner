@@ -149,6 +149,28 @@ describe("pi-adapter strict ref validation", () => {
     assert.equal(stored.featureId, featureA.id);
   });
 
+  test("phase_update rejects derived status writes without mutating metadata", async () => {
+    const { root, st, phase } = await setup();
+    const phasePath = join(root, ".planner", "phases", `${phase.id}.json`);
+    const beforeBytes = await readFile(phasePath);
+    const before = await st.loadPhase(phase.id);
+
+    const result = await tools.get("phase_update").execute("id", {
+      phaseId: "P001",
+      status: "in-progress",
+      title: "Rejected mixed update",
+    }, undefined, undefined, makeCtx(root));
+
+    assert.equal(result.isError, true);
+    assert.match(toolText(result), /DERIVED_STATUS_READ_ONLY/);
+    assert.equal(result.details.updated, false);
+    assert.equal(result.details.effectiveStatus, "planned");
+    assert.deepEqual(await readFile(phasePath), beforeBytes, "status rejection leaves phase JSON byte-identical");
+    const after = await st.loadPhase(phase.id);
+    assert.equal(after.updatedAt, before.updatedAt, "status rejection does not touch updatedAt");
+    assert.equal(after.title, "Seed Phase");
+  });
+
   test("feature_update rejects ambiguous feature refs and leaves data unchanged", async () => {
     const { root, st } = await setup();
 
@@ -191,6 +213,27 @@ describe("pi-adapter strict ref validation", () => {
     const features = (await st.loadFeatures()).features;
     assert.equal(features.find((feature) => feature.id === featureA.id)?.description, "Updated through the F001 human reference.");
     assert.notEqual(features.find((feature) => feature.id === featureB.id)?.description, "Updated through the F001 human reference.");
+  });
+
+  test("feature_update rejects derived status writes without mutating metadata", async () => {
+    const { root, st, featureA } = await setup();
+    const featurePath = join(root, ".planner", "features", `${featureA.id}.json`);
+    const beforeBytes = await readFile(featurePath);
+    const before = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
+
+    const result = await tools.get("feature_update").execute("id", {
+      featureId: "F001",
+      status: "done",
+      description: "This mixed update must be rejected atomically.",
+    }, undefined, undefined, makeCtx(root));
+
+    assert.equal(result.isError, true);
+    assert.match(toolText(result), /DERIVED_STATUS_READ_ONLY/);
+    assert.equal(result.details.updated, false);
+    assert.equal(result.details.effectiveStatus, "planned");
+    assert.deepEqual(await readFile(featurePath), beforeBytes, "status rejection leaves feature JSON byte-identical");
+    const after = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
+    assert.equal(after?.updatedAt, before?.updatedAt, "status rejection does not touch updatedAt");
   });
 
   test("feature_discuss updates governance fields and marks context ready", async () => {

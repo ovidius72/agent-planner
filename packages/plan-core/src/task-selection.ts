@@ -63,7 +63,7 @@ export function checkExplicitTaskStart(
   if (!startableStatus) return { eligible: false, reason: `Task is not startable from ${candidate.task.status}.` };
   const parentHasHardBlock = hardUnavailable.has(candidate.phase.status)
     || (candidate.feature && hardUnavailable.has(candidate.feature.status));
-  if (parentHasHardBlock || (!isTemporaryOverride && (unavailable.has(candidate.phase.status) || (candidate.feature && unavailable.has(candidate.feature.status))))) {
+  if (parentHasHardBlock) {
     return { eligible: false, reason: "Task belongs to an unavailable phase or feature." };
   }
 
@@ -134,7 +134,7 @@ export function recommendNextTask(
 
   const ready = candidates.filter(({ feature, phase, task }) => {
     if (task.status !== "planned") return false;
-    if (unavailable.has(phase.status) || (feature && unavailable.has(feature.status))) return false;
+    if (hardUnavailable.has(phase.status) || (feature && hardUnavailable.has(feature.status))) return false;
     return task.dependsOn.every((id) => byTaskId.get(id)?.task.status === "done");
   });
   const currentPhaseReady = currentPhaseId

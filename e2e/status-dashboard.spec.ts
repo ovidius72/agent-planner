@@ -62,6 +62,35 @@ test("the Web UI supervisor can apply a motivated status without an agent motiva
   await expect(page.getByRole("heading", { name: /Request failed/ })).toHaveCount(0);
 });
 
+test("the Web UI supervisor can move a waiting task back to planned", async ({ page, planner }) => {
+  await planner.seed("minimal");
+  const phase = ((await planner.request("/phases")).body as Array<{ id: string; featureId: string; tasks: Array<{ id: string }> }>)[0]!;
+  const taskId = phase.tasks[0]!.id;
+
+  await planner.request(`/tasks/${taskId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phaseId: phase.id, status: "waiting", motivation: "Waiting on an external dependency." }),
+    expectStatus: 200,
+  });
+  await expect.poll(async () => {
+    const task = (await planner.request(`/tasks/${taskId}`)).body as { status: string };
+    return task.status;
+  }).toBe("waiting");
+
+  await page.goto(`${planner.url}/features/${phase.featureId}/phases/${phase.id}`);
+  const status = page.locator('select[name="status"]').last();
+  await expect(status).toHaveValue("waiting");
+  await status.selectOption("planned");
+
+  await expect(status).toHaveValue("planned");
+  await expect.poll(async () => {
+    const task = (await planner.request(`/tasks/${taskId}`)).body as { status: string };
+    return task.status;
+  }).toBe("planned");
+  await expect(page.getByRole("heading", { name: /Request failed/ })).toHaveCount(0);
+});
+
 test("dashboard filtering, expansion, and requirement grouping work against a populated real plan", async ({ page, planner }) => {
   await planner.seed("full");
   await page.goto(planner.url);
