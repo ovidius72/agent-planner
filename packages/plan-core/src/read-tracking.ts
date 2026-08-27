@@ -4,7 +4,7 @@
  * The first complete read for a task must be task(full) → phase(full) →
  * feature(full), with linked requirements read independently. A persisted
  * sessionInfo attestation may satisfy later checks in the same session while
- * every entity's updatedAt remains at or before its attestation timestamp.
+ * the entity's context revision remains at or before its attestation timestamp.
  */
 
 const DEFAULT_SESSION_ID = "__default__";
@@ -13,6 +13,7 @@ type SessionInfoEntry = { sessionId: string; createdAt: string };
 
 type ReadTrackedEntity = {
   updatedAt: string;
+  descriptionUpdatedAt?: string;
   sessionInfo?: SessionInfoEntry[];
 };
 
@@ -24,9 +25,18 @@ type ReadState = {
   nextSequence: number;
 };
 
+export type ContextReadEntityKind = "task" | "phase" | "feature";
+
+export type RequiredContextRead = {
+  kind: ContextReadEntityKind;
+  id: string;
+  state: "missing" | "stale" | "out-of-order";
+};
+
 export type ContextReadEligibility = {
   eligible: boolean;
   reason: string;
+  requiredReads?: RequiredContextRead[];
 };
 
 export interface SessionContextReadInput {
@@ -147,36 +157,91 @@ function orderedEligibility(sessionId: string, taskId: string, phaseId: string, 
   return { eligible: true, reason: "" };
 }
 
-function validSessionInfo(entity: ReadTrackedEntity | undefined, sessionId: string): boolean {
+type StoredReadState = "valid" | "missing" | "stale";
+
+function entityRevision(entity: ReadTrackedEntity, kind: ContextReadEntityKind | "requirement"): string {
+  if ((kind === "phase" || kind === "feature") && entity.descriptionUpdatedAt?.trim()) {
+    return entity.descriptionUpdatedAt;
+  }
+  return entity.updatedAt;
+}
+
+function storedReadState(
+  entity: ReadTrackedEntity | undefined,
+  sessionId: string,
+  kind: ContextReadEntityKind | "requirement",
+): StoredReadState {
   const entry = entity?.sessionInfo?.find((candidate) => candidate.sessionId === sessionId);
-  return Boolean(entity && entry && entity.updatedAt <= entry.createdAt);
+  if (!entity || !entry) return "missing";
+  return entityRevision(entity, kind) <= entry.createdAt ? "valid" : "stale";
+}
+
+function validSessionInfo(
+  entity: ReadTrackedEntity | undefined,
+  sessionId: string,
+  kind: ContextReadEntityKind | "requirement" = "requirement",
+): boolean {
+  return storedReadState(entity, sessionId, kind) === "valid";
 }
 
 function persistedEligibility(input: SessionContextReadInput): boolean {
-  if (!validSessionInfo(input.task, input.sessionId) || !validSessionInfo(input.phase, input.sessionId)) return false;
-  if (input.featureId && !validSessionInfo(input.feature, input.sessionId)) return false;
+  if (!validSessionInfo(input.task, input.sessionId, "task") || !validSessionInfo(input.phase, input.sessionId, "phase")) return false;
+  if (input.featureId && !validSessionInfo(input.feature, input.sessionId, "feature")) return false;
   const requirementIds = input.requirementIds ?? [];
   return requirementIds.every((id) => validSessionInfo(input.requirements?.find((requirement) => requirement.id === id), input.sessionId));
 }
 
-function hasStoredSessionAttestation(input: SessionContextReadInput): boolean {
-  const entities = [input.task, input.phase, input.feature, ...(input.requirements ?? [])];
-  return entities.some((entity) => entity?.sessionInfo?.some((entry) => entry.sessionId === input.sessionId));
+function requiredReadReason(requiredReads: RequiredContextRead[]): string {
+  const labels = requiredReads.map((read) => `${read.kind} ${read.id} (${read.state})`);
+  return `Read required context only for: ${labels.join(", ")}. Follow these reads in the listed order, then retry.`;
 }
 
 /**
- * Evaluate exact in-memory read ordering first, then a persisted attestation
- * for the same session and current entity revisions. A previously persisted
- * but now stale attestation always wins over stale in-memory ordering.
+ * Combine valid persisted attestations with fresh in-memory reads. The initial
+ * uncached lineage still requires task → phase → feature ordering, while a
+ * stale or missing individual entity can be reread without discarding valid
+ * parent attestations from the same harness session.
  */
 export function contextReadEligibilityForSession(input: SessionContextReadInput): ContextReadEligibility {
-  const ordered = orderedEligibility(input.sessionId, input.taskId, input.phaseId, input.featureId);
-  if (ordered.eligible) return ordered;
-  if (input.task && input.phase && persistedEligibility(input)) return { eligible: true, reason: "" };
-  if (input.task && input.phase && hasStoredSessionAttestation(input)) {
-    return { eligible: false, reason: "Context changed since the last session read; reread the exact task, phase, feature, and linked requirements." };
+  const state = stateFor(input.sessionId);
+  const requiredReads: RequiredContextRead[] = [];
+
+  const taskStored = storedReadState(input.task, input.sessionId, "task");
+  const taskSequence = state.tasks.get(input.taskId);
+  const taskReady = taskStored === "valid" || taskSequence !== undefined;
+  if (!taskReady) {
+    requiredReads.push({ kind: "task", id: input.taskId, state: taskStored === "stale" ? "stale" : "missing" });
   }
-  return ordered;
+
+  const phaseStored = storedReadState(input.phase, input.sessionId, "phase");
+  const phaseSequence = state.phases.get(input.phaseId);
+  const phaseReadInOrder = phaseSequence !== undefined
+    && (taskStored === "valid" || (taskSequence !== undefined && phaseSequence > taskSequence));
+  const phaseReady = phaseStored === "valid" || phaseReadInOrder;
+  if (!phaseReady) {
+    requiredReads.push({
+      kind: "phase",
+      id: input.phaseId,
+      state: phaseStored === "stale" ? "stale" : phaseSequence !== undefined ? "out-of-order" : "missing",
+    });
+  }
+
+  if (input.featureId) {
+    const featureStored = storedReadState(input.feature, input.sessionId, "feature");
+    const featureSequence = state.features.get(input.featureId);
+    const featureReadInOrder = featureSequence !== undefined
+      && (phaseStored === "valid" || (phaseReadInOrder && phaseSequence !== undefined && featureSequence > phaseSequence));
+    if (featureStored !== "valid" && !featureReadInOrder) {
+      requiredReads.push({
+        kind: "feature",
+        id: input.featureId,
+        state: featureStored === "stale" ? "stale" : featureSequence !== undefined ? "out-of-order" : "missing",
+      });
+    }
+  }
+
+  if (requiredReads.length === 0) return { eligible: true, reason: "" };
+  return { eligible: false, reason: requiredReadReason(requiredReads), requiredReads };
 }
 
 /** Return true only when the persisted attestation covers the current revisions. */

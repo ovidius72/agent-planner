@@ -76,19 +76,21 @@ describe("buildRecap — not complete, no active task", () => {
 });
 
 describe("buildRecap — active task", () => {
-  test("focus line shows composite IDs with context-re-read advisory", async () => {
+  test("focus line directs Pi to lifecycle-first context validation", async () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "planned" }] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
     assert.ok(r.includes("Current focus: F01 — Feat One / P001(F001) — Phase 1 / T01 — task 1 (in-progress)"), "focus line with composite IDs");
-    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context in this order:"), "context-re-read advisory for in-progress task");
-    assert.ok(r.includes("/planner task show T01 (full=true), /planner phase show P001(F001) (full=true), /planner feature show F01 (full=true)"), "pi advisory uses required read order");
+    assert.ok(r.includes("Continue with /planner task start T01."), "Pi recap invokes lifecycle validation first");
+    assert.ok(r.includes("follow only the missing or stale reads in its nextActions"), "Pi recap keeps reads demand-driven");
+    assert.doesNotMatch(r, /re-read the full context|\/planner task show T01/);
   });
 
-  test("context-re-read advisory uses MCP command form", async () => {
+  test("active-task advisory uses the MCP lifecycle command", async () => {
     const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "planned" }] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
-    assert.ok(r.includes("This task is in-progress (work started in a previous session). Before continuing, re-read the full context in this order:"), "context-re-read advisory for in-progress task");
-    assert.ok(r.includes("planner-task-show T01 (full=true), planner-phase-show P001(F001) (full=true), planner-feature-show F01 (full=true)"), "MCP advisory uses required read order");
+    assert.ok(r.includes("Continue with planner-task-start T01."), "MCP recap invokes lifecycle validation first");
+    assert.ok(r.includes("follow only the missing or stale reads in its nextActions"), "MCP recap keeps reads demand-driven");
+    assert.doesNotMatch(r, /re-read the full context|planner-task-show T01/);
   });
 });
 

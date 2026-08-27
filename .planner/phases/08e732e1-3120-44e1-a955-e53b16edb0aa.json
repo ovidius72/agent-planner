@@ -26,7 +26,9 @@
     "501a2cb1-b0e7-4a7a-b0c7-3ee64c3af5f0",
     "b3f56864-29af-4843-9910-7f2008cffc4c",
     "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb",
-    "0375ded8-afc5-414a-adeb-52d6145fc2c3"
+    "0375ded8-afc5-414a-adeb-52d6145fc2c3",
+    "803e0b67-8ae9-4531-9fba-77692408cf32",
+    "3a4853c8-e54e-49f1-91e9-6a7da80d80b2"
   ],
   "tasks": [
     {
@@ -94,7 +96,8 @@
       "startedAt": "2026-08-25T11:53:13.235Z",
       "completedAt": "2026-08-25T12:02:51.789Z",
       "createdAt": "2026-08-25T11:51:10.479Z",
-      "updatedAt": "2026-08-25T12:02:51.789Z"
+      "updatedAt": "2026-08-25T12:02:51.789Z",
+      "sessionInfo": []
     },
     {
       "id": "b3f56864-29af-4843-9910-7f2008cffc4c",
@@ -161,7 +164,8 @@
       "startedAt": "2026-08-25T12:03:19.286Z",
       "completedAt": "2026-08-25T12:06:22.755Z",
       "createdAt": "2026-08-25T11:51:17.284Z",
-      "updatedAt": "2026-08-25T12:06:22.755Z"
+      "updatedAt": "2026-08-25T12:06:22.755Z",
+      "sessionInfo": []
     },
     {
       "id": "0b1b9754-a8a6-4c2f-9ce1-367d26bef9cb",
@@ -228,7 +232,8 @@
       "startedAt": "2026-08-25T12:06:52.998Z",
       "completedAt": "2026-08-25T12:20:45.968Z",
       "createdAt": "2026-08-25T11:51:24.368Z",
-      "updatedAt": "2026-08-25T12:20:45.968Z"
+      "updatedAt": "2026-08-25T12:20:45.968Z",
+      "sessionInfo": []
     },
     {
       "id": "0375ded8-afc5-414a-adeb-52d6145fc2c3",
@@ -295,15 +300,186 @@
       "startedAt": "2026-08-25T12:21:23.538Z",
       "completedAt": "2026-08-25T12:24:40.610Z",
       "createdAt": "2026-08-25T11:51:31.698Z",
-      "updatedAt": "2026-08-25T12:24:40.610Z"
+      "updatedAt": "2026-08-25T12:24:40.610Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "803e0b67-8ae9-4531-9fba-77692408cf32",
+      "phaseId": "08e732e1-3120-44e1-a955-e53b16edb0aa",
+      "number": 337,
+      "shortId": "NVUSZ",
+      "priority": 5,
+      "shortName": "fix-cross-harness-session-iden",
+      "title": "Fix cross-harness session identity and granular context-read reuse",
+      "status": "done",
+      "description": "Correct the session-scoped context attestation contract introduced in `packages/plan-core/src/read-tracking.ts`, `packages/plan-core/src/plan-store.ts`, `packages/pi-adapter/src/index.ts`, and `packages/plan-mcp/src/index.ts`. Current behavior regenerates Pi's planner session identifier with `randomUUID()` on every `session_start`, including reloads of the same logical Pi session, while Pi exposes the stable `ctx.sessionManager.getSessionId()`. The shared eligibility check is also all-or-nothing: a stale task attestation forces unchanged phase, feature, and linked requirements to be read again, and the static extension rule still instructs agents to perform the complete read sequence before every start/resume/switch. Implement a harness-agnostic core contract using an opaque session identifier and per-entity freshness, use Pi's stable logical session UUID, define explicit safe MCP semantics for Claude Code, Codex, and future clients without coupling plan-core to any harness, and preserve isolation when no stable MCP client session ID is available. Update start/switch diagnostics and agent-only rules so callers invoke the lifecycle operation first and then read only the missing or stale entities in the required order. Preserve public TypeScript exports, persisted schema compatibility, timestamp-preserving metadata writes, requirement-read enforcement, atomic PlanStore writes, and strict isolation between distinct sessions. Add regressions for Pi reload/resume/fork behavior, MCP process/session boundaries, sibling-task parent reuse, task-only invalidation after waiting/pause changes, individual parent/requirement invalidation, and rule/tool guidance that must not trigger unconditional duplicate reads.\n\n---\n**Completion summary:**\nImplemented and verified cross-harness session identity plus granular context-read reuse. Plan-core now composes fresh in-memory reads with valid persisted per-entity attestations, reports precise missing/stale/out-of-order reads, reuses unchanged phase/feature descriptions across sibling tasks and task lifecycle churn, and keeps linked requirements independently fresh. Pi now keys attestations with the stable `ctx.sessionManager.getSessionId()` logical-session UUID and scopes invalidation to that session; MCP uses the transport `RequestHandlerExtra.sessionId` when available and an isolated per-process fallback for stdio clients such as Claude Code/Codex. Task start/switch, recap guidance, generated Claude setup instructions, shared plugin skill, and canonical extension rules now use a lifecycle-first protocol and follow only returned `nextActions`; exact legacy canonical rules are upgraded in memory without mutating static project overrides. Preserved existing public TypeScript exports, schema compatibility, timestamp-preserving PlanStore writes, atomic persistence, and requirement enforcement. Verification: `pnpm check` passed; plan-core full suite 238/238; Pi adapter 60/60; MCP 52/52; agent-plan CLI 6/6; plugin derivation check passed; final `pnpm test:coverage` passed 464/464 Node tests plus 44/44 Web UI tests at 85.66% lines, 73.64% branches, and 80.42% functions. Package-only Pi/MCP runners still report their known isolated baseline-threshold exits despite zero test failures. Files changed: packages/plan-core/src/{read-tracking.ts,planner-rules.ts,recap.ts}, corresponding core tests, packages/pi-adapter/src/index.ts and Pi host/mutation tests, packages/plan-mcp/src/index.ts and MCP CRUD tests, packages/agent-plan/src/index.ts and CLI setup test, plugins/_shared/planner-skill.md.in, and generated plugins/claude-code/skills/planner/SKILL.md. No remaining implementation work is known; no commit or push was performed.",
+      "descriptionUpdatedAt": "2026-08-26T13:26:32.041Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-001-planned-in-progress",
+          "date": "2026-08-26T07:43:27.840Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-002-in-progress-done",
+          "date": "2026-08-26T13:26:32.038Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented and verified cross-harness session identity plus granular context-read reuse. Plan-core now composes fresh in-memory reads with valid persisted per-entity attestations, reports precise missing/stale/out-of-order reads, reuses unchanged phase/feature descriptions across sibling tasks and task lifecycle churn, and keeps linked requirements independently fresh. Pi now keys attestations with the stable `ctx.sessionManager.getSessionId()` logical-session UUID and scopes invalidation to that session; MCP uses the transport `RequestHandlerExtra.sessionId` when available and an isolated per-process fallback for stdio clients such as Claude Code/Codex. Task start/switch, recap guidance, generated Claude setup instructions, shared plugin skill, and canonical extension rules now use a lifecycle-first protocol and follow only returned `nextActions`; exact legacy canonical rules are upgraded in memory without mutating static project overrides. Preserved existing public TypeScript exports, schema compatibility, timestamp-preserving PlanStore writes, atomic persistence, and requirement enforcement. Verification: `pnpm check` passed; plan-core full suite 238/238; Pi adapter 60/60; MCP 52/52; agent-plan CLI 6/6; plugin derivation check passed; final `pnpm test:coverage` passed 464/464 Node tests plus 44/44 Web UI tests at 85.66% lines, 73.64% branches, and 80.42% functions. Package-only Pi/MCP runners still report their known isolated baseline-threshold exits despite zero test failures. Files changed: packages/plan-core/src/{read-tracking.ts,planner-rules.ts,recap.ts}, corresponding core tests, packages/pi-adapter/src/index.ts and Pi host/mutation tests, packages/plan-mcp/src/index.ts and MCP CRUD tests, packages/agent-plan/src/index.ts and CLI setup test, plugins/_shared/planner-skill.md.in, and generated plugins/claude-code/skills/planner/SKILL.md. No remaining implementation work is known; no commit or push was performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-001-define-the-shared-opaque-session-identity-and-per-entity-eligibility-contract-for-pi-and-mcp",
+          "number": 1,
+          "title": "Define the shared opaque session-identity and per-entity eligibility contract for Pi and MCP",
+          "checked": true
+        },
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-002-use-pi-sessionmanager-s-stable-logical-session-id-across-extension-reloads",
+          "number": 2,
+          "title": "Use Pi SessionManager's stable logical session ID across extension reloads",
+          "checked": true
+        },
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-003-implement-granular-reuse-and-precise-missing-stale-read-diagnostics-in-plan-core-and-both-adapters",
+          "number": 3,
+          "title": "Implement granular reuse and precise missing/stale read diagnostics in plan-core and both adapters",
+          "checked": true
+        },
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-004-align-agent-only-rules-and-lifecycle-tool-guidance-with-demand-driven-reads",
+          "number": 4,
+          "title": "Align agent-only rules and lifecycle tool guidance with demand-driven reads",
+          "checked": true
+        },
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-005-add-pi-mcp-regression-coverage-for-reload-isolation-sibling-tasks-and-entity-specific-invalidation",
+          "number": 5,
+          "title": "Add Pi/MCP regression coverage for reload, isolation, sibling tasks, and entity-specific invalidation",
+          "checked": true
+        },
+        {
+          "id": "803e0b67-8ae9-4531-9fba-77692408cf32-check-006-run-focused-and-full-verification-without-lowering-coverage-thresholds",
+          "number": 6,
+          "title": "Run focused and full verification without lowering coverage thresholds",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-26T07:43:27.840Z",
+      "completedAt": "2026-08-26T13:26:32.038Z",
+      "createdAt": "2026-08-26T07:43:10.727Z",
+      "updatedAt": "2026-08-26T13:26:32.038Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-26T07:43:27.763Z"
+        }
+      ]
+    },
+    {
+      "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2",
+      "phaseId": "08e732e1-3120-44e1-a955-e53b16edb0aa",
+      "number": 338,
+      "shortId": "WLJTJ",
+      "priority": 6,
+      "shortName": "run-cross-harness-session-read",
+      "title": "Run cross-harness session-read integration and Playwright verification",
+      "status": "done",
+      "description": "Verification-only follow-up for the T337 implementation in `packages/plan-core/src/read-tracking.ts`, `packages/pi-adapter/src/index.ts`, and `packages/plan-mcp/src/index.ts`. Run focused Node integration tests against isolated temporary planner roots to verify granular missing/stale diagnostics, sibling-task parent and requirement reuse, stable Pi SessionManager identity across reloads, and MCP process/session isolation. Then run the real-server Playwright suite from `e2e/` as a Web UI regression smoke test, explicitly documenting that browser tests do not directly exercise agent-session attestations. Do not change production behavior, coverage thresholds, package versions, branches, or git history. If a failure exposes a real defect, stop and report it before implementing any correction.\n\n---\n**Completion summary:**\nCompleted an independent verification pass for T337 without changing production code, tests, thresholds, versions, branches, or git history. Focused plan-core verification built @agent-plan/core and passed 19/19 read-tracking plus session-info tests, covering granular missing/stale reads, task-only rereads combined with persisted parent attestations, sibling-task parent reuse, description-specific parent invalidation, requirement freshness, explicit session isolation, and legacy-rule in-memory upgrade. Pi integration built @agent-plan/pi-adapter and passed 13/13 mutation/lifecycle tests against isolated temporary planner roots, including same-logical-session reload continuity, task-only resume reread, sibling parent/requirement reuse, and denial for a distinct SessionManager UUID. MCP integration built @agent-plan/mcp and passed 8/8 real stdio client/server tests, including task-only resume reread, sibling reuse, and isolation between distinct server processes sharing one temporary planner root. The complete real-server Playwright suite passed 22/22 across Chromium desktop and 390px touch/mobile projects after a full production build. Playwright confirms no Web UI/server regression but does not directly exercise Pi/MCP agent-session attestations; those are validated by the focused integration suites. `git diff --check` passed, and verification introduced no additional tracked source changes. No commit or push was performed.",
+      "descriptionUpdatedAt": "2026-08-26T14:57:49.895Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2-check-001-planned-in-progress",
+          "date": "2026-08-26T14:56:27.124Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2-check-002-in-progress-done",
+          "date": "2026-08-26T14:57:49.892Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed an independent verification pass for T337 without changing production code, tests, thresholds, versions, branches, or git history. Focused plan-core verification built @agent-plan/core and passed 19/19 read-tracking plus session-info tests, covering granular missing/stale reads, task-only rereads combined with persisted parent attestations, sibling-task parent reuse, description-specific parent invalidation, requirement freshness, explicit session isolation, and legacy-rule in-memory upgrade. Pi integration built @agent-plan/pi-adapter and passed 13/13 mutation/lifecycle tests against isolated temporary planner roots, including same-logical-session reload continuity, task-only resume reread, sibling parent/requirement reuse, and denial for a distinct SessionManager UUID. MCP integration built @agent-plan/mcp and passed 8/8 real stdio client/server tests, including task-only resume reread, sibling reuse, and isolation between distinct server processes sharing one temporary planner root. The complete real-server Playwright suite passed 22/22 across Chromium desktop and 390px touch/mobile projects after a full production build. Playwright confirms no Web UI/server regression but does not directly exercise Pi/MCP agent-session attestations; those are validated by the focused integration suites. `git diff --check` passed, and verification introduced no additional tracked source changes. No commit or push was performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2-check-001-run-focused-plan-core-read-tracking-and-session-info-tests",
+          "number": 1,
+          "title": "Run focused plan-core read-tracking and session-info tests",
+          "checked": true
+        },
+        {
+          "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2-check-002-run-pi-adapter-lifecycle-reload-sibling-reuse-and-session-isolation-integration-tests",
+          "number": 2,
+          "title": "Run Pi adapter lifecycle, reload, sibling-reuse, and session-isolation integration tests",
+          "checked": true
+        },
+        {
+          "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2-check-003-run-mcp-stdio-lifecycle-sibling-reuse-and-process-isolation-integration-tests",
+          "number": 3,
+          "title": "Run MCP stdio lifecycle, sibling-reuse, and process-isolation integration tests",
+          "checked": true
+        },
+        {
+          "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2-check-004-run-the-complete-real-server-playwright-suite",
+          "number": 4,
+          "title": "Run the complete real-server Playwright suite",
+          "checked": true
+        },
+        {
+          "id": "3a4853c8-e54e-49f1-91e9-6a7da80d80b2-check-005-review-diagnostics-record-limitations-and-complete-the-verification-task",
+          "number": 5,
+          "title": "Review diagnostics, record limitations, and complete the verification task",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-26T14:56:27.124Z",
+      "completedAt": "2026-08-26T14:57:49.892Z",
+      "createdAt": "2026-08-26T14:56:08.422Z",
+      "updatedAt": "2026-08-26T14:57:49.892Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-26T14:56:27.049Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-08-25T11:51:01.542Z",
-  "updatedAt": "2026-08-25T12:24:40.610Z",
+  "updatedAt": "2026-08-26T14:57:49.892Z",
   "handoff": "",
-  "handoffUpdatedAt": "",
+  "handoffUpdatedAt": "2026-08-26T08:03:04.621Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/08e732e1-3120-44e1-a955-e53b16edb0aa-2026-08-26T13-26-32-061Z.md",
+      "clearedAt": "2026-08-26T13:26:32.061Z",
+      "reason": "phase-done"
+    }
+  ],
   "statusLog": [
     {
       "id": "265f69f9-e8b3-46e7-b2cb-fa78b14d1761",
@@ -320,6 +496,44 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "6db7476c-410c-4ef9-accf-c01ffcf7ddb9",
+      "date": "2026-08-26T07:43:27.860Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "555efa0c-ca61-4c6a-a8de-1e59c9a592fc",
+      "date": "2026-08-26T13:26:32.100Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "98f104c5-b861-439f-b1b6-221399d71419",
+      "date": "2026-08-26T14:56:27.147Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "dea19551-6c29-43a0-8d3a-a62ed38161ee",
+      "date": "2026-08-26T14:57:49.915Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-26T14:56:27.049Z"
     }
   ]
 }

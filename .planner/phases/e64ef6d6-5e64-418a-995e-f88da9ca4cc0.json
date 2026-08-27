@@ -1,0 +1,307 @@
+{
+  "id": "e64ef6d6-5e64-418a-995e-f88da9ca4cc0",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 83,
+  "shortId": "RLYZ5",
+  "priority": 26,
+  "slug": "derived-status-and-waiting-startability-contracts",
+  "title": "Derived status and waiting startability contracts",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Fix derived feature/phase status contracts so agents receive truthful update errors, waiting tasks do not block unrelated sibling starts, and the Web UI supervisor can move waiting tasks safely.",
+  "description": "packages/plan-core/src/task-selection.ts:61-68 currently blocks task_start when a parent phase or feature derives to waiting, which means one waiting task can make sibling planned tasks impossible to start. packages/plan-core/src/plan-store.ts:1914-1968 derives phase and feature status from child task/phase states, while packages/plan-core/src/schema.ts:271-353 intentionally omits persistent status from PhaseSchema and FeatureSchema. packages/plan-mcp/src/index.ts:552-586 and 760-783 plus packages/pi-adapter/src/index.ts:3426-3521 and 3684-3810 still accept status updates for derived feature/phase entities and can report success even though schemas discard the value. packages/plan-web-ui/src routes and API surfaces must preserve the human supervisor's ability to change a waiting task status while agent lifecycle start rules remain safe. Goals: return explicit DERIVED_STATUS_READ_ONLY responses for feature/phase status updates in Pi and MCP, adjust startability so waiting derived parents do not block planned sibling tasks, keep hard blocks for blocked/deferred/canceled/rejected, verify task dependencies still gate starts, and add tests across core, MCP, Pi, and Web UI behavior without changing unrelated dashboard analytics work.",
+  "descriptionUpdatedAt": "2026-08-27T14:07:15.709Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "4803e83f-926d-45b4-8def-8968fb13b1c9",
+    "fc881bca-7449-4213-978a-dfc9f8192971",
+    "c231209a-4983-482b-bce5-a10fa06ae73a"
+  ],
+  "tasks": [
+    {
+      "id": "4803e83f-926d-45b4-8def-8968fb13b1c9",
+      "phaseId": "e64ef6d6-5e64-418a-995e-f88da9ca4cc0",
+      "number": 343,
+      "shortId": "QA9SH",
+      "priority": 3,
+      "shortName": "verify-web-ui-supervisor-can-m",
+      "title": "Verify Web UI supervisor can move waiting tasks without agent-only blocks",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/lib/api.ts sends X-Planner-Source:web-ui and packages/plan-server/src/serve.ts already exempts the human supervisor from some agent governance gates. The user reported that a task in waiting cannot be changed from the Web UI. Inspect task status update flows in packages/plan-server/src/serve.ts and relevant Web UI route/component tests, then add or fix coverage so a waiting task can be changed by the Web UI supervisor while agent adapters still require explicit motivation where appropriate. Preserve current UI styling and layouts; do not redesign controls. Add real-server or component tests if needed, including the case where a sibling waiting task no longer prevents starting a planned task through lifecycle APIs after the core change.\n\n---\n**Completion summary:**\nInspected the Web UI waiting-task status path. The browser client tags every request with X-Planner-Source:web-ui in packages/plan-web-ui/src/lib/api.ts, and packages/plan-server/src/serve.ts exempts Web UI supervisor calls from the motivation/governance gates while still preventing generic PUT transitions into in-progress. The reported waiting-to-planned block did not reproduce on the current code after the core waiting-parent fix, so no production UI/server change was needed. Added a real-server Playwright regression in e2e/status-dashboard.spec.ts that seeds a task, moves it to waiting through the API with motivation, opens the real phase page, changes the Web UI select back to planned with no motivation field, and verifies persistence with no Request failed heading on both desktop and 390px mobile. T345 also added real MCP sibling-start coverage for waiting-derived parents. Verification: @agent-plan/web-ui check passed; production web-ui build passed and web-ui-dist was copied; targeted status-dashboard Playwright passed 8/8; full Web UI Vitest suite passed 79/79; full real-server Playwright suite passed 30/30; git diff --check passed. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-27T14:16:06.576Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "4803e83f-926d-45b4-8def-8968fb13b1c9-check-001-planned-in-progress",
+          "date": "2026-08-27T14:14:04.278Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "4803e83f-926d-45b4-8def-8968fb13b1c9-check-002-in-progress-done",
+          "date": "2026-08-27T14:16:06.574Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Inspected the Web UI waiting-task status path. The browser client tags every request with X-Planner-Source:web-ui in packages/plan-web-ui/src/lib/api.ts, and packages/plan-server/src/serve.ts exempts Web UI supervisor calls from the motivation/governance gates while still preventing generic PUT transitions into in-progress. The reported waiting-to-planned block did not reproduce on the current code after the core waiting-parent fix, so no production UI/server change was needed. Added a real-server Playwright regression in e2e/status-dashboard.spec.ts that seeds a task, moves it to waiting through the API with motivation, opens the real phase page, changes the Web UI select back to planned with no motivation field, and verifies persistence with no Request failed heading on both desktop and 390px mobile. T345 also added real MCP sibling-start coverage for waiting-derived parents. Verification: @agent-plan/web-ui check passed; production web-ui build passed and web-ui-dist was copied; targeted status-dashboard Playwright passed 8/8; full Web UI Vitest suite passed 79/79; full real-server Playwright suite passed 30/30; git diff --check passed. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4803e83f-926d-45b4-8def-8968fb13b1c9-check-001-inspect-web-ui-task-status-mutation-path-for-waiting-tasks",
+          "number": 1,
+          "title": "Inspect Web UI task status mutation path for waiting tasks",
+          "checked": true
+        },
+        {
+          "id": "4803e83f-926d-45b4-8def-8968fb13b1c9-check-002-fix-only-the-minimal-server-ui-contract-if-the-reported-block-reproduces",
+          "number": 2,
+          "title": "Fix only the minimal server/UI contract if the reported block reproduces",
+          "checked": true
+        },
+        {
+          "id": "4803e83f-926d-45b4-8def-8968fb13b1c9-check-003-add-web-ui-or-server-regression-for-waiting-task-status-change",
+          "number": 3,
+          "title": "Add Web UI or server regression for waiting-task status change",
+          "checked": true
+        },
+        {
+          "id": "4803e83f-926d-45b4-8def-8968fb13b1c9-check-004-add-integration-coverage-for-sibling-start-if-appropriate",
+          "number": 4,
+          "title": "Add integration coverage for sibling start if appropriate",
+          "checked": true
+        },
+        {
+          "id": "4803e83f-926d-45b4-8def-8968fb13b1c9-check-005-run-web-ui-checks-and-relevant-server-e2e-tests",
+          "number": 5,
+          "title": "Run Web UI checks and relevant server/e2e tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T14:14:04.278Z",
+      "completedAt": "2026-08-27T14:16:06.574Z",
+      "createdAt": "2026-08-27T14:07:33.752Z",
+      "updatedAt": "2026-08-27T14:16:06.574Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T14:14:04.196Z"
+        }
+      ]
+    },
+    {
+      "id": "fc881bca-7449-4213-978a-dfc9f8192971",
+      "phaseId": "e64ef6d6-5e64-418a-995e-f88da9ca4cc0",
+      "number": 344,
+      "shortId": "ZMRUX",
+      "priority": 1,
+      "shortName": "make-derived-feature-and-phase",
+      "title": "Make derived feature and phase status updates explicitly read-only",
+      "status": "done",
+      "description": "packages/plan-core/src/schema.ts:271-353 intentionally excludes persisted status from PhaseSchema and FeatureSchema because phase/feature status is derived at read time. packages/plan-mcp/src/index.ts:552-586 and 760-783 currently accept status in planner-feature-update/planner-phase-update, assign it, and report success even though the schema discards it. packages/pi-adapter/src/index.ts:3426-3521 and 3684-3810 have the same false-success behavior. Implement a truthful DERIVED_STATUS_READ_ONLY contract that preserves parameter compatibility but rejects status updates with updated:false, the effective derived status, and corrective next actions. Preserve non-status field updates. Add MCP and Pi tests proving status-only updates do not mutate, mixed updates reject or clearly avoid false success according to the chosen contract, and the returned text/details are actionable and English-only.\n\n---\n**Completion summary:**\nImplemented explicit read-only status update handling for derived feature and phase statuses in both harness adapters. MCP planner-feature-update/planner-phase-update and Pi feature_update/phase_update now reject any payload containing status with DERIVED_STATUS_READ_ONLY, updated:false, attemptedStatus, effectiveStatus, and nextActions explaining that feature status derives from child phases and phase status derives from child tasks. Mixed metadata+status payloads are rejected atomically so no false-success or partial mutation occurs; non-status metadata updates still work. Updated MCP CRUD tests and Pi ref-validation tests to cover feature and phase status rejection, byte-identical no-write behavior, effective derived status, and continued normal metadata updates. Verification: @agent-plan/mcp check passed; @agent-plan/pi-adapter check passed; @agent-plan/mcp build passed; @agent-plan/pi-adapter build passed; targeted Node tests passed 28/28 across packages/plan-mcp/test/mcp-crud.test.mjs and packages/pi-adapter/test/ref-validation.test.mjs. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-27T14:11:33.158Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "fc881bca-7449-4213-978a-dfc9f8192971-check-001-planned-in-progress",
+          "date": "2026-08-27T14:08:19.420Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "fc881bca-7449-4213-978a-dfc9f8192971-check-002-in-progress-done",
+          "date": "2026-08-27T14:11:33.155Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented explicit read-only status update handling for derived feature and phase statuses in both harness adapters. MCP planner-feature-update/planner-phase-update and Pi feature_update/phase_update now reject any payload containing status with DERIVED_STATUS_READ_ONLY, updated:false, attemptedStatus, effectiveStatus, and nextActions explaining that feature status derives from child phases and phase status derives from child tasks. Mixed metadata+status payloads are rejected atomically so no false-success or partial mutation occurs; non-status metadata updates still work. Updated MCP CRUD tests and Pi ref-validation tests to cover feature and phase status rejection, byte-identical no-write behavior, effective derived status, and continued normal metadata updates. Verification: @agent-plan/mcp check passed; @agent-plan/pi-adapter check passed; @agent-plan/mcp build passed; @agent-plan/pi-adapter build passed; targeted Node tests passed 28/28 across packages/plan-mcp/test/mcp-crud.test.mjs and packages/pi-adapter/test/ref-validation.test.mjs. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "fc881bca-7449-4213-978a-dfc9f8192971-check-001-add-shared-or-adapter-local-read-only-status-response-contract",
+          "number": 1,
+          "title": "Add shared or adapter-local read-only status response contract",
+          "checked": true
+        },
+        {
+          "id": "fc881bca-7449-4213-978a-dfc9f8192971-check-002-update-mcp-feature-phase-update-handlers-and-tests",
+          "number": 2,
+          "title": "Update MCP feature/phase update handlers and tests",
+          "checked": true
+        },
+        {
+          "id": "fc881bca-7449-4213-978a-dfc9f8192971-check-003-update-pi-feature-phase-update-handlers-and-tests",
+          "number": 3,
+          "title": "Update Pi feature/phase update handlers and tests",
+          "checked": true
+        },
+        {
+          "id": "fc881bca-7449-4213-978a-dfc9f8192971-check-004-verify-non-status-updates-still-work",
+          "number": 4,
+          "title": "Verify non-status updates still work",
+          "checked": true
+        },
+        {
+          "id": "fc881bca-7449-4213-978a-dfc9f8192971-check-005-run-targeted-mcp-pi-suites-and-typechecks",
+          "number": 5,
+          "title": "Run targeted MCP/Pi suites and typechecks",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T14:08:19.420Z",
+      "completedAt": "2026-08-27T14:11:33.155Z",
+      "createdAt": "2026-08-27T14:07:33.807Z",
+      "updatedAt": "2026-08-27T14:11:33.155Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T14:08:19.343Z"
+        }
+      ]
+    },
+    {
+      "id": "c231209a-4983-482b-bce5-a10fa06ae73a",
+      "phaseId": "e64ef6d6-5e64-418a-995e-f88da9ca4cc0",
+      "number": 345,
+      "shortId": "K9U6M",
+      "priority": 2,
+      "shortName": "allow-planned-sibling-task-sta",
+      "title": "Allow planned sibling task starts when only sibling work is waiting",
+      "status": "done",
+      "description": "packages/plan-core/src/task-selection.ts:61-68 currently treats parent phase/feature waiting status as unavailable for every explicit task start. packages/plan-core/src/plan-store.ts:1914-1968 derives a phase as waiting when meaningful child tasks are waiting with no progress and derives the feature similarly, so one waiting task can block another planned task in the same phase or feature even when dependencies are complete. Change the core startability rule so derived waiting parents are not a hard blocker for planned sibling starts; keep hard blocks for blocked/deferred/canceled/rejected and keep task-level waiting startable only through approved temporary override. Add core tests for sibling planned start under waiting parent, waiting task still requiring override, dependency blocks, and hard parent blocks.\n\n---\n**Completion summary:**\nAdjusted core startability so a parent phase/feature derived as waiting no longer blocks planned sibling work. checkExplicitTaskStart now treats only blocked/deferred/canceled/rejected parent statuses as hard unavailable; a waiting task itself still cannot start without an approved temporary override, and dependency checks remain mandatory. recommendNextTask uses the same hard-parent rule so priority selection can continue planned sibling work under a waiting parent. Added core regressions for planned sibling start under waiting parent, priority recommendation under waiting parent, waiting task requiring deviation, hard parent statuses, and dependencies. Added a real MCP stdio regression proving planner-task-start can start T001 after T002 makes P001/F001 derive waiting. Verification: @agent-plan/core check passed; @agent-plan/core build passed; targeted task-selection + MCP CRUD tests passed 24/24 plus core cases; full @agent-plan/core test suite passed 240/240. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-27T14:13:47.102Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "c231209a-4983-482b-bce5-a10fa06ae73a-check-001-planned-in-progress",
+          "date": "2026-08-27T14:11:49.831Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "c231209a-4983-482b-bce5-a10fa06ae73a-check-002-in-progress-done",
+          "date": "2026-08-27T14:13:47.100Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Adjusted core startability so a parent phase/feature derived as waiting no longer blocks planned sibling work. checkExplicitTaskStart now treats only blocked/deferred/canceled/rejected parent statuses as hard unavailable; a waiting task itself still cannot start without an approved temporary override, and dependency checks remain mandatory. recommendNextTask uses the same hard-parent rule so priority selection can continue planned sibling work under a waiting parent. Added core regressions for planned sibling start under waiting parent, priority recommendation under waiting parent, waiting task requiring deviation, hard parent statuses, and dependencies. Added a real MCP stdio regression proving planner-task-start can start T001 after T002 makes P001/F001 derive waiting. Verification: @agent-plan/core check passed; @agent-plan/core build passed; targeted task-selection + MCP CRUD tests passed 24/24 plus core cases; full @agent-plan/core test suite passed 240/240. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c231209a-4983-482b-bce5-a10fa06ae73a-check-001-adjust-checkexplicittaskstart-waiting-parent-logic-without-weakening-hard-blocks",
+          "number": 1,
+          "title": "Adjust checkExplicitTaskStart waiting-parent logic without weakening hard blocks",
+          "checked": true
+        },
+        {
+          "id": "c231209a-4983-482b-bce5-a10fa06ae73a-check-002-add-core-regression-tests-for-sibling-planned-start-under-waiting-parent",
+          "number": 2,
+          "title": "Add core regression tests for sibling planned start under waiting parent",
+          "checked": true
+        },
+        {
+          "id": "c231209a-4983-482b-bce5-a10fa06ae73a-check-003-add-regressions-for-waiting-task-dependencies-and-hard-parent-blocks",
+          "number": 3,
+          "title": "Add regressions for waiting task, dependencies, and hard parent blocks",
+          "checked": true
+        },
+        {
+          "id": "c231209a-4983-482b-bce5-a10fa06ae73a-check-004-update-any-affected-adapter-assertions",
+          "number": 4,
+          "title": "Update any affected adapter assertions",
+          "checked": true
+        },
+        {
+          "id": "c231209a-4983-482b-bce5-a10fa06ae73a-check-005-run-plan-core-targeted-and-full-tests",
+          "number": 5,
+          "title": "Run plan-core targeted and full tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T14:11:49.831Z",
+      "completedAt": "2026-08-27T14:13:47.100Z",
+      "createdAt": "2026-08-27T14:07:33.860Z",
+      "updatedAt": "2026-08-27T14:13:47.100Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T14:11:49.755Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-27T14:07:15.708Z",
+  "updatedAt": "2026-08-27T14:16:06.574Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "8b6cd589-2527-4369-9e81-64e4e2430837",
+      "date": "2026-08-27T14:07:46.167Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "ba8c9a03-f0b4-4413-99b0-d387ef5cc2bf",
+      "date": "2026-08-27T14:08:19.441Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "77760d62-f54b-4c15-bfb7-cf7f1ac6409d",
+      "date": "2026-08-27T14:16:06.599Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-27T14:14:04.196Z"
+    }
+  ]
+}

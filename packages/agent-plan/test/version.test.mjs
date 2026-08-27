@@ -75,6 +75,9 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   assert.equal(claudeConfig.mcpServers["agent-plan"].command, "node");
   const plannerCommand = readFileSync(join(cwd, ".claude", "commands", "planner.md"), "utf-8");
   assert.match(plannerCommand, /`version` → call `planner-version`/);
+  assert.match(plannerCommand, /call `planner-task-start` or `planner-task-switch` first/);
+  assert.match(plannerCommand, /only the missing or stale full reads listed in its `nextActions`/);
+  assert.doesNotMatch(plannerCommand, /read the exact lineage in this order/);
   const claudeSettings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
   assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write"));
 });

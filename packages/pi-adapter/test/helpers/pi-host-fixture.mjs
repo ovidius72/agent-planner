@@ -17,6 +17,7 @@
  */
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import { createPlannerFixture, createTempRoot, cleanupFixtures } from "../../../../test/helpers/fixtures.mjs";
@@ -63,8 +64,10 @@ export function toolDetails(result) {
  *   sessions over the same project); a PlanStore is opened on <root>/.planner.
  * @param {boolean} [opts.keepRootOnClose]  close() emits session_shutdown but
  *   does NOT remove the root (so a later host can reopen the same project).
+ * @param {string} [opts.sessionId] stable Pi logical-session UUID; defaults to
+ *   a fresh UUID per host and remains unchanged across session_start reloads.
  */
-export async function createPiHost({ name = "pi-host", seed = "empty", root, keepRootOnClose = false } = {}) {
+export async function createPiHost({ name = "pi-host", seed = "empty", root, keepRootOnClose = false, sessionId = randomUUID() } = {}) {
   const fixture = root
     ? { root, planRoot: join(root, ".planner"), store: new PlanStore(join(root, ".planner")) }
     : seed === null
@@ -137,7 +140,10 @@ export async function createPiHost({ name = "pi-host", seed = "empty", root, kee
     cwd: rootDir,
     hasUI: true,
     ui,
-    sessionManager: { getEntries: () => sessionEntries },
+    sessionManager: {
+      getEntries: () => sessionEntries,
+      getSessionId: () => sessionId,
+    },
     model: undefined,
     modelRegistry: {},
     signal: undefined,

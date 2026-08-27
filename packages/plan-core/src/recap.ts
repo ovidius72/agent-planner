@@ -90,9 +90,6 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   const featureAddCmd = cmd("/planner feature add", "planner-feature-add");
   const phaseAddCmd = cmd("/planner phase add", "planner-phase-add");
   const handoffShowCmd = cmd("/planner handoff show", "planner-handoff-show");
-  const featureShowCmd = cmd("/planner feature show", "planner-feature-show");
-  const phaseShowCmd = cmd("/planner phase show", "planner-phase-show");
-  const taskShowCmd = cmd("/planner task show", "planner-task-show");
 
   const lines: string[] = [];
   lines.push(italian ? "## Ripresa planner" : "## Planner recap");
@@ -115,9 +112,7 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     );
     lines.push(
       "",
-      italian
-        ? `Questo task è in-progress (lavoro iniziato in una sessione precedente). Prima di continuare, rileggi il contesto completo: ${taskShowCmd} ${tr} (full=true), ${phaseShowCmd} ${pr} (full=true), ${featureShowCmd} ${fr} (full=true).`
-        : `⚠️ This task is in-progress (work started in a previous session). Before continuing, re-read the full context in this order: ${taskShowCmd} ${tr} (full=true), ${phaseShowCmd} ${pr} (full=true), ${featureShowCmd} ${fr} (full=true).`,
+      `Continue with ${taskStartCmd} ${tr}. If context reads are required, follow only the missing or stale reads in its nextActions, then retry.`,
     );
   } else if (pendingResume) {
     const feature = feats.find((entry) => entry.id === pendingResume.phase.featureId);

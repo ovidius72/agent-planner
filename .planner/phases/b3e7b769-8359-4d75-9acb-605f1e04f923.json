@@ -1,0 +1,390 @@
+{
+  "id": "b3e7b769-8359-4d75-9acb-605f1e04f923",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 82,
+  "shortId": "5W8B3",
+  "priority": 25,
+  "slug": "dashboard-flow-backlog-analytics",
+  "title": "Dashboard flow & backlog analytics",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Expose deterministic backlog flow, scope growth, throughput, and aging signals directly on the project dashboard.",
+  "description": "Extend the existing dashboard composition in `packages/plan-web-ui/src/routes/dashboard/route.tsx:23-67` and the current aggregate cards in `packages/plan-web-ui/src/components/dashboard/stat-cards.tsx:13-70` with a compact, deterministic Flow & Backlog analytics section. The current UI exposes total/done/remaining counts but cannot show whether scope is growing faster than work is closing. Derive analytics from task `createdAt`, `startedAt`, `completedAt`, current `status`, and `statusLog` fields defined in `packages/plan-core/src/schema.ts:203-254`, without loading or mutating external planner roots and without adding AI-generated claims. Deliver a 7/21/60 active-day selector (default 21), a textual summary and exact KPI table, Added vs Closed flow, cumulative Scope vs Completion, open-task aging, and optional data-point drill-down into the WorkTree in `packages/plan-web-ui/src/components/dashboard/work-tree.tsx:98+`. Define terminal statuses as done/canceled/rejected; treat planned/in-progress/blocked/waiting/deferred as open; include reopen events so net backlog equals added + reopened - closed. Use deterministic UTC day buckets and disclose that deleted tasks are absent from current persisted history. Preserve the dashboard's compact layout, existing filter behavior, responsive/mobile containment, current styling conventions, accessible non-color-only graph semantics, and bundle performance; prefer lightweight SVG/CSS over a heavy chart dependency. Dependencies: existing dashboard loader already provides features and phases. Behaviors to preserve: Project Goal, consolidated context, StatCards, Resume Required, WorkTree, latest-completed and new-added sections, scroll restoration, and Web UI supervisor semantics.",
+  "descriptionUpdatedAt": "2026-08-26T15:27:42.187Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "cba74aed-c6c8-457a-a94d-bf2349b603da",
+    "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04",
+    "9649e356-0ba5-4bec-a61a-58c18a53d264",
+    "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff"
+  ],
+  "tasks": [
+    {
+      "id": "cba74aed-c6c8-457a-a94d-bf2349b603da",
+      "phaseId": "b3e7b769-8359-4d75-9acb-605f1e04f923",
+      "number": 339,
+      "shortId": "AAX2R",
+      "priority": 1,
+      "shortName": "build-deterministic-dashboard",
+      "title": "Build deterministic dashboard analytics model",
+      "status": "done",
+      "description": "Create a pure analytics module for the dashboard, expected under `packages/plan-web-ui/src/lib/dashboard-analytics.ts`, using the Feature/Phase/Task read models already consumed by `packages/plan-web-ui/src/routes/dashboard/route.tsx:23-32`. Compute 7/21/60 active-day windows from task `createdAt`, terminal/open transitions in `statusLog`, `completedAt`, `startedAt`, and current status. Terminal statuses are done/canceled/rejected; open statuses are planned/in-progress/blocked/waiting/deferred. Net backlog must be added + reopened - closed, active days must use deterministic UTC buckets, and current open/total counts must remain independently verifiable. Return graph-ready daily points, cumulative scope/completion points, open-task aging buckets, summary rates, actual calendar range, and explicit data-quality limitations (especially deleted tasks not represented by current files and legacy history fallbacks). Preserve exact optional property handling and do not alter public core schemas or existing exported types. Add focused unit tests covering empty plans, sparse calendar activity, reopened tasks, terminal-to-terminal changes, status-log fallbacks, boundary timestamps, current open counts, aging buckets, and all three window sizes. No UI or styling changes belong in this task.\n\n---\n**Completion summary:**\nImplemented and personally reviewed `packages/plan-web-ui/src/lib/dashboard-analytics.ts` with deterministic UTC active-day analytics for 7/21/60-day windows, terminal/open/reopen event accounting, cumulative scope/completion and net backlog, current counts, rates, aging buckets, calendar ranges, explicit legacy/deleted-data limitations, and stable task-ID sets for later drill-down. Added `packages/plan-web-ui/test/dashboard-analytics.test.ts` with 26 focused cases covering empty and malformed data, sparse windows, reopen cycles, partial-history reconciliation, status transitions, UTC boundaries, as-of cutoffs, aging anchors, stable IDs, and all window sizes. Verification: Web UI TypeScript check passed; focused analytics tests passed 26/26; full Web UI suite passed 69/69 before the final malformed-timestamp regression and the final focused suite passed after it; `git diff --check` passed. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-27T07:51:45.106Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "cba74aed-c6c8-457a-a94d-bf2349b603da-check-001-planned-in-progress",
+          "date": "2026-08-26T15:37:03.786Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "cba74aed-c6c8-457a-a94d-bf2349b603da-check-002-in-progress-done",
+          "date": "2026-08-27T07:51:45.104Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented and personally reviewed `packages/plan-web-ui/src/lib/dashboard-analytics.ts` with deterministic UTC active-day analytics for 7/21/60-day windows, terminal/open/reopen event accounting, cumulative scope/completion and net backlog, current counts, rates, aging buckets, calendar ranges, explicit legacy/deleted-data limitations, and stable task-ID sets for later drill-down. Added `packages/plan-web-ui/test/dashboard-analytics.test.ts` with 26 focused cases covering empty and malformed data, sparse windows, reopen cycles, partial-history reconciliation, status transitions, UTC boundaries, as-of cutoffs, aging anchors, stable IDs, and all window sizes. Verification: Web UI TypeScript check passed; focused analytics tests passed 26/26; full Web UI suite passed 69/69 before the final malformed-timestamp regression and the final focused suite passed after it; `git diff --check` passed. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cba74aed-c6c8-457a-a94d-bf2349b603da-check-001-define-explicit-analytics-types-status-groups-utc-active-day-selection-and-deterministic-input-clock",
+          "number": 1,
+          "title": "Define explicit analytics types, status groups, UTC active-day selection, and deterministic input clock",
+          "checked": true
+        },
+        {
+          "id": "cba74aed-c6c8-457a-a94d-bf2349b603da-check-002-implement-flow-cumulative-scope-completion-current-open-rates-and-aging-calculations",
+          "number": 2,
+          "title": "Implement flow, cumulative scope/completion, current-open, rates, and aging calculations",
+          "checked": true
+        },
+        {
+          "id": "cba74aed-c6c8-457a-a94d-bf2349b603da-check-003-handle-reopen-events-legacy-timestamp-fallbacks-empty-data-and-deleted-history-limitation-metadata",
+          "number": 3,
+          "title": "Handle reopen events, legacy timestamp fallbacks, empty data, and deleted-history limitation metadata",
+          "checked": true
+        },
+        {
+          "id": "cba74aed-c6c8-457a-a94d-bf2349b603da-check-004-add-focused-unit-tests-for-calculations-and-boundary-cases",
+          "number": 4,
+          "title": "Add focused unit tests for calculations and boundary cases",
+          "checked": true
+        },
+        {
+          "id": "cba74aed-c6c8-457a-a94d-bf2349b603da-check-005-run-web-ui-typecheck-and-focused-analytics-tests",
+          "number": 5,
+          "title": "Run Web UI typecheck and focused analytics tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-26T15:37:03.786Z",
+      "completedAt": "2026-08-27T07:51:45.104Z",
+      "createdAt": "2026-08-26T15:27:55.077Z",
+      "updatedAt": "2026-08-27T07:51:45.104Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-26T15:37:03.707Z"
+        }
+      ]
+    },
+    {
+      "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04",
+      "phaseId": "b3e7b769-8359-4d75-9acb-605f1e04f923",
+      "number": 340,
+      "shortId": "5A8X5",
+      "priority": 2,
+      "shortName": "add-flow-backlog-summary-and-p",
+      "title": "Add Flow & Backlog summary and period controls",
+      "status": "done",
+      "description": "Add a compact dashboard component, expected under `packages/plan-web-ui/src/components/dashboard/`, and render it from `packages/plan-web-ui/src/routes/dashboard/route.tsx:23-67` near the existing `StatCards`. Consume only the deterministic model produced by T339. Provide a Flow & Backlog heading, a concise deterministic insight sentence, a 7/21/60 active-day segmented control defaulting to 21, the actual UTC calendar range covered, and an exact KPI presentation for tasks added, closed, reopened when nonzero, net backlog change, open now, addition rate, closure rate, and closure/addition ratio. Preserve the dashboard's compact visual language and existing sections; do not restyle unrelated cards. Controls must be keyboard reachable, expose pressed/selected semantics, not trigger page navigation or scroll restoration, and remain a single compact horizontally usable row on narrow viewports. Display limitations through concise helper text or a tooltip rather than misleading precision. Add component tests for period changes, positive/negative/zero net states, sparse/empty data, reopened visibility, accessible labels, and preservation of dashboard section ordering.\n\n---\n**Completion summary:**\nAdded `FlowBacklogAnalytics` and rendered it directly after aggregate StatCards on the dashboard. The compact section consumes only the T339 deterministic model, defaults to 21 active days, exposes keyboard-reachable 7/21/60 aria-pressed controls without navigation, shows the actual UTC range, deterministic positive/negative/zero insight text, exact added/closed/reopened/net/open/rate/ratio KPIs, and concise limitation disclosure. Added five component/route tests covering period changes, net states, reopened visibility, empty/sparse accessibility, and dashboard ordering. Verification: Web UI TypeScript check passed, focused tests 5/5, full Web UI suite 75/75, and git diff --check passed. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-27T07:57:17.556Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04-check-001-planned-in-progress",
+          "date": "2026-08-27T07:52:23.424Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04-check-002-in-progress-done",
+          "date": "2026-08-27T07:57:17.554Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added `FlowBacklogAnalytics` and rendered it directly after aggregate StatCards on the dashboard. The compact section consumes only the T339 deterministic model, defaults to 21 active days, exposes keyboard-reachable 7/21/60 aria-pressed controls without navigation, shows the actual UTC range, deterministic positive/negative/zero insight text, exact added/closed/reopened/net/open/rate/ratio KPIs, and concise limitation disclosure. Added five component/route tests covering period changes, net states, reopened visibility, empty/sparse accessibility, and dashboard ordering. Verification: Web UI TypeScript check passed, focused tests 5/5, full Web UI suite 75/75, and git diff --check passed. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04-check-001-implement-compact-flow-backlog-summary-component-using-t339-outputs",
+          "number": 1,
+          "title": "Implement compact Flow & Backlog summary component using T339 outputs",
+          "checked": true
+        },
+        {
+          "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04-check-002-add-accessible-7-21-60-active-day-controls-and-actual-range-limitation-copy",
+          "number": 2,
+          "title": "Add accessible 7/21/60 active-day controls and actual-range/limitation copy",
+          "checked": true
+        },
+        {
+          "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04-check-003-render-deterministic-insight-and-kpi-values-for-growth-shrinkage-and-neutral-flow",
+          "number": 3,
+          "title": "Render deterministic insight and KPI values for growth, shrinkage, and neutral flow",
+          "checked": true
+        },
+        {
+          "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04-check-004-integrate-the-section-into-dashboardroute-without-changing-unrelated-dashboard-styling",
+          "number": 4,
+          "title": "Integrate the section into DashboardRoute without changing unrelated dashboard styling",
+          "checked": true
+        },
+        {
+          "id": "973f6dfc-ec1d-438c-a6d1-c92dbce6cb04-check-005-add-component-tests-and-run-web-ui-typecheck-test-suite",
+          "number": 5,
+          "title": "Add component tests and run Web UI typecheck/test suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T07:52:23.424Z",
+      "completedAt": "2026-08-27T07:57:17.554Z",
+      "createdAt": "2026-08-26T15:28:16.193Z",
+      "updatedAt": "2026-08-27T07:57:17.554Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T07:52:23.347Z"
+        }
+      ]
+    },
+    {
+      "id": "9649e356-0ba5-4bec-a61a-58c18a53d264",
+      "phaseId": "b3e7b769-8359-4d75-9acb-605f1e04f923",
+      "number": 341,
+      "shortId": "6WLLX",
+      "priority": 3,
+      "shortName": "render-accessible-backlog-flow",
+      "title": "Render accessible backlog flow, burn-up, and aging graphs",
+      "status": "done",
+      "description": "Extend the Flow & Backlog section created in T340 with three lightweight responsive visualizations driven by the T339 analytics model: (1) Added vs Closed grouped bars by active UTC day, with reopened/net information available without relying on color; (2) cumulative Scope vs Completion burn-up lines or areas where the visible gap represents open backlog; and (3) open-task aging buckets for 0–7, 8–14, 15–30, 31–60, and 60+ days. Implement with small local SVG/CSS components rather than introducing a heavy chart dependency, because the current Vite bundle already reports a large-chunk warning. Every graph must have a visible title, readable axes/labels, an accessible text summary or table, keyboard/focusable data points where interactive, non-color-only series identification, and stable empty/single-point behavior. On mobile, preserve horizontal containment and use a deliberate compact or horizontally scrollable presentation without changing unrelated dashboard layout. Add tests for rendering, labels, empty data, non-color semantics, the 21-point case, and responsive-safe structure.\n\n---\n**Completion summary:**\nAdded `analytics-charts.tsx` with three dependency-free, responsive analytics visualizations driven only by T339 outputs: grouped Added vs Closed bars, cumulative Scope vs Completion burn-up lines, and open-task aging buckets. Charts use lightweight local SVG/CSS, horizontally contained thin-scroll surfaces for long series, visible titles and axes, solid/striped and solid/dashed non-color series distinctions, semantic SVG titles/descriptions, and exact screen-reader tables. Empty and single/long-series behavior is bounded. Extended component tests for chart labels, non-color semantics, empty states, exact tables, aging buckets, 21-point width, and responsive containment. Verification: focused tests 8/8, Web UI TypeScript check passed, full Web UI suite 78/78, and git diff --check passed. No dependency, commit, or push.",
+      "descriptionUpdatedAt": "2026-08-27T08:01:46.473Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "9649e356-0ba5-4bec-a61a-58c18a53d264-check-001-planned-in-progress",
+          "date": "2026-08-27T07:57:53.288Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "9649e356-0ba5-4bec-a61a-58c18a53d264-check-002-in-progress-done",
+          "date": "2026-08-27T08:01:46.471Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added `analytics-charts.tsx` with three dependency-free, responsive analytics visualizations driven only by T339 outputs: grouped Added vs Closed bars, cumulative Scope vs Completion burn-up lines, and open-task aging buckets. Charts use lightweight local SVG/CSS, horizontally contained thin-scroll surfaces for long series, visible titles and axes, solid/striped and solid/dashed non-color series distinctions, semantic SVG titles/descriptions, and exact screen-reader tables. Empty and single/long-series behavior is bounded. Extended component tests for chart labels, non-color semantics, empty states, exact tables, aging buckets, 21-point width, and responsive containment. Verification: focused tests 8/8, Web UI TypeScript check passed, full Web UI suite 78/78, and git diff --check passed. No dependency, commit, or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9649e356-0ba5-4bec-a61a-58c18a53d264-check-001-implement-added-vs-closed-flow-visualization-with-reopened-net-semantics",
+          "number": 1,
+          "title": "Implement Added vs Closed flow visualization with reopened/net semantics",
+          "checked": true
+        },
+        {
+          "id": "9649e356-0ba5-4bec-a61a-58c18a53d264-check-002-implement-cumulative-scope-vs-completion-burn-up-visualization",
+          "number": 2,
+          "title": "Implement cumulative Scope vs Completion burn-up visualization",
+          "checked": true
+        },
+        {
+          "id": "9649e356-0ba5-4bec-a61a-58c18a53d264-check-003-implement-open-task-aging-bucket-visualization",
+          "number": 3,
+          "title": "Implement open-task aging bucket visualization",
+          "checked": true
+        },
+        {
+          "id": "9649e356-0ba5-4bec-a61a-58c18a53d264-check-004-provide-accessible-summaries-tables-and-non-color-only-series-identification",
+          "number": 4,
+          "title": "Provide accessible summaries/tables and non-color-only series identification",
+          "checked": true
+        },
+        {
+          "id": "9649e356-0ba5-4bec-a61a-58c18a53d264-check-005-add-graph-tests-and-run-web-ui-typecheck-test-suite",
+          "number": 5,
+          "title": "Add graph tests and run Web UI typecheck/test suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T07:57:53.288Z",
+      "completedAt": "2026-08-27T08:01:46.471Z",
+      "createdAt": "2026-08-26T15:28:35.890Z",
+      "updatedAt": "2026-08-27T08:01:46.471Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T07:57:53.214Z"
+        }
+      ]
+    },
+    {
+      "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff",
+      "phaseId": "b3e7b769-8359-4d75-9acb-605f1e04f923",
+      "number": 342,
+      "shortId": "UVA4E",
+      "priority": 4,
+      "shortName": "add-analytics-drill-down-and-c",
+      "title": "Add analytics drill-down and complete browser verification",
+      "status": "done",
+      "description": "Complete the P082 dashboard analytics experience by connecting summary or graph selections to the existing WorkTree in `packages/plan-web-ui/src/components/dashboard/work-tree.tsx:98+` without breaking its sort, search, Hide Done, Hide Planned, Only Active, expansion, locate, or persisted per-project view state. A selected active-day data point or KPI should expose the matching task set (added, closed, reopened, or currently open) through a clear reversible filter/drill-down, with an explicit Clear action and stable task IDs rather than title matching. Preserve React Router scroll behavior and avoid query-string updates that reset window position. Add end-to-end coverage in `e2e/status-dashboard.spec.ts` or a dedicated analytics spec using the real plan-server fixture and isolated temporary planner roots. Verify desktop and 390px touch/mobile containment, keyboard operation, data-point/table drill-down, empty analytics, and coexistence with Active tasks/Resume Required. Run the complete Web UI tests, production build, and Playwright suite. Do not change analytics definitions or unrelated WorkTree styling in this task unless a reviewed defect requires it.\n\n---\n**Completion summary:**\nCompleted stable-ID analytics drill-down across dashboard summary KPIs, SVG data points, exact flow table cells, and aging buckets. DashboardRoute owns transient selection state without query-string navigation; WorkTree composes the analytics task-ID set with existing search/status/hide/active filters, force-expands only the transient matching view, preserves stored expansion/sort/filter state, reports visible versus selected counts, and provides explicit clear actions. Added `e2e/analytics-dashboard.spec.ts` covering keyboard activation, KPI/SVG/table drill-down, reversible filtering, unchanged URLs, empty data, Active tasks coexistence, and document containment on desktop plus 390px touch. Fixed analytics-only mobile width by using compact accessible period labels, fixed-coordinate responsive SVGs, contained layouts, and non-expanding exact tables. Verification on final source: Web UI TypeScript check passed; full Web UI suite 79/79; production Vite build passed (existing large-chunk warning only); full real-server Playwright suite passed 28/28 across desktop and mobile; git diff --check passed. Rebuilt and copied web-ui-dist to both plan-server and pi-adapter. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-27T08:20:25.292Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff-check-001-planned-in-progress",
+          "date": "2026-08-27T08:02:11.659Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff-check-002-in-progress-done",
+          "date": "2026-08-27T08:20:25.289Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed stable-ID analytics drill-down across dashboard summary KPIs, SVG data points, exact flow table cells, and aging buckets. DashboardRoute owns transient selection state without query-string navigation; WorkTree composes the analytics task-ID set with existing search/status/hide/active filters, force-expands only the transient matching view, preserves stored expansion/sort/filter state, reports visible versus selected counts, and provides explicit clear actions. Added `e2e/analytics-dashboard.spec.ts` covering keyboard activation, KPI/SVG/table drill-down, reversible filtering, unchanged URLs, empty data, Active tasks coexistence, and document containment on desktop plus 390px touch. Fixed analytics-only mobile width by using compact accessible period labels, fixed-coordinate responsive SVGs, contained layouts, and non-expanding exact tables. Verification on final source: Web UI TypeScript check passed; full Web UI suite 79/79; production Vite build passed (existing large-chunk warning only); full real-server Playwright suite passed 28/28 across desktop and mobile; git diff --check passed. Rebuilt and copied web-ui-dist to both plan-server and pi-adapter. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff-check-001-implement-reversible-task-id-drill-down-between-analytics-and-worktree",
+          "number": 1,
+          "title": "Implement reversible task-ID drill-down between analytics and WorkTree",
+          "checked": true
+        },
+        {
+          "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff-check-002-preserve-existing-worktree-filters-expansion-locate-storage-and-scroll-behavior",
+          "number": 2,
+          "title": "Preserve existing WorkTree filters, expansion, locate, storage, and scroll behavior",
+          "checked": true
+        },
+        {
+          "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff-check-003-add-component-integration-tests-for-drill-down-and-clear-behavior",
+          "number": 3,
+          "title": "Add component/integration tests for drill-down and clear behavior",
+          "checked": true
+        },
+        {
+          "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff-check-004-add-real-server-playwright-coverage-for-desktop-and-mobile-analytics-flows",
+          "number": 4,
+          "title": "Add real-server Playwright coverage for desktop and mobile analytics flows",
+          "checked": true
+        },
+        {
+          "id": "cc41fabc-c3a3-4965-a7a6-73ef8dfcb3ff-check-005-run-full-web-ui-checks-build-and-complete-playwright-suite",
+          "number": 5,
+          "title": "Run full Web UI checks, build, and complete Playwright suite",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T08:02:11.659Z",
+      "completedAt": "2026-08-27T08:20:25.289Z",
+      "createdAt": "2026-08-26T15:28:46.801Z",
+      "updatedAt": "2026-08-27T08:20:25.289Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T08:02:11.590Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-26T15:27:42.187Z",
+  "updatedAt": "2026-08-27T08:20:25.289Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-26T15:48:46.006Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/b3e7b769-8359-4d75-9acb-605f1e04f923-2026-08-27T08-20-25-310Z.md",
+      "clearedAt": "2026-08-27T08:20:25.310Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/b3e7b769-8359-4d75-9acb-605f1e04f923-2026-08-26T15-48-45-988Z.md",
+      "clearedAt": "2026-08-26T15:48:45.988Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "e029d5a5-1146-44e3-87a8-096e978e415a",
+      "date": "2026-08-26T15:37:03.818Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "33f5e38d-3bbe-4228-94cd-bcdcb12a1711",
+      "date": "2026-08-27T08:20:25.349Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-27T08:02:11.590Z"
+    }
+  ]
+}

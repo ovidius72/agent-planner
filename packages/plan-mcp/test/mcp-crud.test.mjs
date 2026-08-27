@@ -23,6 +23,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createPhaseId } from "../../plan-core/dist/index.js";
 import {
+  startMcpClient,
   startMcpFixture,
   closeMcpFixture,
   cleanupMcpFixtures,
@@ -73,6 +74,15 @@ test("feature CRUD: human refs, ambiguity, no UUID leak, follow-up reads", async
     assert.match(toolText(renamed), /F002/);
     const shown2 = await callTool(session, "planner-feature-show", { feature: "Payments v2" });
     assert.match(toolText(shown2), /Payments v2/);
+
+    const beforeStatusUpdate = (await session.store.loadFeatures()).features.find((entry) => entry.id === id);
+    const statusRejected = await callTool(session, "planner-feature-update", { feature: "Payments v2", status: "done" }, { expectError: true });
+    assert.match(toolText(statusRejected), /DERIVED_STATUS_READ_ONLY/);
+    assert.equal(toolStructured(statusRejected).updated, false);
+    assert.equal(toolStructured(statusRejected).effectiveStatus, "planned");
+    const afterStatusUpdate = (await session.store.loadFeatures()).features.find((entry) => entry.id === id);
+    assert.equal(afterStatusUpdate.updatedAt, beforeStatusUpdate.updatedAt, "rejected status update does not mutate feature metadata");
+    assert.equal(afterStatusUpdate.status, "planned", "feature status remains derived");
 
     // duplicate data → ambiguous name error, nothing mutated
     await callTool(session, "planner-feature-add", { name: "Payments v2", description: LONG });
@@ -137,12 +147,17 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
       assert.match(toolText(shown), /P002\(F001\)/, `phase-show resolves ref ${ref}`);
     }
 
-    // phase status is DERIVED from tasks (empty phase → draft); the update
-    // tool accepts the status field but reads always derive, so assert the
-    // title persistence and the derived read through MCP
+    // phase status is DERIVED from tasks (empty phase → draft); status update
+    // attempts are rejected instead of reporting a false-success mutation.
     const before = await callTool(session, "planner-phase-show", { phase: "P002" });
     assert.match(toolText(before), /\(draft; 0 tasks\)/, "empty phase derives draft");
-    const updated = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2", status: "in-progress" });
+    const rejectedStatus = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2", status: "in-progress" }, { expectError: true });
+    assert.match(toolText(rejectedStatus), /DERIVED_STATUS_READ_ONLY/);
+    assert.equal(toolStructured(rejectedStatus).updated, false);
+    assert.equal(toolStructured(rejectedStatus).effectiveStatus, "draft");
+    const storedAfterRejection = await session.store.loadPhase(id);
+    assert.equal(storedAfterRejection.title, "Payouts", "mixed status update is rejected atomically");
+    const updated = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2" });
     assert.match(toolText(updated), /P002\(F001\)/);
     const stored = await session.store.loadPhase(id);
     assert.equal(stored.title, "Payouts v2");
@@ -269,7 +284,17 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     });
     assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T002/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
-    await readTaskContext(session, "T002");
+
+    // The stdio MCP process keeps one isolated fallback session ID. Pause
+    // invalidates only the changed task; parent and requirement attestations
+    // remain reusable, so the retry asks for task context only.
+    const deniedResume = await callTool(session, "planner-task-start", { task: "T002" });
+    assert.equal(toolStructured(deniedResume).errorCode, "CONTEXT_READ_REQUIRED");
+    assert.deepEqual(toolStructured(deniedResume).nextActions, [
+      "planner-task-show P001(F001)/T002 with full=true",
+      "Retry planner-task-start P001(F001)/T002",
+    ]);
+    await callTool(session, "planner-task-show", { task: "T002", full: true });
     assert.match(toolText(await callTool(session, "planner-task-start", { task: "T002" })), /Task started/);
     const missingEvidence = await callTool(session, "planner-task-complete", { task: "T002", force: true }, { expectError: true });
     assert.match(toolText(missingEvidence), /description_update/);
@@ -294,6 +319,64 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const phase = (await session.store.loadAllPhases())[0];
     assert.equal(phase.tasks.some((entry) => entry.id === id), false);
     assert.equal(phase.taskIds.includes(id), false);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("distinct MCP server processes cannot reuse each other's context attestations", async () => {
+  const first = await startMcpFixture({ name: "t337-mcp-session-isolation" });
+  const planRoot = first.planRoot;
+  try {
+    await readTaskContext(first, "T001");
+    assert.equal(toolStructured(await callTool(first, "planner-task-start", { task: "T001" })).started, true);
+  } finally {
+    await closeMcpFixture(first);
+  }
+
+  const second = await startMcpClient({ planRoot, name: "t337-second-mcp-process" });
+  try {
+    const denied = await callTool(second, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(denied).errorCode, "CONTEXT_READ_REQUIRED");
+    assert.deepEqual(toolStructured(denied).contextEligibility.requiredReads.map((read) => read.kind), ["task", "phase", "feature"]);
+    assert.deepEqual(toolStructured(denied).nextActions, [
+      "planner-task-show P001(F001)/T001 with full=true",
+      "planner-phase-show P001(F001) with full=true",
+      "planner-feature-show F001 with full=true",
+      "planner-requirement-list",
+      "Retry planner-task-start P001(F001)/T001",
+    ]);
+  } finally {
+    await closeMcpFixture(second);
+  }
+});
+
+
+test("planned sibling can start when another task makes the parent derive waiting", async () => {
+  const session = await startMcpFixture({ name: "t237-waiting-sibling" });
+  try {
+    await callTool(session, "planner-task-add", {
+      feature: "F001",
+      phase: "P001",
+      title: "Waiting sibling",
+      description: "src/waiting-sibling.ts:10 sibling task used to prove waiting parent status does not block unrelated planned work.",
+    });
+    await callTool(session, "planner-task-update", {
+      task: "T002",
+      status: "waiting",
+      motivation: "External dependency is not ready yet.",
+    });
+
+    const phase = (await session.store.loadAllPhases()).find((entry) => entry.number === 1);
+    const feature = (await session.store.loadFeatures()).features.find((entry) => entry.number === 1);
+    assert.equal(phase.status, "waiting", "sibling waiting task makes the phase derive waiting");
+    assert.equal(feature.status, "waiting", "waiting phase makes the feature derive waiting");
+
+    await readTaskContext(session, "T001", "P001", "F001");
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.match(toolText(started), /Task started: P001\(F001\)\/T001/);
+    const updatedPhase = (await session.store.loadAllPhases()).find((entry) => entry.number === 1);
+    assert.equal(updatedPhase.tasks.find((task) => task.number === 1).status, "in-progress");
   } finally {
     await closeMcpFixture(session);
   }
@@ -392,7 +475,9 @@ test("priority is overridable but active task switches require a snapshot and de
     assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
     assert.match(toolText(priorityOverride), /Priority advisory/);
 
-    await readTaskContext(session, "T001");
+    // T002 already attested the shared phase, feature, and requirements.
+    // A sibling start requires only the exact new task read.
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
     const denied = await callTool(session, "planner-task-start", { task: "T001" });
     assert.equal(denied.isError, true);
     assert.equal(toolStructured(denied).started, false);

@@ -220,6 +220,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
   test("lifecycle + rollup: start, complete gate, force-complete rolls phase and feature to done", async () => {
     const host = await createPiHost({ name: "t242-lifecycle", seed: "minimal" });
     try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
       // Generic updates cannot bypass the dedicated completion path or its evidence requirement.
       const directDone = await host.runTool("task_update", { taskId: "T001", status: "done" });
       assert.match(toolText(directDone), /completion transitions require task_complete/);
@@ -266,7 +267,18 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       });
       assert.match(toolText(paused), /Resume checkpoint saved: P001\(F001\)\/T001/);
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
-      await readTaskContext(host, "T001");
+
+      // Pi emits session_start again when the same logical session reloads.
+      // The stable SessionManager UUID must preserve valid parent/requirement
+      // attestations, so only the task changed by pause needs a reread.
+      await host.emit("session_start", { type: "session_start", reason: "reload" });
+      const deniedResume = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(deniedResume).errorCode, "CONTEXT_READ_REQUIRED");
+      assert.deepEqual(toolDetails(deniedResume).nextActions, [
+        "task_get P001(F001)/T001 with full=true",
+        "Retry task_start P001(F001)/T001",
+      ]);
+      await host.runTool("task_get", { taskId: "T001", full: true });
       assert.match(toolText(await host.runTool("task_start", { taskId: "T001" })), /Task started/);
 
       const missingEvidence = await host.runTool("task_complete", { taskId: "T001", force: true });
@@ -296,6 +308,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
   test("priority remains overridable while active switches require a checkpoint and deterministic return", async () => {
     const host = await createPiHost({ name: "t281-explicit-start", seed: "minimal" });
     try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
       for (const title of ["Explicit lower-priority task", "Another temporary task"]) {
         await host.runTool("task_create", {
           featureId: "F001",
@@ -310,7 +323,9 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolText(priorityOverride), /✅ Task started: P001\(F001\)\/T002/);
       assert.match(toolText(priorityOverride), /Priority advisory/);
 
-      await readTaskContext(host, "T001");
+      // T002 already attested the shared phase, feature, and requirements.
+      // A sibling start requires only the exact new task read.
+      await host.runTool("task_get", { taskId: "T001", full: true });
       const denied = await host.runTool("task_start", { taskId: "T001" });
       assert.equal(denied.isError, true);
       assert.equal(toolDetails(denied).started, false);
@@ -625,6 +640,35 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolText(stopped), /Planner disabled\. Web UI shut down/);
     } finally {
       await closePiHost(host);
+    }
+  });
+
+  test("a distinct Pi logical session cannot reuse another session's attestations", async () => {
+    const first = await createPiHost({ name: "t337-session-one", seed: "minimal", keepRootOnClose: true, sessionId: "logical-session-one" });
+    const root = first.root;
+    try {
+      await first.emit("session_start", { type: "session_start", reason: "startup" });
+      await readTaskContext(first, "T001");
+      assert.equal(toolDetails(await first.runTool("task_start", { taskId: "T001" })).started, true);
+    } finally {
+      await closePiHost(first);
+    }
+
+    const second = await createPiHost({ name: "t337-session-two", root, sessionId: "logical-session-two" });
+    try {
+      await second.emit("session_start", { type: "session_start", reason: "resume" });
+      const denied = await second.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(denied).errorCode, "CONTEXT_READ_REQUIRED");
+      assert.deepEqual(toolDetails(denied).contextEligibility.requiredReads.map((read) => read.kind), ["task", "phase", "feature"]);
+      assert.deepEqual(toolDetails(denied).nextActions, [
+        "task_get P001(F001)/T001 with full=true",
+        "phase_get P001(F001) with full=true",
+        "feature_get F001 with full=true",
+        "requirement_list",
+        "Retry task_start P001(F001)/T001",
+      ]);
+    } finally {
+      await closePiHost(second);
     }
   });
 

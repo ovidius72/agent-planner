@@ -42,10 +42,22 @@
     "a1335e2c-de22-4e09-8a8b-ff7eb8e261e9",
     "1ba31e0f-5ba3-4eba-9b6b-88f795ae499d",
     "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
-    "cd3fd548-a183-448c-9a87-cf804bcdb075"
+    "cd3fd548-a183-448c-9a87-cf804bcdb075",
+    "b3e7b769-8359-4d75-9acb-605f1e04f923",
+    "e64ef6d6-5e64-418a-995e-f88da9ca4cc0"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "bfa30b71-9ad8-488b-a2a3-1dd1c5e85813",
+      "date": "2026-08-27T14:16:06.669Z",
+      "fromStatus": "planned",
+      "toStatus": "done",
+      "title": "planned → done",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-15T20:24:28.795Z",
-  "updatedAt": "2026-07-27T12:01:51.734Z"
+  "updatedAt": "2026-07-27T12:01:51.734Z",
+  "sessionInfo": []
 }

@@ -100,8 +100,46 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "c900f76e-a825-47e2-9d73-d21654e28bc4",
+      "date": "2026-08-26T07:43:27.918Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "073f6736-7cf5-4c2c-9018-bef52ad9ea65",
+      "date": "2026-08-26T13:26:32.156Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "3173ab1f-380c-495d-8c62-e03f106901d9",
+      "date": "2026-08-26T14:56:27.199Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "18100225-3b79-48bb-a9b7-40087e8d4f15",
+      "date": "2026-08-26T14:57:49.968Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-08-25T09:36:00.959Z",
-  "updatedAt": "2026-08-25T09:36:47.490Z"
+  "updatedAt": "2026-08-25T09:36:47.490Z",
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-26T14:56:27.049Z"
+    }
+  ]
 }
