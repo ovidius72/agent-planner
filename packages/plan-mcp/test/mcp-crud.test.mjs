@@ -75,6 +75,15 @@ test("feature CRUD: human refs, ambiguity, no UUID leak, follow-up reads", async
     const shown2 = await callTool(session, "planner-feature-show", { feature: "Payments v2" });
     assert.match(toolText(shown2), /Payments v2/);
 
+    const beforeStatusUpdate = (await session.store.loadFeatures()).features.find((entry) => entry.id === id);
+    const statusRejected = await callTool(session, "planner-feature-update", { feature: "Payments v2", status: "done" }, { expectError: true });
+    assert.match(toolText(statusRejected), /DERIVED_STATUS_READ_ONLY/);
+    assert.equal(toolStructured(statusRejected).updated, false);
+    assert.equal(toolStructured(statusRejected).effectiveStatus, "planned");
+    const afterStatusUpdate = (await session.store.loadFeatures()).features.find((entry) => entry.id === id);
+    assert.equal(afterStatusUpdate.updatedAt, beforeStatusUpdate.updatedAt, "rejected status update does not mutate feature metadata");
+    assert.equal(afterStatusUpdate.status, "planned", "feature status remains derived");
+
     // duplicate data → ambiguous name error, nothing mutated
     await callTool(session, "planner-feature-add", { name: "Payments v2", description: LONG });
     const ambiguous = await callTool(session, "planner-feature-show", { feature: "Payments v2" });
@@ -138,12 +147,17 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
       assert.match(toolText(shown), /P002\(F001\)/, `phase-show resolves ref ${ref}`);
     }
 
-    // phase status is DERIVED from tasks (empty phase → draft); the update
-    // tool accepts the status field but reads always derive, so assert the
-    // title persistence and the derived read through MCP
+    // phase status is DERIVED from tasks (empty phase → draft); status update
+    // attempts are rejected instead of reporting a false-success mutation.
     const before = await callTool(session, "planner-phase-show", { phase: "P002" });
     assert.match(toolText(before), /\(draft; 0 tasks\)/, "empty phase derives draft");
-    const updated = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2", status: "in-progress" });
+    const rejectedStatus = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2", status: "in-progress" }, { expectError: true });
+    assert.match(toolText(rejectedStatus), /DERIVED_STATUS_READ_ONLY/);
+    assert.equal(toolStructured(rejectedStatus).updated, false);
+    assert.equal(toolStructured(rejectedStatus).effectiveStatus, "draft");
+    const storedAfterRejection = await session.store.loadPhase(id);
+    assert.equal(storedAfterRejection.title, "Payouts", "mixed status update is rejected atomically");
+    const updated = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2" });
     assert.match(toolText(updated), /P002\(F001\)/);
     const stored = await session.store.loadPhase(id);
     assert.equal(stored.title, "Payouts v2");
@@ -334,6 +348,37 @@ test("distinct MCP server processes cannot reuse each other's context attestatio
     ]);
   } finally {
     await closeMcpFixture(second);
+  }
+});
+
+
+test("planned sibling can start when another task makes the parent derive waiting", async () => {
+  const session = await startMcpFixture({ name: "t237-waiting-sibling" });
+  try {
+    await callTool(session, "planner-task-add", {
+      feature: "F001",
+      phase: "P001",
+      title: "Waiting sibling",
+      description: "src/waiting-sibling.ts:10 sibling task used to prove waiting parent status does not block unrelated planned work.",
+    });
+    await callTool(session, "planner-task-update", {
+      task: "T002",
+      status: "waiting",
+      motivation: "External dependency is not ready yet.",
+    });
+
+    const phase = (await session.store.loadAllPhases()).find((entry) => entry.number === 1);
+    const feature = (await session.store.loadFeatures()).features.find((entry) => entry.number === 1);
+    assert.equal(phase.status, "waiting", "sibling waiting task makes the phase derive waiting");
+    assert.equal(feature.status, "waiting", "waiting phase makes the feature derive waiting");
+
+    await readTaskContext(session, "T001", "P001", "F001");
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.match(toolText(started), /Task started: P001\(F001\)\/T001/);
+    const updatedPhase = (await session.store.loadAllPhases()).find((entry) => entry.number === 1);
+    assert.equal(updatedPhase.tasks.find((task) => task.number === 1).status, "in-progress");
+  } finally {
+    await closeMcpFixture(session);
   }
 });
 

@@ -32,6 +32,43 @@ function text(textValue: string, structuredContent?: Record<string, unknown>): T
   return structuredContent ? { content: [{ type: "text", text: textValue }], structuredContent } : { content: [{ type: "text", text: textValue }] };
 }
 
+function derivedStatusReadOnlyResult(
+  entity: "feature" | "phase",
+  ref: string,
+  attemptedStatus: string,
+  effectiveStatus: string,
+): ToolResult {
+  const childKind = entity === "feature" ? "phases" : "tasks";
+  const retryAction = entity === "feature"
+    ? `Retry planner-feature-update ${ref} without the status field if you need to update metadata.`
+    : `Retry planner-phase-update ${ref} without the status field if you need to update metadata.`;
+  const nextActions = [
+    `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind}; update the child ${childKind} instead of setting ${entity}.status.`,
+    retryAction,
+  ];
+  return {
+    isError: true,
+    content: [{ type: "text", text: [
+      `❌ ${entity.toUpperCase()} UPDATE FAILED [DERIVED_STATUS_READ_ONLY]`,
+      `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind} and cannot be set directly.`,
+      `Attempted status: ${attemptedStatus}`,
+      `Effective derived status: ${effectiveStatus}`,
+      "No planner data was changed.",
+      "Next required actions:",
+      ...nextActions.map((action, index) => `${index + 1}. ${action}`),
+    ].join("\n") }],
+    structuredContent: {
+      updated: false,
+      errorCode: "DERIVED_STATUS_READ_ONLY",
+      entity,
+      ref,
+      attemptedStatus,
+      effectiveStatus,
+      nextActions,
+    },
+  };
+}
+
 function taskStartError(
   outcome: ReturnType<typeof taskStartDenied>,
   structuredContent: Record<string, unknown> = {},
@@ -568,12 +605,14 @@ server.registerTool("planner-feature-update", {
   const resolvedFeature = resolveFeatureRefStrict(features, ref);
   if (!resolvedFeature.ok) return text(resolvedFeature.error);
   const feature = resolvedFeature.feature;
+  if (updates.status !== undefined) {
+    return derivedStatusReadOnlyResult("feature", formatFeatureRef(feature.number), updates.status, feature.status);
+  }
   const updated = await st.updateFeatures((doc) => {
     const target = doc.features.find((entry) => entry.id === feature.id);
     if (!target) return doc;
     if (updates.name !== undefined) target.name = updates.name.trim();
     if (updates.description !== undefined) target.description = updates.description.trim();
-    if (updates.status !== undefined) target.status = updates.status;
     if (updates.workDone !== undefined) target.workDone = updates.workDone.trim();
     if (updates.workRemaining !== undefined) target.workRemaining = updates.workRemaining.trim();
     if (updates.startDate !== undefined) target.startDate = updates.startDate.trim();
@@ -772,9 +811,11 @@ server.registerTool("planner-phase-update", {
   const features = (await st.loadFeatures()).features;
   const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
+  if (updates.status !== undefined) {
+    return derivedStatusReadOnlyResult("phase", formatPhaseRef(found.number, featureNumberOfPhase(found, features)), updates.status, found.status);
+  }
   const phase = await st.updatePhase(found.id, (entry) => {
     if (updates.title !== undefined) entry.title = updates.title.trim();
-    if (updates.status !== undefined) entry.status = updates.status;
     if (updates.summary !== undefined) entry.summary = updates.summary.trim();
     if (updates.description !== undefined) entry.description = updates.description.trim();
     if (updates.priority !== undefined) entry.priority = updates.priority;

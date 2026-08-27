@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLoaderData, useNavigate, useRouteLoaderData } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Button } from "../../components/ui/button";
@@ -8,6 +8,8 @@ import { AiConsolidatedContext } from "../../components/dashboard/ai-consolidate
 import { LatestCompletedTasks } from "../../components/dashboard/latest-completed-tasks";
 import { NewAddedTasks } from "../../components/dashboard/new-added-tasks";
 import { StatCards } from "../../components/dashboard/stat-cards";
+import { FlowBacklogAnalytics } from "../../components/dashboard/flow-backlog-analytics";
+import type { AnalyticsDrilldown } from "../../components/dashboard/analytics-charts";
 import { WorkTree } from "../../components/dashboard/work-tree";
 import { ResumeRequiredSection } from "../../components/dashboard/resume-required";
 import { useShortcut } from "../../lib/shortcuts";
@@ -30,6 +32,11 @@ export function DashboardRoute() {
   const resumeRequiredIds = useMemo(
     () => new Set((taskFocus.pendingResume ?? []).map((t) => t.id)),
     [taskFocus.pendingResume],
+  );
+  const [analyticsDrilldown, setAnalyticsDrilldown] = useState<AnalyticsDrilldown | null>(null);
+  const analyticsTaskIds = useMemo(
+    () => new Set(analyticsDrilldown?.taskIds ?? []),
+    [analyticsDrilldown],
   );
   const navigate = useNavigate();
   const openEditProject = () => navigate("/project/edit");
@@ -54,6 +61,13 @@ export function DashboardRoute() {
 
       <StatCards features={features} phases={phases} />
 
+      <FlowBacklogAnalytics
+        phases={phases}
+        activeDrilldown={analyticsDrilldown}
+        onDrilldown={setAnalyticsDrilldown}
+        onClearDrilldown={() => setAnalyticsDrilldown(null)}
+      />
+
       <ResumeRequiredSection tasks={taskFocus.pendingResume} />
 
       <WorkTree
@@ -62,6 +76,8 @@ export function DashboardRoute() {
         activeTasks={activeTasks}
         projectStorageScope={projectStorageScope}
         resumeRequiredIds={resumeRequiredIds}
+        analyticsFilter={analyticsDrilldown ? { label: analyticsDrilldown.label, taskIds: analyticsTaskIds } : null}
+        onClearAnalyticsFilter={() => setAnalyticsDrilldown(null)}
       />
 
       <LatestCompletedTasks features={features} phases={phases} />

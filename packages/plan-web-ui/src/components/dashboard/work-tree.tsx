@@ -101,23 +101,53 @@ export function WorkTree({
   activeTasks,
   projectStorageScope,
   resumeRequiredIds = new Set<string>(),
+  analyticsFilter = null,
+  onClearAnalyticsFilter,
 }: {
   features: Feature[];
   phases: Phase[];
   activeTasks: ActiveTaskSummary[];
   projectStorageScope: string;
   resumeRequiredIds?: Set<string>;
+  analyticsFilter?: { label: string; taskIds: ReadonlySet<string> } | null;
+  onClearAnalyticsFilter?: () => void;
 }) {
   const tree = useDashboardTree({ features, phases, projectStorageScope });
+  const analyticsFilteredTree = useMemo(() => {
+    if (!analyticsFilter) return tree.displayedWorkTree;
+    return tree.displayedWorkTree
+      .map((entry) => ({
+        ...entry,
+        allPhases: entry.allPhases
+          .map((phaseEntry) => ({
+            ...phaseEntry,
+            allTasks: phaseEntry.allTasks.filter((task) => analyticsFilter.taskIds.has(task.id)),
+          }))
+          .filter((phaseEntry) => phaseEntry.allTasks.length > 0),
+      }))
+      .filter((entry) => entry.allPhases.length > 0);
+  }, [analyticsFilter, tree.displayedWorkTree]);
+  const analyticsFeatureIds = useMemo(
+    () => new Set(analyticsFilteredTree.map((entry) => entry.feature.id)),
+    [analyticsFilteredTree],
+  );
+  const analyticsPhaseIds = useMemo(
+    () => new Set(analyticsFilteredTree.flatMap((entry) => entry.allPhases.map((phaseEntry) => phaseEntry.phase.id))),
+    [analyticsFilteredTree],
+  );
+  const analyticsVisibleTaskCount = useMemo(
+    () => analyticsFilteredTree.reduce((featureTotal, entry) => featureTotal + entry.allPhases.reduce((phaseTotal, phaseEntry) => phaseTotal + phaseEntry.allTasks.length, 0), 0),
+    [analyticsFilteredTree],
+  );
   // Optimistic reorder: a transient per-scope order applied on drag-end so the
   // tree reorders instantly (no snap-back to original) before the server
   // broadcast arrives with the real new priorities. Cleared when the data
   // refresh changes tree.displayedWorkTree.
   const [pendingOrder, setPendingOrder] = useState<Record<string, string[]>>({});
-  useEffect(() => { setPendingOrder({}); }, [tree.displayedWorkTree]);
+  useEffect(() => { setPendingOrder({}); }, [analyticsFilteredTree]);
   const orderedTree = useMemo(
-    () => applyOrder(tree.displayedWorkTree, pendingOrder),
-    [tree.displayedWorkTree, pendingOrder],
+    () => applyOrder(analyticsFilteredTree, pendingOrder),
+    [analyticsFilteredTree, pendingOrder],
   );
   const [repairing, setRepairing] = useState(false);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
@@ -200,7 +230,7 @@ export function WorkTree({
   };
 
   const isPhaseExpanded = (phaseId: string) =>
-    tree.expandedPhaseIds.includes(phaseId);
+    analyticsFilter ? analyticsPhaseIds.has(phaseId) : tree.expandedPhaseIds.includes(phaseId);
   const isPhaseRecentlyChanged = (phaseId: string) => tree.recentPhaseIds.includes(phaseId);
   const isTaskRecentlyChanged = (taskId: string) => tree.recentTaskIds.includes(taskId);
 
@@ -332,6 +362,19 @@ export function WorkTree({
         </div>
       </div>
 
+      {analyticsFilter ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2" data-analytics-work-tree-filter role="status">
+          <p className="text-sm text-[var(--text)]">
+            <span className="font-bold">Analytics filter:</span> {analyticsFilter.label}. Showing {analyticsVisibleTaskCount} of {analyticsFilter.taskIds.size} selected {analyticsFilter.taskIds.size === 1 ? "task" : "tasks"} after current Work Tree filters.
+          </p>
+          {onClearAnalyticsFilter ? (
+            <button type="button" onClick={onClearAnalyticsFilter} className="rounded-lg px-2 py-1 text-xs font-bold text-[var(--accent)] underline decoration-dotted underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]">
+              Clear analytics filter
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="ap-search-sticky z-20 grid gap-2" style={{ top: headerH }}>
         <SearchBar features={features} phases={phases} query={tree.searchQuery} onQuery={tree.setSearchQuery} />
         <div className="flex flex-wrap items-center gap-2">
@@ -390,7 +433,7 @@ export function WorkTree({
                 <SortableItem key={entry.feature.id} id={entry.feature.id}>
                   <FeatureTreeRow
                     entry={entry}
-                    expanded={tree.expandedFeatureIds.includes(entry.feature.id)}
+                    expanded={analyticsFilter ? analyticsFeatureIds.has(entry.feature.id) : tree.expandedFeatureIds.includes(entry.feature.id)}
                     recentlyChanged={tree.recentFeatureIds.includes(entry.feature.id)}
                     onToggle={() => tree.toggleExpandedFeature(entry.feature.id)}
                     isPhaseExpanded={isPhaseExpanded}
@@ -405,6 +448,10 @@ export function WorkTree({
             </SortableContext>
             <DragOverlay dropAnimation={{ duration: 150, easing: "ease" }}>{renderDragPreview()}</DragOverlay>
           </DndContext>
+        ) : analyticsFilter ? (
+          <p className="py-4 text-center text-sm text-[var(--text-muted)]">
+            No selected analytics tasks match the current Work Tree filters.
+          </p>
         ) : activeTasks.length > 0 ? (
           activeTasks.map((task) => {
             const to = task.featureId
