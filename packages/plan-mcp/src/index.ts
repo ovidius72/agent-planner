@@ -429,23 +429,33 @@ server.registerTool("planner-project-discuss", {
 });
 
   server.registerTool("planner-feature-list", {
-    description: "List features (compact: F00x · shortId — name (status; N phases, M tasks)). Pass featureRef to filter. Use this to discover refs cheaply — do NOT read .planner/ files or planner-plan-get full=true to find entities.",
+    description: "List features (compact: F00x · shortId — name (status; priority N; N phases, M tasks)). Pass featureRef to filter. Use this to discover refs cheaply — do NOT read .planner/ files or planner-plan-get full=true to find entities.",
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name).") },
   }, async ({ featureRef }) => {
     const st = await requireStore();
     const allFeatures = (await st.loadFeatures()).features;
     const features = featureRef ? allFeatures.filter((f) => f.id === findFeatureByRef(allFeatures, featureRef)?.id) : allFeatures;
     const phases = await st.loadAllPhases();
-    const lines = features.map((feature) => {
+    const items = features.map((feature) => {
       const featurePhases = phases.filter((phase) => phase.featureId === feature.id);
       const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
-      return `- ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} — ${feature.name} (${feature.status}; ${featurePhases.length} phases, ${taskCount} tasks)`;
+      return {
+        id: feature.id,
+        ref: formatFeatureRef(feature.number),
+        shortId: feature.shortId,
+        name: feature.name,
+        status: feature.status,
+        priority: feature.priority,
+        phaseCount: featurePhases.length,
+        taskCount,
+      };
     });
-    return text(lines.join("\n") || "No features");
+    const lines = items.map((feature) => `- ${feature.ref}${feature.shortId ? ` · ${feature.shortId}` : ""} — ${feature.name} (${feature.status}${feature.priority > 0 ? `; priority ${feature.priority}` : ""}; ${feature.phaseCount} phases, ${feature.taskCount} tasks)`);
+    return text(lines.join("\n") || "No features", { features: items });
   });
 
   server.registerTool("planner-phase-list", {
-    description: "List phases (compact: F00x/P00x · shortId — title (status; N tasks) [F00x]). Filters: featureRef, status. Cheap discovery — do NOT read .planner/ files or planner-plan-get full=true.",
+    description: "List phases (compact: F00x/P00x · shortId — title (status; priority N; N tasks) [F00x]). Filters: featureRef, status. Cheap discovery — do NOT read .planner/ files or planner-plan-get full=true.",
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name)."), status: z.string().optional().describe("Optional: filter by status name.") },
   }, async ({ featureRef, status }) => {
     const st = await requireStore();
@@ -457,16 +467,28 @@ server.registerTool("planner-project-discuss", {
       phases = phases.filter((p) => p.featureId === f.id);
     }
     if (status) phases = phases.filter((p) => p.status === status);
-    const lines = phases.map((phase) => {
+    const items = phases.map((phase) => {
       const fNum = featureNumberOfPhase(phase, features);
-      const fTag = fNum !== undefined ? ` [F${String(fNum).padStart(3, "0")}]` : "";
-      return `- ${formatPhaseRef(phase.number, fNum)}${phase.shortId ? ` · ${phase.shortId}` : ""} — ${phase.title} (${phase.status}; ${phase.tasks.length} tasks)${fTag}`;
+      return {
+        id: phase.id,
+        ref: formatPhaseRef(phase.number, fNum),
+        shortId: phase.shortId,
+        title: phase.title,
+        status: phase.status,
+        priority: phase.priority,
+        taskCount: phase.tasks.length,
+        featureNumber: fNum,
+      };
     });
-    return text(lines.join("\n") || "No phases");
+    const lines = items.map((phase) => {
+      const fTag = phase.featureNumber !== undefined ? ` [F${String(phase.featureNumber).padStart(3, "0")}]` : "";
+      return `- ${phase.ref}${phase.shortId ? ` · ${phase.shortId}` : ""} — ${phase.title} (${phase.status}${phase.priority > 0 ? `; priority ${phase.priority}` : ""}; ${phase.taskCount} tasks)${fTag}`;
+    });
+    return text(lines.join("\n") || "No phases", { phases: items });
   });
 
   server.registerTool("planner-task-list", {
-    description: "List tasks (compact: F00x/P00x/T00x · shortId — title (status)). Filters: featureRef, phaseRef, status. Cheap discovery — do NOT read .planner/ files or planner-plan-get full=true.",
+    description: "List tasks (compact: F00x/P00x/T00x · shortId — title (status; priority N)). Filters: featureRef, phaseRef, status. Cheap discovery — do NOT read .planner/ files or planner-plan-get full=true.",
     inputSchema: { featureRef: z.string().optional(), phaseRef: z.string().optional(), status: z.string().optional().describe("Optional: filter by status name.") },
   }, async ({ featureRef, phaseRef, status }) => {
     const st = await requireStore();
@@ -482,14 +504,24 @@ server.registerTool("planner-project-discuss", {
       if (!p) return text(`Phase not found: ${phaseRef}`);
       phases = [p];
     }
-    const out: string[] = [];
+    const items: Array<{ id: string; ref: string; shortId?: string; title: string; status: string; priority: number; phaseId: string; featureId?: string }> = [];
     for (const phase of phases) {
       for (const task of phase.tasks) {
         if (status && task.status !== status) continue;
-        out.push(`- ${taskCompositeRef(task, phase, features)}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status})`);
+        items.push({
+          id: task.id,
+          ref: taskCompositeRef(task, phase, features),
+          shortId: task.shortId,
+          title: task.title,
+          status: task.status,
+          priority: task.priority,
+          phaseId: phase.id,
+          ...(phase.featureId ? { featureId: phase.featureId } : {}),
+        });
       }
     }
-    return text(out.join("\n") || "No tasks");
+    const out = items.map((task) => `- ${task.ref}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
+    return text(out.join("\n") || "No tasks", { tasks: items });
   });
 
 server.registerTool("planner-feature-add", {
@@ -1386,7 +1418,7 @@ server.registerTool("planner-task-switch", {
 });
 
 server.registerTool("planner-task-start", {
-  description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, in order, and retry. Every denied start is an MCP isError result with started=false; NEVER claim work started unless structuredContent.started is true. Success is returned only after persisted in-progress state is verified.",
+  description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, then retry. Reads may be performed in any order within the current session. Every denied start is an MCP isError result with started=false; NEVER claim work started unless structuredContent.started is true. Success is returned only after persisted in-progress state is verified.",
   inputSchema: { task: z.string().min(1) },
 }, async ({ task: ref }, extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);

@@ -143,6 +143,20 @@ test("persisted session attestations remain valid until an entity changes", () =
   assert.deepEqual(staleTask.requiredReads, [{ kind: "task", id: "T1", state: "stale" }]);
 });
 
+test("an out-of-order in-memory read of parent-first still satisfies eligibility", () => {
+  invalidateReads();
+  // Read feature, then phase, then task — reversed order from the old rule — and
+  // eligibility must pass because each entity is present in the session.
+  markFeatureReadForSessionId("session-a", "F1");
+  markPhaseReadForSessionId("session-a", "P1");
+  markTaskReadForSessionId("session-a", "T1");
+  const entities = { updatedAt: "2026-01-01T00:00:00.000Z" };
+  assert.deepEqual(
+    contextReadEligibilityForSession({ sessionId: "session-a", taskId: "T1", phaseId: "P1", featureId: "F1", task: entities, phase: entities, feature: entities }),
+    { eligible: true, reason: "" },
+  );
+});
+
 test("a task-only reread reuses valid phase and feature attestations", () => {
   invalidateReads();
   const validParent = {

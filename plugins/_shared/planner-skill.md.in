@@ -118,7 +118,8 @@ and short forms (`F00x`, `P00x`, `T00x`).
 
 ## Planner operational protocol
 
-- Call `planner-task-start` or `planner-task-switch` before reading context so valid session attestations can be reused. If denied, perform only the missing or stale full reads listed in `nextActions`, in order, retry the lifecycle operation, and touch code only after `started=true`.
+- Call `planner-task-start` or `planner-task-switch` before reading context so valid session attestations can be reused. If denied, perform only the missing or stale full reads listed in `nextActions`, retry the lifecycle operation, and touch code only after `started=true`. Reads may be performed in any order within a session.
+- Compact `planner-feature-list`, `planner-phase-list`, and `planner-task-list` surfaces expose priority markers. When browsing manually instead of using the automatic recommendation, choose the lowest-priority ready sibling first.
 - Call `planner-task-complete` as part of delivering finished work.
 - Planner operations (handoff, `planner-show`, CRUD) are NOT code edits and are
   always allowed regardless of task state.

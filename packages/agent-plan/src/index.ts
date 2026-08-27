@@ -148,7 +148,7 @@ $ARGUMENTS
 
 Use the Agent Plan MCP tools. Do not treat this as a shell command.
 
-Before starting, resuming, or switching to a task, call \`planner-task-start\` or \`planner-task-switch\` first so the MCP server can reuse valid session attestations. If the lifecycle operation is denied, perform only the missing or stale full reads listed in its \`nextActions\`, in that order, then retry. Read linked requirements only when \`nextActions\` requests \`planner-requirement-list\`.
+Before starting, resuming, or switching to a task, call \`planner-task-start\` or \`planner-task-switch\` first so the MCP server can reuse valid session attestations. If the lifecycle operation is denied, perform only the missing or stale full reads listed in its \`nextActions\`, then retry. Reads may be performed in any order within the current session. Read linked requirements only when \`nextActions\` requests \`planner-requirement-list\`. When browsing \`planner-feature-list\`, \`planner-phase-list\`, or \`planner-task-list\` manually, follow the surfaced priority markers to choose the lowest-priority ready sibling.
 
 Route common commands as follows:
 

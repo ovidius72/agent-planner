@@ -34,6 +34,21 @@ export function formatPriority(priority: number | null | undefined): string {
   return priority && priority > 0 ? `P${priority}` : "";
 }
 
+export function PriorityBadge({ priority, className }: { priority: number | null | undefined; className?: string }) {
+  const label = formatPriority(priority);
+  if (!label) return null;
+  const accessibleLabel = `Priority ${priority}`;
+  return (
+    <span
+      className={cx("inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]", className)}
+      aria-label={accessibleLabel}
+      title={accessibleLabel}
+    >
+      {label}
+    </span>
+  );
+}
+
 export function formatTimeline(startDate?: string, endDate?: string): string {
   if (!startDate && !endDate) return "";
   return `${startDate || "Start not set"} → ${endDate || "End not set"}`;

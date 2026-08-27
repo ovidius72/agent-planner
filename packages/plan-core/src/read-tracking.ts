@@ -30,7 +30,7 @@ export type ContextReadEntityKind = "task" | "phase" | "feature";
 export type RequiredContextRead = {
   kind: ContextReadEntityKind;
   id: string;
-  state: "missing" | "stale" | "out-of-order";
+  state: "missing" | "stale";
 };
 
 export type ContextReadEligibility = {
@@ -197,10 +197,11 @@ function requiredReadReason(requiredReads: RequiredContextRead[]): string {
 }
 
 /**
- * Combine valid persisted attestations with fresh in-memory reads. The initial
- * uncached lineage still requires task → phase → feature ordering, while a
- * stale or missing individual entity can be reread without discarding valid
- * parent attestations from the same harness session.
+ * Combine valid persisted attestations with fresh in-memory reads. An entity read
+ * in the current session satisfies eligibility regardless of sequence order,
+ * so agents can read task, phase, and feature in any order; only persisted
+ * attestations are checked for revision freshness (stale) and missing entities
+ * remain reported as missing.
  */
 export function contextReadEligibilityForSession(input: SessionContextReadInput): ContextReadEligibility {
   const state = stateFor(input.sessionId);
@@ -215,27 +216,24 @@ export function contextReadEligibilityForSession(input: SessionContextReadInput)
 
   const phaseStored = storedReadState(input.phase, input.sessionId, "phase");
   const phaseSequence = state.phases.get(input.phaseId);
-  const phaseReadInOrder = phaseSequence !== undefined
-    && (taskStored === "valid" || (taskSequence !== undefined && phaseSequence > taskSequence));
-  const phaseReady = phaseStored === "valid" || phaseReadInOrder;
+  const phaseReady = phaseStored === "valid" || phaseSequence !== undefined;
   if (!phaseReady) {
     requiredReads.push({
       kind: "phase",
       id: input.phaseId,
-      state: phaseStored === "stale" ? "stale" : phaseSequence !== undefined ? "out-of-order" : "missing",
+      state: phaseStored === "stale" ? "stale" : "missing",
     });
   }
 
   if (input.featureId) {
     const featureStored = storedReadState(input.feature, input.sessionId, "feature");
     const featureSequence = state.features.get(input.featureId);
-    const featureReadInOrder = featureSequence !== undefined
-      && (phaseStored === "valid" || (phaseReadInOrder && phaseSequence !== undefined && featureSequence > phaseSequence));
-    if (featureStored !== "valid" && !featureReadInOrder) {
+    const featureReady = featureStored === "valid" || featureSequence !== undefined;
+    if (!featureReady) {
       requiredReads.push({
         kind: "feature",
         id: input.featureId,
-        state: featureStored === "stale" ? "stale" : featureSequence !== undefined ? "out-of-order" : "missing",
+        state: featureStored === "stale" ? "stale" : "missing",
       });
     }
   }

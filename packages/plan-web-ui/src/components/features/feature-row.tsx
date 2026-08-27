@@ -9,6 +9,7 @@ import { DisplayStatusBadge } from "../ui/status-badge";
 import { CopyableBadge, EntityPathBadge, ShortIdBadge, formatEntityPath } from "../ui/badges";
 import { StatusItem } from "../ui/status-item";
 import { LastUpdated } from "../ui/last-updated";
+import { PriorityBadge } from "../ui/detail-metadata";
 
 export interface FeatureActivitySummary {
   currentPhase: string | undefined;
@@ -60,6 +61,7 @@ export function FeatureRow({
                 <span className="sr-only">Copy feature path</span>
               </CopyableBadge>
               {feature.shortId ? <ShortIdBadge shortId={feature.shortId} /> : null}
+              <PriorityBadge priority={feature.priority} />
               <span className="shrink-0"><DisplayStatusBadge status={display.displayStatus} breakdown={display.breakdown} /></span>
             </div>
             <Link to={`/features/${feature.id}`} className="entity-link--feature min-w-0 w-full break-words text-sm font-semibold underline-offset-4 hover:underline [overflow-wrap:anywhere]">

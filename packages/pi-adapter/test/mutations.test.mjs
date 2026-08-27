@@ -409,11 +409,16 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal((await task()).checklist.length, 1);
       assert.equal((await task()).checklist[0].number, 1);
 
-      // Reorder knob: priority is persisted and reflected by list ordering.
-      await host.runTool("task_update", { taskId: "T001", priority: 1 });
-      assert.equal((await task()).priority, 1);
+      // Reorder knob: priority is persisted and reflected by compact discovery output.
+      await host.runTool("feature_update", { featureId: "F001", priority: 7 });
+      await host.runTool("phase_update", { phaseId: "P001", priority: 8 });
+      await host.runTool("task_update", { taskId: "T001", priority: 9 });
+      assert.equal((await task()).priority, 9);
+      assert.match(toolText(await host.runTool("feature_list", {})), /priority 7/);
+      assert.match(toolText(await host.runTool("phase_list", {})), /priority 8/);
       const list = await host.runTool("task_list", {});
       assert.match(toolText(list), /T001/);
+      assert.match(toolText(list), /priority 9/);
     } finally {
       await closePiHost(host);
     }

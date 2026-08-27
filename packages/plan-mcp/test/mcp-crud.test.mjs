@@ -382,6 +382,25 @@ test("planned sibling can start when another task makes the parent derive waitin
   }
 });
 
+test("context reads in any order satisfy task_start (no out-of-order gate)", async () => {
+  const session = await startMcpFixture({ name: "t346-out-of-order" });
+  try {
+    // Read in reversed order: requirements, feature, phase, task — the opposite
+    // of the old task→phase→feature ordering requirement.
+    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
+
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.match(toolText(started), /Task started: P001\(F001\)\/T001/);
+    assert.equal(started.isError, undefined);
+    assert.equal(toolStructured(started).started, true);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 // ── List filters + reorder (priority) surface ──────────────────────────────
 
 test("list filters and priority (reorder) updates are visible through reads", async () => {
@@ -421,6 +440,15 @@ test("list filters and priority (reorder) updates are visible through reads", as
     // reading back through MCP reflects the persisted values
     const updatedF = await callTool(session, "planner-feature-show", { feature: "F002", full: true });
     assert.match(toolText(updatedF), /Billing/);
+    const featureListWithPriority = await callTool(session, "planner-feature-list", { featureRef: "F002" });
+    assert.match(toolText(featureListWithPriority), /priority 5/);
+    assert.equal(toolStructured(featureListWithPriority).features[0].priority, 5);
+    const phaseListWithPriority = await callTool(session, "planner-phase-list", { featureRef: "F002" });
+    assert.match(toolText(phaseListWithPriority), /priority 5/);
+    assert.equal(toolStructured(phaseListWithPriority).phases[0].priority, 5);
+    const taskListWithPriority = await callTool(session, "planner-task-list", { phaseRef: "P001" });
+    assert.match(toolText(taskListWithPriority), /priority 50/);
+    assert.equal(toolStructured(taskListWithPriority).tasks[0].priority, 50);
   } finally {
     await closeMcpFixture(session);
   }

@@ -3324,7 +3324,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "feature_list",
       label: "Feature List",
-      description: "List features (compact: F00x · shortId — name (status; N phases, M tasks)). Use this to discover refs cheaply — do NOT read .planner/ files or plan_get full=true to find entities.",
+      description: "List features (compact: F00x · shortId — name (status; priority N; N phases, M tasks)). Use this to discover refs cheaply — do NOT read .planner/ files or plan_get full=true to find entities.",
       parameters: Type.Object({ featureRef: Type.Optional(Type.String({ description: "Optional: filter to one feature (F00x/shortId/UUID/name)" })) }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
         const st = await requirePlan(ctx);
@@ -3336,7 +3336,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const phases = await st.loadAllPhases();
         const summary = features.map((f) => {
           const fp = phases.filter((p) => p.featureId === f.id);
-          return `- ${formatFeatureRef(f.number)}${f.shortId ? ` · ${f.shortId}` : ""} — ${f.name} (${f.status}; ${fp.length} phases, ${fp.reduce((t, p) => t + p.tasks.length, 0)} tasks)`;
+          return `- ${formatFeatureRef(f.number)}${f.shortId ? ` · ${f.shortId}` : ""} — ${f.name} (${f.status}${f.priority > 0 ? `; priority ${f.priority}` : ""}; ${fp.length} phases, ${fp.reduce((t, p) => t + p.tasks.length, 0)} tasks)`;
         }).join("\n");
         return { content: [{ type: "text", text: summary || "No features" }], details: {} };
       },
@@ -3589,7 +3589,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "phase_list",
       label: "Phase List",
-      description: "List phases (compact: F00x/P00x · shortId — title (status; N tasks) [F00x]). Filters: featureRef, status. Cheap discovery — do NOT read .planner/ files or plan_get full=true.",
+      description: "List phases (compact: F00x/P00x · shortId — title (status; priority N; N tasks) [F00x]). Filters: featureRef, status. Cheap discovery — do NOT read .planner/ files or plan_get full=true.",
       parameters: Type.Object({
         featureRef: Type.Optional(Type.String({ description: "Optional: filter to one feature (F00x/shortId/UUID/name)" })),
         status: Type.Optional(Type.String({ description: "Optional: filter by status name" })),
@@ -3609,7 +3609,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const summary = phases.map((p) => {
           const fNum = featureNumberOfPhase(p, features);
           const fTag = fNum !== undefined ? ` [F${pad(fNum)}]` : "";
-          return `- ${formatPhaseRef(p.number, fNum)}${p.shortId ? ` · ${p.shortId}` : ""} — ${p.title} (${p.status}; ${p.tasks.length} tasks)${fTag}`;
+          return `- ${formatPhaseRef(p.number, fNum)}${p.shortId ? ` · ${p.shortId}` : ""} — ${p.title} (${p.status}${p.priority > 0 ? `; priority ${p.priority}` : ""}; ${p.tasks.length} tasks)${fTag}`;
         }).join("\n");
         return { content: [{ type: "text", text: summary || "No phases" }], details: {} };
       },
@@ -3902,7 +3902,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "task_list",
       label: "Task List",
-      description: "List tasks (compact: F00x/P00x/T00x · shortId — title (status)). Filters: featureRef, phaseRef, status. Omit all to list every task. Cheap discovery — do NOT read .planner/ files or plan_get full=true.",
+      description: "List tasks (compact: F00x/P00x/T00x · shortId — title (status; priority N)). Filters: featureRef, phaseRef, status. Omit all to list every task. Cheap discovery — do NOT read .planner/ files or plan_get full=true.",
       parameters: Type.Object({
         featureRef: Type.Optional(Type.String({})),
         phaseRef: Type.Optional(Type.String({})),
@@ -3929,7 +3929,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         for (const phase of phases) {
           for (const task of phase.tasks) {
             if (params.status && task.status !== params.status) continue;
-            out.push(`- ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${pad(task.number)}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status})`);
+            out.push(`- ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${pad(task.number)}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
           }
         }
         return { content: [{ type: "text", text: out.join("\n") || "No tasks" }], details: {} };
@@ -4464,7 +4464,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_start",
     label: "Task Start",
-    description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, in order, and retry. A denied start is an isError result with started=false; NEVER claim work started unless details.started is true. Success is returned only after persisted in-progress state is verified.",
+    description: "Set a task to in-progress or resume checkpointed work. Call this tool before reading context so it can reuse valid sessionInfo attestations; if denied, perform only the missing/stale reads listed in nextActions, then retry. Reads may be performed in any order within the current session. A denied start is an isError result with started=false; NEVER claim work started unless details.started is true. Success is returned only after persisted in-progress state is verified.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to start" }),
     }),
@@ -5065,11 +5065,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "",
         "Operational rules:",
         "- Handoffs are context, not locks. Read the relevant handoff with handoff show <ref> before resuming.",
-        "- BEFORE work: call task_start or task_switch first so valid sessionInfo attestations are reused. If denied, perform only the missing/stale full reads listed in nextActions, in that order, then retry. A denial is an error with started=false; only details.started=true proves the task is in-progress. Only then touch code. AFTER finishing: task_complete with durable completion/verification evidence.",
+        "- BEFORE work: call task_start or task_switch first so valid sessionInfo attestations are reused. If denied, perform only the missing/stale full reads listed in nextActions, then retry. Reads may be performed in any order within the current session. A denial is an error with started=false; only details.started=true proves the task is in-progress. Only then touch code. AFTER finishing: task_complete with durable completion/verification evidence.",
         "- Record every new decision or user-agreed modification in both the relevant feature and phase before treating the discussion as complete.",
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
-        "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Prefer shortId or F00x/P00x/T00x refs. Find via feature_list / phase_list / task_list; read one entity via *_get(full=true).",
+        "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Compact feature_list / phase_list / task_list surfaces expose priority markers; when browsing manually, follow the lowest visible priority first among ready siblings. Prefer shortId or F00x/P00x/T00x refs. Read one entity via *_get(full=true).",
         "- If edit/write guard blocks you, start the right task or use an explicit bypass.",
         ...(extensionRules.length > 0
           ? [

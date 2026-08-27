@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Card } from "../ui/card";
 import { CompositeRef, ParentBadge } from "../ui/badges";
 import { StatusBadge } from "../ui/status-badge";
+import { PriorityBadge } from "../ui/detail-metadata";
 import type { Feature, Phase } from "../../lib/types";
 
 function formatDateTime(value: string): string {
@@ -69,6 +70,7 @@ export function LatestCompletedTasks({ features, phases }: { features: Feature[]
                 phaseName={phase.title}
                 taskTitle={task.title}
               />
+              <PriorityBadge priority={task.priority} />
               <span className="ml-auto shrink-0"><StatusBadge status={task.status} /></span>
             </div>
             <Link

@@ -77,6 +77,8 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   assert.match(plannerCommand, /`version` → call `planner-version`/);
   assert.match(plannerCommand, /call `planner-task-start` or `planner-task-switch` first/);
   assert.match(plannerCommand, /only the missing or stale full reads listed in its `nextActions`/);
+  assert.match(plannerCommand, /Reads may be performed in any order within the current session/);
+  assert.match(plannerCommand, /follow the surfaced priority markers to choose the lowest-priority ready sibling/);
   assert.doesNotMatch(plannerCommand, /read the exact lineage in this order/);
   const claudeSettings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
   assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write"));
