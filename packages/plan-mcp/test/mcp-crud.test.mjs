@@ -471,6 +471,7 @@ test("planner-phase-show gives structured-content clients the full phase read mo
       status: storedPhase.status,
       taskCount: storedPhase.tasks.length,
       description: storedPhase.description,
+      descriptionRef: storedPhase.descriptionRef || "",
     }, "Claude-style structured-content consumers receive the phase title and detailed description");
     assert.ok(Array.isArray(structured.linkedRequirements), "phase-show exposes linkedRequirements");
     assert.equal(structured.linkedRequirements.length, 1);

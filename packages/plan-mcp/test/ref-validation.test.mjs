@@ -1,6 +1,6 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -193,6 +193,40 @@ describe("plan-mcp strict ref validation", () => {
     }
   });
 
+  test("planner-task-start requires a fresh planner-project-guidelines-show attestation when guidelines exist", async () => {
+    const { plannerRoot } = await setup();
+    const session = await startClient(plannerRoot);
+    try {
+      const updated = await session.client.callTool({
+        name: "planner-project-guidelines-update",
+        arguments: { content: "Use English in source code. Run focused tests before claiming success." },
+      });
+      assert.match(toolText(updated), /Project Guidelines updated\./);
+      assert.equal(updated.structuredContent.projectGuidelines.content, "Use English in source code. Run focused tests before claiming success.");
+
+      await session.client.callTool({ name: "planner-task-show", arguments: { task: "T001", full: true } });
+      await session.client.callTool({ name: "planner-phase-show", arguments: { phase: "P001", full: true } });
+      await session.client.callTool({ name: "planner-feature-show", arguments: { feature: "F001", full: true } });
+
+      const denied = await session.client.callTool({ name: "planner-task-start", arguments: { task: "T001" } });
+      assert.equal(denied.isError, true);
+      assert.equal(denied.structuredContent.errorCode, "PROJECT_GUIDELINES_READ_REQUIRED");
+      assert.deepEqual(denied.structuredContent.nextActions, [
+        "planner-project-guidelines-show",
+        "Retry planner-task-start P001(F001)/T001",
+      ]);
+
+      const shown = await session.client.callTool({ name: "planner-project-guidelines-show", arguments: {} });
+      assert.match(toolText(shown), /## Project Guidelines/);
+      assert.equal(shown.structuredContent.readRecorded, true);
+
+      const started = await session.client.callTool({ name: "planner-task-start", arguments: { task: "T001" } });
+      assert.equal(started.structuredContent.started, true);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("planner-feature-delete rejects ambiguous feature refs and does not delete anything", async () => {
     const { plannerRoot, st } = await setup();
     const beforeIds = (await st.loadFeatures()).features.map((feature) => feature.id);
@@ -212,8 +246,63 @@ describe("plan-mcp strict ref validation", () => {
     }
   });
 
-  test("planner-feature-discuss updates governance fields and marks context ready", async () => {
+  test("fieldless MCP update/discuss payloads return markdown fallback guidance without mutating planner data", async () => {
+    const { plannerRoot, st, featureA, phase } = await setup();
+    const projectPath = join(plannerRoot, "project.json");
+    const featurePath = join(plannerRoot, "features", `${featureA.id}.json`);
+    const phasePath = join(plannerRoot, "phases", `${phase.id}.json`);
+    const projectBefore = await readFile(projectPath);
+    const featureBefore = await readFile(featurePath);
+    const phaseBefore = await readFile(phasePath);
+    const session = await startClient(plannerRoot);
+    try {
+      const projectResult = await session.client.callTool({ name: "planner-project-discuss", arguments: {} });
+      assert.equal(projectResult.isError, true);
+      assert.equal(projectResult.structuredContent.errorCode, "DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED");
+      assert.equal(projectResult.structuredContent.fallbackDocPath, ".planner/docs/project/description.md");
+      assert.deepEqual(await readFile(projectPath), projectBefore, "fieldless project discuss leaves project JSON byte-identical");
+
+      const featureUpdate = await session.client.callTool({ name: "planner-feature-update", arguments: { feature: "F001" } });
+      assert.equal(featureUpdate.isError, true);
+      assert.equal(featureUpdate.structuredContent.errorCode, "DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED");
+      assert.equal(featureUpdate.structuredContent.fallbackDocPath, `.planner/docs/features/${featureA.id}.md`);
+      assert.deepEqual(await readFile(featurePath), featureBefore, "fieldless feature update leaves feature JSON byte-identical");
+
+      const featureDiscuss = await session.client.callTool({ name: "planner-feature-discuss", arguments: { feature: "F001" } });
+      assert.equal(featureDiscuss.isError, true);
+      assert.equal(featureDiscuss.structuredContent.discussed, false);
+      assert.equal(featureDiscuss.structuredContent.fallbackDocPath, `.planner/docs/features/${featureA.id}.md`);
+      const featureAfterDiscuss = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
+      assert.equal(featureAfterDiscuss?.contextReady, false, "fieldless feature discuss does not mark context ready");
+      assert.deepEqual(await readFile(featurePath), featureBefore, "fieldless feature discuss leaves feature JSON byte-identical");
+
+      const phaseDiscuss = await session.client.callTool({ name: "planner-phase-discuss", arguments: { phase: "P001" } });
+      assert.equal(phaseDiscuss.isError, true);
+      assert.equal(phaseDiscuss.structuredContent.fallbackDocPath, `.planner/docs/phases/${phase.id}.md`);
+      assert.deepEqual(await readFile(phasePath), phaseBefore, "fieldless phase discuss leaves phase JSON byte-identical");
+
+      const phaseUpdate = await session.client.callTool({ name: "planner-phase-update", arguments: { phase: "P001" } });
+      assert.equal(phaseUpdate.isError, true);
+      assert.equal(phaseUpdate.structuredContent.fallbackDocPath, `.planner/docs/phases/${phase.id}.md`);
+      assert.deepEqual(await readFile(phasePath), phaseBefore, "fieldless phase update leaves phase JSON byte-identical");
+
+      const taskDiscuss = await session.client.callTool({ name: "planner-task-discuss", arguments: { task: "T001" } });
+      assert.equal(taskDiscuss.isError, true);
+      assert.equal(taskDiscuss.structuredContent.fallbackDocPath, `.planner/docs/tasks/${phase.tasks[0].id}.md`);
+      assert.deepEqual(await readFile(phasePath), phaseBefore, "fieldless task discuss leaves host phase JSON byte-identical");
+
+      const taskUpdate = await session.client.callTool({ name: "planner-task-update", arguments: { task: "T001" } });
+      assert.equal(taskUpdate.isError, true);
+      assert.equal(taskUpdate.structuredContent.fallbackDocPath, `.planner/docs/tasks/${phase.tasks[0].id}.md`);
+      assert.deepEqual(await readFile(phasePath), phaseBefore, "fieldless task update leaves host phase JSON byte-identical");
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("planner-feature-discuss updates governance fields, persists descriptionRef, and marks context ready", async () => {
     const { plannerRoot, st, featureA } = await setup();
+    const descriptionRef = `.planner/docs/features/${featureA.id}.md`;
     const session = await startClient(plannerRoot);
     try {
       const result = await session.client.callTool({
@@ -221,19 +310,26 @@ describe("plan-mcp strict ref validation", () => {
         arguments: {
           feature: "F001",
           description: "src/feature.ts:10 current scope and goals for the Auth API feature.",
+          descriptionRef,
           workDone: "Login endpoint scaffolding exists.",
           workRemaining: "Need token rotation and audit logging.",
           dependencies: ["Shared auth middleware", "Billing contract"],
         },
       });
       assert.match(toolText(result), /✅ Feature discussed\/updated: F001/);
+      assert.match(toolText(result), /Fields saved: description, descriptionRef, workDone, workRemaining, dependencies\./);
       const stored = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
       assert.equal(stored?.description, "src/feature.ts:10 current scope and goals for the Auth API feature.");
+      assert.equal(stored?.descriptionRef, descriptionRef);
       assert.equal(stored?.workDone, "Login endpoint scaffolding exists.");
       assert.equal(stored?.workRemaining, "Need token rotation and audit logging.");
       assert.deepEqual(stored?.dependsOn, ["Shared auth middleware", "Billing contract"]);
       assert.equal(stored?.contextReady, true);
       assert.match(stored?.contextReadyReason ?? "", /planner-feature-discuss/i);
+
+      const readBack = await session.client.callTool({ name: "planner-feature-show", arguments: { feature: "F001", full: true } });
+      assert.match(toolText(readBack), /Description reference:/);
+      assert.equal(readBack.structuredContent.feature.descriptionRef, descriptionRef);
     } finally {
       await session.close();
     }
@@ -564,6 +660,68 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
       assert.equal(created.length, 8);
       assert.equal(new Set(numbers).size, 8);
       assert.deepEqual(numbers, [2, 3, 4, 5, 6, 7, 8, 9]);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("planner-project-context-migrate previews without mutation and applies only when explicitly confirmed", async () => {
+    const { plannerRoot, st } = await setup();
+    await st.updateProject((project) => ({
+      ...project,
+      projectGuidelines: { ...project.projectGuidelines, content: "Run focused tests." },
+      globalRules: ["Run focused tests.", "Keep source text in English."],
+      workflowRules: { beforePhaseStart: ["Discuss the phase first."], beforeTaskStart: [], afterPhaseComplete: [] },
+      decisions: ["Use TypeScript for planner packages."],
+    }));
+    const session = await startClient(plannerRoot);
+    try {
+      const preview = await session.client.callTool({ name: "planner-project-context-migrate", arguments: { apply: false } });
+      assert.match(toolText(preview), /preview .*no changes applied/i);
+      assert.equal(preview.structuredContent.applied, false);
+      assert.equal(preview.structuredContent.preview.guidelineAdditions.length, 2);
+      assert.equal((await st.loadProject()).globalRules.length, 2, "preview must not mutate legacy fields");
+
+      const applied = await session.client.callTool({ name: "planner-project-context-migrate", arguments: { apply: true } });
+      assert.match(toolText(applied), /migration applied and verified/i);
+      assert.equal(applied.structuredContent.applied, true);
+      const project = await st.loadProject();
+      assert.deepEqual(project.globalRules, []);
+      assert.deepEqual(project.decisions, []);
+      assert.match(project.projectGuidelines.content, /Keep source text in English./);
+      assert.equal(project.acceptedDecisions.some((decision) => decision.decision === "Use TypeScript for planner packages."), true);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("planner requirement mutations cover macro-task create, update, reorder, and system metadata", async () => {
+    const { plannerRoot } = await setup();
+    const session = await startClient(plannerRoot);
+    try {
+      const created = await session.client.callTool({
+        name: "planner-requirement-create",
+        arguments: {
+          title: "Credential flow", description: "Secure access.", linkedPhaseIds: ["P001"],
+          macroTasks: [{ title: "Validate credentials", description: "Check input.", status: "planned" }],
+        },
+      });
+      const requirement = created.structuredContent.requirement;
+      assert.equal(requirement.macroTasks[0].id, "MT-001");
+      const updated = await session.client.callTool({
+        name: "planner-requirement-update",
+        arguments: {
+          requirementId: requirement.id,
+          macroTasks: [
+            { id: "MT-001", title: "Validate credentials", description: "Check input.", status: "done" },
+            { title: "Record decision", description: "Persist audit.", status: "planned" },
+          ],
+        },
+      });
+      assert.equal(updated.structuredContent.requirement.macroTasks[0].createdAt, requirement.macroTasks[0].createdAt);
+      assert.equal(updated.structuredContent.requirement.macroTasks[1].id, "MT-002");
+      const deleted = await session.client.callTool({ name: "planner-requirement-delete", arguments: { requirementId: requirement.id } });
+      assert.equal(deleted.structuredContent.deleted, requirement.id);
     } finally {
       await session.close();
     }

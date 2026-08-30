@@ -98,6 +98,12 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   lines.push(`${italian ? "Progetto" : "Project"}: ${name}${plan.project.goal ? " — " + plan.project.goal : ""}`);
 
   lines.push(
+    "",
+    "## Project Guidelines",
+    plan.project.projectGuidelines.content.trim() || "No project guidelines set.",
+  );
+
+  lines.push(
     italian
       ? `Avanzamento: feature ${doneF}/${totalF} completate (${activeF} attive) · fasi ${doneP}/${totalP} completate (${activeP} attive) · task ${doneT}/${totalT} completati (${activeT} attivi, ${checkpointedT} con checkpoint)`
       : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active, ${checkpointedT} with checkpoints)`,

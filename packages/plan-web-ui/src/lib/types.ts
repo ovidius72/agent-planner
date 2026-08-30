@@ -213,10 +213,18 @@ export interface PhaseHandoff {
   updatedAt: string;
 }
 
+export interface ProjectGuidelines {
+  content: string;
+  updatedAt: string;
+  sessionInfo: Array<{ sessionId: string; createdAt: string }>;
+}
+
 export interface Project {
   name: string;
   goal: string;
   description: string;
+  descriptionRef?: string;
+  projectGuidelines: ProjectGuidelines;
   webPort: number;
   scope: string[];
   outOfScope: string[];

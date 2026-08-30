@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { ArchivedHandoffSummary, Feature, HandoffSummary, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
+import type { ArchivedHandoffSummary, Feature, HandoffSummary, MacroTask, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -61,6 +61,12 @@ function normalizeFeature(feature: Feature): Feature {
 function normalizeProject(project: Project): Project {
   return {
     ...project,
+    descriptionRef: project.descriptionRef ?? "",
+    projectGuidelines: {
+      content: project.projectGuidelines?.content ?? "",
+      updatedAt: project.projectGuidelines?.updatedAt ?? "",
+      sessionInfo: project.projectGuidelines?.sessionInfo ?? [],
+    },
     scope: project.scope ?? [],
     outOfScope: project.outOfScope ?? [],
     decisions: project.decisions ?? [],
@@ -166,10 +172,49 @@ export async function getProject(): Promise<Project> {
   return normalizeProject(await request("/project"));
 }
 
+export interface LegacyProjectContextMigrationPreview {
+  version: number;
+  hasLegacyContext: boolean;
+  guidelinesChanged: boolean;
+  acceptedDecisionsChanged: boolean;
+  guidelineAdditions: Array<{ source: string; text: string }>;
+  acceptedDecisionAdditions: Array<{ id: string; title: string; decision: string }>;
+  skippedGuidelineDuplicates: number;
+  skippedDecisionDuplicates: number;
+  resultingGuidelinesContent: string;
+  legacyCounts: { globalRules: number; workflowRules: number; decisions: number };
+  fieldsClearedOnApply: string[];
+}
+
+export interface LegacyProjectContextMigrationResult {
+  applied: boolean;
+  preview: LegacyProjectContextMigrationPreview;
+  project: Project;
+}
+
 export async function updateProject(project: Project): Promise<Project> {
   // Runtime workDeviations live in .local/deviations.json (T299); the project
-  // editor must never round-trip them into shared project.json.
-  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify({ ...project, workDeviations: [] }) }));
+  // editor must never round-trip them into shared project.json. Empty optional
+  // description references are UI defaults, not valid persisted references.
+  const { descriptionRef, workDeviations: _workDeviations, ...rest } = project;
+  const payload = {
+    ...rest,
+    ...(descriptionRef ? { descriptionRef } : {}),
+    workDeviations: [],
+  };
+  return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify(payload) }));
+}
+
+export async function previewProjectContextMigration(): Promise<LegacyProjectContextMigrationPreview> {
+  return request("/project/context-migration");
+}
+
+export async function applyProjectContextMigration(): Promise<LegacyProjectContextMigrationResult> {
+  const result = await request<LegacyProjectContextMigrationResult>("/project/context-migration", {
+    method: "POST",
+    body: JSON.stringify({ confirm: true }),
+  });
+  return { ...result, project: normalizeProject(result.project) };
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -200,20 +245,18 @@ export async function getRequirements(): Promise<Requirement[]> {
   return (await request<{ requirements: Requirement[] }>("/requirements")).requirements.map(normalizeRequirement);
 }
 
-export async function createRequirement(requirement: Pick<Requirement, "id" | "title" | "description" | "status" | "linkedPhaseIds">): Promise<Requirement> {
-  const now = new Date().toISOString();
+export type MacroTaskInput = Pick<MacroTask, "title" | "description" | "status"> & { id?: string };
+
+export async function createRequirement(requirement: Pick<Requirement, "title" | "description" | "status" | "linkedPhaseIds"> & { macroTasks: MacroTaskInput[] }): Promise<Requirement> {
   return normalizeRequirement(await request("/requirements", {
     method: "POST",
-    body: JSON.stringify({
-      ...requirement,
-      macroTasks: [],
-      createdAt: now,
-      updatedAt: now,
-    }),
+    body: JSON.stringify(requirement),
   }));
 }
 
-export async function updateRequirement(requirement: Requirement): Promise<Requirement> {
+export type RequirementUpdateInput = Omit<Requirement, "macroTasks"> & { macroTasks: MacroTaskInput[] };
+
+export async function updateRequirement(requirement: RequirementUpdateInput): Promise<Requirement> {
   return normalizeRequirement(await request(`/requirements/${requirement.id}`, {
     method: "PUT",
     body: JSON.stringify({

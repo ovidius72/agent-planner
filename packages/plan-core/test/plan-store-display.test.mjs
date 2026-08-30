@@ -48,7 +48,7 @@ describe("PlanStore.loadPhaseDisplay", () => {
     assert.equal(display.breakdown.planned, 1);
   });
 
-  test("done + canceled tasks → closed", async () => {
+  test("done + canceled tasks → done", async () => {
     const { store, mkPhase, mkTask } = await setup();
     const p = mkPhase(2);
     await store.savePhase(p);
@@ -57,7 +57,7 @@ describe("PlanStore.loadPhaseDisplay", () => {
       return ph;
     });
     const display = await store.loadPhaseDisplay(p.id);
-    assert.equal(display.displayStatus, "closed");
+    assert.equal(display.displayStatus, "done");
     assert.equal(display.breakdown.done, 1);
     assert.equal(display.breakdown.canceled, 1);
   });

@@ -1,0 +1,322 @@
+{
+  "id": "76cbb771-ad31-4c0d-8531-066e333c4429",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 91,
+  "shortId": "JQHH9",
+  "priority": 30,
+  "slug": "ideas-inbox-and-promotion-workflow",
+  "title": "Ideas Inbox and promotion workflow",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Add a top-level Ideas Inbox with Web UI CRUD and agent-guided promotion into feature, phase, or task work.",
+  "description": "Current state: the planner has no Ideas domain, no `/ideas` route, and no Pi/MCP idea tools; `packages/plan-core/src/schema.ts` and `packages/plan-core/src/plan-store.ts` model only project, requirements, features, phases, and tasks, while `packages/plan-web-ui/src/components/layout/top-nav.tsx` and the app router expose no Ideas navigation. Implement a harness-agnostic top-level Ideas Inbox persisted separately from features/phases/tasks so ideas never participate in status derivation. Add stable human references, CRUD, Web UI route/navigation, and agent promotion workflows for feature, phase, and task targets. Copy the approved user-level `/Users/antonio/.pi/agent/skills/grill-me/SKILL.md` contract into a shipped canonical asset that seeds `.planner/skills/grill-me/SKILL.md` for every extension user; load that project-local skill when an agent discusses or promotes an idea. Preserve core harness independence, existing planner priority/status behavior, mobile header navigation, managed-file customization safety, and isolated temporary planner roots in tests.",
+  "descriptionUpdatedAt": "2026-08-30T09:52:07.341Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "a4f6266a-4be6-4bc2-b735-63891008dac4",
+      "title": "Ideas are a top-level non-work domain",
+      "decision": "Persist Ideas in a dedicated top-level inbox outside features, phases, tasks, and requirements; Ideas operations never participate in status derivation, task recommendation, active work, or resume state.",
+      "rationale": "Ideas are intentionally unplanned capture items. Modeling them as planned tasks would distort planner progress and readiness.",
+      "implementationNotes": "Use stable I### references and independent persistence/counter state. Keep promoted ideas as linked history; explicit removal remains a separate user action.",
+      "acceptedAt": "2026-08-30T09:54:01.404Z"
+    },
+    {
+      "id": "e1f6eee9-b46d-4330-9e18-f7397f5872c1",
+      "title": "Project-local grill-me skill drives idea promotion discussions",
+      "decision": "Copy the approved user-level grill-me skill into a shipped canonical asset that seeds `.planner/skills/grill-me/SKILL.md` for every project, and load that project-local skill whenever an agent discusses or promotes an idea.",
+      "rationale": "Every extension user and harness must receive the same rigorous clarification protocol without depending on Antonio's user folder or globally installed skills.",
+      "implementationNotes": "Follow managed-skill upgrade safety: timestamp-free canonical bytes, upgrade unmodified copies, preserve customized copies with drift reporting, and do not leak the skill into human recaps or unrelated turns.",
+      "acceptedAt": "2026-08-30T09:54:07.850Z"
+    },
+    {
+      "id": "ff0a7b2c-7d26-4da1-8002-108d8559f023",
+      "title": "Idea promotion is discussion-first and target-confirmed",
+      "decision": "Feature promotion must clarify insufficient content with grill-me before creating the feature and its phases/tasks; phase promotion must recommend and confirm a parent feature before discussion and creation; task promotion must recommend and confirm the parent feature/phase before discussion and creation.",
+      "rationale": "Promotion changes an unplanned idea into governed planner work and must not guess scope or ownership from incomplete text.",
+      "implementationNotes": "Persist promoted state only after the target entities exist and read back successfully. Return composite human refs and retain the idea as promotion history.",
+      "acceptedAt": "2026-08-30T09:54:15.014Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "cf37b449-e6e5-433a-8834-e030369d52ff",
+    "d2fadc89-3c2c-4783-913a-f5ceb4134df5",
+    "f47996ae-d2b9-4859-8a85-2e0412864d42",
+    "9c004b44-f5ad-4cb6-8cfe-499d58abf66f",
+    "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c"
+  ],
+  "tasks": [
+    {
+      "id": "cf37b449-e6e5-433a-8834-e030369d52ff",
+      "phaseId": "76cbb771-ad31-4c0d-8531-066e333c4429",
+      "number": 356,
+      "shortId": "LU4XR",
+      "priority": 1,
+      "shortName": "add-the-harness-agnostic-ideas",
+      "title": "Add the harness-agnostic Ideas Inbox domain and persistence",
+      "status": "planned",
+      "description": "Implement the top-level Ideas domain in `packages/plan-core/src/schema.ts`, `packages/plan-core/src/plan-store.ts`, and shared reference/rendering helpers. Persist ideas independently under `.planner/` (for example `.planner/ideas.json`) with stable UUID identity plus monotonic human references such as `I001`, editable title/description, deterministic ordering, timestamps, and promotion metadata linking a promoted idea to its resulting feature/phase/task. CRUD and promotion bookkeeping must never create child containment or affect feature/phase/task status derivation, task recommendation, resume state, or readiness. Decide and document the compatibility/upgrade strategy for the new file and counter, preserve customized project data, and cover initialization, reload, atomic validation, delete, edit, promoted-history retention, and rollup isolation using temporary planner roots only.",
+      "descriptionUpdatedAt": "2026-08-30T09:52:34.217Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-001-define-the-ideas-schema-stable-references-ordering-and-promotion-metadata",
+          "number": 1,
+          "title": "Define the Ideas schema, stable references, ordering, and promotion metadata.",
+          "checked": false
+        },
+        {
+          "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-002-seed-and-load-ideas-persistence-without-changing-existing-project-rollups",
+          "number": 2,
+          "title": "Seed and load Ideas persistence without changing existing project rollups.",
+          "checked": false
+        },
+        {
+          "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-003-implement-atomic-planstore-crud-and-promotion-bookkeeping",
+          "number": 3,
+          "title": "Implement atomic PlanStore CRUD and promotion bookkeeping.",
+          "checked": false
+        },
+        {
+          "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-004-add-isolated-core-tests-for-persistence-validation-history-and-status-isolation",
+          "number": 4,
+          "title": "Add isolated core tests for persistence, validation, history, and status isolation.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:52:34.216Z",
+      "updatedAt": "2026-08-30T09:52:34.216Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5",
+      "phaseId": "76cbb771-ad31-4c0d-8531-066e333c4429",
+      "number": 357,
+      "shortId": "95VLH",
+      "priority": 2,
+      "shortName": "seed-and-load-the-project-loca",
+      "title": "Seed and load the project-local grill-me skill for idea discussions",
+      "status": "planned",
+      "description": "Copy the approved source contract from `/Users/antonio/.pi/agent/skills/grill-me/SKILL.md` into a canonical shipped Agent Plan asset and extend the managed project-skill infrastructure in `packages/plan-core/src/planner-skill.ts`, `packages/plan-core/src/plan-store.ts`, package files, and plugin synchronization as appropriate so every initialized/upgraded project receives `.planner/skills/grill-me/SKILL.md`. Follow the managed `.planner/SKILL.md` safety model: deterministic timestamp-free bytes, automatic upgrade only for unmodified canonical copies, preservation of customized copies, and actionable drift reporting. Expose a harness-agnostic loader for the project-local skill and inject/load its instructions only when an idea discussion or promotion begins, rather than leaking the skill into human recaps or every agent turn. Preserve Pi/MCP/Claude/Codex portability and add inventory, package-content, initialization, upgrade, customization, and non-leakage tests.",
+      "descriptionUpdatedAt": "2026-08-30T09:52:43.890Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-001-add-a-shipped-canonical-grill-me-skill-copied-from-the-approved-user-level-source",
+          "number": 1,
+          "title": "Add a shipped canonical grill-me skill copied from the approved user-level source.",
+          "checked": false
+        },
+        {
+          "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-002-seed-and-safely-upgrade-planner-skills-grill-me-skill-md-without-overwriting-customization",
+          "number": 2,
+          "title": "Seed and safely upgrade `.planner/skills/grill-me/SKILL.md` without overwriting customization.",
+          "checked": false
+        },
+        {
+          "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-003-load-the-project-local-skill-for-idea-discuss-promote-flows-across-harnesses",
+          "number": 3,
+          "title": "Load the project-local skill for idea discuss/promote flows across harnesses.",
+          "checked": false
+        },
+        {
+          "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-004-verify-package-inventory-deterministic-bytes-drift-behavior-and-recap-non-leakage",
+          "number": 4,
+          "title": "Verify package inventory, deterministic bytes, drift behavior, and recap non-leakage.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:52:43.889Z",
+      "updatedAt": "2026-08-30T09:52:43.889Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "f47996ae-d2b9-4859-8a85-2e0412864d42",
+      "phaseId": "76cbb771-ad31-4c0d-8531-066e333c4429",
+      "number": 358,
+      "shortId": "3ACUH",
+      "priority": 3,
+      "shortName": "expose-ideas-crud-and-guided-p",
+      "title": "Expose Ideas CRUD and guided promotion across Pi and MCP",
+      "status": "planned",
+      "description": "Add complete cross-harness idea tools and commands in `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, the canonical planner skill, and public-surface inventories. Agents must be able to list/show/create/update/delete ideas and begin/finalize promotion. Feature promotion loads `.planner/skills/grill-me/SKILL.md` when the idea lacks sufficient detail, resolves the design with the user, creates the agreed feature plus appropriate phases/tasks, then records the resulting feature reference. Phase promotion must inspect and recommend the most appropriate feature, obtain user confirmation, run the grill-me discussion, create the phase/tasks, and record the phase reference. Task promotion must recommend and confirm the feature/phase, run the discussion, create the task, and record its reference. Keep promotion multi-step and confirmation-safe: no target entity or promoted state may be persisted before the discussion and target confirmation complete. Return composite human refs, never raw UUIDs, and maintain Pi/MCP contract parity with real transport tests.",
+      "descriptionUpdatedAt": "2026-08-30T09:52:53.945Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-001-add-pi-and-mcp-list-show-create-update-delete-idea-surfaces",
+          "number": 1,
+          "title": "Add Pi and MCP list/show/create/update/delete idea surfaces.",
+          "checked": false
+        },
+        {
+          "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-002-add-prepare-finalize-promotion-contracts-with-typed-target-and-confirmation-diagnostics",
+          "number": 2,
+          "title": "Add prepare/finalize promotion contracts with typed target and confirmation diagnostics.",
+          "checked": false
+        },
+        {
+          "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-003-load-grill-me-and-implement-feature-phase-task-recommendation-and-discussion-guidance",
+          "number": 3,
+          "title": "Load grill-me and implement feature/phase/task recommendation and discussion guidance.",
+          "checked": false
+        },
+        {
+          "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-004-add-cross-harness-parity-public-inventory-confirmation-and-persistence-regressions",
+          "number": 4,
+          "title": "Add cross-harness parity, public-inventory, confirmation, and persistence regressions.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:52:53.943Z",
+      "updatedAt": "2026-08-30T09:52:53.943Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f",
+      "phaseId": "76cbb771-ad31-4c0d-8531-066e333c4429",
+      "number": 359,
+      "shortId": "4JEYJ",
+      "priority": 4,
+      "shortName": "add-the-ideas-page-header-navi",
+      "title": "Add the Ideas page, header navigation, and Web UI management",
+      "status": "planned",
+      "description": "Add a new React Router data-mode `/ideas` route and loader/actions in `packages/plan-web-ui/src/app/router.tsx`, new Ideas route/components, typed API support in `packages/plan-web-ui/src/lib/api.ts` and `types.ts`, and corresponding plan-server endpoints in `packages/plan-server/src/serve.ts`. Add an `Ideas` link to `packages/plan-web-ui/src/components/layout/top-nav.tsx` on desktop and inside the existing mobile hamburger navigation. The page must let the human supervisor list, add, edit, and remove inbox ideas, and inspect promoted ideas with their linked feature/phase/task references without affecting planner work status. Reuse shared cards, badges, forms, dialogs, and responsive patterns; provide keyboard-accessible create/edit/delete confirmation, empty/error/loading states, stable ordering, and mobile containment. Web UI management remains human-owned and must not silently invoke agent promotion discussions.",
+      "descriptionUpdatedAt": "2026-08-30T09:53:03.524Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-001-register-ideas-and-add-desktop-mobile-header-navigation",
+          "number": 1,
+          "title": "Register `/ideas` and add desktop/mobile header navigation.",
+          "checked": false
+        },
+        {
+          "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-002-implement-ideas-list-create-edit-and-confirmed-remove-flows",
+          "number": 2,
+          "title": "Implement Ideas list, create, edit, and confirmed remove flows.",
+          "checked": false
+        },
+        {
+          "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-003-show-promoted-history-with-navigable-target-references",
+          "number": 3,
+          "title": "Show promoted history with navigable target references.",
+          "checked": false
+        },
+        {
+          "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-004-add-component-api-real-server-accessibility-and-mobile-playwright-coverage",
+          "number": 4,
+          "title": "Add component, API, real-server, accessibility, and mobile Playwright coverage.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:53:03.522Z",
+      "updatedAt": "2026-08-30T09:53:03.522Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c",
+      "phaseId": "76cbb771-ad31-4c0d-8531-066e333c4429",
+      "number": 360,
+      "shortId": "V3QE2",
+      "priority": 5,
+      "shortName": "verify-ideas-promotion-end-to",
+      "title": "Verify Ideas promotion end to end without planner rollup side effects",
+      "status": "planned",
+      "description": "Complete the Ideas Inbox slice with end-to-end scenarios spanning `packages/plan-core`, Pi, MCP, plan-server, and the production Web UI bundle. Verify that an idea can be created from the Web UI or an agent, listed through every harness, discussed using the project-local grill-me skill, promoted to a feature/phase/task only after the required parent recommendation and user confirmation, and retained as promoted history linked to the created entity. Prove that idea creation/edit/removal/promotion never changes feature/phase/task derived statuses, task recommendation, active work, resume state, counters other than the Ideas counter, or linked requirements. Exercise desktop and 390px mobile navigation to `/ideas`, reload persistence, error rollback, managed-skill upgrades, and cross-harness structured/text output parity. Rebuild and copy production Web UI bundles after all tests pass.",
+      "descriptionUpdatedAt": "2026-08-30T09:53:15.235Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-001-cover-feature-phase-and-task-promotion-journeys-with-confirmation-and-grill-me-loading",
+          "number": 1,
+          "title": "Cover feature, phase, and task promotion journeys with confirmation and grill-me loading.",
+          "checked": false
+        },
+        {
+          "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-002-prove-ideas-operations-do-not-affect-planner-rollups-or-work-selection",
+          "number": 2,
+          "title": "Prove Ideas operations do not affect planner rollups or work selection.",
+          "checked": false
+        },
+        {
+          "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-003-run-full-pi-mcp-server-web-ui-integration-and-desktop-mobile-browser-verification",
+          "number": 3,
+          "title": "Run full Pi/MCP/server/Web UI integration and desktop/mobile browser verification.",
+          "checked": false
+        },
+        {
+          "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-004-rebuild-distributed-web-ui-assets-and-document-the-final-user-operator-workflow",
+          "number": 4,
+          "title": "Rebuild distributed Web UI assets and document the final user/operator workflow.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:53:15.233Z",
+      "updatedAt": "2026-08-30T09:53:15.233Z",
+      "sessionInfo": []
+    }
+  ],
+  "createdAt": "2026-08-30T09:52:07.335Z",
+  "updatedAt": "2026-08-30T09:54:15.014Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

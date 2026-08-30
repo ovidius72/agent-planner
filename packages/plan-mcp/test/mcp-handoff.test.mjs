@@ -35,6 +35,8 @@ import {
   expectToolError,
   toolText,
 } from "../../../test/helpers/mcp-fixture.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
+import { PhaseSchema, createPhaseId } from "../../plan-core/dist/index.js";
 
 after(async () => {
   await cleanupMcpFixtures();
@@ -48,6 +50,7 @@ async function preparedHandoffArgs(session, phaseRef = "P001") {
   return {
     expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
+    completenessAudit: completeHandoffAudit(),
     taskUpdates: [],
     phaseNoUpdateReason: "Fixture does not change durable phase context.",
     featureNoUpdateReason: "Fixture does not change durable feature context.",
@@ -55,21 +58,7 @@ async function preparedHandoffArgs(session, phaseRef = "P001") {
 }
 
 function canonicalHandoff(title, detail) {
-  return [
-    `# ${title}`,
-    "",
-    "Created at: 2026-08-24T00:00:00.000Z",
-    "Updated at: 2026-08-24T00:00:00.000Z",
-    "Reason: test fixture",
-    "",
-    "## Current focus", detail,
-    "## What was being done", detail,
-    "## How to resume", "Continue the fixture.",
-    "## Files touched", "- test fixture",
-    "## Blockers", "- None",
-    "## Next steps", "- Continue",
-    "## Recent decisions", "- Preserve relevant context",
-  ].join("\n");
+  return canonicalAuditedHandoff(title, detail, { file: "mcp-handoff.test.mjs", reason: "test fixture" });
 }
 
 async function writePreparedHandoff(session, input) {
@@ -110,6 +99,7 @@ test("planner-handoff-write without confirmed returns a proposal with exact comp
       title: "dummy proposal",
       content: "dummy content",
       confirmed: false,
+      completenessAudit: completeHandoffAudit(),
     });
     const text = toolText(res);
     // Should be a proposal, not a success.
@@ -149,6 +139,82 @@ test("planner-handoff-write with confirmed=true writes the handoff and can be re
     const listText = toolText(listRes);
     assert.match(listText, /P001\(F001\)/);
     assert.match(listText, /Test handoff/);
+    assert.equal(listRes.structuredContent.page, 1);
+    assert.equal(listRes.structuredContent.totalPages, 1);
+    assert.equal(Object.hasOwn(listRes.structuredContent.handoffs[0], "content"), false, "compact list must never embed full handoff bodies");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-handoff-write returns typed completeness diagnostics before mutation", async () => {
+  const session = await startMcpFixture({ name: "t352-completeness-required" });
+  try {
+    const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
+    const audit = prepared.structuredContent ?? {};
+    const result = await callTool(session, "planner-handoff-write", {
+      phaseRef: "P001",
+      title: "P001 — missing completeness audit",
+      content: canonicalHandoff("P001 — missing completeness audit", "The body is operational but the audit payload is intentionally absent."),
+      confirmed: true,
+      expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
+      reconciledExistingHandoff: true,
+      taskUpdates: [],
+      phaseNoUpdateReason: "Fixture does not change durable phase context.",
+      featureNoUpdateReason: "Fixture does not change durable feature context.",
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.errorCode, "HANDOFF_COMPLETENESS_AUDIT_REQUIRED");
+    assert.ok(result.structuredContent.missingCategories.includes("branch-worktree"));
+    assert.equal((await session.store.loadAllPhases())[0].handoff, "");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-handoff-list paginates compact summaries without body amplification", async () => {
+  const session = await startMcpFixture({ name: "t352-compact-pagination" });
+  try {
+    const feature = (await session.store.loadFeatures()).features[0];
+    const now = new Date().toISOString();
+    for (let number = 1; number <= 12; number += 1) {
+      const phaseId = createPhaseId();
+      const phase = PhaseSchema.parse({
+        id: phaseId,
+        featureId: feature.id,
+        number: number + 10,
+        slug: `handoff-page-${number}`,
+        title: `Handoff page ${number}`,
+        description: "Pagination fixture",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await session.store.savePhase(phase);
+      await session.store.setPhaseHandoff(phaseId, `# Compact summary ${number}\n\n${"body detail ".repeat(300)}`);
+    }
+    const listed = await callTool(session, "planner-handoff-list", { page: 2, pageSize: 5 });
+    assert.equal(listed.structuredContent.page, 2);
+    assert.equal(listed.structuredContent.pageSize, 5);
+    assert.equal(listed.structuredContent.total, 12);
+    assert.equal(listed.structuredContent.totalPages, 3);
+    assert.equal(listed.structuredContent.handoffs.length, 5);
+    assert.ok(listed.structuredContent.handoffs.every((entry) => !Object.hasOwn(entry, "content")));
+    assert.ok(JSON.stringify(listed.structuredContent).length < 10_000, "paginated structured output stays bounded");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-handoff-show keeps oversized legacy handoffs readable but transport-bounded", async () => {
+  const session = await startMcpFixture({ name: "t352-legacy-bounded-show" });
+  try {
+    const phase = (await session.store.loadAllPhases())[0];
+    await session.store.setPhaseHandoff(phase.id, `# Legacy oversized handoff\n\n${"x".repeat(30_000)}`);
+    const shown = await callTool(session, "planner-handoff-show", { phaseRef: "P001" });
+    assert.equal(shown.structuredContent.truncated, true);
+    assert.equal(shown.structuredContent.fullLength > 24_000, true);
+    assert.equal(shown.structuredContent.content.length, 24_000);
+    assert.match(shown.structuredContent.content, /Legacy handoff truncated for transport safety/);
   } finally {
     await closeMcpFixture(session);
   }
@@ -226,7 +292,7 @@ test("planner-handoff-list and handoff clear workflow", async () => {
     // Now list should show it
     listRes = await callTool(session, "planner-handoff-list", {});
     const listText = toolText(listRes);
-    assert.match(listText, /Phase handoffs \(1\):/);
+    assert.match(listText, /Phase handoffs — page 1\/1 \(1 total\):/);
     assert.match(listText, /P001\(F001\)/);
     assert.match(listText, /Handoff for list\/clear/);
 
@@ -278,6 +344,7 @@ test("handoff proposal is actionable and contains exact target for user confirma
       title: "dummy",
       content: "dummy",
       confirmed: false,
+      completenessAudit: completeHandoffAudit(),
     });
     const text = toolText(res);
     // The proposal must contain the exact composite ref that the agent should present to the user.
@@ -311,7 +378,7 @@ test("refresh reconciles one active handoff without creating a superseded archiv
     // Active list contains ONLY H2
     const listRes = await callTool(session, "planner-handoff-list", {});
     const listText = toolText(listRes);
-    assert.match(listText, /Phase handoffs \(1\):/);
+    assert.match(listText, /Phase handoffs — page 1\/1 \(1 total\):/);
     assert.match(listText, /P001\(F001\)/);
     assert.match(listText, /H2 — second version/);
     assert.doesNotMatch(listText, /H1 — first version/);

@@ -73,10 +73,26 @@ describe("pi-adapter web lifecycle", () => {
         "Web UI startup does not emit a planner recap",
       );
 
+      const guidelines = await host.runTool("project_guidelines_update", {
+        content: "Use English in source code. Run focused verification before claiming success.",
+      });
+      assert.match(toolText(guidelines), /Project Guidelines updated\./);
+
       const loaded = await host.runTool("planner-load", {});
       assert.equal(toolDetails(loaded).enabled, true, "explicit planner-load enables the planner");
       assert.match(toolText(loaded), /## Planner recap/);
-      assert.match(await injectedPrompt(host), /\[Plan Context/);
+      assert.match(toolText(loaded), /## Project Guidelines/);
+      assert.match(toolText(loaded), /Use English in source code\. Run focused verification before claiming success\./);
+      assert.doesNotMatch(toolText(loaded), /## Managed-copy policy/, "agent-only planner skill must not leak into the human recap text");
+      assert.match(toolDetails(loaded).plannerSkill.status, /^(created|current|updated)$/);
+      const prompt = await injectedPrompt(host);
+      assert.match(prompt, /\[Plan Context/);
+      assert.match(prompt, /# Agent Plan operating guide/);
+      assert.match(prompt, /## Handoff protocol/);
+
+      await readTaskContext(host);
+      const taskStart = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(taskStart).started, true, "planner-load records the project-guidelines read attestation");
       assert.equal(
         host.sentMessages.filter((message) => message.message.customType === "planner-resume-trigger").length,
         0,
@@ -94,7 +110,11 @@ describe("pi-adapter web lifecycle", () => {
       await host.runCommand("load");
       let notifyText = host.ui.notifyCalls.map((n) => n.message).join("\n");
       assert.match(notifyText, /Starting web server \(LAN\)/);
-      assert.equal(host.sentMessages.filter((m) => m.message.customType === "planner-resume-trigger").length, 1);
+      const loadTriggers = host.sentMessages.filter((m) => m.message.customType === "planner-resume-trigger");
+      assert.equal(loadTriggers.length, 1);
+      assert.match(loadTriggers[0].message.content, /\[agent-only planner usage skill/);
+      assert.match(loadTriggers[0].message.content, /# Agent Plan operating guide/);
+      assert.match(loadTriggers[0].message.content, /--- RECAP ---/);
       let status = await host.runTool("planner-web", {});
       assert.equal(toolDetails(status).running, true);
 

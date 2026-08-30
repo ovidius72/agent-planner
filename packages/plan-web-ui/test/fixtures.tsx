@@ -115,6 +115,12 @@ export function makeProject(overrides: Partial<Project> = {}): Project {
     name: "Example project",
     goal: "Test the Web UI",
     description: "Project context",
+    descriptionRef: "",
+    projectGuidelines: {
+      content: "",
+      updatedAt: "",
+      sessionInfo: [],
+    },
     webPort: 3030,
     scope: [],
     outOfScope: [],

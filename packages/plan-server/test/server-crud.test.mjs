@@ -301,11 +301,13 @@ test("requirement CRUD: create with phase ref resolution, update, delete, valida
   const created = await request(fx, "/requirements", {
     ...json({
       id: crypto.randomUUID(), title: "Auth must work", description: "", status: "planned",
-      macroTasks: [], linkedPhaseIds: ["P001"], createdAt: now, updatedAt: now,
+      macroTasks: [{ title: "Authenticate request", description: "Verify credentials", status: "planned" }], linkedPhaseIds: ["P001"], createdAt: now, updatedAt: now,
     }),
     expectStatus: 201,
   });
   assert.equal(created.body.linkedPhaseIds[0], phase.id, "composite ref P001 resolved to UUID");
+  assert.equal(created.body.macroTasks[0].id, "MT-001", "server owns macro-task identity");
+  assert.equal(created.body.macroTasks[0].createdAt, created.body.macroTasks[0].updatedAt, "server owns macro-task timestamps");
 
   // empty links → 400 (no partial write)
   await request(fx, "/requirements", {
@@ -316,8 +318,30 @@ test("requirement CRUD: create with phase ref resolution, update, delete, valida
     expectStatus: 400,
   });
 
-  const renamed = await request(fx, `/requirements/${created.body.id}`, put({ ...created.body, title: "Auth must work well" }));
+  const renamed = await request(fx, `/requirements/${created.body.id}`, put({
+    ...created.body,
+    title: "Auth must work well",
+    macroTasks: [
+      { id: created.body.macroTasks[0].id, title: "Authenticate request", description: "Verify credentials", status: "done", createdAt: "forged", updatedAt: "forged" },
+      { title: "Record audit event", description: "Persist the decision", status: "planned" },
+    ],
+  }));
   assert.equal(renamed.body.title, "Auth must work well");
+  assert.equal(renamed.body.macroTasks[0].createdAt, created.body.macroTasks[0].createdAt, "updates preserve system-created timestamps");
+  assert.equal(renamed.body.macroTasks[0].status, "done");
+  assert.equal(renamed.body.macroTasks[1].id, "MT-002", "new macro task receives a planner ID");
+
+  const foreignMacro = await request(fx, `/requirements/${created.body.id}`, {
+    ...put({
+      ...renamed.body,
+      macroTasks: [{ id: "MT-999", title: "Foreign", description: "", status: "planned" }],
+    }),
+    expectStatus: 400,
+  });
+  assert.match(foreignMacro.body.error, /not owned/);
+  const persistedAfterRejectedMacro = await request(fx, "/requirements");
+  const persistedRequirement = persistedAfterRejectedMacro.body.requirements.find((requirement) => requirement.id === created.body.id);
+  assert.equal(persistedRequirement.macroTasks.length, 2, "invalid macro update is atomic");
 
   const deleted = await request(fx, `/requirements/${created.body.id}`, { method: "DELETE" });
   assert.deepEqual(deleted.body, { deleted: created.body.id });

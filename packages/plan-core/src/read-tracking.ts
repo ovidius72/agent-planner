@@ -1,10 +1,10 @@
 /**
- * Session-scoped, ordered context-read enforcement for agent lifecycle operations.
+ * Session-scoped context-read enforcement for agent lifecycle operations.
  *
- * The first complete read for a task must be task(full) → phase(full) →
- * feature(full), with linked requirements read independently. A persisted
- * sessionInfo attestation may satisfy later checks in the same session while
- * the entity's context revision remains at or before its attestation timestamp.
+ * Task/phase/feature reads and linked requirements remain explicit, but fresh
+ * in-session reads may be performed in any order. Persisted sessionInfo
+ * attestations may satisfy later checks while the entity's current revision
+ * remains at or before the attested timestamp.
  */
 
 const DEFAULT_SESSION_ID = "__default__";
@@ -15,6 +15,14 @@ type ReadTrackedEntity = {
   updatedAt: string;
   descriptionUpdatedAt?: string;
   sessionInfo?: SessionInfoEntry[];
+};
+
+type ProjectGuidelinesTrackedProject = {
+  projectGuidelines?: {
+    content?: string;
+    updatedAt?: string;
+    sessionInfo?: SessionInfoEntry[];
+  };
 };
 
 type ReadState = {
@@ -137,23 +145,15 @@ export function markRequirementReadForSessionId(sessionId: string, requirementId
 
 function orderedEligibility(sessionId: string, taskId: string, phaseId: string, featureId?: string): ContextReadEligibility {
   const state = stateFor(sessionId);
-  const taskSequence = state.tasks.get(taskId);
-  if (taskSequence === undefined) {
+  if (!state.tasks.has(taskId)) {
     return { eligible: false, reason: "Read this exact task with full=true first." };
   }
-
-  const phaseSequence = state.phases.get(phaseId);
-  if (phaseSequence === undefined || phaseSequence <= taskSequence) {
-    return { eligible: false, reason: "After reading the task, read its parent phase with full=true." };
+  if (!state.phases.has(phaseId)) {
+    return { eligible: false, reason: "Read this task's parent phase with full=true." };
   }
-
-  if (!featureId) return { eligible: true, reason: "" };
-
-  const featureSequence = state.features.get(featureId);
-  if (featureSequence === undefined || featureSequence <= phaseSequence) {
-    return { eligible: false, reason: "After reading the phase, read its parent feature with full=true." };
+  if (featureId && !state.features.has(featureId)) {
+    return { eligible: false, reason: "Read this phase's parent feature with full=true." };
   }
-
   return { eligible: true, reason: "" };
 }
 
@@ -193,7 +193,7 @@ function persistedEligibility(input: SessionContextReadInput): boolean {
 
 function requiredReadReason(requiredReads: RequiredContextRead[]): string {
   const labels = requiredReads.map((read) => `${read.kind} ${read.id} (${read.state})`);
-  return `Read required context only for: ${labels.join(", ")}. Follow these reads in the listed order, then retry.`;
+  return `Read required context only for: ${labels.join(", ")}. Perform only these reads, in any order within the current session, then retry.`;
 }
 
 /**
@@ -240,6 +240,22 @@ export function contextReadEligibilityForSession(input: SessionContextReadInput)
 
   if (requiredReads.length === 0) return { eligible: true, reason: "" };
   return { eligible: false, reason: requiredReadReason(requiredReads), requiredReads };
+}
+
+export type ProjectGuidelinesReadState = "not-required" | "missing" | "stale" | "valid";
+
+export function projectGuidelinesReadStateForSession(
+  project: ProjectGuidelinesTrackedProject,
+  sessionId: string,
+): ProjectGuidelinesReadState {
+  const guidelines = project.projectGuidelines;
+  const content = guidelines?.content?.trim() ?? "";
+  if (!content) return "not-required";
+  const entry = guidelines?.sessionInfo?.find((candidate) => candidate.sessionId === sessionId);
+  if (!entry) return "missing";
+  const updatedAt = guidelines?.updatedAt?.trim() ?? "";
+  if (updatedAt && updatedAt > entry.createdAt) return "stale";
+  return "valid";
 }
 
 /** Return true only when the persisted attestation covers the current revisions. */
@@ -296,7 +312,7 @@ export function startReadSession(sessionId: string): void {
 export function parentReadAdvisory(featureId: string | undefined, phaseId: string): string {
   const state = stateFor(DEFAULT_SESSION_ID);
   if (state.phases.has(phaseId) && (!featureId || state.features.has(featureId))) return "";
-  return "\n\n⚠️ READ REQUIRED before proceeding: read the parent phase and feature with full=true.";
+  return "\n\n⚠️ READ REQUIRED before proceeding: read only the missing parent phase and feature with full=true.";
 }
 
 /** Advisory text for the separate linked-requirements gate. */

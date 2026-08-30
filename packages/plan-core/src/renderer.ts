@@ -83,6 +83,14 @@ export class PlanRenderer {
       lines.push("");
     }
 
+    // ── Project Guidelines ──────────────────────────────────────────
+    if (project.projectGuidelines.content.trim()) {
+      lines.push("## Project Guidelines");
+      lines.push("");
+      lines.push(project.projectGuidelines.content.trim());
+      lines.push("");
+    }
+
     // ── Global Rules ─────────────────────────────────────────────────
     if (project.globalRules.length > 0) {
       lines.push("## Global Rules");

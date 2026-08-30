@@ -1,8 +1,12 @@
 import { z } from "zod";
+import { isPlannerDescriptionRef } from "./payload-fallback.js";
 import { createChecklistItemId } from "./naming.js";
 
 export const TimestampSchema = z.string().datetime();
 export const SlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const DescriptionRefSchema = z.string().refine(isPlannerDescriptionRef, {
+  message: 'descriptionRef must stay under .planner/docs/ and must not contain relative traversal segments.',
+});
 
 export const CodebaseFileSchema = z.object({
   path: z.string().min(1),
@@ -127,10 +131,25 @@ export const WorkDeviationSchema = z.object({
   resumedAt: z.string().default(""),
 });
 
+export const ProjectGuidelinesSchema = z.object({
+  content: z.string().default(""),
+  updatedAt: z.string().default(""),
+  sessionInfo: z.array(z.object({
+    sessionId: z.string().min(1),
+    createdAt: TimestampSchema,
+  })).default([]),
+});
+
 export const ProjectSchema = z.object({
   name: z.string().min(1),
   goal: z.string().default(""),
   description: z.string().default(""),
+  descriptionRef: DescriptionRefSchema.optional(),
+  projectGuidelines: ProjectGuidelinesSchema.default({
+    content: "",
+    updatedAt: "",
+    sessionInfo: [],
+  }),
   webPort: z.number().int().min(0).max(65535).default(0),
   scope: z.array(z.string().min(1)).default([]),
   outOfScope: z.array(z.string().min(1)).default([]),
@@ -233,6 +252,7 @@ export const TaskSchema = z.object({
   title: z.string().min(1),
   status: TaskStatusSchema,
   description: z.string().default(""),
+  descriptionRef: DescriptionRefSchema.optional(),
   /** Updated only when this task's description changes; distinct from entity updatedAt. */
   descriptionUpdatedAt: z.string().default(""),
   notes: z.string().default(""),
@@ -268,6 +288,29 @@ export const HandoffHistoryEntrySchema = z.object({
   /** Why the handoff was cleared: "task-started" | "phase-done" | "manual" | "superseded" | "imported". */
   reason: z.string().default(""),
 });
+
+export const HandoffCompletenessEntrySchema = z.object({
+  category: z.string().min(1),
+  status: z.enum(["captured", "not-applicable"]),
+  detail: z.string().min(1),
+});
+
+export const HandoffSupportingDocumentSchema = z.object({
+  path: z.string().min(1),
+  description: z.string().min(1),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  contentLength: z.number().int().nonnegative(),
+});
+
+export const HandoffCompletenessAuditSchema = z.object({
+  version: z.number().int().positive(),
+  entries: z.array(HandoffCompletenessEntrySchema),
+  supportingDocuments: z.array(HandoffSupportingDocumentSchema).default([]),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  contentLength: z.number().int().nonnegative(),
+  verifiedAt: TimestampSchema,
+});
+
 export const PhaseSchema = z.object({
   id: z.string(),
   /** MUST be a feature UUID (not a ref like "F005"). Validated at the schema
@@ -288,6 +331,7 @@ export const PhaseSchema = z.object({
   contextReadyReason: z.string().default(""),
   summary: z.string().default(""),
   description: z.string().default(""),
+  descriptionRef: DescriptionRefSchema.optional(),
   /** Updated only when this phase's description changes; distinct from entity updatedAt. */
   descriptionUpdatedAt: z.string().default(""),
   notes: z.string().default(""),
@@ -306,6 +350,8 @@ export const PhaseSchema = z.object({
   updatedAt: TimestampSchema,
   handoff: z.string().default(""),
   handoffUpdatedAt: z.string().default(""),
+  /** Durable proof that the active handoff passed the versioned completeness and read-back contract. */
+  handoffAudit: HandoffCompletenessAuditSchema.nullable().default(null),
   /** When the handoff was last read/acknowledged on recap (ISO). Non-empty means
    *  the agent has seen it; the recap won't re-prompt every turn. Reading is
    *  non-mutating: content remains until every task is done/canceled, a later
@@ -330,6 +376,7 @@ export const FeatureSchema = z.object({
   priority: z.number().int().nonnegative().default(0),
   name: z.string().min(1),
   description: z.string().default(""),
+  descriptionRef: DescriptionRefSchema.optional(),
   /** Updated only when this feature's description changes; distinct from entity updatedAt. */
   descriptionUpdatedAt: z.string().default(""),
   // NOTE: `status` is intentionally ABSENT — it is DERIVED from child phases
@@ -408,6 +455,9 @@ export type SubtaskStatus = z.infer<typeof SubtaskStatusSchema>;
 export type Manifest = z.infer<typeof ManifestSchema>;
 export type WorkflowRules = z.infer<typeof WorkflowRulesSchema>;
 export type AcceptedDecision = z.infer<typeof AcceptedDecisionSchema>;
+export type HandoffCompletenessEntry = z.infer<typeof HandoffCompletenessEntrySchema>;
+export type HandoffSupportingDocument = z.infer<typeof HandoffSupportingDocumentSchema>;
+export type HandoffCompletenessAudit = z.infer<typeof HandoffCompletenessAuditSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
 export type WorkDeviation = z.infer<typeof WorkDeviationSchema>;
 export type TaskPauseSnapshot = z.infer<typeof TaskPauseSnapshotSchema>;

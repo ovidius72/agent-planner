@@ -24,6 +24,7 @@ import {
 } from "../../../test/helpers/mcp-fixture.mjs";
 import { createTempRoot, cleanupFixtures } from "../../../test/helpers/fixtures.mjs";
 import { createPhaseId, createTaskId } from "../../../packages/plan-core/dist/index.js";
+import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupMcpFixtures();
@@ -33,21 +34,7 @@ after(async () => {
 const LONG_DESCRIPTION = "src/harness.ts:10 existing state and the concrete goal for this harness validation entity; include file refs and behaviors to preserve so the description clears the 50-char minimum.";
 
 function canonicalHandoff(title, detail) {
-  return [
-    `# ${title}`,
-    "",
-    "Created at: 2026-08-24T00:00:00.000Z",
-    "Updated at: 2026-08-24T00:00:00.000Z",
-    "Reason: planner web fixture",
-    "",
-    "## Current focus", detail,
-    "## What was being done", detail,
-    "## How to resume", "Continue the fixture.",
-    "## Files touched", "- mcp-planner-web.test.mjs",
-    "## Blockers", "- None",
-    "## Next steps", "- Continue",
-    "## Recent decisions", "- Preserve durable context",
-  ].join("\n");
+  return canonicalAuditedHandoff(title, detail, { file: "mcp-planner-web.test.mjs", reason: "planner web fixture" });
 }
 
 async function writePreparedHandoff(session, phaseRef, title, content) {
@@ -60,6 +47,7 @@ async function writePreparedHandoff(session, phaseRef, title, content) {
     confirmed: true,
     expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
+    completenessAudit: completeHandoffAudit(),
     taskUpdates: [],
     phaseNoUpdateReason: "Fixture does not change durable phase context.",
     featureNoUpdateReason: "Fixture does not change durable feature context.",
@@ -314,10 +302,22 @@ test("recap context and generated/export operations", async () => {
     const phaseBeforeLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
     assert.ok(phaseBeforeLoad?.handoff, "fixture has a pending handoff before planner-load");
 
+    await callTool(session, "planner-project-guidelines-update", {
+      content: "Use English in source code. Run focused verification before claiming success.",
+    });
+
     // planner-load must start web and return a complete recap. The URL must be
     // its last non-empty line, which Codex can present verbatim.
     const loadResult = await callTool(session, "planner-load", {});
     const loadText = toolText(loadResult);
+    assert.match(loadText, /## Project Guidelines/);
+    assert.match(loadText, /Use English in source code\. Run focused verification before claiming success\./);
+    assert.doesNotMatch(loadText, /## Managed-copy policy/, "agent-only planner skill must not leak into the human recap text");
+    assert.equal(loadResult.structuredContent.agentContext.kind, "planner-usage-skill");
+    assert.match(loadResult.structuredContent.agentContext.content, /# Agent Plan operating guide/);
+    assert.match(loadResult.structuredContent.agentContext.content, /## Handoff protocol/);
+    assert.match(loadResult.structuredContent.agentContext.instruction, /Do not quote it/);
+    assert.match(await readFile(join(session.planRoot, "SKILL.md"), "utf8"), /^<!-- agent-plan-managed-skill sha256:/);
     const loadLines = loadText.trim().split("\n");
     assert.match(loadLines.at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
     const phaseAfterLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
@@ -331,6 +331,13 @@ test("recap context and generated/export operations", async () => {
     assert.match(loadText2.trim().split("\n").at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
     const phaseAfterSecondLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
     assert.equal(phaseAfterSecondLoad?.handoff, phaseBeforeLoad.handoff, "repeated planner-load retains handoff too");
+
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", {});
+    const startAfterLoad = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(startAfterLoad.structuredContent.started, true, "planner-load records the project-guidelines read attestation");
 
     // planner-export: real tool contract — writes .planner/EXPORT.md and
     // returns a summary of the full Markdown report.

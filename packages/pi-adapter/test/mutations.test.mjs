@@ -22,6 +22,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupPiHosts();
@@ -38,21 +39,7 @@ async function readTaskContext(host, taskId, phaseId = "P001", featureId = "F001
 }
 
 function canonicalHandoff(title, detail) {
-  return [
-    `# ${title}`,
-    "",
-    "Created at: 2026-08-24T00:00:00.000Z",
-    "Updated at: 2026-08-24T00:00:00.000Z",
-    "Reason: mutation fixture",
-    "",
-    "## Current focus", detail,
-    "## What was being done", detail,
-    "## How to resume", "Continue the fixture.",
-    "## Files touched", "- mutations.test.mjs",
-    "## Blockers", "- None",
-    "## Next steps", "- Continue",
-    "## Recent decisions", "- Preserve durable context",
-  ].join("\n");
+  return canonicalAuditedHandoff(title, detail, { file: "mutations.test.mjs", reason: "mutation fixture" });
 }
 
 async function preparedHandoffArgs(host, phaseRef = "P001") {
@@ -60,6 +47,7 @@ async function preparedHandoffArgs(host, phaseRef = "P001") {
   return {
     expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
+    completenessAudit: completeHandoffAudit(),
     taskUpdates: [],
     phaseNoUpdateReason: "Fixture does not change durable phase context.",
     featureNoUpdateReason: "Fixture does not change durable feature context.",
@@ -186,15 +174,15 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const missingTask = await host.runTool("task_start", { taskId: "   " });
       assert.match(toolText(missingTask), /Task not found/);
       await assertFileUntouched("missing task ref");
-      const badRef = await host.runTool("handoff_write", { phaseRef: "P999", content: "x", confirmed: true });
+      const badRef = await host.runTool("handoff_write", { phaseRef: "P999", content: "x", confirmed: true, completenessAudit: completeHandoffAudit() });
       assert.match(toolText(badRef), /Phase not found/);
       await assertFileUntouched("missing phase ref");
 
       // Handoff text/title validations are rejected without touching the phase.
-      const empty = await host.runTool("handoff_write", { phaseRef: "P001", confirmed: true });
+      const empty = await host.runTool("handoff_write", { phaseRef: "P001", confirmed: true, completenessAudit: completeHandoffAudit() });
       assert.match(toolText(empty), /Provide the handoff text/);
       await assertFileUntouched("empty handoff text");
-      const generic = await host.runTool("handoff_write", { phaseRef: "P001", content: "Handoff" });
+      const generic = await host.runTool("handoff_write", { phaseRef: "P001", content: "Handoff", completenessAudit: completeHandoffAudit() });
       assert.match(toolText(generic), /Generic handoff title/);
       await assertFileUntouched("generic handoff title");
       assert.equal((await host.store.loadAllPhases())[0].handoff, beforeHandoff);
@@ -454,11 +442,26 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const phase = async () => (await host.store.loadAllPhases())[0];
 
       // Proposal only — no confirmation flag, nothing written.
-      const proposal = await host.runTool("handoff_write", { phaseRef: "P001", content: "Body of the handoff." });
+      const proposal = await host.runTool("handoff_write", { phaseRef: "P001", content: "Body of the handoff.", completenessAudit: completeHandoffAudit() });
       assert.match(toolText(proposal), /Proposal only/);
       assert.equal(toolDetails(proposal).confirmationRequired, true);
       assert.match(toolDetails(proposal).phaseRef, /P001/);
       assert.equal((await phase()).handoff, "", "proposal must not write");
+
+      // Confirmed writes require a complete versioned audit and fail atomically with typed diagnostics.
+      const missingAuditArgs = await preparedHandoffArgs(host);
+      delete missingAuditArgs.completenessAudit;
+      const missingAudit = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        title: "P001 — missing completeness audit",
+        content: canonicalHandoff("P001 — missing completeness audit", "The audit payload is intentionally absent."),
+        confirmed: true,
+        ...missingAuditArgs,
+      });
+      assert.equal(missingAudit.isError, true);
+      assert.equal(toolDetails(missingAudit).errorCode, "HANDOFF_COMPLETENESS_AUDIT_REQUIRED");
+      assert.ok(toolDetails(missingAudit).missingCategories.includes("branch-worktree"));
+      assert.equal((await phase()).handoff, "", "failed completeness audit must not write");
 
       // Confirmed write with a meaningful title.
       const written = await host.runTool("handoff_write", {
@@ -475,8 +478,13 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const list = await host.runTool("handoff_list", {});
       assert.match(toolText(list), /P001\(F001\)/);
       assert.match(toolText(list), /fixture handoff/);
+      assert.equal(toolDetails(list).page, 1);
+      assert.equal(Object.hasOwn(toolDetails(list).handoffs[0], "content"), false, "compact list must not embed full bodies");
       const shown = await host.runTool("handoff_show", { phaseRef: "P001" });
       assert.match(toolText(shown), /Body of the handoff\./);
+      assert.match(toolDetails(shown).content, /Body of the handoff\./);
+      assert.equal(toolDetails(shown).truncated, false);
+      assert.equal(toolDetails(shown).handoffAudit.version, 1);
 
       // Clear archives and empties.
       const cleared = await host.runTool("handoff_clear", { phaseRef: "P001" });

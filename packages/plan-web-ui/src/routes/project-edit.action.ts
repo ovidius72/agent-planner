@@ -11,6 +11,10 @@ export async function action({ request }: { request: Request }) {
     name: optionalString(formData, "name") || current.name,
     description: optionalString(formData, "description"),
     goal: optionalString(formData, "goal"),
+    projectGuidelines: {
+      ...current.projectGuidelines,
+      content: optionalString(formData, "projectGuidelines"),
+    },
   });
 
   return redirect("/");

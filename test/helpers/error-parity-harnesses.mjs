@@ -77,7 +77,7 @@ async function executeApiScenario(id, seed) {
           linkedPhaseIds: ["P001"],
           createdAt: NOW,
           updatedAt: NOW,
-        }), 500);
+        }), 400);
       case "refs.unknown.notFound":
         return await normalizeApiCall(fx, `/tasks/${UNKNOWN_UUID}`, {}, 404);
       case "requirements.link.missingPhase":

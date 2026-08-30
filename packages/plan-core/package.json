@@ -16,6 +16,7 @@
     "dist/**/*.js",
     "dist/**/*.d.ts",
     "dist/**/*.d.ts.map",
+    "planner-skill.md",
     "README.md",
     "LICENSE"
   ],

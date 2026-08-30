@@ -1,0 +1,365 @@
+{
+  "id": "23854635-5488-411e-8b55-be317433362e",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 90,
+  "shortId": "EWDQD",
+  "priority": 29,
+  "slug": "project-context-guidelines-and-requirements-editing-parity",
+  "title": "Project Context, Guidelines, and Requirements editing parity",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Replace the misleading dashboard context aggregate with canonical project-owned context and complete Web UI editing for Project Guidelines and Requirements.",
+  "description": "Current state: `packages/plan-web-ui/src/components/dashboard/ai-consolidated-context.tsx` passively renders project metadata under the misleading `AI Consolidated Context` label; `packages/plan-web-ui/src/routes/project-edit.route.tsx` edits only name, description, and goal. The in-progress Project Guidelines model in `packages/plan-core/src/schema.ts` currently persists a redundant fixed `title`, while human-authored guideline content needs a first-class Web UI editor and system-owned `updatedAt`/`sessionInfo` must remain read-only. Requirements already expose title, description, status, and linked phases in `packages/plan-web-ui/src/routes/requirement-edit-modal.route.tsx`, but explicitly preserve `macroTasks` without allowing edits. This phase will replace the dashboard aggregate with a truthful Project Context surface, remove the persisted canonical Guidelines title in favor of a UI label, provide validated/read-back-verified Web UI editing for all human-owned Project Guidelines values, migrate legacy global/workflow rules and project decisions explicitly rather than on load, and ensure every human-owned Requirement field is editable while IDs, timestamps, freshness, and session attestations remain system-managed. Preserve plan-core harness independence, Pi/MCP parity, supervisor-only Web UI governance exemptions, backward-compatible reads for legacy projects, mobile accessibility, and English-only source text. This phase must start only after P089(F020)/T352 is completed; P087(F005)/T350 remains deferred until this phase finishes.",
+  "descriptionUpdatedAt": "2026-08-28T22:24:01.712Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "bea14ae1-cce9-4f0f-b7fd-0b0ff1b0b295",
+      "title": "Web UI editability follows human ownership",
+      "decision": "Every human-authored value added to Project Guidelines or Requirements must be editable by the human supervisor in the Web UI in the same product change. Canonical labels, IDs, timestamps, freshness markers, and session read attestations remain system-owned and non-editable. The fixed `Project Guidelines` label is presentation text and must not be persisted as a user-editable title.",
+      "rationale": "Planner data must not become tool-only metadata that users can see but cannot maintain. Separating human-owned values from system metadata keeps the UI complete without exposing freshness and identity internals to accidental edits.",
+      "implementationNotes": "Implement through P090(F005)/T353–T355. Guidelines content and all Requirement semantic fields, including macro tasks, receive validated Web UI controls and read-back verification. `.planner/SKILL.md` and `.planner/rules.json` remain managed agent-only assets.",
+      "acceptedAt": "2026-08-28T22:25:13.444Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "26127891-01b9-485a-be6c-9b4e262a9d30",
+    "34f72926-5617-46ba-9bb4-aa4a792c7720",
+    "86ea1bd0-6155-4200-aa2e-81cc05dc7736"
+  ],
+  "tasks": [
+    {
+      "id": "26127891-01b9-485a-be6c-9b4e262a9d30",
+      "phaseId": "23854635-5488-411e-8b55-be317433362e",
+      "number": 353,
+      "shortId": "LFPES",
+      "priority": 1,
+      "shortName": "canonicalize-project-guideline",
+      "title": "Canonicalize Project Guidelines and explicit legacy context migration",
+      "status": "done",
+      "description": "Refine the first-class Project Guidelines contract introduced in `packages/plan-core/src/schema.ts`, `packages/plan-core/src/plan-store.ts`, `packages/pi-adapter/src/index.ts`, and `packages/plan-mcp/src/index.ts`. Remove the redundant persisted `projectGuidelines.title` field while keeping the canonical `Project Guidelines` label in adapter/UI presentation. Define human-owned versus system-owned fields explicitly: guideline content is editable; `updatedAt` and session read attestations remain automatic and read-only. Add a lossless, explicit migration operation that previews and deduplicates legacy `project.globalRules`, textual `workflowRules`, and `project.decisions` into canonical Project Guidelines and structured accepted project decisions without running a silent migration during ordinary load. Preserve backward-compatible parsing of legacy projects, freshness invalidation, Pi/MCP read gates, agent-only rule/skill separation, and read-back verification. Update renderer, generated guidance, types, and focused plan-core/Pi/MCP tests. This task must begin only after P089(F020)/T352 completes.\n\n---\n**Completion summary:**\nImplemented canonical Project Guidelines and explicit legacy-context migration. Removed the persisted projectGuidelines.title from the canonical schema while legacy titles parse compatibly and are stripped; adapters render the fixed `Project Guidelines` label, keeping content editable while updatedAt/sessionInfo remain planner-managed. Added deterministic preview/apply migration in plan-core and PlanStore: preview is deduplicated/non-mutating, ordinary loads never migrate, explicit apply transfers globalRules/workflowRules to Guidelines and legacy decisions to structured accepted decisions, clears only migrated legacy fields, and verifies persisted read-back with rollback on failure. Added Pi and MCP migration tools plus Pi `/planner project migrate-context` confirmation; updated canonical/generated skill inventory and cross-harness tests. Verification: pnpm check; pnpm plugins:check; focused core/MCP/Pi/inventory tests passed; pnpm test:coverage passed 498/498 Node and 80/80 Web UI tests, FINAL coverage 86.44% lines / 74.15% branches / 81.15% functions; git diff --check clean. Files: packages/plan-core/src/schema.ts, plan-store.ts, project-context-migration.ts, index.ts, planner-skill.md; packages/pi-adapter/src/index.ts and tests; packages/plan-mcp/src/index.ts and tests; generated plugin skills; test/surfaces.mjs. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-29T13:13:10.302Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-001-planned-waiting",
+          "date": "2026-08-28T22:24:28.086Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "Execution order explicitly agreed with the user: complete P089(F020)/T352 first, then begin P090(F005), while P087(F005)/T350 remains deferred.",
+          "description": "Execution order explicitly agreed with the user: complete P089(F020)/T352 first, then begin P090(F005), while P087(F005)/T350 remains deferred."
+        },
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-002-waiting-planned",
+          "date": "2026-08-29T07:36:58.000Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "P089(F020)/T352 completed and verified, satisfying the agreed dependency before Project Context, Guidelines, and Requirements parity work.",
+          "description": "P089(F020)/T352 completed and verified, satisfying the agreed dependency before Project Context, Guidelines, and Requirements parity work."
+        },
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-003-planned-in-progress",
+          "date": "2026-08-29T07:37:45.468Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-004-in-progress-done",
+          "date": "2026-08-29T13:13:10.299Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented canonical Project Guidelines and explicit legacy-context migration. Removed the persisted projectGuidelines.title from the canonical schema while legacy titles parse compatibly and are stripped; adapters render the fixed `Project Guidelines` label, keeping content editable while updatedAt/sessionInfo remain planner-managed. Added deterministic preview/apply migration in plan-core and PlanStore: preview is deduplicated/non-mutating, ordinary loads never migrate, explicit apply transfers globalRules/workflowRules to Guidelines and legacy decisions to structured accepted decisions, clears only migrated legacy fields, and verifies persisted read-back with rollback on failure. Added Pi and MCP migration tools plus Pi `/planner project migrate-context` confirmation; updated canonical/generated skill inventory and cross-harness tests. Verification: pnpm check; pnpm plugins:check; focused core/MCP/Pi/inventory tests passed; pnpm test:coverage passed 498/498 Node and 80/80 Web UI tests, FINAL coverage 86.44% lines / 74.15% branches / 81.15% functions; git diff --check clean. Files: packages/plan-core/src/schema.ts, plan-store.ts, project-context-migration.ts, index.ts, planner-skill.md; packages/pi-adapter/src/index.ts and tests; packages/plan-mcp/src/index.ts and tests; generated plugin skills; test/surfaces.mjs. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-001-remove-the-persisted-guidelines-title-while-preserving-a-canonical-presentation-label-and-legacy-reads",
+          "number": 1,
+          "title": "Remove the persisted Guidelines title while preserving a canonical presentation label and legacy reads.",
+          "checked": true
+        },
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-002-define-and-test-editable-human-fields-versus-automatic-freshness-and-session-metadata",
+          "number": 2,
+          "title": "Define and test editable human fields versus automatic freshness and session metadata.",
+          "checked": true
+        },
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-003-implement-an-explicit-previewed-migration-for-global-rules-workflow-rules-and-legacy-project-decisions",
+          "number": 3,
+          "title": "Implement an explicit previewed migration for global rules, workflow rules, and legacy project decisions.",
+          "checked": true
+        },
+        {
+          "id": "26127891-01b9-485a-be6c-9b4e262a9d30-check-004-preserve-pi-mcp-guideline-read-gates-and-update-cross-harness-contracts-and-tests",
+          "number": 4,
+          "title": "Preserve Pi/MCP guideline read gates and update cross-harness contracts and tests.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-29T07:37:45.468Z",
+      "completedAt": "2026-08-29T13:13:10.299Z",
+      "createdAt": "2026-08-28T22:24:22.755Z",
+      "updatedAt": "2026-08-29T13:13:10.299Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-29T07:37:45.391Z"
+        }
+      ]
+    },
+    {
+      "id": "34f72926-5617-46ba-9bb4-aa4a792c7720",
+      "phaseId": "23854635-5488-411e-8b55-be317433362e",
+      "number": 354,
+      "shortId": "L7DFR",
+      "priority": 2,
+      "shortName": "replace-ai-consolidated-contex",
+      "title": "Replace AI Consolidated Context with editable Project Context",
+      "status": "done",
+      "description": "Replace `packages/plan-web-ui/src/components/dashboard/ai-consolidated-context.tsx` and its use in `packages/plan-web-ui/src/routes/dashboard/route.tsx` with a truthful `Project Context` surface. Keep structured project overview data such as scope, out-of-scope, technologies, and tools visible without presenting it as AI-generated. Add a dedicated Web UI editor for human-owned Project Guidelines content, backed by `packages/plan-web-ui/src/lib/api.ts`, `packages/plan-web-ui/src/lib/types.ts`, route actions, and plan-server validation. Saving must preserve system-owned freshness/session metadata, invalidate stale agent attestations through plan-core, read the persisted value back, and surface validation failures. Expose an explicit preview-and-confirm legacy-context migration action from T353; do not migrate on page load. Keep `.planner/SKILL.md` and `.planner/rules.json` agent-only and non-editable. Preserve the existing compact dashboard layout, mobile behavior, Web UI supervisor exemption, and accessible form/confirmation semantics. Add component and real-server browser regressions. This task follows T353 and must not start while T353 is incomplete.\n\n---\n**Completion summary:**\nReplaced the dashboard’s misleading AI Consolidated Context with canonical Project Context: human-authored scope, out-of-scope, technologies, tools, Project Guidelines, accepted decisions, and a truthful pending-legacy-migration notice; agent-only `.planner/SKILL.md` and rules.json remain unrendered. Expanded the project editor with Project Guidelines content while preserving automatic updatedAt/sessionInfo, and added accessible preview-then-apply migration controls with live success/error messaging. The Web UI API strips empty optional descriptionRef defaults, while plan-server returns the persisted/stamped project read-back on PUT and exposes preview plus confirmation-required migration endpoints. Added component plus real-server Playwright coverage for guideline edit, migration preview/apply, canonical persistence, and mobile-safe browser path. Verification: pnpm check; Web UI 81/81; targeted Playwright 5/5; pnpm test:coverage 498/498 Node + 81/81 Web UI, final 86.38% lines / 74.22% branches / 80.98% functions; pnpm plugins:check; git diff --check. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-29T13:22:04.331Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-001-planned-waiting",
+          "date": "2026-08-28T22:24:50.313Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "This UI task depends on the canonical Project Guidelines and migration contract established by P090(F005)/T353, which itself waits for P089(F020)/T352.",
+          "description": "This UI task depends on the canonical Project Guidelines and migration contract established by P090(F005)/T353, which itself waits for P089(F020)/T352."
+        },
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-002-waiting-planned",
+          "date": "2026-08-29T07:37:31.636Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "The phase-level waiting rollup blocks the now-ready predecessor T353 in the currently installed planner runtime. Preserve the agreed order through task priorities and one-active-task discipline: T353 first, then T354.",
+          "description": "The phase-level waiting rollup blocks the now-ready predecessor T353 in the currently installed planner runtime. Preserve the agreed order through task priorities and one-active-task discipline: T353 first, then T354."
+        },
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-003-planned-in-progress",
+          "date": "2026-08-29T13:13:39.816Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-004-in-progress-done",
+          "date": "2026-08-29T13:22:04.327Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Replaced the dashboard’s misleading AI Consolidated Context with canonical Project Context: human-authored scope, out-of-scope, technologies, tools, Project Guidelines, accepted decisions, and a truthful pending-legacy-migration notice; agent-only `.planner/SKILL.md` and rules.json remain unrendered. Expanded the project editor with Project Guidelines content while preserving automatic updatedAt/sessionInfo, and added accessible preview-then-apply migration controls with live success/error messaging. The Web UI API strips empty optional descriptionRef defaults, while plan-server returns the persisted/stamped project read-back on PUT and exposes preview plus confirmation-required migration endpoints. Added component plus real-server Playwright coverage for guideline edit, migration preview/apply, canonical persistence, and mobile-safe browser path. Verification: pnpm check; Web UI 81/81; targeted Playwright 5/5; pnpm test:coverage 498/498 Node + 81/81 Web UI, final 86.38% lines / 74.22% branches / 80.98% functions; pnpm plugins:check; git diff --check. No commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-001-build-the-project-context-dashboard-surface-without-the-misleading-ai-generated-label",
+          "number": 1,
+          "title": "Build the Project Context dashboard surface without the misleading AI-generated label.",
+          "checked": true
+        },
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-002-add-a-web-ui-editor-for-all-human-owned-project-guidelines-content",
+          "number": 2,
+          "title": "Add a Web UI editor for all human-owned Project Guidelines content.",
+          "checked": true
+        },
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-003-expose-preview-and-confirm-legacy-migration-without-silent-load-time-writes",
+          "number": 3,
+          "title": "Expose preview-and-confirm legacy migration without silent load-time writes.",
+          "checked": true
+        },
+        {
+          "id": "34f72926-5617-46ba-9bb4-aa4a792c7720-check-004-verify-persistence-read-back-freshness-invalidation-accessibility-and-mobile-behavior",
+          "number": 4,
+          "title": "Verify persistence read-back, freshness invalidation, accessibility, and mobile behavior.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-29T13:13:39.816Z",
+      "completedAt": "2026-08-29T13:22:04.327Z",
+      "createdAt": "2026-08-28T22:24:42.584Z",
+      "updatedAt": "2026-08-29T13:22:04.327Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-29T13:13:39.732Z"
+        }
+      ]
+    },
+    {
+      "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736",
+      "phaseId": "23854635-5488-411e-8b55-be317433362e",
+      "number": 355,
+      "shortId": "G83EE",
+      "priority": 3,
+      "shortName": "complete-web-ui-editing-parity",
+      "title": "Complete Web UI editing parity for Requirement-owned values",
+      "status": "done",
+      "description": "Close the known Requirements editor gap in `packages/plan-web-ui/src/routes/requirement-edit-modal.route.tsx`, which currently edits title, description, status, and linked phases but explicitly preserves `macroTasks` without exposing them. Add accessible create/edit/remove/reorder controls for every human-owned Requirement value present in `packages/plan-core/src/schema.ts`, including macro-task title, description, and status, while keeping requirement/macro-task IDs, timestamps, and `sessionInfo` freshness attestations system-managed and non-editable. Ensure create and edit routes, `packages/plan-web-ui/src/lib/api.ts`, plan-server requirement endpoints, and plan-core persistence validate atomically and read back the saved model. Establish a regression contract that any future human-owned Requirement attribute must ship with Pi/MCP mutation support and a Web UI control in the same change. Preserve linked-phase validation, grouping/filter behavior, supervisor governance exemptions, responsive layout, and temporary isolated planner roots in tests. This task follows T354.\n\n---\n**Completion summary:**\nImplemented complete Requirement-owned macro-task editing parity across the Web UI, plan-server, plan-core, Pi, and MCP. Added accessible create/edit/remove/reorder controls for macro-task title, description, and status; semantic form payloads omit planner-owned IDs/timestamps/session metadata; server and adapters assign IDs/timestamps, preserve existing identities, validate linked phases and macro-task ownership, and reject invalid updates atomically. Added shared plan-core reconciliation tests, real server CRUD coverage, Pi/MCP mutation regressions, Web UI form regressions, and desktop/mobile Playwright coverage. Fixed the legacy edit-action compatibility path to preserve macro tasks when the new hidden field is absent and aligned the missing-title parity expectation with the server's 400 contract. Verification: pnpm check; pnpm test:coverage (502/502 Node tests, 82/82 Web UI tests, 86.49% lines, 74.02% branches, 81.33% functions); pnpm plugins:check; git diff --check; full Playwright suite 34/34 across desktop and 390px mobile. Files include packages/plan-core/src/requirement-macro-tasks.ts and tests, packages/plan-server/src/serve.ts and CRUD tests, packages/plan-mcp/src/index.ts and regressions, packages/pi-adapter/src/index.ts and regressions, Web UI API/actions/editor/tests, e2e/bootstrap-crud.spec.ts, test/surfaces.mjs and canonical planner skill copies. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-08-30T09:13:25.263Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-001-planned-waiting",
+          "date": "2026-08-28T22:25:05.395Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "This Requirements UI parity task follows P090(F005)/T354 so the Project Context and Guidelines UI contract is completed before the final Requirement editor and end-to-end verification work.",
+          "description": "This Requirements UI parity task follows P090(F005)/T354 so the Project Context and Guidelines UI contract is completed before the final Requirement editor and end-to-end verification work."
+        },
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-002-waiting-planned",
+          "date": "2026-08-29T07:37:37.360Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "The phase-level waiting rollup blocks the now-ready predecessor T353 in the currently installed planner runtime. Preserve the agreed order through task priorities and one-active-task discipline: T353, then T354, then T355.",
+          "description": "The phase-level waiting rollup blocks the now-ready predecessor T353 in the currently installed planner runtime. Preserve the agreed order through task priorities and one-active-task discipline: T353, then T354, then T355."
+        },
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-003-planned-in-progress",
+          "date": "2026-08-29T13:22:30.969Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-004-in-progress-done",
+          "date": "2026-08-30T09:13:25.261Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented complete Requirement-owned macro-task editing parity across the Web UI, plan-server, plan-core, Pi, and MCP. Added accessible create/edit/remove/reorder controls for macro-task title, description, and status; semantic form payloads omit planner-owned IDs/timestamps/session metadata; server and adapters assign IDs/timestamps, preserve existing identities, validate linked phases and macro-task ownership, and reject invalid updates atomically. Added shared plan-core reconciliation tests, real server CRUD coverage, Pi/MCP mutation regressions, Web UI form regressions, and desktop/mobile Playwright coverage. Fixed the legacy edit-action compatibility path to preserve macro tasks when the new hidden field is absent and aligned the missing-title parity expectation with the server's 400 contract. Verification: pnpm check; pnpm test:coverage (502/502 Node tests, 82/82 Web UI tests, 86.49% lines, 74.02% branches, 81.33% functions); pnpm plugins:check; git diff --check; full Playwright suite 34/34 across desktop and 390px mobile. Files include packages/plan-core/src/requirement-macro-tasks.ts and tests, packages/plan-server/src/serve.ts and CRUD tests, packages/plan-mcp/src/index.ts and regressions, packages/pi-adapter/src/index.ts and regressions, Web UI API/actions/editor/tests, e2e/bootstrap-crud.spec.ts, test/surfaces.mjs and canonical planner skill copies. No commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-001-add-macro-task-create-edit-remove-reorder-controls-to-requirement-create-and-edit-flows",
+          "number": 1,
+          "title": "Add macro-task create/edit/remove/reorder controls to Requirement create and edit flows.",
+          "checked": true
+        },
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-002-keep-ids-timestamps-and-read-attestations-automatic-and-absent-from-editable-forms",
+          "number": 2,
+          "title": "Keep IDs, timestamps, and read attestations automatic and absent from editable forms.",
+          "checked": true
+        },
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-003-validate-and-read-back-requirement-saves-atomically-across-web-ui-server-and-plan-core",
+          "number": 3,
+          "title": "Validate and read back Requirement saves atomically across Web UI, server, and plan-core.",
+          "checked": true
+        },
+        {
+          "id": "86ea1bd0-6155-4200-aa2e-81cc05dc7736-check-004-add-parity-regressions-covering-every-human-owned-requirement-field-and-responsive-browser-behavior",
+          "number": 4,
+          "title": "Add parity regressions covering every human-owned Requirement field and responsive browser behavior.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-29T13:22:30.969Z",
+      "completedAt": "2026-08-30T09:13:25.261Z",
+      "createdAt": "2026-08-28T22:24:59.534Z",
+      "updatedAt": "2026-08-30T09:13:25.261Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-29T13:22:30.887Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-28T22:24:01.711Z",
+  "updatedAt": "2026-08-30T09:13:25.261Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-29T13:52:59.340Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/23854635-5488-411e-8b55-be317433362e-2026-08-30T09-13-25-281Z.md",
+      "clearedAt": "2026-08-30T09:13:25.281Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/23854635-5488-411e-8b55-be317433362e-2026-08-29T13-52-59-284Z.md",
+      "clearedAt": "2026-08-29T13:52:59.284Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "33a9ac43-f0bf-488f-a80c-022ff8fe2746",
+      "date": "2026-08-28T22:24:28.110Z",
+      "fromStatus": "draft",
+      "toStatus": "waiting",
+      "title": "draft → waiting",
+      "description": ""
+    },
+    {
+      "id": "e54352bc-f072-425b-86dc-55ac180963a2",
+      "date": "2026-08-29T07:37:37.382Z",
+      "fromStatus": "waiting",
+      "toStatus": "planned",
+      "title": "waiting → planned",
+      "description": ""
+    },
+    {
+      "id": "e76c486f-122e-4afe-8f50-6422741fd709",
+      "date": "2026-08-29T07:37:45.494Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "125457f1-e06f-447f-8924-5e33ebb13da0",
+      "date": "2026-08-30T09:13:25.337Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-29T13:22:30.887Z"
+    }
+  ]
+}

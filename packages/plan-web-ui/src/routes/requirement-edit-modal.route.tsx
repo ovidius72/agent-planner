@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { Form, useNavigation, useParams, useRouteLoaderData } from "react-router-dom";
 import { LinkedPhaseSelector } from "../components/requirements/linked-phase-selector";
+import { MacroTaskEditor } from "../components/requirements/macro-task-editor";
 import { Button } from "../components/ui/button";
 import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
@@ -37,10 +38,8 @@ export function RequirementEditModalRoute() {
             {requirementStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
+        <MacroTaskEditor initialTasks={requirement.macroTasks} />
         <LinkedPhaseSelector phases={phases} selectedIds={requirement.linkedPhaseIds} />
-        <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-muted)]">
-          Macro tasks are preserved automatically on save. This screen does not edit the nested macro-task list yet.
-        </div>
         <ModalActions>
           <Button type="submit" variant="primary" disabled={submitting} shortcut="submit">{submitting ? "Saving…" : "Save requirement"}</Button>
         </ModalActions>

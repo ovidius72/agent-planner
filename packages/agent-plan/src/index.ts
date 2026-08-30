@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { PlanStore, ExportService, packageVersionFromModule } from "@agent-plan/core";
+import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
 import { basename, dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -132,10 +132,12 @@ function defaultMcpConfig(flags: CliFlags): Record<string, unknown> {
   };
 }
 
-function plannerCommandTemplate(): string {
+async function plannerCommandTemplate(): Promise<string> {
+  const canonicalSkill = await loadCanonicalPlannerSkill();
+  const skillBody = canonicalSkill.replace(/^---\n[\s\S]*?\n---\n/, "").trimStart();
   return `---
 description: Route Agent Plan planner commands to MCP tools
-argument-hint: "init | show | version | reload | load | recap | disable | repair | export [--full] | web <status|start|stop> | feature <list|add|show|update|delete> | phase <add|show|discuss|update|delete> | task <add|show|discuss|update|delete|start|complete> | handoff <prepare|show|write|clear> | project <discuss|language> | bypass | clear-bypass"
+argument-hint: "load | show | feature | phase | task | handoff | project | web | export | repair | disable"
 ---
 
 You are handling the Agent Plan slash command for this project.
@@ -146,53 +148,9 @@ User command arguments:
 $ARGUMENTS
 \`\`\`
 
-Use the Agent Plan MCP tools. Do not treat this as a shell command.
+Use the Agent Plan MCP tools. Do not treat this as a shell command. Route the requested operation through the exact MCP inventory in the canonical project-local guide below. If arguments are empty, call \`planner-show\` and suggest relevant next commands. Ask one concise clarification when required values are ambiguous.
 
-Before starting, resuming, or switching to a task, call \`planner-task-start\` or \`planner-task-switch\` first so the MCP server can reuse valid session attestations. If the lifecycle operation is denied, perform only the missing or stale full reads listed in its \`nextActions\`, then retry. Reads may be performed in any order within the current session. Read linked requirements only when \`nextActions\` requests \`planner-requirement-list\`. When browsing \`planner-feature-list\`, \`planner-phase-list\`, or \`planner-task-list\` manually, follow the surfaced priority markers to choose the lowest-priority ready sibling.
-
-Route common commands as follows:
-
-- \`init\` → call \`planner-init\`; if required fields are missing, ask for a concise project name first
-- \`show\` → call \`planner-show\`
-- \`version\` → call \`planner-version\` and report the MCP/core versions exactly as returned
-- \`reload\` → call \`planner-load\`, then present the returned recap verbatim to the user (state, active task, pending handoff, web URL). Do not read, clear, or otherwise mutate a handoff.
-- \`load\` → call \`planner-load\`; it starts the web dashboard on LAN and returns a consolidated recap. Present that recap **verbatim and in this reply only**, ending with its final \`🌐 Web UI: <url>\` line. Pending handoffs are read-only context: do **not** call \`planner-handoff-show\` or \`planner-handoff-clear\` during \`load\`/\`recap\`. A handoff is archived only when every task in its phase is \`done\`/\`canceled\`, when a new handoff replaces it, or after an explicit user \`handoff clear\` request. Do NOT show the web URL in any other reply, and do NOT start the planner/web unless the user runs \`load\`/\`recap\`/\`web status\`.
-- \`recap\` → call \`planner-load\` (same as \`load\`) and present its returned recap verbatim; do not mutate handoffs
-- \`disable\` → call \`planner-disable\`
-- \`repair\` → call \`planner-repair\`
-- \`bypass\` → call \`planner-authorize-bypass\` (default 15 min); only when the user authorizes proceeding without a task
-- \`clear-bypass\` → call \`planner-clear-bypass\`
-- \`export\` → call \`planner-export\` with \`full=false\`
-- \`export --full\`, \`export full\`, or \`export-full\` → call \`planner-export\` with \`full=true\`
-- \`web\`, \`web status\`, \`web start\`, \`web stop\` → call \`planner-web\` with action \`status\`, \`start\`, or \`stop\`; default to \`status\`
-- \`project discuss\` → call \`planner-project-discuss\` after asking for any missing project fields
-- \`project language\` → call \`planner-project-language\`
-- \`feature list\` → call \`planner-feature-list\`
-- \`feature add <name>\` → call \`planner-feature-add\`
-- \`feature show <id|name>\` → call \`planner-feature-show\`
-- \`feature update <id|name>\` → call \`planner-feature-update\`
-- \`feature delete <id|name>\` → call \`planner-feature-delete\`
-- \`phase add <title>\` → call \`planner-phase-add\`
-- \`phase show <id|name>\` → call \`planner-phase-show\`
-- \`phase discuss <id|name>\` → call \`planner-phase-discuss\` after asking for any missing discovery details
-- \`phase update <id|name>\` → call \`planner-phase-update\`
-- \`phase delete <id|name>\` → call \`planner-phase-delete\`
-- \`task add <phase> <title>\` → call \`planner-task-add\`
-- \`task show <id|name>\` → call \`planner-task-show\`
-- \`task discuss <id|name>\` → call \`planner-task-discuss\`
-- \`task update <id|name>\` → call \`planner-task-update\`
-- \`task delete <id|name>\` → call \`planner-task-delete\`
-- \`task start <id|name>\` → call \`planner-task-start\`. If it returns isError or structuredContent.started=false, follow its exact nextActions and retry; never tell the user the task started unless structuredContent.started=true.
-- \`task complete <id|name>\` → collect a durable summary of shipped work, verification (including partial verification), remaining/unverified work, files and decisions; call \`planner-task-complete\` with description_update. Never complete through \`planner-task-update\`.
-- \`handoff prepare\` → call \`planner-handoff-prepare\` without a phaseRef to get the target-confirmation workflow; after the user confirms the exact P00x(F00x), call it again with that phaseRef. Read the existing handoff/version and missing task evidence, then call \`planner-handoff-write\` with one fully reconciled handoff, the exact expectedHandoffUpdatedAt token, taskUpdates for every missing task, and durable phase/feature updates or explicit no-update reasons. Never blindly replace an existing handoff.
-- \`handoff show\` → call \`planner-handoff-show\`
-- \`handoff write\` → call \`planner-handoff-write\` after drafting or asking for content
-- \`handoff clear\` → call \`planner-handoff-clear\`
-
-If arguments are empty, call \`planner-show\` and then list suggested next planner commands.
-If the command is ambiguous or missing required values, ask one concise clarification before calling tools.
-Requirements are internal in Phase 1: do not invent \`planner-requirement-*\` commands.
-`;
+${skillBody}`;
 }
 
 async function writeClaudePlannerCommand(scope: "project" | "user"): Promise<string> {
@@ -201,7 +159,7 @@ async function writeClaudePlannerCommand(scope: "project" | "user"): Promise<str
     : join(process.cwd(), ".claude", "commands");
   await mkdir(commandDir, { recursive: true });
   const commandPath = join(commandDir, "planner.md");
-  await writeFile(commandPath, plannerCommandTemplate(), "utf-8");
+  await writeFile(commandPath, await plannerCommandTemplate(), "utf-8");
   return commandPath;
 }
 

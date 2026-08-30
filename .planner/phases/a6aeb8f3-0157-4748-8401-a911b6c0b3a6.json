@@ -1,0 +1,202 @@
+{
+  "id": "a6aeb8f3-0157-4748-8401-a911b6c0b3a6",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 92,
+  "shortId": "YNVZB",
+  "priority": 31,
+  "slug": "automatic-legacy-project-context-migration-on-planner-load",
+  "title": "Automatic legacy project-context migration on planner load",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Migrate legacy rules and decisions automatically and atomically during explicit planner load, removing manual Web UI controls.",
+  "description": "Current state: `packages/plan-core/src/project-context-migration.ts` and `PlanStore.migrateLegacyProjectContext()` already provide deduplicated migration with persisted read-back and rollback, but `packages/plan-web-ui/src/routes/project-edit.route.tsx` exposes manual Preview migration and Apply previewed migration controls because P090/T353-T354 explicitly avoided migration during load. Replace that user-mediated workflow with a harness-agnostic, idempotent automatic migration invoked by every explicit planner-load lifecycle entry before recap/context delivery. Migrate legacy `globalRules` and `workflowRules` into Project Guidelines and legacy textual `decisions` into structured Accepted Decisions, clear only successfully migrated compatibility fields, and report a concise migration summary. Ordinary entity reads must remain non-mutating. Remove the manual Web UI section while preserving compatible diagnostic/recovery APIs unless a separately approved public-contract change is required. Preserve atomic rollback, deterministic deduplication, agent-only rules, Project Guidelines freshness/read gates, and isolated cross-harness tests.",
+  "descriptionUpdatedAt": "2026-08-30T09:53:24.367Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "86ed587c-7253-45fa-8f21-dd75f1f1033d",
+      "title": "Legacy project context migrates automatically on explicit planner load",
+      "decision": "Automatically run the existing deduplicated legacy project-context migration before recap/context delivery in every explicit planner-load lifecycle, with no user confirmation buttons; ordinary reads remain non-mutating.",
+      "rationale": "Legacy rules and decisions are schema compatibility data, so requiring the human supervisor to understand and manually trigger their migration creates confusing and unnecessary product friction.",
+      "implementationNotes": "Preserve atomic persisted read-back and rollback, keep successful no-op loads quiet, report concise counts when a migration occurs, remove the Web UI migration card, and retain manual APIs/tools only as backward-compatible recovery diagnostics.",
+      "acceptedAt": "2026-08-30T09:54:22.526Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "9a79ac19-d375-4851-bc00-aabc201e28b7",
+    "4e07640e-0837-44b8-b780-ff147a8a6677",
+    "b8873f5e-ffad-43b6-a6c9-f22cde9b7a87"
+  ],
+  "tasks": [
+    {
+      "id": "9a79ac19-d375-4851-bc00-aabc201e28b7",
+      "phaseId": "a6aeb8f3-0157-4748-8401-a911b6c0b3a6",
+      "number": 361,
+      "shortId": "DVWRZ",
+      "priority": 1,
+      "shortName": "make-legacy-project-context-mi",
+      "title": "Make legacy project-context migration an idempotent load preparation step",
+      "status": "planned",
+      "description": "Refactor the existing migration contract in `packages/plan-core/src/project-context-migration.ts` and `packages/plan-core/src/plan-store.ts` into a reusable explicit planner-session preparation operation. When legacy `globalRules`, `workflowRules`, or textual `decisions` exist, automatically deduplicate and migrate them into Project Guidelines and structured Accepted Decisions before recap/context is built; when none exist, return a no-op without rewriting files. Preserve persisted read-back verification and exact rollback, keep ordinary `loadProject()` and entity reads non-mutating, and return a concise typed summary for lifecycle adapters. Ensure repeated loads are idempotent, canonical data wins over duplicates, Project Guidelines freshness/session attestations are invalidated only when content changes, and migration timestamps/metadata do not introduce avoidable cross-worktree drift.",
+      "descriptionUpdatedAt": "2026-08-30T09:53:34.949Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9a79ac19-d375-4851-bc00-aabc201e28b7-check-001-extract-a-typed-planner-load-preparation-result-around-the-existing-migration-engine",
+          "number": 1,
+          "title": "Extract a typed planner-load preparation result around the existing migration engine.",
+          "checked": false
+        },
+        {
+          "id": "9a79ac19-d375-4851-bc00-aabc201e28b7-check-002-preserve-deterministic-deduplication-atomic-read-back-rollback-and-no-op-behavior",
+          "number": 2,
+          "title": "Preserve deterministic deduplication, atomic read-back, rollback, and no-op behavior.",
+          "checked": false
+        },
+        {
+          "id": "9a79ac19-d375-4851-bc00-aabc201e28b7-check-003-keep-ordinary-reads-non-mutating-and-invalidate-only-genuinely-stale-guidelines-attestations",
+          "number": 3,
+          "title": "Keep ordinary reads non-mutating and invalidate only genuinely stale Guidelines attestations.",
+          "checked": false
+        },
+        {
+          "id": "9a79ac19-d375-4851-bc00-aabc201e28b7-check-004-add-core-tests-for-first-load-repeated-load-duplicates-failure-rollback-and-metadata-stability",
+          "number": 4,
+          "title": "Add core tests for first load, repeated load, duplicates, failure rollback, and metadata stability.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:53:34.947Z",
+      "updatedAt": "2026-08-30T09:53:34.947Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "4e07640e-0837-44b8-b780-ff147a8a6677",
+      "phaseId": "a6aeb8f3-0157-4748-8401-a911b6c0b3a6",
+      "number": 362,
+      "shortId": "X3E4P",
+      "priority": 2,
+      "shortName": "run-automatic-context-migratio",
+      "title": "Run automatic context migration across every planner-load lifecycle",
+      "status": "planned",
+      "description": "Wire the plan-core preparation operation into all explicit load entry points in `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and `packages/agent-plan/src/index.ts` as applicable: Pi `/planner load`, Pi `planner-load`, MCP `planner-load`, and any supported CLI/session load path. Migration must finish successfully before human recap and agent-only context/skills are delivered. A successful migration returns only a concise user-visible summary of migrated rule/decision counts; no-op loads remain quiet. A verification failure must abort load with a typed diagnostic after restoring the original project. Preserve independent Web UI lifecycle behavior, disabled-by-default planner context, stable harness session identity, Project Guidelines read gates, and backward-compatible manual migration tools as idempotent recovery/diagnostic surfaces.",
+      "descriptionUpdatedAt": "2026-08-30T09:53:44.103Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4e07640e-0837-44b8-b780-ff147a8a6677-check-001-integrate-preparation-before-recap-context-in-every-supported-explicit-planner-load-path",
+          "number": 1,
+          "title": "Integrate preparation before recap/context in every supported explicit planner-load path.",
+          "checked": false
+        },
+        {
+          "id": "4e07640e-0837-44b8-b780-ff147a8a6677-check-002-keep-no-op-loads-quiet-and-report-only-concise-successful-migration-counts",
+          "number": 2,
+          "title": "Keep no-op loads quiet and report only concise successful migration counts.",
+          "checked": false
+        },
+        {
+          "id": "4e07640e-0837-44b8-b780-ff147a8a6677-check-003-abort-safely-with-typed-rollback-diagnostics-on-persistence-verification-failure",
+          "number": 3,
+          "title": "Abort safely with typed rollback diagnostics on persistence verification failure.",
+          "checked": false
+        },
+        {
+          "id": "4e07640e-0837-44b8-b780-ff147a8a6677-check-004-add-pi-mcp-cli-lifecycle-and-repeated-load-regressions",
+          "number": 4,
+          "title": "Add Pi, MCP, CLI, lifecycle, and repeated-load regressions.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:53:44.101Z",
+      "updatedAt": "2026-08-30T09:53:44.101Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "b8873f5e-ffad-43b6-a6c9-f22cde9b7a87",
+      "phaseId": "a6aeb8f3-0157-4748-8401-a911b6c0b3a6",
+      "number": 363,
+      "shortId": "QQD48",
+      "priority": 3,
+      "shortName": "remove-manual-migration-contro",
+      "title": "Remove manual migration controls and verify the automatic upgrade UX",
+      "status": "planned",
+      "description": "Remove the `Legacy context migration` card, preview state, and Apply previewed migration controls from `packages/plan-web-ui/src/routes/project-edit.route.tsx`; Project Edit should contain only canonical editable Project Context and Project Guidelines fields. Preserve existing migration API/tool contracts for compatibility and recovery, but do not require the human supervisor to discover or invoke them. Update Web UI tests and `e2e/bootstrap-crud.spec.ts` so legacy fixtures are migrated through an explicit planner-load lifecycle before the canonical fields are asserted, and verify the manual card is absent. Run the full build, typecheck, coverage, plugin synchronization, and real-server Playwright suite across desktop/mobile, rebuilding distributed Web UI bundles after success. Document that automatic migration occurs on planner load and ordinary reads remain non-mutating.",
+      "descriptionUpdatedAt": "2026-08-30T09:53:53.972Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b8873f5e-ffad-43b6-a6c9-f22cde9b7a87-check-001-remove-the-manual-legacy-context-migration-card-and-client-only-interaction-state",
+          "number": 1,
+          "title": "Remove the manual Legacy context migration card and client-only interaction state.",
+          "checked": false
+        },
+        {
+          "id": "b8873f5e-ffad-43b6-a6c9-f22cde9b7a87-check-002-update-web-ui-and-browser-contracts-to-exercise-automatic-planner-load-migration",
+          "number": 2,
+          "title": "Update Web UI and browser contracts to exercise automatic planner-load migration.",
+          "checked": false
+        },
+        {
+          "id": "b8873f5e-ffad-43b6-a6c9-f22cde9b7a87-check-003-verify-canonical-guidelines-accepted-decisions-results-and-absence-of-manual-controls",
+          "number": 3,
+          "title": "Verify canonical Guidelines/Accepted Decisions results and absence of manual controls.",
+          "checked": false
+        },
+        {
+          "id": "b8873f5e-ffad-43b6-a6c9-f22cde9b7a87-check-004-run-the-complete-repository-and-desktop-mobile-production-bundle-gate",
+          "number": 4,
+          "title": "Run the complete repository and desktop/mobile production-bundle gate.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-08-30T09:53:53.970Z",
+      "updatedAt": "2026-08-30T09:53:53.970Z",
+      "sessionInfo": []
+    }
+  ],
+  "createdAt": "2026-08-30T09:53:24.366Z",
+  "updatedAt": "2026-08-30T09:54:22.526Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

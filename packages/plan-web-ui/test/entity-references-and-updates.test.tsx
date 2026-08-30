@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ActiveTasksHeader } from "../src/components/layout/app-shell";
 import { ResumeRequiredSection } from "../src/components/dashboard/resume-required";
+import { ProjectContext } from "../src/components/dashboard/project-context";
 import { TopNav } from "../src/components/layout/top-nav";
 import { TaskDetailRoute } from "../src/routes/task-detail/route";
 import { LastUpdated } from "../src/components/ui/last-updated";
@@ -12,9 +13,29 @@ import { FeatureRow } from "../src/components/features/feature-row";
 import { PhaseRow } from "../src/components/phases/phase-row";
 import { TaskTreeRow } from "../src/components/dashboard/work-tree-rows";
 import { createEmptyStatusSummary } from "../src/lib/status-summary";
-import { makeFeature, makePhase, makeTask, renderRoute } from "./fixtures";
+import { makeFeature, makePhase, makeProject, makeTask, renderRoute } from "./fixtures";
 
 describe("entity references and timestamps", () => {
+  it("renders canonical Project Context without exposing agent-only files and flags unmigrated legacy context", () => {
+    const project = makeProject({
+      scope: ["Planner core"],
+      technologies: ["TypeScript"],
+      projectGuidelines: { content: "Use English in source code.", updatedAt: "", sessionInfo: [] },
+      globalRules: ["Legacy rule"],
+      acceptedDecisions: [{ id: "decision-1", title: "Use file storage", decision: "Store plans in .planner/.", rationale: "Portable.", implementationNotes: "Keep the format open.", acceptedAt: "2026-01-01T00:00:00.000Z" }],
+    });
+    render(<MemoryRouter><ProjectContext project={project} /></MemoryRouter>);
+
+    expect(screen.getByText("Project Context")).toBeInTheDocument();
+    expect(screen.queryByText("AI Consolidated Context")).not.toBeInTheDocument();
+    expect(screen.getByText("Project Guidelines")).toBeInTheDocument();
+    expect(screen.getByText("Use English in source code.")).toBeInTheDocument();
+    expect(screen.getByText(/Legacy project context remains/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review the migration preview" })).toHaveAttribute("href", "/project/edit");
+    expect(screen.queryByText(/SKILL\.md/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/rules\.json/)).not.toBeInTheDocument();
+  });
+
   it("keeps every active-task header path segment navigable and its identifiers copyable", () => {
     renderRoute([
       {

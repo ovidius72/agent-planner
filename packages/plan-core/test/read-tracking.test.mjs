@@ -27,6 +27,7 @@ import {
   markFeatureReadForSessionId,
   markPhaseReadForSessionId,
   markTaskReadForSessionId,
+  projectGuidelinesReadStateForSession,
   readTrackingSnapshot,
   requirementReadAdvisory,
   startReadSession,
@@ -42,18 +43,17 @@ test("a fresh read state denies lifecycle work until the task is read", () => {
 test("a task read does not imply its parent phase or feature", () => {
   invalidateReads();
   markTaskRead("T1", "P1", "F1");
-  assert.deepEqual(eligible(), { eligible: false, reason: "After reading the task, read its parent phase with full=true." });
+  assert.deepEqual(eligible(), { eligible: false, reason: "Read this task's parent phase with full=true." });
   assert.equal(hasReadParents("F1", "P1"), false);
 });
 
-test("the required context order is task, then phase, then feature", () => {
+test("default-session eligibility requires the same lineage but no longer depends on read order", () => {
   invalidateReads();
   markFeatureRead("F1");
   markTaskRead("T1", "P1", "F1");
-  markPhaseRead("P1", "F1");
-  assert.deepEqual(eligible(), { eligible: false, reason: "After reading the phase, read its parent feature with full=true." });
+  assert.deepEqual(eligible(), { eligible: false, reason: "Read this task's parent phase with full=true." });
 
-  markFeatureRead("F1");
+  markPhaseRead("P1", "F1");
   assert.deepEqual(eligible(), { eligible: true, reason: "" });
 });
 
@@ -208,6 +208,31 @@ test("parent lifecycle churn does not invalidate unchanged descriptions", () => 
   assert.deepEqual(contextReadEligibilityForSession({ ...input, phase: changedPhase }).requiredReads, [
     { kind: "phase", id: "P1", state: "stale" },
   ]);
+});
+
+test("project guidelines attestations are optional, reusable, and freshness-aware", () => {
+  assert.equal(projectGuidelinesReadStateForSession({ projectGuidelines: { content: "", updatedAt: "", sessionInfo: [] } }, "session-a"), "not-required");
+  assert.equal(projectGuidelinesReadStateForSession({
+    projectGuidelines: {
+      content: "Follow the formatter.",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      sessionInfo: [],
+    },
+  }, "session-a"), "missing");
+  assert.equal(projectGuidelinesReadStateForSession({
+    projectGuidelines: {
+      content: "Follow the formatter.",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-03T00:00:00.000Z" }],
+    },
+  }, "session-a"), "valid");
+  assert.equal(projectGuidelinesReadStateForSession({
+    projectGuidelines: {
+      content: "Follow the formatter.",
+      updatedAt: "2026-01-04T00:00:00.000Z",
+      sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-03T00:00:00.000Z" }],
+    },
+  }, "session-a"), "stale");
 });
 
 test("agent rules demand lifecycle-first reads instead of unconditional rereads", () => {

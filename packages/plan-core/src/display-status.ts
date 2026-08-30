@@ -9,8 +9,8 @@
  * - `started`: the entity has clearly begun (historical progress exists) but
  *   no child is active now, and the unfinished remainder is mixed or cannot
  *   honestly collapse to one specific workflow label.
- * - `closed`: every child is terminal, but outcomes are mixed (e.g.
- *   `done + canceled`, `canceled + rejected`).
+ * - `closed`: every child is terminal, but outcomes are mixed without a
+ *   positive completion rollup (for example, `canceled + rejected`).
  *
  * These are NEVER persisted: they are computed on demand from children's
  * canonical workflow statuses. The canonical workflow model
@@ -103,7 +103,7 @@ function emptyBreakdown(): StatusBreakdown {
  * Algorithm (locked by P039 accepted decisions):
  *  1. If any meaningful child is active now → `in-progress`.
  *  2. If every child is terminal:
- *       - all `done` → `done`
+ *       - only `done` + `canceled`, with at least one `done` → `done`
  *       - all `canceled` → `canceled`
  *       - all `rejected` → `rejected`
  *       - otherwise → `closed` (mixed terminal outcomes)
@@ -150,7 +150,10 @@ export function deriveParentDisplay(childStatuses: readonly WorkflowStatus[]): P
 
   // 2. All children are terminal.
   if (statuses.every((s) => TERMINAL.has(s))) {
-    if (statuses.every((s) => s === "done")) {
+    if (
+      statuses.some((s) => s === "done")
+      && statuses.every((s) => s === "done" || s === "canceled")
+    ) {
       return { displayStatus: "done", breakdown, hasStarted, totalChildren, meaningfulChildren };
     }
     if (statuses.every((s) => s === "canceled")) {

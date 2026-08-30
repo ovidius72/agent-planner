@@ -4,7 +4,7 @@ import { Pencil } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { FormattedText } from "../../components/ui/formatted-text";
-import { AiConsolidatedContext } from "../../components/dashboard/ai-consolidated-context";
+import { ProjectContext } from "../../components/dashboard/project-context";
 import { LatestCompletedTasks } from "../../components/dashboard/latest-completed-tasks";
 import { NewAddedTasks } from "../../components/dashboard/new-added-tasks";
 import { StatCards } from "../../components/dashboard/stat-cards";
@@ -20,7 +20,7 @@ import type { Feature, Phase, Project } from "../../lib/types";
  * Dashboard / home route. Now a thin orchestrator: it loads the plan data,
  * derives the per-project storage scope, and composes the four dashboard
  * sections. All section logic + state lives in dedicated components/hooks
- * (AiConsolidatedContext, StatCards, WorkTree, LatestCompletedTasks).
+ * (ProjectContext, StatCards, WorkTree, LatestCompletedTasks).
  */
 export function DashboardRoute() {
   const { features, phases, activeTasks } = useLoaderData() as {
@@ -57,7 +57,7 @@ export function DashboardRoute() {
         {project.goal ? <FormattedText text={project.goal} className="max-w-4xl" /> : <p className="max-w-4xl text-sm text-[var(--text-muted)]">Add a project goal to define the main objective.</p>}
       </Card>
 
-      <AiConsolidatedContext project={project} />
+      <ProjectContext project={project} />
 
       <StatCards features={features} phases={phases} />
 

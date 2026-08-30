@@ -184,20 +184,77 @@ describe("pi-adapter strict ref validation", () => {
     assert.deepEqual(features.map((feature) => feature.name), ["Auth API", "Auth UI"]);
   });
 
-  test("feature_update rejects a fieldless payload without writing", async () => {
-    const { root, st, featureA } = await setup();
+  test("fieldless update/discuss payloads return markdown fallback guidance without mutating planner data", async () => {
+    const { root, st, featureA, phase, taskId } = await setup();
+    const projectPath = join(root, ".planner", "project.json");
     const featurePath = join(root, ".planner", "features", `${featureA.id}.json`);
-    const beforeBytes = await readFile(featurePath);
-    const before = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
+    const phasePath = join(root, ".planner", "phases", `${phase.id}.json`);
+    const projectBefore = await readFile(projectPath);
+    const featureBefore = await readFile(featurePath);
+    const phaseBefore = await readFile(phasePath);
 
-    const result = await tools.get("feature_update").execute("id", { featureId: "F001" }, undefined, undefined, makeCtx(root));
+    const projectResult = await tools.get("project_update").execute("id", {}, undefined, undefined, makeCtx(root));
+    assert.equal(projectResult.isError, true);
+    assert.equal(projectResult.details.errorCode, "DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED");
+    assert.equal(projectResult.details.fallbackDocPath, ".planner/docs/project/description.md");
+    assert.match(toolText(projectResult), /descriptionRef/);
+    assert.deepEqual(await readFile(projectPath), projectBefore, "fieldless project update leaves project JSON byte-identical");
 
-    assert.match(toolText(result), /^Not updated — no mutable fields were received\./);
-    assert.equal(result.details.updated, false);
-    assert.equal(result.details.reason, "no-mutable-fields");
-    assert.deepEqual(await readFile(featurePath), beforeBytes, "fieldless update leaves feature JSON byte-identical");
-    const after = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
-    assert.equal(after?.updatedAt, before?.updatedAt, "fieldless update does not change updatedAt");
+    const featureUpdate = await tools.get("feature_update").execute("id", { featureId: "F001" }, undefined, undefined, makeCtx(root));
+    assert.equal(featureUpdate.isError, true);
+    assert.equal(featureUpdate.details.errorCode, "DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED");
+    assert.equal(featureUpdate.details.fallbackDocPath, `.planner/docs/features/${featureA.id}.md`);
+    assert.deepEqual(await readFile(featurePath), featureBefore, "fieldless feature update leaves feature JSON byte-identical");
+
+    const featureDiscuss = await tools.get("feature_discuss").execute("id", { featureId: "F001" }, undefined, undefined, makeCtx(root));
+    assert.equal(featureDiscuss.isError, true);
+    assert.equal(featureDiscuss.details.discussed, false);
+    assert.equal(featureDiscuss.details.fallbackDocPath, `.planner/docs/features/${featureA.id}.md`);
+    const featureAfterDiscuss = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
+    assert.equal(featureAfterDiscuss?.contextReady, false, "fieldless feature discuss does not mark context ready");
+    assert.deepEqual(await readFile(featurePath), featureBefore, "fieldless feature discuss leaves feature JSON byte-identical");
+
+    const phaseUpdate = await tools.get("phase_update").execute("id", { phaseId: "P001" }, undefined, undefined, makeCtx(root));
+    assert.equal(phaseUpdate.isError, true);
+    assert.equal(phaseUpdate.details.errorCode, "DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED");
+    assert.equal(phaseUpdate.details.fallbackDocPath, `.planner/docs/phases/${phase.id}.md`);
+    assert.deepEqual(await readFile(phasePath), phaseBefore, "fieldless phase update leaves phase JSON byte-identical");
+
+    const taskUpdate = await tools.get("task_update").execute("id", { taskId: "T001" }, undefined, undefined, makeCtx(root));
+    assert.equal(taskUpdate.isError, true);
+    assert.equal(taskUpdate.details.errorCode, "DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED");
+    assert.equal(taskUpdate.details.fallbackDocPath, `.planner/docs/tasks/${taskId}.md`);
+    assert.deepEqual(await readFile(phasePath), phaseBefore, "fieldless task update leaves host phase JSON byte-identical");
+  });
+
+  test("task_start requires a fresh project_guidelines_show attestation when guidelines exist", async () => {
+    const { root } = await setup();
+    const ctx = makeCtx(root);
+
+    const updated = await tools.get("project_guidelines_update").execute("id", {
+      content: "Use English in source code. Run focused tests before claiming success.",
+    }, undefined, undefined, ctx);
+    assert.match(toolText(updated), /Project Guidelines updated\./);
+    assert.equal(updated.details.projectGuidelines.content, "Use English in source code. Run focused tests before claiming success.");
+
+    await tools.get("task_get").execute("id", { taskId: "T001", full: true }, undefined, undefined, ctx);
+    await tools.get("phase_get").execute("id", { phaseId: "P001", full: true }, undefined, undefined, ctx);
+    await tools.get("feature_get").execute("id", { featureId: "F001", full: true }, undefined, undefined, ctx);
+
+    const denied = await tools.get("task_start").execute("id", { taskId: "T001" }, undefined, undefined, ctx);
+    assert.equal(denied.isError, true);
+    assert.equal(denied.details.errorCode, "PROJECT_GUIDELINES_READ_REQUIRED");
+    assert.deepEqual(denied.details.nextActions, [
+      "project_guidelines_show",
+      "Retry task_start P001(F001)/T001",
+    ]);
+
+    const shown = await tools.get("project_guidelines_show").execute("id", {}, undefined, undefined, ctx);
+    assert.match(toolText(shown), /## Project Guidelines/);
+    assert.equal(shown.details.readRecorded, true);
+
+    const started = await tools.get("task_start").execute("id", { taskId: "T001" }, undefined, undefined, ctx);
+    assert.equal(started.details.started, true);
   });
 
   test("feature_update resolves F00x once and mutates only that feature", async () => {
@@ -236,24 +293,33 @@ describe("pi-adapter strict ref validation", () => {
     assert.equal(after?.updatedAt, before?.updatedAt, "status rejection does not touch updatedAt");
   });
 
-  test("feature_discuss updates governance fields and marks context ready", async () => {
+  test("feature_discuss updates governance fields, persists descriptionRef, and marks context ready", async () => {
     const { root, st, featureA } = await setup();
+    const descriptionRef = `.planner/docs/features/${featureA.id}.md`;
     const result = await tools.get("feature_discuss").execute("id", {
       featureId: "F001",
       description: "src/feature.ts:10 current scope and goals for the Auth API feature.",
+      descriptionRef,
       workDone: "Login endpoint scaffolding exists.",
       workRemaining: "Need token rotation and audit logging.",
       dependencies: ["Shared auth middleware", "Billing contract"],
     }, undefined, undefined, makeCtx(root));
 
     assert.match(toolText(result), /✅ Feature discussed\/updated: F001/);
+    assert.match(toolText(result), /Fields saved: description, descriptionRef, workDone, workRemaining, dependencies\./);
     const stored = (await st.loadFeatures()).features.find((feature) => feature.id === featureA.id);
     assert.equal(stored?.description, "src/feature.ts:10 current scope and goals for the Auth API feature.");
+    assert.equal(stored?.descriptionRef, descriptionRef);
     assert.equal(stored?.workDone, "Login endpoint scaffolding exists.");
     assert.equal(stored?.workRemaining, "Need token rotation and audit logging.");
     assert.deepEqual(stored?.dependsOn, ["Shared auth middleware", "Billing contract"]);
     assert.equal(stored?.contextReady, true);
     assert.match(stored?.contextReadyReason ?? "", /feature_discuss|feature discuss/i);
+
+    const readBack = await tools.get("feature_get").execute("id", { featureId: "F001", full: true }, undefined, undefined, makeCtx(root));
+    assert.match(toolText(readBack), /Description reference:/);
+    assert.match(toolText(readBack), new RegExp(featureA.id.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")));
+    assert.equal(readBack.details.feature.descriptionRef, descriptionRef);
   });
 
   test("plan_cleanup_orphan_phases supports dry-run and confirmed cleanup", async () => {
@@ -463,5 +529,51 @@ describe("pi-adapter strict ref validation", () => {
     project = await st.loadProject();
     assert.equal(project.workDeviations.at(-1)?.state, "resume-required");
     assert.match(toolText(await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx)), /Recommended \(resume\): P001\(F001\)\/T001/);
+  });
+
+  test("project_context_migrate previews without mutation and applies only when explicitly confirmed", async () => {
+    const { root, st } = await setup();
+    const ctx = makeCtx(root);
+    await st.updateProject((project) => ({
+      ...project,
+      projectGuidelines: { ...project.projectGuidelines, content: "Run focused tests." },
+      globalRules: ["Run focused tests.", "Keep source text in English."],
+      workflowRules: { beforePhaseStart: ["Discuss the phase first."], beforeTaskStart: [], afterPhaseComplete: [] },
+      decisions: ["Use TypeScript for planner packages."],
+    }));
+
+    const preview = await tools.get("project_context_migrate").execute("id", { apply: false }, undefined, undefined, ctx);
+    assert.match(toolText(preview), /preview .*no changes applied/i);
+    assert.equal(preview.details.applied, false);
+    assert.equal(preview.details.preview.guidelineAdditions.length, 2);
+    assert.equal((await st.loadProject()).globalRules.length, 2, "preview must not mutate legacy fields");
+
+    const applied = await tools.get("project_context_migrate").execute("id", { apply: true }, undefined, undefined, ctx);
+    assert.match(toolText(applied), /migration applied and verified/i);
+    assert.equal(applied.details.applied, true);
+    const project = await st.loadProject();
+    assert.deepEqual(project.globalRules, []);
+    assert.deepEqual(project.decisions, []);
+    assert.match(project.projectGuidelines.content, /Keep source text in English/);
+    assert.equal(project.acceptedDecisions.some((decision) => decision.decision === "Use TypeScript for planner packages."), true);
+  });
+
+  test("requirement mutations cover macro-task create, update, reorder, and system metadata", async () => {
+    const { root } = await setup();
+    const ctx = makeCtx(root);
+    const created = await tools.get("requirement_create").execute("id", {
+      title: "Credential flow", description: "Secure access.", linkedPhaseIds: ["P001"],
+      macroTasks: [{ title: "Validate credentials", description: "Check input.", status: "planned" }],
+    }, undefined, undefined, ctx);
+    assert.equal(created.details.macroTasks[0].id, "MT-001");
+    const updated = await tools.get("requirement_update").execute("id", {
+      requirementId: created.details.id,
+      macroTasks: [
+        { id: "MT-001", title: "Validate credentials", description: "Check input.", status: "done" },
+        { title: "Record decision", description: "Persist audit.", status: "planned" },
+      ],
+    }, undefined, undefined, ctx);
+    assert.equal(updated.details.macroTasks[0].createdAt, created.details.macroTasks[0].createdAt);
+    assert.equal(updated.details.macroTasks[1].id, "MT-002");
   });
 });

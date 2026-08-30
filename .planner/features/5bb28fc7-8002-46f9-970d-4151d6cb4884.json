@@ -13,7 +13,16 @@
   "endDate": "",
   "workDone": "",
   "workRemaining": "",
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "86ed587c-7253-45fa-8f21-dd75f1f1033d",
+      "title": "Legacy project context migrates automatically on explicit planner load",
+      "decision": "Automatically run the existing deduplicated legacy project-context migration before recap/context delivery in every explicit planner-load lifecycle, with no user confirmation buttons; ordinary reads remain non-mutating.",
+      "rationale": "Legacy rules and decisions are schema compatibility data, so requiring the human supervisor to understand and manually trigger their migration creates confusing and unnecessary product friction.",
+      "implementationNotes": "Preserve atomic persisted read-back and rollback, keep successful no-op loads quiet, report concise counts when a migration occurs, remove the Web UI migration card, and retain manual APIs/tools only as backward-compatible recovery diagnostics.",
+      "acceptedAt": "2026-08-30T09:54:22.526Z"
+    }
+  ],
   "phaseIds": [
     "5714df9d-57ad-4f69-92f4-117dc765fd15",
     "63d3014e-eff2-47d0-ac52-ceffe14ae77c",
@@ -45,20 +54,16 @@
     "cd3fd548-a183-448c-9a87-cf804bcdb075",
     "b3e7b769-8359-4d75-9acb-605f1e04f923",
     "e64ef6d6-5e64-418a-995e-f88da9ca4cc0",
-    "eb6ce64c-8229-4af2-8549-d0e4d9389df8"
+    "eb6ce64c-8229-4af2-8549-d0e4d9389df8",
+    "b0e71dd1-6dd9-4e20-9529-0eabd27ed5ca",
+    "1c7e6499-fe74-443c-89c7-0ae254c1552d",
+    "23854635-5488-411e-8b55-be317433362e",
+    "76cbb771-ad31-4c0d-8531-066e333c4429",
+    "a6aeb8f3-0157-4748-8401-a911b6c0b3a6"
   ],
   "dependsOn": [],
-  "statusLog": [
-    {
-      "id": "09919b58-8662-4c32-9562-4acf97e93716",
-      "date": "2026-08-27T19:58:42.772Z",
-      "fromStatus": "planned",
-      "toStatus": "done",
-      "title": "planned → done",
-      "description": ""
-    }
-  ],
+  "statusLog": [],
   "createdAt": "2026-07-15T20:24:28.795Z",
-  "updatedAt": "2026-07-27T12:01:51.734Z",
+  "updatedAt": "2026-08-30T09:54:22.526Z",
   "sessionInfo": []
 }
