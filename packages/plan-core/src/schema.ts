@@ -429,11 +429,38 @@ export const RequirementsDocumentSchema = z.object({
   requirements: z.array(RequirementSchema),
 });
 
+export const IdeaPromotionTargetTypeSchema = z.enum(["feature", "phase", "task"]);
+
+export const IdeaPromotionSchema = z.object({
+  targetType: IdeaPromotionTargetTypeSchema,
+  targetId: z.string().min(1),
+  targetRef: z.string().min(1),
+  promotedAt: TimestampSchema,
+});
+
+export const IdeaSchema = z.object({
+  id: z.string().uuid(),
+  /** Global Ideas sequence, independent from feature/phase/task numbering. */
+  number: z.number().int().positive(),
+  shortId: z.string().regex(/^[A-Z2-9]{5}$/),
+  title: z.string().min(1),
+  description: z.string().default(""),
+  promotion: IdeaPromotionSchema.nullable().default(null),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+});
+
+export const IdeasDocumentSchema = z.object({
+  nextIdeaNumber: z.number().int().positive().default(1),
+  ideas: z.array(IdeaSchema).default([]),
+});
+
 export const PlanWorkspaceSchema = z.object({
   manifest: ManifestSchema,
   project: ProjectSchema,
   features: FeaturesDocumentSchema,
   requirements: RequirementsDocumentSchema,
+  ideas: IdeasDocumentSchema.default({ nextIdeaNumber: 1, ideas: [] }),
   phases: z.array(PhaseSchema),
 });
 
@@ -470,4 +497,8 @@ export type Phase = z.infer<typeof PhaseSchema> & { status: PhaseStatus };
 export type MacroTask = z.infer<typeof MacroTaskSchema>;
 export type Requirement = z.infer<typeof RequirementSchema>;
 export type RequirementsDocument = z.infer<typeof RequirementsDocumentSchema>;
+export type IdeaPromotionTargetType = z.infer<typeof IdeaPromotionTargetTypeSchema>;
+export type IdeaPromotion = z.infer<typeof IdeaPromotionSchema>;
+export type Idea = z.infer<typeof IdeaSchema>;
+export type IdeasDocument = z.infer<typeof IdeasDocumentSchema>;
 export type PlanWorkspace = Omit<z.infer<typeof PlanWorkspaceSchema>, "phases" | "features"> & { phases: Phase[]; features: FeaturesDocument };

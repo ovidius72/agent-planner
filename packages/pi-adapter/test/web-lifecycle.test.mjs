@@ -11,6 +11,8 @@
 
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 
 after(async () => {
@@ -77,6 +79,7 @@ describe("pi-adapter web lifecycle", () => {
         content: "Use English in source code. Run focused verification before claiming success.",
       });
       assert.match(toolText(guidelines), /Project Guidelines updated\./);
+      await rm(join(host.planRoot, "skills", "grill-me", "SKILL.md"));
 
       const loaded = await host.runTool("planner-load", {});
       assert.equal(toolDetails(loaded).enabled, true, "explicit planner-load enables the planner");
@@ -84,11 +87,14 @@ describe("pi-adapter web lifecycle", () => {
       assert.match(toolText(loaded), /## Project Guidelines/);
       assert.match(toolText(loaded), /Use English in source code\. Run focused verification before claiming success\./);
       assert.doesNotMatch(toolText(loaded), /## Managed-copy policy/, "agent-only planner skill must not leak into the human recap text");
+      assert.doesNotMatch(toolText(loaded), /Interview me relentlessly about every aspect/, "idea discussion skill must not leak into the human recap text");
       assert.match(toolDetails(loaded).plannerSkill.status, /^(created|current|updated)$/);
+      assert.match(await readFile(join(host.planRoot, "skills", "grill-me", "SKILL.md"), "utf8"), /^<!-- agent-plan-managed-skill sha256:/);
       const prompt = await injectedPrompt(host);
       assert.match(prompt, /\[Plan Context/);
       assert.match(prompt, /# Agent Plan operating guide/);
       assert.match(prompt, /## Handoff protocol/);
+      assert.doesNotMatch(prompt, /Interview me relentlessly about every aspect/, "idea discussion skill must not load on ordinary agent turns");
 
       await readTaskContext(host);
       const taskStart = await host.runTool("task_start", { taskId: "T001" });
@@ -113,6 +119,7 @@ describe("pi-adapter web lifecycle", () => {
       const loadTriggers = host.sentMessages.filter((m) => m.message.customType === "planner-resume-trigger");
       assert.equal(loadTriggers.length, 1);
       assert.match(loadTriggers[0].message.content, /\[agent-only planner usage skill/);
+      assert.doesNotMatch(loadTriggers[0].message.content, /Interview me relentlessly about every aspect/, "Pi command load must not inject grill-me before an Ideas workflow");
       assert.match(loadTriggers[0].message.content, /# Agent Plan operating guide/);
       assert.match(loadTriggers[0].message.content, /--- RECAP ---/);
       let status = await host.runTool("planner-web", {});

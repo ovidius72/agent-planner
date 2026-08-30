@@ -1,4 +1,4 @@
-import type { AcceptedDecision, Feature, Phase, PlanWorkspace, Requirement, Task } from "./schema.js";
+import type { AcceptedDecision, Feature, Idea, Phase, PlanWorkspace, Requirement, Task } from "./schema.js";
 import { bullet, statusBadge, statusIcon, renderAcceptedDecisions } from "./render-utils.js";
 
 function seq(value: number | undefined): string {
@@ -17,9 +17,13 @@ function taskLabel(task: Task): string {
   return `T${seq(task.number)} — ${task.title}`;
 }
 
+function ideaLabel(idea: Idea): string {
+  return `I${seq(idea.number)} — ${idea.title}`;
+}
+
 export class PlanRenderer {
   renderPlan(plan: PlanWorkspace): string {
-    const { project, manifest, features, requirements, phases } = plan;
+    const { project, manifest, features, requirements, ideas, phases } = plan;
     const lines: string[] = [];
 
     lines.push(`# ${project.name} — Project Plan`);
@@ -116,6 +120,19 @@ export class PlanRenderer {
     if (wr.afterPhaseComplete.length > 0) {
       lines.push("### After phase complete");
       lines.push(bullet(wr.afterPhaseComplete));
+      lines.push("");
+    }
+
+    // ── Ideas Inbox ─────────────────────────────────────────────────
+    if (ideas.ideas.length > 0) {
+      lines.push("---");
+      lines.push("## Ideas Inbox");
+      lines.push("");
+      for (const idea of ideas.ideas) {
+        const promotion = idea.promotion ? ` → ${idea.promotion.targetRef}` : "";
+        lines.push(`- **${ideaLabel(idea)}**${promotion}`);
+        if (idea.description) lines.push(`  - ${idea.description}`);
+      }
       lines.push("");
     }
 

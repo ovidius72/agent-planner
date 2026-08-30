@@ -2370,6 +2370,7 @@ server.registerTool("planner-load", {
     await st.recordProjectGuidelinesRead({ sessionId: plannerSessionId });
   }
   const plannerSkill = await st.syncPlannerSkill();
+  await st.syncGrillMeSkill();
   const web = await ensureWebStarted();
   const recap = await buildRecap(st, web, { harness: "mcp" });
   return {

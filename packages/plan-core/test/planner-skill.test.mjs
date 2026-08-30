@@ -5,7 +5,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  loadCanonicalGrillMeSkill,
   loadCanonicalPlannerSkill,
+  loadProjectGrillMeSkill,
   managedPlannerSkillBody,
   plannerSkillHash,
   PlanStore,
@@ -80,5 +82,45 @@ test("syncPlannerSkill preserves unmarked project-authored copies", async () => 
 
     assert.equal(result.status, "customized");
     assert.equal(await readFile(join(root, "SKILL.md"), "utf8"), customized);
+  });
+});
+
+test("core package declares the canonical grill-me asset for publication", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.ok(packageJson.files.includes("skills/**/*.md"));
+});
+
+test("PlanStore.init seeds the canonical project-local grill-me skill", async () => {
+  await withPlan(async ({ root, store }) => {
+    const canonical = await loadCanonicalGrillMeSkill();
+    const path = join(root, "skills", "grill-me", "SKILL.md");
+    const persisted = await readFile(path, "utf8");
+
+    assert.match(persisted, /^<!-- agent-plan-managed-skill sha256:[a-f0-9]{64} -->\n/);
+    assert.equal(managedPlannerSkillBody(persisted), canonical);
+    assert.match(canonical, /Ask the questions one at a time\./);
+    assert.doesNotMatch(persisted, /createdAt|updatedAt|\d{4}-\d{2}-\d{2}T\d{2}:/);
+
+    const second = await store.syncGrillMeSkill();
+    assert.equal(second.status, "current");
+    assert.equal(await store.ideaDiscussionSkill(), canonical);
+  });
+});
+
+test("grill-me managed copies upgrade only when unmodified", async () => {
+  await withPlan(async ({ root, store }) => {
+    const path = join(root, "skills", "grill-me", "SKILL.md");
+    await writeFile(path, renderManagedPlannerSkill("# Older grill guide\n"), "utf8");
+    const updated = await store.syncGrillMeSkill();
+    assert.equal(updated.status, "updated");
+    assert.equal(managedPlannerSkillBody(await readFile(path, "utf8")), await loadCanonicalGrillMeSkill());
+
+    const customized = `${renderManagedPlannerSkill("# Older grill guide\n")}\nProject-specific interview rule.\n`;
+    await writeFile(path, customized, "utf8");
+    const preserved = await store.syncGrillMeSkill();
+    assert.equal(preserved.status, "customized");
+    assert.match(preserved.message, /Preserved the customized \.planner\/skills\/grill-me\/SKILL\.md/);
+    assert.equal(await readFile(path, "utf8"), customized);
+    assert.match(await loadProjectGrillMeSkill(root), /Project-specific interview rule/);
   });
 });

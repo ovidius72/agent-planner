@@ -36,6 +36,12 @@ import {
   type RequirementsDocument,
   type Requirement,
   RequirementsDocumentSchema,
+  type Idea,
+  type IdeasDocument,
+  type IdeaPromotion,
+  type IdeaPromotionTargetType,
+  IdeaSchema,
+  IdeasDocumentSchema,
   ResumeFocusSchema,
   ActivityLogSchema,
   TimestampSchema,
@@ -46,10 +52,10 @@ import {
   type WorkDeviation,
   WorkDeviationSchema,
 } from "./schema.js";
-import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
+import { createFeatureId, createIdeaId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatFeatureRef, formatIdeaRef, formatPhaseRef, formatThreeDigitNumber, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
 import { loadExtensionRules, PLANNER_EXTENSION_RULES } from "./planner-rules.js";
-import { syncProjectPlannerSkill, type PlannerSkillSyncResult } from "./planner-skill.js";
+import { loadProjectGrillMeSkill, syncProjectGrillMeSkill, syncProjectPlannerSkill, type PlannerSkillSyncResult } from "./planner-skill.js";
 import {
   applyLegacyProjectContextMigration,
   previewLegacyProjectContextMigration,
@@ -87,6 +93,22 @@ export interface RecordContextReadResult {
   feature?: Feature;
   requirements: Requirement[];
   createdAt: string;
+}
+
+export interface IdeaCreateInput {
+  title: string;
+  description?: string;
+}
+
+export interface IdeaUpdateInput {
+  title?: string;
+  description?: string;
+}
+
+export interface IdeaPromotionTargetInput {
+  targetType: IdeaPromotionTargetType;
+  targetId: string;
+  promotedAt?: string;
 }
 
 function upsertSessionInfo<T extends { sessionInfo: Array<{ sessionId: string; createdAt: string }> }>(
@@ -182,7 +204,7 @@ const CROSS_PROCESS_LOCK_RETRY_MS = 10;
 /** Allocation registry is deliberately outside the versioned plan. Git worktrees
  * share their common git dir, so reservations are serialized across branches
  * without rewriting project.json or unrelated planner entities. */
-const AllocationKindSchema = z.enum(["feature", "phase", "task"]);
+const AllocationKindSchema = z.enum(["feature", "phase", "task", "idea"]);
 const AllocationRegistrySchema = z.object({
   version: z.literal(1),
   projectId: z.string().min(1),
@@ -998,6 +1020,9 @@ export class PlanStore {
   private requirementsPath(): string {
     return join(this.root, "requirements.json");
   }
+  private ideasPath(): string {
+    return join(this.root, "ideas.json");
+  }
   private featuresPath(): string {
     return join(this.root, "features.json");
   }
@@ -1192,6 +1217,7 @@ export class PlanStore {
       workDeviations: [],
     });
     await this.saveRequirements({ requirements: [] });
+    await this.saveIdeas({ nextIdeaNumber: 1, ideas: [] });
     await this.saveFeatures({ features: [] });
     await this.saveResume({
       updatedAt: nowISO(),
@@ -1216,6 +1242,7 @@ export class PlanStore {
       "utf-8",
     );
     await this.syncPlannerSkill();
+    await this.syncGrillMeSkill();
 
     // Write a README stub
     const readme = [
@@ -1227,8 +1254,10 @@ export class PlanStore {
       "",
       "- `manifest.json` — metadata",
       "- `SKILL.md` — managed cross-harness planner operating guide",
+      "- `skills/grill-me/SKILL.md` — managed idea-discussion interview skill",
       "- `project.json` — scope, rules, stack, tools",
       "- `requirements.json` — requirements and macro-tasks",
+      "- `ideas.json` — top-level Ideas Inbox (excluded from work status derivation)",
       "- `phases/` — one JSON file per phase",
       "- `generated/` — auto-generated markdown views (under `.local/`)",
       "- `schema/plan.schema.json` — JSON Schema for tooling",
@@ -1261,6 +1290,16 @@ export class PlanStore {
    */
   async syncPlannerSkill(): Promise<PlannerSkillSyncResult> {
     return syncProjectPlannerSkill(this.root);
+  }
+
+  /** Safely create or refresh the project-local grill-me skill for Ideas. */
+  async syncGrillMeSkill(): Promise<PlannerSkillSyncResult> {
+    return syncProjectGrillMeSkill(this.root);
+  }
+
+  /** Load grill-me instructions only when an Ideas discussion requests them. */
+  async ideaDiscussionSkill(): Promise<string> {
+    return loadProjectGrillMeSkill(this.root);
   }
 
   /** Idempotently ensure `.planner/.gitignore` ignores `.local/` (and the
@@ -1325,7 +1364,7 @@ export class PlanStore {
    * Worktrees in the same clone share `.git/agent-plan/allocations`, guarded by
    * the same cross-process lock used for atomic writes. The registry reserves
    * numbers/short IDs before an entity file is written, so parallel branches
-   * cannot allocate the same F/P/T or shortId. Existing entities are never
+   * cannot allocate the same F/P/T/I or shortId. Existing entities are never
    * rewritten; cross-clone coordination requires a shared allocator service.
    */
   async allocateEntityIdentity(kind: AllocationKind, entityId: string): Promise<{ number: number; shortId: string }> {
@@ -1346,19 +1385,30 @@ export class PlanStore {
 
       const phases = await this.loadAllPhases();
       const features = (await this.loadFeatures()).features;
+      const ideasDocument = await this.loadIdeas();
+      const ideas = ideasDocument.ideas;
       const canonical = kind === "feature"
         ? features.map((feature) => ({ number: feature.number, shortId: feature.shortId }))
         : kind === "phase"
           ? phases.map((phase) => ({ number: phase.number, shortId: phase.shortId }))
-          : phases.flatMap((phase) => phase.tasks.map((task) => ({ number: task.number, shortId: task.shortId })));
+          : kind === "task"
+            ? phases.flatMap((phase) => phase.tasks.map((task) => ({ number: task.number, shortId: task.shortId })))
+            : ideas.map((idea) => ({ number: idea.number, shortId: idea.shortId }));
       const usedNumbers = new Set([...canonical.map((entry) => entry.number), ...registry.allocations.filter((entry) => entry.kind === kind).map((entry) => entry.number)]);
-      const counter = kind === "feature" ? project.nextFeatureNumber : kind === "phase" ? project.nextPhaseNumber : project.nextTaskNumber;
+      const counter = kind === "feature"
+        ? project.nextFeatureNumber
+        : kind === "phase"
+          ? project.nextPhaseNumber
+          : kind === "task"
+            ? project.nextTaskNumber
+            : ideasDocument.nextIdeaNumber;
       let number = Math.max(1, counter);
       while (usedNumbers.has(number)) number += 1;
 
       const allShortIds = new Set<string>([
         ...features.map((feature) => feature.shortId),
         ...phases.flatMap((phase) => [phase.shortId, ...phase.tasks.map((task) => task.shortId)]),
+        ...ideas.map((idea) => idea.shortId),
         ...registry.allocations.map((entry) => entry.shortId),
       ].filter(Boolean));
       const allocation: Allocation = { kind, entityId, number, shortId: createShortId(allShortIds, `${kind}:${entityId}`) };
@@ -1373,6 +1423,7 @@ export class PlanStore {
   async allocFeatureNumber(): Promise<number> { return this.allocateLegacyNumber("feature"); }
   async allocPhaseNumber(): Promise<number> { return this.allocateLegacyNumber("phase"); }
   async allocTaskNumber(): Promise<number> { return this.allocateLegacyNumber("task"); }
+  async allocIdeaNumber(): Promise<number> { return this.allocateLegacyNumber("idea"); }
   private async allocateLegacyNumber(kind: AllocationKind): Promise<number> {
     const id = `legacy-${kind}-${randomUUID()}`;
     return (await this.allocateEntityIdentity(kind, id)).number;
@@ -1572,6 +1623,18 @@ export class PlanStore {
     }
   }
 
+  async loadIdeas(): Promise<IdeasDocument> {
+    try {
+      const document = await readJson(this.ideasPath(), IdeasDocumentSchema);
+      return {
+        ...document,
+        ideas: [...document.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+      };
+    } catch {
+      return { nextIdeaNumber: 1, ideas: [] };
+    }
+  }
+
   async linkedRequirementsForPhase(phaseId: string): Promise<Requirement[]> {
     const requirements = await this.loadRequirements();
     return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.includes(phaseId));
@@ -1649,16 +1712,17 @@ export class PlanStore {
 
 
   async loadAll(): Promise<PlanWorkspace> {
-    const [manifest, project, requirements, phases] = await Promise.all([
+    const [manifest, project, requirements, ideas, phases] = await Promise.all([
       this.loadManifest(),
       this.loadProject(),
       this.loadRequirements(),
+      this.loadIdeas(),
       this.loadAllPhases(),
     ]);
     const rawFeatures = await this.loadRawFeatures();
     const features: Feature[] = rawFeatures.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
     const normalized = this.normalizeStructureSnapshot({ features }, phases);
-    return { manifest, project, requirements, phases: normalized.phases, features: normalized.features };
+    return { manifest, project, requirements, ideas, phases: normalized.phases, features: normalized.features };
   }
 
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
@@ -2218,6 +2282,136 @@ export class PlanStore {
     return updated;
   }
 
+  private async ensureIdeasFileForWrite(): Promise<void> {
+    try {
+      await access(this.ideasPath());
+    } catch {
+      await atomicWriteJson(this.ideasPath(), IdeasDocumentSchema.parse({ nextIdeaNumber: 1, ideas: [] }), this.root);
+    }
+  }
+
+  async updateIdeas(updater: (ideas: IdeasDocument) => IdeasDocument): Promise<IdeasDocument> {
+    await this.ensureIdeasFileForWrite();
+    const updated = await atomicUpdateJson(this.ideasPath(), IdeasDocumentSchema, (current) => {
+      const candidate = IdeasDocumentSchema.parse(updater(current));
+      const maxNumber = candidate.ideas.reduce((max, idea) => Math.max(max, idea.number), 0);
+      return {
+        ...candidate,
+        nextIdeaNumber: Math.max(candidate.nextIdeaNumber, maxNumber + 1),
+        ideas: [...candidate.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+      };
+    }, this.root);
+    await this.touchTimestamp();
+    await this.maybeAutoSync();
+    return updated;
+  }
+
+  async createIdea(input: IdeaCreateInput, timestamp = nowISO()): Promise<Idea> {
+    const id = createIdeaId();
+    const { number, shortId } = await this.allocateEntityIdentity("idea", id);
+    const idea = IdeaSchema.parse({
+      id,
+      number,
+      shortId,
+      title: input.title.trim(),
+      description: input.description?.trim() ?? "",
+      promotion: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await this.updateIdeas((document) => ({
+      nextIdeaNumber: Math.max(document.nextIdeaNumber, number + 1),
+      ideas: [...document.ideas, idea],
+    }));
+    return idea;
+  }
+
+  async updateIdea(ideaId: string, input: IdeaUpdateInput, timestamp = nowISO()): Promise<Idea> {
+    let updated: Idea | undefined;
+    await this.updateIdeas((document) => {
+      const existing = document.ideas.find((idea) => idea.id === ideaId);
+      if (!existing) throw new PlanStoreError(`Idea ${ideaId} not found.`);
+      updated = IdeaSchema.parse({
+        ...existing,
+        ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+        ...(input.description !== undefined ? { description: input.description.trim() } : {}),
+        updatedAt: timestamp,
+      });
+      return {
+        ...document,
+        ideas: document.ideas.map((idea) => idea.id === ideaId ? updated! : idea),
+      };
+    });
+    return updated!;
+  }
+
+  async deleteIdea(ideaId: string): Promise<boolean> {
+    let deleted = false;
+    await this.updateIdeas((document) => {
+      deleted = document.ideas.some((idea) => idea.id === ideaId);
+      return deleted
+        ? { ...document, ideas: document.ideas.filter((idea) => idea.id !== ideaId) }
+        : document;
+    });
+    return deleted;
+  }
+
+  private async resolveIdeaPromotionTarget(targetType: IdeaPromotionTargetType, targetId: string): Promise<string> {
+    const phases = await this.loadAllPhases();
+    const features = (await this.loadFeatures()).features;
+    if (targetType === "feature") {
+      const feature = features.find((candidate) => candidate.id === targetId);
+      if (!feature) throw new PlanStoreError(`Idea promotion target feature ${targetId} not found.`);
+      return formatFeatureRef(feature.number);
+    }
+    if (targetType === "phase") {
+      const phase = phases.find((candidate) => candidate.id === targetId);
+      if (!phase) throw new PlanStoreError(`Idea promotion target phase ${targetId} not found.`);
+      const feature = features.find((candidate) => candidate.id === phase.featureId);
+      return formatPhaseRef(phase.number, feature?.number);
+    }
+    for (const phase of phases) {
+      const task = phase.tasks.find((candidate) => candidate.id === targetId);
+      if (!task) continue;
+      const feature = features.find((candidate) => candidate.id === phase.featureId);
+      return `${formatPhaseRef(phase.number, feature?.number)}/T${formatThreeDigitNumber(task.number)}`;
+    }
+    throw new PlanStoreError(`Idea promotion target task ${targetId} not found.`);
+  }
+
+  async promoteIdea(ideaId: string, input: IdeaPromotionTargetInput): Promise<Idea> {
+    const targetRef = await this.resolveIdeaPromotionTarget(input.targetType, input.targetId);
+    const promotedAt = input.promotedAt ?? nowISO();
+    let promoted: Idea | undefined;
+    await this.updateIdeas((document) => {
+      const existing = document.ideas.find((idea) => idea.id === ideaId);
+      if (!existing) throw new PlanStoreError(`Idea ${ideaId} not found.`);
+      if (existing.promotion) {
+        if (existing.promotion.targetType === input.targetType && existing.promotion.targetId === input.targetId) {
+          promoted = existing;
+          return document;
+        }
+        throw new PlanStoreError(`Idea ${formatIdeaRef(existing.number)} is already promoted to ${existing.promotion.targetRef}.`);
+      }
+      const promotion: IdeaPromotion = {
+        targetType: input.targetType,
+        targetId: input.targetId,
+        targetRef,
+        promotedAt,
+      };
+      promoted = IdeaSchema.parse({
+        ...existing,
+        promotion,
+        updatedAt: promotedAt,
+      });
+      return {
+        ...document,
+        ideas: document.ideas.map((idea) => idea.id === ideaId ? promoted! : idea),
+      };
+    });
+    return promoted!;
+  }
+
   /**
    * Persist completion of one full task → phase → feature → requirements read
    * sequence. Session metadata is deliberately the only changed entity field:
@@ -2379,7 +2573,18 @@ export class PlanStore {
     await this.touchTimestamp();
   }
 
-    async savePhase(phase: Phase): Promise<void> {
+  async saveIdeas(ideas: IdeasDocument): Promise<void> {
+    const parsed = IdeasDocumentSchema.parse(ideas);
+    const maxNumber = parsed.ideas.reduce((max, idea) => Math.max(max, idea.number), 0);
+    await atomicWriteJson(this.ideasPath(), {
+      ...parsed,
+      nextIdeaNumber: Math.max(parsed.nextIdeaNumber, maxNumber + 1),
+      ideas: [...parsed.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+    }, this.root);
+    await this.touchTimestamp();
+  }
+
+  async savePhase(phase: Phase): Promise<void> {
     const previous = await this.loadPhase(phase.id).catch(() => null);
     const timestamp = nowISO();
     const features = await this.loadRawFeatures();
@@ -2878,14 +3083,15 @@ export class PlanStore {
 
   // ── Workspace-level operations ─────────────────────────────────────
 
-  /** Load the full workspace (manifest + phases + project + requirements + features) */
+  /** Load the full workspace, including the rollup-independent Ideas Inbox. */
   async loadWorkspace(): Promise<PlanWorkspace> {
     const manifest = await this.loadManifest();
     const phases = await this.loadAllPhases();
     const project = await this.loadProject();
     const features = await this.loadFeatures();
     const requirements = await this.loadRequirements();
-    return { manifest, phases, project, features, requirements };
+    const ideas = await this.loadIdeas();
+    return { manifest, phases, project, features, requirements, ideas };
   }
 
   // ── Markdown generation ────────────────────────────────────────────

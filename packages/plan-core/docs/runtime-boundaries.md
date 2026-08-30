@@ -33,6 +33,7 @@ tree; the planner mirrors that split for its own state.
 | `phases/<id>.json` | Phase documents (with their tasks) | Canonical work data |
 | `tasks/<id>.json` | Task documents | Canonical work data |
 | `requirements.json` | Top-level requirements | Canonical work data |
+| `ideas.json` | Top-level Ideas Inbox, its independent `nextIdeaNumber`, and promotion links | Canonical discovery history; intentionally excluded from work status derivation and selection |
 | `handoffs/` | Active, entity-scoped phase handoffs | Canonical (a handoff is a first-class planner entity) |
 | `rules.json` | Static extension-rule strings (no timestamps) | Canonical, identical across worktrees; timestamp-free so it never drifts |
 
@@ -72,9 +73,11 @@ view* by `loadProject()`. `saveProject()` strips `workDeviations` so shared
    `planned` / `waiting` / `in-progress`. A `resume-required` deviation whose
    target task is `done` is correctly excluded (the resume is moot).
 4. **Counters stay shared.** `nextFeatureNumber` / `nextPhaseNumber` /
-   `nextTaskNumber` live only in `project.json`. They are the global,
-   monotonically increasing, never-reused sequence. Localizing them would cause
-   numbering collisions across worktrees — do not move them to `.local`.
+   `nextTaskNumber` live in `project.json`; the independent `nextIdeaNumber`
+   lives in `ideas.json`. All are monotonically increasing, never-reused
+   sequences, with the cross-worktree allocation registry preventing local
+   clone collisions. Localizing canonical counters would cause numbering
+   collisions — do not move them to `.local`.
 5. **`resume.json` / `activity.json` are machine-local.** They may differ per
    worktree/session with no conflict. Treat them as ephemeral session hints.
 6. **Handoff archive is local.** Terminal-phase auto-archive writes to
@@ -96,7 +99,7 @@ Cloning the canonical `.planner/` into a second worktree while *excluding*
 `.local/` yields a second planner whose runtime state is empty and independent.
 Each worktree then owns its own `deviations.json` / `resume.json` /
 `activity.json` without affecting the other, while sharing all canonical
-features/phases/tasks/requirements. This is covered by the T297 isolation test
+features/phases/tasks/requirements/ideas. This is covered by the T297 isolation test
 (`resume-protocol-isolation.test.mjs`).
 
 ## Open items / known couplings

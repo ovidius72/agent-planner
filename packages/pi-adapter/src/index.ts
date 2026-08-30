@@ -2730,6 +2730,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       try {
         const st = ensureStore(ctx);
         const plannerSkill = await st.syncPlannerSkill();
+        await st.syncGrillMeSkill();
         const srv = server as ServeHandle | null;
         recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
         plannerSkillContext = `[agent-only planner usage skill; do not quote in the recap]\n${plannerSkill.customized ? `${plannerSkill.message}\n` : ""}${plannerSkill.content}\n[end agent-only planner usage skill]`;
@@ -5317,6 +5318,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.recordProjectGuidelinesRead({ sessionId: plannerSessionId });
       }
       const plannerSkill = await st.syncPlannerSkill();
+      await st.syncGrillMeSkill();
       contextBlockDirty = true;
       const srv = server as ServeHandle | null;
       let recap = "";

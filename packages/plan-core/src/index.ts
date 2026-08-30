@@ -15,7 +15,7 @@ export * from "./handoff-context.js";
 export * from "./project-context-migration.js";
 export * from "./requirement-macro-tasks.js";
 export * from "./package-version.js";
-export { PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, type PhaseHandoffSummary, type OrphanPhaseSummary } from "./plan-store.js";
+export { PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, type IdeaCreateInput, type IdeaUpdateInput, type IdeaPromotionTargetInput, type PhaseHandoffSummary, type OrphanPhaseSummary } from "./plan-store.js";
 export { PlanRenderer } from "./renderer.js";
 export { ExportService } from "./export-service.js";
 export type { CodebaseProfile, ResumeFocus, ActivityEntry, ActivityLog, AmbientFacts } from "./schema.js";

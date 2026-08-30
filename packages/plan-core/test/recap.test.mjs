@@ -65,6 +65,7 @@ describe("buildRecap — internal agent rules", () => {
       const recap = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness });
       assert.doesNotMatch(recap, /Planner rules \(extension/);
       assert.ok(!recap.includes(PLANNER_EXTENSION_RULES[0]), `${harness} recap excludes the canonical agent rule`);
+      assert.doesNotMatch(recap, /Interview me relentlessly about every aspect/);
       assert.match(recap, /## Project Guidelines/);
       assert.match(recap, /No project guidelines set\./);
     }

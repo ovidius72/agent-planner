@@ -12,7 +12,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import {
   startMcpFixture,
   startMcpClient,
@@ -306,6 +306,9 @@ test("recap context and generated/export operations", async () => {
       content: "Use English in source code. Run focused verification before claiming success.",
     });
 
+    // Simulate an existing project created before the managed Ideas skill.
+    await rm(join(session.planRoot, "skills", "grill-me", "SKILL.md"));
+
     // planner-load must start web and return a complete recap. The URL must be
     // its last non-empty line, which Codex can present verbatim.
     const loadResult = await callTool(session, "planner-load", {});
@@ -313,11 +316,14 @@ test("recap context and generated/export operations", async () => {
     assert.match(loadText, /## Project Guidelines/);
     assert.match(loadText, /Use English in source code\. Run focused verification before claiming success\./);
     assert.doesNotMatch(loadText, /## Managed-copy policy/, "agent-only planner skill must not leak into the human recap text");
+    assert.doesNotMatch(loadText, /Interview me relentlessly about every aspect/, "idea discussion skill must not leak into the human recap text");
     assert.equal(loadResult.structuredContent.agentContext.kind, "planner-usage-skill");
     assert.match(loadResult.structuredContent.agentContext.content, /# Agent Plan operating guide/);
     assert.match(loadResult.structuredContent.agentContext.content, /## Handoff protocol/);
     assert.match(loadResult.structuredContent.agentContext.instruction, /Do not quote it/);
     assert.match(await readFile(join(session.planRoot, "SKILL.md"), "utf8"), /^<!-- agent-plan-managed-skill sha256:/);
+    assert.match(await readFile(join(session.planRoot, "skills", "grill-me", "SKILL.md"), "utf8"), /^<!-- agent-plan-managed-skill sha256:/);
+    assert.doesNotMatch(loadResult.structuredContent.agentContext.content, /Interview me relentlessly about every aspect/, "idea discussion skill must not load before an Ideas workflow requests it");
     const loadLines = loadText.trim().split("\n");
     assert.match(loadLines.at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
     const phaseAfterLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);

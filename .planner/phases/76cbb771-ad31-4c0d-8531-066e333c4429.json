@@ -63,11 +63,28 @@
       "priority": 1,
       "shortName": "add-the-harness-agnostic-ideas",
       "title": "Add the harness-agnostic Ideas Inbox domain and persistence",
-      "status": "planned",
-      "description": "Implement the top-level Ideas domain in `packages/plan-core/src/schema.ts`, `packages/plan-core/src/plan-store.ts`, and shared reference/rendering helpers. Persist ideas independently under `.planner/` (for example `.planner/ideas.json`) with stable UUID identity plus monotonic human references such as `I001`, editable title/description, deterministic ordering, timestamps, and promotion metadata linking a promoted idea to its resulting feature/phase/task. CRUD and promotion bookkeeping must never create child containment or affect feature/phase/task status derivation, task recommendation, resume state, or readiness. Decide and document the compatibility/upgrade strategy for the new file and counter, preserve customized project data, and cover initialization, reload, atomic validation, delete, edit, promoted-history retention, and rollup isolation using temporary planner roots only.",
-      "descriptionUpdatedAt": "2026-08-30T09:52:34.217Z",
+      "status": "done",
+      "description": "Implement the top-level Ideas domain in `packages/plan-core/src/schema.ts`, `packages/plan-core/src/plan-store.ts`, and shared reference/rendering helpers. Persist ideas independently under `.planner/` (for example `.planner/ideas.json`) with stable UUID identity plus monotonic human references such as `I001`, editable title/description, deterministic ordering, timestamps, and promotion metadata linking a promoted idea to its resulting feature/phase/task. CRUD and promotion bookkeeping must never create child containment or affect feature/phase/task status derivation, task recommendation, resume state, or readiness. Decide and document the compatibility/upgrade strategy for the new file and counter, preserve customized project data, and cover initialization, reload, atomic validation, delete, edit, promoted-history retention, and rollup isolation using temporary planner roots only.\n\n---\n**Completion summary:**\nImplemented the harness-agnostic Ideas Inbox domain in plan-core. Added Idea/IdeasDocument/promotion schemas and exported types; stable UUID plus independent monotonic I### and shortId identity; formatIdeaRef/findIdeaByRef; `.planner/ideas.json` initialization and backward-compatible missing-file reads; cross-worktree allocation support for idea identities; atomic PlanStore create/update/delete/promote operations with target existence validation and retained promotion history; Ideas inclusion in PlanWorkspace and generated PLAN.md; and shared/local boundary documentation. Ideas remain entirely outside feature/phase/task containment, status derivation, work selection, active work, requirements, and resume state. Verification: @agent-plan/core check/build passed; focused 28/28 tests passed; full plan-core suite passed 265/265; git diff --check passed. Added packages/plan-core/test/ideas.test.mjs covering init, reload, monotonic gaps, invalid-update atomicity, refs, feature/phase/task promotion, idempotence/conflicts, generated rendering, and rollup/resume isolation. No commit or push performed after the user-authorized baseline commit.",
+      "descriptionUpdatedAt": "2026-08-30T10:12:52.273Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-001-planned-in-progress",
+          "date": "2026-08-30T10:02:59.937Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-002-in-progress-done",
+          "date": "2026-08-30T10:12:52.271Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented the harness-agnostic Ideas Inbox domain in plan-core. Added Idea/IdeasDocument/promotion schemas and exported types; stable UUID plus independent monotonic I### and shortId identity; formatIdeaRef/findIdeaByRef; `.planner/ideas.json` initialization and backward-compatible missing-file reads; cross-worktree allocation support for idea identities; atomic PlanStore create/update/delete/promote operations with target existence validation and retained promotion history; Ideas inclusion in PlanWorkspace and generated PLAN.md; and shared/local boundary documentation. Ideas remain entirely outside feature/phase/task containment, status derivation, work selection, active work, requirements, and resume state. Verification: @agent-plan/core check/build passed; focused 28/28 tests passed; full plan-core suite passed 265/265; git diff --check passed. Added packages/plan-core/test/ideas.test.mjs covering init, reload, monotonic gaps, invalid-update atomicity, refs, feature/phase/task promotion, idempotence/conflicts, generated rendering, and rollup/resume isolation. No commit or push performed after the user-authorized baseline commit."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -75,36 +92,41 @@
           "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-001-define-the-ideas-schema-stable-references-ordering-and-promotion-metadata",
           "number": 1,
           "title": "Define the Ideas schema, stable references, ordering, and promotion metadata.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-002-seed-and-load-ideas-persistence-without-changing-existing-project-rollups",
           "number": 2,
           "title": "Seed and load Ideas persistence without changing existing project rollups.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-003-implement-atomic-planstore-crud-and-promotion-bookkeeping",
           "number": 3,
           "title": "Implement atomic PlanStore CRUD and promotion bookkeeping.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "cf37b449-e6e5-433a-8834-e030369d52ff-check-004-add-isolated-core-tests-for-persistence-validation-history-and-status-isolation",
           "number": 4,
           "title": "Add isolated core tests for persistence, validation, history, and status isolation.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-30T10:02:59.937Z",
+      "completedAt": "2026-08-30T10:12:52.271Z",
       "createdAt": "2026-08-30T09:52:34.216Z",
-      "updatedAt": "2026-08-30T09:52:34.216Z",
-      "sessionInfo": []
+      "updatedAt": "2026-08-30T10:12:52.271Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-30T10:02:59.858Z"
+        }
+      ]
     },
     {
       "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5",
@@ -114,11 +136,28 @@
       "priority": 2,
       "shortName": "seed-and-load-the-project-loca",
       "title": "Seed and load the project-local grill-me skill for idea discussions",
-      "status": "planned",
-      "description": "Copy the approved source contract from `/Users/antonio/.pi/agent/skills/grill-me/SKILL.md` into a canonical shipped Agent Plan asset and extend the managed project-skill infrastructure in `packages/plan-core/src/planner-skill.ts`, `packages/plan-core/src/plan-store.ts`, package files, and plugin synchronization as appropriate so every initialized/upgraded project receives `.planner/skills/grill-me/SKILL.md`. Follow the managed `.planner/SKILL.md` safety model: deterministic timestamp-free bytes, automatic upgrade only for unmodified canonical copies, preservation of customized copies, and actionable drift reporting. Expose a harness-agnostic loader for the project-local skill and inject/load its instructions only when an idea discussion or promotion begins, rather than leaking the skill into human recaps or every agent turn. Preserve Pi/MCP/Claude/Codex portability and add inventory, package-content, initialization, upgrade, customization, and non-leakage tests.",
-      "descriptionUpdatedAt": "2026-08-30T09:52:43.890Z",
+      "status": "done",
+      "description": "Copy the approved source contract from `/Users/antonio/.pi/agent/skills/grill-me/SKILL.md` into a canonical shipped Agent Plan asset and extend the managed project-skill infrastructure in `packages/plan-core/src/planner-skill.ts`, `packages/plan-core/src/plan-store.ts`, package files, and plugin synchronization as appropriate so every initialized/upgraded project receives `.planner/skills/grill-me/SKILL.md`. Follow the managed `.planner/SKILL.md` safety model: deterministic timestamp-free bytes, automatic upgrade only for unmodified canonical copies, preservation of customized copies, and actionable drift reporting. Expose a harness-agnostic loader for the project-local skill and inject/load its instructions only when an idea discussion or promotion begins, rather than leaking the skill into human recaps or every agent turn. Preserve Pi/MCP/Claude/Codex portability and add inventory, package-content, initialization, upgrade, customization, and non-leakage tests.\n\n---\n**Completion summary:**\nShipped the managed project-local grill-me skill lifecycle. The exact approved source contract now lives in the publishable canonical asset `packages/plan-core/skills/grill-me/SKILL.md`; `@agent-plan/core` includes `skills/**/*.md` in its npm package. Refactored managed-skill synchronization into a shared deterministic, hash-marked helper and added `loadCanonicalGrillMeSkill`, `syncProjectGrillMeSkill`, and `loadProjectGrillMeSkill`, exposed through PlanStore as `syncGrillMeSkill()` and the on-demand `ideaDiscussionSkill()` loader. Fresh project initialization creates timestamp-free `.planner/skills/grill-me/SKILL.md`; explicit Pi command/tool and MCP `planner-load` safely upgrade missing/unmodified managed copies while preserving customized copies. Normal agent context and human recaps never include grill-me; T358 must call the on-demand core loader only after an Ideas discuss/promote flow begins. Verification: core/MCP/Pi builds; targeted Pi/MCP/core tests; full `pnpm test:coverage` 511/511 Node + 84/84 Web UI tests with final coverage gate green; `pnpm plugins:check`; `git diff --check`; and packed `@agent-plan/core` archive contains both `planner-skill.md` and `skills/grill-me/SKILL.md`. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-08-30T17:46:20.907Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-001-planned-in-progress",
+          "date": "2026-08-30T10:13:26.638Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-002-in-progress-done",
+          "date": "2026-08-30T17:46:20.905Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped the managed project-local grill-me skill lifecycle. The exact approved source contract now lives in the publishable canonical asset `packages/plan-core/skills/grill-me/SKILL.md`; `@agent-plan/core` includes `skills/**/*.md` in its npm package. Refactored managed-skill synchronization into a shared deterministic, hash-marked helper and added `loadCanonicalGrillMeSkill`, `syncProjectGrillMeSkill`, and `loadProjectGrillMeSkill`, exposed through PlanStore as `syncGrillMeSkill()` and the on-demand `ideaDiscussionSkill()` loader. Fresh project initialization creates timestamp-free `.planner/skills/grill-me/SKILL.md`; explicit Pi command/tool and MCP `planner-load` safely upgrade missing/unmodified managed copies while preserving customized copies. Normal agent context and human recaps never include grill-me; T358 must call the on-demand core loader only after an Ideas discuss/promote flow begins. Verification: core/MCP/Pi builds; targeted Pi/MCP/core tests; full `pnpm test:coverage` 511/511 Node + 84/84 Web UI tests with final coverage gate green; `pnpm plugins:check`; `git diff --check`; and packed `@agent-plan/core` archive contains both `planner-skill.md` and `skills/grill-me/SKILL.md`. No commit or push performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -126,36 +165,41 @@
           "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-001-add-a-shipped-canonical-grill-me-skill-copied-from-the-approved-user-level-source",
           "number": 1,
           "title": "Add a shipped canonical grill-me skill copied from the approved user-level source.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-002-seed-and-safely-upgrade-planner-skills-grill-me-skill-md-without-overwriting-customization",
           "number": 2,
           "title": "Seed and safely upgrade `.planner/skills/grill-me/SKILL.md` without overwriting customization.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-003-load-the-project-local-skill-for-idea-discuss-promote-flows-across-harnesses",
           "number": 3,
           "title": "Load the project-local skill for idea discuss/promote flows across harnesses.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "d2fadc89-3c2c-4783-913a-f5ceb4134df5-check-004-verify-package-inventory-deterministic-bytes-drift-behavior-and-recap-non-leakage",
           "number": 4,
           "title": "Verify package inventory, deterministic bytes, drift behavior, and recap non-leakage.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-30T10:13:26.638Z",
+      "completedAt": "2026-08-30T17:46:20.905Z",
       "createdAt": "2026-08-30T09:52:43.889Z",
-      "updatedAt": "2026-08-30T09:52:43.889Z",
-      "sessionInfo": []
+      "updatedAt": "2026-08-30T17:46:20.905Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-30T10:13:26.555Z"
+        }
+      ]
     },
     {
       "id": "f47996ae-d2b9-4859-8a85-2e0412864d42",
@@ -165,11 +209,20 @@
       "priority": 3,
       "shortName": "expose-ideas-crud-and-guided-p",
       "title": "Expose Ideas CRUD and guided promotion across Pi and MCP",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Add complete cross-harness idea tools and commands in `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, the canonical planner skill, and public-surface inventories. Agents must be able to list/show/create/update/delete ideas and begin/finalize promotion. Feature promotion loads `.planner/skills/grill-me/SKILL.md` when the idea lacks sufficient detail, resolves the design with the user, creates the agreed feature plus appropriate phases/tasks, then records the resulting feature reference. Phase promotion must inspect and recommend the most appropriate feature, obtain user confirmation, run the grill-me discussion, create the phase/tasks, and record the phase reference. Task promotion must recommend and confirm the feature/phase, run the discussion, create the task, and record its reference. Keep promotion multi-step and confirmation-safe: no target entity or promoted state may be persisted before the discussion and target confirmation complete. Return composite human refs, never raw UUIDs, and maintain Pi/MCP contract parity with real transport tests.",
       "descriptionUpdatedAt": "2026-08-30T09:52:53.945Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-001-planned-in-progress",
+          "date": "2026-08-30T17:46:49.888Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -202,11 +255,16 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-08-30T17:46:49.888Z",
       "completedAt": "",
       "createdAt": "2026-08-30T09:52:53.943Z",
-      "updatedAt": "2026-08-30T09:52:53.943Z",
-      "sessionInfo": []
+      "updatedAt": "2026-08-30T17:46:49.888Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-30T17:46:49.809Z"
+        }
+      ]
     },
     {
       "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f",
@@ -312,11 +370,31 @@
     }
   ],
   "createdAt": "2026-08-30T09:52:07.335Z",
-  "updatedAt": "2026-08-30T09:54:15.014Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-08-30T17:46:49.888Z",
+  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-30T17:47:29.854Z\nUpdated at: 2026-08-30T17:47:29.854Z\nReason: before compact\n\n## Progress snapshot\n- Features: 19/20 done, 1 active\n- Phases: 89/91 done, 1 active/discovery\n- Tasks: 356/362 done, 1 active\n\n## Current focus\n- Feature: `5bb28fc7-8002-46f9-970d-4151d6cb4884` — Improvements (in-progress)\n- Phase: `76cbb771-ad31-4c0d-8531-066e333c4429` — Ideas Inbox and promotion workflow (in-progress)\n- Task: `f47996ae-d2b9-4859-8a85-2e0412864d42` — Expose Ideas CRUD and guided promotion across Pi and MCP (in-progress)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 76cbb771-ad31-4c0d-8531-066e333c4429)\n- ✅ `cf37b449-e6e5-433a-8834-e030369d52ff` — Add the harness-agnostic Ideas Inbox domain and persistence (done)\n- ✅ `d2fadc89-3c2c-4783-913a-f5ceb4134df5` — Seed and load the project-local grill-me skill for idea discussions (done)\n- 🚧 `f47996ae-d2b9-4859-8a85-2e0412864d42` — Expose Ideas CRUD and guided promotion across Pi and MCP (in-progress)\n- 📋 `9c004b44-f5ad-4cb6-8cfe-499d58abf66f` — Add the Ideas page, header navigation, and Web UI management (planned)\n- 📋 `f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c` — Verify Ideas promotion end to end without planner rollup side effects (planned)\n\n## How to resume\n1. Open task f47996ae-d2b9-4859-8a85-2e0412864d42 (Expose Ideas CRUD and guided promotion across Pi and MCP).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: Resume task f47996ae-d2b9-4859-8a85-2e0412864d42 — Expose Ideas CRUD and guided promotion across Pi and MCP.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/76cbb771-ad31-4c0d-8531-066e333c4429.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Resume task f47996ae-d2b9-4859-8a85-2e0412864d42 — Expose Ideas CRUD and guided promotion across Pi and MCP.\n- Review the task details and continue implementation in phase 76cbb771-ad31-4c0d-8531-066e333c4429.\n- When the work is complete, call task_complete so the derived phase/feature statuses stay correct.\n\n## Recent activity\n- 2026-08-24T07:32:57.613Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → done\n- 2026-08-24T07:32:51.157Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-08-30T17:47:29.879Z",
   "handoffReadAt": "",
-  "handoffHistory": [],
-  "statusLog": [],
-  "sessionInfo": []
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/76cbb771-ad31-4c0d-8531-066e333c4429-2026-08-30T17-47-29-856Z.md",
+      "clearedAt": "2026-08-30T17:47:29.856Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "d43e4dc8-1443-40bc-bc1a-07d3d9f1eaa7",
+      "date": "2026-08-30T10:02:59.963Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-30T17:46:49.809Z"
+    }
+  ]
 }
