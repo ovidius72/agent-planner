@@ -11,10 +11,36 @@
  *   - Compos: "P002(F001)"           -> phase.number with parent feature validation
  *   - Title:  exact match, then includes (backward-compat fallback)
  */
-import type { Phase, Feature } from "./schema.js";
+import type { Phase, Feature, Idea } from "./schema.js";
 
 // P00x  or  P00x(F00x)  — accept 1+ digits so "p1" == "p001".
 const PHASE_REF_RE = /^p(\d+)(?:\(f(\d+)\))?$/;
+const IDEA_REF_RE = /^i(\d+)$/;
+
+/**
+ * Resolve an idea by UUID, I00x number, shortId, exact title, then title
+ * inclusion. Ideas are top-level and never require feature/phase context.
+ */
+export function findIdeaByRef(ideas: Idea[], ref: string): Idea | undefined {
+  const normalized = ref.trim().toLowerCase();
+  if (!normalized) return undefined;
+
+  const byId = ideas.find((idea) => idea.id.toLowerCase() === normalized);
+  if (byId) return byId;
+
+  const match = normalized.match(IDEA_REF_RE);
+  if (match) {
+    const number = parseInt(match[1]!, 10);
+    const byNumber = ideas.find((idea) => idea.number === number);
+    if (byNumber) return byNumber;
+  }
+
+  const byShortId = ideas.find((idea) => idea.shortId.toLowerCase() === normalized);
+  if (byShortId) return byShortId;
+
+  return ideas.find((idea) => idea.title.toLowerCase() === normalized)
+    ?? ideas.find((idea) => idea.title.toLowerCase().includes(normalized));
+}
 
 /**
  * Resolve a phase reference to a Phase. Returns `undefined` when not found or

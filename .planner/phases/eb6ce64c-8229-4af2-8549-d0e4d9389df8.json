@@ -1,0 +1,139 @@
+{
+  "id": "eb6ce64c-8229-4af2-8549-d0e4d9389df8",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 85,
+  "shortId": "DXXGR",
+  "priority": 27,
+  "slug": "priority-visibility-in-planner-discovery-surfaces",
+  "title": "Priority visibility in planner discovery surfaces",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Expose feature/phase/task priority consistently in MCP, Pi, and the Web UI discovery surfaces",
+  "description": "Current planner behavior already uses ascending `priority` for recommendation and ordering (`packages/plan-core/src/task-selection.ts:31-32,151-153` and existing reorder persistence), but several discovery surfaces hide the priority values. This makes agents and humans lose the intended order once they leave the recommendation flow and browse lists manually.\n\nCurrent implementation references:\n- MCP compact discovery tools in `packages/plan-mcp/src/index.ts:431-468` list features/phases/tasks without surfacing the persisted `priority` values in the returned text, even though those values exist on the entities.\n- Pi compact discovery tools in `packages/pi-adapter/src/index.ts:3325-3903` similarly omit priority in `feature_list`, `phase_list`, and `task_list` output, while the operational context block later tells agents to prioritize by ascending priority.\n- Web UI list/discovery surfaces such as `packages/plan-web-ui/src/components/features/feature-row.tsx`, `packages/plan-web-ui/src/components/phases/phase-row.tsx`, `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`, `packages/plan-web-ui/src/components/dashboard/latest-completed-tasks.tsx`, and `packages/plan-web-ui/src/components/dashboard/new-added-tasks.tsx` show refs/statuses but do not consistently show the entity priority next to those compact headers.\n- Shared/generated planner guidance in `plugins/_shared/planner-skill.md.in`, `packages/agent-plan/src/index.ts`, and Pi's injected operational rules should describe that manual browsing surfaces expose priority and that agents should follow it when choosing between ready siblings.\n\nScope:\n- Surface compact priority markers in MCP and Pi discovery outputs for features, phases, and tasks.\n- Add compact priority badges/labels to the relevant Web UI list surfaces without regressing the agreed compact single-row layouts.\n- Align shared/generated guidance so agents understand that the visible list order and priority markers are authoritative when browsing manually.\n- Cover the changes with focused MCP/Pi/Web UI regressions.\n\nBehaviors to preserve:\n- Existing sort order and recommendation logic stay unchanged.\n- Compact layouts remain compact; do not introduce wrapping-heavy or oversized controls.\n- Source-code text stays in English.",
+  "descriptionUpdatedAt": "2026-08-27T19:43:58.308Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "55a88c99-b3bd-4479-b7e6-6eec1d10fa46"
+  ],
+  "tasks": [
+    {
+      "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46",
+      "phaseId": "eb6ce64c-8229-4af2-8549-d0e4d9389df8",
+      "number": 347,
+      "shortId": "M79E6",
+      "priority": 1,
+      "shortName": "surface-priority-in-mcp-pi-and",
+      "title": "Surface priority in MCP, Pi, and compact Web UI lists",
+      "status": "done",
+      "description": "Implement the missing priority surfacing that the current branch review identified.\n\nCode references and current state:\n- `packages/plan-mcp/src/index.ts` compact list handlers `planner-feature-list`, `planner-phase-list`, and `planner-task-list` currently return one-line text rows without any priority markers, even though entities persist `priority` and recommendations already sort by it.\n- `packages/pi-adapter/src/index.ts` tool handlers `feature_list`, `phase_list`, and `task_list` have the same omission in their compact text output.\n- Web UI compact browsing surfaces in `packages/plan-web-ui/src/components/features/feature-row.tsx`, `packages/plan-web-ui/src/components/phases/phase-row.tsx`, `packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx`, `packages/plan-web-ui/src/components/dashboard/latest-completed-tasks.tsx`, and `packages/plan-web-ui/src/components/dashboard/new-added-tasks.tsx` show refs and statuses but not the priority values needed to understand sibling ordering at a glance.\n- Guidance surfaces in `plugins/_shared/planner-skill.md.in`, `packages/agent-plan/src/index.ts`, and `packages/pi-adapter/src/index.ts` still need explicit wording that manual discovery surfaces expose priority and that only missing/stale reads must be retried.\n\nImplementation goals:\n1. Add compact priority markers for feature/phase/task list rows in MCP and Pi.\n2. Add compact, layout-safe priority badges to the relevant Web UI list surfaces: feature rows, phase rows, WorkTree task rows, Latest completed tasks, and New Added Tasks.\n3. Align shared/generated guidance to the updated priority and read-order protocol.\n4. Add focused regressions for the new output/badges without changing sort behavior itself.\n\nEdge cases:\n- Preserve existing outputs for entities whose priority is unset/0 by showing no misleading badge.\n- Keep accessible names clear and avoid duplicate label text in compact headers.\n- Do not change recommendation logic or create unrelated UI restyling.\n\n---\n**Completion summary:**\nSurfaced priority consistently across manual planner discovery surfaces and aligned the related guidance. MCP compact list tools in `packages/plan-mcp/src/index.ts` now include priority markers in feature/phase/task text output, return structured arrays carrying `priority`, and advertise the richer compact format; Pi compact list tools in `packages/pi-adapter/src/index.ts` now surface the same priority markers in `feature_list`, `phase_list`, and `task_list`; and compact Web UI rows/cards now show reusable priority pills via `packages/plan-web-ui/src/components/ui/detail-metadata.tsx` on feature rows, phase rows, WorkTree task rows, Latest completed tasks, and New Added Tasks. Guidance was aligned in `plugins/_shared/planner-skill.md.in`, regenerated `plugins/claude-code/skills/planner/SKILL.md`, `packages/agent-plan/src/index.ts`, `packages/agent-plan/test/version.test.mjs`, and Pi’s injected operational text so agents know reads can be retried in any order within a session and manual list browsing should follow visible priority markers. Regression coverage was extended in `packages/plan-mcp/test/mcp-crud.test.mjs`, `packages/pi-adapter/test/mutations.test.mjs`, and `packages/plan-web-ui/test/entity-references-and-updates.test.tsx`. Verification passed with `pnpm check` and `pnpm test:coverage`, including 471/471 Node tests, 80/80 Web UI tests, and final coverage 85.83% lines / 73.80% branches / 80.65% functions.",
+      "descriptionUpdatedAt": "2026-08-27T19:58:42.697Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46-check-001-planned-in-progress",
+          "date": "2026-08-27T19:46:29.839Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46-check-002-in-progress-done",
+          "date": "2026-08-27T19:58:42.695Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Surfaced priority consistently across manual planner discovery surfaces and aligned the related guidance. MCP compact list tools in `packages/plan-mcp/src/index.ts` now include priority markers in feature/phase/task text output, return structured arrays carrying `priority`, and advertise the richer compact format; Pi compact list tools in `packages/pi-adapter/src/index.ts` now surface the same priority markers in `feature_list`, `phase_list`, and `task_list`; and compact Web UI rows/cards now show reusable priority pills via `packages/plan-web-ui/src/components/ui/detail-metadata.tsx` on feature rows, phase rows, WorkTree task rows, Latest completed tasks, and New Added Tasks. Guidance was aligned in `plugins/_shared/planner-skill.md.in`, regenerated `plugins/claude-code/skills/planner/SKILL.md`, `packages/agent-plan/src/index.ts`, `packages/agent-plan/test/version.test.mjs`, and Pi’s injected operational text so agents know reads can be retried in any order within a session and manual list browsing should follow visible priority markers. Regression coverage was extended in `packages/plan-mcp/test/mcp-crud.test.mjs`, `packages/pi-adapter/test/mutations.test.mjs`, and `packages/plan-web-ui/test/entity-references-and-updates.test.tsx`. Verification passed with `pnpm check` and `pnpm test:coverage`, including 471/471 Node tests, 80/80 Web UI tests, and final coverage 85.83% lines / 73.80% branches / 80.65% functions."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46-check-001-update-mcp-compact-list-outputs-and-tests-to-include-priority-markers",
+          "number": 1,
+          "title": "Update MCP compact list outputs and tests to include priority markers.",
+          "checked": true
+        },
+        {
+          "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46-check-002-update-pi-compact-list-outputs-and-tests-to-include-priority-markers",
+          "number": 2,
+          "title": "Update Pi compact list outputs and tests to include priority markers.",
+          "checked": true
+        },
+        {
+          "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46-check-003-add-compact-web-ui-priority-badges-to-feature-rows-phase-rows-worktree-task-rows-latest-completed-tasks-and-new-added-tasks",
+          "number": 3,
+          "title": "Add compact Web UI priority badges to feature rows, phase rows, WorkTree task rows, Latest completed tasks, and New Added Tasks.",
+          "checked": true
+        },
+        {
+          "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46-check-004-align-shared-generated-operational-guidance-in-planner-skill-agent-plan-and-pi-context-text",
+          "number": 4,
+          "title": "Align shared/generated operational guidance in planner-skill, agent-plan, and Pi context text.",
+          "checked": true
+        },
+        {
+          "id": "55a88c99-b3bd-4479-b7e6-6eec1d10fa46-check-005-run-focused-and-full-verification-for-touched-packages-then-complete-the-task-with-durable-evidence",
+          "number": 5,
+          "title": "Run focused and full verification for touched packages, then complete the task with durable evidence.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T19:46:29.839Z",
+      "completedAt": "2026-08-27T19:58:42.695Z",
+      "createdAt": "2026-08-27T19:44:10.889Z",
+      "updatedAt": "2026-08-27T19:58:42.695Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T19:46:29.760Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-27T19:43:58.307Z",
+  "updatedAt": "2026-08-27T19:58:42.695Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "c09d0100-8085-4f20-ae48-f86d5affdc35",
+      "date": "2026-08-27T19:46:29.877Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "0c0a846c-652f-417e-8559-86f66cd6d9ff",
+      "date": "2026-08-27T19:58:42.723Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-27T19:46:29.760Z"
+    }
+  ]
+}

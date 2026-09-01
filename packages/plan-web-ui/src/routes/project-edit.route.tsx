@@ -25,43 +25,32 @@ export function ProjectEditRoute() {
 
       <Card className="grid gap-5">
         <div>
-          <h2 className="text-xl font-black tracking-tight text-[var(--text)]">Edit project overview</h2>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">Update the short dashboard summary and the longer project goal without changing the rest of the project metadata.</p>
+          <h2 className="text-xl font-black tracking-tight text-[var(--text)]">Edit project context</h2>
+          <p className="mt-2 text-sm text-[var(--text-muted)]">Update human-authored overview and Project Guidelines content. Freshness and agent read attestations remain planner-managed.</p>
         </div>
 
         <Form ref={formRef} method="post" className="grid gap-4">
           <Field label="Project name">
-            <Input
-              name="name"
-              defaultValue={project.name}
-              placeholder="Project name"
-              required
-            />
+            <Input name="name" defaultValue={project.name} placeholder="Project name" required />
           </Field>
           <Field label="Short description">
-            <Textarea
-              name="description"
-              defaultValue={project.description}
-              placeholder="Summarize the project in a few lines for the dashboard overview"
-            />
+            <Textarea name="description" defaultValue={project.description} placeholder="Summarize the project in a few lines for the dashboard overview" />
           </Field>
           <Field label="Project goal">
-            <Textarea
-              name="goal"
-              defaultValue={project.goal}
-              placeholder="Define the main objective, success criteria, and overall direction of the project"
-            />
+            <Textarea name="goal" defaultValue={project.goal} placeholder="Define the main objective, success criteria, and overall direction of the project" />
+          </Field>
+          <Field label="Project Guidelines">
+            <Textarea name="projectGuidelines" defaultValue={project.projectGuidelines.content} placeholder="Coding standards, formatting, styling, and verification rules agents must follow" />
           </Field>
           <div className="flex justify-end gap-3">
-            <Link to="/">
-              <Button type="button" variant="ghost">Cancel</Button>
-            </Link>
+            <Link to="/"><Button type="button" variant="ghost">Cancel</Button></Link>
             <Button type="submit" variant="primary" disabled={submitting} shortcut="submit">
-              {submitting ? "Saving…" : "Save project overview"}
+              {submitting ? "Saving…" : "Save project context"}
             </Button>
           </div>
         </Form>
       </Card>
+
     </div>
   );
 }

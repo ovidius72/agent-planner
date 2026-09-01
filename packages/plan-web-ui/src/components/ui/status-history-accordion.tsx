@@ -36,19 +36,25 @@ function buildTransitions(
   backbone: string[],
   startedAt?: string,
   completedAt?: string,
-): { date: string; fromStatus: string; toStatus: string; inferred: boolean }[] {
+): { date: string; fromStatus: string; toStatus: string; motivation: string; inferred: boolean }[] {
   if (statusLog.length > 0) {
-    return statusLog.map((e) => ({ date: e.date, fromStatus: e.fromStatus, toStatus: e.toStatus, inferred: false }));
+    return statusLog.map((e) => ({
+      date: e.date,
+      fromStatus: e.fromStatus,
+      toStatus: e.toStatus,
+      motivation: e.description.trim(),
+      inferred: false,
+    }));
   }
   // Infer from backbone.
   const idx = backbone.indexOf(currentStatus);
   if (idx < 0) return [];
-  const out: { date: string; fromStatus: string; toStatus: string; inferred: boolean }[] = [];
+  const out: { date: string; fromStatus: string; toStatus: string; motivation: string; inferred: boolean }[] = [];
   for (let i = 1; i <= idx; i++) {
     const from = backbone[i - 1]!;
     const to = backbone[i]!;
     const date = to === "in-progress" ? (startedAt ?? "") : to === "done" ? (completedAt ?? "") : "";
-    out.push({ date, fromStatus: from, toStatus: to, inferred: true });
+    out.push({ date, fromStatus: from, toStatus: to, motivation: "", inferred: true });
   }
   return out;
 }
@@ -83,14 +89,36 @@ export function StatusHistoryAccordion({ statusLog, currentStatus, backbone, sta
       {transitions.length === 0 ? (
         <p className="text-sm text-[var(--text-muted)] italic">No status changes recorded.</p>
       ) : (
-        transitions.map((entry, i) => (
-          <div key={i} className="text-sm flex flex-wrap items-center gap-2">
-            <span className="text-xs font-mono text-[var(--text-subtle)]">{formatCompactDate(entry.date)}</span>
-            <span className="font-semibold text-[var(--text-muted)]">{prettyStatus(entry.fromStatus)}</span>
-            <span className="text-[var(--text-subtle)]">→</span>
-            <span className="font-semibold text-[var(--text)]">{prettyStatus(entry.toStatus)}</span>
-          </div>
-        ))
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-[var(--border)] text-xs text-[var(--text-subtle)]">
+                <th scope="col" className="px-2 pb-2 font-medium">Date</th>
+                <th scope="col" className="px-2 pb-2 font-medium">From</th>
+                <th scope="col" className="px-2 pb-2 font-medium">To</th>
+                <th scope="col" className="px-2 pb-2 font-medium">Motivation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transitions.map((entry, i) => (
+                <tr key={i} className="border-b border-[var(--border)] last:border-b-0">
+                  <td className="px-2 py-2 align-top text-xs font-mono text-[var(--text-subtle)] whitespace-nowrap">
+                    {formatCompactDate(entry.date)}
+                  </td>
+                  <td className="px-2 py-2 align-top font-semibold text-[var(--text-muted)] whitespace-nowrap">
+                    {prettyStatus(entry.fromStatus)}
+                  </td>
+                  <td className="px-2 py-2 align-top font-semibold text-[var(--text)] whitespace-nowrap">
+                    {prettyStatus(entry.toStatus)}
+                  </td>
+                  <td className="px-2 py-2 align-top text-[var(--text-muted)] whitespace-pre-wrap [overflow-wrap:anywhere]">
+                    {entry.motivation || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Accordion>
   );

@@ -8,11 +8,20 @@ import { join } from "node:path";
 const dirs = [];
 after(async () => { await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true }))); });
 
-async function makePlan({ featStatus = "planned", phaseStatus = "planned", tasks = [{ status: "planned" }], handoff = null, nextSteps = [] } = {}) {
+async function makePlan({ featStatus = "planned", phaseStatus = "planned", tasks = [{ status: "planned" }], handoff = null, nextSteps = [], projectGuidelines = "" } = {}) {
   const root = await mkdtemp(join(tmpdir(), "recap-"));
   dirs.push(root);
   const store = new PlanStore(join(root, ".planner"));
   await store.init("Recap project");
+  if (projectGuidelines) {
+    await store.updateProject((project) => ({
+      ...project,
+      projectGuidelines: {
+        ...project.projectGuidelines,
+        content: projectGuidelines,
+      },
+    }));
+  }
   const now = new Date().toISOString();
   const feat = FeatureSchema.parse({ id: createFeatureId(), number: 1, name: "Feat One", status: featStatus, createdAt: now, updatedAt: now });
   await store.saveFeature(feat);
@@ -56,7 +65,17 @@ describe("buildRecap — internal agent rules", () => {
       const recap = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness });
       assert.doesNotMatch(recap, /Planner rules \(extension/);
       assert.ok(!recap.includes(PLANNER_EXTENSION_RULES[0]), `${harness} recap excludes the canonical agent rule`);
+      assert.doesNotMatch(recap, /Interview me relentlessly about every aspect/);
+      assert.match(recap, /## Project Guidelines/);
+      assert.match(recap, /No project guidelines set\./);
     }
+  });
+
+  test("surfaces project guidelines as a fixed recap section when present", async () => {
+    const { store } = await makePlan({ tasks: [{ status: "planned" }], projectGuidelines: "Use English in source code. Keep formatting consistent." });
+    const recap = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.match(recap, /## Project Guidelines/);
+    assert.match(recap, /Use English in source code\. Keep formatting consistent\./);
   });
 });
 

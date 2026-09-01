@@ -111,6 +111,11 @@ export function formatFeatureRef(featureNumber: number): string {
   return `F${formatThreeDigitNumber(featureNumber)}`;
 }
 
+/** Human-readable idea ref: `I00x`. Ideas use an independent global sequence. */
+export function formatIdeaRef(ideaNumber: number): string {
+  return `I${formatThreeDigitNumber(ideaNumber)}`;
+}
+
 /** Find the parent feature's number for a phase (for P00x(F00x) composite refs). */
 export function featureNumberOfPhase(
   phase: { featureId?: string | null | undefined },
@@ -139,6 +144,10 @@ export function createTaskId(): string {
 }
 
 export function createRequirementId(): string {
+  return randomUUID();
+}
+
+export function createIdeaId(): string {
   return randomUUID();
 }
 

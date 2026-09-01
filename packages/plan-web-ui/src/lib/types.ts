@@ -134,6 +134,25 @@ export interface MacroTask {
   updatedAt: string;
 }
 
+export interface IdeaPromotion {
+  targetType: "feature" | "phase" | "task";
+  targetId: string;
+  targetRef: string;
+  promotedAt: string;
+}
+
+export interface Idea {
+  id: string;
+  number: number;
+  shortId: string;
+  title: string;
+  description: string;
+  promotion: IdeaPromotion | null;
+  targetHref?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Requirement {
   id: string;
   title: string;
@@ -213,10 +232,18 @@ export interface PhaseHandoff {
   updatedAt: string;
 }
 
+export interface ProjectGuidelines {
+  content: string;
+  updatedAt: string;
+  sessionInfo: Array<{ sessionId: string; createdAt: string }>;
+}
+
 export interface Project {
   name: string;
   goal: string;
   description: string;
+  descriptionRef?: string;
+  projectGuidelines: ProjectGuidelines;
   webPort: number;
   scope: string[];
   outOfScope: string[];

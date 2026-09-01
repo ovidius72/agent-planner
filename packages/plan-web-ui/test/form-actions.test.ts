@@ -95,7 +95,9 @@ describe("entity form actions", () => {
         linkedPhaseIds: ["phase-1", "phase-2"],
         macroTasks: [],
       });
-      expect(body.id).toEqual(expect.any(String));
+      expect(body).not.toHaveProperty("id");
+      expect(body).not.toHaveProperty("createdAt");
+      expect(body).not.toHaveProperty("updatedAt");
       return jsonResponse(makeRequirement());
     });
     const result = await createRequirement({ request: formRequest({ title: " Outcome ", status: "in-progress", linkedPhaseIds: [" phase-1 ", "", "phase-2"] }) });

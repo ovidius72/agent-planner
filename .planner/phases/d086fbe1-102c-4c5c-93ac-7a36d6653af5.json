@@ -1,0 +1,240 @@
+{
+  "id": "d086fbe1-102c-4c5c-93ac-7a36d6653af5",
+  "featureId": "2f99bd64-b58c-4635-963e-31b45f0ccff6",
+  "number": 86,
+  "shortId": "6Y347",
+  "priority": 4,
+  "slug": "context-persistence-fallbacks-and-project-guidelines-gates",
+  "title": "Context persistence fallbacks and project guidelines gates",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Prevent silent context loss on oversized descriptions and add a first-class Project Guidelines / Coding Standard contract with read enforcement.",
+  "description": "`packages/pi-adapter/src/index.ts` already contains one partial large-payload warning in `feature_update` ('If you attempted a large description, it may have exceeded the tool payload limit.') but the behavior is not uniform across feature/phase/task/project update/discuss flows and there is no automatic durable fallback. `packages/plan-mcp/src/index.ts` has the analogous update/discuss surfaces, `packages/plan-core/src/schema.ts` does not impose a description max length, and `packages/plan-core/src/plan-store.ts` appears able to persist long descriptions once they arrive, so the risk is at the harness/tool boundary where a truncated or omitted field can still produce a misleading success. Separately, the planner currently exposes only generic `globalRules` / `workflowRules` in the core schema and UI contexts, but there is no canonical mandatory 'Project Guidelines' or 'Coding Standard' section that agents must read on load and before starting work. This phase should add a trustworthy oversize-description fallback contract (detect suspected dropped payloads, verify persisted description, fall back to a committed markdown artifact plus a short linked planner description) and a harness-agnostic project-guidelines contract (canonical storage surface, explicit read tools/state, lifecycle-first enforcement, and parity across Pi, MCP, generated planner guidance, and Web UI where appropriate). Preserve planner core harness-agnosticism, agent-only enforcement for agent flows rather than the human supervisor Web UI, existing public TypeScript exports unless explicitly additive, and the project rule that source-code text remains English.",
+  "descriptionUpdatedAt": "2026-08-27T20:18:55.442Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "366b25d6-bfa3-4cbf-8282-b6f8f048ae63",
+    "e5dc016e-b875-4091-9fdd-382223752f66"
+  ],
+  "tasks": [
+    {
+      "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63",
+      "phaseId": "d086fbe1-102c-4c5c-93ac-7a36d6653af5",
+      "number": 348,
+      "shortId": "5TW5K",
+      "priority": 1,
+      "shortName": "add-oversized-description-mark",
+      "title": "Add oversized-description markdown fallback for planner update/discuss flows",
+      "status": "done",
+      "description": "Implement a safe fallback for planner writes when a long `description` payload is suspected to have been dropped before reaching the handler. Relevant surfaces are `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts` for feature/phase/task/project update/discuss tools, plus any shared contract needed in `packages/plan-core`. When no mutable field is actually received, return a structured non-success result instead of a misleading success, explicitly flagging suspected payload loss. Add an agent-facing recovery path that instructs the caller to create a committed markdown file in the repository, retry the planner write with a concise summary plus file reference, and read the entity back to verify the persisted description survived. Prefer a shared helper so Pi and MCP stay in parity. Preserve current successful small-payload behavior, do not mutate planner state on the failure path, keep source text English, and add focused regressions for both harnesses plus any guidance/template updates required so agents actually follow the fallback.\n\n---\n**Completion summary:**\nImplemented oversized-description fallback support across planner update/discuss flows without mutating planner state on the failure path. Added `packages/plan-core/src/payload-fallback.ts` plus schema support for optional `descriptionRef` on project/feature/phase/task entities, and updated `packages/plan-core/src/plan-store.ts` so `descriptionUpdatedAt` tracks inline-description or descriptionRef changes. Updated Pi and MCP update/discuss handlers to reject fieldless payloads with structured `DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED` results, suggest canonical `.planner/docs/...` fallback paths, accept/persist `descriptionRef`, and surface description references in full read-back responses. Aligned shared agent guidance in `packages/agent-plan/src/index.ts`, `plugins/_shared/planner-skill.md.in`, and regenerated `plugins/claude-code/skills/planner/SKILL.md` so agents create a committed markdown file, retry with a concise summary plus `descriptionRef`, and verify by read-back. Added regression coverage in `packages/pi-adapter/test/ref-validation.test.mjs`, `packages/plan-mcp/test/ref-validation.test.mjs`, `packages/plan-mcp/test/mcp-crud.test.mjs`, and `packages/agent-plan/test/version.test.mjs`. Verification passed with `pnpm check`, `pnpm build`, focused `node --test packages/pi-adapter/test/ref-validation.test.mjs packages/plan-mcp/test/ref-validation.test.mjs packages/agent-plan/test/version.test.mjs`, and full `pnpm test:coverage` at 472/472 tests with FINAL coverage gate passing. Remaining work: T349 project-guidelines gates and T350 mixed done+canceled parent display follow-up are still pending. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-08-28T08:21:30.255Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63-check-001-planned-in-progress",
+          "date": "2026-08-27T20:19:45.716Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63-check-002-in-progress-done",
+          "date": "2026-08-28T08:21:30.253Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented oversized-description fallback support across planner update/discuss flows without mutating planner state on the failure path. Added `packages/plan-core/src/payload-fallback.ts` plus schema support for optional `descriptionRef` on project/feature/phase/task entities, and updated `packages/plan-core/src/plan-store.ts` so `descriptionUpdatedAt` tracks inline-description or descriptionRef changes. Updated Pi and MCP update/discuss handlers to reject fieldless payloads with structured `DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED` results, suggest canonical `.planner/docs/...` fallback paths, accept/persist `descriptionRef`, and surface description references in full read-back responses. Aligned shared agent guidance in `packages/agent-plan/src/index.ts`, `plugins/_shared/planner-skill.md.in`, and regenerated `plugins/claude-code/skills/planner/SKILL.md` so agents create a committed markdown file, retry with a concise summary plus `descriptionRef`, and verify by read-back. Added regression coverage in `packages/pi-adapter/test/ref-validation.test.mjs`, `packages/plan-mcp/test/ref-validation.test.mjs`, `packages/plan-mcp/test/mcp-crud.test.mjs`, and `packages/agent-plan/test/version.test.mjs`. Verification passed with `pnpm check`, `pnpm build`, focused `node --test packages/pi-adapter/test/ref-validation.test.mjs packages/plan-mcp/test/ref-validation.test.mjs packages/agent-plan/test/version.test.mjs`, and full `pnpm test:coverage` at 472/472 tests with FINAL coverage gate passing. Remaining work: T349 project-guidelines gates and T350 mixed done+canceled parent display follow-up are still pending. No commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63-check-001-audit-every-planner-update-discuss-surface-that-can-accept-long-description-text-and-classify-exact-false-success-vs-no-op-behavior",
+          "number": 1,
+          "title": "Audit every planner update/discuss surface that can accept long description text and classify exact false-success vs no-op behavior.",
+          "checked": true
+        },
+        {
+          "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63-check-002-introduce-a-shared-oversized-description-failure-contract-helper-used-by-pi-and-mcp-update-discuss-handlers",
+          "number": 2,
+          "title": "Introduce a shared oversized-description failure contract/helper used by Pi and MCP update/discuss handlers.",
+          "checked": true
+        },
+        {
+          "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63-check-003-update-pi-and-mcp-agent-facing-tool-text-nextactions-so-the-recovery-path-is-create-committed-markdown-write-short-linked-summary-read-back-then-continue",
+          "number": 3,
+          "title": "Update Pi and MCP agent-facing tool text / nextActions so the recovery path is: create committed markdown, write short linked summary, read back, then continue.",
+          "checked": true
+        },
+        {
+          "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63-check-004-add-regressions-proving-oversized-description-suspected-cases-return-non-success-with-fallback-instructions-and-do-not-mutate-planner-data",
+          "number": 4,
+          "title": "Add regressions proving oversized-description suspected cases return non-success with fallback instructions and do not mutate planner data.",
+          "checked": true
+        },
+        {
+          "id": "366b25d6-bfa3-4cbf-8282-b6f8f048ae63-check-005-run-focused-and-full-verification-for-touched-packages",
+          "number": 5,
+          "title": "Run focused and full verification for touched packages.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T20:19:45.716Z",
+      "completedAt": "2026-08-28T08:21:30.253Z",
+      "createdAt": "2026-08-27T20:19:11.976Z",
+      "updatedAt": "2026-08-28T08:21:30.253Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T20:19:45.631Z"
+        }
+      ]
+    },
+    {
+      "id": "e5dc016e-b875-4091-9fdd-382223752f66",
+      "phaseId": "d086fbe1-102c-4c5c-93ac-7a36d6653af5",
+      "number": 349,
+      "shortId": "CC9G9",
+      "priority": 2,
+      "shortName": "implement-canonical-project-gu",
+      "title": "Implement canonical Project Guidelines and Coding Standard read gates",
+      "status": "done",
+      "description": "Add the missing first-class 'Project Guidelines' / 'Coding Standard' contract that the user requested. The current planner only has generic `globalRules` and `workflowRules` in `packages/plan-core/src/schema.ts`, they are surfaced in `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and `packages/plan-web-ui/src/components/dashboard/ai-consolidated-context.tsx`, but there is no canonical dedicated section, no explicit read attestation, and no lifecycle enforcement on task start. Design and implement a harness-agnostic planner-core model for project guidelines, explicit read/list/show/update surfaces for Pi and MCP, agent-only load/start guidance that requires reading guidelines before task work, and session-scoped reuse/invalidation semantics consistent with the existing context-read model. If Web UI supervisor surfaces are involved, keep them informational/editorial and do not block the human supervisor with agent-only gates. Generated planner guidance/templates must reflect the new rule, and tests should cover creation/update/read plus task-start enforcement and any adapter lifecycle prompts. Preserve backward compatibility by keeping `globalRules` / `workflowRules` unless a safe additive migration path supersedes them.\n\n---\n**Completion summary:**\nImplemented canonical Project Guidelines gates across core, Pi, MCP, and informational Web UI surfaces. Added first-class project.projectGuidelines storage with updatedAt + sessionInfo attestation persistence in plan-core schema/PlanStore, read-state freshness evaluation in read-tracking, user-facing recap and renderer sections, and extension-rule guidance updates. Added Pi and MCP read/update tools for Project Guidelines, recorded guideline reads on planner-load, enforced PROJECT_GUIDELINES_READ_REQUIRED on task_start and task_switch paths (including Pi /planner task start), aligned retry guidance to nextActions any-order semantics, and updated generated planner command/skill text. Added informational Web UI support in AI Consolidated Context and project typing/normalization. Verification: pnpm check; pnpm build; pnpm --filter @agent-plan/web-ui exec vitest run; pnpm test:coverage (477/477 Node tests, 80/80 Web UI tests, FINAL coverage gate green at 85.94% lines / 73.55% branches / 80.44% functions); git diff --check.",
+      "descriptionUpdatedAt": "2026-08-28T14:09:10.387Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "e5dc016e-b875-4091-9fdd-382223752f66-check-001-planned-in-progress",
+          "date": "2026-08-28T08:23:12.512Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e5dc016e-b875-4091-9fdd-382223752f66-check-002-in-progress-done",
+          "date": "2026-08-28T14:09:10.385Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented canonical Project Guidelines gates across core, Pi, MCP, and informational Web UI surfaces. Added first-class project.projectGuidelines storage with updatedAt + sessionInfo attestation persistence in plan-core schema/PlanStore, read-state freshness evaluation in read-tracking, user-facing recap and renderer sections, and extension-rule guidance updates. Added Pi and MCP read/update tools for Project Guidelines, recorded guideline reads on planner-load, enforced PROJECT_GUIDELINES_READ_REQUIRED on task_start and task_switch paths (including Pi /planner task start), aligned retry guidance to nextActions any-order semantics, and updated generated planner command/skill text. Added informational Web UI support in AI Consolidated Context and project typing/normalization. Verification: pnpm check; pnpm build; pnpm --filter @agent-plan/web-ui exec vitest run; pnpm test:coverage (477/477 Node tests, 80/80 Web UI tests, FINAL coverage gate green at 85.94% lines / 73.55% branches / 80.44% functions); git diff --check."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e5dc016e-b875-4091-9fdd-382223752f66-check-001-design-the-canonical-planner-core-project-guidelines-data-shape-and-additive-migration-path",
+          "number": 1,
+          "title": "Design the canonical planner-core project-guidelines data shape and additive migration path.",
+          "checked": true
+        },
+        {
+          "id": "e5dc016e-b875-4091-9fdd-382223752f66-check-002-add-pi-and-mcp-tool-surfaces-plus-read-attestation-support-for-guidelines",
+          "number": 2,
+          "title": "Add Pi and MCP tool surfaces plus read-attestation support for guidelines.",
+          "checked": true
+        },
+        {
+          "id": "e5dc016e-b875-4091-9fdd-382223752f66-check-003-enforce-guidelines-read-on-agent-load-task-start-flows-without-blocking-the-web-ui-supervisor",
+          "number": 3,
+          "title": "Enforce guidelines read on agent load/task-start flows without blocking the Web UI supervisor.",
+          "checked": true
+        },
+        {
+          "id": "e5dc016e-b875-4091-9fdd-382223752f66-check-004-update-generated-shared-planner-guidance-so-agents-know-guidelines-are-mandatory-before-work",
+          "number": 4,
+          "title": "Update generated/shared planner guidance so agents know guidelines are mandatory before work.",
+          "checked": true
+        },
+        {
+          "id": "e5dc016e-b875-4091-9fdd-382223752f66-check-005-add-focused-plus-full-verification-across-core-pi-mcp-and-any-affected-web-ui-tests",
+          "number": 5,
+          "title": "Add focused plus full verification across core, Pi, MCP, and any affected Web UI/tests.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T08:23:12.512Z",
+      "completedAt": "2026-08-28T14:09:10.385Z",
+      "createdAt": "2026-08-27T20:19:12.039Z",
+      "updatedAt": "2026-08-28T14:09:10.385Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-28T08:23:12.435Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-27T20:18:55.442Z",
+  "updatedAt": "2026-08-28T14:09:10.385Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-28T08:40:21.386Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/d086fbe1-102c-4c5c-93ac-7a36d6653af5-2026-08-28T14-09-10-407Z.md",
+      "clearedAt": "2026-08-28T14:09:10.407Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/d086fbe1-102c-4c5c-93ac-7a36d6653af5-2026-08-28T08-40-21-362Z.md",
+      "clearedAt": "2026-08-28T08:40:21.362Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/d086fbe1-102c-4c5c-93ac-7a36d6653af5-2026-08-28T08-21-55-952Z.md",
+      "clearedAt": "2026-08-28T08:21:55.952Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/d086fbe1-102c-4c5c-93ac-7a36d6653af5-2026-08-27T20-29-43-988Z.md",
+      "clearedAt": "2026-08-27T20:29:43.988Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "316e08fd-7a4a-4d82-95d9-85a3250f7e23",
+      "date": "2026-08-27T20:19:45.740Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "0c5329ca-9a3c-488e-9241-9e879c66e892",
+      "date": "2026-08-28T14:09:10.454Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-28T08:23:12.435Z"
+    }
+  ]
+}

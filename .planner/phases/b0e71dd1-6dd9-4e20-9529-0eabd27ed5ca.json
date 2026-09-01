@@ -1,0 +1,157 @@
+{
+  "id": "b0e71dd1-6dd9-4e20-9529-0eabd27ed5ca",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 87,
+  "shortId": "QBJWZ",
+  "priority": 28,
+  "slug": "derived-done-display-for-mixed-done-canceled-parents",
+  "title": "Derived done display for mixed done+canceled parents",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Treat parent entities with only done/canceled children as done in the derived display layer.",
+  "description": "Current state: planner canonical status derivation in packages/plan-core/src/plan-store.ts already treats mixed done+canceled children as done because derivePhaseStatus() and deriveFeatureStatus() ignore canceled/rejected children when computing meaningful progress (see the derivePhaseStatus/deriveFeatureStatus block around lines 1914-1968). However the parent presentation layer in packages/plan-core/src/display-status.ts still maps any mixed terminal set to the parent-only display status `closed` (documented at line 109 and returned by deriveParentDisplay() near line 162). This makes phases/features with children {done,canceled} appear closed even though the positive completed outcome should be surfaced as done. Goals: adjust the derived display logic so parents whose terminal children are only done+canceled derive/display as done, while preserving current behavior for all-canceled => canceled, all-rejected => rejected, mixed canceled+rejected => closed, and any mixed terminal set containing rejected with done/canceled only if product rules still want closed. Update the relevant plan-core tests and any Web UI/API expectations that assert `closed` for done+canceled parents. Preserve harness-agnostic behavior in plan-core and avoid changing canonical persisted statuses or sort behavior.",
+  "descriptionUpdatedAt": "2026-08-28T07:42:39.472Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [
+    "P089(F020)/T352 — complete the approved planner-skill and handoff-enforcement sequence before this display-layer task."
+  ],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "8f43168b-f308-4991-b679-a94d322bdb47",
+      "title": "Show status-log motivations in Status history",
+      "decision": "Extend the existing Web UI Status history accordion with a Motivation column populated from each statusLog entry description, using an em dash when no motivation exists.",
+      "rationale": "The planner already records transition motivations in statusLog.description, but the existing accordion discarded that field and exposed only date/from/to, making agent-entered operational reasons invisible to the human supervisor.",
+      "implementationNotes": "Update packages/plan-web-ui/src/components/ui/status-history-accordion.tsx without creating a new history surface. Preserve inferred transition behavior, responsive accessibility, and existing task/phase/feature usage; add focused component coverage.",
+      "acceptedAt": "2026-08-30T09:29:11.819Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "147c654c-ca1f-4bf0-9801-29cfa567e898"
+  ],
+  "tasks": [
+    {
+      "id": "147c654c-ca1f-4bf0-9801-29cfa567e898",
+      "phaseId": "b0e71dd1-6dd9-4e20-9529-0eabd27ed5ca",
+      "number": 350,
+      "shortId": "3GXJ2",
+      "priority": 1,
+      "shortName": "adjust-parent-display-derivati",
+      "title": "Adjust parent display derivation so done+canceled rolls up to done",
+      "status": "done",
+      "description": "Investigate and correct the parent display-status derivation for features and phases whose children are terminal with a positive-completion mix. Current implementation: packages/plan-core/src/display-status.ts documents `closed` for mixed terminal outcomes and deriveParentDisplay() returns `closed` whenever every child is terminal but not all done/canceled/rejected individually; this currently includes the common {done,canceled} case. Canonical status derivation in packages/plan-core/src/plan-store.ts already treats done+canceled as done because canceled/rejected are excluded from meaningful child status sets, so the bug is specifically in the display layer rather than persisted workflow status. Implement the product rule that a parent with children containing only done and canceled should display/derive as done, not closed. Preserve the existing outcomes for all-canceled => canceled, all-rejected => rejected, and mixed canceled+rejected => closed unless investigation shows another rule is required. Update plan-core tests for display-status and any downstream tests or badges that expect the old closed label. Verification should include targeted unit coverage for phase/feature parent rollups and a check that no canonical schema/status persistence behavior regresses.\n\n---\n**Completion summary:**\nImplemented the display-layer correction in packages/plan-core/src/display-status.ts: terminal parent children containing only done and canceled now derive displayStatus=done when at least one child is done. Preserved all-canceled=canceled, all-rejected=rejected, done+rejected=closed, and canceled+rejected=closed; canonical persisted workflow derivation and sorting were not changed. Updated packages/plan-core/test/display-status.test.mjs and plan-store-display.test.mjs with truth-table and PlanStore phase-rollup coverage. Also implemented the user-approved Status history enhancement in packages/plan-web-ui/src/components/ui/status-history-accordion.tsx: recorded statusLog.description is retained as the Motivation column, empty and inferred transitions display an em dash, and the semantic table is horizontally contained for narrow viewports. Added packages/plan-web-ui/test/status-history-accordion.test.tsx. Verification: targeted core tests 37/37; focused UI tests 2/2; pnpm build; pnpm check; pnpm test:coverage with 504/504 Node and 84/84 Web UI tests, FINAL coverage 86.44% lines / 73.96% branches / 81.40% functions; pnpm plugins:check; git diff --check; full isolated real-server Playwright 34/34 across desktop and 390px mobile. Rebuilt Web UI bundles were copied to plan-server and pi-adapter. No commit or push performed; no remaining work identified.",
+      "descriptionUpdatedAt": "2026-08-30T09:33:02.269Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "147c654c-ca1f-4bf0-9801-29cfa567e898-check-001-planned-waiting",
+          "date": "2026-08-28T14:38:19.502Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "Deferred until the explicitly approved sequence P088(F005)/T351 followed by P089(F020)/T352 is completed.",
+          "description": "Deferred until the explicitly approved sequence P088(F005)/T351 followed by P089(F020)/T352 is completed."
+        },
+        {
+          "id": "147c654c-ca1f-4bf0-9801-29cfa567e898-check-002-waiting-planned",
+          "date": "2026-08-30T09:24:03.492Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "The prerequisite sequence P088/T351, P089/T352, and P090/T353-T355 is complete; this deferred display-layer fix is now the next approved task.",
+          "description": "The prerequisite sequence P088/T351, P089/T352, and P090/T353-T355 is complete; this deferred display-layer fix is now the next approved task."
+        },
+        {
+          "id": "147c654c-ca1f-4bf0-9801-29cfa567e898-check-003-planned-in-progress",
+          "date": "2026-08-30T09:24:26.579Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "147c654c-ca1f-4bf0-9801-29cfa567e898-check-004-in-progress-done",
+          "date": "2026-08-30T09:33:02.266Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented the display-layer correction in packages/plan-core/src/display-status.ts: terminal parent children containing only done and canceled now derive displayStatus=done when at least one child is done. Preserved all-canceled=canceled, all-rejected=rejected, done+rejected=closed, and canceled+rejected=closed; canonical persisted workflow derivation and sorting were not changed. Updated packages/plan-core/test/display-status.test.mjs and plan-store-display.test.mjs with truth-table and PlanStore phase-rollup coverage. Also implemented the user-approved Status history enhancement in packages/plan-web-ui/src/components/ui/status-history-accordion.tsx: recorded statusLog.description is retained as the Motivation column, empty and inferred transitions display an em dash, and the semantic table is horizontally contained for narrow viewports. Added packages/plan-web-ui/test/status-history-accordion.test.tsx. Verification: targeted core tests 37/37; focused UI tests 2/2; pnpm build; pnpm check; pnpm test:coverage with 504/504 Node and 84/84 Web UI tests, FINAL coverage 86.44% lines / 73.96% branches / 81.40% functions; pnpm plugins:check; git diff --check; full isolated real-server Playwright 34/34 across desktop and 390px mobile. Rebuilt Web UI bundles were copied to plan-server and pi-adapter. No commit or push performed; no remaining work identified."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-30T09:24:26.579Z",
+      "completedAt": "2026-08-30T09:33:02.266Z",
+      "createdAt": "2026-08-28T07:42:56.012Z",
+      "updatedAt": "2026-08-30T09:33:02.266Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-30T09:24:26.492Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-28T07:42:39.471Z",
+  "updatedAt": "2026-08-30T09:33:02.266Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-30T09:24:59.998Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/b0e71dd1-6dd9-4e20-9529-0eabd27ed5ca-2026-08-30T09-33-02-291Z.md",
+      "clearedAt": "2026-08-30T09:33:02.291Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "3254c779-2906-42cd-a649-2d49350df3f3",
+      "date": "2026-08-28T14:38:19.537Z",
+      "fromStatus": "draft",
+      "toStatus": "waiting",
+      "title": "draft → waiting",
+      "description": ""
+    },
+    {
+      "id": "819206bc-ffdf-4004-b1cd-839d3fb263c2",
+      "date": "2026-08-30T09:24:03.513Z",
+      "fromStatus": "waiting",
+      "toStatus": "planned",
+      "title": "waiting → planned",
+      "description": ""
+    },
+    {
+      "id": "b2ccbb87-1aa8-4306-9d73-9c340ed22e05",
+      "date": "2026-08-30T09:24:26.607Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "098b54e9-021a-450d-bb7f-09fd8bf5c1b5",
+      "date": "2026-08-30T09:33:02.333Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-30T09:24:26.492Z"
+    }
+  ]
+}

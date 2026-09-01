@@ -148,6 +148,10 @@ test("project update: rich update persists through a fresh PlanStore", async () 
     ...p,
     goal: "Ship a harness-agnostic planner",
     description: "Longer project description.",
+    projectGuidelines: {
+      ...p.projectGuidelines,
+      content: "Keep naming consistent. Run focused verification before claiming success.",
+    },
     webPort: 4173,
     scope: ["core", "adapters"],
     outOfScope: ["mobile"],
@@ -165,6 +169,9 @@ test("project update: rich update persists through a fresh PlanStore", async () 
   assert.deepEqual(project.scope, ["core", "adapters"]);
   assert.deepEqual(project.technologies, ["TypeScript", "Hono"]);
   assert.deepEqual(project.globalRules, ["One task at a time"]);
+  assert.equal(Object.hasOwn(project.projectGuidelines, "title"), false);
+  assert.equal(project.projectGuidelines.content, "Keep naming consistent. Run focused verification before claiming success.");
+  assert.ok(project.projectGuidelines.updatedAt, "guidelines changes stamp freshness");
   assert.equal(project.contentLanguage, "it");
   assert.equal(project.nextFeatureNumber, 1, "counters untouched by plain updates");
 });
@@ -185,6 +192,11 @@ test("project saveProject: full explicit project round-trips deep-equal", async 
     name: "Round-trip project",
     goal: "Goal",
     description: "Desc",
+    projectGuidelines: {
+      content: "Use English in source code. Keep tests isolated.",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-02T00:00:00.000Z" }],
+    },
     webPort: 8080,
     scope: ["a", "b"],
     outOfScope: ["c"],
@@ -206,9 +218,36 @@ test("project saveProject: full explicit project round-trips deep-equal", async 
   const loaded = await reopened.loadProject();
   assert.equal(loaded.name, "Round-trip project");
   assert.equal(loaded.webPort, 8080);
+  assert.equal(loaded.projectGuidelines.content, "Use English in source code. Keep tests isolated.");
+  assert.equal(loaded.projectGuidelines.sessionInfo.length, 1);
   assert.equal(loaded.nextFeatureNumber, 7);
   assert.equal(loaded.nextTaskNumber, 12);
   assert.deepEqual(loaded.workDeviations, []);
+});
+
+test("project guidelines read attestations persist and become stale after guidelines change", async () => {
+  const { store } = await createPlannerFixture({ name: "proj-guidelines-attestation", seed: "empty" });
+  await store.updateProject((project) => ({
+    ...project,
+    projectGuidelines: {
+      ...project.projectGuidelines,
+      content: "Follow the formatter before committing.",
+    },
+  }));
+  await store.recordProjectGuidelinesRead({ sessionId: "session-a", createdAt: "2026-01-02T00:00:00.000Z" });
+  let loaded = await store.loadProject();
+  assert.deepEqual(loaded.projectGuidelines.sessionInfo, [{ sessionId: "session-a", createdAt: "2026-01-02T00:00:00.000Z" }]);
+
+  await store.updateProject((project) => ({
+    ...project,
+    projectGuidelines: {
+      ...project.projectGuidelines,
+      content: "Follow the formatter and rerun focused tests before claiming success.",
+    },
+  }));
+  loaded = await store.loadProject();
+  assert.equal(loaded.projectGuidelines.sessionInfo[0]?.sessionId, "session-a", "attestation stays recorded for staleness checks");
+  assert.ok(loaded.projectGuidelines.updatedAt > "2026-01-02T00:00:00.000Z", "guideline edit bumps freshness past the prior attestation");
 });
 
 test("project counters: non-positive values are rejected without mutation", async () => {

@@ -10,6 +10,7 @@ import { CopyableBadge, EntityPathBadge, HandoffBadge, ShortIdBadge, formatEntit
 import { StatusItem } from "../ui/status-item";
 import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
 import { LastUpdated } from "../ui/last-updated";
+import { PriorityBadge } from "../ui/detail-metadata";
 
 export function PhaseRow({ featureId, feature, phase }: { featureId: string; feature: Feature; phase: Phase }) {
   const statusFetcher = useFetcher();
@@ -32,6 +33,7 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
                 <span className="sr-only">Copy phase path</span>
               </CopyableBadge>
               {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
+              <PriorityBadge priority={phase.priority} />
               {phase.handoff ? <HandoffBadge phaseId={phase.id} updatedAt={phase.handoffUpdatedAt} /> : null}
               <PhaseRequirementLink
                 phaseId={phase.id}

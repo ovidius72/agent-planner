@@ -33,27 +33,14 @@ import { spawn } from "node:child_process";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 import { PlanStore } from "../../plan-core/dist/index.js";
 import { seedFixture, createTempRoot } from "../../../test/helpers/fixtures.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupPiHosts();
 });
 
 function canonicalHandoff(title, detail) {
-  return [
-    `# ${title}`,
-    "",
-    "Created at: 2026-08-24T00:00:00.000Z",
-    "Updated at: 2026-08-24T00:00:00.000Z",
-    "Reason: resume fixture",
-    "",
-    "## Current focus", detail,
-    "## What was being done", detail,
-    "## How to resume", "Continue the fixture.",
-    "## Files touched", "- resume.test.mjs",
-    "## Blockers", "- None",
-    "## Next steps", "- Continue",
-    "## Recent decisions", "- Preserve the handoff",
-  ].join("\n");
+  return canonicalAuditedHandoff(title, detail, { file: "resume.test.mjs", reason: "resume fixture" });
 }
 
 async function preparedHandoffArgs(host, phaseRef = "P001") {
@@ -61,6 +48,7 @@ async function preparedHandoffArgs(host, phaseRef = "P001") {
   return {
     expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
+    completenessAudit: completeHandoffAudit(),
     taskUpdates: [],
     phaseNoUpdateReason: "Resume fixture does not change durable phase context.",
     featureNoUpdateReason: "Resume fixture does not change durable feature context.",

@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { Form, useNavigation, useRouteLoaderData } from "react-router-dom";
 import { LinkedPhaseSelector } from "../components/requirements/linked-phase-selector";
+import { MacroTaskEditor } from "../components/requirements/macro-task-editor";
 import { Button } from "../components/ui/button";
 import { Field } from "../components/ui/field";
 import { Input } from "../components/ui/input";
@@ -34,6 +35,7 @@ export function RequirementCreateModalRoute() {
             {requirementStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>
+        <MacroTaskEditor initialTasks={[]} />
         <LinkedPhaseSelector phases={phases} />
         <ModalActions>
           <Button type="submit" variant="primary" disabled={submitting} shortcut="submit">{submitting ? "Creating…" : "Create requirement"}</Button>

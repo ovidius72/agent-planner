@@ -1,0 +1,167 @@
+{
+  "id": "1c7e6499-fe74-443c-89c7-0ae254c1552d",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 88,
+  "shortId": "TRG93",
+  "priority": 0,
+  "slug": "project-local-planner-usage-skill-and-cross-harness-loading",
+  "title": "Project-local planner usage skill and cross-harness loading",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Create a complete project-local planner usage skill, keep its command inventory current, and load it consistently across harnesses.",
+  "description": "Current state: `plugins/_shared/planner-skill.md.in:1` contains the shared MCP-oriented `/planner` routing guide and `plugins/claude-code/skills/planner/SKILL.md:1` is its generated Claude Code copy, but the command inventory may drift and no canonical `.planner/SKILL.md` exists. `packages/plan-core/src/plan-store.ts` does not seed or load a project-local planner skill, while `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and `packages/agent-plan/src/index.ts` carry overlapping operational guidance. Create a harness-agnostic canonical skill source, audit every current Pi/MCP command and lifecycle outcome, seed `.planner/SKILL.md` without timestamps, load it automatically for agent context across Pi and MCP-compatible clients, and keep generated plugin guidance synchronized. Canonical unmodified copies may be upgraded deterministically; project-customized copies must be preserved and reported as drift rather than overwritten. The skill must distinguish planner usage instructions from Project Guidelines, remain agent-facing rather than leaking internal rules into the human recap, and cover discovery/priority, composite references, context reads, task lifecycle, mutations, description fallback, handoffs, Web UI supervisor boundaries, and troubleshooting. Preserve plan-core harness independence and existing public contracts unless additions are explicitly compatible.",
+  "descriptionUpdatedAt": "2026-08-28T14:36:50.773Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "1e226f2a-e2d3-4883-874d-88c04c54378a",
+      "title": "Canonical managed project-local planner skill",
+      "decision": "The canonical cross-harness planner operating guide is owned by @agent-plan/core and materialized as a timestamp-free managed `.planner/SKILL.md`. Unmodified managed copies upgrade deterministically by body hash on explicit planner load; customized copies are preserved and produce actionable drift diagnostics. Pi injects the guide as agent-only system context and MCP planner-load returns it as agent-only structured context while the human recap text remains clean.",
+      "rationale": "One plan-core source prevents Pi, MCP, CLI, and plugin guidance from drifting, while a content hash distinguishes safe automatic upgrades from project-authored customizations. Agent-only loading makes the guide available in every supported harness without leaking operational instructions into user-facing recaps.",
+      "implementationNotes": "Canonical source: packages/plan-core/planner-skill.md. Runtime synchronization: packages/plan-core/src/planner-skill.ts and PlanStore.syncPlannerSkill(). Generated mirrors: plugins/_shared/planner-skill.md.in and plugins/claude-code/skills/planner/SKILL.md via scripts/sync-plugins.cjs. Inventory and lifecycle regressions must remain green.",
+      "acceptedAt": "2026-08-28T22:08:08.186Z"
+    }
+  ],
+  "completionCriteria": [
+    "`.planner/SKILL.md` contains the complete current planner usage contract and public command inventory.",
+    "Pi and MCP-compatible agent flows load the project-local skill automatically without exposing internal guidance in human recaps.",
+    "Canonical unmodified copies upgrade deterministically while customized copies are preserved with actionable drift reporting.",
+    "Cross-harness, generated-output, persistence, and inventory-drift tests pass."
+  ],
+  "taskIds": [
+    "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc"
+  ],
+  "tasks": [
+    {
+      "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc",
+      "phaseId": "1c7e6499-fe74-443c-89c7-0ae254c1552d",
+      "number": 351,
+      "shortId": "AEDCX",
+      "priority": 1,
+      "shortName": "planner-usage-skill",
+      "title": "Audit, publish, and auto-load the project-local planner usage skill",
+      "status": "done",
+      "description": "Implement the approved project-local planner skill contract. Audit the complete public command/tool inventories in `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, `packages/agent-plan/src/index.ts`, and `test/surfaces.mjs`; reconcile them with `plugins/_shared/planner-skill.md.in:1` and the generated `plugins/claude-code/skills/planner/SKILL.md:1`. Add a harness-agnostic canonical source in plan-core and integrate `packages/plan-core/src/plan-store.ts` so new planners receive timestamp-free `.planner/SKILL.md`. Existing canonical, unmodified copies must upgrade deterministically when Agent Plan changes; customized copies must be preserved and return actionable drift diagnostics. Wire automatic agent-context loading for Pi and MCP-compatible clients without exposing internal operational guidance in the human recap. The skill must precisely document planner activation, feature/phase/task discovery and visible priorities, composite references, lifecycle-first demand-driven reads, Project Guidelines, start/pause/switch/resume/complete, mutation/read-back rules, `.planner/docs/` oversized-description fallback, Web UI supervisor exemptions, typed denial recovery, and the exhaustive handoff protocol that the following F020 phase will enforce. Add inventory-drift, init/upgrade/customization, cross-harness loading, generated-output, and no-user-recap-leak regression tests. Preserve user customizations, exact source-code English, and plan-core harness independence.\n\n---\n**Completion summary:**\nImplemented the canonical cross-harness planner usage skill and verified it end to end. `packages/plan-core/planner-skill.md` is now the single English-language operating guide with complete Pi/MCP inventories, lifecycle-first demand-driven reads, Project Guidelines, visible priorities, composite refs, typed denial recovery, mutation/read-back and `.planner/docs/` fallback rules, Web UI supervisor boundaries, task pause/switch/resume/complete behavior, and a resume-proof handoff protocol including bounded inline content plus linked supporting docs. `packages/plan-core/src/planner-skill.ts` adds deterministic SHA-256 managed-copy rendering and synchronization; `PlanStore.init()` seeds timestamp-free `.planner/SKILL.md`, explicit loads safely upgrade unmodified copies, and customized copies are preserved with actionable drift diagnostics. `packages/plan-core/package.json` ships the canonical Markdown asset. Pi `/planner load` and `planner-load` synchronize the copy and inject it only into hidden/system agent context; MCP `planner-load` returns it in agent-only structuredContent while keeping recap text clean. `packages/agent-plan/src/index.ts` now generates Claude command guidance from the canonical core skill, and `scripts/sync-plugins.cjs` mirrors that source into `plugins/_shared/planner-skill.md.in` and `plugins/claude-code/skills/planner/SKILL.md`. Added `packages/plan-core/test/planner-skill.test.mjs` and `test/planner-skill-inventory.test.mjs`, plus Pi/MCP/CLI regressions for managed init/upgrade/customization, complete public tool and slash-command inventories, cross-harness load injection, generated-copy parity, package inclusion, and no human-recap leakage. Verification: `pnpm check` passed; `node scripts/sync-plugins.cjs --check` passed; focused new/cross-harness tests passed; `pnpm test:coverage` passed 484/484 Node tests and 80/80 Web UI tests with FINAL coverage 85.92% lines, 73.84% branches, 80.61% functions; `npm pack --dry-run` confirmed `planner-skill.md` and `dist/planner-skill.*` are published; `git diff --check` passed. No commit or push was performed. The separate verified handoff-list/show transport overflow and structured-content defects were recorded for P089(F020)/T352 rather than mixed into this task.",
+      "descriptionUpdatedAt": "2026-08-28T22:08:57.199Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc-check-001-planned-in-progress",
+          "date": "2026-08-28T14:40:30.856Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc-check-002-in-progress-done",
+          "date": "2026-08-28T22:08:57.197Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented the canonical cross-harness planner usage skill and verified it end to end. `packages/plan-core/planner-skill.md` is now the single English-language operating guide with complete Pi/MCP inventories, lifecycle-first demand-driven reads, Project Guidelines, visible priorities, composite refs, typed denial recovery, mutation/read-back and `.planner/docs/` fallback rules, Web UI supervisor boundaries, task pause/switch/resume/complete behavior, and a resume-proof handoff protocol including bounded inline content plus linked supporting docs. `packages/plan-core/src/planner-skill.ts` adds deterministic SHA-256 managed-copy rendering and synchronization; `PlanStore.init()` seeds timestamp-free `.planner/SKILL.md`, explicit loads safely upgrade unmodified copies, and customized copies are preserved with actionable drift diagnostics. `packages/plan-core/package.json` ships the canonical Markdown asset. Pi `/planner load` and `planner-load` synchronize the copy and inject it only into hidden/system agent context; MCP `planner-load` returns it in agent-only structuredContent while keeping recap text clean. `packages/agent-plan/src/index.ts` now generates Claude command guidance from the canonical core skill, and `scripts/sync-plugins.cjs` mirrors that source into `plugins/_shared/planner-skill.md.in` and `plugins/claude-code/skills/planner/SKILL.md`. Added `packages/plan-core/test/planner-skill.test.mjs` and `test/planner-skill-inventory.test.mjs`, plus Pi/MCP/CLI regressions for managed init/upgrade/customization, complete public tool and slash-command inventories, cross-harness load injection, generated-copy parity, package inclusion, and no human-recap leakage. Verification: `pnpm check` passed; `node scripts/sync-plugins.cjs --check` passed; focused new/cross-harness tests passed; `pnpm test:coverage` passed 484/484 Node tests and 80/80 Web UI tests with FINAL coverage 85.92% lines, 73.84% branches, 80.61% functions; `npm pack --dry-run` confirmed `planner-skill.md` and `dist/planner-skill.*` are published; `git diff --check` passed. No commit or push was performed. The separate verified handoff-list/show transport overflow and structured-content defects were recorded for P089(F020)/T352 rather than mixed into this task."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc-check-001-audit-every-current-pi-mcp-generated-command-and-lifecycle-outcome-against-the-shared-skill",
+          "number": 1,
+          "title": "Audit every current Pi, MCP, generated command, and lifecycle outcome against the shared skill.",
+          "checked": true
+        },
+        {
+          "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc-check-002-add-the-canonical-plan-core-skill-source-and-timestamp-free-planner-skill-md-persistence-contract",
+          "number": 2,
+          "title": "Add the canonical plan-core skill source and timestamp-free `.planner/SKILL.md` persistence contract.",
+          "checked": true
+        },
+        {
+          "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc-check-003-implement-deterministic-upgrades-for-unmodified-copies-and-drift-preservation-for-customized-copies",
+          "number": 3,
+          "title": "Implement deterministic upgrades for unmodified copies and drift preservation for customized copies.",
+          "checked": true
+        },
+        {
+          "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc-check-004-auto-load-the-skill-into-pi-and-mcp-compatible-agent-context-without-leaking-it-into-human-recaps",
+          "number": 4,
+          "title": "Auto-load the skill into Pi and MCP-compatible agent context without leaking it into human recaps.",
+          "checked": true
+        },
+        {
+          "id": "0d3b05fe-99ea-40ed-b78b-08dd0db7eccc-check-005-regenerate-plugin-outputs-and-add-complete-inventory-persistence-loading-and-drift-regression-coverage",
+          "number": 5,
+          "title": "Regenerate plugin outputs and add complete inventory, persistence, loading, and drift regression coverage.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T14:40:30.856Z",
+      "completedAt": "2026-08-28T22:08:57.197Z",
+      "createdAt": "2026-08-28T14:37:06.045Z",
+      "updatedAt": "2026-08-28T22:08:57.197Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-28T14:40:30.781Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-28T14:36:50.773Z",
+  "updatedAt": "2026-08-28T22:08:57.197Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-28T14:43:45.422Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/1c7e6499-fe74-443c-89c7-0ae254c1552d-2026-08-28T22-08-57-215Z.md",
+      "clearedAt": "2026-08-28T22:08:57.215Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "ae0ed63a-6291-46cb-931f-e20d76b6db91",
+      "date": "2026-08-28T14:37:51.924Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "0ad894c0-bfbe-46b8-b3ce-fa781ee8bb7e",
+      "date": "2026-08-28T14:40:30.876Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "4e3fca46-6e3f-40d0-910a-643e1b5c92a6",
+      "date": "2026-08-28T22:08:57.261Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-28T14:40:30.781Z"
+    }
+  ]
+}

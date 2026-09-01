@@ -29,11 +29,22 @@
       "rationale": "T326 made required reads enforceable but returned denials as ordinary tool results, allowing agents to claim a task started while it remained planned. The gate is valuable; the ambiguous outcome is the regression.",
       "implementationNotes": "Align Pi and MCP response details and descriptions; include CONTEXT_READ_REQUIRED and REQUIREMENTS_READ_REQUIRED codes; instruct requirement_list then retry; add denial/no-mutation/retry/postcondition tests.",
       "acceptedAt": "2026-08-25T09:36:47.490Z"
+    },
+    {
+      "id": "b1bfff21-1530-4b2c-b116-cf546196e544",
+      "title": "Bound handoff transport output and externalize extended detail",
+      "decision": "Handoff list surfaces must return compact summary metadata only and support bounded retrieval instead of embedding every full handoff. A single handoff show result must expose its body consistently in both textual and structured MCP content. Canonical handoffs must stay under a deterministic character budget; exhaustive supporting detail that exceeds the budget must live in linked committed Markdown documents under .planner/docs/.",
+      "rationale": "The current MCP planner-handoff-list structured payload includes every full handoff and has exceeded the client token limit, while planner-handoff-show puts the body only in text and can appear empty to clients that prioritize structuredContent. Bounded summaries plus one targeted bounded body preserve exhaustive resume context without overflowing transport limits.",
+      "implementationNotes": "Implement in P089(F020)/T352. Remove content from PhaseHandoffSummary/list structured payloads, add pagination or an explicit bounded list contract, include content in planner-handoff-show structuredContent, select and test a concrete character ceiling, validate linked .planner/docs/ references for overflow detail, and preserve legacy handoff readability.",
+      "acceptedAt": "2026-08-28T21:56:40.503Z"
     }
   ],
   "phaseIds": [
     "d7c3ad4b-8473-4985-9c0a-aff650635de0",
-    "08e732e1-3120-44e1-a955-e53b16edb0aa"
+    "08e732e1-3120-44e1-a955-e53b16edb0aa",
+    "8d96c7fb-9767-4628-8c8b-7c5aed53fc49",
+    "d086fbe1-102c-4c5c-93ac-7a36d6653af5",
+    "3efa2651-56e4-4701-810f-93e11ddfd83c"
   ],
   "dependsOn": [],
   "statusLog": [
@@ -132,14 +143,78 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "c3b4f37b-8b65-45c6-a4aa-5a5d71b92113",
+      "date": "2026-08-27T16:11:20.534Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "700fae29-b2d6-4688-a231-3712f6952142",
+      "date": "2026-08-27T16:19:01.390Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "a235ed82-d55c-4778-999a-9378c36b2892",
+      "date": "2026-08-27T17:42:34.074Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "49c15518-b601-49a5-b8ec-7e61ab43b8b6",
+      "date": "2026-08-27T19:46:12.628Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "bc854814-77a9-45b6-b812-7218369e4d6a",
+      "date": "2026-08-27T20:19:45.801Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "8f7f937d-022a-4544-9732-d97c7e279ecc",
+      "date": "2026-08-28T14:09:10.511Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "fe960161-8878-44c6-8733-fd6ba3c0db5a",
+      "date": "2026-08-28T14:37:52.161Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "75f7d409-735b-4ce9-8841-c718a874f785",
+      "date": "2026-08-29T07:36:25.336Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-08-25T09:36:00.959Z",
-  "updatedAt": "2026-08-25T09:36:47.490Z",
+  "updatedAt": "2026-08-28T21:56:40.503Z",
   "sessionInfo": [
     {
       "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
-      "createdAt": "2026-08-26T14:56:27.049Z"
+      "createdAt": "2026-08-28T22:25:41.022Z"
     }
   ]
 }

@@ -14,7 +14,9 @@ describe("deriveParentDisplay — truth table", () => {
     ["done + waiting → waiting", ["done", "waiting"], "waiting"],
     ["done + blocked → blocked", ["done", "blocked"], "blocked"],
     ["done + deferred → deferred", ["done", "deferred"], "deferred"],
-    ["done + canceled → closed", ["done", "canceled"], "closed"],
+    ["done + canceled → done", ["done", "canceled"], "done"],
+    ["done + canceled + canceled → done", ["done", "canceled", "canceled"], "done"],
+    ["done + rejected → closed", ["done", "rejected"], "closed"],
     ["canceled + rejected → closed", ["canceled", "rejected"], "closed"],
     ["planned + planned → planned", ["planned", "planned"], "planned"],
     ["planned + waiting → started", ["planned", "waiting"], "started"],
@@ -61,9 +63,9 @@ describe("deriveParentDisplay — breakdown + hasStarted", () => {
     assert.equal(result.meaningfulChildren, 0);
   });
 
-  test("done + canceled: meaningful excludes canceled but display is closed", () => {
+  test("done + canceled: meaningful excludes canceled but positive completion displays done", () => {
     const result = deriveParentDisplay(["done", "canceled"]);
-    assert.equal(result.displayStatus, "closed");
+    assert.equal(result.displayStatus, "done");
     assert.equal(result.meaningfulChildren, 1);
     assert.equal(result.hasStarted, true);
   });

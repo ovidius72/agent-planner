@@ -1,0 +1,156 @@
+{
+  "id": "8d96c7fb-9767-4628-8c8b-7c5aed53fc49",
+  "featureId": "2f99bd64-b58c-4635-963e-31b45f0ccff6",
+  "number": 84,
+  "shortId": "AAYV7",
+  "priority": 3,
+  "slug": "context-read-ordering-follow-up",
+  "title": "Context-read ordering follow-up",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Relax in-session context-read ordering so parent/task reads can be reused without sequence errors",
+  "description": "Follow-up to the cross-harness context-read reuse work in F020. Current source shows the real repeated CONTEXT_READ_REQUIRED issue is not MCP session identity instability; it is the strict in-session ordering check inside `packages/plan-core/src/read-tracking.ts`, where `contextReadEligibilityForSession()` treats parent reads as invalid when they happen before the task read and reports them as effectively unusable until reread in task → phase → feature order.\n\nActual implementation scope for this phase:\n- Relax `contextReadEligibilityForSession()` in `packages/plan-core/src/read-tracking.ts` so any in-memory read recorded in the current harness session satisfies eligibility regardless of sequence order, while persisted attestations still enforce freshness via entity revisions.\n- Remove the obsolete `out-of-order` state from the machine-readable `RequiredContextRead` contract and keep diagnostics limited to the meaningful states `missing` and `stale`.\n- Add regression coverage in `packages/plan-core/test/read-tracking.test.mjs` for reversed parent-first reads and in `packages/plan-mcp/test/mcp-crud.test.mjs` for a real MCP task_start flow that reads requirements/feature/phase/task in non-legacy order and still starts successfully.\n- Align the shared planner operational guidance in `plugins/_shared/planner-skill.md.in` and any harness-facing generated guidance so agents are told to follow only the missing/stale `nextActions`, with reads allowed in any order inside the current session.\n\nNon-goals for this phase:\n- No RequestHandlerExtra session-id threading overhaul in `packages/plan-mcp/src/index.ts`; that was already addressed by the earlier F020 session-aware work.\n- No unrelated UI work or priority-surface changes here; those belong to a separate improvement phase.\n\nAcceptance:\n- Focused core + MCP regressions cover the orderless in-session read behavior.\n- Full repository verification passes after the guidance/source updates.",
+  "descriptionUpdatedAt": "2026-08-27T19:43:37.411Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "ba509896-6b43-45f9-a3ce-9571af5f79a0"
+  ],
+  "tasks": [
+    {
+      "id": "ba509896-6b43-45f9-a3ce-9571af5f79a0",
+      "phaseId": "8d96c7fb-9767-4628-8c8b-7c5aed53fc49",
+      "number": 346,
+      "shortId": "DKQPD",
+      "priority": 1,
+      "shortName": "fix-mcp-plannersessionid-insta",
+      "title": "Fix MCP plannerSessionId instability causing repeated CONTEXT_READ_REQUIRED",
+      "status": "done",
+      "description": "Fix repeated CONTEXT_READ_REQUIRED in MCP caused by strict task→phase→feature read ordering in contextReadEligibilityForSession (packages/plan-core/src/read-tracking.ts). Agents got \"out-of-order\" errors when reading parents before tasks, even after completing the reads.\n\nThree-part fix:\n\n**Part 1: Relax ordering (DONE)**\n- Relaxed contextReadEligibilityForSession so in-memory reads satisfy eligibility regardless of sequence order\n- Removed \"out-of-order\" state from RequiredContextRead type\n- Added regression tests in read-tracking.test.mjs and mcp-crud.test.mjs\n\n**Part 2: Surface priority in list views (TODO)**\nAdd priority values to list/discovery outputs so agents can follow priority ordering when browsing manually:\n- `planner-task-list` (MCP): add priority field to structured content\n- `planner-phase-list` (MCP): add priority field to structured content\n- `planner-feature-list` (MCP): add priority field to structured content\n- `task_list` (Pi): include priority in text output\n- `phase_list` (Pi): include priority in text output\n- `feature_list` (Pi): include priority in text output\n- Web UI task-row.tsx: show priority badge using formatPriority\n- Web UI work-tree-rows.tsx: show priority in task rows\n\n**Part 3: Extend skill guidance (TODO)**\n- Update planner-skill.md.in with priority-following instructions\n- Add priority guidance to Pi adapter /planner operational protocol\n- Ensure skill is auto-read on load\n\nAcceptance: node scripts/test-all.mjs unit --no-build reports fail 0; priority visible in list outputs\n\n---\n**Completion summary:**\nCorrected the planner metadata to reflect the real root cause and completed the code-level follow-up for orderless in-session read reuse. Source changes now keep `packages/plan-core/src/read-tracking.ts` relaxed to accept current-session task/phase/feature reads in any order while still reporting only meaningful `missing`/`stale` requirements; aligned retry guidance in `plugins/_shared/planner-skill.md.in`, `packages/agent-plan/src/index.ts`, and Pi’s injected operational context text in `packages/pi-adapter/src/index.ts`; regenerated the shared Claude planner skill via `node scripts/sync-plugins.cjs`; and verified the behavior with focused builds/tests: `pnpm --filter @agent-plan/core build`, `pnpm --filter @agent-plan/mcp build`, `pnpm --filter @agent-plan/pi-adapter build`, `pnpm --filter agent-plan build`, and `node --test packages/plan-core/test/read-tracking.test.mjs packages/plan-mcp/test/mcp-crud.test.mjs packages/agent-plan/test/version.test.mjs packages/pi-adapter/test/web-lifecycle.test.mjs` (39/39 passing). Remaining work moved out of this task: priority visibility is now tracked separately in P085(F005)/T347.",
+      "descriptionUpdatedAt": "2026-08-27T19:46:12.552Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ba509896-6b43-45f9-a3ce-9571af5f79a0-check-001-planned-in-progress",
+          "date": "2026-08-27T16:11:20.460Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ba509896-6b43-45f9-a3ce-9571af5f79a0-check-002-in-progress-done",
+          "date": "2026-08-27T16:19:01.310Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Relaxed the strict task→phase→feature read ordering in plan-core's contextReadEligibilityForSession so in-memory reads satisfy eligibility regardless of order. Removed 'out-of-order' state. Added regression tests in read-tracking.test.mjs and mcp-crud.test.mjs. Updated planner-skill.md.in wording. All 422 tests pass, coverage above gates, all builds clean. Dist rebuilt for plan-core, plan-mcp, pi-adapter."
+        },
+        {
+          "id": "ba509896-6b43-45f9-a3ce-9571af5f79a0-check-003-done-planned",
+          "date": "2026-08-27T17:42:33.996Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Need to reopen to implement Part 2 (priority surfacing) and Part 3 (skill guidance updates)",
+          "description": "Need to reopen to implement Part 2 (priority surfacing) and Part 3 (skill guidance updates)"
+        },
+        {
+          "id": "ba509896-6b43-45f9-a3ce-9571af5f79a0-check-004-planned-in-progress",
+          "date": "2026-08-27T19:40:11.645Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ba509896-6b43-45f9-a3ce-9571af5f79a0-check-005-in-progress-done",
+          "date": "2026-08-27T19:46:12.550Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Corrected the planner metadata to reflect the real root cause and completed the code-level follow-up for orderless in-session read reuse. Source changes now keep `packages/plan-core/src/read-tracking.ts` relaxed to accept current-session task/phase/feature reads in any order while still reporting only meaningful `missing`/`stale` requirements; aligned retry guidance in `plugins/_shared/planner-skill.md.in`, `packages/agent-plan/src/index.ts`, and Pi’s injected operational context text in `packages/pi-adapter/src/index.ts`; regenerated the shared Claude planner skill via `node scripts/sync-plugins.cjs`; and verified the behavior with focused builds/tests: `pnpm --filter @agent-plan/core build`, `pnpm --filter @agent-plan/mcp build`, `pnpm --filter @agent-plan/pi-adapter build`, `pnpm --filter agent-plan build`, and `node --test packages/plan-core/test/read-tracking.test.mjs packages/plan-mcp/test/mcp-crud.test.mjs packages/agent-plan/test/version.test.mjs packages/pi-adapter/test/web-lifecycle.test.mjs` (39/39 passing). Remaining work moved out of this task: priority visibility is now tracked separately in P085(F005)/T347."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-27T16:11:20.460Z",
+      "completedAt": "2026-08-27T19:46:12.550Z",
+      "createdAt": "2026-08-27T15:31:21.281Z",
+      "updatedAt": "2026-08-27T19:46:12.550Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-27T19:40:11.565Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-27T15:31:12.920Z",
+  "updatedAt": "2026-08-27T19:46:12.550Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "614e9a0c-e804-4374-8095-3b2a08668591",
+      "date": "2026-08-27T16:11:20.479Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "06b24ebc-11d9-4ffd-a935-ddfc9fc7c3fb",
+      "date": "2026-08-27T16:19:01.331Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "204c0c4f-5f1d-4873-98e7-893c7266bc26",
+      "date": "2026-08-27T17:42:34.015Z",
+      "fromStatus": "done",
+      "toStatus": "planned",
+      "title": "done → planned",
+      "description": ""
+    },
+    {
+      "id": "5026ed9a-f2ad-44f7-9d6b-ef18ea927c1a",
+      "date": "2026-08-27T19:40:11.663Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "29bd22ee-0c7d-4789-ade6-94ba86786bf7",
+      "date": "2026-08-27T19:46:12.578Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-27T19:40:11.565Z"
+    }
+  ]
+}

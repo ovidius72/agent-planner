@@ -1,5 +1,5 @@
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z, ZodError } from "zod";
 
@@ -20,6 +20,7 @@ import {
   FeatureSchema,
   type Feature,
   type FeaturesDocument,
+  type HandoffSupportingDocument,
   FeaturesDocumentSchema,
   ManifestSchema,
   type Manifest,
@@ -35,6 +36,12 @@ import {
   type RequirementsDocument,
   type Requirement,
   RequirementsDocumentSchema,
+  type Idea,
+  type IdeasDocument,
+  type IdeaPromotion,
+  type IdeaPromotionTargetType,
+  IdeaSchema,
+  IdeasDocumentSchema,
   ResumeFocusSchema,
   ActivityLogSchema,
   TimestampSchema,
@@ -45,12 +52,24 @@ import {
   type WorkDeviation,
   WorkDeviationSchema,
 } from "./schema.js";
-import { createFeatureId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatPhaseRef, isLegacyPhaseId } from "./naming.js";
+import { createFeatureId, createIdeaId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatFeatureRef, formatIdeaRef, formatPhaseRef, formatThreeDigitNumber, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
 import { loadExtensionRules, PLANNER_EXTENSION_RULES } from "./planner-rules.js";
+import { loadProjectGrillMeSkill, syncProjectGrillMeSkill, syncProjectPlannerSkill, type PlannerSkillSyncResult } from "./planner-skill.js";
+import {
+  applyLegacyProjectContextMigration,
+  plannerSessionPreparationResult,
+  previewLegacyProjectContextMigration,
+  type LegacyProjectContextMigrationPreview,
+  type LegacyProjectContextMigrationResult,
+  type PlannerSessionPreparationResult,
+} from "./project-context-migration.js";
 import {
   applyHandoffContextSync,
   auditPhaseHandoff,
+  handoffContentHash,
+  HandoffContractError,
+  type HandoffSupportingDocumentInput,
   type PhaseHandoffAudit,
   type RefreshPhaseHandoffInput,
   type RefreshPhaseHandoffResult,
@@ -76,6 +95,22 @@ export interface RecordContextReadResult {
   feature?: Feature;
   requirements: Requirement[];
   createdAt: string;
+}
+
+export interface IdeaCreateInput {
+  title: string;
+  description?: string;
+}
+
+export interface IdeaUpdateInput {
+  title?: string;
+  description?: string;
+}
+
+export interface IdeaPromotionTargetInput {
+  targetType: IdeaPromotionTargetType;
+  targetId: string;
+  promotedAt?: string;
 }
 
 function upsertSessionInfo<T extends { sessionInfo: Array<{ sessionId: string; createdAt: string }> }>(
@@ -171,7 +206,7 @@ const CROSS_PROCESS_LOCK_RETRY_MS = 10;
 /** Allocation registry is deliberately outside the versioned plan. Git worktrees
  * share their common git dir, so reservations are serialized across branches
  * without rewriting project.json or unrelated planner entities. */
-const AllocationKindSchema = z.enum(["feature", "phase", "task"]);
+const AllocationKindSchema = z.enum(["feature", "phase", "task", "idea"]);
 const AllocationRegistrySchema = z.object({
   version: z.literal(1),
   projectId: z.string().min(1),
@@ -361,9 +396,13 @@ export interface PhaseHandoffSummary {
   updatedAt: string;
   /** First non-empty line of the handoff, leading markdown headers stripped, ~80 chars. */
   firstLine: string;
-  /** Full handoff content (phase.handoff) — lets the /handoff viewer render
-   *  inline without a per-phase fetch. */
-  content: string;
+  /** Full content is omitted by default so agent list transports stay bounded.
+   * Request includeContent only for trusted UI/API consumers. */
+  content?: string | undefined;
+  auditVersion: number | null;
+  contentLength: number;
+  contentHash: string;
+  verifiedAt: string;
 }
 
 /** Summary of an archived handoff. The content remains recoverable under
@@ -727,7 +766,7 @@ export class PlanStore {
     // Numbers are a STABLE global sequence (assigned once at create from project.nextTaskNumber).
     // Do NOT renumber here — renumbering would break references after deletions.
     const normalized = tasks.map((task) => {
-      const descriptionUpdatedAt = task.description && !task.descriptionUpdatedAt
+      const descriptionUpdatedAt = (task.description || task.descriptionRef) && !task.descriptionUpdatedAt
         ? task.createdAt
         : task.descriptionUpdatedAt;
       const normalizedStatus = (task.status as string) === "paused" ? "planned" : task.status;
@@ -770,21 +809,68 @@ export class PlanStore {
   /** Stamp description edits independently from generic entity mutations.
    * Legacy entities cannot reveal their historical description-edit time, so
    * their creation time is the earliest truthful fallback. */
-  private stampDescriptionUpdatedAt<T extends { description: string; descriptionUpdatedAt: string; createdAt: string }>(
+  private stampDescriptionUpdatedAt<T extends { description: string; descriptionUpdatedAt: string; createdAt: string } & { descriptionRef?: string | undefined }>(
     entity: T,
     previousDescription: string | undefined,
+    previousDescriptionRef: string | undefined,
     timestamp: string,
   ): T {
-    if (!entity.description) return { ...entity, descriptionUpdatedAt: "" };
-    if (previousDescription === undefined || previousDescription !== entity.description) {
-      return { ...entity, descriptionUpdatedAt: timestamp };
+    if (!entity.description && !entity.descriptionRef) return { ...entity, descriptionUpdatedAt: "" } as T;
+    if (
+      previousDescription === undefined
+      || previousDescription !== entity.description
+      || previousDescriptionRef !== entity.descriptionRef
+    ) {
+      return { ...entity, descriptionUpdatedAt: timestamp } as T;
     }
-    return entity.descriptionUpdatedAt ? entity : { ...entity, descriptionUpdatedAt: entity.createdAt };
+    return entity.descriptionUpdatedAt ? entity : { ...entity, descriptionUpdatedAt: entity.createdAt } as T;
+  }
+
+  private stampProjectGuidelinesUpdatedAt(
+    project: Project,
+    previousContent: string | undefined,
+    timestamp: string,
+  ): Project {
+    const nextContent = project.projectGuidelines.content.trim();
+    const nextGuidelines = {
+      content: nextContent,
+      updatedAt: project.projectGuidelines.updatedAt,
+      sessionInfo: project.projectGuidelines.sessionInfo,
+    };
+    if (!nextContent) {
+      return {
+        ...project,
+        projectGuidelines: {
+          ...nextGuidelines,
+          updatedAt: "",
+          sessionInfo: [],
+        },
+      };
+    }
+    if (previousContent === undefined || previousContent !== nextContent) {
+      return {
+        ...project,
+        projectGuidelines: {
+          ...nextGuidelines,
+          updatedAt: timestamp,
+        },
+      };
+    }
+    if (nextGuidelines.updatedAt) {
+      return { ...project, projectGuidelines: nextGuidelines };
+    }
+    return {
+      ...project,
+      projectGuidelines: {
+        ...nextGuidelines,
+        updatedAt: timestamp,
+      },
+    };
   }
 
   private normalizeFeaturesDocument(doc: FeaturesDocument): { doc: FeaturesDocument; changed: boolean } {
     // Numbers are a STABLE global sequence (assigned once at create from project.nextFeatureNumber).
-    const features = doc.features.map((feature) => feature.description && !feature.descriptionUpdatedAt
+    const features = doc.features.map((feature) => (feature.description || feature.descriptionRef) && !feature.descriptionUpdatedAt
       ? { ...feature, descriptionUpdatedAt: feature.createdAt }
       : feature);
     return { doc: { ...doc, features }, changed: features.some((feature, index) => feature !== doc.features[index]) };
@@ -794,7 +880,7 @@ export class PlanStore {
     const { tasks, changed } = this.normalizeTasks(phase.tasks);
     const nextTaskIds = tasks.map((task) => task.id);
     const taskIdsChanged = nextTaskIds.length !== phase.taskIds.length || nextTaskIds.some((id, index) => id !== phase.taskIds[index]);
-    const descriptionUpdatedAt = phase.description && !phase.descriptionUpdatedAt ? phase.createdAt : phase.descriptionUpdatedAt;
+    const descriptionUpdatedAt = (phase.description || phase.descriptionRef) && !phase.descriptionUpdatedAt ? phase.createdAt : phase.descriptionUpdatedAt;
     const descriptionTimestampChanged = descriptionUpdatedAt !== phase.descriptionUpdatedAt;
     return {
       phase: {
@@ -935,6 +1021,9 @@ export class PlanStore {
   }
   private requirementsPath(): string {
     return join(this.root, "requirements.json");
+  }
+  private ideasPath(): string {
+    return join(this.root, "ideas.json");
   }
   private featuresPath(): string {
     return join(this.root, "features.json");
@@ -1104,6 +1193,11 @@ export class PlanStore {
       name: projectName,
       goal: "",
       description: "",
+      projectGuidelines: {
+        content: "",
+        updatedAt: "",
+        sessionInfo: [],
+      },
       webPort: 0,
       scope: [],
       outOfScope: [],
@@ -1125,6 +1219,7 @@ export class PlanStore {
       workDeviations: [],
     });
     await this.saveRequirements({ requirements: [] });
+    await this.saveIdeas({ nextIdeaNumber: 1, ideas: [] });
     await this.saveFeatures({ features: [] });
     await this.saveResume({
       updatedAt: nowISO(),
@@ -1148,6 +1243,8 @@ export class PlanStore {
       JSON.stringify({ extensionRules: PLANNER_EXTENSION_RULES }, null, 2),
       "utf-8",
     );
+    await this.syncPlannerSkill();
+    await this.syncGrillMeSkill();
 
     // Write a README stub
     const readme = [
@@ -1158,8 +1255,11 @@ export class PlanStore {
       "## Structure",
       "",
       "- `manifest.json` — metadata",
+      "- `SKILL.md` — managed cross-harness planner operating guide",
+      "- `skills/grill-me/SKILL.md` — managed idea-discussion interview skill",
       "- `project.json` — scope, rules, stack, tools",
       "- `requirements.json` — requirements and macro-tasks",
+      "- `ideas.json` — top-level Ideas Inbox (excluded from work status derivation)",
       "- `phases/` — one JSON file per phase",
       "- `generated/` — auto-generated markdown views (under `.local/`)",
       "- `schema/plan.schema.json` — JSON Schema for tooling",
@@ -1183,6 +1283,25 @@ export class PlanStore {
    */
   async extensionRules(): Promise<string[]> {
     return loadExtensionRules(this.root);
+  }
+
+  /**
+   * Create or safely refresh the project-local planner usage skill. Explicit
+   * planner-load surfaces call this so unmodified managed copies follow the
+   * installed Agent Plan version while project customizations are preserved.
+   */
+  async syncPlannerSkill(): Promise<PlannerSkillSyncResult> {
+    return syncProjectPlannerSkill(this.root);
+  }
+
+  /** Safely create or refresh the project-local grill-me skill for Ideas. */
+  async syncGrillMeSkill(): Promise<PlannerSkillSyncResult> {
+    return syncProjectGrillMeSkill(this.root);
+  }
+
+  /** Load grill-me instructions only when an Ideas discussion requests them. */
+  async ideaDiscussionSkill(): Promise<string> {
+    return loadProjectGrillMeSkill(this.root);
   }
 
   /** Idempotently ensure `.planner/.gitignore` ignores `.local/` (and the
@@ -1247,7 +1366,7 @@ export class PlanStore {
    * Worktrees in the same clone share `.git/agent-plan/allocations`, guarded by
    * the same cross-process lock used for atomic writes. The registry reserves
    * numbers/short IDs before an entity file is written, so parallel branches
-   * cannot allocate the same F/P/T or shortId. Existing entities are never
+   * cannot allocate the same F/P/T/I or shortId. Existing entities are never
    * rewritten; cross-clone coordination requires a shared allocator service.
    */
   async allocateEntityIdentity(kind: AllocationKind, entityId: string): Promise<{ number: number; shortId: string }> {
@@ -1268,19 +1387,30 @@ export class PlanStore {
 
       const phases = await this.loadAllPhases();
       const features = (await this.loadFeatures()).features;
+      const ideasDocument = await this.loadIdeas();
+      const ideas = ideasDocument.ideas;
       const canonical = kind === "feature"
         ? features.map((feature) => ({ number: feature.number, shortId: feature.shortId }))
         : kind === "phase"
           ? phases.map((phase) => ({ number: phase.number, shortId: phase.shortId }))
-          : phases.flatMap((phase) => phase.tasks.map((task) => ({ number: task.number, shortId: task.shortId })));
+          : kind === "task"
+            ? phases.flatMap((phase) => phase.tasks.map((task) => ({ number: task.number, shortId: task.shortId })))
+            : ideas.map((idea) => ({ number: idea.number, shortId: idea.shortId }));
       const usedNumbers = new Set([...canonical.map((entry) => entry.number), ...registry.allocations.filter((entry) => entry.kind === kind).map((entry) => entry.number)]);
-      const counter = kind === "feature" ? project.nextFeatureNumber : kind === "phase" ? project.nextPhaseNumber : project.nextTaskNumber;
+      const counter = kind === "feature"
+        ? project.nextFeatureNumber
+        : kind === "phase"
+          ? project.nextPhaseNumber
+          : kind === "task"
+            ? project.nextTaskNumber
+            : ideasDocument.nextIdeaNumber;
       let number = Math.max(1, counter);
       while (usedNumbers.has(number)) number += 1;
 
       const allShortIds = new Set<string>([
         ...features.map((feature) => feature.shortId),
         ...phases.flatMap((phase) => [phase.shortId, ...phase.tasks.map((task) => task.shortId)]),
+        ...ideas.map((idea) => idea.shortId),
         ...registry.allocations.map((entry) => entry.shortId),
       ].filter(Boolean));
       const allocation: Allocation = { kind, entityId, number, shortId: createShortId(allShortIds, `${kind}:${entityId}`) };
@@ -1295,6 +1425,7 @@ export class PlanStore {
   async allocFeatureNumber(): Promise<number> { return this.allocateLegacyNumber("feature"); }
   async allocPhaseNumber(): Promise<number> { return this.allocateLegacyNumber("phase"); }
   async allocTaskNumber(): Promise<number> { return this.allocateLegacyNumber("task"); }
+  async allocIdeaNumber(): Promise<number> { return this.allocateLegacyNumber("idea"); }
   private async allocateLegacyNumber(kind: AllocationKind): Promise<number> {
     const id = `legacy-${kind}-${randomUUID()}`;
     return (await this.allocateEntityIdentity(kind, id)).number;
@@ -1494,6 +1625,18 @@ export class PlanStore {
     }
   }
 
+  async loadIdeas(): Promise<IdeasDocument> {
+    try {
+      const document = await readJson(this.ideasPath(), IdeasDocumentSchema);
+      return {
+        ...document,
+        ideas: [...document.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+      };
+    } catch {
+      return { nextIdeaNumber: 1, ideas: [] };
+    }
+  }
+
   async linkedRequirementsForPhase(phaseId: string): Promise<Requirement[]> {
     const requirements = await this.loadRequirements();
     return requirements.requirements.filter((requirement) => requirement.linkedPhaseIds.includes(phaseId));
@@ -1571,16 +1714,17 @@ export class PlanStore {
 
 
   async loadAll(): Promise<PlanWorkspace> {
-    const [manifest, project, requirements, phases] = await Promise.all([
+    const [manifest, project, requirements, ideas, phases] = await Promise.all([
       this.loadManifest(),
       this.loadProject(),
       this.loadRequirements(),
+      this.loadIdeas(),
       this.loadAllPhases(),
     ]);
     const rawFeatures = await this.loadRawFeatures();
     const features: Feature[] = rawFeatures.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
     const normalized = this.normalizeStructureSnapshot({ features }, phases);
-    return { manifest, project, requirements, phases: normalized.phases, features: normalized.features };
+    return { manifest, project, requirements, ideas, phases: normalized.phases, features: normalized.features };
   }
 
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
@@ -2045,9 +2189,52 @@ export class PlanStore {
   // ── Savers ───────────────────────────────────────────────────────────
 
   async updateProject(updater: (p: Project) => Project): Promise<Project> {
-    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, updater, this.root);
+    const timestamp = nowISO();
+    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, (current) => {
+      const previousGuidelines = current.projectGuidelines.content;
+      const candidate = updater(current);
+      return this.stampProjectGuidelinesUpdatedAt(candidate, previousGuidelines, timestamp);
+    }, this.root);
     await this.maybeAutoSync();
     return updated;
+  }
+
+  /** Preview the explicit, lossless migration from legacy project rule and
+   * decision fields into Project Guidelines and structured accepted decisions. */
+  async previewLegacyProjectContextMigration(): Promise<LegacyProjectContextMigrationPreview> {
+    return previewLegacyProjectContextMigration(await readJson(this.projectPath(), ProjectSchema));
+  }
+
+  /** Prepare an explicit planner session before recap/context delivery.
+   * Ordinary entity reads remain non-mutating. */
+  async preparePlannerSession(): Promise<PlannerSessionPreparationResult> {
+    return plannerSessionPreparationResult(await this.migrateLegacyProjectContext());
+  }
+
+  /** Apply and verify the legacy project-context migration. Callers must invoke
+   * this only from an explicit preparation or compatibility-recovery flow. */
+  async migrateLegacyProjectContext(): Promise<LegacyProjectContextMigrationResult> {
+    const original = await readJson(this.projectPath(), ProjectSchema);
+    const acceptedAt = nowISO();
+    const expected = applyLegacyProjectContextMigration(original, acceptedAt);
+    if (!expected.applied) return expected;
+
+    await this.updateProject(() => expected.project);
+    const persisted = await readJson(this.projectPath(), ProjectSchema);
+    const migratedDecisionIds = new Set(expected.preview.acceptedDecisionAdditions.map((decision) => decision.id));
+    const persistedDecisionIds = new Set(persisted.acceptedDecisions.map((decision) => decision.id));
+    const verified = persisted.projectGuidelines.content === expected.preview.resultingGuidelinesContent
+      && persisted.globalRules.length === 0
+      && persisted.workflowRules.beforePhaseStart.length === 0
+      && persisted.workflowRules.beforeTaskStart.length === 0
+      && persisted.workflowRules.afterPhaseComplete.length === 0
+      && persisted.decisions.length === 0
+      && [...migratedDecisionIds].every((id) => persistedDecisionIds.has(id));
+    if (!verified) {
+      await atomicWriteJson(this.projectPath(), ProjectSchema.parse(original), this.root);
+      throw new PlanStoreError("Legacy project-context migration failed persisted read-back verification; the original project was restored.");
+    }
+    return { applied: true, preview: expected.preview, project: persisted };
   }
 
   /** Persist an explicitly approved work deviation without coupling it to a harness. */
@@ -2083,10 +2270,11 @@ export class PlanStore {
       // Updaters commonly mutate `current` in place, so snapshot descriptions
       // before invoking them rather than comparing object references afterward.
       const previousDescriptions = new Map(current.features.map((feature) => [feature.id, feature.description]));
+      const previousDescriptionRefs = new Map(current.features.map((feature) => [feature.id, feature.descriptionRef]));
       const timestamp = nowISO();
       const candidate = updater(current);
       const stamped: FeaturesDocument = {
-        features: candidate.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), timestamp)),
+        features: candidate.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), previousDescriptionRefs.get(feature.id), timestamp)),
       };
       const upd = this.normalizeFeaturesDocument(stamped).doc;
       await this.saveFeaturesRaw(upd);
@@ -2100,6 +2288,136 @@ export class PlanStore {
     const updated = await atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater, this.root);
     await this.maybeAutoSync();
     return updated;
+  }
+
+  private async ensureIdeasFileForWrite(): Promise<void> {
+    try {
+      await access(this.ideasPath());
+    } catch {
+      await atomicWriteJson(this.ideasPath(), IdeasDocumentSchema.parse({ nextIdeaNumber: 1, ideas: [] }), this.root);
+    }
+  }
+
+  async updateIdeas(updater: (ideas: IdeasDocument) => IdeasDocument): Promise<IdeasDocument> {
+    await this.ensureIdeasFileForWrite();
+    const updated = await atomicUpdateJson(this.ideasPath(), IdeasDocumentSchema, (current) => {
+      const candidate = IdeasDocumentSchema.parse(updater(current));
+      const maxNumber = candidate.ideas.reduce((max, idea) => Math.max(max, idea.number), 0);
+      return {
+        ...candidate,
+        nextIdeaNumber: Math.max(candidate.nextIdeaNumber, maxNumber + 1),
+        ideas: [...candidate.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+      };
+    }, this.root);
+    await this.touchTimestamp();
+    await this.maybeAutoSync();
+    return updated;
+  }
+
+  async createIdea(input: IdeaCreateInput, timestamp = nowISO()): Promise<Idea> {
+    const id = createIdeaId();
+    const { number, shortId } = await this.allocateEntityIdentity("idea", id);
+    const idea = IdeaSchema.parse({
+      id,
+      number,
+      shortId,
+      title: input.title.trim(),
+      description: input.description?.trim() ?? "",
+      promotion: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await this.updateIdeas((document) => ({
+      nextIdeaNumber: Math.max(document.nextIdeaNumber, number + 1),
+      ideas: [...document.ideas, idea],
+    }));
+    return idea;
+  }
+
+  async updateIdea(ideaId: string, input: IdeaUpdateInput, timestamp = nowISO()): Promise<Idea> {
+    let updated: Idea | undefined;
+    await this.updateIdeas((document) => {
+      const existing = document.ideas.find((idea) => idea.id === ideaId);
+      if (!existing) throw new PlanStoreError(`Idea ${ideaId} not found.`);
+      updated = IdeaSchema.parse({
+        ...existing,
+        ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+        ...(input.description !== undefined ? { description: input.description.trim() } : {}),
+        updatedAt: timestamp,
+      });
+      return {
+        ...document,
+        ideas: document.ideas.map((idea) => idea.id === ideaId ? updated! : idea),
+      };
+    });
+    return updated!;
+  }
+
+  async deleteIdea(ideaId: string): Promise<boolean> {
+    let deleted = false;
+    await this.updateIdeas((document) => {
+      deleted = document.ideas.some((idea) => idea.id === ideaId);
+      return deleted
+        ? { ...document, ideas: document.ideas.filter((idea) => idea.id !== ideaId) }
+        : document;
+    });
+    return deleted;
+  }
+
+  private async resolveIdeaPromotionTarget(targetType: IdeaPromotionTargetType, targetId: string): Promise<string> {
+    const phases = await this.loadAllPhases();
+    const features = (await this.loadFeatures()).features;
+    if (targetType === "feature") {
+      const feature = features.find((candidate) => candidate.id === targetId);
+      if (!feature) throw new PlanStoreError(`Idea promotion target feature ${targetId} not found.`);
+      return formatFeatureRef(feature.number);
+    }
+    if (targetType === "phase") {
+      const phase = phases.find((candidate) => candidate.id === targetId);
+      if (!phase) throw new PlanStoreError(`Idea promotion target phase ${targetId} not found.`);
+      const feature = features.find((candidate) => candidate.id === phase.featureId);
+      return formatPhaseRef(phase.number, feature?.number);
+    }
+    for (const phase of phases) {
+      const task = phase.tasks.find((candidate) => candidate.id === targetId);
+      if (!task) continue;
+      const feature = features.find((candidate) => candidate.id === phase.featureId);
+      return `${formatPhaseRef(phase.number, feature?.number)}/T${formatThreeDigitNumber(task.number)}`;
+    }
+    throw new PlanStoreError(`Idea promotion target task ${targetId} not found.`);
+  }
+
+  async promoteIdea(ideaId: string, input: IdeaPromotionTargetInput): Promise<Idea> {
+    const targetRef = await this.resolveIdeaPromotionTarget(input.targetType, input.targetId);
+    const promotedAt = input.promotedAt ?? nowISO();
+    let promoted: Idea | undefined;
+    await this.updateIdeas((document) => {
+      const existing = document.ideas.find((idea) => idea.id === ideaId);
+      if (!existing) throw new PlanStoreError(`Idea ${ideaId} not found.`);
+      if (existing.promotion) {
+        if (existing.promotion.targetType === input.targetType && existing.promotion.targetId === input.targetId) {
+          promoted = existing;
+          return document;
+        }
+        throw new PlanStoreError(`Idea ${formatIdeaRef(existing.number)} is already promoted to ${existing.promotion.targetRef}.`);
+      }
+      const promotion: IdeaPromotion = {
+        targetType: input.targetType,
+        targetId: input.targetId,
+        targetRef,
+        promotedAt,
+      };
+      promoted = IdeaSchema.parse({
+        ...existing,
+        promotion,
+        updatedAt: promotedAt,
+      });
+      return {
+        ...document,
+        ideas: document.ideas.map((idea) => idea.id === ideaId ? promoted! : idea),
+      };
+    });
+    return promoted!;
   }
 
   /**
@@ -2183,10 +2501,25 @@ export class PlanStore {
     });
   }
 
+  async recordProjectGuidelinesRead(input: { sessionId: string; createdAt?: string }): Promise<Project> {
+    const sessionId = input.sessionId.trim();
+    if (!sessionId) throw new PlanStoreError("Project-guidelines attestation requires a non-empty sessionId.");
+    const createdAt = TimestampSchema.parse(input.createdAt ?? nowISO());
+    const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, (project) => {
+      if (!project.projectGuidelines.content.trim()) return project;
+      const result = upsertSessionInfo(project.projectGuidelines, sessionId, createdAt);
+      return result.changed ? { ...project, projectGuidelines: result.entity } : project;
+    }, this.root);
+    await this.maybeAutoSync();
+    return updated;
+  }
+
   async saveProject(project: Project): Promise<void> {
     // Runtime workDeviations live in .local/deviations.json (T299); never
     // persist them here so shared project.json stays stable across worktrees.
-    const parsed = ProjectSchema.parse({ ...project, workDeviations: [] });
+    const previous = await readJson(this.projectPath(), ProjectSchema).catch(() => null);
+    const stamped = this.stampProjectGuidelinesUpdatedAt(project, previous?.projectGuidelines.content, nowISO());
+    const parsed = ProjectSchema.parse({ ...stamped, workDeviations: [] });
     await atomicWriteJson(this.projectPath(), parsed, this.root);
     await this.touchTimestamp();
     await this.maybeAutoSync();
@@ -2196,9 +2529,10 @@ export class PlanStore {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
       const previousDescriptions = new Map((await this.loadRawFeatures()).map((feature) => [feature.id, feature.description]));
+      const previousDescriptionRefs = new Map((await this.loadRawFeatures()).map((feature) => [feature.id, feature.descriptionRef]));
       const timestamp = nowISO();
       await this.saveFeaturesRaw({
-        features: features.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), timestamp)),
+        features: features.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), previousDescriptionRefs.get(feature.id), timestamp)),
       });
     });
     await this.touchTimestamp();
@@ -2234,7 +2568,7 @@ export class PlanStore {
       await this.migrateLegacy();
       const previous = await readJson(this.featurePath(feature.id), FeatureSchema).catch(() => null);
       await mkdir(this.featuresDir(), { recursive: true });
-      const parsed = FeatureSchema.parse(this.stampDescriptionUpdatedAt(feature, previous?.description, nowISO()));
+      const parsed = FeatureSchema.parse(this.stampDescriptionUpdatedAt(feature, previous?.description, previous?.descriptionRef, nowISO()));
       await atomicWriteJson(this.featurePath(parsed.id), parsed, this.root);
     });
     await this.touchTimestamp();
@@ -2247,7 +2581,18 @@ export class PlanStore {
     await this.touchTimestamp();
   }
 
-    async savePhase(phase: Phase): Promise<void> {
+  async saveIdeas(ideas: IdeasDocument): Promise<void> {
+    const parsed = IdeasDocumentSchema.parse(ideas);
+    const maxNumber = parsed.ideas.reduce((max, idea) => Math.max(max, idea.number), 0);
+    await atomicWriteJson(this.ideasPath(), {
+      ...parsed,
+      nextIdeaNumber: Math.max(parsed.nextIdeaNumber, maxNumber + 1),
+      ideas: [...parsed.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+    }, this.root);
+    await this.touchTimestamp();
+  }
+
+  async savePhase(phase: Phase): Promise<void> {
     const previous = await this.loadPhase(phase.id).catch(() => null);
     const timestamp = nowISO();
     const features = await this.loadRawFeatures();
@@ -2268,8 +2613,9 @@ export class PlanStore {
       ? { ...phase, featureId: resolvedFeatureId }
       : phase;
     const previousTaskDescriptions = new Map((previous?.tasks ?? []).map((task) => [task.id, task.description]));
-    const timestamped = this.stampDescriptionUpdatedAt(normalizedInput, previous?.description, timestamp);
-    timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), timestamp));
+    const previousTaskDescriptionRefs = new Map((previous?.tasks ?? []).map((task) => [task.id, task.descriptionRef]));
+    const timestamped = this.stampDescriptionUpdatedAt(normalizedInput, previous?.description, previous?.descriptionRef, timestamp);
+    timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), previousTaskDescriptionRefs.get(task.id), timestamp));
     const parsed = PhaseSchema.parse(this.normalizePhaseDocument(timestamped).phase);
     await mkdir(this.phasesDir(), { recursive: true });
     await atomicWriteJson(this.phasePath(parsed.id), parsed, this.root);
@@ -2290,11 +2636,13 @@ export class PlanStore {
       const current: Phase = { ...rawPhase, status: this.derivePhaseStatus(rawPhase.tasks) };
       // The updater may mutate `current`, therefore snapshot descriptions first.
       const previousDescription = current.description;
+      const previousDescriptionRef = current.descriptionRef;
       const previousTaskDescriptions = new Map(current.tasks.map((task) => [task.id, task.description]));
+      const previousTaskDescriptionRefs = new Map(current.tasks.map((task) => [task.id, task.descriptionRef]));
       const timestamp = nowISO();
       const next = updater(current);
-      const timestamped = this.stampDescriptionUpdatedAt(next, previousDescription, timestamp);
-      timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), timestamp));
+      const timestamped = this.stampDescriptionUpdatedAt(next, previousDescription, previousDescriptionRef, timestamp);
+      timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), previousTaskDescriptionRefs.get(task.id), timestamp));
       const resolvedFeatureId = resolveStoredFeatureId(features, timestamped.featureId);
       // Referential integrity: reject orphan featureId.
       if (timestamped.featureId && timestamped.featureId.trim() && !resolvedFeatureId) {
@@ -2390,6 +2738,55 @@ export class PlanStore {
     return (await this.loadPhase(phaseId)).handoff;
   }
 
+  private async validateHandoffSupportingDocuments(
+    documents: HandoffSupportingDocumentInput[],
+  ): Promise<HandoffSupportingDocument[]> {
+    const docsRoot = resolve(this.root, "docs");
+    const verified: HandoffSupportingDocument[] = [];
+    const seen = new Set<string>();
+    for (const document of documents) {
+      const normalizedPath = document.path.trim().replace(/\\/g, "/");
+      if (!/^\.planner\/docs\/.+\.md$/i.test(normalizedPath) || normalizedPath.includes("/../")) {
+        throw new HandoffContractError(
+          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+          `Supporting document path must be a Markdown file under .planner/docs/: ${document.path}`,
+          { path: document.path },
+        );
+      }
+      if (seen.has(normalizedPath)) {
+        throw new HandoffContractError(
+          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+          `Supporting document appears more than once: ${normalizedPath}`,
+          { path: normalizedPath },
+        );
+      }
+      seen.add(normalizedPath);
+      const target = resolve(this.root, normalizedPath.slice(".planner/".length));
+      if (!target.startsWith(`${docsRoot}${sep}`)) {
+        throw new HandoffContractError(
+          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+          `Supporting document escapes .planner/docs/: ${normalizedPath}`,
+          { path: normalizedPath },
+        );
+      }
+      const content = await readFile(target, "utf8").catch(() => null);
+      if (content === null || !content.trim()) {
+        throw new HandoffContractError(
+          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+          `Supporting document is missing or empty: ${normalizedPath}`,
+          { path: normalizedPath },
+        );
+      }
+      verified.push({
+        path: normalizedPath,
+        description: document.description.trim(),
+        contentHash: handoffContentHash(content),
+        contentLength: content.length,
+      });
+    }
+    return verified;
+  }
+
   /** Audit one exact phase before preparing a handoff refresh. */
   async preparePhaseHandoff(phaseId: string): Promise<PhaseHandoffAudit> {
     const phase = await this.loadPhase(phaseId);
@@ -2414,26 +2811,52 @@ export class PlanStore {
       const featureIndex = originalFeatures.features.findIndex((candidate) => candidate.id === originalPhase.featureId);
       if (featureIndex < 0) throw new PlanStoreError(`Parent feature ${originalPhase.featureId} not found for phase ${phaseId}.`);
       const timestamp = nowISO();
-      const applied = applyHandoffContextSync(originalPhase, originalFeatures.features[featureIndex]!, input, timestamp);
-      const nextFeatures = structuredClone(originalFeatures);
-      nextFeatures.features[featureIndex] = applied.feature;
+      const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(input.supportingDocuments ?? []);
+      const verifiedInput: RefreshPhaseHandoffInput = { ...input, verifiedSupportingDocuments };
+      const originalFeature = originalFeatures.features[featureIndex]!;
+      const applied = applyHandoffContextSync(originalPhase, originalFeature, verifiedInput, timestamp);
 
       try {
-        await this.saveFeatures(nextFeatures);
+        // Keep the transaction granular: only the parent feature and target phase
+        // belong to this handoff refresh. Rewriting the whole feature document can
+        // disturb unrelated feature containment metadata.
+        await this.saveFeature(applied.feature);
         await this.savePhase(applied.phase);
+        const phase = await this.loadPhase(phaseId);
+        const feature = (await this.loadFeatures()).features.find((candidate) => candidate.id === originalPhase.featureId)!;
+        const persistedHash = handoffContentHash(phase.handoff);
+        if (
+          phase.handoff !== applied.phase.handoff
+          || !phase.handoffAudit
+          || phase.handoffAudit.contentHash !== persistedHash
+          || phase.handoffAudit.contentLength !== phase.handoff.length
+        ) {
+          throw new HandoffContractError(
+            "HANDOFF_PERSISTENCE_VERIFICATION_FAILED",
+            "The persisted handoff did not match the verified content. The write was rolled back.",
+            { expectedHash: applied.phase.handoffAudit?.contentHash ?? "", actualHash: persistedHash },
+          );
+        }
+        return {
+          phase,
+          feature,
+          updatedTaskIds: applied.updatedTaskIds,
+          handoffUpdatedAt: phase.handoffUpdatedAt,
+          handoffAudit: phase.handoffAudit,
+        };
       } catch (error) {
         const rollbackErrors: unknown[] = [];
-        await this.saveFeatures(originalFeatures).catch((rollbackError) => rollbackErrors.push(rollbackError));
-        await this.savePhase(originalPhase).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        // Restore the exact parsed snapshots directly. Going through saveFeature /
+        // savePhase would restamp description freshness against the failed write.
+        await atomicWriteJson(this.featurePath(originalFeature.id), FeatureSchema.parse(originalFeature), this.root)
+          .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        await atomicWriteJson(this.phasePath(originalPhase.id), PhaseSchema.parse(originalPhase), this.root)
+          .catch((rollbackError) => rollbackErrors.push(rollbackError));
         if (rollbackErrors.length > 0) {
           throw new AggregateError([error, ...rollbackErrors], "Handoff refresh failed and rollback was incomplete.");
         }
         throw error;
       }
-
-      const phase = await this.loadPhase(phaseId);
-      const feature = (await this.loadFeatures()).features.find((candidate) => candidate.id === originalPhase.featureId)!;
-      return { phase, feature, updatedTaskIds: applied.updatedTaskIds, handoffUpdatedAt: phase.handoffUpdatedAt };
     });
   }
 
@@ -2450,7 +2873,7 @@ export class PlanStore {
       await this.clearPhaseHandoff(phaseId, "superseded");
     }
     const now = new Date().toISOString();
-    await this.updatePhase(phaseId, (current) => ({ ...current, handoff: normalized, handoffUpdatedAt: now }));
+    await this.updatePhase(phaseId, (current) => ({ ...current, handoff: normalized, handoffUpdatedAt: now, handoffAudit: null }));
   }
 
 
@@ -2545,7 +2968,7 @@ export class PlanStore {
 
   /** List only active/pending phase handoffs, newest first. Handoffs from
    * phases where every task is done/canceled are archived before returning. */
-  async listHandoffs(): Promise<PhaseHandoffSummary[]> {
+  async listHandoffs(options: { includeContent?: boolean } = {}): Promise<PhaseHandoffSummary[]> {
     await this.archiveStaleHandoffs();
     const phases = await this.loadAllPhases();
     const features = await this.loadFeatures();
@@ -2563,7 +2986,11 @@ export class PlanStore {
         compositeRef: formatPhaseRef(p.number, fnum),
         updatedAt: p.handoffUpdatedAt || p.updatedAt,
         firstLine: handoffFirstLine(p.handoff),
-        content: p.handoff,
+        ...(options.includeContent ? { content: p.handoff } : {}),
+        auditVersion: p.handoffAudit?.version ?? null,
+        contentLength: p.handoff.length,
+        contentHash: p.handoffAudit?.contentHash ?? handoffContentHash(p.handoff),
+        verifiedAt: p.handoffAudit?.verifiedAt ?? "",
       });
     }
     out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -2664,14 +3091,15 @@ export class PlanStore {
 
   // ── Workspace-level operations ─────────────────────────────────────
 
-  /** Load the full workspace (manifest + phases + project + requirements + features) */
+  /** Load the full workspace, including the rollup-independent Ideas Inbox. */
   async loadWorkspace(): Promise<PlanWorkspace> {
     const manifest = await this.loadManifest();
     const phases = await this.loadAllPhases();
     const project = await this.loadProject();
     const features = await this.loadFeatures();
     const requirements = await this.loadRequirements();
-    return { manifest, phases, project, features, requirements };
+    const ideas = await this.loadIdeas();
+    return { manifest, phases, project, features, requirements, ideas };
   }
 
   // ── Markdown generation ────────────────────────────────────────────

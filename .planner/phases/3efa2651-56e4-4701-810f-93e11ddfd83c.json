@@ -1,0 +1,221 @@
+{
+  "id": "3efa2651-56e4-4701-810f-93e11ddfd83c",
+  "featureId": "2f99bd64-b58c-4635-963e-31b45f0ccff6",
+  "number": 89,
+  "shortId": "7CUWS",
+  "priority": 0,
+  "slug": "operationally-exhaustive-handoff-completeness-enforcement",
+  "title": "Operationally exhaustive handoff completeness enforcement",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make prepare/write reject formally valid but operationally incomplete handoffs and verify persisted resume context.",
+  "description": "Current state: `packages/plan-core/src/handoff-context.ts:94` validates canonical headings, stale preparation tokens, existing-handoff reconciliation, and missing completion evidence, while `packages/pi-adapter/src/index.ts:2516` and `packages/plan-mcp/src/index.ts:1976` instruct agents to prepare and write reconciled handoffs. This protects structure and durable task/phase/feature updates but does not prove operational completeness: branch/worktree, exact commands, runtime limitations, workarounds, composite refs, verification gaps, user-visible behavior, and required operator actions can still be omitted. Extend the harness-agnostic handoff contract with a mandatory structured completeness audit, deterministic canonical rendering or cross-validation, typed missing-category failures, internal write/read-back verification, and durable audit metadata. The implementation must use the project-local planner skill from P088(F005) as the agent guidance layer while enforcing the same categories in plan-core so prompts alone cannot be treated as sufficient. Add Pi/MCP parity and regressions based on the reported real-world incomplete handoff example. Preserve target confirmation, single active handoff semantics, stale-token protection, archive behavior, existing-handoff reconciliation, and compatibility for reading legacy handoffs.",
+  "descriptionUpdatedAt": "2026-08-28T14:37:16.431Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [
+    "P088(F005)/T351 — project-local planner usage skill must be available before enforcement guidance is finalized."
+  ],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "b1bfff21-1530-4b2c-b116-cf546196e544",
+      "title": "Bound handoff transport output and externalize extended detail",
+      "decision": "Handoff list surfaces must return compact summary metadata only and support bounded retrieval instead of embedding every full handoff. A single handoff show result must expose its body consistently in both textual and structured MCP content. Canonical handoffs must stay under a deterministic character budget; exhaustive supporting detail that exceeds the budget must live in linked committed Markdown documents under .planner/docs/.",
+      "rationale": "The current MCP planner-handoff-list structured payload includes every full handoff and has exceeded the client token limit, while planner-handoff-show puts the body only in text and can appear empty to clients that prioritize structuredContent. Bounded summaries plus one targeted bounded body preserve exhaustive resume context without overflowing transport limits.",
+      "implementationNotes": "Implement in P089(F020)/T352. Remove content from PhaseHandoffSummary/list structured payloads, add pagination or an explicit bounded list contract, include content in planner-handoff-show structuredContent, select and test a concrete character ceiling, validate linked .planner/docs/ references for overflow detail, and preserve legacy handoff readability.",
+      "acceptedAt": "2026-08-28T21:56:40.503Z"
+    }
+  ],
+  "completionCriteria": [
+    "Formally valid but operationally incomplete handoffs are rejected with typed missing-category diagnostics.",
+    "Successful handoffs contain every required category or a substantive not-applicable reason and are verified by persisted read-back/hash.",
+    "Pi and MCP expose equivalent prepare/write contracts and recovery guidance.",
+    "The reported real-world omission example fails before completion data is added and passes afterward."
+  ],
+  "taskIds": [
+    "93ba1735-47af-4da4-b01c-9b4d3f2ebc86"
+  ],
+  "tasks": [
+    {
+      "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86",
+      "phaseId": "3efa2651-56e4-4701-810f-93e11ddfd83c",
+      "number": 352,
+      "shortId": "P4CSR",
+      "priority": 1,
+      "shortName": "handoff-completeness",
+      "title": "Enforce a structured, read-back-verified handoff completeness contract",
+      "status": "done",
+      "description": "Implement versioned operational handoff completeness enforcement across plan-core, Pi, and MCP. Require a captured-or-substantively-not-applicable audit, typed HANDOFF_COMPLETENESS_AUDIT_REQUIRED diagnostics, canonical body cross-validation, atomic persistence read-back with content hash and durable audit metadata, legacy readability, compact paginated handoff lists, consistent bounded handoff-show structured content, and a deterministic 24,000-character inline ceiling with linked committed `.planner/docs/` overflow material. Full categories, transport contract, and the real omission regression are specified in `.planner/docs/t352-handoff-completeness-contract.md`; read that file before implementation and verify this short planner reference persists.\n\n---\n**Completion summary:**\nCompleted the versioned operational handoff completeness and bounded-transport contract. Shipped: (1) plan-core handoff audit v1 with 18 captured-or-substantively-not-applicable categories, deterministic HANDOFF_COMPLETENESS_AUDIT_REQUIRED/HANDOFF_CONTENT_LIMIT_EXCEEDED/HANDOFF_SUPPORTING_DOCUMENT_INVALID/HANDOFF_PERSISTENCE_VERIFICATION_FAILED outcomes, canonical audit rendering, a 24,000-character inline ceiling, validated linked Markdown under .planner/docs/, durable content hash/length/verifiedAt metadata, and exact persistence read-back; (2) granular parent-feature + target-phase persistence with exact rollback snapshots, preventing unrelated feature metadata rewrites; (3) Pi and MCP prepare/write parity, typed failures, compact paginated summary-only lists, bounded legacy show results, consistent body/audit metadata in text and structured output, and bounded deprecated Pi plan_get_handoff output; (4) canonical planner-skill guidance synchronized to shared, Claude, and managed .planner/SKILL.md copies; (5) regression coverage for the reported omissions (branch, composite refs/tool protocol, Notification::info(\"x\").send() runtime workaround, user-visible behavior, and Antonio operator actions), missing/generic audits, supporting-document links/hashes, oversized bodies, compact pagination, legacy truncation, atomic rollback, persisted hash mismatch, and unrelated-feature preservation. Verification: pnpm build passed; pnpm check passed; pnpm test:coverage passed 492/492 Node tests plus 80/80 Web UI tests with FINAL coverage 86.16% lines, 74.06% branches, 80.89% functions; pnpm plugins:check passed; git diff --check passed. Files include packages/plan-core/src/{schema.ts,handoff-context.ts,plan-store.ts}, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, packages/plan-server/src/serve.ts, packages/plan-core/planner-skill.md and synchronized skill copies, .planner/docs/t352-handoff-completeness-contract.md, test/helpers/handoff-audit.mjs, and focused core/Pi/MCP tests. Remaining/unverified work: none for T352. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-08-29T07:36:25.211Z",
+      "notes": "Additional verified transport defects to fix with the completeness contract: (1) PlanStore.listHandoffs() currently includes full `content` in every PhaseHandoffSummary, so MCP planner-handoff-list structuredContent can exceed client token limits (reported 69,786 characters); make list results summary-only and bounded/paginated. (2) MCP planner-handoff-show currently puts the handoff body only in text while structuredContent contains only phaseRef/phaseId, so clients that prioritize structuredContent can appear to receive an empty body; include the bounded body and metadata consistently in structuredContent. Enforce a deterministic handoff character ceiling and move exhaustive overflow detail to linked committed Markdown documents under `.planner/docs/`, preserving legacy readability and validating links/read-back.",
+      "statusLog": [
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-001-planned-waiting",
+          "date": "2026-08-28T14:38:07.642Z",
+          "fromStatus": "planned",
+          "toStatus": "waiting",
+          "title": "Waiting for P088(F005)/T351 to publish and auto-load the canonical project-local planner usage skill that will carry the handoff protocol enforced by this task.",
+          "description": "Waiting for P088(F005)/T351 to publish and auto-load the canonical project-local planner usage skill that will carry the handoff protocol enforced by this task."
+        },
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-002-waiting-planned",
+          "date": "2026-08-28T22:09:07.676Z",
+          "fromStatus": "waiting",
+          "toStatus": "planned",
+          "title": "The prerequisite P088(F005)/T351 is complete: the canonical project-local planner skill is published in plan-core, synchronized across generated guidance, and auto-loaded for Pi/MCP agent context. T352 can now implement the handoff completeness and bounded transport contract against that canonical skill.",
+          "description": "The prerequisite P088(F005)/T351 is complete: the canonical project-local planner skill is published in plan-core, synchronized across generated guidance, and auto-loaded for Pi/MCP agent context. T352 can now implement the handoff completeness and bounded transport contract against that canonical skill."
+        },
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-003-planned-in-progress",
+          "date": "2026-08-28T22:25:41.106Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-004-in-progress-done",
+          "date": "2026-08-29T07:36:25.209Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed the versioned operational handoff completeness and bounded-transport contract. Shipped: (1) plan-core handoff audit v1 with 18 captured-or-substantively-not-applicable categories, deterministic HANDOFF_COMPLETENESS_AUDIT_REQUIRED/HANDOFF_CONTENT_LIMIT_EXCEEDED/HANDOFF_SUPPORTING_DOCUMENT_INVALID/HANDOFF_PERSISTENCE_VERIFICATION_FAILED outcomes, canonical audit rendering, a 24,000-character inline ceiling, validated linked Markdown under .planner/docs/, durable content hash/length/verifiedAt metadata, and exact persistence read-back; (2) granular parent-feature + target-phase persistence with exact rollback snapshots, preventing unrelated feature metadata rewrites; (3) Pi and MCP prepare/write parity, typed failures, compact paginated summary-only lists, bounded legacy show results, consistent body/audit metadata in text and structured output, and bounded deprecated Pi plan_get_handoff output; (4) canonical planner-skill guidance synchronized to shared, Claude, and managed .planner/SKILL.md copies; (5) regression coverage for the reported omissions (branch, composite refs/tool protocol, Notification::info(\"x\").send() runtime workaround, user-visible behavior, and Antonio operator actions), missing/generic audits, supporting-document links/hashes, oversized bodies, compact pagination, legacy truncation, atomic rollback, persisted hash mismatch, and unrelated-feature preservation. Verification: pnpm build passed; pnpm check passed; pnpm test:coverage passed 492/492 Node tests plus 80/80 Web UI tests with FINAL coverage 86.16% lines, 74.06% branches, 80.89% functions; pnpm plugins:check passed; git diff --check passed. Files include packages/plan-core/src/{schema.ts,handoff-context.ts,plan-store.ts}, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, packages/plan-server/src/serve.ts, packages/plan-core/planner-skill.md and synchronized skill copies, .planner/docs/t352-handoff-completeness-contract.md, test/helpers/handoff-audit.mjs, and focused core/Pi/MCP tests. Remaining/unverified work: none for T352. No commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-001-define-versioned-completeness-categories-audit-input-typed-denial-and-durable-audit-metadata-in-plan-core",
+          "number": 1,
+          "title": "Define versioned completeness categories, audit input, typed denial, and durable audit metadata in plan-core.",
+          "checked": true
+        },
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-002-make-handoff-prepare-return-the-mandatory-audit-contract-and-existing-durable-session-evidence-to-reconcile",
+          "number": 2,
+          "title": "Make handoff_prepare return the mandatory audit contract and existing durable/session evidence to reconcile.",
+          "checked": true
+        },
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-003-make-handoff-write-reject-missing-or-generic-coverage-render-or-cross-validate-content-and-verify-persisted-read-back-hash",
+          "number": 3,
+          "title": "Make handoff_write reject missing or generic coverage, render or cross-validate content, and verify persisted read-back/hash.",
+          "checked": true
+        },
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-004-wire-equivalent-pi-mcp-schemas-results-and-project-local-generated-skill-instructions",
+          "number": 4,
+          "title": "Wire equivalent Pi/MCP schemas, results, and project-local/generated skill instructions.",
+          "checked": true
+        },
+        {
+          "id": "93ba1735-47af-4da4-b01c-9b4d3f2ebc86-check-005-add-the-real-world-omission-regression-plus-legacy-compatibility-atomicity-and-cross-harness-verification",
+          "number": 5,
+          "title": "Add the real-world omission regression plus legacy compatibility, atomicity, and cross-harness verification.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-08-28T22:25:41.106Z",
+      "completedAt": "2026-08-29T07:36:25.209Z",
+      "createdAt": "2026-08-28T14:37:28.830Z",
+      "updatedAt": "2026-08-29T07:36:25.209Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-28T22:25:41.022Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-08-28T14:37:16.430Z",
+  "updatedAt": "2026-08-29T07:36:25.209Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-28T22:44:42.225Z",
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/3efa2651-56e4-4701-810f-93e11ddfd83c-2026-08-29T07-36-25-231Z.md",
+      "clearedAt": "2026-08-29T07:36:25.231Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/3efa2651-56e4-4701-810f-93e11ddfd83c-2026-08-28T22-44-42-204Z.md",
+      "clearedAt": "2026-08-28T22:44:42.204Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/3efa2651-56e4-4701-810f-93e11ddfd83c-2026-08-28T22-35-58-763Z.md",
+      "clearedAt": "2026-08-28T22:35:58.763Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/3efa2651-56e4-4701-810f-93e11ddfd83c-2026-08-28T22-35-51-671Z.md",
+      "clearedAt": "2026-08-28T22:35:51.671Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/3efa2651-56e4-4701-810f-93e11ddfd83c-2026-08-28T22-34-16-205Z.md",
+      "clearedAt": "2026-08-28T22:34:16.205Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "f3758cae-c578-4886-84fb-d5d06c0fe984",
+      "date": "2026-08-28T14:37:51.924Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "b55bfe72-cc45-4ebd-8e8d-639db7d1ea0f",
+      "date": "2026-08-28T14:38:07.663Z",
+      "fromStatus": "planned",
+      "toStatus": "waiting",
+      "title": "planned → waiting",
+      "description": ""
+    },
+    {
+      "id": "6917b26d-2201-40ac-975b-380874be53e4",
+      "date": "2026-08-28T22:09:07.697Z",
+      "fromStatus": "waiting",
+      "toStatus": "planned",
+      "title": "waiting → planned",
+      "description": ""
+    },
+    {
+      "id": "215c0014-d926-4fb7-a344-51578581f06b",
+      "date": "2026-08-28T22:25:41.127Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "dec017d8-4b4b-46b7-bf6e-2b19f285c878",
+      "date": "2026-08-29T07:36:25.271Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+      "createdAt": "2026-08-28T22:25:41.022Z"
+    }
+  ]
+}

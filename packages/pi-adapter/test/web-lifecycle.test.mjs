@@ -11,6 +11,8 @@
 
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 
 after(async () => {
@@ -73,15 +75,45 @@ describe("pi-adapter web lifecycle", () => {
         "Web UI startup does not emit a planner recap",
       );
 
+      const guidelines = await host.runTool("project_guidelines_update", {
+        content: "Use English in source code. Run focused verification before claiming success.",
+      });
+      assert.match(toolText(guidelines), /Project Guidelines updated\./);
+      const legacyContext = await host.runTool("project_update", {
+        globalRules: ["Keep generated output deterministic."],
+        decisions: ["Use automatic migration on explicit planner load."],
+      });
+      assert.match(toolText(legacyContext), /Project updated/);
+      await rm(join(host.planRoot, "skills", "grill-me", "SKILL.md"));
+
       const loaded = await host.runTool("planner-load", {});
       assert.equal(toolDetails(loaded).enabled, true, "explicit planner-load enables the planner");
+      assert.equal(toolDetails(loaded).preparation.migrated, true);
+      assert.match(toolText(loaded), /Migrated legacy project context: 1 guideline, 1 accepted decision/);
       assert.match(toolText(loaded), /## Planner recap/);
-      assert.match(await injectedPrompt(host), /\[Plan Context/);
+      assert.match(toolText(loaded), /## Project Guidelines/);
+      assert.match(toolText(loaded), /Use English in source code\. Run focused verification before claiming success\./);
+      assert.doesNotMatch(toolText(loaded), /## Managed-copy policy/, "agent-only planner skill must not leak into the human recap text");
+      assert.doesNotMatch(toolText(loaded), /Interview me relentlessly about every aspect/, "idea discussion skill must not leak into the human recap text");
+      assert.match(toolDetails(loaded).plannerSkill.status, /^(created|current|updated)$/);
+      assert.match(await readFile(join(host.planRoot, "skills", "grill-me", "SKILL.md"), "utf8"), /^<!-- agent-plan-managed-skill sha256:/);
+      const prompt = await injectedPrompt(host);
+      assert.match(prompt, /\[Plan Context/);
+      assert.match(prompt, /# Agent Plan operating guide/);
+      assert.match(prompt, /## Handoff protocol/);
+      assert.doesNotMatch(prompt, /Interview me relentlessly about every aspect/, "idea discussion skill must not load on ordinary agent turns");
+
+      await readTaskContext(host);
+      const taskStart = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(taskStart).started, true, "planner-load records the project-guidelines read attestation");
       assert.equal(
         host.sentMessages.filter((message) => message.message.customType === "planner-resume-trigger").length,
         0,
         "tool-based planner load returns the recap directly without a hidden trigger turn",
       );
+      const repeated = await host.runTool("planner-load", {});
+      assert.equal(toolDetails(repeated).preparation.migrated, false);
+      assert.doesNotMatch(toolText(repeated), /Migrated legacy project context/, "no-op loads remain quiet");
     } finally {
       await closePiHost(host);
     }
@@ -90,11 +122,18 @@ describe("pi-adapter web lifecycle", () => {
   test("load enables, stop and its `disable` alias halt, unknown subcommand warns", async () => {
     const host = await createPiHost({ name: "t241-aliases", seed: "minimal" });
     try {
-      // load → running + recap trigger.
+      await host.runTool("project_update", { globalRules: ["Keep generated output deterministic."] });
+      // load → migration + running + recap trigger.
       await host.runCommand("load");
       let notifyText = host.ui.notifyCalls.map((n) => n.message).join("\n");
       assert.match(notifyText, /Starting web server \(LAN\)/);
-      assert.equal(host.sentMessages.filter((m) => m.message.customType === "planner-resume-trigger").length, 1);
+      const loadTriggers = host.sentMessages.filter((m) => m.message.customType === "planner-resume-trigger");
+      assert.equal(loadTriggers.length, 1);
+      assert.match(loadTriggers[0].message.content, /\[agent-only planner usage skill/);
+      assert.doesNotMatch(loadTriggers[0].message.content, /Interview me relentlessly about every aspect/, "Pi command load must not inject grill-me before an Ideas workflow");
+      assert.match(loadTriggers[0].message.content, /# Agent Plan operating guide/);
+      assert.match(loadTriggers[0].message.content, /--- RECAP ---/);
+      assert.match(loadTriggers[0].message.content, /Migrated legacy project context: 1 guideline/);
       let status = await host.runTool("planner-web", {});
       assert.equal(toolDetails(status).running, true);
 
@@ -108,6 +147,8 @@ describe("pi-adapter web lifecycle", () => {
 
       // The `disable` alias behaves identically.
       await host.runCommand("load");
+      const repeatedTrigger = host.sentMessages.filter((m) => m.message.customType === "planner-resume-trigger").at(-1);
+      assert.doesNotMatch(repeatedTrigger.message.content, /Migrated legacy project context/, "repeated command load remains quiet");
       assert.equal(toolDetails(await host.runTool("planner-web", {})).running, true);
       await host.runCommand("disable");
       assert.equal(toolDetails(await host.runTool("planner-web", {})).running, false);
@@ -117,6 +158,20 @@ describe("pi-adapter web lifecycle", () => {
       await host.runCommand("frobnicate");
       assert.match(host.ui.notifyCalls.at(-1).message, /Unknown/);
       assert.equal(toolDetails(await host.runTool("planner-web", {})).running, false);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("planner-load aborts with a typed diagnostic before enabling on preparation failure", async () => {
+    const host = await createPiHost({ name: "t362-preparation-failure", seed: "minimal" });
+    try {
+      await writeFile(join(host.planRoot, "project.json"), "{ invalid json", "utf8");
+      const result = await host.runTool("planner-load", {});
+      assert.equal(toolDetails(result).errorCode, "PLANNER_SESSION_PREPARATION_FAILED");
+      assert.equal(toolDetails(result).enabled, false);
+      assert.equal(toolDetails(result).running, false);
+      assert.match(toolText(result), /Planner load aborted/);
     } finally {
       await closePiHost(host);
     }

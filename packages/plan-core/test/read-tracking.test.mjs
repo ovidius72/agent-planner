@@ -27,6 +27,7 @@ import {
   markFeatureReadForSessionId,
   markPhaseReadForSessionId,
   markTaskReadForSessionId,
+  projectGuidelinesReadStateForSession,
   readTrackingSnapshot,
   requirementReadAdvisory,
   startReadSession,
@@ -42,18 +43,17 @@ test("a fresh read state denies lifecycle work until the task is read", () => {
 test("a task read does not imply its parent phase or feature", () => {
   invalidateReads();
   markTaskRead("T1", "P1", "F1");
-  assert.deepEqual(eligible(), { eligible: false, reason: "After reading the task, read its parent phase with full=true." });
+  assert.deepEqual(eligible(), { eligible: false, reason: "Read this task's parent phase with full=true." });
   assert.equal(hasReadParents("F1", "P1"), false);
 });
 
-test("the required context order is task, then phase, then feature", () => {
+test("default-session eligibility requires the same lineage but no longer depends on read order", () => {
   invalidateReads();
   markFeatureRead("F1");
   markTaskRead("T1", "P1", "F1");
-  markPhaseRead("P1", "F1");
-  assert.deepEqual(eligible(), { eligible: false, reason: "After reading the phase, read its parent feature with full=true." });
+  assert.deepEqual(eligible(), { eligible: false, reason: "Read this task's parent phase with full=true." });
 
-  markFeatureRead("F1");
+  markPhaseRead("P1", "F1");
   assert.deepEqual(eligible(), { eligible: true, reason: "" });
 });
 
@@ -143,6 +143,20 @@ test("persisted session attestations remain valid until an entity changes", () =
   assert.deepEqual(staleTask.requiredReads, [{ kind: "task", id: "T1", state: "stale" }]);
 });
 
+test("an out-of-order in-memory read of parent-first still satisfies eligibility", () => {
+  invalidateReads();
+  // Read feature, then phase, then task — reversed order from the old rule — and
+  // eligibility must pass because each entity is present in the session.
+  markFeatureReadForSessionId("session-a", "F1");
+  markPhaseReadForSessionId("session-a", "P1");
+  markTaskReadForSessionId("session-a", "T1");
+  const entities = { updatedAt: "2026-01-01T00:00:00.000Z" };
+  assert.deepEqual(
+    contextReadEligibilityForSession({ sessionId: "session-a", taskId: "T1", phaseId: "P1", featureId: "F1", task: entities, phase: entities, feature: entities }),
+    { eligible: true, reason: "" },
+  );
+});
+
 test("a task-only reread reuses valid phase and feature attestations", () => {
   invalidateReads();
   const validParent = {
@@ -194,6 +208,31 @@ test("parent lifecycle churn does not invalidate unchanged descriptions", () => 
   assert.deepEqual(contextReadEligibilityForSession({ ...input, phase: changedPhase }).requiredReads, [
     { kind: "phase", id: "P1", state: "stale" },
   ]);
+});
+
+test("project guidelines attestations are optional, reusable, and freshness-aware", () => {
+  assert.equal(projectGuidelinesReadStateForSession({ projectGuidelines: { content: "", updatedAt: "", sessionInfo: [] } }, "session-a"), "not-required");
+  assert.equal(projectGuidelinesReadStateForSession({
+    projectGuidelines: {
+      content: "Follow the formatter.",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      sessionInfo: [],
+    },
+  }, "session-a"), "missing");
+  assert.equal(projectGuidelinesReadStateForSession({
+    projectGuidelines: {
+      content: "Follow the formatter.",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-03T00:00:00.000Z" }],
+    },
+  }, "session-a"), "valid");
+  assert.equal(projectGuidelinesReadStateForSession({
+    projectGuidelines: {
+      content: "Follow the formatter.",
+      updatedAt: "2026-01-04T00:00:00.000Z",
+      sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-03T00:00:00.000Z" }],
+    },
+  }, "session-a"), "stale");
 });
 
 test("agent rules demand lifecycle-first reads instead of unconditional rereads", () => {

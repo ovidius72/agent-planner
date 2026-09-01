@@ -1,6 +1,64 @@
-import type { Feature, Phase, Task } from "./schema.js";
+import { createHash } from "node:crypto";
+import type {
+  Feature,
+  HandoffCompletenessAudit,
+  HandoffCompletenessEntry,
+  HandoffSupportingDocument,
+  Phase,
+  Task,
+} from "./schema.js";
 
 export const COMPLETION_SUMMARY_HEADING = "**Completion summary:**";
+export const HANDOFF_COMPLETENESS_AUDIT_VERSION = 1;
+export const MAX_HANDOFF_CONTENT_CHARS = 24_000;
+export const HANDOFF_AUDIT_START_MARKER = "<!-- agent-plan:handoff-audit:start -->";
+export const HANDOFF_AUDIT_END_MARKER = "<!-- agent-plan:handoff-audit:end -->";
+
+export const HANDOFF_COMPLETENESS_CATEGORIES = [
+  { id: "exact-focus-resume-point", label: "Exact focus and resume point" },
+  { id: "first-resume-action", label: "First resume action" },
+  { id: "completed-work", label: "Completed work" },
+  { id: "partial-work", label: "Partial work" },
+  { id: "remaining-work", label: "Remaining work" },
+  { id: "decisions-rationale", label: "Decisions and rationale" },
+  { id: "rejected-alternatives", label: "Rejected alternatives" },
+  { id: "files-symbols", label: "Files and symbols" },
+  { id: "branch-worktree", label: "Branch and worktree" },
+  { id: "commands-tools", label: "Commands and tools" },
+  { id: "completed-verification", label: "Completed verification" },
+  { id: "pending-verification", label: "Pending verification" },
+  { id: "runtime-limitations-workarounds", label: "Runtime limitations and workarounds" },
+  { id: "blockers-risks", label: "Blockers and risks" },
+  { id: "user-visible-behavior", label: "User-visible behavior" },
+  { id: "operator-actions", label: "Operator actions" },
+  { id: "project-operating-notes", label: "Project-specific operating notes" },
+  { id: "conversation-only-facts", label: "Conversation-only facts" },
+] as const;
+
+export type HandoffCompletenessCategory = typeof HANDOFF_COMPLETENESS_CATEGORIES[number]["id"];
+export type HandoffContractErrorCode = "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED";
+
+export class HandoffContractError extends Error {
+  readonly code: HandoffContractErrorCode;
+  readonly details: Record<string, unknown>;
+
+  constructor(code: HandoffContractErrorCode, message: string, details: Record<string, unknown> = {}) {
+    super(message);
+    this.name = "HandoffContractError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export interface HandoffCompletenessAuditInput {
+  version: number;
+  entries: HandoffCompletenessEntry[];
+}
+
+export interface HandoffSupportingDocumentInput {
+  path: string;
+  description: string;
+}
 
 export interface HandoffTaskContextUpdate {
   taskId: string;
@@ -37,12 +95,20 @@ export interface PhaseHandoffAudit {
   handoffUpdatedAt: string;
   missingCompletionTaskIds: string[];
   missingCompletionTasks: Array<{ id: string; number: number; title: string }>;
+  completenessVersion: number;
+  maxContentChars: number;
+  completenessCategories: ReadonlyArray<{ id: HandoffCompletenessCategory; label: string }>;
+  existingCompletenessAudit: HandoffCompletenessAudit | null;
 }
 
 export interface RefreshPhaseHandoffInput {
   content: string;
   expectedHandoffUpdatedAt: string;
   reconciledExistingHandoff: boolean;
+  completenessAudit?: HandoffCompletenessAuditInput;
+  supportingDocuments?: HandoffSupportingDocumentInput[];
+  /** Populated and verified by PlanStore before pure domain application. */
+  verifiedSupportingDocuments?: HandoffSupportingDocument[];
   contextSync: PhaseHandoffContextSync;
 }
 
@@ -51,6 +117,7 @@ export interface RefreshPhaseHandoffResult {
   feature: Feature;
   updatedTaskIds: string[];
   handoffUpdatedAt: string;
+  handoffAudit: HandoffCompletenessAudit;
 }
 
 export function hasTaskCompletionEvidence(task: Task): boolean {
@@ -70,6 +137,10 @@ export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffA
     handoffUpdatedAt: phase.handoffUpdatedAt,
     missingCompletionTaskIds: missingCompletionTasks.map((task) => task.id),
     missingCompletionTasks,
+    completenessVersion: HANDOFF_COMPLETENESS_AUDIT_VERSION,
+    maxContentChars: MAX_HANDOFF_CONTENT_CHARS,
+    completenessCategories: HANDOFF_COMPLETENESS_CATEGORIES,
+    existingCompletenessAudit: phase.handoffAudit,
   };
 }
 
@@ -87,6 +158,88 @@ function appendSection(existing: string, section: string): string {
   const normalized = section.trim();
   if (!normalized || existing.includes(normalized)) return existing;
   return existing.trim() ? `${existing.trim()}\n\n---\n${normalized}` : normalized;
+}
+
+function isSubstantive(value: string): boolean {
+  const normalized = value.trim();
+  if (normalized.length < 12) return false;
+  return !/^(?:n\/?a|none|nothing|unknown|same as above|see (?:above|handoff|document)|not applicable|tbd)[.!]?$/i.test(normalized);
+}
+
+function stripRenderedCompletenessAudit(content: string): string {
+  const start = content.indexOf(HANDOFF_AUDIT_START_MARKER);
+  if (start < 0) return content.trim();
+  const end = content.indexOf(HANDOFF_AUDIT_END_MARKER, start);
+  if (end < 0) return content.slice(0, start).trim();
+  return `${content.slice(0, start)}${content.slice(end + HANDOFF_AUDIT_END_MARKER.length)}`.trim();
+}
+
+export function handoffContentHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+export function validateHandoffCompletenessAudit(audit: HandoffCompletenessAuditInput | undefined): HandoffCompletenessEntry[] {
+  const expectedIds = HANDOFF_COMPLETENESS_CATEGORIES.map((entry) => entry.id);
+  if (!audit || audit.version !== HANDOFF_COMPLETENESS_AUDIT_VERSION) {
+    throw new HandoffContractError(
+      "HANDOFF_COMPLETENESS_AUDIT_REQUIRED",
+      `Handoff completeness audit version ${HANDOFF_COMPLETENESS_AUDIT_VERSION} is required.`,
+      { requiredVersion: HANDOFF_COMPLETENESS_AUDIT_VERSION, missingCategories: expectedIds },
+    );
+  }
+
+  const byCategory = new Map<string, HandoffCompletenessEntry>();
+  const duplicates: string[] = [];
+  for (const entry of audit.entries) {
+    if (byCategory.has(entry.category)) duplicates.push(entry.category);
+    else byCategory.set(entry.category, entry);
+  }
+  const missingCategories = expectedIds.filter((id) => !byCategory.has(id));
+  const unknownCategories = [...byCategory.keys()].filter((id) => !expectedIds.includes(id as HandoffCompletenessCategory));
+  const invalidCategories = expectedIds.filter((id) => {
+    const entry = byCategory.get(id);
+    return entry ? !isSubstantive(entry.detail) : false;
+  });
+  if (missingCategories.length > 0 || unknownCategories.length > 0 || duplicates.length > 0 || invalidCategories.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_COMPLETENESS_AUDIT_REQUIRED",
+      "The handoff completeness audit is missing required categories or contains non-substantive entries.",
+      { missingCategories, invalidCategories, unknownCategories, duplicateCategories: [...new Set(duplicates)] },
+    );
+  }
+  return expectedIds.map((id) => byCategory.get(id)!);
+}
+
+export function renderHandoffCompletenessAudit(audit: HandoffCompletenessAuditInput): string {
+  const entries = validateHandoffCompletenessAudit(audit);
+  const labels = new Map(HANDOFF_COMPLETENESS_CATEGORIES.map((entry) => [entry.id, entry.label] as const));
+  return [
+    HANDOFF_AUDIT_START_MARKER,
+    `## Operational completeness audit (v${HANDOFF_COMPLETENESS_AUDIT_VERSION})`,
+    "",
+    ...entries.flatMap((entry) => [
+      `### ${labels.get(entry.category as HandoffCompletenessCategory) ?? entry.category}`,
+      `**Status:** ${entry.status}`,
+      entry.detail.trim(),
+      "",
+    ]),
+    HANDOFF_AUDIT_END_MARKER,
+  ].join("\n").trim();
+}
+
+export function renderVerifiedHandoffContent(content: string, audit?: HandoffCompletenessAuditInput): string {
+  const base = stripRenderedCompletenessAudit(content);
+  validateCanonicalHandoffContent(base);
+  validateHandoffCompletenessAudit(audit);
+  const rendered = `${base}\n\n${renderHandoffCompletenessAudit(audit!)}`.trim();
+  if (rendered.length > MAX_HANDOFF_CONTENT_CHARS) {
+    throw new HandoffContractError(
+      "HANDOFF_CONTENT_LIMIT_EXCEEDED",
+      `Canonical handoff content is ${rendered.length} characters; the maximum is ${MAX_HANDOFF_CONTENT_CHARS}. Move extended detail to committed Markdown under .planner/docs/ and link it with a substantive explanation.`,
+      { contentLength: rendered.length, maxContentChars: MAX_HANDOFF_CONTENT_CHARS },
+    );
+  }
+  return rendered;
 }
 
 export function validateCanonicalHandoffContent(content: string): void {
@@ -112,7 +265,34 @@ export function validateHandoffContextSync(
   feature: Feature,
   input: RefreshPhaseHandoffInput,
 ): void {
-  validateCanonicalHandoffContent(input.content);
+  renderVerifiedHandoffContent(input.content, input.completenessAudit);
+  const requestedDocuments = input.supportingDocuments ?? [];
+  const verifiedDocuments = input.verifiedSupportingDocuments ?? [];
+  if (requestedDocuments.length !== verifiedDocuments.length) {
+    throw new HandoffContractError(
+      "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+      "Every supporting document must be validated by PlanStore before the handoff is written.",
+      { requestedCount: requestedDocuments.length, verifiedCount: verifiedDocuments.length },
+    );
+  }
+  for (let index = 0; index < requestedDocuments.length; index += 1) {
+    const requested = requestedDocuments[index]!;
+    const verified = verifiedDocuments[index]!;
+    if (requested.path !== verified.path || !isSubstantive(requested.description) || requested.description.trim() !== verified.description) {
+      throw new HandoffContractError(
+        "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+        `Supporting document ${requested.path || `(index ${index})`} is not valid or lacks a substantive description.`,
+        { index, path: requested.path },
+      );
+    }
+    if (!input.content.includes(requested.path)) {
+      throw new HandoffContractError(
+        "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+        `Canonical handoff content must link supporting document ${requested.path}.`,
+        { index, path: requested.path },
+      );
+    }
+  }
   if (phase.status === "done" || phase.status === "canceled") {
     throw new Error(`Cannot write a handoff on ${phase.status} phase ${phase.id}; completed phases have no pending handoff.`);
   }
@@ -164,6 +344,8 @@ export function applyHandoffContextSync(
   timestamp: string,
 ): { phase: Phase; feature: Feature; updatedTaskIds: string[] } {
   validateHandoffContextSync(phase, feature, input);
+  const handoffContent = renderVerifiedHandoffContent(input.content, input.completenessAudit);
+  const auditEntries = validateHandoffCompletenessAudit(input.completenessAudit);
   const nextPhase = structuredClone(phase);
   const nextFeature = structuredClone(feature);
   const updatedTaskIds: string[] = [];
@@ -209,8 +391,16 @@ export function applyHandoffContextSync(
     nextFeature.workRemaining = appendSection(nextFeature.workRemaining, featureUpdate.workRemaining);
   }
 
-  nextPhase.handoff = input.content.trim();
+  nextPhase.handoff = handoffContent;
   nextPhase.handoffUpdatedAt = timestamp;
+  nextPhase.handoffAudit = {
+    version: HANDOFF_COMPLETENESS_AUDIT_VERSION,
+    entries: auditEntries,
+    supportingDocuments: input.verifiedSupportingDocuments ?? [],
+    contentHash: handoffContentHash(handoffContent),
+    contentLength: handoffContent.length,
+    verifiedAt: timestamp,
+  };
   nextPhase.handoffReadAt = "";
   nextPhase.updatedAt = timestamp;
   nextFeature.updatedAt = timestamp;

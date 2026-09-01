@@ -7,7 +7,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, reconcileRequirementMacroTasks, RequirementMacroTaskError, type MacroTaskMutationInput } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -40,6 +40,12 @@ async function resolveRequirementPhaseIds(
   if (missing !== -1) return { error: `linked phase not found: ${refs[missing]}` };
 
   return { linkedPhaseIds: [...new Set(resolved.map((phase) => phase!.id))] };
+}
+
+type RequirementMutationBody = Partial<Requirement> & { macroTasks?: MacroTaskMutationInput[] };
+
+function macroTaskInputs(value: unknown): MacroTaskMutationInput[] | null {
+  return Array.isArray(value) ? value as MacroTaskMutationInput[] : null;
 }
 
 function nextTaskNumber(phase: Phase): number {
@@ -239,22 +245,63 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   app.put(route("/project"), async (c) => {
     const body = await c.req.json<Project>();
-    await store.updateProject(() => body);
+    const persisted = await store.updateProject(() => body);
     await store.writeGenerated();
-    hub()?.broadcast({ type: "project-updated", data: body });
+    hub()?.broadcast({ type: "project-updated", data: persisted });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
-    return c.json(body);
+    return c.json(persisted);
+  });
+
+  app.get(route("/project/context-migration"), async (c) => {
+    return c.json(await store.previewLegacyProjectContextMigration());
+  });
+
+  app.post(route("/project/context-migration"), async (c) => {
+    const body = await c.req.json<{ confirm?: unknown }>().catch((): { confirm?: unknown } => ({}));
+    if (body.confirm !== true) {
+      return c.json({
+        error: "PROJECT_CONTEXT_MIGRATION_CONFIRMATION_REQUIRED",
+        message: "Preview the legacy project-context migration, then retry with confirm=true to apply it.",
+      }, 400);
+    }
+    const result = await store.migrateLegacyProjectContext();
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "project-updated", data: result.project });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json(result);
   });
 
   // ── Requirements ─────────────────────────────────────────────────
   app.get(route("/requirements"), async (c) => c.json(await store.loadRequirements()));
 
   app.post(route("/requirements"), async (c) => {
-    const body = await c.req.json<Requirement>();
+    const body = await c.req.json<RequirementMutationBody>();
+    const title = body.title?.trim();
+    if (!title) return c.json({ error: "title required" }, 400);
     const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds);
     if ("error" in links) return c.json({ error: links.error }, 400);
-    const requirement = { ...body, linkedPhaseIds: links.linkedPhaseIds };
-    const reqs = await store.updateRequirements((doc) => { doc.requirements.push(requirement); return doc; });
+    const inputs = macroTaskInputs(body.macroTasks ?? []);
+    if (!inputs) return c.json({ error: "macroTasks must be an array" }, 400);
+    const now = nowISO();
+    let macroTasks;
+    try {
+      macroTasks = reconcileRequirementMacroTasks([], inputs, now);
+    } catch (error) {
+      const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
+      return c.json({ error: message }, 400);
+    }
+    const requirement: Requirement = {
+      id: createRequirementId(),
+      title,
+      description: body.description?.trim() ?? "",
+      status: body.status ?? "planned",
+      macroTasks,
+      linkedPhaseIds: links.linkedPhaseIds,
+      createdAt: now,
+      updatedAt: now,
+      sessionInfo: [],
+    };
+    const reqs = await store.updateRequirements((doc) => ({ requirements: [...doc.requirements, requirement] }));
     await store.writeGenerated();
     hub()?.broadcast({ type: "requirements-updated", data: reqs });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
@@ -263,21 +310,38 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   app.put(route("/requirements/:id"), async (c) => {
     const id = c.req.param("id");
-    const body = await c.req.json<Requirement>();
-    const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds);
+    if (!id) return c.json({ error: "id required" }, 400);
+    const body = await c.req.json<RequirementMutationBody>();
+    const existing = (await store.loadRequirements()).requirements.find((requirement) => requirement.id === id);
+    if (!existing) return c.json({ error: "not found" }, 404);
+    const title = body.title?.trim();
+    if (!title) return c.json({ error: "title required" }, 400);
+    const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds ?? existing.linkedPhaseIds);
     if ("error" in links) return c.json({ error: links.error }, 400);
-    const requirement = { ...body, linkedPhaseIds: links.linkedPhaseIds };
-    let found = false;
-    const reqs = await store.updateRequirements((doc) => {
-      const idx = doc.requirements.findIndex((r) => r.id === id);
-      if (idx === -1) return doc;
-      doc.requirements[idx] = requirement;
-      found = true;
-      return doc;
-    });
-    if (!found) return c.json({ error: "not found" }, 404);
+    const inputs = macroTaskInputs(body.macroTasks ?? existing.macroTasks);
+    if (!inputs) return c.json({ error: "macroTasks must be an array" }, 400);
+    const now = nowISO();
+    let macroTasks;
+    try {
+      macroTasks = reconcileRequirementMacroTasks(existing.macroTasks, inputs, now);
+    } catch (error) {
+      const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
+      return c.json({ error: message }, 400);
+    }
+    const requirement: Requirement = {
+      ...existing,
+      title,
+      description: body.description?.trim() ?? "",
+      status: body.status ?? existing.status,
+      macroTasks,
+      linkedPhaseIds: links.linkedPhaseIds,
+      updatedAt: now,
+    };
+    await store.updateRequirements((doc) => ({
+      requirements: doc.requirements.map((candidate) => candidate.id === id ? requirement : candidate),
+    }));
     await store.writeGenerated();
-    hub()?.broadcast({ type: "requirements-updated", data: reqs });
+    hub()?.broadcast({ type: "requirements-updated", data: { action: "updated", id, requirement } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     return c.json(requirement);
   });
@@ -293,6 +357,47 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!found) return c.json({ error: "not found" }, 404);
     await store.writeGenerated();
     hub()?.broadcast({ type: "requirements-updated", data: reqs });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ deleted: id });
+  });
+
+  // ── Ideas Inbox ──────────────────────────────────────────────────
+  app.get(route("/ideas"), async (c) => c.json(await store.loadIdeas()));
+
+  app.post(route("/ideas"), async (c) => {
+    const body = await c.req.json<{ title?: string; description?: string }>();
+    const title = body.title?.trim();
+    if (!title) return c.json({ error: "title required" }, 400);
+    const idea = await store.createIdea({ title, ...(body.description !== undefined ? { description: body.description.trim() } : {}) });
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "file-changed", data: { filename: "ideas.json" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json(idea, 201);
+  });
+
+  app.put(route("/ideas/:id"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const body = await c.req.json<{ title?: string; description?: string }>();
+    const title = body.title?.trim();
+    if (!title) return c.json({ error: "title required" }, 400);
+    const current = (await store.loadIdeas()).ideas.find((idea) => idea.id === id);
+    if (!current) return c.json({ error: "not found" }, 404);
+    const idea = await store.updateIdea(id, { title, description: body.description?.trim() ?? "" });
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "file-changed", data: { filename: "ideas.json" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json(idea);
+  });
+
+  app.delete(route("/ideas/:id"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const current = (await store.loadIdeas()).ideas.find((idea) => idea.id === id);
+    if (!current) return c.json({ error: "not found" }, 404);
+    await store.deleteIdea(id);
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "file-changed", data: { filename: "ideas.json" } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     return c.json({ deleted: id });
   });
@@ -458,7 +563,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         updatedAt: now,
         handoff: "",
         handoffUpdatedAt: "",
-          handoffReadAt: "",
+        handoffAudit: null,
+        handoffReadAt: "",
           handoffHistory: [],
           statusLog: [],
           sessionInfo: [],
@@ -1026,7 +1132,9 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   // ── Handoff (entity-scoped, phase.handoff) ────────────────────
   app.get(route("/handoffs"), async (c) => {
-    const list = await store.listHandoffs();
+    // The browser renders expanded bodies; agent list tools use the compact
+    // default and never transport all handoff content at once.
+    const list = await store.listHandoffs({ includeContent: true });
     return c.json({ handoffs: list });
   });
 

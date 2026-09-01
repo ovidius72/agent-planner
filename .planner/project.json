@@ -2,24 +2,16 @@
   "name": "Agent Plan",
   "goal": "Deliver a self-hosted Claude Code plugin (marketplace, no approval) bundling @agent-plan/mcp + a /planner skill + a non-blocking SessionStart hook, with a reusable multi-plugin folder structure ready for Codex and future harnesses.",
   "description": "Self-improvement: add harness-specific plugin bundles (Claude Code first, Codex next) alongside the existing npm packages, so Agent Plan integrates natively with multiple coding-agent harnesses.",
+  "projectGuidelines": {
+    "content": "- use the available react skill. \n- make each component small and reusable. fully typescript typed and expandable. \n- add unit tests to every component\n- make the UI user friendly\n- use the best react-router 7 patterns: form submissions, navigation and middleware",
+    "updatedAt": "2026-08-31T07:38:25.009Z",
+    "sessionInfo": []
+  },
   "webPort": 56321,
   "scope": [],
   "outOfScope": [],
-  "decisions": [
-    "D1: plugins live in a top-level plugins/ dir, separate from packages/ (static bundles, not npm packages).",
-    "D2: one subdirectory per harness (claude-code/, codex/); _shared/ holds single-source-of-truth templates.",
-    "D3: planner logic stays in @agent-plan/mcp (npm); plugins reference it via .mcp.json (npx -y @agent-plan/mcp).",
-    "D4: planner disabled by default at startup; web dashboard does NOT auto-start (respects user constraint).",
-    "D5: /planner load enables planner + starts web (LAN) + emits recap with Web UI address; /planner stop disables.",
-    "D6: Web UI address shown only on /planner load recap or /planner web status (not every message — Claude Code has no message_end hook to append to final message).",
-    "D7: SessionStart hook is non-blocking notification only (no auto-start, no recap injection).",
-    "D8: distribution via self-hosted marketplace (channel 2, no approval); official directory (channel 3) optional future.",
-    "D9: planner operations (handoff, CRUD) are NOT code edits and allowed regardless of task state.",
-    "D10: entity references use composite IDs F00x/P00x/T00x, never raw UUIDs."
-  ],
-  "globalRules": [
-    "For recurring UI patterns, prefer shared reusable components over route-local reimplementations; if you create a toggle, accordion, disclosure, or similar primitive, reuse it consistently instead of duplicating markup and styles in each screen."
-  ],
+  "decisions": [],
+  "globalRules": [],
   "technologies": [
     "TypeScript",
     "pnpm workspace",
@@ -36,7 +28,88 @@
     "beforeTaskStart": [],
     "afterPhaseComplete": []
   },
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "legacy-project-decision-84905617a3aa46cf",
+      "title": "D1: plugins live in a top-level plugins/ dir, separate from packages/ (static bundles, not npm pa...",
+      "decision": "D1: plugins live in a top-level plugins/ dir, separate from packages/ (static bundles, not npm packages).",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-397b753a85ae777e",
+      "title": "D2: one subdirectory per harness (claude-code/, codex/); _shared/ holds single-source-of-truth te...",
+      "decision": "D2: one subdirectory per harness (claude-code/, codex/); _shared/ holds single-source-of-truth templates.",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-65c175e5ce5f6c01",
+      "title": "D3: planner logic stays in @agent-plan/mcp (npm); plugins reference it via .mcp.json (npx -y @age...",
+      "decision": "D3: planner logic stays in @agent-plan/mcp (npm); plugins reference it via .mcp.json (npx -y @agent-plan/mcp).",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-3d51ff33a994bd8a",
+      "title": "D4: planner disabled by default at startup; web dashboard does NOT auto-start (respects user cons...",
+      "decision": "D4: planner disabled by default at startup; web dashboard does NOT auto-start (respects user constraint).",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-a6b448c9ee74c35a",
+      "title": "D5: /planner load enables planner + starts web (LAN) + emits recap with Web UI address; /planner...",
+      "decision": "D5: /planner load enables planner + starts web (LAN) + emits recap with Web UI address; /planner stop disables.",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-117494bd0fce495d",
+      "title": "D6: Web UI address shown only on /planner load recap or /planner web status (not every message —...",
+      "decision": "D6: Web UI address shown only on /planner load recap or /planner web status (not every message — Claude Code has no message_end hook to append to final message).",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-7bd42bfa32c8d5e7",
+      "title": "D7: SessionStart hook is non-blocking notification only (no auto-start, no recap injection).",
+      "decision": "D7: SessionStart hook is non-blocking notification only (no auto-start, no recap injection).",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-7e9425c989f951e9",
+      "title": "D8: distribution via self-hosted marketplace (channel 2, no approval); official directory (channe...",
+      "decision": "D8: distribution via self-hosted marketplace (channel 2, no approval); official directory (channel 3) optional future.",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-2546ac20a5ebca67",
+      "title": "D9: planner operations (handoff, CRUD) are NOT code edits and allowed regardless of task state.",
+      "decision": "D9: planner operations (handoff, CRUD) are NOT code edits and allowed regardless of task state.",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    },
+    {
+      "id": "legacy-project-decision-fa8405e9a6b71056",
+      "title": "D10: entity references use composite IDs F00x/P00x/T00x, never raw UUIDs.",
+      "decision": "D10: entity references use composite IDs F00x/P00x/T00x, never raw UUIDs.",
+      "rationale": "Migrated from the legacy project decisions collection.",
+      "implementationNotes": "Review and enrich this structured decision when additional rationale or implementation detail is available.",
+      "acceptedAt": "2026-08-30T09:46:06.857Z"
+    }
+  ],
   "nextFeatureNumber": 17,
   "nextPhaseNumber": 65,
   "nextTaskNumber": 283,

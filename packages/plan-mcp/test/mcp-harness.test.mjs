@@ -34,6 +34,7 @@ import {
   discoverTools,
 } from "../../../test/helpers/mcp-fixture.mjs";
 import { createTempRoot, cleanupFixtures } from "../../../test/helpers/fixtures.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupMcpFixtures();
@@ -60,9 +61,9 @@ test("listTools exposes the full published tool set with actionable input schema
     const names = tools.map((tool) => tool.name);
 
     const expected = [
-      "planner-version", "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init", "planner-requirement-list",
+      "planner-version", "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init", "planner-idea-list", "planner-idea-show", "planner-idea-create", "planner-idea-update", "planner-idea-delete", "planner-idea-promotion-begin", "planner-idea-promotion-finalize", "planner-requirement-list", "planner-requirement-create", "planner-requirement-update", "planner-requirement-delete",
       "planner-show", "planner-repair", "planner-cleanup-orphan-phases",
-      "planner-project-language", "planner-project-discuss",
+      "planner-project-language", "planner-project-discuss", "planner-project-guidelines-show", "planner-project-guidelines-update", "planner-project-context-migrate",
       "planner-feature-list", "planner-phase-list", "planner-task-list",
       "planner-feature-add", "planner-feature-show", "planner-feature-discuss",
       "planner-feature-update", "planner-feature-delete",
@@ -111,6 +112,7 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.ok(handoffWrite.required.includes("confirmed"), "handoff-write requires confirmed");
     assert.ok(handoffWrite.required.includes("phaseRef"), "handoff-write requires phaseRef");
     assert.ok(handoffWrite.required.includes("content"), "handoff-write requires content");
+    assert.ok(handoffWrite.properties.completenessAudit, "handoff-write publishes the mandatory confirmed-write completeness audit contract");
     assert.equal(handoffWrite.properties.confirmed.type, "boolean", "confirmed is a boolean");
 
     // task-checklist-toggle requires task + item
@@ -249,6 +251,7 @@ test("error helpers catch schema-level and semantic errors without mutating stat
       title: "T236 — harness proposal",
       content: "proposal body",
       confirmed: false,
+      completenessAudit: completeHandoffAudit(),
     });
     assert.equal(proposal.isError, undefined, "proposal is a plain text result");
     expectToolError(proposal, /Proposal only|confirmationRequired/i);
@@ -269,21 +272,9 @@ test("handoff write (confirmed) + show return structured phase identifiers", asy
     const written = await callTool(session, "planner-handoff-write", {
       phaseRef: "P001(F001)",
       title: "T236 — confirmed handoff",
-      content: [
-        "# T236 — confirmed handoff",
-        "",
-        "Created at: 2026-08-24T00:00:00.000Z",
-        "Updated at: 2026-08-24T00:00:00.000Z",
-        "Reason: harness fixture",
-        "## Current focus", "Handoff body for the harness.",
-        "## What was being done", "Testing the handoff harness.",
-        "## How to resume", "Continue the fixture.",
-        "## Files touched", "- mcp-harness.test.mjs",
-        "## Blockers", "- None",
-        "## Next steps", "- Continue",
-        "## Recent decisions", "- Preserve durable context",
-      ].join("\n"),
+      content: canonicalAuditedHandoff("T236 — confirmed handoff", "Handoff body for the harness.", { file: "mcp-harness.test.mjs", reason: "harness fixture" }),
       confirmed: true,
+      completenessAudit: completeHandoffAudit(),
       expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
       reconciledExistingHandoff: true,
       taskUpdates: [],

@@ -6,6 +6,7 @@ import { loader as featuresLoader } from "../routes/features/loader";
 import { FeaturesRoute } from "../routes/features/route";
 import { loader as requirementsLoader } from "../routes/requirements/loader";
 import { RequirementsRoute } from "../routes/requirements/route";
+import { IdeasRoute, action as ideasAction, loader as ideasLoader } from "../routes/ideas/route";
 import { loader as featureDetailLoader } from "../routes/feature-detail/loader";
 import { FeatureDetailRoute } from "../routes/feature-detail/route";
 import { loader as phaseDetailLoader } from "../routes/phase-detail/loader";
@@ -80,6 +81,7 @@ export const router = createBrowserRouter([
           { path: ":requirementId/edit", element: <RequirementEditModalRoute />, action: requirementEditAction },
         ],
       },
+      { path: "ideas", id: "ideas", loader: ideasLoader, action: ideasAction, element: <IdeasRoute /> },
       { path: "project/edit", element: <ProjectEditRoute />, action: projectEditAction },
       { path: "handoff", loader: handoffLoader, element: <HandoffRoute /> },
       { path: "handoff/archive", loader: handoffArchiveLoader, element: <HandoffArchiveRoute /> },

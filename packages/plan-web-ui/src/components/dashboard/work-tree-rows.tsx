@@ -16,6 +16,7 @@ import { StatusItem } from "../ui/status-item";
 import { LastUpdated } from "../ui/last-updated";
 import { DragHandle, SortableItem } from "./sortable";
 import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
+import { PriorityBadge } from "../ui/detail-metadata";
 import {
   statusBorderColor,
   type DisplayStatus,
@@ -409,6 +410,7 @@ export function TaskTreeRow({
             <span className="sr-only">Copy task path</span>
           </CopyableBadge>
           {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
+          <PriorityBadge priority={task.priority} />
           {task.status === "in-progress" ? (
             <span aria-hidden="true" className="ap-progress-dot" />
           ) : null}

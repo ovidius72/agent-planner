@@ -1,9 +1,30 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FeatureCreateModalRoute } from "../src/routes/feature-create-modal.route";
+import { MacroTaskEditor } from "../src/components/requirements/macro-task-editor";
 import { installFetchMock, jsonResponse, renderRoute } from "./fixtures";
 
 describe("entity form modal contracts", () => {
+  it("edits, removes, and reorders semantic macro-task values without exposing planner metadata", () => {
+    render(<form><MacroTaskEditor initialTasks={[
+      { id: "MT-001", title: "First", description: "First detail", status: "planned" },
+      { id: "MT-002", title: "Second", description: "Second detail", status: "done" },
+    ]} /></form>);
+
+    fireEvent.click(screen.getByRole("button", { name: "Move macro task 2 up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove macro task 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add macro task" }));
+    fireEvent.change(screen.getByLabelText("Macro task 2 title"), { target: { value: "New macro task" } });
+    const payload = JSON.parse((document.querySelector('input[name="macroTasks"]') as HTMLInputElement).value);
+
+    expect(payload).toEqual([
+      { id: "MT-002", title: "Second", description: "Second detail", status: "done" },
+      { title: "New macro task", description: "", status: "planned" },
+    ]);
+    expect(screen.queryByText("createdAt")).not.toBeInTheDocument();
+    expect(screen.queryByText("updatedAt")).not.toBeInTheDocument();
+  });
+
   it("keeps required feature submission in the browser until a name is present", async () => {
     const fetchMock = installFetchMock(() => jsonResponse({}));
     renderRoute([{ path: "/", element: <FeatureCreateModalRoute /> }]);

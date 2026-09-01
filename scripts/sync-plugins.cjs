@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // scripts/sync-plugins.js
-// Regenerate each plugin's derived files from the single-source-of-truth
-// templates in plugins/_shared/. Substitutes {{HARNESS}} and {{LOAD_COMMAND}}
-// placeholders per harness. Edits go to _shared/, then run this script.
+// Regenerate plugin files from canonical sources. The planner usage skill is
+// owned by @agent-plan/core (`packages/plan-core/planner-skill.md`) and mirrored
+// into plugins/_shared/ plus each harness bundle. Hook templates remain owned
+// by plugins/_shared/. Substitutes harness placeholders when present.
 //
 // Usage: node scripts/sync-plugins.js [--check]
 //   --check  fail (exit 1) if any derived file is out of sync (CI guard)
@@ -17,13 +18,22 @@ const pluginsDir = path.join(root, "plugins");
 // Per-harness substitution values. Add a new harness here when scaffolding it.
 const HARNESSES = [
   {
+    name: "shared-planner-skill-mirror",
+    dir: sharedDir,
+    HARNESS: "",
+    LOAD_COMMAND: "/planner load",
+    targets: [
+      { from: "../../packages/plan-core/planner-skill.md", to: "planner-skill.md.in", mode: 0o644 },
+    ],
+  },
+  {
     name: "claude-code",
     dir: path.join(pluginsDir, "claude-code"),
     HARNESS: "Claude Code",
     LOAD_COMMAND: "/planner load",
     // derived targets: source template -> destination
     targets: [
-      { from: "planner-skill.md.in", to: "skills/planner/SKILL.md", mode: 0o644 },
+      { from: "../../packages/plan-core/planner-skill.md", to: "skills/planner/SKILL.md", mode: 0o644 },
       { from: "notify-session-start.sh.in", to: "scripts/notify-session-start.sh", mode: 0o755 },
       { from: "guard-pre-tool-use.sh.in", to: "scripts/guard-pre-tool-use.sh", mode: 0o755 },
     ],
@@ -85,10 +95,10 @@ for (const h of HARNESSES) {
 
 if (check) {
   if (drift.length > 0) {
-    console.error(`\n${drift.length} derived file(s) out of sync with plugins/_shared/.`);
+    console.error(`\n${drift.length} derived file(s) out of sync with canonical sources.`);
     process.exit(1);
   }
-  console.log("\nAll derived files in sync with plugins/_shared/.");
+  console.log("\nAll derived files in sync with canonical sources.");
 } else {
   console.log(`\nDone. ${changed} file(s) regenerated.`);
 }
