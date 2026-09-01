@@ -209,9 +209,9 @@
       "priority": 3,
       "shortName": "expose-ideas-crud-and-guided-p",
       "title": "Expose Ideas CRUD and guided promotion across Pi and MCP",
-      "status": "in-progress",
-      "description": "Add complete cross-harness idea tools and commands in `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, the canonical planner skill, and public-surface inventories. Agents must be able to list/show/create/update/delete ideas and begin/finalize promotion. Feature promotion loads `.planner/skills/grill-me/SKILL.md` when the idea lacks sufficient detail, resolves the design with the user, creates the agreed feature plus appropriate phases/tasks, then records the resulting feature reference. Phase promotion must inspect and recommend the most appropriate feature, obtain user confirmation, run the grill-me discussion, create the phase/tasks, and record the phase reference. Task promotion must recommend and confirm the feature/phase, run the discussion, create the task, and record its reference. Keep promotion multi-step and confirmation-safe: no target entity or promoted state may be persisted before the discussion and target confirmation complete. Return composite human refs, never raw UUIDs, and maintain Pi/MCP contract parity with real transport tests.",
-      "descriptionUpdatedAt": "2026-08-30T09:52:53.945Z",
+      "status": "done",
+      "description": "Add complete cross-harness idea tools and commands in `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, the canonical planner skill, and public-surface inventories. Agents must be able to list/show/create/update/delete ideas and begin/finalize promotion. Feature promotion loads `.planner/skills/grill-me/SKILL.md` when the idea lacks sufficient detail, resolves the design with the user, creates the agreed feature plus appropriate phases/tasks, then records the resulting feature reference. Phase promotion must inspect and recommend the most appropriate feature, obtain user confirmation, run the grill-me discussion, create the phase/tasks, and record the phase reference. Task promotion must recommend and confirm the feature/phase, run the discussion, create the task, and record its reference. Keep promotion multi-step and confirmation-safe: no target entity or promoted state may be persisted before the discussion and target confirmation complete. Return composite human refs, never raw UUIDs, and maintain Pi/MCP contract parity with real transport tests.\n\n---\n**Completion summary:**\nImplemented complete cross-harness Ideas CRUD and confirmation-safe guided promotion surfaces. Pi now exposes idea_list/show/create/update/delete/promotion_begin/promotion_finalize tools plus `/planner idea list|add|show|update|delete|promote`; MCP exposes matching planner-idea-* tools. Promotion begin demand-loads the managed project-local grill-me skill, returns target guidance and never writes. The agent interviews one question at a time, recommends and confirms feature/phase placement, creates the agreed target through normal validated creation tools only after explicit confirmation, and finalization records promotion history only when discussionCompleted=true, confirmed=true, and the target resolves; composite refs are returned. Added canonical skill command/inventory guidance, public surface entries, Pi registration coverage, Pi confirmation/no-write regression, and real stdio MCP transport regression. Verification: pnpm build and pnpm check passed; focused Pi/MCP tests passed 59/59; full pnpm test:coverage passed 513/513 Node and 84/84 Web UI tests with final coverage 86.16% lines, 74.01% branches, 81.22% functions; plugins:check and git diff --check passed. No commit or push after the previously authorized checkpoint.",
+      "descriptionUpdatedAt": "2026-08-30T20:28:20.240Z",
       "notes": "",
       "statusLog": [
         {
@@ -221,6 +221,14 @@
           "toStatus": "in-progress",
           "title": "planned → in-progress",
           "description": ""
+        },
+        {
+          "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-002-in-progress-done",
+          "date": "2026-08-30T20:28:20.238Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented complete cross-harness Ideas CRUD and confirmation-safe guided promotion surfaces. Pi now exposes idea_list/show/create/update/delete/promotion_begin/promotion_finalize tools plus `/planner idea list|add|show|update|delete|promote`; MCP exposes matching planner-idea-* tools. Promotion begin demand-loads the managed project-local grill-me skill, returns target guidance and never writes. The agent interviews one question at a time, recommends and confirms feature/phase placement, creates the agreed target through normal validated creation tools only after explicit confirmation, and finalization records promotion history only when discussionCompleted=true, confirmed=true, and the target resolves; composite refs are returned. Added canonical skill command/inventory guidance, public surface entries, Pi registration coverage, Pi confirmation/no-write regression, and real stdio MCP transport regression. Verification: pnpm build and pnpm check passed; focused Pi/MCP tests passed 59/59; full pnpm test:coverage passed 513/513 Node and 84/84 Web UI tests with final coverage 86.16% lines, 74.01% branches, 81.22% functions; plugins:check and git diff --check passed. No commit or push after the previously authorized checkpoint."
         }
       ],
       "decisions": [],
@@ -230,25 +238,25 @@
           "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-001-add-pi-and-mcp-list-show-create-update-delete-idea-surfaces",
           "number": 1,
           "title": "Add Pi and MCP list/show/create/update/delete idea surfaces.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-002-add-prepare-finalize-promotion-contracts-with-typed-target-and-confirmation-diagnostics",
           "number": 2,
           "title": "Add prepare/finalize promotion contracts with typed target and confirmation diagnostics.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-003-load-grill-me-and-implement-feature-phase-task-recommendation-and-discussion-guidance",
           "number": 3,
           "title": "Load grill-me and implement feature/phase/task recommendation and discussion guidance.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "f47996ae-d2b9-4859-8a85-2e0412864d42-check-004-add-cross-harness-parity-public-inventory-confirmation-and-persistence-regressions",
           "number": 4,
           "title": "Add cross-harness parity, public-inventory, confirmation, and persistence regressions.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -256,9 +264,9 @@
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "2026-08-30T17:46:49.888Z",
-      "completedAt": "",
+      "completedAt": "2026-08-30T20:28:20.238Z",
       "createdAt": "2026-08-30T09:52:53.943Z",
-      "updatedAt": "2026-08-30T17:46:49.888Z",
+      "updatedAt": "2026-08-30T20:28:20.238Z",
       "sessionInfo": [
         {
           "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
@@ -274,11 +282,28 @@
       "priority": 4,
       "shortName": "add-the-ideas-page-header-navi",
       "title": "Add the Ideas page, header navigation, and Web UI management",
-      "status": "planned",
-      "description": "Add a new React Router data-mode `/ideas` route and loader/actions in `packages/plan-web-ui/src/app/router.tsx`, new Ideas route/components, typed API support in `packages/plan-web-ui/src/lib/api.ts` and `types.ts`, and corresponding plan-server endpoints in `packages/plan-server/src/serve.ts`. Add an `Ideas` link to `packages/plan-web-ui/src/components/layout/top-nav.tsx` on desktop and inside the existing mobile hamburger navigation. The page must let the human supervisor list, add, edit, and remove inbox ideas, and inspect promoted ideas with their linked feature/phase/task references without affecting planner work status. Reuse shared cards, badges, forms, dialogs, and responsive patterns; provide keyboard-accessible create/edit/delete confirmation, empty/error/loading states, stable ordering, and mobile containment. Web UI management remains human-owned and must not silently invoke agent promotion discussions.",
-      "descriptionUpdatedAt": "2026-08-30T09:53:03.524Z",
+      "status": "done",
+      "description": "Add a new React Router data-mode `/ideas` route and loader/actions in `packages/plan-web-ui/src/app/router.tsx`, new Ideas route/components, typed API support in `packages/plan-web-ui/src/lib/api.ts` and `types.ts`, and corresponding plan-server endpoints in `packages/plan-server/src/serve.ts`. Add an `Ideas` link to `packages/plan-web-ui/src/components/layout/top-nav.tsx` on desktop and inside the existing mobile hamburger navigation. The page must let the human supervisor list, add, edit, and remove inbox ideas, and inspect promoted ideas with their linked feature/phase/task references without affecting planner work status. Reuse shared cards, badges, forms, dialogs, and responsive patterns; provide keyboard-accessible create/edit/delete confirmation, empty/error/loading states, stable ordering, and mobile containment. Web UI management remains human-owned and must not silently invoke agent promotion discussions.\n\n---\n**Completion summary:**\nImplemented the human-owned Ideas Inbox Web UI. Added typed Idea/IdeaPromotion API models, GET/POST/PUT/DELETE `/api/ideas` endpoints with server-owned identity and WebSocket/file-change refresh, and enriched promoted records with navigable feature/phase/task target URLs. Added the React Router data-mode `/ideas` loader/action route, responsive stable-order cards, accessible create/edit dialog and confirmed delete flow, empty state, promoted-history links, and an Ideas navigation item shared by the desktop header and mobile hamburger. Web UI never invokes agent promotion discussion. Added public API inventory entries, real plan-server CRUD/identity tests, component/navigation/accessibility tests, and desktop plus 390px mobile real-server Playwright CRUD/overflow coverage. Verification: pnpm build/check passed; full test:coverage passed 514/514 Node and 86/86 Web UI tests with final coverage green; focused server 16/16 and UI 2/2; Playwright bootstrap suite 14/14 desktop/mobile; git diff check clean. Rebuilt and copied production Web UI bundles to plan-server and pi-adapter. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-30T20:53:25.104Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-001-planned-in-progress",
+          "date": "2026-08-30T20:28:42.555Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-002-in-progress-done",
+          "date": "2026-08-30T20:53:25.102Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented the human-owned Ideas Inbox Web UI. Added typed Idea/IdeaPromotion API models, GET/POST/PUT/DELETE `/api/ideas` endpoints with server-owned identity and WebSocket/file-change refresh, and enriched promoted records with navigable feature/phase/task target URLs. Added the React Router data-mode `/ideas` loader/action route, responsive stable-order cards, accessible create/edit dialog and confirmed delete flow, empty state, promoted-history links, and an Ideas navigation item shared by the desktop header and mobile hamburger. Web UI never invokes agent promotion discussion. Added public API inventory entries, real plan-server CRUD/identity tests, component/navigation/accessibility tests, and desktop plus 390px mobile real-server Playwright CRUD/overflow coverage. Verification: pnpm build/check passed; full test:coverage passed 514/514 Node and 86/86 Web UI tests with final coverage green; focused server 16/16 and UI 2/2; Playwright bootstrap suite 14/14 desktop/mobile; git diff check clean. Rebuilt and copied production Web UI bundles to plan-server and pi-adapter. No commit or push."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -286,36 +311,41 @@
           "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-001-register-ideas-and-add-desktop-mobile-header-navigation",
           "number": 1,
           "title": "Register `/ideas` and add desktop/mobile header navigation.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-002-implement-ideas-list-create-edit-and-confirmed-remove-flows",
           "number": 2,
           "title": "Implement Ideas list, create, edit, and confirmed remove flows.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-003-show-promoted-history-with-navigable-target-references",
           "number": 3,
           "title": "Show promoted history with navigable target references.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "9c004b44-f5ad-4cb6-8cfe-499d58abf66f-check-004-add-component-api-real-server-accessibility-and-mobile-playwright-coverage",
           "number": 4,
           "title": "Add component, API, real-server, accessibility, and mobile Playwright coverage.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-30T20:28:42.555Z",
+      "completedAt": "2026-08-30T20:53:25.102Z",
       "createdAt": "2026-08-30T09:53:03.522Z",
-      "updatedAt": "2026-08-30T09:53:03.522Z",
-      "sessionInfo": []
+      "updatedAt": "2026-08-30T20:53:25.102Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-30T20:28:42.467Z"
+        }
+      ]
     },
     {
       "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c",
@@ -325,11 +355,28 @@
       "priority": 5,
       "shortName": "verify-ideas-promotion-end-to",
       "title": "Verify Ideas promotion end to end without planner rollup side effects",
-      "status": "planned",
-      "description": "Complete the Ideas Inbox slice with end-to-end scenarios spanning `packages/plan-core`, Pi, MCP, plan-server, and the production Web UI bundle. Verify that an idea can be created from the Web UI or an agent, listed through every harness, discussed using the project-local grill-me skill, promoted to a feature/phase/task only after the required parent recommendation and user confirmation, and retained as promoted history linked to the created entity. Prove that idea creation/edit/removal/promotion never changes feature/phase/task derived statuses, task recommendation, active work, resume state, counters other than the Ideas counter, or linked requirements. Exercise desktop and 390px mobile navigation to `/ideas`, reload persistence, error rollback, managed-skill upgrades, and cross-harness structured/text output parity. Rebuild and copy production Web UI bundles after all tests pass.",
-      "descriptionUpdatedAt": "2026-08-30T09:53:15.235Z",
+      "status": "done",
+      "description": "Complete the Ideas Inbox slice with end-to-end scenarios spanning `packages/plan-core`, Pi, MCP, plan-server, and the production Web UI bundle. Verify that an idea can be created from the Web UI or an agent, listed through every harness, discussed using the project-local grill-me skill, promoted to a feature/phase/task only after the required parent recommendation and user confirmation, and retained as promoted history linked to the created entity. Prove that idea creation/edit/removal/promotion never changes feature/phase/task derived statuses, task recommendation, active work, resume state, counters other than the Ideas counter, or linked requirements. Exercise desktop and 390px mobile navigation to `/ideas`, reload persistence, error rollback, managed-skill upgrades, and cross-harness structured/text output parity. Rebuild and copy production Web UI bundles after all tests pass.\n\n---\n**Completion summary:**\nCompleted end-to-end verification of the Ideas Inbox slice across plan-core, Pi, MCP, plan-server, and the production Web UI bundle. Strengthened promotion-begin outputs so phase promotion recommends and requires confirmation of a parent feature, while task promotion recommends and requires confirmation of both feature and phase; both Pi details and MCP structuredContent expose the same recommendation plus demand-loaded project-local grill-me instructions. Added cross-harness regressions for denial as a persistence no-op and confirmed feature/phase/task finalization with composite F/P/T refs in structured and text output. Expanded core isolation coverage to prove Ideas CRUD/promotion leaves the Project document and work counters, requirements, task recommendation, resume/runtime state, feature/phase display rollups, and active work unchanged. Added plan-server and Web UI CRUD coverage, navigable promoted-target links, reload persistence, server-owned identity validation, and full desktop/390px mobile real-server navigation/CRUD/overflow coverage. Managed grill-me seed/upgrade/customization and recap non-leakage remain covered. Rebuilt and copied production Web UI bundles to pi-adapter and plan-server. Final verification: pnpm build, pnpm check, pnpm test:coverage (514/514 Node tests, 86/86 Web UI tests; 86.26% lines, 73.94% branches, 81.44% functions), pnpm plugins:check, full Playwright 36/36 desktop/mobile, and git diff --check all passed. Restored six unrelated planner feature-file drifts from HEAD; Graphify-generated artifacts remain untracked/excluded. No commit or push.",
+      "descriptionUpdatedAt": "2026-08-31T07:23:00.899Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-001-planned-in-progress",
+          "date": "2026-08-30T20:53:51.735Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-002-in-progress-done",
+          "date": "2026-08-31T07:23:00.897Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed end-to-end verification of the Ideas Inbox slice across plan-core, Pi, MCP, plan-server, and the production Web UI bundle. Strengthened promotion-begin outputs so phase promotion recommends and requires confirmation of a parent feature, while task promotion recommends and requires confirmation of both feature and phase; both Pi details and MCP structuredContent expose the same recommendation plus demand-loaded project-local grill-me instructions. Added cross-harness regressions for denial as a persistence no-op and confirmed feature/phase/task finalization with composite F/P/T refs in structured and text output. Expanded core isolation coverage to prove Ideas CRUD/promotion leaves the Project document and work counters, requirements, task recommendation, resume/runtime state, feature/phase display rollups, and active work unchanged. Added plan-server and Web UI CRUD coverage, navigable promoted-target links, reload persistence, server-owned identity validation, and full desktop/390px mobile real-server navigation/CRUD/overflow coverage. Managed grill-me seed/upgrade/customization and recap non-leakage remain covered. Rebuilt and copied production Web UI bundles to pi-adapter and plan-server. Final verification: pnpm build, pnpm check, pnpm test:coverage (514/514 Node tests, 86/86 Web UI tests; 86.26% lines, 73.94% branches, 81.44% functions), pnpm plugins:check, full Playwright 36/36 desktop/mobile, and git diff --check all passed. Restored six unrelated planner feature-file drifts from HEAD; Graphify-generated artifacts remain untracked/excluded. No commit or push."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -337,47 +384,72 @@
           "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-001-cover-feature-phase-and-task-promotion-journeys-with-confirmation-and-grill-me-loading",
           "number": 1,
           "title": "Cover feature, phase, and task promotion journeys with confirmation and grill-me loading.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-002-prove-ideas-operations-do-not-affect-planner-rollups-or-work-selection",
           "number": 2,
           "title": "Prove Ideas operations do not affect planner rollups or work selection.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-003-run-full-pi-mcp-server-web-ui-integration-and-desktop-mobile-browser-verification",
           "number": 3,
           "title": "Run full Pi/MCP/server/Web UI integration and desktop/mobile browser verification.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c-check-004-rebuild-distributed-web-ui-assets-and-document-the-final-user-operator-workflow",
           "number": 4,
           "title": "Rebuild distributed Web UI assets and document the final user/operator workflow.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-08-30T20:53:51.735Z",
+      "completedAt": "2026-08-31T07:23:00.897Z",
       "createdAt": "2026-08-30T09:53:15.233Z",
-      "updatedAt": "2026-08-30T09:53:15.233Z",
-      "sessionInfo": []
+      "updatedAt": "2026-08-31T07:23:00.897Z",
+      "sessionInfo": [
+        {
+          "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
+          "createdAt": "2026-08-30T20:53:51.654Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-08-30T09:52:07.335Z",
-  "updatedAt": "2026-08-30T17:46:49.888Z",
-  "handoff": "# Handoff — before compact\n\nCreated at: 2026-08-30T17:47:29.854Z\nUpdated at: 2026-08-30T17:47:29.854Z\nReason: before compact\n\n## Progress snapshot\n- Features: 19/20 done, 1 active\n- Phases: 89/91 done, 1 active/discovery\n- Tasks: 356/362 done, 1 active\n\n## Current focus\n- Feature: `5bb28fc7-8002-46f9-970d-4151d6cb4884` — Improvements (in-progress)\n- Phase: `76cbb771-ad31-4c0d-8531-066e333c4429` — Ideas Inbox and promotion workflow (in-progress)\n- Task: `f47996ae-d2b9-4859-8a85-2e0412864d42` — Expose Ideas CRUD and guided promotion across Pi and MCP (in-progress)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 76cbb771-ad31-4c0d-8531-066e333c4429)\n- ✅ `cf37b449-e6e5-433a-8834-e030369d52ff` — Add the harness-agnostic Ideas Inbox domain and persistence (done)\n- ✅ `d2fadc89-3c2c-4783-913a-f5ceb4134df5` — Seed and load the project-local grill-me skill for idea discussions (done)\n- 🚧 `f47996ae-d2b9-4859-8a85-2e0412864d42` — Expose Ideas CRUD and guided promotion across Pi and MCP (in-progress)\n- 📋 `9c004b44-f5ad-4cb6-8cfe-499d58abf66f` — Add the Ideas page, header navigation, and Web UI management (planned)\n- 📋 `f6bfb656-4f12-4dc6-b6c9-a7a290d27a5c` — Verify Ideas promotion end to end without planner rollup side effects (planned)\n\n## How to resume\n1. Open task f47996ae-d2b9-4859-8a85-2e0412864d42 (Expose Ideas CRUD and guided promotion across Pi and MCP).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: Resume task f47996ae-d2b9-4859-8a85-2e0412864d42 — Expose Ideas CRUD and guided promotion across Pi and MCP.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/76cbb771-ad31-4c0d-8531-066e333c4429.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Resume task f47996ae-d2b9-4859-8a85-2e0412864d42 — Expose Ideas CRUD and guided promotion across Pi and MCP.\n- Review the task details and continue implementation in phase 76cbb771-ad31-4c0d-8531-066e333c4429.\n- When the work is complete, call task_complete so the derived phase/feature statuses stay correct.\n\n## Recent activity\n- 2026-08-24T07:32:57.613Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → done\n- 2026-08-24T07:32:51.157Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
-  "handoffUpdatedAt": "2026-08-30T17:47:29.879Z",
+  "updatedAt": "2026-08-31T07:23:00.897Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-08-30T20:56:25.030Z",
   "handoffReadAt": "",
   "handoffHistory": [
     {
-      "file": "handoff-archive/76cbb771-ad31-4c0d-8531-066e333c4429-2026-08-30T17-47-29-856Z.md",
-      "clearedAt": "2026-08-30T17:47:29.856Z",
+      "file": "handoff-archive/76cbb771-ad31-4c0d-8531-066e333c4429-2026-08-31T07-23-00-921Z.md",
+      "clearedAt": "2026-08-31T07:23:00.921Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/76cbb771-ad31-4c0d-8531-066e333c4429-2026-08-30T20-56-25-007Z.md",
+      "clearedAt": "2026-08-30T20:56:25.007Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/76cbb771-ad31-4c0d-8531-066e333c4429-2026-08-30T20-16-25-189Z.md",
+      "clearedAt": "2026-08-30T20:16:25.189Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/76cbb771-ad31-4c0d-8531-066e333c4429-2026-08-30T18-28-57-123Z.md",
+      "clearedAt": "2026-08-30T18:28:57.123Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/76cbb771-ad31-4c0d-8531-066e333c4429-2026-08-30T17-58-49-293Z.md",
+      "clearedAt": "2026-08-30T17:58:49.293Z",
       "reason": "superseded"
     }
   ],
@@ -389,12 +461,20 @@
       "toStatus": "in-progress",
       "title": "draft → in-progress",
       "description": ""
+    },
+    {
+      "id": "d994047a-fbc4-483d-b2b3-2a4e9ea9b945",
+      "date": "2026-08-31T07:23:00.961Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "a924067d-096d-45b0-af64-2641ab6bba92",
-      "createdAt": "2026-08-30T17:46:49.809Z"
+      "createdAt": "2026-08-30T20:53:51.654Z"
     }
   ]
 }

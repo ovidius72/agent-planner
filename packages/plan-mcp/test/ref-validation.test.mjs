@@ -727,3 +727,38 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
     }
   });
 });
+
+test("MCP Ideas CRUD and promotion are confirmation-safe over real stdio transport", async () => {
+  const { plannerRoot, st, featureA } = await setup();
+  const session = await startClient(plannerRoot);
+  try {
+    const created = await session.client.callTool({ name: "planner-idea-create", arguments: { title: "MCP idea", description: "Needs guided discussion." } });
+    assert.equal(created.structuredContent.created, true);
+    assert.match(toolText(created), /I001/);
+
+    const snapshot = await st.loadIdeas();
+    const denied = await session.client.callTool({ name: "planner-idea-promotion-finalize", arguments: { idea: "I001", targetType: "feature", targetRef: "F001", discussionCompleted: false, confirmed: false } });
+    assert.equal(denied.structuredContent.promoted, false);
+    assert.deepEqual(await st.loadIdeas(), snapshot, "denied promotion changes nothing");
+
+    const begun = await session.client.callTool({ name: "planner-idea-promotion-begin", arguments: { idea: "I001", targetType: "phase" } });
+    assert.equal(begun.structuredContent.persisted, false);
+    assert.match(begun.structuredContent.grillMeSkill, /Ask the questions one at a time/);
+    assert.match(begun.structuredContent.recommendation, /Recommended parent feature: F001/);
+
+    const promoted = await session.client.callTool({ name: "planner-idea-promotion-finalize", arguments: { idea: "I001", targetType: "feature", targetRef: "F001", discussionCompleted: true, confirmed: true } });
+    assert.equal(promoted.structuredContent.promoted, true);
+    assert.equal(promoted.structuredContent.targetRef, "F001");
+    assert.equal((await st.loadIdeas()).ideas[0].promotion.targetId, featureA.id);
+
+    await session.client.callTool({ name: "planner-idea-create", arguments: { title: "MCP phase idea" } });
+    await session.client.callTool({ name: "planner-idea-create", arguments: { title: "MCP task idea" } });
+    const phasePromotion = await session.client.callTool({ name: "planner-idea-promotion-finalize", arguments: { idea: "I002", targetType: "phase", targetRef: "P001(F001)", discussionCompleted: true, confirmed: true } });
+    const taskPromotion = await session.client.callTool({ name: "planner-idea-promotion-finalize", arguments: { idea: "I003", targetType: "task", targetRef: "P001(F001)/T001", discussionCompleted: true, confirmed: true } });
+    assert.equal(phasePromotion.structuredContent.targetRef, "P001(F001)");
+    assert.equal(taskPromotion.structuredContent.targetRef, "P001(F001)/T001");
+    assert.match(toolText(taskPromotion), /P001\(F001\)\/T001/);
+  } finally {
+    await session.close();
+  }
+});

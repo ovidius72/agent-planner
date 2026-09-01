@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { ArchivedHandoffSummary, Feature, HandoffSummary, MacroTask, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
+import type { ArchivedHandoffSummary, Feature, HandoffSummary, Idea, MacroTask, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -239,6 +239,22 @@ export async function updateFeature(feature: Feature): Promise<Feature> {
 
 export async function deleteFeature(featureId: string): Promise<{ deleted: string }> {
   return request(`/features/${featureId}`, { method: "DELETE" });
+}
+
+export async function getIdeas(): Promise<Idea[]> {
+  return (await request<{ ideas: Idea[] }>("/ideas")).ideas;
+}
+
+export async function createIdea(payload: Pick<Idea, "title" | "description">): Promise<Idea> {
+  return request("/ideas", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function updateIdea(idea: Pick<Idea, "id" | "title" | "description">): Promise<Idea> {
+  return request(`/ideas/${idea.id}`, { method: "PUT", body: JSON.stringify(idea) });
+}
+
+export async function deleteIdea(ideaId: string): Promise<{ deleted: string }> {
+  return request(`/ideas/${ideaId}`, { method: "DELETE" });
 }
 
 export async function getRequirements(): Promise<Requirement[]> {

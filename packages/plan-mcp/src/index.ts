@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { Feature, Phase, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput } from "@agent-plan/core";
 
@@ -2167,6 +2167,101 @@ server.registerTool("planner-requirement-delete", {
   return writeAndSummarize(st, `Requirement deleted: ${requirementId}.`, { deleted: requirementId });
 });
 
+function ideaPromotionTarget(st: PlanStore, type: "feature" | "phase" | "task", ref: string) {
+  return Promise.all([st.loadFeatures(), st.loadAllPhases()]).then(([featuresDoc, phases]) => {
+    const features = featuresDoc.features;
+    if (type === "feature") {
+      const feature = findFeatureByRef(features, ref);
+      return feature ? { id: feature.id, ref: formatFeatureRef(feature.number) } : undefined;
+    }
+    if (type === "phase") {
+      const phase = findPhaseByRef(phases, features, ref);
+      return phase ? { id: phase.id, ref: formatPhaseRef(phase.number, features.find((item) => item.id === phase.featureId)?.number) } : undefined;
+    }
+    const found = findTaskByRef(phases, features, ref);
+    return found ? { id: found.task.id, ref: `${formatPhaseRef(found.phase.number, features.find((item) => item.id === found.phase.featureId)?.number)}/T${String(found.task.number).padStart(3, "0")}` } : undefined;
+  });
+}
+
+server.registerTool("planner-idea-list", {
+  description: "List top-level Ideas Inbox entries. Ideas never affect feature, phase, or task rollups.",
+  inputSchema: {},
+}, async () => {
+  const ideas = (await requireStore().then((st) => st.loadIdeas())).ideas;
+  return text(ideas.map((idea) => `- ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`).join("\n") || "No ideas", { ideas });
+});
+
+server.registerTool("planner-idea-show", {
+  description: "Show one Idea Inbox entry by I-number, short ID, UUID, or title.",
+  inputSchema: { idea: z.string().min(1) },
+}, async ({ idea: ref }) => {
+  const st = await requireStore(); const idea = findIdeaByRef((await st.loadIdeas()).ideas, ref);
+  return idea ? text(`${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}`, { idea }) : text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND" });
+});
+
+server.registerTool("planner-idea-create", {
+  description: "Create a rollup-independent Ideas Inbox entry.",
+  inputSchema: { title: z.string().min(1), description: z.string().optional() },
+}, async ({ title, description }) => {
+  const st = await requireStore(); const idea = await st.createIdea({ title, ...(description !== undefined ? { description } : {}) }); await st.writeGenerated();
+  return text(`Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}`, { idea, created: true });
+});
+
+server.registerTool("planner-idea-update", {
+  description: "Update an unpromoted or promoted Idea Inbox entry title or description.",
+  inputSchema: { idea: z.string().min(1), title: z.string().min(1).optional(), description: z.string().optional() },
+}, async ({ idea: ref, title, description }) => {
+  const st = await requireStore(); const current = findIdeaByRef((await st.loadIdeas()).ideas, ref);
+  if (!current) return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", updated: false });
+  if (title === undefined && description === undefined) return text("No mutable idea fields were received.", { errorCode: "NO_MUTABLE_FIELDS_RECEIVED", updated: false });
+  const idea = await st.updateIdea(current.id, { ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}) }); await st.writeGenerated();
+  return text(`Idea updated: ${formatIdeaRef(idea.number)} — ${idea.title}`, { idea, updated: true });
+});
+
+server.registerTool("planner-idea-delete", {
+  description: "Delete an Idea Inbox entry. Confirm the exact idea with the user before calling.",
+  inputSchema: { idea: z.string().min(1), confirmed: z.boolean() },
+}, async ({ idea: ref, confirmed }) => {
+  if (!confirmed) return text("Idea deletion requires confirmed=true after explicit user confirmation.", { errorCode: "CONFIRMATION_REQUIRED", deleted: false });
+  const st = await requireStore(); const current = findIdeaByRef((await st.loadIdeas()).ideas, ref);
+  if (!current) return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", deleted: false });
+  await st.deleteIdea(current.id); await st.writeGenerated(); return text(`Idea deleted: ${formatIdeaRef(current.number)}.`, { deleted: true, ideaRef: formatIdeaRef(current.number) });
+});
+
+server.registerTool("planner-idea-promotion-begin", {
+  description: "Begin an Idea promotion discussion without persisting a target or promotion. Returns the project-local grill-me instructions; follow them one question at a time, then use planner-idea-promotion-finalize only after target confirmation.",
+  inputSchema: { idea: z.string().min(1), targetType: z.enum(["feature", "phase", "task"]) },
+}, async ({ idea: ref, targetType }) => {
+  const st = await requireStore(); const idea = findIdeaByRef((await st.loadIdeas()).ideas, ref);
+  if (!idea) return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND" });
+  if (idea.promotion) return text(`${formatIdeaRef(idea.number)} is already promoted to ${idea.promotion.targetRef}.`, { errorCode: "ALREADY_PROMOTED", idea });
+  const features = (await st.loadFeatures()).features;
+  const phases = await st.loadAllPhases();
+  const recommendedFeature = features[0];
+  const recommendedPhase = recommendedFeature ? phases.find((phase) => phase.featureId === recommendedFeature.id) : phases[0];
+  const recommendation = targetType === "feature"
+    ? "Create a new feature after the discussion."
+    : targetType === "phase"
+      ? recommendedFeature ? `Recommended parent feature: ${formatFeatureRef(recommendedFeature.number)} — ${recommendedFeature.name}. Confirm or choose another feature before creating the phase.` : "Create and confirm a parent feature before promoting to a phase."
+      : recommendedPhase
+        ? `Recommended destination: ${formatPhaseRef(recommendedPhase.number, features.find((feature) => feature.id === recommendedPhase.featureId)?.number)} — ${recommendedPhase.title}. Confirm its feature and phase before creating the task.`
+        : "Create and confirm a parent feature and phase before promoting to a task.";
+  return text(`Promotion discussion started for ${formatIdeaRef(idea.number)}. ${recommendation}`, { idea, targetType, recommendation, grillMeSkill: await st.ideaDiscussionSkill(), persisted: false, nextActions: ["Follow grill-me one question at a time.", "Obtain explicit parent and target confirmation.", "Create the agreed target through the normal feature/phase/task creation tool.", "Call planner-idea-promotion-finalize with discussionCompleted=true and confirmed=true."] });
+});
+
+server.registerTool("planner-idea-promotion-finalize", {
+  description: "Record a promotion only after grill-me discussion, explicit target confirmation, and successful target creation. targetRef must be the already-created agreed target; no raw UUID is returned.",
+  inputSchema: { idea: z.string().min(1), targetType: z.enum(["feature", "phase", "task"]), targetRef: z.string().min(1), discussionCompleted: z.boolean(), confirmed: z.boolean() },
+}, async ({ idea: ref, targetType, targetRef, discussionCompleted, confirmed }) => {
+  if (!discussionCompleted || !confirmed) return text("Promotion requires discussionCompleted=true and confirmed=true; no target or promotion was persisted.", { errorCode: "IDEA_PROMOTION_CONFIRMATION_REQUIRED", promoted: false });
+  const st = await requireStore(); const idea = findIdeaByRef((await st.loadIdeas()).ideas, ref);
+  if (!idea) return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", promoted: false });
+  const target = await ideaPromotionTarget(st, targetType, targetRef);
+  if (!target) return text(`Confirmed ${targetType} target not found: ${targetRef}; no promotion was persisted.`, { errorCode: "TARGET_NOT_FOUND", promoted: false });
+  const promoted = await st.promoteIdea(idea.id, { targetType, targetId: target.id }); await st.writeGenerated();
+  return text(`Idea promoted: ${formatIdeaRef(promoted.number)} → ${promoted.promotion!.targetRef}`, { idea: promoted, promoted: true, targetRef: promoted.promotion!.targetRef });
+});
+
 server.registerTool("planner-handoff-write", {
   description: "Reconcile one active handoff with durable context synchronization and a mandatory versioned completeness audit. Run planner-handoff-prepare first; link extended detail from committed .planner/docs/ Markdown.",
   inputSchema: {
@@ -2365,7 +2460,13 @@ server.registerTool("planner-load", {
   const st = store();
   if (!(await st.exists())) return text("No .planner/ found at " + planRoot() + ". Run planner-init first.");
   const plannerSessionId = plannerSessionIdFor(extra);
-  const project = await st.loadProject();
+  let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
+  try {
+    preparation = await st.preparePlannerSession();
+  } catch (error) {
+    return text(`Planner load aborted: ${error instanceof Error ? error.message : String(error)}`, { errorCode: "PLANNER_SESSION_PREPARATION_FAILED", loaded: false });
+  }
+  const project = preparation.project;
   if (project.projectGuidelines.content.trim()) {
     await st.recordProjectGuidelinesRead({ sessionId: plannerSessionId });
   }
@@ -2373,9 +2474,11 @@ server.registerTool("planner-load", {
   await st.syncGrillMeSkill();
   const web = await ensureWebStarted();
   const recap = await buildRecap(st, web, { harness: "mcp" });
+  const visibleRecap = preparation.changed ? `${preparation.legacyProjectContext.summary}\n\n${recap}` : recap;
   return {
-    content: [{ type: "text", text: recap }],
+    content: [{ type: "text", text: visibleRecap }],
     structuredContent: {
+      preparation: preparation.legacyProjectContext,
       agentContext: {
         kind: "planner-usage-skill",
         content: plannerSkill.content,

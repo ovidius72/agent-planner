@@ -3,8 +3,8 @@
   "goal": "Deliver a self-hosted Claude Code plugin (marketplace, no approval) bundling @agent-plan/mcp + a /planner skill + a non-blocking SessionStart hook, with a reusable multi-plugin folder structure ready for Codex and future harnesses.",
   "description": "Self-improvement: add harness-specific plugin bundles (Claude Code first, Codex next) alongside the existing npm packages, so Agent Plan integrates natively with multiple coding-agent harnesses.",
   "projectGuidelines": {
-    "content": "- use the available react skill. \n- make each component small and reusable. fully typescript typed and expandable. \n- add unit tests to every component\n- make the UI user friendly\n- use the best react-router 7 patterns:r form submissions, navigation and middleware",
-    "updatedAt": "2026-08-30T09:48:27.695Z",
+    "content": "- use the available react skill. \n- make each component small and reusable. fully typescript typed and expandable. \n- add unit tests to every component\n- make the UI user friendly\n- use the best react-router 7 patterns: form submissions, navigation and middleware",
+    "updatedAt": "2026-08-31T07:38:25.009Z",
     "sessionInfo": []
   },
   "webPort": 56321,

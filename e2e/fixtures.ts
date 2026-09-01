@@ -20,6 +20,7 @@ export interface BrowserPlanner extends PlannerApi {
   url: string;
   handle: ServeHandle;
   seed: (name: "empty" | "minimal" | "full" | "terminal" | "resume-needed" | "legacy-single-file") => Promise<void>;
+  preparePlannerSession: () => Promise<{ changed: boolean }>;
 }
 
 export const test = base.extend<{ planner: BrowserPlanner }>({
@@ -65,6 +66,7 @@ export const test = base.extend<{ planner: BrowserPlanner }>({
         handle,
         request,
         seed: async (name) => seedFixture(fixture.store, name),
+        preparePlannerSession: async () => fixture.store.preparePlannerSession(),
       });
     } finally {
       await handle?.close().catch(() => {});

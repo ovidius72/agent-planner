@@ -58,9 +58,11 @@ import { loadExtensionRules, PLANNER_EXTENSION_RULES } from "./planner-rules.js"
 import { loadProjectGrillMeSkill, syncProjectGrillMeSkill, syncProjectPlannerSkill, type PlannerSkillSyncResult } from "./planner-skill.js";
 import {
   applyLegacyProjectContextMigration,
+  plannerSessionPreparationResult,
   previewLegacyProjectContextMigration,
   type LegacyProjectContextMigrationPreview,
   type LegacyProjectContextMigrationResult,
+  type PlannerSessionPreparationResult,
 } from "./project-context-migration.js";
 import {
   applyHandoffContextSync,
@@ -2203,8 +2205,14 @@ export class PlanStore {
     return previewLegacyProjectContextMigration(await readJson(this.projectPath(), ProjectSchema));
   }
 
-  /** Apply the legacy project-context migration only after an explicit caller
-   * request, then verify the persisted result. Ordinary loads never migrate. */
+  /** Prepare an explicit planner session before recap/context delivery.
+   * Ordinary entity reads remain non-mutating. */
+  async preparePlannerSession(): Promise<PlannerSessionPreparationResult> {
+    return plannerSessionPreparationResult(await this.migrateLegacyProjectContext());
+  }
+
+  /** Apply and verify the legacy project-context migration. Callers must invoke
+   * this only from an explicit preparation or compatibility-recovery flow. */
   async migrateLegacyProjectContext(): Promise<LegacyProjectContextMigrationResult> {
     const original = await readJson(this.projectPath(), ProjectSchema);
     const acceptedAt = nowISO();

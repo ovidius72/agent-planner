@@ -12,6 +12,7 @@ import {
   createTaskId,
   findIdeaByRef,
   formatIdeaRef,
+  recommendNextTask,
 } from "../dist/index.js";
 
 const roots = [];
@@ -134,9 +135,12 @@ describe("Ideas promotion bookkeeping", () => {
     const { store } = await setup();
     const { feature, phase } = await addFeaturePhaseTask(store);
     const beforeWorkspace = await store.loadAll();
+    const beforeProject = await store.loadProject();
+    const beforeRequirements = await store.loadRequirements();
     const beforeResume = await store.loadResume();
     const beforeFeatureDisplay = await store.loadFeatureDisplay(feature.id);
     const beforePhaseDisplay = await store.loadPhaseDisplay(phase.id);
+    const beforeRecommendation = recommendNextTask(beforeWorkspace.features.features, beforeWorkspace.phases);
 
     const idea = await store.createIdea({ title: "Independent idea" });
     await store.updateIdea(idea.id, { description: "Still outside planned work" });
@@ -148,7 +152,10 @@ describe("Ideas promotion bookkeeping", () => {
       beforeWorkspace.features.features.map(({ id, status }) => ({ id, status })),
     );
     assert.deepEqual(afterWorkspace.phases.map(({ id, status }) => ({ id, status })), beforeWorkspace.phases.map(({ id, status }) => ({ id, status })));
+    assert.deepEqual(await store.loadProject(), beforeProject, "Ideas do not consume project work counters or runtime state");
+    assert.deepEqual(await store.loadRequirements(), beforeRequirements, "Ideas do not change requirement links");
     assert.deepEqual(await store.loadResume(), beforeResume);
+    assert.deepEqual(recommendNextTask(afterWorkspace.features.features, afterWorkspace.phases), beforeRecommendation, "Ideas do not affect task recommendation");
     assert.deepEqual(await store.loadFeatureDisplay(feature.id), beforeFeatureDisplay);
     assert.deepEqual(await store.loadPhaseDisplay(phase.id), beforePhaseDisplay);
     assert.equal(afterWorkspace.ideas.ideas[0]?.promotion?.targetRef, "P001(F001)");

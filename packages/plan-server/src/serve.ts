@@ -361,6 +361,47 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json({ deleted: id });
   });
 
+  // ── Ideas Inbox ──────────────────────────────────────────────────
+  app.get(route("/ideas"), async (c) => c.json(await store.loadIdeas()));
+
+  app.post(route("/ideas"), async (c) => {
+    const body = await c.req.json<{ title?: string; description?: string }>();
+    const title = body.title?.trim();
+    if (!title) return c.json({ error: "title required" }, 400);
+    const idea = await store.createIdea({ title, ...(body.description !== undefined ? { description: body.description.trim() } : {}) });
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "file-changed", data: { filename: "ideas.json" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json(idea, 201);
+  });
+
+  app.put(route("/ideas/:id"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const body = await c.req.json<{ title?: string; description?: string }>();
+    const title = body.title?.trim();
+    if (!title) return c.json({ error: "title required" }, 400);
+    const current = (await store.loadIdeas()).ideas.find((idea) => idea.id === id);
+    if (!current) return c.json({ error: "not found" }, 404);
+    const idea = await store.updateIdea(id, { title, description: body.description?.trim() ?? "" });
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "file-changed", data: { filename: "ideas.json" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json(idea);
+  });
+
+  app.delete(route("/ideas/:id"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const current = (await store.loadIdeas()).ideas.find((idea) => idea.id === id);
+    if (!current) return c.json({ error: "not found" }, 404);
+    await store.deleteIdea(id);
+    await store.writeGenerated();
+    hub()?.broadcast({ type: "file-changed", data: { filename: "ideas.json" } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+    return c.json({ deleted: id });
+  });
+
   // ── Features ─────────────────────────────────────────────────────
   app.get(route("/features"), async (c) => c.json((await store.loadFeatures()).features));
 

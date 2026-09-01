@@ -128,8 +128,12 @@ test("PlanStore previews without writes, applies explicitly, and verifies the pe
   assert.equal(preview.guidelineAdditions.length, 2);
   assert.equal(await readFile(projectPath, "utf8"), beforePreview, "preview is read-only");
 
-  const result = await freshStore.migrateLegacyProjectContext();
-  assert.equal(result.applied, true);
+  const result = await freshStore.preparePlannerSession();
+  assert.equal(result.changed, true);
+  assert.equal(result.legacyProjectContext.migrated, true);
+  assert.equal(result.legacyProjectContext.guidelinesAdded, 2);
+  assert.equal(result.legacyProjectContext.acceptedDecisionsAdded, 1);
+  assert.match(result.legacyProjectContext.summary, /Migrated legacy project context/);
   const after = await freshStore.loadProject();
   assert.equal(Object.hasOwn(after.projectGuidelines, "title"), false);
   assert.deepEqual(after.globalRules, []);
@@ -138,8 +142,29 @@ test("PlanStore previews without writes, applies explicitly, and verifies the pe
   assert.equal(after.acceptedDecisions.some((decision) => decision.decision === "Use TypeScript for planner packages."), true);
   assert.match(after.projectGuidelines.content, /Keep source text in English\./);
   assert.ok(after.projectGuidelines.updatedAt);
-  assert.deepEqual(after.projectGuidelines.sessionInfo, [{ sessionId: "session-a", createdAt: "2026-01-01T00:00:00.000Z" }]);
+  assert.deepEqual(after.projectGuidelines.sessionInfo, [{ sessionId: "session-a", createdAt: "2026-01-01T00:00:00.000Z" }], "content changes make prior attestations stale through the updated freshness timestamp");
 
-  const second = await freshStore.migrateLegacyProjectContext();
-  assert.equal(second.applied, false, "a completed migration is idempotent");
+  const canonicalBytes = await readFile(projectPath, "utf8");
+  const second = await freshStore.preparePlannerSession();
+  assert.equal(second.changed, false, "a completed migration is idempotent");
+  assert.equal(second.legacyProjectContext.migrated, false);
+  assert.equal(await readFile(projectPath, "utf8"), canonicalBytes, "a no-op preparation does not rewrite project.json");
+});
+
+test("session preparation clears duplicate-only legacy fields without invalidating fresh guidelines", async () => {
+  const { store, planRoot } = await createPlannerFixture({ name: "duplicate-only-context", seed: "empty" });
+  const attestation = { sessionId: "stable-session", createdAt: "2026-01-01T00:00:00.000Z" };
+  await store.updateProject((project) => ({
+    ...project,
+    projectGuidelines: { content: "Keep source text in English.", updatedAt: "2026-01-01T00:00:00.000Z", sessionInfo: [attestation] },
+    globalRules: ["Keep source text in English."],
+  }));
+  const before = await store.loadProject();
+  const prepared = await new PlanStore(planRoot).preparePlannerSession();
+  assert.equal(prepared.changed, true, "legacy compatibility fields are cleared");
+  assert.equal(prepared.legacyProjectContext.guidelinesAdded, 0);
+  assert.equal(prepared.legacyProjectContext.duplicatesSkipped, 1);
+  assert.deepEqual(prepared.project.projectGuidelines.sessionInfo, before.projectGuidelines.sessionInfo);
+  assert.equal(prepared.project.projectGuidelines.updatedAt, before.projectGuidelines.updatedAt);
+  assert.deepEqual(prepared.project.globalRules, []);
 });

@@ -577,3 +577,43 @@ describe("pi-adapter strict ref validation", () => {
     assert.equal(updated.details.macroTasks[1].id, "MT-002");
   });
 });
+
+test("Idea tools keep promotion confirmation-safe and return composite refs", async () => {
+  const { root, st, featureA } = await setup();
+  const created = await tools.get("idea_create").execute("id", { title: "Idea transport", description: "Discuss this idea before promotion." }, undefined, undefined, makeCtx(root));
+  assert.equal(created.details.created, true);
+  assert.match(toolText(created), /I001/);
+
+  const before = await st.loadIdeas();
+  const denied = await tools.get("idea_promotion_finalize").execute("id", {
+    idea: "I001", targetType: "feature", targetRef: "F001", discussionCompleted: false, confirmed: false,
+  }, undefined, undefined, makeCtx(root));
+  assert.equal(denied.details.promoted, false);
+  assert.deepEqual(await st.loadIdeas(), before, "denied promotion is a no-op");
+
+  const begun = await tools.get("idea_promotion_begin").execute("id", { idea: "I001", targetType: "phase" }, undefined, undefined, makeCtx(root));
+  assert.equal(begun.details.persisted, false);
+  assert.match(begun.details.grillMeSkill, /Ask the questions one at a time/);
+  assert.match(begun.details.recommendation, /Recommended parent feature: F001/);
+
+  const promoted = await tools.get("idea_promotion_finalize").execute("id", {
+    idea: "I001", targetType: "feature", targetRef: "F001", discussionCompleted: true, confirmed: true,
+  }, undefined, undefined, makeCtx(root));
+  assert.equal(promoted.details.promoted, true);
+  assert.equal(promoted.details.targetRef, "F001");
+  assert.equal((await st.loadIdeas()).ideas[0].promotion.targetId, featureA.id);
+
+  const phaseIdea = await tools.get("idea_create").execute("id", { title: "Phase idea" }, undefined, undefined, makeCtx(root));
+  const taskIdea = await tools.get("idea_create").execute("id", { title: "Task idea" }, undefined, undefined, makeCtx(root));
+  assert.equal(phaseIdea.details.created, true);
+  assert.equal(taskIdea.details.created, true);
+  const phasePromotion = await tools.get("idea_promotion_finalize").execute("id", { idea: "I002", targetType: "phase", targetRef: "P001(F001)", discussionCompleted: true, confirmed: true }, undefined, undefined, makeCtx(root));
+  const taskPromotion = await tools.get("idea_promotion_finalize").execute("id", { idea: "I003", targetType: "task", targetRef: "P001(F001)/T001", discussionCompleted: true, confirmed: true }, undefined, undefined, makeCtx(root));
+  assert.equal(phasePromotion.details.targetRef, "P001(F001)");
+  assert.equal(taskPromotion.details.targetRef, "P001(F001)/T001");
+
+  const listed = await tools.get("idea_list").execute("id", {}, undefined, undefined, makeCtx(root));
+  assert.match(toolText(listed), /I001.*F001/);
+  assert.match(toolText(listed), /I002.*P001\(F001\)/);
+  assert.match(toolText(listed), /I003.*P001\(F001\)\/T001/);
+});

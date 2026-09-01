@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { Card } from "../ui/card";
 import { FormattedText } from "../ui/formatted-text";
 import type { AcceptedDecision, Project } from "../../lib/types";
@@ -79,7 +78,7 @@ export function ProjectContext({ project }: { project: Project }) {
           {legacyCount > 0 ? (
             <aside className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-muted)]" aria-label="Legacy project context">
               <span className="font-semibold text-[var(--text)]">Legacy project context remains.</span>{" "}
-              {legacyCount} legacy rule or decision {legacyCount === 1 ? "entry is" : "entries are"} preserved without automatic migration. <Link to="/project/edit" className="font-semibold text-[var(--accent)] hover:underline">Review the migration preview</Link> before applying it.
+              {legacyCount} legacy rule or decision {legacyCount === 1 ? "entry will" : "entries will"} migrate automatically on the next explicit planner load.
             </aside>
           ) : null}
         </div>

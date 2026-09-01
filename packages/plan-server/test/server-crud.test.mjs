@@ -471,3 +471,26 @@ test("persistence across restart: a second server on the same planRoot sees the 
   // composite ref stable after restart
   assert.equal(phase2.tasks.find((t) => t.id === task.body.id).title, "Persistent task");
 });
+
+// ── Ideas Inbox CRUD ─────────────────────────────────────────────────────
+
+test("Ideas CRUD remains independent and validates server-owned identity", async () => {
+  const fx = await startServerFixture({ name: "ideas-crud" });
+  const created = await request(fx, "/ideas", { ...json({ title: "Explore notifications", description: "Inbox-only concept" }), expectStatus: 201 });
+  assert.equal(created.body.number, 1);
+  assert.match(created.body.shortId, /^[A-Z2-9]{5}$/);
+  assert.equal(created.body.promotion, null);
+
+  const listed = await request(fx, "/ideas");
+  assert.equal(listed.body.ideas.length, 1);
+  assert.equal(listed.body.ideas[0].title, "Explore notifications");
+
+  const updated = await request(fx, `/ideas/${created.body.id}`, { ...put({ title: "Explore native notifications", description: "Updated detail" }) });
+  assert.equal(updated.body.title, "Explore native notifications");
+  assert.equal(updated.body.id, created.body.id);
+  assert.equal(updated.body.createdAt, created.body.createdAt);
+
+  await request(fx, `/ideas/${created.body.id}`, { method: "DELETE" });
+  assert.equal((await request(fx, "/ideas")).body.ideas.length, 0);
+  await expectError(fx, `/ideas/${created.body.id}`, { method: "DELETE" }, { status: 404 });
+});

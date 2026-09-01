@@ -12,8 +12,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput } from "@agent-plan/core";
 import { join, dirname } from "node:path";
@@ -1282,6 +1282,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       "project discuss",
       "project language",
       "project guidelines",
+      "idea list",
+      "idea add",
+      "idea show",
+      "idea update",
+      "idea delete",
+      "idea promote",
       "feature list",
       "feature add",
       "feature show",
@@ -1314,7 +1320,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       "stop",
     ];
 
-    const SUB_HELP = "Available: init, show, version, repair, cleanup-orphans, project, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, stop\n" +
+    const SUB_HELP = "Available: init, show, version, repair, cleanup-orphans, project, idea, feature, phase, task, discuss, handoff, web, export, export-full, bypass, clear-bypass, load, stop\n" +
       "Try: /planner <TAB>  |  /planner feature list  |  /planner task start  |  /planner cleanup-orphans\n" +
       "Handoff actions: /planner handoff list | show P00x | write P00x | clear P00x | prepare (prepare proposes a target and asks for confirmation)";
 
@@ -1722,6 +1728,71 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return;
       }
       ctx.ui.notify(`Unknown project action "${b}". Try: discuss, language, guidelines, migrate-context`, "warning");
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  idea <sub>
+    // ═══════════════════════════════════════════════════════════════
+    if (a === "idea") {
+      if (!b) {
+        ctx.ui.notify("idea actions: list | add [title] | show [ref] | update [ref] | delete [ref] | promote [ref]", "info");
+        return;
+      }
+      const ideas = (await st.loadIdeas()).ideas;
+      if (b === "list") {
+        await paginatedNotify(ctx, {
+          title: "ideas",
+          lines: ideas.map((idea) => `${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`),
+          pageSize: 10,
+        });
+        return;
+      }
+      if (b === "add") {
+        const title = subArgs.trim() || await ctx.ui.input("Idea title");
+        if (!title?.trim()) { ctx.ui.notify("Aborted", "warning"); return; }
+        const description = await ctx.ui.editor("Idea description", "");
+        const idea = await st.createIdea({ title: title.trim(), ...(description?.trim() ? { description: description.trim() } : {}) });
+        await st.writeGenerated();
+        ctx.ui.notify(`Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}`, "info");
+        return;
+      }
+      const ref = subArgs.trim() || await ctx.ui.input("Idea ref (I00x, short ID, or title)");
+      const idea = ref ? findIdeaByRef(ideas, ref) : undefined;
+      if (!idea) { ctx.ui.notify(`Idea not found: ${ref || "(empty)"}`, "error"); return; }
+      if (b === "show") {
+        ctx.ui.notify(`${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}${idea.promotion ? `\n\nPromoted to: ${idea.promotion.targetRef}` : ""}`, "info");
+        return;
+      }
+      if (b === "update") {
+        const title = await ctx.ui.input(`Title [${idea.title}]`);
+        const description = await ctx.ui.editor("Description", idea.description);
+        const updated = await st.updateIdea(idea.id, { ...(title?.trim() ? { title: title.trim() } : {}), ...(description !== undefined ? { description: description.trim() } : {}) });
+        await st.writeGenerated();
+        ctx.ui.notify(`Idea updated: ${formatIdeaRef(updated.number)} — ${updated.title}`, "info");
+        return;
+      }
+      if (b === "delete") {
+        const answer = await ctx.ui.select(`Delete ${formatIdeaRef(idea.number)} — ${idea.title}?`, ["cancel", "delete"]);
+        if (answer !== "delete") { ctx.ui.notify("Cancelled — no changes saved.", "info"); return; }
+        await st.deleteIdea(idea.id);
+        await st.writeGenerated();
+        ctx.ui.notify(`Idea deleted: ${formatIdeaRef(idea.number)}.`, "info");
+        return;
+      }
+      if (b === "promote") {
+        if (idea.promotion) { ctx.ui.notify(`Already promoted to ${idea.promotion.targetRef}.`, "warning"); return; }
+        const targetType = await ctx.ui.select("Promotion target", ["feature", "phase", "task"]);
+        if (!targetType) return;
+        const skill = await st.ideaDiscussionSkill();
+        if (capturedPi) {
+          await capturedPi.sendUserMessage(`Discuss promotion of ${formatIdeaRef(idea.number)} — ${idea.title} to a ${targetType}.\n\n${skill}\n\nDo not create or persist a target until the discussion is complete and I explicitly confirm the exact destination. For a phase, recommend and confirm its feature. For a task, recommend and confirm its feature and phase. After creating the confirmed target with the normal planner tool, record the promotion with idea_promotion_finalize.`);
+        } else {
+          ctx.ui.notify("Promotion discussion instructions loaded. Use the idea_promotion_begin tool in an agent session.", "info");
+        }
+        return;
+      }
+      ctx.ui.notify(`Unknown idea action "${b}". Try: list, add, show, update, delete, promote`, "warning");
       return;
     }
 
@@ -2698,6 +2769,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
 
     if (a === "load") {
+      const st = ensureStore(ctx);
+      let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
+      try {
+        preparation = await st.preparePlannerSession();
+      } catch (error) {
+        ctx.ui.notify(`Planner load aborted: ${error instanceof Error ? error.message : String(error)}`, "error");
+        return;
+      }
       enablePlannerSession();
       if (!server) {
         ctx.ui.notify("Starting web server (LAN) …", "info");
@@ -2728,11 +2807,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       let recapText = "";
       let plannerSkillContext = "";
       try {
-        const st = ensureStore(ctx);
         const plannerSkill = await st.syncPlannerSkill();
         await st.syncGrillMeSkill();
         const srv = server as ServeHandle | null;
         recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
+        if (preparation.changed) recapText = `${preparation.legacyProjectContext.summary}\n\n${recapText}`;
         plannerSkillContext = `[agent-only planner usage skill; do not quote in the recap]\n${plannerSkill.customized ? `${plannerSkill.message}\n` : ""}${plannerSkill.content}\n[end agent-only planner usage skill]`;
       } catch (e) { recapText = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       pi.sendMessage({
@@ -3179,6 +3258,51 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       await st.writeGenerated();
       return { content: [{ type: "text", text: `Requirement deleted: ${params.requirementId}` }], details: { deleted: params.requirementId } };
     },
+  });
+
+  pi.registerTool({
+    name: "idea_list", label: "Idea List", description: "List rollup-independent Ideas Inbox entries.", parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const ideas = (await st.loadIdeas()).ideas; return { content: [{ type: "text", text: ideas.map((idea) => `- ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}${idea.promotion ? ` → ${idea.promotion.targetRef}` : ""}`).join("\n") || "No ideas" }], details: { ideas } }; },
+  });
+  pi.registerTool({
+    name: "idea_show", label: "Idea Show", description: "Show an idea by I-number, short ID, UUID, or title.", parameters: Type.Object({ idea: Type.String() }),
+    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const idea = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); return idea ? { content: [{ type: "text", text: `${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}\n\n${idea.description || "(no description)"}` }], details: { idea } } : { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND" } }; },
+  });
+  pi.registerTool({
+    name: "idea_create", label: "Idea Create", description: "Create an independent Ideas Inbox entry.", parameters: Type.Object({ title: Type.String(), description: Type.Optional(Type.String()) }),
+    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const idea = await st.createIdea({ title: params.title, ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea created: ${formatIdeaRef(idea.number)} · ${idea.shortId} — ${idea.title}` }], details: { idea, created: true } }; },
+  });
+  pi.registerTool({
+    name: "idea_update", label: "Idea Update", description: "Update an Ideas Inbox title or description.", parameters: Type.Object({ idea: Type.String(), title: Type.Optional(Type.String()), description: Type.Optional(Type.String()) }),
+    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return { content: [{ type: "text", text: "No mutable idea fields were received." }], details: { errorCode: "NO_MUTABLE_FIELDS_RECEIVED", updated: false } }; const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea updated: ${formatIdeaRef(idea.number)} — ${idea.title}` }], details: { idea, updated: true } }; },
+  });
+  pi.registerTool({
+    name: "idea_delete", label: "Idea Delete", description: "Delete an Idea only after explicit user confirmation.", parameters: Type.Object({ idea: Type.String(), confirmed: Type.Boolean() }),
+    async execute(_id, params, _signal, _onUpdate, ctx) { if (!params.confirmed) return { content: [{ type: "text", text: "Idea deletion requires confirmed=true after explicit user confirmation." }], details: { errorCode: "CONFIRMATION_REQUIRED", deleted: false } }; const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", deleted: false } }; await st.deleteIdea(current.id); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea deleted: ${formatIdeaRef(current.number)}.` }], details: { deleted: true, ideaRef: formatIdeaRef(current.number) } }; },
+  });
+  pi.registerTool({
+    name: "idea_promotion_begin", label: "Idea Promotion Begin", description: "Begin a grill-me idea promotion discussion without persisting a target or promotion.", parameters: Type.Object({ idea: Type.String(), targetType: Type.Union([Type.Literal("feature"), Type.Literal("phase"), Type.Literal("task")]) }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const idea = findIdeaByRef((await st.loadIdeas()).ideas, params.idea);
+      if (!idea) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND" } };
+      if (idea.promotion) return { content: [{ type: "text", text: `${formatIdeaRef(idea.number)} is already promoted to ${idea.promotion.targetRef}.` }], details: { errorCode: "ALREADY_PROMOTED", idea } };
+      const features = (await st.loadFeatures()).features;
+      const phases = await st.loadAllPhases();
+      const recommendedFeature = features[0];
+      const recommendedPhase = recommendedFeature ? phases.find((phase) => phase.featureId === recommendedFeature.id) : phases[0];
+      const recommendation = params.targetType === "feature"
+        ? "Create a new feature after the discussion."
+        : params.targetType === "phase"
+          ? recommendedFeature ? `Recommended parent feature: ${formatFeatureRef(recommendedFeature.number)} — ${recommendedFeature.name}. Confirm or choose another feature before creating the phase.` : "Create and confirm a parent feature before promoting to a phase."
+          : recommendedPhase ? `Recommended destination: ${formatPhaseRef(recommendedPhase.number, features.find((feature) => feature.id === recommendedPhase.featureId)?.number)} — ${recommendedPhase.title}. Confirm its feature and phase before creating the task.` : "Create and confirm a parent feature and phase before promoting to a task.";
+      return { content: [{ type: "text", text: `Promotion discussion started for ${formatIdeaRef(idea.number)}. ${recommendation}` }], details: { idea, targetType: params.targetType, recommendation, grillMeSkill: await st.ideaDiscussionSkill(), persisted: false, nextActions: ["Follow grill-me one question at a time.", "Obtain explicit parent and target confirmation.", "Create the agreed target using feature_create, phase_create, or task_create.", "Call idea_promotion_finalize with discussionCompleted=true and confirmed=true."] } };
+    },
+  });
+  pi.registerTool({
+    name: "idea_promotion_finalize", label: "Idea Promotion Finalize", description: "Record an idea promotion after grill-me discussion, explicit confirmation, and successful normal target creation.", parameters: Type.Object({ idea: Type.String(), targetType: Type.Union([Type.Literal("feature"), Type.Literal("phase"), Type.Literal("task")]), targetRef: Type.String(), discussionCompleted: Type.Boolean(), confirmed: Type.Boolean() }),
+    async execute(_id, params, _signal, _onUpdate, ctx) { if (!params.discussionCompleted || !params.confirmed) return { content: [{ type: "text", text: "Promotion requires discussionCompleted=true and confirmed=true; no promotion was persisted." }], details: { errorCode: "IDEA_PROMOTION_CONFIRMATION_REQUIRED", promoted: false } }; const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const idea = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!idea) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", promoted: false } }; const features = (await st.loadFeatures()).features; const phases = await st.loadAllPhases(); let target: { id: string } | undefined; if (params.targetType === "feature") { const resolved = resolveFeatureRefStrict(features, params.targetRef); target = resolved.ok ? { id: resolved.feature.id } : undefined; } else if (params.targetType === "phase") { const phase = findPhaseByRef(phases, features, params.targetRef); target = phase ? { id: phase.id } : undefined; } else { const found = findTaskByRef(phases, features, params.targetRef); target = found ? { id: found.task.id } : undefined; } if (!target) return { content: [{ type: "text", text: `Confirmed ${params.targetType} target not found: ${params.targetRef}; no promotion was persisted.` }], details: { errorCode: "TARGET_NOT_FOUND", promoted: false } }; const promoted = await st.promoteIdea(idea.id, { targetType: params.targetType, targetId: target.id }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea promoted: ${formatIdeaRef(promoted.number)} → ${promoted.promotion!.targetRef}` }], details: { idea: promoted, promoted: true, targetRef: promoted.promotion!.targetRef } }; },
   });
 
   pi.registerTool({
@@ -5309,6 +5433,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { enabled: false, running: false } };
+      let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
+      try {
+        preparation = await st.preparePlannerSession();
+      } catch (error) {
+        return { content: [{ type: "text", text: `Planner load aborted: ${error instanceof Error ? error.message : String(error)}` }], details: { errorCode: "PLANNER_SESSION_PREPARATION_FAILED", enabled: false, running: false } };
+      }
       enablePlannerSession();
       if (!server) {
         await startServer(ctx, undefined, "lan").catch(() => {});
@@ -5323,7 +5453,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const srv = server as ServeHandle | null;
       let recap = "";
       try { recap = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" }); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
-      return { content: [{ type: "text", text: recap }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message } } };
+      if (preparation.changed) recap = `${preparation.legacyProjectContext.summary}\n\n${recap}`;
+      return { content: [{ type: "text", text: recap }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, preparation: preparation.legacyProjectContext, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message } } };
     },
   });
 

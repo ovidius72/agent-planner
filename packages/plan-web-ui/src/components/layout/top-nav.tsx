@@ -1,4 +1,4 @@
-import { ChevronDown, Download, Layers, ListTodo, Menu, Moon, ScrollText, Sun, X } from "lucide-react";
+import { ChevronDown, Download, Layers, Lightbulb, ListTodo, Menu, Moon, ScrollText, Sun, X } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { exportPlan } from "../../lib/api";
@@ -38,6 +38,7 @@ export function TopNav({
   const [exporting, setExporting] = useState<"summary" | "full" | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navItems = [
+    { to: "/ideas", label: "Ideas", icon: Lightbulb },
     { to: "/features", label: "Features", icon: Layers },
     { to: "/requirements", label: "Requirements", icon: ListTodo },
     { to: "/handoff", label: "Handoff", icon: ScrollText },

@@ -305,6 +305,11 @@ test("recap context and generated/export operations", async () => {
     await callTool(session, "planner-project-guidelines-update", {
       content: "Use English in source code. Run focused verification before claiming success.",
     });
+    await session.store.updateProject((project) => ({
+      ...project,
+      globalRules: ["Keep generated output deterministic."],
+      decisions: ["Use automatic migration on explicit planner load."],
+    }));
 
     // Simulate an existing project created before the managed Ideas skill.
     await rm(join(session.planRoot, "skills", "grill-me", "SKILL.md"));
@@ -313,6 +318,8 @@ test("recap context and generated/export operations", async () => {
     // its last non-empty line, which Codex can present verbatim.
     const loadResult = await callTool(session, "planner-load", {});
     const loadText = toolText(loadResult);
+    assert.equal(loadResult.structuredContent.preparation.migrated, true);
+    assert.match(loadText, /Migrated legacy project context: 1 guideline, 1 accepted decision/);
     assert.match(loadText, /## Project Guidelines/);
     assert.match(loadText, /Use English in source code\. Run focused verification before claiming success\./);
     assert.doesNotMatch(loadText, /## Managed-copy policy/, "agent-only planner skill must not leak into the human recap text");
@@ -334,6 +341,8 @@ test("recap context and generated/export operations", async () => {
     await callTool(session, "planner-web", { action: "stop" });
     const loadResult2 = await callTool(session, "planner-load", {});
     const loadText2 = toolText(loadResult2);
+    assert.equal(loadResult2.structuredContent.preparation.migrated, false);
+    assert.doesNotMatch(loadText2, /Migrated legacy project context/, "no-op loads remain quiet");
     assert.match(loadText2.trim().split("\n").at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
     const phaseAfterSecondLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
     assert.equal(phaseAfterSecondLoad?.handoff, phaseBeforeLoad.handoff, "repeated planner-load retains handoff too");

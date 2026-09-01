@@ -31,7 +31,8 @@ describe("entity references and timestamps", () => {
     expect(screen.getByText("Project Guidelines")).toBeInTheDocument();
     expect(screen.getByText("Use English in source code.")).toBeInTheDocument();
     expect(screen.getByText(/Legacy project context remains/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Review the migration preview" })).toHaveAttribute("href", "/project/edit");
+    expect(screen.getByText(/migrate automatically on the next explicit planner load/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review the migration preview" })).not.toBeInTheDocument();
     expect(screen.queryByText(/SKILL\.md/)).not.toBeInTheDocument();
     expect(screen.queryByText(/rules\.json/)).not.toBeInTheDocument();
   });

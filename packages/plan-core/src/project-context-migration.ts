@@ -40,6 +40,44 @@ export interface LegacyProjectContextMigrationResult {
   project: Project;
 }
 
+export interface PlannerSessionPreparationResult {
+  changed: boolean;
+  project: Project;
+  legacyProjectContext: {
+    migrated: boolean;
+    version: number;
+    guidelinesAdded: number;
+    acceptedDecisionsAdded: number;
+    duplicatesSkipped: number;
+    clearedFields: Array<"globalRules" | "workflowRules" | "decisions">;
+    summary: string;
+  };
+}
+
+export function plannerSessionPreparationResult(
+  result: LegacyProjectContextMigrationResult,
+): PlannerSessionPreparationResult {
+  const guidelinesAdded = result.preview.guidelineAdditions.length;
+  const acceptedDecisionsAdded = result.preview.acceptedDecisionAdditions.length;
+  const duplicatesSkipped = result.preview.skippedGuidelineDuplicates + result.preview.skippedDecisionDuplicates;
+  const summary = result.applied
+    ? `Migrated legacy project context: ${guidelinesAdded} guideline${guidelinesAdded === 1 ? "" : "s"}, ${acceptedDecisionsAdded} accepted decision${acceptedDecisionsAdded === 1 ? "" : "s"}, ${duplicatesSkipped} duplicate${duplicatesSkipped === 1 ? "" : "s"} skipped.`
+    : "Legacy project context is already canonical; no migration was needed.";
+  return {
+    changed: result.applied,
+    project: result.project,
+    legacyProjectContext: {
+      migrated: result.applied,
+      version: result.preview.version,
+      guidelinesAdded,
+      acceptedDecisionsAdded,
+      duplicatesSkipped,
+      clearedFields: result.preview.fieldsClearedOnApply,
+      summary,
+    },
+  };
+}
+
 const SOURCE_LABELS: Record<LegacyGuidelineSource, string> = {
   "global-rules": "Global rules",
   "before-phase-start": "Before phase start",
