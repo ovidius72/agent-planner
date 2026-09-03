@@ -18,11 +18,12 @@
 
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
-import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupPiHosts();
@@ -48,6 +49,7 @@ async function preparedHandoffArgs(host, phaseRef = "P001") {
     expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
     completenessAudit: completeHandoffAudit(),
+    coldStartInventory: completeHandoffColdStartInventory({ file: "mutations.test.mjs" }),
     taskUpdates: [],
     phaseNoUpdateReason: "Fixture does not change durable phase context.",
     featureNoUpdateReason: "Fixture does not change durable feature context.",
@@ -55,6 +57,38 @@ async function preparedHandoffArgs(host, phaseRef = "P001") {
 }
 
 describe("pi-adapter mutations, validation, requirements, handoffs", () => {
+  test("writer contention stays readable and surfaces PLAN_WRITER_BUSY through Pi tools", async () => {
+    const host = await createPiHost({ name: "writer-busy", seed: "empty" });
+    const lockPath = join(host.planRoot, ".local", "locks", "writer.lock");
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
+      token: "external-writer",
+      pid: process.pid,
+      hostname: hostname(),
+      cwd: host.root,
+      acquiredAt: new Date().toISOString(),
+    }), "utf8");
+    const previousTimeout = process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS;
+    const previousRetry = process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS;
+    process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS = "60";
+    process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS = "10";
+    try {
+      assert.match(toolText(await host.runTool("feature_list", {})), /No features/);
+      await assert.rejects(
+        host.runTool("feature_create", { name: "Blocked writer", description: LONG_DESC }),
+        /PLAN_WRITER_BUSY.*Read-only operations remain available/,
+      );
+      assert.equal((await host.store.loadFeatures()).features.length, 0);
+    } finally {
+      if (previousTimeout === undefined) delete process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS;
+      else process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS = previousTimeout;
+      if (previousRetry === undefined) delete process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS;
+      else process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS = previousRetry;
+      await rm(lockPath, { recursive: true, force: true });
+      await closePiHost(host);
+    }
+  });
+
   test("creation round-trip: feature → phase → task → requirement with composite IDs", async () => {
     const host = await createPiHost({ name: "t242-create", seed: "minimal" });
     try {
@@ -214,6 +248,9 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolText(directDone), /completion transitions require task_complete/);
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
 
+      const preservedFeatureDescription = "Updated through Pi before task lifecycle synchronization.";
+      await host.runTool("feature_update", { featureId: "F001", description: preservedFeatureDescription });
+
       // A lifecycle start must not mutate before the exact full-read sequence.
       const deniedWithoutReads = await host.runTool("task_start", { taskId: "T001" });
       assert.equal(deniedWithoutReads.isError, true);
@@ -241,6 +278,8 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
 
       // Start — response carries the composite ref only after requirements are read.
       await host.runTool("requirement_list", {});
+      const preservedWorkDone = "Metadata committed after Pi read the task context.";
+      await host.runTool("feature_update", { featureId: "F001", workDone: preservedWorkDone });
       const started = await host.runTool("task_start", { taskId: "T001" });
       assert.match(toolText(started), /✅ Task started:/);
       assert.match(toolText(started), /P001\(F001\)/);
@@ -288,6 +327,8 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(phase.status, "done", "phase rolls to done via syncTaskStatusRollup");
       const features = await host.store.loadFeatures();
       assert.equal(features.features[0].status, "done", "feature rolls to done");
+      assert.equal(features.features[0].description, preservedFeatureDescription, "Pi lifecycle writes preserve newer feature metadata");
+      assert.equal(features.features[0].workDone, preservedWorkDone, "Pi lifecycle writes preserve metadata committed after context reads");
     } finally {
       await closePiHost(host);
     }
@@ -440,6 +481,13 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     const host = await createPiHost({ name: "t242-handoff", seed: "minimal" });
     try {
       const phase = async () => (await host.store.loadAllPhases())[0];
+      const prepared = await host.runTool("handoff_prepare", { phaseRef: "P001" });
+      assert.match(toolText(prepared), /Use this exact scaffold before drafting/);
+      assert.match(toolText(prepared), /Created at: \{\{REQUIRED: ISO-8601 timestamp\}\}/);
+      assert.match(toolText(prepared), /Required cold-start source review v1/);
+      assert.match(toolDetails(prepared).draftTemplate, /## Working tree and ownership/);
+      assert.match(toolDetails(prepared).draftTemplate, /## Files touched/);
+      assert.equal(toolDetails(prepared).coldStartInventoryCategories.length, 14);
 
       // Proposal only — no confirmation flag, nothing written.
       const proposal = await host.runTool("handoff_write", { phaseRef: "P001", content: "Body of the handoff.", completenessAudit: completeHandoffAudit() });
@@ -462,6 +510,19 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(toolDetails(missingAudit).errorCode, "HANDOFF_COMPLETENESS_AUDIT_REQUIRED");
       assert.ok(toolDetails(missingAudit).missingCategories.includes("branch-worktree"));
       assert.equal((await phase()).handoff, "", "failed completeness audit must not write");
+
+      const missingInventoryArgs = await preparedHandoffArgs(host);
+      delete missingInventoryArgs.coldStartInventory;
+      const missingInventory = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        title: "P001 — missing cold-start inventory",
+        content: canonicalHandoff("P001 — missing cold-start inventory", "The inventory payload is intentionally absent."),
+        confirmed: true,
+        ...missingInventoryArgs,
+      });
+      assert.equal(missingInventory.isError, true);
+      assert.equal(toolDetails(missingInventory).errorCode, "HANDOFF_COLD_START_INVENTORY_REQUIRED");
+      assert.equal((await phase()).handoff, "", "failed cold-start inventory must not write");
 
       // Confirmed write with a meaningful title.
       const written = await host.runTool("handoff_write", {
@@ -631,7 +692,8 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         description: "A requirement used to exercise the public deletion handler.",
         linkedPhaseIds: ["P001"],
       });
-      const requirementId = toolDetails(createdRequirement).id;
+      const requirementId = toolDetails(createdRequirement).requirement.id;
+      assert.equal(toolDetails(createdRequirement).created, true);
       assert.ok(requirementId);
       assert.match(
         toolText(await host.runTool("task_list", { featureRef: "F001", phaseRef: "P001", status: "planned" })),
@@ -682,6 +744,29 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       ]);
     } finally {
       await closePiHost(second);
+    }
+  });
+
+  test("Pi task rejection archives the phase handoff with a terminal reason", async () => {
+    const host = await createPiHost({ name: "t379-rejected-handoff", seed: "minimal" });
+    try {
+      const phase = (await host.store.loadAllPhases())[0];
+      await host.store.setPhaseHandoff(phase.id, "# rejected through Pi");
+
+      const updated = await host.runTool("task_update", {
+        taskId: "T001",
+        status: "rejected",
+        motivation: "The capability is no longer part of the accepted scope.",
+      });
+      assert.match(toolText(updated), /\(rejected\)/);
+
+      const persisted = (await host.store.loadAllPhases())[0];
+      assert.equal(persisted.status, "rejected");
+      assert.equal(persisted.handoff, "");
+      assert.equal(persisted.handoffHistory[0].reason, "phase-rejected");
+      assert.equal(toolDetails(await host.runTool("handoff_list", {})).count, 0);
+    } finally {
+      await closePiHost(host);
     }
   });
 

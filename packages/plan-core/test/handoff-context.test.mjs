@@ -13,6 +13,9 @@ import {
   createTaskId,
   HANDOFF_COMPLETENESS_AUDIT_VERSION,
   HANDOFF_COMPLETENESS_CATEGORIES,
+  HANDOFF_COLD_START_INVENTORY_VERSION,
+  HANDOFF_COLD_START_SOURCE_REVIEWS,
+  HANDOFF_COLD_START_INVENTORY_CATEGORIES,
 } from "../dist/index.js";
 
 const roots = [];
@@ -67,6 +70,34 @@ function completeAudit() {
   };
 }
 
+function completeColdStartInventory(overrides = {}) {
+  const items = {
+    files: ["packages/plan-core/src/handoff-context.ts"],
+    symbols: ["applyHandoffContextSync"],
+    "working-tree-ownership": ["The handoff diff is complete and must be preserved"],
+    "negative-state": ["No deletion has started and unrelated files remain untouched"],
+    "commands-tools": ["pnpm test"],
+    "runtime-wiring": ["runtime wiring between phase and feature context"],
+    "preservation-constraints": ["Existing handoff archive behavior must survive"],
+    "verification-evidence": ["Focused unit verification passed for the refresh contract"],
+    "related-planned-work": ["Adapter wiring remains tracked as related planned work"],
+    "user-visible-behavior": ["User-visible handoff resume behavior remains stable"],
+    "operator-actions": ["run pnpm test and inspect the persisted handoff"],
+    "blockers-risks": ["No known blocker"],
+    "remaining-work": ["Wire adapters"],
+    "ordered-resume-steps": ["Continue adapter wiring with pnpm test"],
+    ...overrides,
+  };
+  return {
+    version: HANDOFF_COLD_START_INVENTORY_VERSION,
+    sourceReviews: HANDOFF_COLD_START_SOURCE_REVIEWS.map(({ id, label }) => ({
+      source: id,
+      detail: `${label} was reviewed before drafting and concrete resume facts were extracted.`,
+    })),
+    entries: HANDOFF_COLD_START_INVENTORY_CATEGORIES.map(({ id }) => ({ category: id, items: items[id] })),
+  };
+}
+
 function refreshInput(audit, doneTaskId, overrides = {}) {
   const completenessAudit = completeAudit();
   return {
@@ -78,16 +109,23 @@ function refreshInput(audit, doneTaskId, overrides = {}) {
       "Reason: session boundary",
       "",
       "## Current focus", "Continue the phase.",
-      "## What was being done", "Implementing reconciliation.",
-      "## How to resume", "Continue adapter wiring.",
+      "## What was being done", "Implementing the reconciled handoff contract. User-visible handoff resume behavior remains stable.",
+      "## Working tree and ownership", "The handoff diff is complete and must be preserved; commit approval remains with the user.",
+      "## Work not started or intentionally untouched", "No deletion has started and unrelated files remain untouched.",
+      "## Runtime wiring", "applyHandoffContextSync preserves runtime wiring between phase and feature context.",
+      "## Preservation constraints", "Existing handoff archive behavior must survive.",
+      "## Verification evidence", "Focused unit verification passed for the refresh contract.",
+      "## Related planned work", "Adapter wiring remains tracked as related planned work.",
+      "## How to resume", "1. Continue adapter wiring with pnpm test.",
       "## Files touched", "- packages/plan-core/src/handoff-context.ts",
-      "## Blockers", "- None",
-      "## Next steps", "- Wire adapters",
+      "## Blockers", "- No known blocker.",
+      "## Next steps", "- Wire adapters. Operator action: run pnpm test and inspect the persisted handoff.",
       "## Recent decisions", "- Keep one active handoff",
     ].join("\n"),
     expectedHandoffUpdatedAt: audit.handoffUpdatedAt,
     reconciledExistingHandoff: true,
     completenessAudit,
+    coldStartInventory: completeColdStartInventory(),
     contextSync: {
       taskUpdates: [{
         taskId: doneTaskId,
@@ -124,6 +162,11 @@ describe("durable handoff context refresh", () => {
     const audit = await store.preparePhaseHandoff(phaseId);
     assert.deepEqual(audit.missingCompletionTaskIds, [doneTaskId]);
     assert.match(audit.handoff, /Keep this decision/);
+    assert.deepEqual(audit.canonicalSections, ["Created at", "Updated at", "Reason", "Current focus", "What was being done", "Working tree and ownership", "Work not started or intentionally untouched", "Runtime wiring", "Preservation constraints", "Verification evidence", "Related planned work", "How to resume", "Files touched", "Blockers", "Next steps", "Recent decisions"]);
+    assert.match(audit.draftTemplate, /Created at: \{\{REQUIRED: ISO-8601 timestamp\}\}/);
+    assert.match(audit.draftTemplate, /## How to resume/);
+    assert.equal(audit.coldStartSourceReviews.length, HANDOFF_COLD_START_SOURCE_REVIEWS.length);
+    assert.equal(audit.coldStartInventoryCategories.length, HANDOFF_COLD_START_INVENTORY_CATEGORIES.length);
 
     const result = await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId));
     assert.equal(result.updatedTaskIds[0], doneTaskId);
@@ -208,6 +251,33 @@ describe("durable handoff context refresh", () => {
         return true;
       },
     );
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, { ...input, coldStartInventory: undefined }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_COLD_START_INVENTORY_REQUIRED");
+        assert.equal(error.details.missingCategories.length, HANDOFF_COLD_START_INVENTORY_CATEGORIES.length);
+        return true;
+      },
+    );
+    const missingSourceReview = completeColdStartInventory();
+    missingSourceReview.sourceReviews = missingSourceReview.sourceReviews.slice(1);
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, { ...input, coldStartInventory: missingSourceReview }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_COLD_START_INVENTORY_REQUIRED");
+        assert.ok(error.details.missingSources.includes("conversation"));
+        return true;
+      },
+    );
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, { ...input, content: "# Expensive draft without the prepared scaffold" }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_CANONICAL_SECTIONS_REQUIRED");
+        assert.ok(error.details.missingSections.includes("Updated at"));
+        assert.ok(error.details.missingSections.includes("How to resume"));
+        return true;
+      },
+    );
     assert.deepEqual(await store.loadPhase(phaseId), before);
   });
 
@@ -248,6 +318,60 @@ describe("durable handoff context refresh", () => {
     assert.match(persisted.handoff, /Antonio must launch the app/);
   });
 
+  test("rejects omitted concrete wiring before persistence and accepts it once represented", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const prepared = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(prepared, doneTaskId);
+    const reportedSymbols = [
+      "drain_pending_drops",
+      "install_drop_sink",
+      "pending_drops",
+      "pane_drop_row",
+      "DragItemRegistry",
+      "column_drop",
+      "accept_drop",
+      "showcase",
+      "Dropped",
+      "drag_identity",
+      "paint_drag_feedback",
+      "resolve_at_for",
+      "DropHit",
+    ];
+    const coldStartInventory = completeColdStartInventory({
+      files: ["startup.rs", "heca/src/mouse.rs", "chrome/scene.rs", "mouse/interactive.rs"],
+      symbols: reportedSymbols,
+      "working-tree-ownership": ["The uncommitted diff is finished work and must not be discarded; commit approval remains with the user"],
+      "negative-state": ["No deletion has started and nothing is half-removed"],
+      "runtime-wiring": ["heca/src/mouse.rs release path branches on drag_ctx.active_surface and calls handle_interactive_move_release plus both sidebar release handlers"],
+      "preservation-constraints": ["mouse/interactive.rs must keep cancel_all() and surface iteration working"],
+      "verification-evidence": ["chrome/scene.rs paints LeftSidebar with phase Dragging, but nothing sets that phase, so deleting it must produce no visible change"],
+      "related-planned-work": ["Sidebar removal stays separate from the surviving interactive-move path"],
+    });
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, { ...baseInput, coldStartInventory }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_COLD_START_INVENTORY_UNCOVERED");
+        const uncovered = error.details.uncoveredItems.map(({ item }) => item);
+        assert.ok(uncovered.includes("startup.rs"));
+        assert.ok(uncovered.includes("drain_pending_drops"));
+        assert.ok(uncovered.includes("DropHit"));
+        return true;
+      },
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, "");
+
+    const completeContent = `${baseInput.content}\n\n## Concrete cold-start evidence\n- Files: startup.rs, heca/src/mouse.rs, chrome/scene.rs, mouse/interactive.rs.\n- Symbols: ${reportedSymbols.join(", ")}.\n- The uncommitted diff is finished work and must not be discarded; commit approval remains with the user.\n- No deletion has started and nothing is half-removed.\n- heca/src/mouse.rs release path branches on drag_ctx.active_surface and calls handle_interactive_move_release plus both sidebar release handlers.\n- mouse/interactive.rs must keep cancel_all() and surface iteration working.\n- chrome/scene.rs paints LeftSidebar with phase Dragging, but nothing sets that phase, so deleting it must produce no visible change.\n- Sidebar removal stays separate from the surviving interactive-move path.`;
+    await store.refreshPhaseHandoff(phaseId, { ...baseInput, content: completeContent, coldStartInventory });
+    const persisted = await store.loadPhase(phaseId);
+    assert.equal(persisted.handoffAudit.coldStartInventory.version, HANDOFF_COLD_START_INVENTORY_VERSION);
+    assert.deepEqual(
+      persisted.handoffAudit.coldStartInventory.entries.find((entry) => entry.category === "symbols").items,
+      reportedSymbols,
+    );
+    for (const symbol of reportedSymbols) assert.match(persisted.handoff, new RegExp(symbol));
+  });
+
   test("persists verified audit metadata and validated supporting documents", async () => {
     const { store, phaseId, doneTaskId } = await setup();
     await mkdir(join(store.root, "docs"), { recursive: true });
@@ -268,6 +392,7 @@ describe("durable handoff context refresh", () => {
     const input = {
       ...baseInput,
       content: `${baseInput.content}\n\n## Supporting documents\n- [.planner/docs/handoff-detail.md](.planner/docs/handoff-detail.md) — exact command logs and design mappings required for resumption.`,
+      coldStartInventory: completeColdStartInventory({ "commands-tools": ["Exact command logs and design mappings for resumption"] }),
       supportingDocuments,
     };
 

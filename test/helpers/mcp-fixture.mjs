@@ -58,7 +58,7 @@ export async function closeMcpFixture(session) {
  * The server resolves its planner from AGENT_PLAN_ROOT, so planRoot points at
  * the target .planner directory (may not exist yet — planner-init creates it).
  */
-export async function startMcpClient({ planRoot, name = "agent-plan-test" } = {}) {
+export async function startMcpClient({ planRoot, name = "agent-plan-test", env = {} } = {}) {
   if (!planRoot) throw new Error("startMcpClient: planRoot is required");
   const serverPath = packageDist("plan-mcp");
   const client = new Client({ name, version: "0.0.0" }, { capabilities: {} });
@@ -66,7 +66,7 @@ export async function startMcpClient({ planRoot, name = "agent-plan-test" } = {}
     command: process.execPath,
     args: [serverPath],
     cwd: dirname(serverPath),
-    env: { ...process.env, AGENT_PLAN_ROOT: planRoot },
+    env: { ...process.env, ...env, AGENT_PLAN_ROOT: planRoot },
     stderr: "pipe",
   });
   let stderr = "";
@@ -102,9 +102,9 @@ export async function startMcpClient({ planRoot, name = "agent-plan-test" } = {}
  * { root, planRoot, store, client, transport, close } — store lets tests
  * assert persisted state directly (real PlanStore, same filesystem).
  */
-export async function startMcpFixture({ name = "mcp", seed = "minimal", opts = {} } = {}) {
+export async function startMcpFixture({ name = "mcp", seed = "minimal", opts = {}, env = {} } = {}) {
   const fixture = await createPlannerFixture({ name, seed, opts });
-  const session = await startMcpClient({ planRoot: fixture.planRoot, name: `harness-${name}` });
+  const session = await startMcpClient({ planRoot: fixture.planRoot, name: `harness-${name}`, env });
   return { ...fixture, ...session };
 }
 

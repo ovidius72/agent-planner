@@ -83,7 +83,6 @@ export function StatusHistoryAccordion({ statusLog, currentStatus, backbone, sta
     <Accordion
       title="Status history"
       count={transitions.length}
-      defaultOpen={transitions.length > 0}
       contentClassName="grid gap-2.5"
     >
       {transitions.length === 0 ? (

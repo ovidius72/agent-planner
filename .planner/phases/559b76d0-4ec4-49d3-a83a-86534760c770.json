@@ -1,0 +1,154 @@
+{
+  "id": "559b76d0-4ec4-49d3-a83a-86534760c770",
+  "featureId": "39d5b62f-6c16-4bed-9fc2-749d4b189f82",
+  "number": 97,
+  "shortId": "QGEJ4",
+  "priority": 31,
+  "slug": "plan-context-coherence-and-hierarchical-freshness",
+  "title": "Plan-context coherence and hierarchical freshness",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make resumed work aware of sibling capabilities and keep parent descriptions reconciled with child changes.",
+  "description": "Remediate plan-context coherence gaps across packages/plan-core/src/recap.ts, packages/plan-core/src/handoff-context.ts, packages/plan-core/src/plan-store.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and the managed planner skill. Current handoff and task-resume context can omit sibling tasks and related planned capabilities in the active phase, causing agents to propose work already tracked elsewhere. Task or phase description changes can also leave parent phase/feature descriptions stale or contradictory. Add bounded sibling/related-capability context at prepare/load/start boundaries and deterministic hierarchical freshness diagnostics or reconciliation without silently rewriting user-authored descriptions. Preserve composite references, bounded handoff transport, agent-only context separation, harness parity, and explicit user ownership of semantic plan content.",
+  "descriptionUpdatedAt": "2026-09-01T15:00:40.025Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e",
+    "094c66e1-fca2-4ac1-a211-7c0883adf4f5"
+  ],
+  "tasks": [
+    {
+      "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 380,
+      "shortId": "TWKXQ",
+      "priority": 1,
+      "shortName": "include-sibling-tasks-and-rela",
+      "title": "Include sibling tasks and related planned capabilities in resume context",
+      "status": "planned",
+      "description": "Strengthen resume and handoff context across packages/plan-core/src/handoff-context.ts, packages/plan-core/src/recap.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and packages/plan-core/planner-skill.md. Agents resuming one task currently receive its checkpoint but can miss sibling tasks and related capabilities already planned in the same phase, leading to duplicate or contradictory proposals. Add a bounded, priority-ordered phase work map with sibling task refs, statuses, concise goals, dependencies, and remaining capability ownership to handoff prepare/show and task resume/start guidance. Require agents to reread the canonical phase plan before proposing new work, preserve the 24,000-character handoff ceiling by linking deeper context under .planner/docs/, and add Pi/MCP regressions based on the reported case where a capability already covered by another phase task was proposed again.",
+      "descriptionUpdatedAt": "2026-09-01T15:00:55.078Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-001-define-bounded-sibling-and-related-capability-context-contract",
+          "number": 1,
+          "title": "Define bounded sibling and related-capability context contract",
+          "checked": false
+        },
+        {
+          "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-002-integrate-the-phase-work-map-into-handoff-and-resume-surfaces",
+          "number": 2,
+          "title": "Integrate the phase work map into handoff and resume surfaces",
+          "checked": false
+        },
+        {
+          "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-003-require-canonical-plan-reread-before-new-proposals",
+          "number": 3,
+          "title": "Require canonical-plan reread before new proposals",
+          "checked": false
+        },
+        {
+          "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-004-add-pi-mcp-regressions-for-duplicate-capability-prevention",
+          "number": 4,
+          "title": "Add Pi/MCP regressions for duplicate-capability prevention",
+          "checked": false
+        },
+        {
+          "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-005-run-full-cross-harness-verification",
+          "number": 5,
+          "title": "Run full cross-harness verification",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T15:00:55.076Z",
+      "updatedAt": "2026-09-01T15:00:55.076Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 381,
+      "shortId": "R4XLE",
+      "priority": 2,
+      "shortName": "detect-and-reconcile-hierarchi",
+      "title": "Detect and reconcile hierarchical description drift",
+      "status": "planned",
+      "description": "Add hierarchical freshness handling across packages/plan-core/src/plan-store.ts, packages/plan-core/src/schema.ts, packages/plan-server/src/serve.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and relevant Web UI detail surfaces. Updating a task description can leave its parent phase description obsolete or contradictory, and phase changes can leave the feature description stale. Introduce deterministic child-to-parent freshness metadata or diagnostics, surface exact stale parent refs after semantic description changes, and provide explicit previewed reconciliation rather than silently overwriting user-authored phase or feature prose. Preserve descriptionRef markdown fallback, updatedAt/descriptionUpdatedAt semantics, read-attestation freshness, stable composite references, and harness parity. Add regressions proving task changes invalidate or flag only the owning phase/feature context and that accepted parent reconciliation restores freshness without unrelated metadata loss.",
+      "descriptionUpdatedAt": "2026-09-01T15:01:08.439Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-001-define-hierarchical-description-freshness-model",
+          "number": 1,
+          "title": "Define hierarchical description freshness model",
+          "checked": false
+        },
+        {
+          "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-002-flag-exact-stale-phase-and-feature-context-after-child-changes",
+          "number": 2,
+          "title": "Flag exact stale phase and feature context after child changes",
+          "checked": false
+        },
+        {
+          "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-003-provide-previewed-explicit-reconciliation-without-silent-prose-rewrites",
+          "number": 3,
+          "title": "Provide previewed explicit reconciliation without silent prose rewrites",
+          "checked": false
+        },
+        {
+          "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-004-expose-parity-across-pi-mcp-server-and-web-ui",
+          "number": 4,
+          "title": "Expose parity across Pi, MCP, server, and Web UI",
+          "checked": false
+        },
+        {
+          "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-005-add-regression-coverage-and-run-full-verification",
+          "number": 5,
+          "title": "Add regression coverage and run full verification",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T15:01:08.437Z",
+      "updatedAt": "2026-09-01T15:01:08.437Z",
+      "sessionInfo": []
+    }
+  ],
+  "createdAt": "2026-09-01T15:00:40.024Z",
+  "updatedAt": "2026-09-01T15:01:08.437Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}

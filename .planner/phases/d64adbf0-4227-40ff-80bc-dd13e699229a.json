@@ -1,0 +1,292 @@
+{
+  "id": "d64adbf0-4227-40ff-80bc-dd13e699229a",
+  "featureId": "39d5b62f-6c16-4bed-9fc2-749d4b189f82",
+  "number": 94,
+  "shortId": "5NF9B",
+  "priority": 10,
+  "slug": "p1-agent-context-and-mutation-parity",
+  "title": "P1 agent context and mutation parity",
+  "discussedAt": "2026-09-01T10:16:09.685Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Deliver and mutate canonical context consistently across Pi, MCP, Web UI, and work-start boundaries.",
+  "description": "Accepted Decisions read/load/start delivery and CRUD; Pi/MCP/Web UI mutation parity; phase-discuss readiness; precise linked-requirement attestation.",
+  "descriptionUpdatedAt": "2026-09-01T10:16:09.685Z",
+  "notes": "",
+  "goals": [
+    "A canonical field that is attested as read or advertised as mutable must be delivered and managed consistently on every supported surface."
+  ],
+  "nonGoals": [
+    "Changing user-authored decision semantics without migration",
+    "Making system-owned timestamps or session attestations editable"
+  ],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [
+    "Broadening payloads can exceed transport limits unless outputs remain bounded",
+    "Backward compatibility must preserve existing tool parameters"
+  ],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Full reads contain all canonical context needed for attestation",
+    "Accepted Decisions have explicit supported management paths",
+    "Pi/MCP/Web UI mutation fields and governance outcomes are equivalent",
+    "Only delivered and target-relevant Requirements become attested"
+  ],
+  "taskIds": [
+    "44841443-4365-4c54-afc5-17764f762c01",
+    "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08",
+    "0c425f35-9d42-4ea4-aca8-44f789723b5c",
+    "3ebe4454-ecac-4c17-ad50-efce3acbb53f"
+  ],
+  "tasks": [
+    {
+      "id": "44841443-4365-4c54-afc5-17764f762c01",
+      "phaseId": "d64adbf0-4227-40ff-80bc-dd13e699229a",
+      "number": 368,
+      "shortId": "T28BN",
+      "priority": 0,
+      "shortName": "deliver-accepted-decisions-in",
+      "title": "Deliver Accepted Decisions in canonical full reads and work context",
+      "status": "planned",
+      "description": "Include project, feature, phase, and task Accepted Decisions in bounded canonical full-read outputs, MCP planner-load agentContext, Pi agent-only context, and task-start phase context where relevant. Update read-attestation semantics so a full read is never certified while canonical decision context was omitted, preserve transport ceilings, and add Pi/MCP/load/start regressions.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:09.824Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "44841443-4365-4c54-afc5-17764f762c01-check-001-map-decision-ownership-and-delivery-boundaries",
+          "number": 1,
+          "title": "Map decision ownership and delivery boundaries",
+          "checked": false
+        },
+        {
+          "id": "44841443-4365-4c54-afc5-17764f762c01-check-002-update-full-show-read-payloads",
+          "number": 2,
+          "title": "Update full show/read payloads",
+          "checked": false
+        },
+        {
+          "id": "44841443-4365-4c54-afc5-17764f762c01-check-003-align-pi-and-mcp-load-start-agent-context",
+          "number": 3,
+          "title": "Align Pi and MCP load/start agent context",
+          "checked": false
+        },
+        {
+          "id": "44841443-4365-4c54-afc5-17764f762c01-check-004-tie-attestations-to-delivered-canonical-fields",
+          "number": 4,
+          "title": "Tie attestations to delivered canonical fields",
+          "checked": false
+        },
+        {
+          "id": "44841443-4365-4c54-afc5-17764f762c01-check-005-add-bounded-output-and-no-user-recap-leak-regressions",
+          "number": 5,
+          "title": "Add bounded-output and no-user-recap-leak regressions",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:09.785Z",
+      "updatedAt": "2026-09-01T10:16:09.926Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08",
+      "phaseId": "d64adbf0-4227-40ff-80bc-dd13e699229a",
+      "number": 369,
+      "shortId": "S7CU7",
+      "priority": 10,
+      "shortName": "add-accepted-decisions-managem",
+      "title": "Add Accepted Decisions management parity",
+      "status": "planned",
+      "description": "Provide explicit project and entity Accepted Decisions create/update/delete workflows across plan-core, Pi, MCP, plan-server, and Web UI. Preserve decision IDs, acceptedAt, rationale, implementationNotes, user confirmation, and planner-owned metadata; avoid raw array replacement where safer semantic operations are required; cover migrations and audit history.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:10.202Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-001-define-semantic-decision-mutation-api",
+          "number": 1,
+          "title": "Define semantic decision mutation API",
+          "checked": false
+        },
+        {
+          "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-002-implement-core-atomic-operations",
+          "number": 2,
+          "title": "Implement core atomic operations",
+          "checked": false
+        },
+        {
+          "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-003-expose-pi-and-mcp-parity",
+          "number": 3,
+          "title": "Expose Pi and MCP parity",
+          "checked": false
+        },
+        {
+          "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-004-add-accessible-web-ui-management",
+          "number": 4,
+          "title": "Add accessible Web UI management",
+          "checked": false
+        },
+        {
+          "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-005-verify-project-entity-separation-and-history-preservation",
+          "number": 5,
+          "title": "Verify project/entity separation and history preservation",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:10.157Z",
+      "updatedAt": "2026-09-01T10:16:10.301Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c",
+      "phaseId": "d64adbf0-4227-40ff-80bc-dd13e699229a",
+      "number": 370,
+      "shortId": "4FHAF",
+      "priority": 20,
+      "shortName": "align-feature-phase-and-task-m",
+      "title": "Align feature phase and task mutation and discuss governance parity",
+      "status": "planned",
+      "description": "Close Pi/MCP/Web UI field mismatches for feature, phase, and task updates, including phase relinking/goals/non-goals/dependencies/risks/questions/completion criteria, task notes/decisions, and registered phase-discuss readiness. Preserve derived-status read-only rules and human-supervisor exemptions while adding compatibility-safe typed responses.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:10.513Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-001-build-field-level-parity-inventory",
+          "number": 1,
+          "title": "Build field-level parity inventory",
+          "checked": false
+        },
+        {
+          "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-002-implement-missing-mcp-and-pi-surfaces",
+          "number": 2,
+          "title": "Implement missing MCP and Pi surfaces",
+          "checked": false
+        },
+        {
+          "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-003-align-phase-discuss-contextready-semantics",
+          "number": 3,
+          "title": "Align phase discuss contextReady semantics",
+          "checked": false
+        },
+        {
+          "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-004-add-web-ui-controls-only-for-human-owned-fields",
+          "number": 4,
+          "title": "Add Web UI controls only for human-owned fields",
+          "checked": false
+        },
+        {
+          "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-005-verify-backward-compatibility-and-governance-outcomes",
+          "number": 5,
+          "title": "Verify backward compatibility and governance outcomes",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:10.474Z",
+      "updatedAt": "2026-09-01T10:16:10.624Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f",
+      "phaseId": "d64adbf0-4227-40ff-80bc-dd13e699229a",
+      "number": 371,
+      "shortId": "QEQ9Y",
+      "priority": 30,
+      "shortName": "scope-requirement-read-attesta",
+      "title": "Scope Requirement read attestations to delivered linked context",
+      "status": "planned",
+      "description": "Refine packages/plan-core/src/read-tracking.ts and Pi/MCP requirement read flows so starting work requires and reuses only linked Requirements actually delivered to the session, rather than marking every top-level Requirement read after a broad list. Preserve any-order freshness, Project Guidelines gates, sibling-task reuse, and precise missing/stale diagnostics.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:10.851Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-001-define-requirement-delivery-attestation-contract",
+          "number": 1,
+          "title": "Define requirement delivery-attestation contract",
+          "checked": false
+        },
+        {
+          "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-002-add-targeted-show-read-surface-if-needed",
+          "number": 2,
+          "title": "Add targeted show/read surface if needed",
+          "checked": false
+        },
+        {
+          "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-003-update-pi-and-mcp-tracking",
+          "number": 3,
+          "title": "Update Pi and MCP tracking",
+          "checked": false
+        },
+        {
+          "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-004-preserve-sibling-reuse-and-invalidation-semantics",
+          "number": 4,
+          "title": "Preserve sibling reuse and invalidation semantics",
+          "checked": false
+        },
+        {
+          "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-005-add-cross-session-and-linked-only-regressions",
+          "number": 5,
+          "title": "Add cross-session and linked-only regressions",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:10.807Z",
+      "updatedAt": "2026-09-01T10:16:10.956Z",
+      "sessionInfo": []
+    }
+  ],
+  "createdAt": "2026-09-01T10:16:09.397Z",
+  "updatedAt": "2026-09-01T10:16:10.956Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "b06b12a1-f89a-4d6f-8142-4b70565bbb4d",
+      "date": "2026-09-01T10:16:09.948Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

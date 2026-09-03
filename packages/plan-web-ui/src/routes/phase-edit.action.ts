@@ -10,7 +10,8 @@ export async function action({ request, params }: { request: Request; params: Re
   const formData = await request.formData();
 
   await updatePhase({
-    ...current,
+    id: current.id,
+    updatedAt: current.updatedAt,
     title: requiredString(formData, "title"),
     status: requiredString(formData, "status") as PhaseStatus,
     priority: optionalNumber(formData, "priority"),

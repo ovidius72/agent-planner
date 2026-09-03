@@ -12,10 +12,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
+import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
-import type { HandoffCompletenessAuditInput } from "@agent-plan/core";
+import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -245,6 +245,12 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "project language", label: "project language", description: "Set persistent language preferences" },
   { value: "project guidelines", label: "project guidelines", description: "Edit the canonical Project Guidelines section" },
   { value: "project migrate-context", label: "project migrate-context", description: "Preview and explicitly migrate legacy project rules and decisions" },
+  { value: "idea list", label: "idea list", description: "List Ideas Inbox entries" },
+  { value: "idea add", label: "idea add", description: "Create an Ideas Inbox entry" },
+  { value: "idea show", label: "idea show", description: "Show an idea" },
+  { value: "idea update", label: "idea update", description: "Update an idea" },
+  { value: "idea delete", label: "idea delete", description: "Delete an idea after confirmation" },
+  { value: "idea promote", label: "idea promote", description: "Begin guided idea promotion" },
   { value: "feature list", label: "feature list", description: "List features" },
   { value: "feature add", label: "feature add", description: "Create a feature" },
   { value: "feature show", label: "feature show", description: "Show a feature" },
@@ -364,7 +370,7 @@ async function ensureProjectLanguagePreferences(st: PlanStore, persist = true): 
     if (project.contentLanguage !== contentLanguage || project.chatLanguage !== chatLanguage) {
       project.contentLanguage = contentLanguage;
       project.chatLanguage = chatLanguage;
-      if (persist) await st.saveProject(project);
+      if (persist) await st.updateProject((current) => ({ ...current, contentLanguage, chatLanguage }));
     }
     return project;
   }
@@ -373,7 +379,11 @@ async function ensureProjectLanguagePreferences(st: PlanStore, persist = true): 
     const fallback = contentLanguage || chatLanguage;
     project.contentLanguage = contentLanguage || fallback;
     project.chatLanguage = chatLanguage || fallback;
-    if (persist) await st.saveProject(project);
+    if (persist) await st.updateProject((current) => ({
+      ...current,
+      contentLanguage: project.contentLanguage,
+      chatLanguage: project.chatLanguage,
+    }));
     return project;
   }
 
@@ -802,8 +812,7 @@ async function pickProjectPort(ctx: ExtensionContext, explicitPort?: number): Pr
     if (!(await isPortAvailable(explicitPort)) && project.webPort !== explicitPort) {
       throw new Error(`Port ${explicitPort} is already in use`);
     }
-    project.webPort = explicitPort;
-    await st.saveProject(project);
+    await st.updateProject((current) => ({ ...current, webPort: explicitPort }));
     return explicitPort;
   }
 
@@ -821,8 +830,7 @@ async function pickProjectPort(ctx: ExtensionContext, explicitPort?: number): Pr
     if (port === project.webPort) continue;
     if (await isPortAvailable(port)) {
       if (project.webPort <= 0) {
-        project.webPort = port;
-        await st.saveProject(project);
+        await st.updateProject((current) => ({ ...current, webPort: port }));
       }
       return port;
     }
@@ -943,8 +951,7 @@ async function startServer(ctx: ExtensionContext, requestedPort?: number, visibi
         // existing canonical). Never persist a transient fallback port — that
         // hijacks the primary session's port when two instances share a .planner.
         if (project.webPort <= 0 || project.webPort === realPort) {
-          project.webPort = realPort;
-          await st.saveProject(project);
+          await st.updateProject((current) => ({ ...current, webPort: realPort }));
         }
       }
     } catch {}
@@ -1335,11 +1342,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }
 
     if (a === "version") {
+      const packages = runtimePackagesDiagnostic([PI_ADAPTER_PACKAGE, CORE_PACKAGE, SERVER_PACKAGE]);
+      const capabilities = runtimeCapabilities();
       ctx.ui.notify([
-        "Agent Plan runtime versions",
-        `${PI_ADAPTER_PACKAGE.name}: ${PI_ADAPTER_PACKAGE.version}`,
-        `${CORE_PACKAGE.name}: ${CORE_PACKAGE.version}`,
-        `${SERVER_PACKAGE.name}: ${SERVER_PACKAGE.version}`,
+        "Agent Plan runtime diagnostics",
+        "Runtime packages (loaded package manifests):",
+        `- ${PI_ADAPTER_PACKAGE.name}: loaded ${packages[PI_ADAPTER_PACKAGE.name]?.loadedVersion ?? PI_ADAPTER_PACKAGE.version}`,
+        `- ${CORE_PACKAGE.name}: loaded ${packages[CORE_PACKAGE.name]?.loadedVersion ?? CORE_PACKAGE.version}`,
+        `- ${SERVER_PACKAGE.name}: loaded ${packages[SERVER_PACKAGE.name]?.loadedVersion ?? SERVER_PACKAGE.version}`,
+        `Plan schema: manifest schemaVersion ${capabilities.planSchema.manifestSchemaVersion}`,
+        `Allocation registry: v${capabilities.allocationRegistry.version}; supported kinds: ${capabilities.allocationRegistry.supportedKinds.join(", ")}`,
       ].join("\n"), "info");
       return;
     }
@@ -1659,7 +1671,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             : project.acceptedDecisions,
         };
 
-        await st.saveProject(draftProject);
+        await st.updateProject((current) => ({
+          ...current,
+          goal: draftProject.goal,
+          technologies: draftProject.technologies,
+          tools: draftProject.tools,
+          globalRules: draftProject.globalRules,
+          decisions: draftProject.decisions,
+          acceptedDecisions: draftProject.acceptedDecisions,
+          contentLanguage: draftProject.contentLanguage,
+          chatLanguage: draftProject.chatLanguage,
+        }));
         await st.saveCodebaseProfile(profile);
         await st.writeGenerated();
 
@@ -1689,7 +1711,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const chatLanguage = await ctx.ui.input(`Chat language [${project.chatLanguage || contentLanguage?.trim() || project.contentLanguage || "English"}]`);
         project.contentLanguage = contentLanguage?.trim() || project.contentLanguage || "English";
         project.chatLanguage = chatLanguage?.trim() || project.chatLanguage || project.contentLanguage || "English";
-        await st.saveProject(project);
+        await st.updateProject((current) => ({
+          ...current,
+          contentLanguage: project.contentLanguage,
+          chatLanguage: project.chatLanguage,
+        }));
         await st.writeGenerated();
         ctx.ui.notify(`Saved language preferences: content=${project.contentLanguage}, chat=${project.chatLanguage}`, "info");
         return;
@@ -1700,12 +1726,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           "Project Guidelines / Coding Standard (Markdown or plain text). Agents must read this before task work.",
           project.projectGuidelines.content || "",
         );
-        project.projectGuidelines = {
-          content: nextContent?.trim() || "",
-          updatedAt: project.projectGuidelines.updatedAt,
-          sessionInfo: project.projectGuidelines.sessionInfo,
-        };
-        await st.saveProject(project);
+        const guidelinesContent = nextContent?.trim() || "";
+        project.projectGuidelines = { ...project.projectGuidelines, content: guidelinesContent };
+        await st.updateProject((current) => ({
+          ...current,
+          projectGuidelines: { ...current.projectGuidelines, content: guidelinesContent },
+        }), { expectedGuidelinesUpdatedAt: project.projectGuidelines.updatedAt });
         await st.writeGenerated();
         ctx.ui.notify(project.projectGuidelines.content ? "Project Guidelines updated." : "Project Guidelines cleared.", "info");
         return;
@@ -1991,9 +2017,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           }
         } else {
           for (const phase of phases) {
-            phase.featureId = undefined;
-            phase.updatedAt = nowISO();
-            await st.savePhase(phase);
+            await st.updatePhase(phase.id, (current) => ({ ...current, featureId: undefined, updatedAt: nowISO() }));
             affectedPhases += 1;
           }
         }
@@ -2028,7 +2052,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // and only then abandoning the follow-up question.
         const startDiscuss = await ctx.ui.input("Start phase discuss now? Type yes to continue");
         let phase: Phase | undefined;
-        await withFeatureLock(feature.id, async () => {
+        await st.runBatch(() => withFeatureLock(feature.id, async () => {
           const phases = await st.loadAllPhases();
           const featurePhases = phases.filter((p) => p.featureId === feature.id);
           const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -2056,7 +2080,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             return doc;
           });
           await st.writeGenerated();
-        });
+        }));
         if (!phase) return;
           ctx.ui.notify(`Phase created: ${formatPhaseRef(phase.number, feature.number)} — ${title}${phase.shortId ? ` · ${phase.shortId}` : ""} (feature ${feature.name})`, "info");
         if (isYes(startDiscuss)) {
@@ -2103,8 +2127,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ctx.ui.notify(recapLines.join("\n"), "info");
         const changeNote = await ctx.ui.input("Anything changed? (free text, or leave empty to keep current plan)");
         if (changeNote?.trim()) {
-          phase.notes = `${phase.notes ? phase.notes + "\n" : ""}[discuss ${nowISO()}] ${changeNote.trim()}`;
-          await st.savePhase(phase);
+          const note = changeNote.trim();
+          phase = await st.updatePhase(phase.id, (current) => ({
+            ...current,
+            notes: `${current.notes ? current.notes + "\n" : ""}[discuss ${nowISO()}] ${note}`,
+            updatedAt: nowISO(),
+          }));
           if (capturedPi) {
             await capturedPi.sendUserMessage(
               `Before planning tasks for phase ${phase.id} (${phase.title}), the user reported a change: ${changeNote.trim()}. ` +
@@ -2130,17 +2158,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (ans?.trim()) answers[q.key] = ans.trim();
         }
 
-        if (answers.goal) phase.goals = [answers.goal];
-        if (answers.summary) phase.summary = answers.summary;
-        if (answers.scope) phase.description = answers.scope;
-        if (answers.non_scope) phase.nonGoals = [answers.non_scope];
-        if (answers.deps) phase.dependencies = splitCsv(answers.deps);
-        if (answers.risks) phase.risks = splitCsv(answers.risks);
-        if (answers.completion) phase.completionCriteria = splitCsv(answers.completion);
-
-        phase.status = "planned";
-        phase.updatedAt = nowISO();
-        await st.savePhase(phase);
+        phase = await st.updatePhase(phase.id, (current) => ({
+          ...current,
+          ...(answers.goal ? { goals: [answers.goal] } : {}),
+          ...(answers.summary ? { summary: answers.summary } : {}),
+          ...(answers.scope ? { description: answers.scope } : {}),
+          ...(answers.non_scope ? { nonGoals: [answers.non_scope] } : {}),
+          ...(answers.deps ? { dependencies: splitCsv(answers.deps) } : {}),
+          ...(answers.risks ? { risks: splitCsv(answers.risks) } : {}),
+          ...(answers.completion ? { completionCriteria: splitCsv(answers.completion) } : {}),
+          updatedAt: nowISO(),
+        }));
         await st.writeGenerated();
         ctx.ui.notify(`Phase ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))} is now **planned**.${phase.shortId ? ` · ${phase.shortId}` : ""}`, "info");
         return;
@@ -2205,25 +2233,24 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const risks = await ctx.ui.input(`Risks (comma-separated) [${phase.risks.join(", ") || ""}]`);
         const completion = await ctx.ui.input(`Completion criteria (comma-separated) [${phase.completionCriteria.join(", ") || ""}]`);
 
-        // Update only changed fields
-        if (title?.trim()) phase.title = title.trim();
         if (statusInput?.trim()) {
           const valid = ["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
           if (!valid.includes(statusInput.trim())) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
-          phase.status = statusInput.trim() as Phase["status"];
         }
-        if (summary !== undefined) phase.summary = summary;
-        if (desc?.trim()) phase.description = desc.trim();
-        if (goals?.trim()) phase.goals = goals.split(",").map((g) => g.trim()).filter(Boolean);
-        if (nonGoals?.trim()) phase.nonGoals = nonGoals.split(",").map((g) => g.trim()).filter(Boolean);
-        if (deps?.trim()) phase.dependencies = deps.split(",").map((g) => g.trim()).filter(Boolean);
-        if (risks?.trim()) phase.risks = risks.split(",").map((g) => g.trim()).filter(Boolean);
-        if (completion?.trim()) phase.completionCriteria = completion.split(",").map((g) => g.trim()).filter(Boolean);
-        phase.updatedAt = nowISO();
-
-        await st.savePhase(phase);
+        phase = await st.updatePhase(phase.id, (current) => ({
+          ...current,
+          ...(title?.trim() ? { title: title.trim(), slug: normalizeSlug(title) } : {}),
+          ...(summary !== undefined ? { summary } : {}),
+          ...(desc?.trim() ? { description: desc.trim() } : {}),
+          ...(goals?.trim() ? { goals: splitCsv(goals) } : {}),
+          ...(nonGoals?.trim() ? { nonGoals: splitCsv(nonGoals) } : {}),
+          ...(deps?.trim() ? { dependencies: splitCsv(deps) } : {}),
+          ...(risks?.trim() ? { risks: splitCsv(risks) } : {}),
+          ...(completion?.trim() ? { completionCriteria: splitCsv(completion) } : {}),
+          updatedAt: nowISO(),
+        }));
         await st.writeGenerated();
           ctx.ui.notify(`Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))} — ${phase.title} (${phase.status})${phase.shortId ? ` · ${phase.shortId}` : ""}`, "info");
         return;
@@ -2269,10 +2296,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           startedAt: "", completedAt: "",
           createdAt: now, updatedAt: now,
         };
-        phase.tasks.push(task);
-        phase.taskIds.push(taskId);
-        phase.updatedAt = nowISO();
-        await st.savePhase(phase);
+        await st.updatePhase(phase.id, (current) => ({
+          ...current,
+          tasks: [...current.tasks, task],
+          taskIds: [...current.taskIds, taskId],
+          updatedAt: nowISO(),
+        }));
         await st.writeGenerated();
         ctx.ui.notify(`Task created: ${taskId} — ${title}`, "info");
         if (isYes(startDiscuss)) {
@@ -2295,17 +2324,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const { phase, task } = resolved;
         const description = await ctx.ui.input(`Execution notes / description [${task.description || ""}]`);
         const checklistSeed = await ctx.ui.input("Checklist items (comma-separated, blank to keep current)");
-        if (description?.trim()) task.description = description.trim();
-        if (checklistSeed?.trim()) {
-          task.checklist = splitCsv(checklistSeed).map((itemTitle, index) => ({ number: index + 1,
-            id: createChecklistItemId(task.id, index + 1, itemTitle),
-            title: itemTitle,
-            checked: false,
-          }));
-        }
-        task.updatedAt = nowISO();
-        phase.updatedAt = nowISO();
-        await st.savePhase(phase);
+        const checklist = checklistSeed?.trim()
+          ? splitCsv(checklistSeed).map((itemTitle, index) => ({
+              number: index + 1,
+              id: createChecklistItemId(task.id, index + 1, itemTitle),
+              title: itemTitle,
+              checked: false,
+            }))
+          : undefined;
+        await st.updateTask(phase.id, task.id, (current) => ({
+          ...current,
+          ...(description?.trim() ? { description: description.trim() } : {}),
+          ...(checklist ? { checklist } : {}),
+          updatedAt: nowISO(),
+        }));
         await st.writeGenerated();
           ctx.ui.notify(`Task ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} discussed and updated.`, "info");
         return;
@@ -2354,10 +2386,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (confirm?.trim() !== "yes") {
           ctx.ui.notify("Aborted", "warning"); return;
         }
-        phase.tasks = phase.tasks.filter((t) => t.id !== task.id);
-        phase.taskIds = phase.taskIds.filter((id) => id !== task.id);
-        phase.updatedAt = nowISO();
-        await st.savePhase(phase);
+        await st.updatePhase(phase.id, (current) => ({
+          ...current,
+          tasks: current.tasks.filter((candidate) => candidate.id !== task.id),
+          taskIds: current.taskIds.filter((id) => id !== task.id),
+          updatedAt: nowISO(),
+        }));
         await st.writeGenerated();
           ctx.ui.notify(`Task deleted: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")}${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
         return;
@@ -2380,35 +2414,40 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const statusInput = await ctx.ui.input(`Status [${task.status}] (planned|in-progress|done|blocked|canceled)`);
         const desc = await ctx.ui.input(`Description [leave empty to keep]`);
 
-        // Update only changed fields
-        if (title?.trim()) task.title = title.trim();
         const now = nowISO();
-        if (statusInput?.trim()) {
-          const normalizedStatus = statusInput.trim();
+        const normalizedStatus = statusInput?.trim() as Task["status"] | undefined;
+        if (normalizedStatus) {
           const valid = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"];
           if (!valid.includes(normalizedStatus)) {
             ctx.ui.notify(`Invalid status. Use: ${valid.join(", ")}`, "error"); return;
           }
           if (normalizedStatus === "in-progress" && normalizedStatus !== task.status) {
-            ctx.ui.notify("Task start/resume transitions require /planner task start so ordered full context reads and lifecycle state remain consistent.", "warning");
+            ctx.ui.notify("Task start/resume transitions require /planner task start so lifecycle state remains consistent.", "warning");
             return;
           }
           if (normalizedStatus === "done" && normalizedStatus !== task.status) {
             ctx.ui.notify("Task completion requires /planner task complete with durable completion and verification evidence.", "warning");
             return;
           }
-          applyTaskLifecycleDates(task, normalizedStatus as Task["status"], now);
         }
-        if (desc?.trim()) task.description = desc.trim();
-        task.updatedAt = now;
-        phase.updatedAt = now;
-        await st.savePhase(phase);
+        const result = await st.updateTask(phase.id, task.id, (current) => {
+          const next = {
+            ...current,
+            ...(title?.trim() ? { title: title.trim() } : {}),
+            ...(normalizedStatus ? { status: normalizedStatus } : {}),
+            ...(desc?.trim() ? { description: desc.trim() } : {}),
+            updatedAt: now,
+          };
+          if (normalizedStatus) applyTaskLifecycleDates(next, normalizedStatus, now);
+          return next;
+        });
         await st.syncTaskStatusRollup(phase.id);
         await st.writeGenerated();
-          ctx.ui.notify(`Task updated: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (${task.status})${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
+          ctx.ui.notify(`Task updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))}/T${String(result.task.number).padStart(3, "0")} — ${result.task.title} (${result.task.status})${result.task.shortId ? ` · ${result.task.shortId}` : ""}`, "info");
         return;
       }
       if (b === "start") {
+        return st.runBatch(async () => {
         let phase: Phase | null = null;
         let task: Task | null = null;
         if (subArgs.trim()) {
@@ -2488,25 +2527,24 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // It is archived only when the phase completes (auto) or the user
         // explicitly clears it.
         const now = nowISO();
-        // Record status change in the incremental statusLog.
-        const prevStatus = task.status;
-        const entry: StatusLogEntry = {
-          id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-in-progress`),
-          date: now,
-          fromStatus: task.status as any,
-          toStatus: "in-progress" as any,
-          title: task.status === "done" ? "Reopened" : `→ in-progress`,
-          description: task.status === "done" ? "Task reopened from done status." : "",
-        };
-        task.statusLog = [...(task.statusLog ?? []), entry];
-        applyTaskLifecycleDates(task, "in-progress", now);
-        task.updatedAt = now;
-        phase!.updatedAt = now;
-        await st.savePhase(phase!);
+        const result = await st.updateTask(phase!.id, task.id, (current) => {
+          const entry: StatusLogEntry = {
+            id: createChecklistItemId(current.id, current.statusLog.length + 1, `${current.status}-in-progress`),
+            date: now,
+            fromStatus: current.status,
+            toStatus: "in-progress",
+            title: current.status === "done" ? "Reopened" : "→ in-progress",
+            description: current.status === "done" ? "Task reopened from done status." : "",
+          };
+          const next = { ...current, status: "in-progress" as const, statusLog: [...current.statusLog, entry], updatedAt: now };
+          applyTaskLifecycleDates(next, "in-progress", now);
+          return next;
+        });
         await st.syncTaskStatusRollup(phase!.id);
         await st.writeGenerated();
-          ctx.ui.notify(`✅ Task started: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (in-progress)${task.shortId ? ` · ${task.shortId}` : ""}`, "info");
+          ctx.ui.notify(`✅ Task started: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(result.task.number).padStart(3, "0")} — ${result.task.title} (in-progress)${result.task.shortId ? ` · ${result.task.shortId}` : ""}`, "info");
         return;
+        });
       }
       if (b === "complete") {
         let phase: Phase | null = null;
@@ -2541,26 +2579,30 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return;
         }
         const now = nowISO();
-        // Record status change in the incremental statusLog.
-        const entry: StatusLogEntry = {
-          id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-done`),
-          date: now,
-          fromStatus: task.status as any,
-          toStatus: "done" as any,
-          title: `→ done`,
-          description: completionSummary.trim(),
-        };
-        task.statusLog = [...(task.statusLog ?? []), entry];
-        applyTaskLifecycleDates(task, "done", now);
-        const separator = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
-        task.description = `${task.description}${separator}${completionSummary.trim()}`;
-        task.descriptionUpdatedAt = now;
-        task.updatedAt = now;
-        phase!.updatedAt = now;
-        await st.savePhase(phase!);
+        const result = await st.updateTask(phase!.id, task.id, (current) => {
+          const entry: StatusLogEntry = {
+            id: createChecklistItemId(current.id, current.statusLog.length + 1, `${current.status}-done`),
+            date: now,
+            fromStatus: current.status,
+            toStatus: "done",
+            title: "→ done",
+            description: completionSummary.trim(),
+          };
+          const separator = current.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
+          const next = {
+            ...current,
+            status: "done" as const,
+            statusLog: [...current.statusLog, entry],
+            description: `${current.description}${separator}${completionSummary.trim()}`,
+            descriptionUpdatedAt: now,
+            updatedAt: now,
+          };
+          applyTaskLifecycleDates(next, "done", now);
+          return next;
+        });
         const clearedRef = await st.syncTaskStatusRollup(phase!.id);
         await st.writeGenerated();
-          ctx.ui.notify(`✅ Task completed: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} — ${task.title} (done)${task.shortId ? ` · ${task.shortId}` : ""}${clearedRef ? ` — phase handoff archived (${clearedRef})` : ""}`, "info");
+          ctx.ui.notify(`✅ Task completed: ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(result.task.number).padStart(3, "0")} — ${result.task.title} (done)${result.task.shortId ? ` · ${result.task.shortId}` : ""}${clearedRef ? ` — phase handoff archived (${clearedRef})` : ""}`, "info");
         return;
       }
       // checklist-add <T00x> <title>  /  checklist-remove <T00x> <C{n}|title>  /  checklist-toggle <T00x> <C{n}|title> [on|off]
@@ -2646,7 +2688,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           "Prepare a canonical session handoff proposal. Do not write anything yet. First identify from this conversation and the latest planner lifecycle events the exact feature and phase where the decisions/work belong. Never use the first in-progress phase or a stale resume pointer as a target.\n\n" +
           "If the last phase was just completed, do not create an operational handoff for it; its existing handoff must have been archived by the phase-done lifecycle. If another non-done phase is the real continuation, identify that phase explicitly.\n\n" +
           "Before writing, tell the user exactly: `I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?` Wait for an explicit confirmation. If the target is ambiguous, ask the user to identify the feature and phase instead of guessing.\n\n" +
-          "After confirmation, call `handoff_prepare` with that exact phaseRef. Read the entire existing handoff and its handoffUpdatedAt token. Audit every listed done task that lacks durable completion/verification evidence. Then call `handoff_write` with the exact token, one reconciled handoff body, taskUpdates for every missing task, and either durable phase/feature updates or explicit no-update reasons. Never overwrite an existing handoff without retaining its still-relevant decisions, solved problems, architecture, files, and constraints. Replace stale focus, blockers, and next steps.\n\n" +
+          "After confirmation, call `handoff_prepare` with that exact phaseRef. BEFORE drafting prose, use its exact returned scaffold and cold-start inventory categories. Read the entire existing handoff and its handoffUpdatedAt token. Complete every source review by checking the conversation and approvals, planner entities and sibling tasks, current diff/implementation, verification/runtime evidence, and peer-agent or network messages (or explicitly record that no peer output exists). Inventory every exact file, symbol, working-tree ownership/completion state, commit authorization, work or deletion not yet started, command/tool path, runtime call site, preservation constraint, proof observation, related planned capability, user-visible behavior, operator action, blocker/risk, remaining item, and ordered resume step known from this session. Then call `handoff_write` once with the exact token, the completed scaffold, the structured coldStartInventory, taskUpdates for every missing task, and either durable phase/feature updates or explicit no-update reasons. Every inventory item must appear verbatim in the inline handoff or a validated supporting document. Never overwrite an existing handoff without retaining its still-relevant decisions, solved problems, architecture, files, and constraints. Replace stale focus, blockers, and next steps.\n\n" +
           "The reconciled handoff MUST contain at minimum:\n" +
           "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
           "- `Reason:` why this handoff is being written\n" +
@@ -2896,10 +2938,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         project.contentLanguage = normalizedContent || fallback;
         project.chatLanguage = normalizedChat || fallback;
       }
-      await st.saveProject(project);
+      const persisted = await st.updateProject((current) => ({
+        ...current,
+        contentLanguage: project.contentLanguage,
+        chatLanguage: project.chatLanguage,
+      }));
       await st.writeGenerated();
       return {
-        content: [{ type: "text", text: `Saved language preferences: content=${project.contentLanguage || "(unset)"}, chat=${project.chatLanguage || "(unset)"}` }],
+        content: [{ type: "text", text: `Saved language preferences: content=${persisted.contentLanguage || "(unset)"}, chat=${persisted.chatLanguage || "(unset)"}` }],
         details: { contentLanguage: project.contentLanguage, chatLanguage: project.chatLanguage },
       };
     },
@@ -3014,9 +3060,28 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (params.tools !== undefined) project.tools = params.tools.map((entry) => entry.trim()).filter(Boolean);
       if (params.globalRules !== undefined) project.globalRules = params.globalRules.map((entry) => entry.trim()).filter(Boolean);
       if (params.decisions !== undefined) project.decisions = params.decisions.map((entry) => entry.trim()).filter(Boolean);
-      await st.saveProject(project);
+      const persisted = await st.updateProject((current) => {
+        const next = {
+          ...current,
+          ...(params.name !== undefined ? { name: params.name.trim() } : {}),
+          ...(params.description !== undefined ? { description: params.description.trim() } : {}),
+          ...(params.goal !== undefined ? { goal: params.goal.trim() } : {}),
+          ...(params.scope !== undefined ? { scope: params.scope.map((entry) => entry.trim()).filter(Boolean) } : {}),
+          ...(params.outOfScope !== undefined ? { outOfScope: params.outOfScope.map((entry) => entry.trim()).filter(Boolean) } : {}),
+          ...(params.technologies !== undefined ? { technologies: params.technologies.map((entry) => entry.trim()).filter(Boolean) } : {}),
+          ...(params.tools !== undefined ? { tools: params.tools.map((entry) => entry.trim()).filter(Boolean) } : {}),
+          ...(params.globalRules !== undefined ? { globalRules: params.globalRules.map((entry) => entry.trim()).filter(Boolean) } : {}),
+          ...(params.decisions !== undefined ? { decisions: params.decisions.map((entry) => entry.trim()).filter(Boolean) } : {}),
+        };
+        if (params.descriptionRef !== undefined) {
+          const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
+          if (descriptionRef) next.descriptionRef = descriptionRef;
+          else delete next.descriptionRef;
+        }
+        return next;
+      });
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Project updated: ${project.name}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...project, updated: true, updatedFields: receivedFields } };
+      return { content: [{ type: "text", text: `Project updated: ${persisted.name}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...persisted, updated: true, updatedFields: receivedFields } };
     },
   });
 
@@ -3061,12 +3126,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Use plan_init first." }], details: {} };
       const project = await st.loadProject();
-      project.projectGuidelines = {
-        content: params.content.trim(),
-        updatedAt: project.projectGuidelines.updatedAt,
-        sessionInfo: project.projectGuidelines.sessionInfo,
-      };
-      await st.saveProject(project);
+      await st.updateProject((current) => ({
+        ...current,
+        projectGuidelines: { ...current.projectGuidelines, content: params.content.trim() },
+      }), { expectedGuidelinesUpdatedAt: project.projectGuidelines.updatedAt });
       await st.writeGenerated();
       const refreshed = await st.loadProject();
       return {
@@ -3147,7 +3210,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
       const links = await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
       if (!links.ok) return { content: [{ type: "text", text: links.error }], details: {} };
-      const requirements = await st.loadRequirements();
       const now = nowISO();
       let macroTasks;
       try {
@@ -3171,15 +3233,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         createdAt: now,
         updatedAt: now,
       };
-      requirements.requirements.push(requirement);
       try {
-        await st.saveRequirements(requirements);
+        await st.updateRequirements((document) => ({ requirements: [...document.requirements, requirement] }));
       } catch (error) {
         const message = error instanceof RequirementMacroTaskError ? error.message : error instanceof Error ? error.message : "Invalid requirement.";
         return { content: [{ type: "text", text: message }], details: {} };
       }
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Requirement created: ${requirement.id}` }], details: requirement };
+      return { content: [{ type: "text", text: `Requirement created: ${requirement.id}` }], details: { requirement, created: true } };
     },
   });
 
@@ -3206,36 +3267,45 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const requirements = await st.loadRequirements();
       const requirement = requirements.requirements.find((entry) => entry.id === params.requirementId);
       if (!requirement) return { content: [{ type: "text", text: `Requirement not found: ${params.requirementId}` }], details: {} };
-      if (params.title !== undefined) {
-        const title = params.title.trim();
-        if (!title) return { content: [{ type: "text", text: "title required" }], details: {} };
-        requirement.title = title;
+      if (params.title !== undefined && !params.title.trim()) {
+        return { content: [{ type: "text", text: "title required" }], details: { errorCode: "TITLE_REQUIRED", updated: false } };
       }
-      if (params.description !== undefined) requirement.description = params.description.trim();
-      if (params.status !== undefined) requirement.status = params.status.trim() as Requirement["status"];
-      if (params.linkedPhaseIds !== undefined) {
-        const links = await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
-        if (!links.ok) return { content: [{ type: "text", text: links.error }], details: {} };
-        requirement.linkedPhaseIds = links.linkedPhaseIds;
+      if (params.title === undefined && params.description === undefined && params.status === undefined && params.linkedPhaseIds === undefined && params.macroTasks === undefined) {
+        return mutationNoFieldsFailure({
+          entity: "requirement",
+          ref: params.requirementId,
+          operation: "update",
+          mutableFields: ["title", "description", "status", "linkedPhaseIds", "macroTasks"],
+          retryCommand: `requirement_update ${params.requirementId}`,
+        });
       }
+      const links = params.linkedPhaseIds === undefined
+        ? undefined
+        : await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
+      if (links && !links.ok) return { content: [{ type: "text", text: links.error }], details: { errorCode: "REQUIREMENT_PHASE_LINK_INVALID", updated: false } };
       const now = nowISO();
-      if (params.macroTasks !== undefined) {
-        try {
-          requirement.macroTasks = reconcileRequirementMacroTasks(requirement.macroTasks, params.macroTasks.map((task) => ({
+      let persisted: Requirement;
+      try {
+        persisted = await st.updateRequirement(requirement.id, (canonical) => ({
+          ...canonical,
+          ...(params.title !== undefined ? { title: params.title.trim() } : {}),
+          ...(params.description !== undefined ? { description: params.description.trim() } : {}),
+          ...(params.status !== undefined ? { status: params.status.trim() as Requirement["status"] } : {}),
+          ...(links?.ok ? { linkedPhaseIds: links.linkedPhaseIds } : {}),
+          ...(params.macroTasks !== undefined ? { macroTasks: reconcileRequirementMacroTasks(canonical.macroTasks, params.macroTasks.map((task) => ({
             ...(task.id ? { id: task.id } : {}),
             title: task.title,
             ...(task.description !== undefined ? { description: task.description } : {}),
             status: task.status.trim() as Requirement["status"],
-          })), now);
-        } catch (error) {
-          const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
-          return { content: [{ type: "text", text: message }], details: {} };
-        }
+          })), now) } : {}),
+          updatedAt: now,
+        }));
+      } catch (error) {
+        const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
+        return { content: [{ type: "text", text: message }], details: {} };
       }
-      requirement.updatedAt = now;
-      await st.saveRequirements(requirements);
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Requirement updated: ${requirement.id}` }], details: requirement };
+      return { content: [{ type: "text", text: `Requirement updated: ${persisted.id}` }], details: { requirement: persisted, updated: true } };
     },
   });
 
@@ -3249,14 +3319,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const requirements = await st.loadRequirements();
-      const next = requirements.requirements.filter((entry) => entry.id !== params.requirementId);
-      if (next.length === requirements.requirements.length) {
-        return { content: [{ type: "text", text: `Requirement not found: ${params.requirementId}` }], details: {} };
+      let deleted = false;
+      await st.updateRequirements((document) => {
+        const requirements = document.requirements.filter((entry) => entry.id !== params.requirementId);
+        deleted = requirements.length !== document.requirements.length;
+        return deleted ? { requirements } : document;
+      });
+      if (!deleted) {
+        return { content: [{ type: "text", text: `Requirement not found: ${params.requirementId}` }], details: { errorCode: "NOT_FOUND", deleted: false } };
       }
-      await st.saveRequirements({ requirements: next });
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Requirement deleted: ${params.requirementId}` }], details: { deleted: params.requirementId } };
+      return { content: [{ type: "text", text: `Requirement deleted: ${params.requirementId}` }], details: { deleted: true, requirementId: params.requirementId } };
     },
   });
 
@@ -3274,7 +3347,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
   pi.registerTool({
     name: "idea_update", label: "Idea Update", description: "Update an Ideas Inbox title or description.", parameters: Type.Object({ idea: Type.String(), title: Type.Optional(Type.String()), description: Type.Optional(Type.String()) }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return { content: [{ type: "text", text: "No mutable idea fields were received." }], details: { errorCode: "NO_MUTABLE_FIELDS_RECEIVED", updated: false } }; const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea updated: ${formatIdeaRef(idea.number)} — ${idea.title}` }], details: { idea, updated: true } }; },
+    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return mutationNoFieldsFailure({ entity: "idea", ref: params.idea, operation: "update", mutableFields: ["title", "description"], retryCommand: `idea_update ${params.idea}` }); const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea updated: ${formatIdeaRef(idea.number)} — ${idea.title}` }], details: { idea, updated: true } }; },
   });
   pi.registerTool({
     name: "idea_delete", label: "Idea Delete", description: "Delete an Idea only after explicit user confirmation.", parameters: Type.Object({ idea: Type.String(), confirmed: Type.Boolean() }),
@@ -3546,7 +3619,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_prepare",
     label: "Handoff Prepare",
-    description: "Audit one exact phase before writing a handoff. Returns the current handoff token, missing task evidence, the required versioned completeness categories, and the 24,000-character inline budget. Reconcile everything through handoff_write.",
+    description: "Audit one exact phase before writing a handoff. Returns the exact canonical scaffold before drafting, the current handoff token, missing task evidence, required completeness and cold-start inventory categories, and the 24,000-character inline budget. Reconcile everything through handoff_write.",
     parameters: Type.Object({ phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3563,11 +3636,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           content: [{ type: "text", text: [
             `Handoff preparation audit for ${r.compositeRef}`,
             `Base handoffUpdatedAt: ${audit.handoffUpdatedAt || "(empty)"}`,
+            "Use this exact scaffold before drafting; replace every angle-bracket placeholder and retain every heading:",
+            audit.draftTemplate,
+            "",
             "Done tasks missing durable completion/verification evidence:",
             missing,
             "",
             `Required completeness audit v${audit.completenessVersion} — every category must be captured or marked not-applicable with a substantive reason:`,
             ...audit.completenessCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
+            "",
+            `Required cold-start source review v${audit.coldStartInventoryVersion} — inspect and substantively summarize every source before drafting:`,
+            ...audit.coldStartSourceReviews.map((entry) => `- ${entry.id} — ${entry.label}`),
+            "Required cold-start inventory — every category needs a concrete item (use an explicit verified-negative statement when nothing exists), and every item must appear verbatim in the handoff or a validated supporting document:",
+            ...audit.coldStartInventoryCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
             `Maximum canonical inline content: ${audit.maxContentChars} characters. Link extended material from .planner/docs/.`,
             "",
             "Existing active handoff (reconcile all still-relevant content):",
@@ -3600,6 +3681,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           category: Type.String({ description: `One required category id from handoff_prepare: ${HANDOFF_COMPLETENESS_CATEGORIES.map((entry) => entry.id).join(", ")}` }),
           status: Type.Union([Type.Literal("captured"), Type.Literal("not-applicable")]),
           detail: Type.String({ description: "Substantive captured detail or a substantive reason why the category is not applicable." }),
+        })),
+      })),
+      coldStartInventory: Type.Optional(Type.Object({
+        version: Type.Literal(HANDOFF_COLD_START_INVENTORY_VERSION),
+        sourceReviews: Type.Array(Type.Object({
+          source: Type.String({ description: `One required source review id: ${HANDOFF_COLD_START_SOURCE_REVIEWS.map((entry) => entry.id).join(", ")}` }),
+          detail: Type.String({ description: "Substantive summary of what was reviewed and which facts were extracted before drafting." }),
+        })),
+        entries: Type.Array(Type.Object({
+          category: Type.String({ description: `One required cold-start category id from handoff_prepare: ${HANDOFF_COLD_START_INVENTORY_CATEGORIES.map((entry) => entry.id).join(", ")}` }),
+          items: Type.Array(Type.String({ description: "Exact resume-critical item; it must appear verbatim in the handoff or a validated supporting document." })),
+          notApplicableReason: Type.Optional(Type.String({ description: "Optional explanation only; every category still requires a concrete item, using an explicit verified-negative statement when nothing exists." })),
         })),
       })),
       supportingDocuments: Type.Optional(Type.Array(Type.Object({
@@ -3668,6 +3761,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           expectedHandoffUpdatedAt: params.expectedHandoffUpdatedAt,
           reconciledExistingHandoff: params.reconciledExistingHandoff === true,
           ...(params.completenessAudit ? { completenessAudit: params.completenessAudit as HandoffCompletenessAuditInput } : {}),
+          ...(params.coldStartInventory ? { coldStartInventory: params.coldStartInventory as HandoffColdStartInventoryInput } : {}),
           ...(params.supportingDocuments ? { supportingDocuments: params.supportingDocuments } : {}),
           contextSync: {
             taskUpdates,
@@ -3810,6 +3904,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      return st.runBatch(async () => {
       const now = nowISO();
       const status = (params.status as Feature["status"] | undefined) ?? "planned";
       const currentFeatures = (await st.loadFeatures()).features;
@@ -3848,6 +3943,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       });
       await st.writeGenerated();
       return { content: [{ type: "text", text: `✅ Feature created: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}` }], details: feature };
+      });
     },
   });
 
@@ -4031,22 +4127,24 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
       const featureId = resolvedFeature.feature.id;
       let deleted = false;
-      await st.updateFeatures((doc) => {
-        const before = doc.features.length;
-        doc.features = doc.features.filter((f) => f.id !== featureId);
-        if (doc.features.length !== before) deleted = true;
-        return doc;
-      });
-
       let cascadeCount = 0;
-      if (params.cascade) {
-        const phases = await st.loadAllPhases();
-        for (const phase of phases.filter((p) => p.featureId === featureId)) {
-          await st.deletePhase(phase.id);
-          cascadeCount += 1;
+      await st.runBatch(async () => {
+        await st.updateFeatures((doc) => {
+          const before = doc.features.length;
+          doc.features = doc.features.filter((f) => f.id !== featureId);
+          if (doc.features.length !== before) deleted = true;
+          return doc;
+        });
+
+        if (params.cascade) {
+          const phases = await st.loadAllPhases();
+          for (const phase of phases.filter((p) => p.featureId === featureId)) {
+            await st.deletePhase(phase.id);
+            cascadeCount += 1;
+          }
         }
-      }
-      await st.writeGenerated();
+        await st.writeGenerated();
+      });
       return { content: [{ type: "text", text: `Feature deleted: ${params.featureId}${params.cascade ? ` (cascade: ${cascadeCount} phases)` : ""}` }], details: { deleted: params.featureId, cascadedPhases: cascadeCount } };
     },
   });
@@ -4137,7 +4235,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const existingFeature = (await st.loadFeatures()).features.find((f) => f.id === featureId);
       if (!existingFeature) return { content: [{ type: "text", text: `Resolved feature ${featureId} no longer exists. Refusing to create phase.` }], details: {} };
       let phase: Phase | undefined;
-      await withFeatureLock(featureId, async () => {
+      await st.runBatch(() => withFeatureLock(featureId, async () => {
         const id = createPhaseId();
         const identity = await st.allocateEntityIdentity("phase", id);
         const priority = await st.nextPriority("phase", featureId);
@@ -4171,7 +4269,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           return doc;
         });
         await st.writeGenerated();
-      });
+      }));
       if (!phase) return { content: [{ type: "text", text: "Phase creation failed." }], details: {} };
       const phaseCreateFeatures = (await st.loadFeatures()).features;
         return { content: [{ type: "text", text: `✅ Phase created: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseCreateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}` }], details: phase };
@@ -4244,24 +4342,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       const prevFeatureId = phase.featureId;
       let nextFeatureIdForUpdate = prevFeatureId;
-      if (params.title !== undefined) { phase.title = params.title.trim(); phase.slug = normalizeSlug(params.title); }
-      if (params.summary !== undefined) phase.summary = params.summary.trim();
-      if (params.description !== undefined) phase.description = params.description.trim();
-      if (params.descriptionRef !== undefined) {
-        const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
-        if (descriptionRef) phase.descriptionRef = descriptionRef;
-        else delete phase.descriptionRef;
-      }
-      if (params.priority !== undefined) phase.priority = params.priority;
-      if (params.goals !== undefined) phase.goals = params.goals.map((item) => item.trim()).filter(Boolean);
-      if (params.nonGoals !== undefined) phase.nonGoals = params.nonGoals.map((item) => item.trim()).filter(Boolean);
-      if (params.dependencies !== undefined) phase.dependencies = params.dependencies.map((item) => item.trim()).filter(Boolean);
-      if (params.risks !== undefined) phase.risks = params.risks.map((item) => item.trim()).filter(Boolean);
-      if (params.openQuestions !== undefined) phase.openQuestions = params.openQuestions.map((item) => item.trim()).filter(Boolean);
-      if (params.decisions !== undefined) phase.decisions = params.decisions.map((item) => item.trim()).filter(Boolean);
-      if (params.acceptedDecisions !== undefined) phase.acceptedDecisions = params.acceptedDecisions;
-      if (params.completionCriteria !== undefined) phase.completionCriteria = params.completionCriteria.map((item) => item.trim()).filter(Boolean);
-
       if (params.featureId !== undefined) {
         if (params.featureId === "") {
           nextFeatureIdForUpdate = undefined;
@@ -4270,23 +4350,49 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
           nextFeatureIdForUpdate = resolvedFeature.feature.id;
         }
-        phase.featureId = nextFeatureIdForUpdate;
-        if (nextFeatureIdForUpdate !== prevFeatureId) {
-          await st.updateFeatures((doc) => {
-            for (const f of doc.features) {
-              if (f.id === prevFeatureId) f.phaseIds = f.phaseIds.filter((pid) => pid !== phase.id);
-              if (f.id === nextFeatureIdForUpdate && !f.phaseIds.includes(phase.id)) f.phaseIds.push(phase.id);
-            }
-            return doc;
-          });
-        }
       }
 
-      phase.updatedAt = nowISO();
-      await st.savePhase(phase);
-      await st.writeGenerated();
+      let persistedPhase: Phase | undefined;
+      await st.runBatch(async () => {
+        persistedPhase = await st.updatePhase(phaseId, (current) => {
+          const next: Phase = {
+            ...current,
+            ...(params.title !== undefined ? { title: params.title.trim(), slug: normalizeSlug(params.title) } : {}),
+            ...(params.summary !== undefined ? { summary: params.summary.trim() } : {}),
+            ...(params.description !== undefined ? { description: params.description.trim() } : {}),
+            ...(params.priority !== undefined ? { priority: params.priority } : {}),
+            ...(params.goals !== undefined ? { goals: params.goals.map((item) => item.trim()).filter(Boolean) } : {}),
+            ...(params.nonGoals !== undefined ? { nonGoals: params.nonGoals.map((item) => item.trim()).filter(Boolean) } : {}),
+            ...(params.dependencies !== undefined ? { dependencies: params.dependencies.map((item) => item.trim()).filter(Boolean) } : {}),
+            ...(params.risks !== undefined ? { risks: params.risks.map((item) => item.trim()).filter(Boolean) } : {}),
+            ...(params.openQuestions !== undefined ? { openQuestions: params.openQuestions.map((item) => item.trim()).filter(Boolean) } : {}),
+            ...(params.decisions !== undefined ? { decisions: params.decisions.map((item) => item.trim()).filter(Boolean) } : {}),
+            ...(params.acceptedDecisions !== undefined ? { acceptedDecisions: params.acceptedDecisions } : {}),
+            ...(params.completionCriteria !== undefined ? { completionCriteria: params.completionCriteria.map((item) => item.trim()).filter(Boolean) } : {}),
+            ...(params.featureId !== undefined ? { featureId: nextFeatureIdForUpdate } : {}),
+            updatedAt: nowISO(),
+          };
+          if (params.descriptionRef !== undefined) {
+            const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
+            if (descriptionRef) next.descriptionRef = descriptionRef;
+            else delete next.descriptionRef;
+          }
+          return next;
+        });
+        if (params.featureId !== undefined && nextFeatureIdForUpdate !== prevFeatureId) {
+          await st.updateFeatures((document) => {
+            for (const feature of document.features) {
+              if (feature.id === prevFeatureId) feature.phaseIds = feature.phaseIds.filter((id) => id !== phaseId);
+              if (feature.id === nextFeatureIdForUpdate && !feature.phaseIds.includes(phaseId)) feature.phaseIds.push(phaseId);
+            }
+            return document;
+          });
+        }
+        await st.writeGenerated();
+      });
+      phase = persistedPhase!;
       const phaseUpdateFeatures = (await st.loadFeatures()).features;
-        return { content: [{ type: "text", text: `✅ Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseUpdateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...phase, updated: true, updatedFields: receivedFields } };
+      return { content: [{ type: "text", text: `✅ Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseUpdateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...phase, updated: true, updatedFields: receivedFields } };
     },
   });
 
@@ -4322,7 +4428,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         implementationNotes: params.implementationNotes.trim(),
         acceptedAt,
       };
-      await withFeatureLock(resolvedFeature.feature.id, async () => {
+      await st.runBatch(() => withFeatureLock(resolvedFeature.feature.id, async () => {
         let featureWritten = false;
         try {
           await st.updateFeatures((doc) => {
@@ -4350,7 +4456,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           }
           throw error;
         }
-      });
+      }));
       await st.writeGenerated();
       return { content: [{ type: "text", text: `✅ Decision recorded on ${formatFeatureRef(resolvedFeature.feature.number)} and ${formatPhaseRef(resolvedPhase.number, resolvedFeature.feature.number)}: ${acceptedDecision.title}` }], details: acceptedDecision };
     },
@@ -4376,18 +4482,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       } catch {
         return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
       }
-      await st.deletePhase(phaseId);
-      if (phase.featureId) {
-        await st.updateFeatures((doc) => {
-          const feature = doc.features.find((f) => f.id === phase!.featureId);
-          if (feature) {
-            feature.phaseIds = feature.phaseIds.filter((pid) => pid !== phaseId);
-            feature.updatedAt = nowISO();
-          }
-          return doc;
-        });
-      }
-      await st.writeGenerated();
+      await st.runBatch(async () => {
+        await st.deletePhase(phaseId);
+        if (phase.featureId) {
+          await st.updateFeatures((doc) => {
+            const feature = doc.features.find((f) => f.id === phase!.featureId);
+            if (feature) {
+              feature.phaseIds = feature.phaseIds.filter((pid) => pid !== phaseId);
+              feature.updatedAt = nowISO();
+            }
+            return doc;
+          });
+        }
+        await st.writeGenerated();
+      });
       return { content: [{ type: "text", text: `Phase deleted: ${params.phaseId}` }], details: { deleted: params.phaseId } };
     },
   });
@@ -4922,8 +5030,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const sourceWasActive = source.task.status === "in-progress";
       let sourceCheckpointed = false;
       let targetStarted = false;
-      try {
-        if (sourceWasActive) {
+      await st.runBatch(async () => {
+        try {
+          if (sourceWasActive) {
           await st.pauseTask(source.phase.id, source.task.id, snapshot);
         } else {
           await st.updatePhase(source.phase.id, (phase) => {
@@ -4970,18 +5079,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             return phase;
           }).catch(() => {});
         }
-        if (sourceCheckpointed) {
-          if (sourceWasActive) await st.resumeTask(source.phase.id, source.task.id, nowISO()).catch(() => {});
-          else await st.updatePhase(source.phase.id, (phase) => {
-            phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
-            return phase;
-          }).catch(() => {});
+          if (sourceCheckpointed) {
+            if (sourceWasActive) await st.resumeTask(source.phase.id, source.task.id, nowISO()).catch(() => {});
+            else await st.updatePhase(source.phase.id, (phase) => {
+              phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
+              return phase;
+            }).catch(() => {});
+          }
+          throw error;
         }
-        throw error;
-      }
-      await st.syncTaskStatusRollup(source.phase.id);
-      if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
-      await st.writeGenerated();
+        await st.syncTaskStatusRollup(source.phase.id);
+        if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
+        await st.writeGenerated();
+      });
       invalidateReads(plannerSessionId);
       const sourceRef = `${formatPhaseRef(source.phase.number, featureNumberOfPhase(source.phase, features))}/T${String(source.task.number).padStart(3, "0")}`;
       const targetRef = `${formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features))}/T${String(target.task.number).padStart(3, "0")}`;
@@ -5007,6 +5117,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return taskStartFailure(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry task_start."]));
+      return st.runBatch(async () => {
       const features = (await st.loadFeatures()).features;
       const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
       if (!found) return taskStartFailure(taskStartDenied("TASK_NOT_FOUND", `Task not found: ${params.taskId}`, ["Resolve the task with task_list or task_get, then retry task_start."]));
@@ -5205,6 +5316,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         details: { ...persistedTask, ...outcome, task: persistedTask },
         ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
       };
+      });
     },
   });
 

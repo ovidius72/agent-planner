@@ -1,0 +1,234 @@
+{
+  "id": "71bae839-e639-46e3-8fa4-aef5e195f94f",
+  "featureId": "39d5b62f-6c16-4bed-9fc2-749d4b189f82",
+  "number": 96,
+  "shortId": "MT4QK",
+  "priority": 30,
+  "slug": "p2-permanent-vertical-completeness-gates",
+  "title": "P2 permanent vertical completeness gates",
+  "discussedAt": "2026-09-01T10:16:12.795Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Replace handler-existence coverage with a field-level semantic capability contract enforced in CI.",
+  "description": "Field-level capability manifest; persistence/read/mutate/load/UI parity declarations; generated contract assertions; explicit exceptions with rationale; audit reporting and contributor guidance.",
+  "descriptionUpdatedAt": "2026-09-01T10:16:12.795Z",
+  "notes": "",
+  "goals": [
+    "Make future partial, unreachable, or cross-harness-inconsistent capabilities fail CI before release."
+  ],
+  "nonGoals": [
+    "Replacing behavioral tests with static metadata",
+    "Lowering coverage thresholds"
+  ],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [
+    "A manifest can become another stale source unless tied to executable tests",
+    "Legitimate harness-specific differences need explicit bounded exceptions"
+  ],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Every human-owned canonical field has declared and tested read/mutation surfaces",
+    "Every attested read proves the corresponding data was delivered",
+    "Documented capabilities have an executable end-to-end path",
+    "CI rejects undeclared parity drift and false-success contracts"
+  ],
+  "taskIds": [
+    "07295e29-711a-4f84-b1a6-5eee7964c9a8",
+    "e3287786-0765-4cae-b246-94a8606b2bab",
+    "7fba73ad-c63f-40b8-a966-b69a84b28549"
+  ],
+  "tasks": [
+    {
+      "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8",
+      "phaseId": "71bae839-e639-46e3-8fa4-aef5e195f94f",
+      "number": 375,
+      "shortId": "5CZMZ",
+      "priority": 0,
+      "shortName": "build-a-field-level-semantic-c",
+      "title": "Build a field-level semantic capability manifest",
+      "status": "planned",
+      "description": "Replace count-only assumptions with a canonical test-owned manifest mapping each persisted human-owned field and operation to core read/write, Pi, MCP, HTTP, Web UI, agent-load, documentation, and behavioral-test coverage. Encode system-owned and intentionally harness-specific exceptions with explicit rationale.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:12.937Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-001-inventory-schemas-and-semantic-operations",
+          "number": 1,
+          "title": "Inventory schemas and semantic operations",
+          "checked": false
+        },
+        {
+          "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-002-define-executable-manifest-format",
+          "number": 2,
+          "title": "Define executable manifest format",
+          "checked": false
+        },
+        {
+          "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-003-map-current-supported-and-exceptional-surfaces",
+          "number": 3,
+          "title": "Map current supported and exceptional surfaces",
+          "checked": false
+        },
+        {
+          "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-004-validate-references-against-real-registrations",
+          "number": 4,
+          "title": "Validate references against real registrations",
+          "checked": false
+        },
+        {
+          "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-005-document-ownership-and-update-workflow",
+          "number": 5,
+          "title": "Document ownership and update workflow",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:12.899Z",
+      "updatedAt": "2026-09-01T10:16:13.038Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "e3287786-0765-4cae-b246-94a8606b2bab",
+      "phaseId": "71bae839-e639-46e3-8fa4-aef5e195f94f",
+      "number": 376,
+      "shortId": "DFLEX",
+      "priority": 10,
+      "shortName": "enforce-vertical-parity-contra",
+      "title": "Enforce vertical parity contracts in CI",
+      "status": "planned",
+      "description": "Generate or drive executable assertions from the semantic capability manifest so CI fails when a field is persisted but unreachable, attested but omitted, mutable in only one required harness, documented without an implementation path, or returns false success. Integrate with test/matrix-consistency.test.mjs and existing coverage gates.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:13.251Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-001-add-manifest-consistency-tests",
+          "number": 1,
+          "title": "Add manifest consistency tests",
+          "checked": false
+        },
+        {
+          "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-002-add-semantic-read-mutation-probes",
+          "number": 2,
+          "title": "Add semantic read/mutation probes",
+          "checked": false
+        },
+        {
+          "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-003-add-agent-context-and-ui-parity-assertions",
+          "number": 3,
+          "title": "Add agent-context and UI parity assertions",
+          "checked": false
+        },
+        {
+          "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-004-wire-failures-into-ci-with-actionable-diagnostics",
+          "number": 4,
+          "title": "Wire failures into CI with actionable diagnostics",
+          "checked": false
+        },
+        {
+          "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-005-prove-representative-intentional-breakages-are-caught",
+          "number": 5,
+          "title": "Prove representative intentional breakages are caught",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:13.215Z",
+      "updatedAt": "2026-09-01T10:16:13.355Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "7fba73ad-c63f-40b8-a966-b69a84b28549",
+      "phaseId": "71bae839-e639-46e3-8fa4-aef5e195f94f",
+      "number": 377,
+      "shortId": "L95FA",
+      "priority": 20,
+      "shortName": "publish-and-maintain-the-produ",
+      "title": "Publish and maintain the product capability audit",
+      "status": "planned",
+      "description": "Add contributor documentation and a generated bounded audit report that classifies capabilities as complete, partial, unreachable, harness-specific, deprecated, or exempt. Ensure generation is deterministic, links to owning tests and planner tasks, and cannot silently declare completeness from handler existence alone.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:13.578Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-001-define-classifications-and-evidence-links",
+          "number": 1,
+          "title": "Define classifications and evidence links",
+          "checked": false
+        },
+        {
+          "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-002-generate-deterministic-audit-output",
+          "number": 2,
+          "title": "Generate deterministic audit output",
+          "checked": false
+        },
+        {
+          "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-003-document-remediation-and-exception-policy",
+          "number": 3,
+          "title": "Document remediation and exception policy",
+          "checked": false
+        },
+        {
+          "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-004-add-drift-check-to-plugins-or-ci-as-appropriate",
+          "number": 4,
+          "title": "Add drift check to plugins or CI as appropriate",
+          "checked": false
+        },
+        {
+          "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-005-verify-no-user-facing-agent-rule-leakage",
+          "number": 5,
+          "title": "Verify no user-facing agent-rule leakage",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:13.537Z",
+      "updatedAt": "2026-09-01T10:16:13.680Z",
+      "sessionInfo": []
+    }
+  ],
+  "createdAt": "2026-09-01T10:16:12.505Z",
+  "updatedAt": "2026-09-01T10:16:13.680Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "f2caa960-fd1c-4dc6-884d-f45683770de2",
+      "date": "2026-09-01T10:16:13.058Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

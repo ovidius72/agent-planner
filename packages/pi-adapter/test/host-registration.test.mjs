@@ -52,6 +52,15 @@ describe("pi-adapter host harness", () => {
       assert.ok(Array.isArray(completions) && completions.length > 0);
       assert.ok(completions.some((c) => c.value === "task start"), "task subcommand completion");
       assert.ok(planner.getArgumentCompletions("ver").some((c) => c.value === "version"), "version subcommand completion");
+      const ideaCompletions = planner.getArgumentCompletions("idea").map((completion) => completion.value);
+      assert.deepEqual(ideaCompletions, [
+        "idea list",
+        "idea add",
+        "idea show",
+        "idea update",
+        "idea delete",
+        "idea promote",
+      ], "every interactive Ideas action must be discoverable from /planner completion");
 
       // All 60 tools with the required definition fields.
       assert.equal(host.tools.size, 60);
@@ -75,14 +84,31 @@ describe("pi-adapter host harness", () => {
     }
   });
 
-  test("/planner version reports loaded package manifests without requiring a planner", async () => {
+  test("/planner idea add is reachable through the interactive command dispatcher", async () => {
+    const host = await createPiHost({ name: "t378-idea-command", seed: "minimal" });
+    try {
+      host.ui.editorAnswer = "Captured from the interactive Pi command.";
+      await host.runCommand("idea add Discoverable idea");
+      const ideas = (await host.store.loadIdeas()).ideas;
+      assert.equal(ideas.length, 1);
+      assert.equal(ideas[0].title, "Discoverable idea");
+      assert.equal(ideas[0].description, "Captured from the interactive Pi command.");
+      assert.match(host.ui.notifyCalls.at(-1)?.message ?? "", /Idea created: I001/);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("/planner version reports loaded runtime provenance and compatibility without requiring a planner", async () => {
     const host = await createPiHost({ name: "t293-version", seed: null });
     try {
       await host.runCommand("version");
       const message = host.ui.notifyCalls.at(-1)?.message ?? "";
-      assert.match(message, new RegExp(`@agent-plan/pi-adapter: ${PI_ADAPTER_VERSION.replaceAll(".", "\\.")}`));
-      assert.match(message, new RegExp(`@agent-plan/core: ${CORE_VERSION.replaceAll(".", "\\.")}`));
-      assert.match(message, new RegExp(`@agent-plan/server: ${SERVER_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/pi-adapter: loaded ${PI_ADAPTER_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/core: loaded ${CORE_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/server: loaded ${SERVER_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, /Plan schema: manifest schemaVersion 1/);
+      assert.match(message, /Allocation registry: v1; supported kinds: feature, phase, task, idea/);
       assert.equal(existsSync(host.planRoot), false, "version lookup must not initialize planner state");
     } finally {
       await closePiHost(host);
@@ -147,6 +173,29 @@ describe("pi-adapter host harness", () => {
       const features = await st.loadFeatures();
       assert.equal(features.features.length, 1);
       assert.equal(features.features[0].name, "Feature One");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("mutation tools return typed no-op and persisted outcome details", async () => {
+    const host = await createPiHost({ name: "t367-mutation-outcomes", seed: "minimal" });
+    try {
+      const requirement = (await host.store.loadRequirements()).requirements[0];
+      const requirementNoop = await host.runTool("requirement_update", { requirementId: requirement.id });
+      assert.equal(requirementNoop.isError, true);
+      assert.equal(toolDetails(requirementNoop).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+      assert.equal((await host.store.loadRequirements()).requirements[0].updatedAt, requirement.updatedAt, "no-field requirement update must not restamp persisted data");
+
+      const requirementUpdate = await host.runTool("requirement_update", { requirementId: requirement.id, title: "Updated requirement" });
+      assert.equal(toolDetails(requirementUpdate).updated, true);
+      assert.equal(toolDetails(requirementUpdate).requirement.title, "Updated requirement");
+
+      const ideaCreate = await host.runTool("idea_create", { title: "Outcome idea" });
+      assert.equal(toolDetails(ideaCreate).created, true);
+      const ideaNoop = await host.runTool("idea_update", { idea: "I001" });
+      assert.equal(ideaNoop.isError, true);
+      assert.equal(toolDetails(ideaNoop).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
     } finally {
       await closePiHost(host);
     }

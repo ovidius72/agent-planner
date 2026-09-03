@@ -1,4 +1,4 @@
-<!-- agent-plan-managed-skill sha256:cf9729b6a4b0dec04c5b13894ae6958a490434f06b54e03fb8615900f54c44b9 -->
+<!-- agent-plan-managed-skill sha256:8a5e13c98b06fc7f1e67ea983e8de1e6356c1483d0f1fc740dfbe21b9bf028a7 -->
 ---
 name: agent-plan
 summary: Cross-harness operating guide for Agent Plan projects.
@@ -57,7 +57,7 @@ Do not convert a denial into a planner status change merely to bypass the gate. 
 
 - Read it on planner load when present and whenever lifecycle `nextActions` says it is missing or stale.
 - Update it only through `project_guidelines_update`, `planner-project-guidelines-update`, or Pi `/planner project guidelines`.
-- Legacy `globalRules`, textual `workflowRules`, and project `decisions` remain readable compatibility fields until explicitly migrated. Preview with `project_context_migrate` or `planner-project-context-migrate`; apply only with `apply=true` after reviewing the deduplicated preview. Ordinary planner loads never migrate or clear them.
+- Explicit planner load automatically and atomically deduplicates legacy `globalRules`, textual `workflowRules`, and project `decisions` into canonical Project Guidelines and Accepted Decisions before recap/context delivery. Ordinary entity reads remain non-mutating. `project_context_migrate` and `planner-project-context-migrate` remain manual preview/recovery diagnostics; repeated applications are idempotent.
 - The Web UI may display the section for the human supervisor, but guideline-read enforcement applies to agents.
 
 ## Task execution
@@ -98,6 +98,10 @@ Keep the canonical handoff within the tool-reported budget (currently 24,000 cha
 
 Then call `handoff_write` / `planner-handoff-write` with the preparation token, completeness audit, optional supporting-document manifest, and reconciled task/phase/feature context. Missing categories, oversized bodies, invalid documents, or failed persistence read-back are typed failures and must never be reported as success. Read the persisted handoff back with the exact phase reference and verify its body, content hash, audit metadata, branch, file, command, expected behavior, and next action before stopping. `handoff_list` is a compact paginated summary-only index; use `handoff_show` for one bounded body and its metadata. Clear/archive only after explicit intent or when phase completion makes it obsolete.
 
+## Ideas Inbox and promotion
+
+Ideas are independent inbox entries (`I001`, never feature/phase/task children) and do not affect work rollups. Use `planner-idea-list` / `idea_list` to discover and `*-show/create/update/delete` for CRUD. For promotion, first call `planner-idea-promotion-begin` / `idea_promotion_begin`; it loads the project-local `grill-me` instructions only for that discussion. Follow its one-question-at-a-time interview, obtain explicit target confirmation, create the agreed target through normal creation tools, then call `*-promotion-finalize` with `discussionCompleted=true` and `confirmed=true`. Begin never persists a target or promotion; finalize rejects missing confirmation or an unresolved target.
+
 ## Pi `/planner` command routing
 
 Supported interactive command paths:
@@ -114,6 +118,16 @@ Supported interactive command paths:
 - `/planner project discuss`
 - `/planner project language`
 - `/planner project guidelines`
+- `/planner project migrate-context`
+
+### Ideas Inbox
+
+- `/planner idea list`
+- `/planner idea add [title]`
+- `/planner idea show <I00x>`
+- `/planner idea update <I00x>`
+- `/planner idea delete <I00x>`
+- `/planner idea promote <I00x>`
 
 ### Features and phases
 
@@ -166,7 +180,8 @@ Pause, switch, deviation, recommendation, requirement, and decision operations a
 The MCP adapter publishes these tools:
 
 - Core: `planner-version`, `planner-init`, `planner-show`, `planner-repair`, `planner-cleanup-orphan-phases`, `planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`, `planner-load`, `planner-disable`, `planner-web`.
-- Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-requirement-list`.
+- Ideas: `planner-idea-list`, `planner-idea-show`, `planner-idea-create`, `planner-idea-update`, `planner-idea-delete`, `planner-idea-promotion-begin`, `planner-idea-promotion-finalize`.
+- Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-requirement-list`, `planner-requirement-create`, `planner-requirement-update`, `planner-requirement-delete`.
 - Features: `planner-feature-list`, `planner-feature-add`, `planner-feature-show`, `planner-feature-discuss`, `planner-feature-update`, `planner-feature-delete`.
 - Phases: `planner-phase-list`, `planner-phase-add`, `planner-phase-show`, `planner-phase-discuss`, `planner-phase-update`, `planner-phase-delete`.
 - Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
@@ -176,6 +191,7 @@ The MCP adapter publishes these tools:
 
 The Pi adapter registers these tools:
 
+- Ideas: `idea_list`, `idea_show`, `idea_create`, `idea_update`, `idea_delete`, `idea_promotion_begin`, `idea_promotion_finalize`.
 - Project and requirements: `project_set_language_preferences`, `project_update`, `project_guidelines_show`, `project_guidelines_update`, `project_context_migrate`, `requirement_list`, `requirement_create`, `requirement_update`, `requirement_delete`.
 - Plan: `plan_init`, `plan_get`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
 - Features: `feature_list`, `feature_get`, `feature_create`, `feature_discuss`, `feature_update`, `feature_delete`.

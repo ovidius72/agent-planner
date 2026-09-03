@@ -1,0 +1,628 @@
+{
+  "id": "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+  "featureId": "39d5b62f-6c16-4bed-9fc2-749d4b189f82",
+  "number": 93,
+  "shortId": "CMN88",
+  "priority": 0,
+  "slug": "p0-runtime-integrity-and-writer-safety",
+  "title": "P0 runtime integrity and writer safety",
+  "discussedAt": "2026-09-01T10:16:08.012Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Prevent concurrent or stale writers and make incompatible runtimes fail explicitly.",
+  "description": "P0 runtime integrity and released-surface safety across packages/plan-core/src/plan-store.ts, packages/plan-core/src/write-coordination.ts, packages/plan-server/src/serve.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and packages/plan-web-ui/src/. T364 establishes root-scoped cross-process write transactions and typed contention diagnostics. T378 restores complete Ideas discoverability and inventory parity, and T379 archives handoffs for every canonical terminal phase outcome. T365 then prevents serialized stale snapshots from overwriting newer canonical data, T366 exposes runtime/schema provenance, and T367 eliminates false-success mutation results. Preserve reader availability, harness-agnostic core behavior, generated-view consistency, composite references, explicit lifecycle, and Web UI supervisor behavior.",
+  "descriptionUpdatedAt": "2026-09-01T15:01:21.151Z",
+  "notes": "",
+  "goals": [
+    "Make every planner write single-owner or concurrency-safe, version-diagnosable, and durably verified."
+  ],
+  "nonGoals": [
+    "Stopping active Claude processes as part of product implementation",
+    "Changing canonical task/phase/feature rollup semantics",
+    "Replacing JSON persistence with a database"
+  ],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [
+    "Cross-process locking must not deadlock tests or normal CLI lifecycles",
+    "Read-only secondary consumers must remain usable",
+    "Legacy plans must remain readable and recoverable"
+  ],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Two concurrent server/adapters cannot silently overwrite each other",
+    "Stale Web UI bodies cannot erase independently updated fields",
+    "Incompatible runtime/schema data returns actionable typed diagnostics",
+    "Mutating public surfaces verify persisted outcomes and do not report false success"
+  ],
+  "taskIds": [
+    "b3d2fc51-b853-4f04-9dbf-30532483cd71",
+    "de387e78-9d72-4126-b45d-5836033c8ab3",
+    "3436bc8d-6071-43ce-a4b6-fe4f880b432c",
+    "37769e17-5995-4650-8ff8-dc56c9d08e4c",
+    "17f30e3a-2b2c-4d6b-a670-704788fea823",
+    "b9f2324a-9aec-4607-9f73-7f25c9dc2587"
+  ],
+  "tasks": [
+    {
+      "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71",
+      "phaseId": "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+      "number": 364,
+      "shortId": "DYK7P",
+      "priority": 0,
+      "shortName": "enforce-single-writer-coordina",
+      "title": "Enforce single-writer coordination for planner roots",
+      "status": "done",
+      "description": "Implement root-scoped writer coordination across packages/plan-core/src/plan-store.ts and packages/plan-server/src/serve.ts so independent Pi, MCP, CLI, dev, and standalone server processes cannot silently mutate the same .planner root from stale state. Define lease/ownership and read-only secondary behavior, surface typed conflict diagnostics through adapters and Web UI, preserve per-file atomic backups and worktree-local .local data, and add multi-process dynamic-port tests reproducing the normal-server plus pnpm-dev collision.\n\n---\n**Completion summary:**\nImplemented root-scoped cross-process writer coordination in packages/plan-core/src/write-coordination.ts and wired it through PlanStore atomic writes/runBatch, plan-server, Pi, and MCP composite create/delete/switch/start paths. Added typed PLAN_WRITER_BUSY diagnostics with owner metadata and HTTP 423, read-only access during contention, re-entrant nested transactions, heartbeat and safe local/remote stale-owner recovery, plus Web UI conflict guidance. Multi-process regressions cover serialization, busy diagnostics, stale recovery races, concurrent phase/task creation, single-active-task starts, and normal plus development-style dynamic-port servers sharing one planner root. Updated packages/plan-core/docs/runtime-boundaries.md and public surface inventory. Verification: pnpm build and pnpm check passed; pnpm test:coverage passed 526/526 Node tests and 88/88 Web UI tests with final coverage 86.19% lines, 74.15% branches, 81.57% functions; plugins:check passed; Playwright passed 36/36 desktop/mobile; git diff --check passed. Remaining work is explicitly tracked in P093(F021)/T365: root serialization cannot by itself prevent a later serialized stale snapshot from overwriting newer canonical data.",
+      "descriptionUpdatedAt": "2026-09-01T14:31:29.950Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71-check-001-planned-in-progress",
+          "date": "2026-09-01T10:17:21.146Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71-check-002-in-progress-done",
+          "date": "2026-09-01T14:31:29.948Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented root-scoped cross-process writer coordination in packages/plan-core/src/write-coordination.ts and wired it through PlanStore atomic writes/runBatch, plan-server, Pi, and MCP composite create/delete/switch/start paths. Added typed PLAN_WRITER_BUSY diagnostics with owner metadata and HTTP 423, read-only access during contention, re-entrant nested transactions, heartbeat and safe local/remote stale-owner recovery, plus Web UI conflict guidance. Multi-process regressions cover serialization, busy diagnostics, stale recovery races, concurrent phase/task creation, single-active-task starts, and normal plus development-style dynamic-port servers sharing one planner root. Updated packages/plan-core/docs/runtime-boundaries.md and public surface inventory. Verification: pnpm build and pnpm check passed; pnpm test:coverage passed 526/526 Node tests and 88/88 Web UI tests with final coverage 86.19% lines, 74.15% branches, 81.57% functions; plugins:check passed; Playwright passed 36/36 desktop/mobile; git diff --check passed. Remaining work is explicitly tracked in P093(F021)/T365: root serialization cannot by itself prevent a later serialized stale snapshot from overwriting newer canonical data."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71-check-001-define-root-writer-ownership-lease-and-recovery-semantics",
+          "number": 1,
+          "title": "Define root writer ownership/lease and recovery semantics",
+          "checked": true
+        },
+        {
+          "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71-check-002-enforce-coordination-in-every-mutation-entry-path",
+          "number": 2,
+          "title": "Enforce coordination in every mutation entry path",
+          "checked": true
+        },
+        {
+          "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71-check-003-expose-actionable-pi-mcp-http-web-ui-diagnostics",
+          "number": 3,
+          "title": "Expose actionable Pi/MCP/HTTP/Web UI diagnostics",
+          "checked": true
+        },
+        {
+          "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71-check-004-add-multi-process-collision-and-stale-owner-recovery-tests",
+          "number": 4,
+          "title": "Add multi-process collision and stale-owner recovery tests",
+          "checked": true
+        },
+        {
+          "id": "b3d2fc51-b853-4f04-9dbf-30532483cd71-check-005-run-full-build-coverage-and-real-server-verification",
+          "number": 5,
+          "title": "Run full build, coverage, and real-server verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-01T10:17:21.146Z",
+      "completedAt": "2026-09-01T14:31:29.948Z",
+      "createdAt": "2026-09-01T10:16:08.115Z",
+      "updatedAt": "2026-09-01T14:31:29.948Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:c8e7d544-20a8-4a2d-ab52-6e615de90316",
+          "createdAt": "2026-09-01T10:17:20.971Z"
+        }
+      ]
+    },
+    {
+      "id": "de387e78-9d72-4126-b45d-5836033c8ab3",
+      "phaseId": "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+      "number": 365,
+      "shortId": "KFNDK",
+      "priority": 4,
+      "shortName": "replace-stale-whole-entity-web",
+      "title": "Replace stale whole-entity Web UI writes with concurrency-safe mutations",
+      "status": "done",
+      "description": "Eliminate stale-snapshot lost updates across every planner mutation path, not only Web UI writes. Current evidence: an agent updates a feature description, then task_start/status synchronization in another process rewrites feature files from an older in-memory FeaturesDocument and silently reverts that update; similar unrelated feature metadata loss has been observed repeatedly. Audit packages/plan-core/src/plan-store.ts updateFeatures/status synchronization and lifecycle paths, packages/plan-web-ui/src/lib/api.ts, packages/plan-server/src/serve.ts, packages/pi-adapter/src/index.ts, and packages/plan-mcp/src/index.ts. Replace whole-document stale writes with field-scoped patches, target-only writes, or optimistic revision/hash checks. Mutating code must acquire the root writer lock first, reload canonical state inside that lock, preserve unrelated entities and planner-owned fields, reject stale revisions with typed diagnostics, and return the normalized persisted read-back. Add same-process and multi-process regressions: update a feature/phase/task description or Accepted Decision, then start/complete another task from a process holding an older snapshot; the newer content and unrelated feature files must remain byte-for-byte intact. Cover two-client Web UI edits and Pi/MCP lifecycle/status synchronization. This work follows T364: serialization alone prevents simultaneous writes but does not prevent a later serialized stale snapshot from overwriting newer canonical data.\n\n---\n**Completion summary:**\nAll stale-snapshot lost-update paths replaced with concurrency-safe field-scoped mutations. savePhase/saveFeature/saveRequirements hardened with root write lock and stale revision checks. HTTP 409 PLAN_STALE_WRITE surfaced in Web UI with typed guidance. Inventory confirmed 23+ stale mutation sites across Pi/MCP/server/Web UI and all refactored. Regression suite (4 stale-write-safety, 5 plan-core, 18 server CRUD, 70 Pi adapter, real two-process MCP concurrent lifecycle) passes 542/542 Node. Production build rebuilt and bundles copied to pi-adapter and plan-server. Playwright 36/36 desktop/mobile. Plugin sync and git diff check clean. Final coverage: 86.49% lines, 74.17% branches, 82.23% functions. Remaining: classify 3 direct saveProject(project) call sites in pi-adapter as creation-safe vs stale-update paths.",
+      "descriptionUpdatedAt": "2026-09-02T14:54:06.542Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "de387e78-9d72-4126-b45d-5836033c8ab3-check-001-planned-in-progress",
+          "date": "2026-09-02T07:27:42.655Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d7ee77c5-8c66-47ab-a6e7-70826758680a",
+          "date": "2026-09-02T07:38:55.167Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: The user reported a production handoff-quality failure showing that the completed handoff contract still causes expensive late structural rejection and permits omission of concrete runtime wiring. This P0 correctness failure must be fixed before continuing stale-write work.\nWhat was being done: Auditing and beginning the stale-snapshot repair. Added PlanStaleWriteError/assertPlannerRevision plus session-info merge and stale timestamp checks to packages/plan-core/src/plan-store.ts, and began hardening saveFeatures/saveFeature/saveRequirements. These edits are incomplete and unverified; server field-level patching, Pi interactive snapshot mutations, Web UI payloads, and regressions remain.\nResume location: packages/plan-core/src/plan-store.ts around PlanStoreError, mergeSessionInfo/assertSnapshotNotOlder, saveFeatures, saveFeature, and saveRequirements; inspect the working diff before continuing because partial edits have landed.\nHow to resume: First run git diff on packages/plan-core/src/plan-store.ts and pnpm --filter @agent-plan/core check to assess the partial state. Then complete T365's server/API field-level patch contract, stale revision mapping, adapter-safe mutations, and same-process/multiprocess lost-update regressions. Do not discard the partial core edits, and preserve unrelated completed T364/T378/T379 work."
+        },
+        {
+          "id": "d9a26ff5-fe2d-4d99-aa5b-1078304df867",
+          "date": "2026-09-02T12:36:10.189Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from packages/plan-core/src/plan-store.ts around PlanStoreError, mergeSessionInfo/assertSnapshotNotOlder, saveFeatures, saveFeature, and saveRequirements; inspect the working diff before continuing because partial edits have landed.. First run git diff on packages/plan-core/src/plan-store.ts and pnpm --filter @agent-plan/core check to assess the partial state. Then complete T365's server/API field-level patch contract, stale revision mapping, adapter-safe mutations, and same-process/multiprocess lost-update regressions. Do not discard the partial core edits, and preserve unrelated completed T364/T378/T379 work."
+        },
+        {
+          "id": "de387e78-9d72-4126-b45d-5836033c8ab3-check-004-in-progress-done",
+          "date": "2026-09-02T14:54:06.540Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "All stale-snapshot lost-update paths replaced with concurrency-safe field-scoped mutations. savePhase/saveFeature/saveRequirements hardened with root write lock and stale revision checks. HTTP 409 PLAN_STALE_WRITE surfaced in Web UI with typed guidance. Inventory confirmed 23+ stale mutation sites across Pi/MCP/server/Web UI and all refactored. Regression suite (4 stale-write-safety, 5 plan-core, 18 server CRUD, 70 Pi adapter, real two-process MCP concurrent lifecycle) passes 542/542 Node. Production build rebuilt and bundles copied to pi-adapter and plan-server. Playwright 36/36 desktop/mobile. Plugin sync and git diff check clean. Final coverage: 86.49% lines, 74.17% branches, 82.23% functions. Remaining: classify 3 direct saveProject(project) call sites in pi-adapter as creation-safe vs stale-update paths."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "de387e78-9d72-4126-b45d-5836033c8ab3-check-001-inventory-whole-entity-web-ui-mutation-routes",
+          "number": 1,
+          "title": "Inventory whole-entity Web UI mutation routes",
+          "checked": false
+        },
+        {
+          "id": "de387e78-9d72-4126-b45d-5836033c8ab3-check-002-design-revision-and-patch-contract",
+          "number": 2,
+          "title": "Design revision and patch contract",
+          "checked": false
+        },
+        {
+          "id": "de387e78-9d72-4126-b45d-5836033c8ab3-check-003-implement-atomic-merge-read-back-behavior",
+          "number": 3,
+          "title": "Implement atomic merge/read-back behavior",
+          "checked": false
+        },
+        {
+          "id": "de387e78-9d72-4126-b45d-5836033c8ab3-check-004-add-stale-client-and-planner-owned-field-regressions",
+          "number": 4,
+          "title": "Add stale-client and planner-owned-field regressions",
+          "checked": false
+        },
+        {
+          "id": "de387e78-9d72-4126-b45d-5836033c8ab3-check-005-verify-existing-supervisor-workflows-desktop-and-mobile",
+          "number": 5,
+          "title": "Verify existing supervisor workflows desktop and mobile",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "e2dfb1ac-0394-467f-b49b-7d82cde70c22",
+          "reason": "The user reported a production handoff-quality failure showing that the completed handoff contract still causes expensive late structural rejection and permits omission of concrete runtime wiring. This P0 correctness failure must be fixed before continuing stale-write work.",
+          "whatWasBeingDone": "Auditing and beginning the stale-snapshot repair. Added PlanStaleWriteError/assertPlannerRevision plus session-info merge and stale timestamp checks to packages/plan-core/src/plan-store.ts, and began hardening saveFeatures/saveFeature/saveRequirements. These edits are incomplete and unverified; server field-level patching, Pi interactive snapshot mutations, Web UI payloads, and regressions remain.",
+          "resumeLocation": "packages/plan-core/src/plan-store.ts around PlanStoreError, mergeSessionInfo/assertSnapshotNotOlder, saveFeatures, saveFeature, and saveRequirements; inspect the working diff before continuing because partial edits have landed.",
+          "howToResume": "First run git diff on packages/plan-core/src/plan-store.ts and pnpm --filter @agent-plan/core check to assess the partial state. Then complete T365's server/API field-level patch contract, stale revision mapping, adapter-safe mutations, and same-process/multiprocess lost-update regressions. Do not discard the partial core edits, and preserve unrelated completed T364/T378/T379 work.",
+          "relatedTaskId": "69100ae0-1971-4c73-9969-5da0b47d5ee0",
+          "pausedAt": "2026-09-02T07:38:55.167Z",
+          "pausedBy": "pi"
+        }
+      ],
+      "startedAt": "2026-09-02T07:27:42.655Z",
+      "completedAt": "2026-09-02T14:54:06.540Z",
+      "createdAt": "2026-09-01T10:16:08.433Z",
+      "updatedAt": "2026-09-02T14:54:06.540Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+          "createdAt": "2026-09-02T12:36:10.094Z"
+        }
+      ]
+    },
+    {
+      "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c",
+      "phaseId": "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+      "number": 366,
+      "shortId": "82CX9",
+      "priority": 5,
+      "shortName": "expose-runtime-provenance-and",
+      "title": "Expose runtime provenance and schema compatibility diagnostics",
+      "status": "done",
+      "description": "Strengthen planner-version and initialization diagnostics across packages/plan-core, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and packages/agent-plan/src/index.ts. Report adapter/core/server/CLI versions and plan schema/allocation capabilities, detect unsupported registry kinds such as idea before mutation, distinguish installed-vs-loaded runtime state, and return an actionable typed upgrade response instead of a low-level validation error.\n\n---\n**Completion summary:**\nImplemented runtime provenance and compatibility diagnostics for T366. Shipped a harness-agnostic runtime diagnostics surface in packages/plan-core/src/runtime-diagnostics.ts with PLAN_SCHEMA_VERSION=1, ALLOCATION_REGISTRY_VERSION=1, supported allocation kinds feature/phase/task/idea, runtimePackageDiagnostic/runtimePackagesDiagnostic, runtimeCapabilities, and typed unsupported-allocation upgrade details. packages/plan-core/src/package-version.ts now retains the loaded package manifest path as provenance. packages/plan-core/src/schema.ts uses PLAN_SCHEMA_VERSION for manifest validation, and packages/plan-core/src/plan-store.ts now detects unsupported allocation kinds and incompatible manifest/allocation registry schemas before identity allocation or mutation, returning PLAN_UNSUPPORTED_ALLOCATION_KIND or PLAN_RUNTIME_SCHEMA_INCOMPATIBLE with upgrade/reload guidance instead of low-level Zod validation. packages/plan-server/src/serve.ts maps these typed compatibility failures to HTTP 409 JSON responses. packages/plan-mcp/src/index.ts planner-version now reports loaded @agent-plan/mcp and @agent-plan/core provenance plus plan schema and allocation capabilities in text and structuredContent. packages/pi-adapter/src/index.ts /planner version now reports loaded pi-adapter/core/server provenance and the same compatibility capabilities without creating .planner. packages/agent-plan/src/index.ts adds agent-plan version for CLI runtime diagnostics while preserving --version/-v as terse version output. Documentation: packages/plan-core/docs/runtime-boundaries.md documents runtime diagnostics, installedVersion vs loadedVersion fields, safe upgrade/reload remediation, and atomic no-op behavior for compatibility failures. Tests added/updated: packages/plan-core/test/runtime-diagnostics.test.mjs, packages/plan-mcp/test/mcp-harness.test.mjs, packages/pi-adapter/test/host-registration.test.mjs, packages/agent-plan/test/version.test.mjs, packages/plan-server/test/server-crud.test.mjs. Verification run: pnpm --filter @agent-plan/core build && pnpm --filter @agent-plan/server build && pnpm --filter @agent-plan/mcp build && pnpm --filter @agent-plan/pi-adapter build && pnpm --filter agent-plan build passed; node --test packages/plan-core/test/runtime-diagnostics.test.mjs packages/plan-server/test/server-crud.test.mjs packages/plan-mcp/test/mcp-harness.test.mjs packages/pi-adapter/test/host-registration.test.mjs packages/agent-plan/test/version.test.mjs passed 51/51; pnpm check passed. Remaining/unverified work: full repository coverage/e2e was not rerun after this focused slice; no commit or push performed. Branch/worktree: feature/p093-runtime-integrity created from develop with existing broad uncommitted P093 work preserved.",
+      "descriptionUpdatedAt": "2026-09-02T18:57:24.677Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c-check-001-planned-in-progress",
+          "date": "2026-09-02T15:01:46.878Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c-check-002-in-progress-done",
+          "date": "2026-09-02T18:57:24.674Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented runtime provenance and compatibility diagnostics for T366. Shipped a harness-agnostic runtime diagnostics surface in packages/plan-core/src/runtime-diagnostics.ts with PLAN_SCHEMA_VERSION=1, ALLOCATION_REGISTRY_VERSION=1, supported allocation kinds feature/phase/task/idea, runtimePackageDiagnostic/runtimePackagesDiagnostic, runtimeCapabilities, and typed unsupported-allocation upgrade details. packages/plan-core/src/package-version.ts now retains the loaded package manifest path as provenance. packages/plan-core/src/schema.ts uses PLAN_SCHEMA_VERSION for manifest validation, and packages/plan-core/src/plan-store.ts now detects unsupported allocation kinds and incompatible manifest/allocation registry schemas before identity allocation or mutation, returning PLAN_UNSUPPORTED_ALLOCATION_KIND or PLAN_RUNTIME_SCHEMA_INCOMPATIBLE with upgrade/reload guidance instead of low-level Zod validation. packages/plan-server/src/serve.ts maps these typed compatibility failures to HTTP 409 JSON responses. packages/plan-mcp/src/index.ts planner-version now reports loaded @agent-plan/mcp and @agent-plan/core provenance plus plan schema and allocation capabilities in text and structuredContent. packages/pi-adapter/src/index.ts /planner version now reports loaded pi-adapter/core/server provenance and the same compatibility capabilities without creating .planner. packages/agent-plan/src/index.ts adds agent-plan version for CLI runtime diagnostics while preserving --version/-v as terse version output. Documentation: packages/plan-core/docs/runtime-boundaries.md documents runtime diagnostics, installedVersion vs loadedVersion fields, safe upgrade/reload remediation, and atomic no-op behavior for compatibility failures. Tests added/updated: packages/plan-core/test/runtime-diagnostics.test.mjs, packages/plan-mcp/test/mcp-harness.test.mjs, packages/pi-adapter/test/host-registration.test.mjs, packages/agent-plan/test/version.test.mjs, packages/plan-server/test/server-crud.test.mjs. Verification run: pnpm --filter @agent-plan/core build && pnpm --filter @agent-plan/server build && pnpm --filter @agent-plan/mcp build && pnpm --filter @agent-plan/pi-adapter build && pnpm --filter agent-plan build passed; node --test packages/plan-core/test/runtime-diagnostics.test.mjs packages/plan-server/test/server-crud.test.mjs packages/plan-mcp/test/mcp-harness.test.mjs packages/pi-adapter/test/host-registration.test.mjs packages/agent-plan/test/version.test.mjs passed 51/51; pnpm check passed. Remaining/unverified work: full repository coverage/e2e was not rerun after this focused slice; no commit or push performed. Branch/worktree: feature/p093-runtime-integrity created from develop with existing broad uncommitted P093 work preserved."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c-check-001-define-harness-agnostic-provenance-payload",
+          "number": 1,
+          "title": "Define harness-agnostic provenance payload",
+          "checked": true
+        },
+        {
+          "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c-check-002-detect-incompatible-manifest-and-allocation-data-before-writes",
+          "number": 2,
+          "title": "Detect incompatible manifest and allocation data before writes",
+          "checked": true
+        },
+        {
+          "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c-check-003-expose-consistent-pi-mcp-cli-diagnostics",
+          "number": 3,
+          "title": "Expose consistent Pi/MCP/CLI diagnostics",
+          "checked": true
+        },
+        {
+          "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c-check-004-add-stale-runtime-and-installed-vs-loaded-regressions",
+          "number": 4,
+          "title": "Add stale-runtime and installed-vs-loaded regressions",
+          "checked": true
+        },
+        {
+          "id": "3436bc8d-6071-43ce-a4b6-fe4f880b432c-check-005-document-safe-upgrade-behavior-without-process-disruption",
+          "number": 5,
+          "title": "Document safe upgrade behavior without process disruption",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-02T15:01:46.878Z",
+      "completedAt": "2026-09-02T18:57:24.674Z",
+      "createdAt": "2026-09-01T10:16:08.747Z",
+      "updatedAt": "2026-09-02T18:57:24.674Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-02T18:16:59.861Z"
+        },
+        {
+          "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+          "createdAt": "2026-09-02T15:01:46.780Z"
+        }
+      ]
+    },
+    {
+      "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c",
+      "phaseId": "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+      "number": 367,
+      "shortId": "B3MG5",
+      "priority": 6,
+      "shortName": "eliminate-false-success-mutati",
+      "title": "Eliminate false-success mutation responses",
+      "status": "done",
+      "description": "Audit all mutating Pi, MCP, and plan-server handlers against PlanStore persisted read-back. Standardize updated/created/deleted booleans and typed no-op/error reasons, ensure mixed invalid payloads are atomic no-ops, and extend semantic regressions beyond handler-existence checks for feature, phase, task, requirement, idea, handoff, and project operations.\n\n---\n**Completion summary:**\nImplemented false-success mutation response hardening for T367 on top of the existing P093 writer-safety work. Audited the public mutation response shapes visible in packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, packages/plan-server/src/serve.ts, and the inventory in test/surfaces.mjs. Extended the shared noMutableFieldsReceived diagnostic in packages/plan-core/src/payload-fallback.ts to cover requirement and idea operations. MCP planner-requirement-update and planner-idea-update now return isError typed NO_MUTABLE_FIELDS_RECEIVED no-op responses when no mutable fields arrive, and planner-requirement-delete now reports a boolean deleted outcome with the deleted requirementId separately. Pi requirement_create/update/delete now return explicit created/updated/deleted booleans with persisted entity read-back where applicable, typed NOT_FOUND/TITLE_REQUIRED/REQUIREMENT_PHASE_LINK_INVALID errors, and no-field requirement/idea updates use the shared typed no-op failure. plan-server now rejects empty/no-field PUT payloads for project, feature, phase, task, requirement, and idea routes with HTTP 400 NO_MUTABLE_FIELDS_RECEIVED before restamping or persisting, preserves stale-write detection when a mutable stale field is present, and allows idea description-only updates without forcing a title rewrite. Added semantic regressions in packages/plan-server/test/server-crud.test.mjs, packages/plan-mcp/test/mcp-harness.test.mjs, and packages/pi-adapter/test/host-registration.test.mjs proving no-field mutation payloads are atomic no-ops and do not restamp persisted data. Updated test/surfaces.mjs to include the new runtime-diagnostics capability surface. Verification run: pnpm check passed; node --test packages/plan-core/test/runtime-diagnostics.test.mjs packages/plan-server/test/server-crud.test.mjs packages/plan-mcp/test/mcp-harness.test.mjs packages/pi-adapter/test/host-registration.test.mjs packages/agent-plan/test/version.test.mjs test/matrix-consistency.test.mjs passed 65/65. Earlier in the same task sequence, all affected packages also built successfully with pnpm --filter @agent-plan/core/server/mcp/pi-adapter/agent-plan build. Remaining/unverified work: full coverage and Playwright e2e were not rerun after this final focused false-success hardening; no commit, push, PR, or merge performed. Branch/worktree: feature/p093-runtime-integrity created from develop with the broad existing uncommitted P093 changes preserved.",
+      "descriptionUpdatedAt": "2026-09-02T19:06:20.040Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c-check-001-planned-in-progress",
+          "date": "2026-09-02T18:57:35.865Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c-check-002-in-progress-done",
+          "date": "2026-09-02T19:06:20.038Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented false-success mutation response hardening for T367 on top of the existing P093 writer-safety work. Audited the public mutation response shapes visible in packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, packages/plan-server/src/serve.ts, and the inventory in test/surfaces.mjs. Extended the shared noMutableFieldsReceived diagnostic in packages/plan-core/src/payload-fallback.ts to cover requirement and idea operations. MCP planner-requirement-update and planner-idea-update now return isError typed NO_MUTABLE_FIELDS_RECEIVED no-op responses when no mutable fields arrive, and planner-requirement-delete now reports a boolean deleted outcome with the deleted requirementId separately. Pi requirement_create/update/delete now return explicit created/updated/deleted booleans with persisted entity read-back where applicable, typed NOT_FOUND/TITLE_REQUIRED/REQUIREMENT_PHASE_LINK_INVALID errors, and no-field requirement/idea updates use the shared typed no-op failure. plan-server now rejects empty/no-field PUT payloads for project, feature, phase, task, requirement, and idea routes with HTTP 400 NO_MUTABLE_FIELDS_RECEIVED before restamping or persisting, preserves stale-write detection when a mutable stale field is present, and allows idea description-only updates without forcing a title rewrite. Added semantic regressions in packages/plan-server/test/server-crud.test.mjs, packages/plan-mcp/test/mcp-harness.test.mjs, and packages/pi-adapter/test/host-registration.test.mjs proving no-field mutation payloads are atomic no-ops and do not restamp persisted data. Updated test/surfaces.mjs to include the new runtime-diagnostics capability surface. Verification run: pnpm check passed; node --test packages/plan-core/test/runtime-diagnostics.test.mjs packages/plan-server/test/server-crud.test.mjs packages/plan-mcp/test/mcp-harness.test.mjs packages/pi-adapter/test/host-registration.test.mjs packages/agent-plan/test/version.test.mjs test/matrix-consistency.test.mjs passed 65/65. Earlier in the same task sequence, all affected packages also built successfully with pnpm --filter @agent-plan/core/server/mcp/pi-adapter/agent-plan build. Remaining/unverified work: full coverage and Playwright e2e were not rerun after this final focused false-success hardening; no commit, push, PR, or merge performed. Branch/worktree: feature/p093-runtime-integrity created from develop with the broad existing uncommitted P093 changes preserved."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c-check-001-inventory-every-public-mutation-handler-and-response-shape",
+          "number": 1,
+          "title": "Inventory every public mutation handler and response shape",
+          "checked": true
+        },
+        {
+          "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c-check-002-add-shared-persisted-outcome-diagnostics",
+          "number": 2,
+          "title": "Add shared persisted-outcome diagnostics",
+          "checked": true
+        },
+        {
+          "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c-check-003-correct-false-success-and-partial-write-paths",
+          "number": 3,
+          "title": "Correct false-success and partial-write paths",
+          "checked": true
+        },
+        {
+          "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c-check-004-add-cross-harness-semantic-mutation-tests",
+          "number": 4,
+          "title": "Add cross-harness semantic mutation tests",
+          "checked": true
+        },
+        {
+          "id": "37769e17-5995-4650-8ff8-dc56c9d08e4c-check-005-feed-discovered-contracts-into-the-p2-capability-manifest",
+          "number": 5,
+          "title": "Feed discovered contracts into the P2 capability manifest",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-02T18:57:35.865Z",
+      "completedAt": "2026-09-02T19:06:20.038Z",
+      "createdAt": "2026-09-01T10:16:09.073Z",
+      "updatedAt": "2026-09-02T19:06:20.038Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-02T18:57:35.775Z"
+        }
+      ]
+    },
+    {
+      "id": "17f30e3a-2b2c-4d6b-a670-704788fea823",
+      "phaseId": "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+      "number": 378,
+      "shortId": "U6QHM",
+      "priority": 2,
+      "shortName": "restore-ideas-command-discover",
+      "title": "Restore Ideas command discoverability and inventory parity",
+      "status": "done",
+      "description": "Fix the released Ideas discoverability gap across packages/pi-adapter/src/index.ts, packages/pi-adapter/test/host-registration.test.mjs, packages/plan-mcp/src/index.ts, packages/plan-mcp/test/mcp-harness.test.mjs, and the canonical planner skill inventories. The 0.2.26 runtime registers Pi idea_list/show/create/update/delete/promotion tools and MCP planner-idea-* tools, and direct `/planner idea ...` dispatch exists, but PLANNER_COMMAND_COMPLETIONS omits every Ideas command so Pi users cannot discover them through `/planner <TAB>`. Add complete interactive command completions for list/add/show/update/delete/promote, verify direct command dispatch and agent-tool registration, verify MCP discovery and packaged runtime inventories, and add permanent parity assertions so registered command families cannot remain hidden. Preserve confirmation-safe promotion and rollup independence.\n\n---\n**Completion summary:**\nRestored complete Ideas discoverability in the Pi grouped command by adding `/planner idea list/add/show/update/delete/promote` to PLANNER_COMMAND_COMPLETIONS while preserving the existing direct dispatcher and registered agent tools. Added a real Pi host regression that creates an idea through `/planner idea add`, exact completion inventory assertions for all six actions, and MCP discovery/schema assertions proving planner-idea-create/delete/promotion tools are present and actionable. Existing canonical skill inventory coverage now also validates the newly visible Pi completions. Verification passed pnpm check, 527/527 Node tests, 88/88 Web UI tests, final coverage at 86.65% lines, 74.20% branches, and 81.63% functions, plugins:check, 36/36 desktop/mobile Playwright tests, and git diff --check. No production MCP change was required because all seven MCP Ideas tools were already present in source, the published 0.2.26 bundle, and listTools discovery.",
+      "descriptionUpdatedAt": "2026-09-01T15:05:22.647Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "17f30e3a-2b2c-4d6b-a670-704788fea823-check-001-planned-in-progress",
+          "date": "2026-09-01T15:01:38.853Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "17f30e3a-2b2c-4d6b-a670-704788fea823-check-002-in-progress-done",
+          "date": "2026-09-01T15:05:22.645Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Restored complete Ideas discoverability in the Pi grouped command by adding `/planner idea list/add/show/update/delete/promote` to PLANNER_COMMAND_COMPLETIONS while preserving the existing direct dispatcher and registered agent tools. Added a real Pi host regression that creates an idea through `/planner idea add`, exact completion inventory assertions for all six actions, and MCP discovery/schema assertions proving planner-idea-create/delete/promotion tools are present and actionable. Existing canonical skill inventory coverage now also validates the newly visible Pi completions. Verification passed pnpm check, 527/527 Node tests, 88/88 Web UI tests, final coverage at 86.65% lines, 74.20% branches, and 81.63% functions, plugins:check, 36/36 desktop/mobile Playwright tests, and git diff --check. No production MCP change was required because all seven MCP Ideas tools were already present in source, the published 0.2.26 bundle, and listTools discovery."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "17f30e3a-2b2c-4d6b-a670-704788fea823-check-001-add-every-ideas-interactive-command-to-pi-completion-discovery",
+          "number": 1,
+          "title": "Add every Ideas interactive command to Pi completion discovery",
+          "checked": true
+        },
+        {
+          "id": "17f30e3a-2b2c-4d6b-a670-704788fea823-check-002-verify-pi-direct-commands-and-agent-tools-are-both-reachable",
+          "number": 2,
+          "title": "Verify Pi direct commands and agent tools are both reachable",
+          "checked": true
+        },
+        {
+          "id": "17f30e3a-2b2c-4d6b-a670-704788fea823-check-003-verify-mcp-ideas-tool-discovery-and-published-inventory-parity",
+          "number": 3,
+          "title": "Verify MCP Ideas tool discovery and published inventory parity",
+          "checked": true
+        },
+        {
+          "id": "17f30e3a-2b2c-4d6b-a670-704788fea823-check-004-add-regression-coverage-preventing-hidden-registered-capability-families",
+          "number": 4,
+          "title": "Add regression coverage preventing hidden registered capability families",
+          "checked": true
+        },
+        {
+          "id": "17f30e3a-2b2c-4d6b-a670-704788fea823-check-005-run-adapter-mcp-plugin-sync-and-full-verification",
+          "number": 5,
+          "title": "Run adapter, MCP, plugin-sync, and full verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-01T15:01:38.853Z",
+      "completedAt": "2026-09-01T15:05:22.645Z",
+      "createdAt": "2026-09-01T14:59:48.230Z",
+      "updatedAt": "2026-09-01T15:05:22.645Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+          "createdAt": "2026-09-01T15:01:38.769Z"
+        }
+      ]
+    },
+    {
+      "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587",
+      "phaseId": "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+      "number": 379,
+      "shortId": "575ZH",
+      "priority": 3,
+      "shortName": "archive-handoffs-for-every-ter",
+      "title": "Archive handoffs for every terminal phase outcome",
+      "status": "done",
+      "description": "Correct terminal handoff lifecycle semantics in packages/plan-core/src/plan-store.ts and all Pi, MCP, plan-server, and maintenance paths that invoke syncTaskStatusRollup, cleanupStaleHandoffs, listHandoffs, or repair. Current hasCompletedHandoffLifecycle only accepts tasks that are done or canceled, so an all-rejected phase retains an active handoff and a done-plus-rejected phase derives done and disappears from the active list without being archived. Define archival from the canonical derived terminal phase outcome: done, rejected, or legacy canceled. Archive immediately on task mutation and retroactively during list/repair cleanup, preserve recoverable history with an accurate terminal reason, reject new handoffs on terminal phases, and keep nonterminal blocked/waiting/deferred/planned phases active. Add regressions for all-rejected, done+rejected, done+canceled, all-canceled, already-terminal legacy state, and every transport path that can close or reject task work.\n\n---\n**Completion summary:**\nImplemented canonical terminal-phase handoff lifecycle across plan-core and every existing transport mutation path that calls syncTaskStatusRollup. PlanStore now derives archival from the loaded phase's canonical terminal status: done archives as phase-done, rejected (including all-canceled legacy task sets) archives as phase-rejected, and legacy canceled is supported as phase-canceled. Immediate task mutations archive through existing Pi, MCP, and plan-server rollup calls; listHandoffs and repair retroactively archive stale terminal handoffs instead of merely hiding them; both legacy setPhaseHandoff and completeness-audited refreshPhaseHandoff reject every terminal phase. Nonterminal planned, waiting, blocked, and deferred phases retain active handoffs. Updated canonical cross-harness skill guidance and synchronized generated plugin copy. Added core regressions for all-rejected, done+rejected, done+canceled, all-canceled, stale list/repair cleanup, nonterminal preservation, and terminal write rejection; added Pi, MCP, and real plan-server rejected-transition regressions. Also hardened the T364 two-server test readiness protocol to wait for a non-empty valid URL rather than file existence, eliminating a race observed during full verification. Verification: pnpm build, pnpm check, pnpm test:coverage (533/533 Node tests, 88/88 Web UI tests; FINAL coverage 86.65% lines, 74.24% branches, 81.62% functions), pnpm plugins:check, pnpm test:e2e (36/36 desktop/mobile Chromium), and git diff --check all passed. Files include packages/plan-core/src/plan-store.ts, packages/plan-core/src/handoff-context.ts, packages/plan-core/test/handoff-lifecycle.test.mjs, packages/plan-core/test/status-rollup-handoff-repair-persistence.test.mjs, packages/plan-server/test/server-handoff.test.mjs, packages/plan-server/test/writer-coordination.test.mjs, packages/pi-adapter/test/mutations.test.mjs, packages/plan-mcp/test/mcp-handoff.test.mjs, packages/plan-core/planner-skill.md, plugins/_shared/planner-skill.md.in, synchronized plugin output, and rebuilt dist/web-ui bundles. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-09-02T07:24:08.335Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587-check-001-planned-in-progress",
+          "date": "2026-09-01T15:05:47.995Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587-check-002-in-progress-done",
+          "date": "2026-09-02T07:24:08.333Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented canonical terminal-phase handoff lifecycle across plan-core and every existing transport mutation path that calls syncTaskStatusRollup. PlanStore now derives archival from the loaded phase's canonical terminal status: done archives as phase-done, rejected (including all-canceled legacy task sets) archives as phase-rejected, and legacy canceled is supported as phase-canceled. Immediate task mutations archive through existing Pi, MCP, and plan-server rollup calls; listHandoffs and repair retroactively archive stale terminal handoffs instead of merely hiding them; both legacy setPhaseHandoff and completeness-audited refreshPhaseHandoff reject every terminal phase. Nonterminal planned, waiting, blocked, and deferred phases retain active handoffs. Updated canonical cross-harness skill guidance and synchronized generated plugin copy. Added core regressions for all-rejected, done+rejected, done+canceled, all-canceled, stale list/repair cleanup, nonterminal preservation, and terminal write rejection; added Pi, MCP, and real plan-server rejected-transition regressions. Also hardened the T364 two-server test readiness protocol to wait for a non-empty valid URL rather than file existence, eliminating a race observed during full verification. Verification: pnpm build, pnpm check, pnpm test:coverage (533/533 Node tests, 88/88 Web UI tests; FINAL coverage 86.65% lines, 74.24% branches, 81.62% functions), pnpm plugins:check, pnpm test:e2e (36/36 desktop/mobile Chromium), and git diff --check all passed. Files include packages/plan-core/src/plan-store.ts, packages/plan-core/src/handoff-context.ts, packages/plan-core/test/handoff-lifecycle.test.mjs, packages/plan-core/test/status-rollup-handoff-repair-persistence.test.mjs, packages/plan-server/test/server-handoff.test.mjs, packages/plan-server/test/writer-coordination.test.mjs, packages/pi-adapter/test/mutations.test.mjs, packages/plan-mcp/test/mcp-handoff.test.mjs, packages/plan-core/planner-skill.md, plugins/_shared/planner-skill.md.in, synchronized plugin output, and rebuilt dist/web-ui bundles. No commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587-check-001-define-canonical-terminal-phase-handoff-lifecycle-semantics",
+          "number": 1,
+          "title": "Define canonical terminal-phase handoff lifecycle semantics",
+          "checked": true
+        },
+        {
+          "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587-check-002-archive-immediately-for-done-rejected-and-legacy-canceled-outcomes",
+          "number": 2,
+          "title": "Archive immediately for done, rejected, and legacy canceled outcomes",
+          "checked": true
+        },
+        {
+          "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587-check-003-repair-and-list-stale-terminal-handoffs-with-accurate-archive-reasons",
+          "number": 3,
+          "title": "Repair and list stale terminal handoffs with accurate archive reasons",
+          "checked": true
+        },
+        {
+          "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587-check-004-add-core-and-transport-regressions-for-mixed-terminal-outcomes",
+          "number": 4,
+          "title": "Add core and transport regressions for mixed terminal outcomes",
+          "checked": true
+        },
+        {
+          "id": "b9f2324a-9aec-4607-9f73-7f25c9dc2587-check-005-run-full-build-coverage-plugin-sync-and-browser-verification",
+          "number": 5,
+          "title": "Run full build, coverage, plugin-sync, and browser verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-01T15:05:47.995Z",
+      "completedAt": "2026-09-02T07:24:08.333Z",
+      "createdAt": "2026-09-01T15:00:02.963Z",
+      "updatedAt": "2026-09-02T07:24:08.333Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+          "createdAt": "2026-09-01T15:05:47.907Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-09-01T10:16:07.719Z",
+  "updatedAt": "2026-09-02T19:06:20.038Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-02T18:24:53.820Z",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/a5561b5b-6c51-43bc-b241-d416cab4abcc-2026-09-02T19-06-20-064Z.md",
+      "clearedAt": "2026-09-02T19:06:20.064Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/a5561b5b-6c51-43bc-b241-d416cab4abcc-2026-09-02T18-24-53-793Z.md",
+      "clearedAt": "2026-09-02T18:24:53.793Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/a5561b5b-6c51-43bc-b241-d416cab4abcc-2026-09-02T15-24-20-745Z.md",
+      "clearedAt": "2026-09-02T15:24:20.745Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/a5561b5b-6c51-43bc-b241-d416cab4abcc-2026-09-02T15-24-20-647Z.md",
+      "clearedAt": "2026-09-02T15:24:20.647Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/a5561b5b-6c51-43bc-b241-d416cab4abcc-2026-09-02T15-23-05-818Z.md",
+      "clearedAt": "2026-09-02T15:23:05.818Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "f65ae645-47e8-4579-b215-23e5f7a78de8",
+      "date": "2026-09-01T10:16:08.276Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "21265d11-7d22-46f3-8254-ee70ad28f866",
+      "date": "2026-09-01T10:17:21.221Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "de326c2a-9407-4ae6-b6a4-59df102e6cf6",
+      "date": "2026-09-02T19:06:20.112Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-02T18:57:35.775Z"
+    },
+    {
+      "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+      "createdAt": "2026-09-02T15:01:46.780Z"
+    },
+    {
+      "sessionId": "mcp-process:c8e7d544-20a8-4a2d-ab52-6e615de90316",
+      "createdAt": "2026-09-01T10:17:20.971Z"
+    }
+  ]
+}

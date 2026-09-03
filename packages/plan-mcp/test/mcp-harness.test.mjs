@@ -34,7 +34,7 @@ import {
   discoverTools,
 } from "../../../test/helpers/mcp-fixture.mjs";
 import { createTempRoot, cleanupFixtures } from "../../../test/helpers/fixtures.mjs";
-import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupMcpFixtures();
@@ -89,6 +89,14 @@ test("listTools exposes the full published tool set with actionable input schema
     const byName = (toolName) => tools.find((tool) => tool.name === toolName);
     const schema = (toolName) => byName(toolName).inputSchema;
 
+    // Ideas are both discoverable and actionable through their published schemas.
+    const ideaCreate = schema("planner-idea-create");
+    assert.ok(ideaCreate.required.includes("title"), "idea-create requires a title");
+    const ideaDelete = schema("planner-idea-delete");
+    assert.ok(ideaDelete.required.includes("idea") && ideaDelete.required.includes("confirmed"), "idea-delete requires the target and confirmation");
+    const ideaPromotion = schema("planner-idea-promotion-begin");
+    assert.deepEqual(ideaPromotion.properties.targetType.enum, ["feature", "phase", "task"], "idea promotion publishes every supported target type");
+
     // feature-add: name + description required, description ≥ 50, status enum
     const featureAdd = schema("planner-feature-add");
     assert.ok(featureAdd.required.includes("name"), "feature-add requires name");
@@ -113,6 +121,8 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.ok(handoffWrite.required.includes("phaseRef"), "handoff-write requires phaseRef");
     assert.ok(handoffWrite.required.includes("content"), "handoff-write requires content");
     assert.ok(handoffWrite.properties.completenessAudit, "handoff-write publishes the mandatory confirmed-write completeness audit contract");
+    assert.ok(handoffWrite.properties.coldStartInventory, "handoff-write publishes the mandatory cold-start inventory contract");
+    assert.ok(handoffWrite.properties.coldStartInventory.properties.sourceReviews, "cold-start inventory publishes the pre-draft source-review contract");
     assert.equal(handoffWrite.properties.confirmed.type, "boolean", "confirmed is a boolean");
 
     // task-checklist-toggle requires task + item
@@ -129,17 +139,24 @@ test("listTools exposes the full published tool set with actionable input schema
   }
 });
 
-test("planner-version works without a planner workspace and reports loaded package manifests", async () => {
+test("planner-version works without a planner workspace and reports loaded runtime provenance and compatibility", async () => {
   const root = await createTempRoot("agent-plan-mcp-version-");
   const session = await startMcpClient({ planRoot: join(root, ".planner"), name: "t293-version" });
   try {
     const result = await callTool(session, "planner-version", {});
-    assert.match(toolText(result), new RegExp(`@agent-plan/mcp: ${MCP_VERSION.replaceAll(".", "\\.")}`));
-    assert.match(toolText(result), new RegExp(`@agent-plan/core: ${CORE_VERSION.replaceAll(".", "\\.")}`));
-    assert.deepEqual(toolStructured(result)?.versions, {
+    assert.match(toolText(result), new RegExp(`@agent-plan/mcp: loaded ${MCP_VERSION.replaceAll(".", "\\.")}`));
+    assert.match(toolText(result), new RegExp(`@agent-plan/core: loaded ${CORE_VERSION.replaceAll(".", "\\.")}`));
+    assert.match(toolText(result), /Plan schema: manifest schemaVersion 1/);
+    assert.match(toolText(result), /Allocation registry: v1; supported kinds: feature, phase, task, idea/);
+    const structured = toolStructured(result);
+    assert.deepEqual(structured?.versions, {
       "@agent-plan/mcp": MCP_VERSION,
       "@agent-plan/core": CORE_VERSION,
     });
+    assert.equal(structured?.packages?.["@agent-plan/mcp"]?.loadedVersion, MCP_VERSION);
+    assert.equal(structured?.packages?.["@agent-plan/mcp"]?.installedVersion, MCP_VERSION);
+    assert.equal(structured?.packages?.["@agent-plan/mcp"]?.runtimeState, "loaded");
+    assert.deepEqual(structured?.capabilities?.allocationRegistry?.supportedKinds, ["feature", "phase", "task", "idea"]);
   } finally {
     await closeMcpFixture(session);
   }
@@ -243,6 +260,18 @@ test("error helpers catch schema-level and semantic errors without mutating stat
     const after = (await session.store.loadFeatures()).features.map((entry) => entry.name);
     assert.deepEqual(after, before, "semantic failure leaves data unchanged");
 
+    const requirement = (await session.store.loadRequirements()).requirements[0];
+    const requirementNoop = await callTool(session, "planner-requirement-update", { requirementId: requirement.id });
+    assert.equal(requirementNoop.isError, true, "no-field requirement updates are typed no-op failures");
+    assert.equal(toolStructured(requirementNoop)?.errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+    assert.equal((await session.store.loadRequirements()).requirements[0].updatedAt, requirement.updatedAt, "no-field requirement update does not restamp persisted data");
+
+    const ideaCreate = await callTool(session, "planner-idea-create", { title: "No-op candidate" });
+    assert.equal(toolStructured(ideaCreate)?.created, true);
+    const ideaNoop = await callTool(session, "planner-idea-update", { idea: "I001" });
+    assert.equal(ideaNoop.isError, true, "no-field idea updates are typed no-op failures");
+    assert.equal(toolStructured(ideaNoop)?.errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+
     // handoff write without confirmation is proposal-only, never mutates.
     // (confirmed is REQUIRED by the schema, so an explicit false exercises the
     // proposal branch; omitting it is a schema-level -32602 validation error.)
@@ -275,6 +304,7 @@ test("handoff write (confirmed) + show return structured phase identifiers", asy
       content: canonicalAuditedHandoff("T236 — confirmed handoff", "Handoff body for the harness.", { file: "mcp-harness.test.mjs", reason: "harness fixture" }),
       confirmed: true,
       completenessAudit: completeHandoffAudit(),
+      coldStartInventory: completeHandoffColdStartInventory({ file: "mcp-harness.test.mjs" }),
       expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
       reconciledExistingHandoff: true,
       taskUpdates: [],

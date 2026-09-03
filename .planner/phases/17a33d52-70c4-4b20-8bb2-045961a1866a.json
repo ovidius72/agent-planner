@@ -1,0 +1,234 @@
+{
+  "id": "17a33d52-70c4-4b20-8bb2-045961a1866a",
+  "featureId": "39d5b62f-6c16-4bed-9fc2-749d4b189f82",
+  "number": 95,
+  "shortId": "5KBBZ",
+  "priority": 20,
+  "slug": "p1-task-dependency-and-subtask-reachability",
+  "title": "P1 task dependency and subtask reachability",
+  "discussedAt": "2026-09-01T10:16:11.436Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Make persisted work-graph capabilities actually creatable, editable, and testable.",
+  "description": "Atomic dependency add/remove/reorder as applicable; subtask create/update/remove/reorder; Pi/MCP/Web UI parity; cycle/foreign-ID validation; startability and rendering tests.",
+  "descriptionUpdatedAt": "2026-09-01T10:16:11.436Z",
+  "notes": "",
+  "goals": [
+    "Turn task dependencies and subtasks from partially persisted/read-only concepts into complete supported workflows."
+  ],
+  "nonGoals": [
+    "Introducing a separate nested planner task entity hierarchy unless schema analysis requires it",
+    "Weakening dependency enforcement"
+  ],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [
+    "Dependency cycles and deletion semantics require explicit contracts",
+    "Subtask identity must remain stable and planner-owned"
+  ],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Users and agents can manage dependencies and subtasks through supported surfaces",
+    "Invalid graphs fail atomically with actionable diagnostics",
+    "Task start uses the same persisted graph exposed to users",
+    "Desktop/mobile and cross-harness tests cover the complete workflow"
+  ],
+  "taskIds": [
+    "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7",
+    "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16",
+    "599476ab-18e3-449a-8356-0f870602bcb2"
+  ],
+  "tasks": [
+    {
+      "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7",
+      "phaseId": "17a33d52-70c4-4b20-8bb2-045961a1866a",
+      "number": 372,
+      "shortId": "V93B6",
+      "priority": 0,
+      "shortName": "add-task-dependency-management",
+      "title": "Add task dependency management across all surfaces",
+      "status": "planned",
+      "description": "Implement atomic task dependency add/remove/update operations in plan-core and expose them through Pi, MCP, plan-server, and Web UI. Validate composite references, cross-project IDs, self-dependencies, cycles, deletion behavior, and startability; preserve existing dependsOn enforcement and deterministic rendering.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:11.588Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-001-specify-dependency-graph-and-cycle-contract",
+          "number": 1,
+          "title": "Specify dependency graph and cycle contract",
+          "checked": false
+        },
+        {
+          "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-002-implement-core-atomic-operations",
+          "number": 2,
+          "title": "Implement core atomic operations",
+          "checked": false
+        },
+        {
+          "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-003-expose-pi-mcp-http-and-web-ui-controls",
+          "number": 3,
+          "title": "Expose Pi MCP HTTP and Web UI controls",
+          "checked": false
+        },
+        {
+          "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-004-add-deletion-and-startability-regressions",
+          "number": 4,
+          "title": "Add deletion and startability regressions",
+          "checked": false
+        },
+        {
+          "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-005-verify-desktop-mobile-workflows",
+          "number": 5,
+          "title": "Verify desktop/mobile workflows",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:11.549Z",
+      "updatedAt": "2026-09-01T10:16:11.689Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16",
+      "phaseId": "17a33d52-70c4-4b20-8bb2-045961a1866a",
+      "number": 373,
+      "shortId": "TQPV7",
+      "priority": 10,
+      "shortName": "add-stable-subtask-management",
+      "title": "Add stable subtask management across all surfaces",
+      "status": "planned",
+      "description": "Define stable planner-owned subtask identity and implement create/edit/remove/reorder operations in plan-core, Pi, MCP, plan-server, and Web UI. Preserve existing task status/checklist behavior, reject forged IDs atomically, render accessible nested work consistently, and migrate legacy inline subtasks without loss.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:11.900Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-001-confirm-or-migrate-subtask-schema",
+          "number": 1,
+          "title": "Confirm or migrate subtask schema",
+          "checked": false
+        },
+        {
+          "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-002-implement-atomic-semantic-operations",
+          "number": 2,
+          "title": "Implement atomic semantic operations",
+          "checked": false
+        },
+        {
+          "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-003-expose-cross-harness-mutation-parity",
+          "number": 3,
+          "title": "Expose cross-harness mutation parity",
+          "checked": false
+        },
+        {
+          "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-004-add-responsive-accessible-web-ui-controls",
+          "number": 4,
+          "title": "Add responsive accessible Web UI controls",
+          "checked": false
+        },
+        {
+          "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-005-verify-identity-ordering-and-legacy-compatibility",
+          "number": 5,
+          "title": "Verify identity ordering and legacy compatibility",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:11.864Z",
+      "updatedAt": "2026-09-01T10:16:11.996Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "599476ab-18e3-449a-8356-0f870602bcb2",
+      "phaseId": "17a33d52-70c4-4b20-8bb2-045961a1866a",
+      "number": 374,
+      "shortId": "5Z47H",
+      "priority": 20,
+      "shortName": "verify-complete-work-graph-lif",
+      "title": "Verify complete work-graph lifecycle end to end",
+      "status": "planned",
+      "description": "Add real PlanStore, Pi-host, stdio MCP, plan-server, and desktop/mobile Playwright scenarios covering dependency creation, blocked start, prerequisite completion, unblocked start, subtask editing, deletion/cascade behavior, and generated PLAN.md output. Ensure Ideas and unrelated rollups remain isolated.",
+      "descriptionUpdatedAt": "2026-09-01T10:16:12.217Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-001-author-shared-work-graph-scenarios",
+          "number": 1,
+          "title": "Author shared work-graph scenarios",
+          "checked": false
+        },
+        {
+          "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-002-cover-pi-and-real-mcp-transports",
+          "number": 2,
+          "title": "Cover Pi and real MCP transports",
+          "checked": false
+        },
+        {
+          "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-003-cover-server-and-web-ui-workflows",
+          "number": 3,
+          "title": "Cover server and Web UI workflows",
+          "checked": false
+        },
+        {
+          "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-004-exercise-lifecycle-and-deletion-edges",
+          "number": 4,
+          "title": "Exercise lifecycle and deletion edges",
+          "checked": false
+        },
+        {
+          "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-005-run-full-coverage-and-playwright-gates",
+          "number": 5,
+          "title": "Run full coverage and Playwright gates",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-01T10:16:12.178Z",
+      "updatedAt": "2026-09-01T10:16:12.320Z",
+      "sessionInfo": []
+    }
+  ],
+  "createdAt": "2026-09-01T10:16:11.137Z",
+  "updatedAt": "2026-09-01T10:16:12.320Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "0ca9113e-2749-4514-9aea-ff9181b64e99",
+      "date": "2026-09-01T10:16:11.712Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

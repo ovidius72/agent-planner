@@ -5,7 +5,16 @@
   "projectGuidelines": {
     "content": "- use the available react skill. \n- make each component small and reusable. fully typescript typed and expandable. \n- add unit tests to every component\n- make the UI user friendly\n- use the best react-router 7 patterns: form submissions, navigation and middleware",
     "updatedAt": "2026-08-31T07:38:25.009Z",
-    "sessionInfo": []
+    "sessionInfo": [
+      {
+        "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+        "createdAt": "2026-09-02T18:16:54.211Z"
+      },
+      {
+        "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+        "createdAt": "2026-09-02T15:01:43.399Z"
+      }
+    ]
   },
   "webPort": 56321,
   "scope": [],

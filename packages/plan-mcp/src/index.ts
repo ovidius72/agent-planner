@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
+import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { Feature, Phase, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
-import type { HandoffCompletenessAuditInput } from "@agent-plan/core";
+import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
 const PHASE_STATUS_VALUES = ["draft", "discovery", ...STATUS_VALUES] as const;
@@ -312,17 +312,22 @@ async function resolvePhaseForHandoff(st: PlanStore, ref: string | undefined): P
 }
 
 server.registerTool("planner-version", {
-  description: "Report the versions of the Agent Plan MCP server and core package actually loaded by this process. Available without an initialized .planner/ workspace.",
+  description: "Report loaded Agent Plan MCP/core runtime provenance plus plan schema and allocation compatibility. Available without an initialized .planner/ workspace.",
 }, async () => {
+  const packages = runtimePackagesDiagnostic([MCP_PACKAGE, CORE_PACKAGE]);
+  const capabilities = runtimeCapabilities();
   const versions = {
     [MCP_PACKAGE.name]: MCP_PACKAGE.version,
     [CORE_PACKAGE.name]: CORE_PACKAGE.version,
   };
   return text([
-    "Agent Plan runtime versions",
-    `${MCP_PACKAGE.name}: ${MCP_PACKAGE.version}`,
-    `${CORE_PACKAGE.name}: ${CORE_PACKAGE.version}`,
-  ].join("\n"), { versions });
+    "Agent Plan runtime diagnostics",
+    "Runtime packages (loaded package manifests):",
+    `- ${MCP_PACKAGE.name}: loaded ${MCP_PACKAGE.version}`,
+    `- ${CORE_PACKAGE.name}: loaded ${CORE_PACKAGE.version}`,
+    `Plan schema: manifest schemaVersion ${capabilities.planSchema.manifestSchemaVersion}`,
+    `Allocation registry: v${capabilities.allocationRegistry.version}; supported kinds: ${capabilities.allocationRegistry.supportedKinds.join(", ")}`,
+  ].join("\n"), { versions, packages, capabilities });
 });
 
 server.registerTool("planner-export", {
@@ -463,10 +468,11 @@ server.registerTool("planner-project-language", {
   },
 }, async ({ contentLanguage, chatLanguage }) => {
   const st = await requireStore();
-  const project = await st.loadProject();
-  if (contentLanguage !== undefined) project.contentLanguage = contentLanguage.trim();
-  if (chatLanguage !== undefined) project.chatLanguage = chatLanguage.trim();
-  await st.saveProject(project);
+  const project = await st.updateProject((current) => ({
+    ...current,
+    ...(contentLanguage !== undefined ? { contentLanguage: contentLanguage.trim() } : {}),
+    ...(chatLanguage !== undefined ? { chatLanguage: chatLanguage.trim() } : {}),
+  }));
   return writeAndSummarize(st, `Saved language preferences: content=${project.contentLanguage || "(unset)"}, chat=${project.chatLanguage || "(unset)"}`);
 });
 
@@ -516,8 +522,26 @@ server.registerTool("planner-project-discuss", {
   if (params.tools !== undefined) project.tools = params.tools.map((entry) => entry.trim()).filter(Boolean);
   if (params.globalRules !== undefined) project.globalRules = params.globalRules.map((entry) => entry.trim()).filter(Boolean);
   if (params.decisions !== undefined) project.decisions = params.decisions.map((entry) => entry.trim()).filter(Boolean);
-  await st.saveProject(project);
-  return writeAndSummarize(st, `Project discussed/updated: ${project.name}. Fields saved: ${receivedFields.join(", ")}.`, { project, discussed: true, updatedFields: receivedFields });
+  const persisted = await st.updateProject((current) => {
+    const next = {
+      ...current,
+      ...(params.description !== undefined ? { description: params.description.trim() } : {}),
+      ...(params.goal !== undefined ? { goal: params.goal.trim() } : {}),
+      ...(params.scope !== undefined ? { scope: params.scope.map((entry) => entry.trim()).filter(Boolean) } : {}),
+      ...(params.outOfScope !== undefined ? { outOfScope: params.outOfScope.map((entry) => entry.trim()).filter(Boolean) } : {}),
+      ...(params.technologies !== undefined ? { technologies: params.technologies.map((entry) => entry.trim()).filter(Boolean) } : {}),
+      ...(params.tools !== undefined ? { tools: params.tools.map((entry) => entry.trim()).filter(Boolean) } : {}),
+      ...(params.globalRules !== undefined ? { globalRules: params.globalRules.map((entry) => entry.trim()).filter(Boolean) } : {}),
+      ...(params.decisions !== undefined ? { decisions: params.decisions.map((entry) => entry.trim()).filter(Boolean) } : {}),
+    };
+    if (params.descriptionRef !== undefined) {
+      const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
+      if (descriptionRef) next.descriptionRef = descriptionRef;
+      else delete next.descriptionRef;
+    }
+    return next;
+  });
+  return writeAndSummarize(st, `Project discussed/updated: ${persisted.name}. Fields saved: ${receivedFields.join(", ")}.`, { project: persisted, discussed: true, updatedFields: receivedFields });
 });
 
 server.registerTool("planner-project-guidelines-show", {
@@ -547,12 +571,10 @@ server.registerTool("planner-project-guidelines-update", {
 }, async ({ content }) => {
   const st = await requireStore();
   const project = await st.loadProject();
-  project.projectGuidelines = {
-    content: content.trim(),
-    updatedAt: project.projectGuidelines.updatedAt,
-    sessionInfo: project.projectGuidelines.sessionInfo,
-  };
-  await st.saveProject(project);
+  await st.updateProject((current) => ({
+    ...current,
+    projectGuidelines: { ...current.projectGuidelines, content: content.trim() },
+  }), { expectedGuidelinesUpdatedAt: project.projectGuidelines.updatedAt });
   const refreshed = await st.loadProject();
   return writeAndSummarize(
     st,
@@ -690,6 +712,7 @@ server.registerTool("planner-feature-add", {
   },
 }, async ({ name, description, status }) => {
   const st = await requireStore();
+  return st.runBatch(async () => {
   const timestamp = nowISO();
   const effectiveStatus = status ?? "planned";
   const existingFeatures = (await st.loadFeatures()).features;
@@ -725,6 +748,7 @@ server.registerTool("planner-feature-add", {
     return doc;
   });
   return writeAndSummarize(st, `✅ Feature created: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}`);
+  });
 });
 
 server.registerTool("planner-feature-show", {
@@ -877,19 +901,19 @@ server.registerTool("planner-feature-delete", {
   if (!resolvedFeature.ok) return text(resolvedFeature.error);
   const feature = resolvedFeature.feature;
   const phases = (await st.loadAllPhases()).filter((phase) => phase.featureId === feature.id);
-  await st.updateFeatures((doc) => {
-    doc.features = doc.features.filter((entry) => entry.id !== feature.id);
-    return doc;
-  });
-  for (const phase of phases) {
-    if (cascade) {
-      await st.deletePhase(phase.id);
-    } else {
-      phase.featureId = undefined;
-      phase.updatedAt = nowISO();
-      await st.savePhase(phase);
+  await st.runBatch(async () => {
+    await st.updateFeatures((doc) => {
+      doc.features = doc.features.filter((entry) => entry.id !== feature.id);
+      return doc;
+    });
+    for (const phase of phases) {
+      if (cascade) {
+        await st.deletePhase(phase.id);
+      } else {
+        await st.updatePhase(phase.id, (current) => ({ ...current, featureId: undefined, updatedAt: nowISO() }));
+      }
     }
-  }
+  });
   return writeAndSummarize(st, `Feature deleted: ${feature.id}${cascade ? `; deleted ${phases.length} phases` : `; unlinked ${phases.length} phases`}`, { deleted: feature.id, affectedPhases: phases.length, cascade: Boolean(cascade) });
 });
 
@@ -913,7 +937,7 @@ server.registerTool("planner-phase-add", {
   if (!feature) return text(`Resolved feature ${featureRef} no longer exists. Refusing to create phase.`);
   const lockKey = feature?.id ?? "__unscoped__";
   let phase: Phase | undefined;
-  await withFeatureLock(lockKey, async () => {
+  await st.runBatch(() => withFeatureLock(lockKey, async () => {
     const phases = await st.loadAllPhases();
     const featurePhases = feature ? phases.filter((phase) => phase.featureId === feature.id) : phases;
     const timestamp = nowISO();
@@ -966,7 +990,7 @@ server.registerTool("planner-phase-add", {
       });
     }
     await st.writeGenerated();
-  });
+  }));
   if (!phase) return text("Phase creation failed.");
   return writeAndSummarize(st, `✅ Phase created: ${formatPhaseRef(phase.number, feature?.number)} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}`);
 });
@@ -1121,10 +1145,12 @@ server.registerTool("planner-phase-delete", {
   const st = await requireStore();
   const phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!phase) return text(`Phase not found: ${ref}`);
-  await st.deletePhase(phase.id);
-  await st.updateFeatures((doc) => {
-    for (const feature of doc.features) feature.phaseIds = feature.phaseIds.filter((id) => id !== phase.id);
-    return doc;
+  await st.runBatch(async () => {
+    await st.deletePhase(phase.id);
+    await st.updateFeatures((doc) => {
+      for (const feature of doc.features) feature.phaseIds = feature.phaseIds.filter((id) => id !== phase.id);
+      return doc;
+    });
   });
     const dFeat = (await st.loadFeatures()).features.find((f) => f.id === phase.featureId);
     return writeAndSummarize(st, `Phase deleted: ${formatPhaseRef(phase.number, dFeat?.number)}${phase.shortId ? ` · ${phase.shortId}` : ""}`, { deleted: phase.id });
@@ -1141,6 +1167,7 @@ server.registerTool("planner-task-add", {
   },
 }, async ({ feature: featureRef, phase: ref, title, description, checklist }) => {
   const st = await requireStore();
+  return st.runBatch(async () => {
   const features = (await st.loadFeatures()).features;
   if (!featureRef?.trim()) return text("feature is required: a task must belong to a feature.");
   const resolvedFeature = resolveFeatureRefStrict(features, featureRef);
@@ -1194,6 +1221,7 @@ server.registerTool("planner-task-add", {
   });
   const finalFeatures = (await st.loadFeatures()).features;
   return writeAndSummarize(st, `✅ Task created: ${taskCompositeRef(task, found, finalFeatures)} — ${task.title} (planned)${task.shortId ? ` · ${task.shortId}` : ""}`);
+  });
 });
 
 server.registerTool("planner-task-show", {
@@ -1670,8 +1698,9 @@ server.registerTool("planner-task-switch", {
   const sourceWasActive = source.task.status === "in-progress";
   let sourceCheckpointed = false;
   let targetStarted = false;
-  try {
-    if (sourceWasActive) {
+  await st.runBatch(async () => {
+    try {
+      if (sourceWasActive) {
       await st.pauseTask(source.phase.id, source.task.id, snapshot);
     } else {
       await st.updatePhase(source.phase.id, (phase) => {
@@ -1718,17 +1747,18 @@ server.registerTool("planner-task-switch", {
         return phase;
       }).catch(() => {});
     }
-    if (sourceCheckpointed) {
-      if (sourceWasActive) await st.resumeTask(source.phase.id, source.task.id, nowISO()).catch(() => {});
-      else await st.updatePhase(source.phase.id, (phase) => {
-        phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
-        return phase;
-      }).catch(() => {});
+      if (sourceCheckpointed) {
+        if (sourceWasActive) await st.resumeTask(source.phase.id, source.task.id, nowISO()).catch(() => {});
+        else await st.updatePhase(source.phase.id, (phase) => {
+          phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
+          return phase;
+        }).catch(() => {});
+      }
+      throw error;
     }
-    throw error;
-  }
-  await st.syncTaskStatusRollup(source.phase.id);
-  if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
+    await st.syncTaskStatusRollup(source.phase.id);
+    if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
+  });
   invalidateReads(plannerSessionId);
   return writeAndSummarize(st, [
     `🔀 Task switched: ${taskCompositeRef(source.task, source.phase, features)} → ${taskCompositeRef(target.task, target.phase, features)}`,
@@ -1750,6 +1780,7 @@ server.registerTool("planner-task-start", {
     return taskStartError(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry planner-task-start."]));
   }
 
+  return st.runBatch(async () => {
   const features = (await st.loadFeatures()).features;
   const found = findTaskByRef(await st.loadAllPhases(), features, ref);
   if (!found) return taskStartError(taskStartDenied("TASK_NOT_FOUND", `Task not found: ${ref}`, ["Resolve the task with planner-task-list or planner-task-show, then retry planner-task-start."]));
@@ -1948,6 +1979,7 @@ server.registerTool("planner-task-start", {
     task: persistedTask,
     ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
   });
+  });
 });
 
 server.registerTool("planner-task-complete", {
@@ -2097,8 +2129,7 @@ server.registerTool("planner-requirement-create", {
     updatedAt: now,
     sessionInfo: [],
   };
-  const requirements = await st.loadRequirements();
-  await st.saveRequirements({ requirements: [...requirements.requirements, requirement] });
+  await st.updateRequirements((document) => ({ requirements: [...document.requirements, requirement] }));
   await st.writeGenerated();
   return writeAndSummarize(st, `Requirement created: ${requirement.id}.`, { requirement, created: true });
 });
@@ -2123,33 +2154,38 @@ server.registerTool("planner-requirement-update", {
   const requirements = await st.loadRequirements();
   const current = requirements.requirements.find((requirement) => requirement.id === requirementId);
   if (!current) return text(`❌ Requirement not found: ${requirementId}`, { updated: false, errorCode: "NOT_FOUND" });
+  if (title === undefined && description === undefined && status === undefined && linkedPhaseIds === undefined && macroTasks === undefined) {
+    return mutationNoFieldsFailure({
+      entity: "requirement",
+      ref: requirementId,
+      operation: "update",
+      mutableFields: ["title", "description", "status", "linkedPhaseIds", "macroTasks"],
+      retryCommand: `planner-requirement-update ${requirementId}`,
+    });
+  }
   const links = linkedPhaseIds === undefined ? { ok: true as const, linkedPhaseIds: current.linkedPhaseIds } : await resolveRequirementPhaseRefs(st, linkedPhaseIds);
   if (!links.ok) return text(`❌ ${links.error}`, { updated: false, errorCode: "REQUIREMENT_PHASE_LINK_INVALID" });
   const now = nowISO();
-  let normalizedMacroTasks = current.macroTasks;
-  if (macroTasks !== undefined) {
-    try {
-      normalizedMacroTasks = reconcileRequirementMacroTasks(current.macroTasks, macroTasks.map((task) => ({
+  let next: Requirement;
+  try {
+    next = await st.updateRequirement(current.id, (canonical) => ({
+      ...canonical,
+      ...(title !== undefined ? { title: title.trim() } : {}),
+      ...(description !== undefined ? { description: description.trim() } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(linkedPhaseIds !== undefined ? { linkedPhaseIds: links.linkedPhaseIds } : {}),
+      ...(macroTasks !== undefined ? { macroTasks: reconcileRequirementMacroTasks(canonical.macroTasks, macroTasks.map((task) => ({
         ...(task.id !== undefined ? { id: task.id } : {}),
         title: task.title,
         ...(task.description !== undefined ? { description: task.description } : {}),
         status: task.status,
-      })), now);
-    } catch (error) {
-      const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
-      return text(`❌ ${message}`, { updated: false, errorCode: "REQUIREMENT_MACRO_TASK_INVALID" });
-    }
+      })), now) } : {}),
+      updatedAt: now,
+    }));
+  } catch (error) {
+    const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
+    return text(`❌ ${message}`, { updated: false, errorCode: "REQUIREMENT_MACRO_TASK_INVALID" });
   }
-  const next: Requirement = {
-    ...current,
-    ...(title !== undefined ? { title: title.trim() } : {}),
-    ...(description !== undefined ? { description: description.trim() } : {}),
-    ...(status !== undefined ? { status } : {}),
-    linkedPhaseIds: links.linkedPhaseIds,
-    macroTasks: normalizedMacroTasks,
-    updatedAt: now,
-  };
-  await st.saveRequirements({ requirements: requirements.requirements.map((requirement) => requirement.id === current.id ? next : requirement) });
   await st.writeGenerated();
   return writeAndSummarize(st, `Requirement updated: ${next.id}.`, { requirement: next, updated: true });
 });
@@ -2159,12 +2195,15 @@ server.registerTool("planner-requirement-delete", {
   inputSchema: { requirementId: z.string().min(1) },
 }, async ({ requirementId }) => {
   const st = await requireStore();
-  const requirements = await st.loadRequirements();
-  const next = requirements.requirements.filter((requirement) => requirement.id !== requirementId);
-  if (next.length === requirements.requirements.length) return text(`❌ Requirement not found: ${requirementId}`, { deleted: false, errorCode: "NOT_FOUND" });
-  await st.saveRequirements({ requirements: next });
+  let deleted = false;
+  await st.updateRequirements((document) => {
+    const requirements = document.requirements.filter((requirement) => requirement.id !== requirementId);
+    deleted = requirements.length !== document.requirements.length;
+    return deleted ? { requirements } : document;
+  });
+  if (!deleted) return text(`❌ Requirement not found: ${requirementId}`, { deleted: false, errorCode: "NOT_FOUND" });
   await st.writeGenerated();
-  return writeAndSummarize(st, `Requirement deleted: ${requirementId}.`, { deleted: requirementId });
+  return writeAndSummarize(st, `Requirement deleted: ${requirementId}.`, { deleted: true, requirementId });
 });
 
 function ideaPromotionTarget(st: PlanStore, type: "feature" | "phase" | "task", ref: string) {
@@ -2213,7 +2252,15 @@ server.registerTool("planner-idea-update", {
 }, async ({ idea: ref, title, description }) => {
   const st = await requireStore(); const current = findIdeaByRef((await st.loadIdeas()).ideas, ref);
   if (!current) return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", updated: false });
-  if (title === undefined && description === undefined) return text("No mutable idea fields were received.", { errorCode: "NO_MUTABLE_FIELDS_RECEIVED", updated: false });
+  if (title === undefined && description === undefined) {
+    return mutationNoFieldsFailure({
+      entity: "idea",
+      ref,
+      operation: "update",
+      mutableFields: ["title", "description"],
+      retryCommand: `planner-idea-update ${ref}`,
+    });
+  }
   const idea = await st.updateIdea(current.id, { ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}) }); await st.writeGenerated();
   return text(`Idea updated: ${formatIdeaRef(idea.number)} — ${idea.title}`, { idea, updated: true });
 });
@@ -2279,6 +2326,15 @@ server.registerTool("planner-handoff-write", {
         detail: z.string().min(1),
       })),
     }).optional().describe("Mandatory for confirmed writes; every category from planner-handoff-prepare must be present."),
+    coldStartInventory: z.object({
+      version: z.literal(HANDOFF_COLD_START_INVENTORY_VERSION),
+      sourceReviews: z.array(z.object({ source: z.string().min(1), detail: z.string().min(1) })),
+      entries: z.array(z.object({
+        category: z.string().min(1).describe(`One required cold-start category id: ${HANDOFF_COLD_START_INVENTORY_CATEGORIES.map((entry) => entry.id).join(", ")}`),
+        items: z.array(z.string().min(1)),
+        notApplicableReason: z.string().min(1).optional().describe("Optional explanation only; every category still requires a concrete item, using an explicit verified-negative statement when nothing exists."),
+      })),
+    }).optional().describe("Mandatory for confirmed writes. Every concrete item must appear verbatim in the handoff or a validated supporting document."),
     supportingDocuments: z.array(z.object({
       path: z.string().min(1).describe("Committed Markdown path under .planner/docs/."),
       description: z.string().min(1).describe("What the document contains and why the next agent needs it."),
@@ -2300,7 +2356,7 @@ server.registerTool("planner-handoff-write", {
     featureUpdate: z.object({ workDone: z.string().min(1), workRemaining: z.string().min(1) }).optional(),
     featureNoUpdateReason: z.string().min(1).optional(),
   },
-}, async ({ phaseRef, title, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, completenessAudit, supportingDocuments, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
+}, async ({ phaseRef, title, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, completenessAudit, coldStartInventory, supportingDocuments, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
   const st = await requireStore();
   let body = content.trim();
   const firstLine = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
@@ -2342,6 +2398,7 @@ server.registerTool("planner-handoff-write", {
       expectedHandoffUpdatedAt,
       reconciledExistingHandoff: reconciledExistingHandoff === true,
       ...(completenessAudit ? { completenessAudit: completenessAudit as HandoffCompletenessAuditInput } : {}),
+      ...(coldStartInventory ? { coldStartInventory: coldStartInventory as HandoffColdStartInventoryInput } : {}),
       ...(supportingDocuments ? { supportingDocuments } : {}),
       contextSync: {
         taskUpdates: resolvedTaskUpdates,
@@ -2371,7 +2428,7 @@ server.registerTool("planner-handoff-write", {
 });
 
 server.registerTool("planner-handoff-prepare", {
-  description: "Identify or audit the exact handoff target. With a confirmed phaseRef, returns the current token, missing task evidence, mandatory completeness categories, and the 24,000-character inline budget.",
+  description: "Identify or audit the exact handoff target. With a confirmed phaseRef, returns the exact canonical scaffold before drafting, the current token, missing task evidence, mandatory completeness and cold-start inventory categories, and the 24,000-character inline budget.",
   inputSchema: { phaseRef: z.string().min(1).optional() },
 }, async ({ phaseRef }) => {
   if (!phaseRef) return text([
@@ -2388,11 +2445,19 @@ server.registerTool("planner-handoff-prepare", {
     return text([
       `Handoff preparation audit for ${r.compositeRef}`,
       `Base handoffUpdatedAt: ${audit.handoffUpdatedAt || "(empty)"}`,
+      "Use this exact scaffold before drafting; replace every angle-bracket placeholder and retain every heading:",
+      audit.draftTemplate,
+      "",
       "Done tasks missing durable completion/verification evidence:",
       missing,
       "",
       `Required completeness audit v${audit.completenessVersion} — every category must be captured or marked not-applicable with a substantive reason:`,
       ...audit.completenessCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
+      "",
+      `Required cold-start source review v${audit.coldStartInventoryVersion} — inspect and substantively summarize every source before drafting:`,
+      ...audit.coldStartSourceReviews.map((entry) => `- ${entry.id} — ${entry.label}`),
+      "Required cold-start inventory — every category needs a concrete item (use an explicit verified-negative statement when nothing exists), and every item must appear verbatim in the handoff or a validated supporting document:",
+      ...audit.coldStartInventoryCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
       `Maximum canonical inline content: ${audit.maxContentChars} characters. Link extended material from .planner/docs/.`,
       "",
       "Existing active handoff (reconcile all still-relevant content):",

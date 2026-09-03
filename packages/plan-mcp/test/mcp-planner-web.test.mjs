@@ -24,7 +24,7 @@ import {
 } from "../../../test/helpers/mcp-fixture.mjs";
 import { createTempRoot, cleanupFixtures } from "../../../test/helpers/fixtures.mjs";
 import { createPhaseId, createTaskId } from "../../../packages/plan-core/dist/index.js";
-import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupMcpFixtures();
@@ -48,6 +48,7 @@ async function writePreparedHandoff(session, phaseRef, title, content) {
     expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
     completenessAudit: completeHandoffAudit(),
+    coldStartInventory: completeHandoffColdStartInventory({ file: "mcp-planner-web.test.mjs" }),
     taskUpdates: [],
     phaseNoUpdateReason: "Fixture does not change durable phase context.",
     featureNoUpdateReason: "Fixture does not change durable feature context.",

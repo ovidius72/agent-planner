@@ -1,0 +1,55 @@
+{
+  "id": "39d5b62f-6c16-4bed-9fc2-749d4b189f82",
+  "number": 21,
+  "shortId": "N6RD4",
+  "priority": 0,
+  "name": "Product vertical completeness and runtime integrity",
+  "description": "Audit-driven remediation across packages/plan-core/src/plan-store.ts, packages/plan-server/src/serve.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and packages/plan-web-ui/src/. The 2026-09 vertical audit found concurrency, reachability, read-delivery, mutation-parity, and semantic-test gaps that handler-existence inventories cannot detect. Preserve harness-agnostic core boundaries, composite references, rollup derivation, explicit planner lifecycle, and the Web UI human-supervisor role.",
+  "descriptionUpdatedAt": "2026-09-01T10:16:07.610Z",
+  "discussedAt": "2026-09-01T10:16:07.610Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-feature-discuss MCP tool.",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "Read-only vertical audit mapped persistence, PlanStore, Pi, MCP, HTTP, Web UI, agent-load context, generated guidance, and test inventories. Confirmed v0.2.26 handoff transport is shipped.",
+  "workRemaining": "Close P0 writer/data-integrity gaps; close P1 Accepted Decisions, mutation, Requirements, dependency, and subtask gaps; then enforce field-level parity in CI.",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "a5561b5b-6c51-43bc-b241-d416cab4abcc",
+    "d64adbf0-4227-40ff-80bc-dd13e699229a",
+    "17a33d52-70c4-4b20-8bb2-045961a1866a",
+    "71bae839-e639-46e3-8fa4-aef5e195f94f",
+    "559b76d0-4ec4-49d3-a83a-86534760c770"
+  ],
+  "dependsOn": [
+    "Stable v0.2.26 baseline on develop",
+    "Existing test/surfaces.mjs and integration scenario matrix",
+    "Temporary coexistence with active legacy Claude MCP processes must not be disrupted during implementation"
+  ],
+  "statusLog": [
+    {
+      "id": "591ffd51-9898-4a6d-b249-e0ddaadad314",
+      "date": "2026-09-01T10:17:21.297Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-09-01T10:13:26.005Z",
+  "updatedAt": "2026-09-01T10:16:07.610Z",
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-02T18:57:35.775Z"
+    },
+    {
+      "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+      "createdAt": "2026-09-02T15:01:46.780Z"
+    },
+    {
+      "sessionId": "mcp-process:c8e7d544-20a8-4a2d-ab52-6e615de90316",
+      "createdAt": "2026-09-01T10:17:20.971Z"
+    }
+  ]
+}

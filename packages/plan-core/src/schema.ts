@@ -302,9 +302,27 @@ export const HandoffSupportingDocumentSchema = z.object({
   contentLength: z.number().int().nonnegative(),
 });
 
+export const HandoffColdStartInventoryEntrySchema = z.object({
+  category: z.string().min(1),
+  items: z.array(z.string().min(1)).default([]),
+  notApplicableReason: z.string().optional(),
+});
+
+export const HandoffColdStartSourceReviewSchema = z.object({
+  source: z.string().min(1),
+  detail: z.string().min(1),
+});
+
+export const HandoffColdStartInventorySchema = z.object({
+  version: z.number().int().positive(),
+  sourceReviews: z.array(HandoffColdStartSourceReviewSchema),
+  entries: z.array(HandoffColdStartInventoryEntrySchema),
+});
+
 export const HandoffCompletenessAuditSchema = z.object({
   version: z.number().int().positive(),
   entries: z.array(HandoffCompletenessEntrySchema),
+  coldStartInventory: HandoffColdStartInventorySchema.optional(),
   supportingDocuments: z.array(HandoffSupportingDocumentSchema).default([]),
   contentHash: z.string().regex(/^[a-f0-9]{64}$/),
   contentLength: z.number().int().nonnegative(),
@@ -484,6 +502,9 @@ export type WorkflowRules = z.infer<typeof WorkflowRulesSchema>;
 export type AcceptedDecision = z.infer<typeof AcceptedDecisionSchema>;
 export type HandoffCompletenessEntry = z.infer<typeof HandoffCompletenessEntrySchema>;
 export type HandoffSupportingDocument = z.infer<typeof HandoffSupportingDocumentSchema>;
+export type HandoffColdStartInventoryEntry = z.infer<typeof HandoffColdStartInventoryEntrySchema>;
+export type HandoffColdStartSourceReview = z.infer<typeof HandoffColdStartSourceReviewSchema>;
+export type HandoffColdStartInventory = z.infer<typeof HandoffColdStartInventorySchema>;
 export type HandoffCompletenessAudit = z.infer<typeof HandoffCompletenessAuditSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
 export type WorkDeviation = z.infer<typeof WorkDeviationSchema>;

@@ -33,7 +33,7 @@ import { spawn } from "node:child_process";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 import { PlanStore } from "../../plan-core/dist/index.js";
 import { seedFixture, createTempRoot } from "../../../test/helpers/fixtures.mjs";
-import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupPiHosts();
@@ -49,6 +49,7 @@ async function preparedHandoffArgs(host, phaseRef = "P001") {
     expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
     completenessAudit: completeHandoffAudit(),
+    coldStartInventory: completeHandoffColdStartInventory({ file: "resume.test.mjs" }),
     taskUpdates: [],
     phaseNoUpdateReason: "Resume fixture does not change durable phase context.",
     featureNoUpdateReason: "Resume fixture does not change durable feature context.",

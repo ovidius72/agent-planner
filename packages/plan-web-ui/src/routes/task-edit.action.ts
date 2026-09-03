@@ -31,7 +31,8 @@ export async function action({ request, params }: { request: Request; params: Re
   }
 
   await updateTask({
-    ...current,
+    id: current.id,
+    updatedAt: current.updatedAt,
     phaseId,
     title: requiredString(formData, "title"),
     status,

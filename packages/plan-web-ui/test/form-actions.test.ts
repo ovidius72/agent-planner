@@ -122,8 +122,12 @@ describe("entity form actions", () => {
     await editFeature({ request: formRequest({ name: "Updated", status: "done", priority: "not-a-number" }), params });
     await editPhase({ request: formRequest({ title: "Updated phase", status: "discovery", priority: "Infinity", goals: "One\n Two ", nonGoals: "", dependencies: "", risks: "", openQuestions: "", completionCriteria: "" }), params });
 
-    expect(payloads[0]).toMatchObject({ id: "feature-1", name: "Updated", status: "done", priority: 0 });
-    expect(payloads[1]).toMatchObject({ id: "phase-1", title: "Updated phase", status: "discovery", priority: 0, goals: ["One", "Two"] });
+    expect(payloads[0]).toMatchObject({ id: "feature-1", name: "Updated", priority: 0, expectedUpdatedAt: feature.updatedAt });
+    expect(payloads[0]).not.toHaveProperty("phaseIds");
+    expect(payloads[0]).not.toHaveProperty("acceptedDecisions");
+    expect(payloads[1]).toMatchObject({ id: "phase-1", title: "Updated phase", status: "discovery", priority: 0, goals: ["One", "Two"], expectedUpdatedAt: phase.updatedAt });
+    expect(payloads[1]).not.toHaveProperty("tasks");
+    expect(payloads[1]).not.toHaveProperty("handoff");
   });
 
   it("starts a task through the lifecycle endpoint", async () => {
@@ -153,6 +157,9 @@ describe("entity form actions", () => {
     const result = await editTask({ request: formRequest({ title: "Retitled", status: "planned", priority: "2", checklist: "Keep\nNew item" }), params });
     expect((result as Response).headers.get("Location")).toBe("/features/feature-1/phases/phase-1/tasks/task-1");
     expect(updatePayload).toMatchObject({
+      id: "task-1",
+      phaseId: "phase-1",
+      expectedUpdatedAt: task.updatedAt,
       title: "Retitled",
       status: "planned",
       priority: 2,
@@ -161,6 +168,8 @@ describe("entity form actions", () => {
         { id: "check-2-new-item", number: 2, title: "New item", checked: false },
       ],
     });
+    expect(updatePayload).not.toHaveProperty("acceptedDecisions");
+    expect(updatePayload).not.toHaveProperty("statusLog");
   });
 
   it("edits requirements or reports a missing requirement without a partial write", async () => {
@@ -176,7 +185,16 @@ describe("entity form actions", () => {
     });
 
     await editRequirement({ request: formRequest({ title: "Changed", description: "", status: "done", linkedPhaseIds: ["phase-2"] }), params });
-    expect(updatePayload).toMatchObject({ title: "Changed", status: "done", linkedPhaseIds: ["phase-2"], macroTasks: requirement.macroTasks });
+    expect(updatePayload).toMatchObject({
+      id: "requirement-1",
+      expectedUpdatedAt: requirement.updatedAt,
+      title: "Changed",
+      status: "done",
+      linkedPhaseIds: ["phase-2"],
+      macroTasks: requirement.macroTasks,
+    });
+    expect(updatePayload).not.toHaveProperty("sessionInfo");
+    expect(updatePayload).not.toHaveProperty("createdAt");
 
     installFetchMock((path) => {
       expect(path).toBe("/api/requirements");

@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 export interface RuntimePackageVersion {
   name: string;
   version: string;
+  /** Absolute path to the loaded package manifest used as the version source. */
+  packageJsonPath?: string;
 }
 
 interface PackageManifest {
@@ -34,7 +36,7 @@ export function packageVersionFromModule(
         if (typeof manifest.version !== "string" || !manifest.version.trim()) {
           throw new Error(`Package ${expectedName} has no valid version in ${manifestPath}.`);
         }
-        return { name: expectedName, version: manifest.version };
+        return { name: expectedName, version: manifest.version, packageJsonPath: manifestPath };
       }
     }
 

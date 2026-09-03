@@ -37,11 +37,28 @@ for (const flag of ["--version", "-v"]) {
   });
 }
 
-test("CLI help documents both version aliases", () => {
+test("CLI help documents both version aliases and diagnostics command", () => {
   const result = runCli(["help"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--version, -v/);
   assert.match(result.stdout, /agent-plan --version \| -v/);
+  assert.match(result.stdout, /agent-plan version/);
+});
+
+test("agent-plan version reports loaded runtime provenance and compatibility", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "agent-plan-version-diagnostics-"));
+  roots.push(cwd);
+
+  const result = runCli(["version"], { cwd });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, new RegExp(`agent-plan: loaded ${packageVersion.replaceAll(".", "\\.")}`));
+  assert.match(result.stdout, /@agent-plan\/core: loaded /);
+  assert.match(result.stdout, /@agent-plan\/mcp: loaded /);
+  assert.match(result.stdout, /Plan schema: manifest schemaVersion 1/);
+  assert.match(result.stdout, /Allocation registry: v1; supported kinds: feature, phase, task, idea/);
+  assert.equal(existsSync(join(cwd, ".planner")), false, "version diagnostics must not initialize planner state");
 });
 
 test("CLI init and export operate on an isolated workspace", async () => {

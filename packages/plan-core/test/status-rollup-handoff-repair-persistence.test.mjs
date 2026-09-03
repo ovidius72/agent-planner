@@ -245,7 +245,7 @@ test("handoff: all-canceled phase derives rejected but auto-archives its handoff
   assert.equal(cleared, formatPhaseRef(1, 1), "all-terminal canceled work clears the handoff");
   const after = (await store.loadAllPhases()).find((p) => p.id === phaseId);
   assert.equal(after.handoff, "");
-  assert.equal(after.handoffHistory[0].reason, "phase-done");
+  assert.equal(after.handoffHistory[0].reason, "phase-rejected", "archive reason follows the canonical derived terminal outcome");
   assert.equal((await store.listHandoffs()).length, 0, "no active handoff remains after all tasks are canceled");
 });
 

@@ -565,16 +565,18 @@ describe("pi-adapter strict ref validation", () => {
       title: "Credential flow", description: "Secure access.", linkedPhaseIds: ["P001"],
       macroTasks: [{ title: "Validate credentials", description: "Check input.", status: "planned" }],
     }, undefined, undefined, ctx);
-    assert.equal(created.details.macroTasks[0].id, "MT-001");
+    assert.equal(created.details.created, true);
+    assert.equal(created.details.requirement.macroTasks[0].id, "MT-001");
     const updated = await tools.get("requirement_update").execute("id", {
-      requirementId: created.details.id,
+      requirementId: created.details.requirement.id,
       macroTasks: [
         { id: "MT-001", title: "Validate credentials", description: "Check input.", status: "done" },
         { title: "Record decision", description: "Persist audit.", status: "planned" },
       ],
     }, undefined, undefined, ctx);
-    assert.equal(updated.details.macroTasks[0].createdAt, created.details.macroTasks[0].createdAt);
-    assert.equal(updated.details.macroTasks[1].id, "MT-002");
+    assert.equal(updated.details.updated, true);
+    assert.equal(updated.details.requirement.macroTasks[0].createdAt, created.details.requirement.macroTasks[0].createdAt);
+    assert.equal(updated.details.requirement.macroTasks[1].id, "MT-002");
   });
 });
 

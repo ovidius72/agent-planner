@@ -19,7 +19,8 @@
 
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { createPhaseId } from "../../plan-core/dist/index.js";
 import {
@@ -48,7 +49,108 @@ async function readTaskContext(session, task = "T001", phase = "P001", feature =
   await callTool(session, "planner-requirement-list", {});
 }
 
+test("writer contention stays readable and surfaces PLAN_WRITER_BUSY through MCP", async () => {
+  const session = await startMcpFixture({
+    name: "writer-busy",
+    seed: "empty",
+    env: {
+      AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS: "60",
+      AGENT_PLAN_WRITE_LOCK_RETRY_MS: "10",
+    },
+  });
+  const lockPath = join(session.planRoot, ".local", "locks", "writer.lock");
+  try {
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
+      token: "external-writer",
+      pid: process.pid,
+      hostname: hostname(),
+      cwd: session.root,
+      acquiredAt: new Date().toISOString(),
+    }), "utf8");
+
+    assert.match(toolText(await callTool(session, "planner-feature-list", {})), /No features/);
+    const blocked = await callTool(session, "planner-feature-add", {
+      name: "Blocked writer",
+      description: LONG,
+    }, { expectError: true });
+    assert.match(toolText(blocked), /PLAN_WRITER_BUSY.*Read-only operations remain available/s);
+    assert.equal((await session.store.loadFeatures()).features.length, 0);
+  } finally {
+    await rm(lockPath, { recursive: true, force: true });
+    await closeMcpFixture(session);
+  }
+});
+
 // ── Feature CRUD ───────────────────────────────────────────────────────────
+
+test("concurrent MCP processes create linked phases without duplicate priority or lost feature links", async () => {
+  const first = await startMcpFixture({ name: "concurrent-phase-create" });
+  const second = await startMcpClient({ planRoot: first.planRoot, name: "concurrent-phase-create-second" });
+  try {
+    await Promise.all([
+      callTool(first, "planner-phase-add", { title: "Concurrent phase A", feature: "F001", description: LONG }),
+      callTool(second, "planner-phase-add", { title: "Concurrent phase B", feature: "F001", description: LONG }),
+    ]);
+    const allPhases = await first.store.loadAllPhases();
+    const created = allPhases.filter((phase) => phase.title.startsWith("Concurrent phase"));
+    assert.equal(created.length, 2);
+    assert.equal(new Set(created.map((phase) => phase.priority)).size, 2, "root transactions serialize nextPriority allocation");
+    const feature = (await first.store.loadFeatures()).features.find((entry) => entry.number === 1);
+    assert.ok(feature);
+    assert.ok(created.every((phase) => feature.phaseIds.includes(phase.id)), "both phase links persist on the feature");
+  } finally {
+    await closeMcpFixture(second);
+    await closeMcpFixture(first);
+  }
+});
+
+test("concurrent MCP task starts preserve the single-active-task invariant", async () => {
+  const first = await startMcpFixture({ name: "concurrent-task-start" });
+  const second = await startMcpClient({ planRoot: first.planRoot, name: "concurrent-task-start-second" });
+  try {
+    const created = await callTool(first, "planner-task-add", { feature: "F001", phase: "P001", title: "Concurrent sibling", description: LONG });
+    assert.match(toolText(created), /Task created/);
+    const tasks = (await first.store.loadAllPhases())[0].tasks;
+    const seedRef = `T${String(tasks.find((task) => task.title !== "Concurrent sibling").number).padStart(3, "0")}`;
+    const siblingRef = `T${String(tasks.find((task) => task.title === "Concurrent sibling").number).padStart(3, "0")}`;
+    await readTaskContext(first, seedRef);
+    await readTaskContext(second, siblingRef);
+
+    const starts = await Promise.all([
+      callTool(first, "planner-task-start", { task: seedRef }),
+      callTool(second, "planner-task-start", { task: siblingRef }),
+    ]);
+    assert.equal(starts.filter((result) => toolStructured(result)?.started === true).length, 1);
+    const denied = starts.find((result) => toolStructured(result)?.started !== true);
+    assert.ok(denied);
+    assert.match(toolStructured(denied).errorCode, /^(START_NOT_ALLOWED|ACTIVE_TASK_CONFLICT)$/);
+    assert.match(toolText(denied), /active/i);
+    const active = (await first.store.loadAllPhases()).flatMap((phase) => phase.tasks).filter((task) => task.status === "in-progress");
+    assert.equal(active.length, 1);
+  } finally {
+    await closeMcpFixture(second);
+    await closeMcpFixture(first);
+  }
+});
+
+test("an MCP lifecycle write preserves metadata committed by another process after its earlier read", async () => {
+  const first = await startMcpFixture({ name: "cross-process-stale-lifecycle" });
+  const second = await startMcpClient({ planRoot: first.planRoot, name: "cross-process-stale-lifecycle-second" });
+  try {
+    await readTaskContext(first, "T001");
+    const workDone = "Metadata committed by the second MCP process after the first process read context.";
+    await callTool(second, "planner-feature-update", { feature: "F001", workDone });
+
+    const started = await callTool(first, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(started).started, true);
+    const persisted = (await first.store.loadFeatures()).features[0];
+    assert.equal(persisted.workDone, workDone);
+  } finally {
+    await closeMcpFixture(second);
+    await closeMcpFixture(first);
+  }
+});
 
 test("feature CRUD: human refs, ambiguity, no UUID leak, follow-up reads", async () => {
   const session = await startMcpFixture({ name: "t237-feature" });
@@ -254,7 +356,10 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.match(toolText(directDone), /completion transitions require planner-task-complete/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
 
-    // Lifecycle work is rejected without the ordered full-read sequence.
+    const preservedFeatureDescription = "Updated through MCP before task lifecycle synchronization.";
+    await callTool(session, "planner-feature-update", { feature: "F001", description: preservedFeatureDescription });
+
+    // Lifecycle work is rejected without the required full context reads.
     const deniedWithoutReads = await callTool(session, "planner-task-start", { task: "T002" });
     assert.equal(deniedWithoutReads.isError, true);
     assert.equal(toolStructured(deniedWithoutReads).started, false);
@@ -304,6 +409,7 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const doneTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(doneTask.status, "done");
     assert.ok(doneTask.completedAt);
+    assert.equal((await session.store.loadFeatures()).features[0].description, preservedFeatureDescription, "MCP lifecycle writes preserve newer feature metadata");
 
     const reopenNoMotivation = await callTool(session, "planner-task-update", { task: "T002", status: "planned" });
     expectToolError(reopenNoMotivation, /requires a motivation/);

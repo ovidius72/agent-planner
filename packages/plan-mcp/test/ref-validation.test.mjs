@@ -721,7 +721,8 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
       assert.equal(updated.structuredContent.requirement.macroTasks[0].createdAt, requirement.macroTasks[0].createdAt);
       assert.equal(updated.structuredContent.requirement.macroTasks[1].id, "MT-002");
       const deleted = await session.client.callTool({ name: "planner-requirement-delete", arguments: { requirementId: requirement.id } });
-      assert.equal(deleted.structuredContent.deleted, requirement.id);
+      assert.equal(deleted.structuredContent.deleted, true);
+      assert.equal(deleted.structuredContent.requirementId, requirement.id);
     } finally {
       await session.close();
     }

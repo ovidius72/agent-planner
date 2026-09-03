@@ -7,7 +7,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, reconcileRequirementMacroTasks, RequirementMacroTaskError, type MacroTaskMutationInput } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, reconcileRequirementMacroTasks, RequirementMacroTaskError, type MacroTaskMutationInput } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -46,6 +46,19 @@ type RequirementMutationBody = Partial<Requirement> & { macroTasks?: MacroTaskMu
 
 function macroTaskInputs(value: unknown): MacroTaskMutationInput[] | null {
   return Array.isArray(value) ? value as MacroTaskMutationInput[] : null;
+}
+
+function hasDefinedField(body: Record<string, unknown>, fields: readonly string[]): boolean {
+  return fields.some((field) => body[field] !== undefined);
+}
+
+function noMutableFieldsResponse(fields: readonly string[]) {
+  return {
+    error: "NO_MUTABLE_FIELDS_RECEIVED",
+    updated: false,
+    reason: "no-mutable-fields",
+    mutableFields: [...fields],
+  };
 }
 
 function nextTaskNumber(phase: Phase): number {
@@ -189,6 +202,15 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   // phase file -> PlanStoreError/ENOENT) bubble up to the host process console
   // (the agent session). Convert it to a clean HTTP response instead.
   app.onError((err, c) => {
+    if (err instanceof PlanWriterBusyError) {
+      return c.json({ error: err.code, message: err.message, details: err.details }, 423);
+    }
+    if (err instanceof PlanStaleWriteError) {
+      return c.json({ error: err.code, message: err.message, details: err.details }, 409);
+    }
+    if (err instanceof PlanStoreError && (err.details?.errorCode === "PLAN_UNSUPPORTED_ALLOCATION_KIND" || err.details?.errorCode === "PLAN_RUNTIME_SCHEMA_INCOMPATIBLE")) {
+      return c.json({ error: err.details.errorCode, message: err.message, details: err.details }, 409);
+    }
     const isStoreRead = err instanceof PlanStoreError || /ENOENT|read failed/i.test(err.message);
     if (isStoreRead) {
       return c.json({ error: "not found", message: err.message }, 404);
@@ -225,11 +247,12 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.get(route("/export"), async (c) => {
     const full = c.req.query("full") === "true";
     const exportService = new ExportService();
-    const plan = await store.loadAll();
-    const markdown = exportService.exportToMarkdown(plan, full);
-
-    // Save to disk
-    await writeFile(join(store.root, "EXPORT.md"), markdown, "utf-8");
+    const markdown = await store.runBatch(async () => {
+      const plan = await store.loadAll();
+      const rendered = exportService.exportToMarkdown(plan, full);
+      await writeFile(join(store.root, "EXPORT.md"), rendered, "utf-8");
+      return rendered;
+    });
 
     return c.json({ markdown, filePath: "EXPORT.md" });
   });
@@ -244,8 +267,32 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   });
 
   app.put(route("/project"), async (c) => {
-    const body = await c.req.json<Project>();
-    const persisted = await store.updateProject(() => body);
+    const body = await c.req.json<Partial<Project> & { expectedGuidelinesUpdatedAt?: string }>();
+    const mutableFields = ["name", "goal", "description", "descriptionRef", "webPort", "scope", "outOfScope", "decisions", "globalRules", "technologies", "tools", "contentLanguage", "chatLanguage", "workflowRules", "acceptedDecisions", "projectGuidelines"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
+    const persisted = await store.updateProject((current) => ({
+      ...current,
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.goal !== undefined ? { goal: body.goal } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+      ...(body.webPort !== undefined ? { webPort: body.webPort } : {}),
+      ...(body.scope !== undefined ? { scope: body.scope } : {}),
+      ...(body.outOfScope !== undefined ? { outOfScope: body.outOfScope } : {}),
+      ...(body.decisions !== undefined ? { decisions: body.decisions } : {}),
+      ...(body.globalRules !== undefined ? { globalRules: body.globalRules } : {}),
+      ...(body.technologies !== undefined ? { technologies: body.technologies } : {}),
+      ...(body.tools !== undefined ? { tools: body.tools } : {}),
+      ...(body.contentLanguage !== undefined ? { contentLanguage: body.contentLanguage } : {}),
+      ...(body.chatLanguage !== undefined ? { chatLanguage: body.chatLanguage } : {}),
+      ...(body.workflowRules !== undefined ? { workflowRules: body.workflowRules } : {}),
+      ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
+      ...(body.projectGuidelines !== undefined
+        ? { projectGuidelines: { ...current.projectGuidelines, content: body.projectGuidelines.content } }
+        : {}),
+    }), body.projectGuidelines !== undefined && body.expectedGuidelinesUpdatedAt !== undefined
+      ? { expectedGuidelinesUpdatedAt: body.expectedGuidelinesUpdatedAt }
+      : {});
     await store.writeGenerated();
     hub()?.broadcast({ type: "project-updated", data: persisted });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
@@ -308,14 +355,16 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(requirement, 201);
   });
 
-  app.put(route("/requirements/:id"), async (c) => {
+  app.put(route("/requirements/:id"), async (c) => store.runBatch(async () => {
     const id = c.req.param("id");
     if (!id) return c.json({ error: "id required" }, 400);
-    const body = await c.req.json<RequirementMutationBody>();
+    const body = await c.req.json<RequirementMutationBody & { expectedUpdatedAt?: string }>();
     const existing = (await store.loadRequirements()).requirements.find((requirement) => requirement.id === id);
     if (!existing) return c.json({ error: "not found" }, 404);
+    const mutableFields = ["title", "description", "status", "linkedPhaseIds", "macroTasks"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const title = body.title?.trim();
-    if (!title) return c.json({ error: "title required" }, 400);
+    if (body.title !== undefined && !title) return c.json({ error: "title required" }, 400);
     const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds ?? existing.linkedPhaseIds);
     if ("error" in links) return c.json({ error: links.error }, 400);
     const inputs = macroTaskInputs(body.macroTasks ?? existing.macroTasks);
@@ -328,23 +377,20 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
       return c.json({ error: message }, 400);
     }
-    const requirement: Requirement = {
-      ...existing,
-      title,
-      description: body.description?.trim() ?? "",
-      status: body.status ?? existing.status,
-      macroTasks,
-      linkedPhaseIds: links.linkedPhaseIds,
+    const requirement = await store.updateRequirement(id, (current) => ({
+      ...current,
+      ...(title !== undefined ? { title } : {}),
+      ...(body.description !== undefined ? { description: body.description.trim() } : {}),
+      ...(body.status !== undefined ? { status: body.status } : {}),
+      ...(body.macroTasks !== undefined ? { macroTasks } : {}),
+      ...(body.linkedPhaseIds !== undefined ? { linkedPhaseIds: links.linkedPhaseIds } : {}),
       updatedAt: now,
-    };
-    await store.updateRequirements((doc) => ({
-      requirements: doc.requirements.map((candidate) => candidate.id === id ? requirement : candidate),
-    }));
+    }), body.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: body.expectedUpdatedAt } : {});
     await store.writeGenerated();
     hub()?.broadcast({ type: "requirements-updated", data: { action: "updated", id, requirement } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     return c.json(requirement);
-  });
+  }));
 
   app.delete(route("/requirements/:id"), async (c) => {
     const id = c.req.param("id");
@@ -379,11 +425,13 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const id = c.req.param("id");
     if (!id) return c.json({ error: "id required" }, 400);
     const body = await c.req.json<{ title?: string; description?: string }>();
+    const mutableFields = ["title", "description"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const title = body.title?.trim();
-    if (!title) return c.json({ error: "title required" }, 400);
+    if (body.title !== undefined && !title) return c.json({ error: "title required", updated: false }, 400);
     const current = (await store.loadIdeas()).ideas.find((idea) => idea.id === id);
     if (!current) return c.json({ error: "not found" }, 404);
-    const idea = await store.updateIdea(id, { title, description: body.description?.trim() ?? "" });
+    const idea = await store.updateIdea(id, { ...(title !== undefined ? { title } : {}), ...(body.description !== undefined ? { description: body.description.trim() } : {}) });
     await store.writeGenerated();
     hub()?.broadcast({ type: "file-changed", data: { filename: "ideas.json" } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
@@ -405,7 +453,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   // ── Features ─────────────────────────────────────────────────────
   app.get(route("/features"), async (c) => c.json((await store.loadFeatures()).features));
 
-  app.post(route("/features"), async (c) => {
+  app.post(route("/features"), async (c) => store.runBatch(async () => {
     const body = await c.req.json<{ name?: string; description?: string }>();
     const name = body.name?.trim();
     if (!name) return c.json({ error: "name required" }, 400);
@@ -447,7 +495,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     await store.syncStatuses();
     await store.appendActivity("feature_created", feature.id, `Feature created: ${feature.name}`);
     return c.json(feature, 201);
-  });
+  }));
 
   app.get(route("/features/:id"), async (c) => {
     const id = c.req.param("id");
@@ -457,30 +505,47 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(feature);
   });
 
-  app.put(route("/features/:id"), async (c) => {
+  app.put(route("/features/:id"), async (c) => store.runBatch(async () => {
     const id = c.req.param("id");
-    const body = await c.req.json<Feature>();
-    if (body.id !== id) return c.json({ error: "id mismatch" }, 400);
+    if (!id) return c.json({ error: "id required" }, 400);
+    const body = await c.req.json<Partial<Feature> & { expectedUpdatedAt?: string }>();
+    if (body.id !== undefined && body.id !== id) return c.json({ error: "id mismatch" }, 400);
+    const name = body.name?.trim();
+    if (body.name !== undefined && !name) return c.json({ error: "name required" }, 400);
 
-    const features = await store.loadFeatures();
-    const idx = features.features.findIndex((f) => f.id === id);
-    if (idx === -1) return c.json({ error: "not found" }, 404);
-
-    if (entersGovernedState(features.features[idx]?.status, body.status) && !fromWebUi(c) && !featureGovernanceReady(body)) {
+    const existing = (await store.loadFeatures()).features.find((feature) => feature.id === id);
+    if (!existing) return c.json({ error: "not found" }, 404);
+    const mutableFields = ["name", "description", "descriptionRef", "discussedAt", "contextReady", "contextReadyReason", "startDate", "endDate", "workDone", "workRemaining", "priority", "phaseIds", "dependsOn", "notes", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "acceptedDecisions", "contentLanguage", "chatLanguage", "status", "scope", "outOfScope", "technologies", "tools"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
+    const projected = { ...existing, ...body };
+    if (entersGovernedState(existing.status, body.status) && !fromWebUi(c) && !featureGovernanceReady(projected)) {
       return c.json({ error: "feature governance required: discuss the feature first, or set contextReady=true with a reason before starting work." }, 400);
     }
 
-    await store.updateFeatures((doc) => {
-      const i = doc.features.findIndex((f) => f.id === id);
-      if (i !== -1) doc.features[i] = body;
-      return doc;
-    });
+    const timestamp = nowISO();
+    const persisted = await store.updateFeature(id, (current) => ({
+      ...current,
+      ...(name !== undefined ? { name } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+      ...(body.discussedAt !== undefined ? { discussedAt: body.discussedAt } : {}),
+      ...(body.contextReady !== undefined ? { contextReady: body.contextReady } : {}),
+      ...(body.contextReadyReason !== undefined ? { contextReadyReason: body.contextReadyReason } : {}),
+      ...(body.priority !== undefined ? { priority: body.priority } : {}),
+      ...(body.startDate !== undefined ? { startDate: body.startDate } : {}),
+      ...(body.endDate !== undefined ? { endDate: body.endDate } : {}),
+      ...(body.workDone !== undefined ? { workDone: body.workDone } : {}),
+      ...(body.workRemaining !== undefined ? { workRemaining: body.workRemaining } : {}),
+      ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
+      ...(body.dependsOn !== undefined ? { dependsOn: body.dependsOn } : {}),
+      updatedAt: timestamp,
+    }), body.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: body.expectedUpdatedAt } : {});
     await store.writeGenerated();
     hub()?.broadcast({ type: "features-updated", data: { action: "updated", id, featureId: id } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.syncStatuses();
-    return c.json(body);
-  });
+    return c.json((await store.loadFeatures()).features.find((feature) => feature.id === persisted.id) ?? persisted);
+  }));
 
   app.delete(route("/features/:id"), async (c) => {
     const id = c.req.param("id");
@@ -512,11 +577,26 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       if (requiresGovernance(full.status) && !fromWebUi(c) && !phaseGovernanceReady(full)) {
         return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
       }
-      await store.updatePhase(full.id, () => full);
-      await store.writeGenerated();
+      let alreadyExists = false;
+      await store.runBatch(async () => {
+        alreadyExists = Boolean(await store.loadPhase(full.id).catch(() => null));
+        if (alreadyExists) return;
+        await store.savePhase(full);
+        if (full.featureId) {
+          await store.updateFeatures((document) => {
+            const feature = document.features.find((entry) => entry.id === full.featureId);
+            if (feature && !feature.phaseIds.includes(full.id)) feature.phaseIds.push(full.id);
+            return document;
+          });
+        }
+        await store.writeGenerated();
+      });
+      if (alreadyExists) {
+        return c.json({ error: "phase already exists; use PUT with expectedUpdatedAt for updates" }, 409);
+      }
       hub()?.broadcast({ type: "phases-updated", data: { action: "created", id: full.id, phaseId: full.id, featureId: full.featureId ?? "" } });
       hub()?.broadcast({ type: "plan-rendered", data: {} });
-      return c.json(full, 201);
+      return c.json(await store.loadPhaseWithRequirements(full.id), 201);
     }
 
     const title = body.title?.trim();
@@ -525,7 +605,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!featureId) return c.json({ error: "featureId required: a phase must belong to a feature" }, 400);
 
     let phase: Phase | undefined;
-    await withFeatureLock(featureId, async () => {
+    await store.runBatch(() => withFeatureLock(featureId, async () => {
       const allPhases = await store.loadAllPhases();
       const slug = normalizeSlug(title);
       const id = createPhaseId();
@@ -585,7 +665,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       }
 
       await store.writeGenerated();
-    });
+    }));
 
     if (!phase) return c.json({ error: "phase creation failed" }, 500);
     hub()?.broadcast({ type: "phases-updated", data: { action: "created", id: phase.id, phaseId: phase.id, featureId: phase.featureId ?? "" } });
@@ -604,26 +684,66 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     }
   });
 
-  app.put(route("/phases/:id"), async (c) => {
+  app.put(route("/phases/:id"), async (c) => store.runBatch(async () => {
     const id = c.req.param("id");
-    const body = await c.req.json<Phase>();
-    if (body.id !== id) return c.json({ error: "id mismatch" }, 400);
+    if (!id) return c.json({ error: "id required" }, 400);
+    const body = await c.req.json<Partial<Phase> & { expectedUpdatedAt?: string }>();
+    if (body.id !== undefined && body.id !== id) return c.json({ error: "id mismatch" }, 400);
+    const title = body.title?.trim();
+    if (body.title !== undefined && !title) return c.json({ error: "title required" }, 400);
     const existingPhase = await store.loadPhase(id).catch(() => null);
     if (!existingPhase) return c.json({ error: "phase not found" }, 404);
-    if (entersGovernedState(existingPhase.status, body.status) && !fromWebUi(c) && !phaseGovernanceReady(body)) {
+    const mutableFields = ["title", "status", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "acceptedDecisions", "completionCriteria", "notes", "discussedAt", "contextReady", "contextReadyReason"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
+    const projected = { ...existingPhase, ...body };
+    if (entersGovernedState(existingPhase.status, body.status) && !fromWebUi(c) && !phaseGovernanceReady(projected)) {
       return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
     }
-    await store.updatePhase(id, () => body);
+    const timestamp = nowISO();
+    const persisted = await store.updatePhase(id, (current) => ({
+      ...current,
+      ...(title !== undefined ? { title } : {}),
+      ...(body.slug !== undefined ? { slug: body.slug } : {}),
+      ...(body.featureId !== undefined ? { featureId: body.featureId } : {}),
+      ...(body.priority !== undefined ? { priority: body.priority } : {}),
+      ...(body.discussedAt !== undefined ? { discussedAt: body.discussedAt } : {}),
+      ...(body.contextReady !== undefined ? { contextReady: body.contextReady } : {}),
+      ...(body.contextReadyReason !== undefined ? { contextReadyReason: body.contextReadyReason } : {}),
+      ...(body.summary !== undefined ? { summary: body.summary } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+      ...(body.notes !== undefined ? { notes: body.notes } : {}),
+      ...(body.goals !== undefined ? { goals: body.goals } : {}),
+      ...(body.nonGoals !== undefined ? { nonGoals: body.nonGoals } : {}),
+      ...(body.dependencies !== undefined ? { dependencies: body.dependencies } : {}),
+      ...(body.dependsOn !== undefined ? { dependsOn: body.dependsOn } : {}),
+      ...(body.risks !== undefined ? { risks: body.risks } : {}),
+      ...(body.openQuestions !== undefined ? { openQuestions: body.openQuestions } : {}),
+      ...(body.decisions !== undefined ? { decisions: body.decisions } : {}),
+      ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
+      ...(body.completionCriteria !== undefined ? { completionCriteria: body.completionCriteria } : {}),
+      updatedAt: timestamp,
+    }), body.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: body.expectedUpdatedAt } : {});
+    const targetFeatureId = body.featureId;
+    if (targetFeatureId !== undefined && targetFeatureId !== existingPhase.featureId) {
+      await store.updateFeatures((document) => {
+        for (const feature of document.features) {
+          feature.phaseIds = feature.id === targetFeatureId
+            ? [...new Set([...feature.phaseIds, id])]
+            : feature.phaseIds.filter((phaseId) => phaseId !== id);
+        }
+        return document;
+      });
+    }
     await store.writeGenerated();
-    hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: body.featureId ?? "" } });
+    hub()?.broadcast({ type: "phases-updated", data: { action: "updated", id, phaseId: id, featureId: persisted.featureId ?? "" } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
 
-    // Propagate status up
     await store.syncStatuses();
-    await store.appendActivity("phase_updated", id, `Phase updated: ${body.title} (${body.status})`);
+    await store.appendActivity("phase_updated", id, `Phase updated: ${persisted.title} (${persisted.status})`);
 
-    return c.json(body);
-  });
+    return c.json(await store.loadPhaseWithRequirements(id));
+  }));
 
 
   app.delete(route("/phases/:id"), async (c) => {
@@ -631,15 +751,17 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!id) return c.json({ error: "id required" }, 400);
     const existing = await store.loadPhase(id).catch(() => null);
     if (!existing) return c.json({ error: "phase not found" }, 404);
-    await store.deletePhase(id);
-    if (existing.featureId) {
-      await store.updateFeatures((features) => {
-        const feature = features.features.find((f) => f.id === existing.featureId);
-        if (feature) feature.phaseIds = feature.phaseIds.filter((pid) => pid !== id);
-        return features;
-      });
-    }
-    await store.writeGenerated();
+    await store.runBatch(async () => {
+      await store.deletePhase(id);
+      if (existing.featureId) {
+        await store.updateFeatures((features) => {
+          const feature = features.features.find((f) => f.id === existing.featureId);
+          if (feature) feature.phaseIds = feature.phaseIds.filter((pid) => pid !== id);
+          return features;
+        });
+      }
+      await store.writeGenerated();
+    });
     hub()?.broadcast({ type: "phases-updated", data: { action: "deleted", id, phaseId: id, featureId: existing.featureId ?? "" } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.syncStatuses();
@@ -647,7 +769,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json({ deleted: id });
   });
 
-  app.post(route("/phases/:phaseId/tasks"), async (c) => {
+  app.post(route("/phases/:phaseId/tasks"), async (c) => store.runBatch(async () => {
     const phaseId = c.req.param("phaseId");
     if (!phaseId) return c.json({ error: "phaseId required" }, 400);
     const body = await c.req.json<{ title?: string; description?: string; status?: Task["status"]; checklist?: string[] }>();
@@ -717,7 +839,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const seq = (n: number) => String(n && n > 0 ? n : 0).padStart(3, "0");
     const label = `T${seq(task.number)}(P${seq(phase.number)}/F${seq(featureNum)}) - ${task.title}`;
     return c.json({ ...task, label }, 201);
-  });
+  }));
 
   // ── Tasks ─────────────────────────────────────────────────────────
   app.get(route("/tasks/active"), async (c) => {
@@ -811,7 +933,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   /** Canonical HTTP task-entry path. Generic task updates must never start work,
    * because start/resume is responsible for clearing checkpoints and closing
    * any matching return-stack deviation. */
-  app.post(route("/tasks/:id/start"), async (c) => {
+  app.post(route("/tasks/:id/start"), async (c) => store.runBatch(async () => {
     const taskId = c.req.param("id");
     const [phases, featuresDoc, project] = await Promise.all([
       store.loadAllPhases(), store.loadFeatures(), store.loadProject(),
@@ -870,7 +992,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.appendActivity("task_status", existing.id, `Task ${existing.id} → in-progress`);
     return c.json(updated ?? existing);
-  });
+  }));
 
   app.get(route("/tasks/:id"), async (c) => {
     const taskId = c.req.param("id");
@@ -882,23 +1004,22 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json({ error: "task not found" }, 404);
   });
 
-  app.put(route("/tasks/:id"), async (c) => {
+  app.put(route("/tasks/:id"), async (c) => store.runBatch(async () => {
     const taskId = c.req.param("id");
-    const body = await c.req.json<{ phaseId: string; motivation?: string } & Partial<Task>>();
+    const body = await c.req.json<{ phaseId: string; motivation?: string; expectedUpdatedAt?: string } & Partial<Task>>();
     if (!body.phaseId) return c.json({ error: "phaseId required" }, 400);
 
     const phase = await store.loadPhase(body.phaseId).catch(() => null);
     if (!phase) return c.json({ error: "phase not found" }, 404);
-    const existing = phase.tasks.find((t) => t.id === taskId);
+    const existing = phase.tasks.find((task) => task.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
+    const mutableFields = ["title", "description", "descriptionRef", "status", "notes", "decisions", "acceptedDecisions", "priority", "checklist"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
 
     if (body.status && body.status !== existing.status && (body.status === "in-progress" || (body.status as string) === "paused" || (existing.status as string) === "paused")) {
       return c.json({ error: "Task start/resume transitions require POST /tasks/:id/start so lifecycle state, checkpoints, and return stacks remain consistent." }, 400);
     }
 
-    // Validate motivation requirement for status transitions. The Web UI is the
-    // human supervisor and is exempt (X-Planner-Source: web-ui) — agents calling
-    // the API without that header are still required to motivate state changes.
     if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status) && !fromWebUi(c)) {
       if (!body.motivation || !body.motivation.trim()) {
         return c.json({ error: `Status transition "${existing.status} → ${body.status}" requires a motivation. Provide the "motivation" field with a detailed explanation.` }, 400);
@@ -913,63 +1034,52 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       }
     }
 
-    // NOTE: checklist completeness is advisory for the AI agent (enforced via
-    // prompt rules), not a hard API gate. The web UI is for the human
-    // supervisor, who may close a task regardless of checklist state.
     const now = nowISO();
-    const updated: Task = {
-      ...existing,
-      ...body,
-      id: taskId as string,
-      phaseId: existing.phaseId,
-      shortName: existing.shortName,
-      createdAt: existing.createdAt,
-      startedAt: existing.startedAt,
-      completedAt: existing.completedAt,
-      updatedAt: now,
-    };
-
-    if (body.status) {
-      applyTaskLifecycleDates(updated, body.status, now);
-    }
-
-    // Record status change in the incremental statusLog.
-    if (body.status && body.status !== existing.status) {
-      const entry: StatusLogEntry = {
-        id: createTaskId(),
-        date: now,
-        fromStatus: existing.status,
-        toStatus: body.status,
-        title: body.motivation?.split("\n")[0]?.trim() || `${existing.status} → ${body.status}`,
-        description: body.motivation?.trim() || "",
+    const expectedUpdatedAt = body.expectedUpdatedAt ?? body.updatedAt;
+    const result = await store.updateTask(phase.id, existing.id, (current) => {
+      const previousStatus = current.status;
+      const next: Task = {
+        ...current,
+        ...(body.title !== undefined ? { title: body.title } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {}),
+        ...(body.priority !== undefined ? { priority: body.priority } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(body.decisions !== undefined ? { decisions: body.decisions } : {}),
+        ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
+        ...(body.checklist !== undefined ? { checklist: body.checklist } : {}),
+        ...(body.subtasks !== undefined ? { subtasks: body.subtasks } : {}),
+        ...(body.dependsOn !== undefined ? { dependsOn: body.dependsOn } : {}),
+        updatedAt: now,
       };
-      updated.statusLog = [...(existing.statusLog ?? []), entry];
-    }
-
-    const tIdx = phase.tasks.findIndex((t) => t.id === taskId);
-    phase.tasks[tIdx] = updated;
-    phase.updatedAt = updated.updatedAt;
-    // Atomic: serialize concurrent task updates on the same phase.
-    await store.updatePhase(phase.id, (p) => {
-      const i = p.tasks.findIndex((t) => t.id === taskId);
-      if (i !== -1) p.tasks[i] = updated;
-      p.updatedAt = updated.updatedAt;
-      return p;
-    });
+      if (body.status !== undefined) applyTaskLifecycleDates(next, body.status, now);
+      if (body.status !== undefined && body.status !== previousStatus) {
+        const entry: StatusLogEntry = {
+          id: createTaskId(),
+          date: now,
+          fromStatus: previousStatus,
+          toStatus: body.status,
+          title: body.motivation?.split("\n")[0]?.trim() || `${previousStatus} → ${body.status}`,
+          description: body.motivation?.trim() || "",
+        };
+        next.statusLog = [...current.statusLog, entry];
+      }
+      return next;
+    }, expectedUpdatedAt !== undefined ? { expectedUpdatedAt } : {});
     await store.writeGenerated();
     await store.syncTaskStatusRollup(phase.id);
-    hub()?.broadcast({ type: "phases-updated", data: { action: "task-updated", id: body.phaseId, phaseId: body.phaseId, featureId: phase.featureId ?? "", taskId } });
+    hub()?.broadcast({ type: "phases-updated", data: { action: "task-updated", id: phase.id, phaseId: phase.id, featureId: phase.featureId ?? "", taskId } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
 
-    // Propagate status up
     if (body.status && body.status !== existing.status) {
       await store.appendActivity("task_status", taskId ?? "", `Task ${taskId} → ${body.status}`);
     } else {
-      await store.appendActivity("task_updated", taskId ?? "", `Task updated: ${updated.title}`);
+      await store.appendActivity("task_updated", taskId ?? "", `Task updated: ${result.task.title}`);
     }
 
-    return c.json(updated);
-  });
+    return c.json((await store.loadPhase(phase.id)).tasks.find((task) => task.id === taskId) ?? result.task);
+  }));
 
 
   app.delete(route("/tasks/:id"), async (c) => {

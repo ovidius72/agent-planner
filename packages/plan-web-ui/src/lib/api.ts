@@ -192,15 +192,20 @@ export interface LegacyProjectContextMigrationResult {
   project: Project;
 }
 
-export async function updateProject(project: Project): Promise<Project> {
-  // Runtime workDeviations live in .local/deviations.json (T299); the project
-  // editor must never round-trip them into shared project.json. Empty optional
-  // description references are UI defaults, not valid persisted references.
-  const { descriptionRef, workDeviations: _workDeviations, ...rest } = project;
+export interface ProjectUpdateInput {
+  name?: string;
+  goal?: string;
+  description?: string;
+  descriptionRef?: string;
+  projectGuidelines?: { content: string };
+  expectedGuidelinesUpdatedAt?: string;
+}
+
+export async function updateProject(project: ProjectUpdateInput): Promise<Project> {
+  const { descriptionRef, ...rest } = project;
   const payload = {
     ...rest,
     ...(descriptionRef ? { descriptionRef } : {}),
-    workDeviations: [],
   };
   return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify(payload) }));
 }
@@ -233,8 +238,16 @@ export async function createFeature(payload: { name: string; description?: strin
   return normalizeFeature(await request("/features", { method: "POST", body: JSON.stringify(payload) }));
 }
 
-export async function updateFeature(feature: Feature): Promise<Feature> {
-  return normalizeFeature(await request(`/features/${feature.id}`, { method: "PUT", body: JSON.stringify(feature) }));
+export type FeatureUpdateInput = Pick<Feature, "id" | "updatedAt"> & Partial<Pick<Feature,
+  "name" | "description" | "status" | "startDate" | "endDate" | "priority" | "workDone" | "workRemaining"
+>>;
+
+export async function updateFeature(feature: FeatureUpdateInput): Promise<Feature> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = feature;
+  return normalizeFeature(await request(`/features/${feature.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
+  }));
 }
 
 export async function deleteFeature(featureId: string): Promise<{ deleted: string }> {
@@ -270,15 +283,15 @@ export async function createRequirement(requirement: Pick<Requirement, "title" |
   }));
 }
 
-export type RequirementUpdateInput = Omit<Requirement, "macroTasks"> & { macroTasks: MacroTaskInput[] };
+export type RequirementUpdateInput = Pick<Requirement, "id" | "updatedAt"> & Partial<Pick<Requirement,
+  "title" | "description" | "status" | "linkedPhaseIds"
+>> & { macroTasks?: MacroTaskInput[] };
 
 export async function updateRequirement(requirement: RequirementUpdateInput): Promise<Requirement> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = requirement;
   return normalizeRequirement(await request(`/requirements/${requirement.id}`, {
     method: "PUT",
-    body: JSON.stringify({
-      ...requirement,
-      updatedAt: new Date().toISOString(),
-    }),
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
   }));
 }
 
@@ -299,8 +312,16 @@ export async function createPhase(payload: { title: string; featureId: string; s
   return normalizePhase(await request("/phases", { method: "POST", body: JSON.stringify(payload) }));
 }
 
-export async function updatePhase(phase: Phase): Promise<Phase> {
-  return normalizePhase(await request(`/phases/${phase.id}`, { method: "PUT", body: JSON.stringify(phase) }));
+export type PhaseUpdateInput = Pick<Phase, "id" | "updatedAt"> & Partial<Pick<Phase,
+  "title" | "status" | "priority" | "summary" | "description" | "goals" | "nonGoals" | "dependencies" | "risks" | "openQuestions" | "completionCriteria"
+>>;
+
+export async function updatePhase(phase: PhaseUpdateInput): Promise<Phase> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = phase;
+  return normalizePhase(await request(`/phases/${phase.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
+  }));
 }
 
 export async function deletePhase(phaseId: string): Promise<{ deleted: string }> {
@@ -315,8 +336,16 @@ export async function getTask(taskId: string): Promise<Task> {
   return normalizeTask(await request(`/tasks/${taskId}`));
 }
 
-export async function updateTask(task: Task): Promise<Task> {
-  return normalizeTask(await request(`/tasks/${task.id}`, { method: "PUT", body: JSON.stringify(task) }));
+export type TaskUpdateInput = Pick<Task, "id" | "phaseId" | "updatedAt"> & Partial<Pick<Task,
+  "title" | "status" | "priority" | "description" | "checklist"
+>>;
+
+export async function updateTask(task: TaskUpdateInput): Promise<Task> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = task;
+  return normalizeTask(await request(`/tasks/${task.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
+  }));
 }
 
 /** Start planned work or resume a checkpoint through the canonical lifecycle. */

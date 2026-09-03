@@ -20,6 +20,8 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import {
   startServerFixture,
@@ -80,6 +82,28 @@ test("feature CRUD: create 201 with refs, list, rename, delete, missing 404", as
   const deleted = await request(fx, `/features/${created.body.id}`, { method: "DELETE" });
   assert.deepEqual(deleted.body, { deleted: created.body.id });
   await request(fx, `/features/${created.body.id}`, { expectStatus: 404 });
+});
+
+test("feature create returns typed runtime compatibility diagnostics for incompatible allocation data", async () => {
+  const fx = await startServerFixture({ name: "t366-server-allocation-compat" });
+  const manifest = await fx.store.loadManifest();
+  const registryDir = join(fx.planRoot, ".local", "allocations");
+  await mkdir(registryDir, { recursive: true });
+  await writeFile(join(registryDir, `${manifest.projectId}.json`), JSON.stringify({
+    version: 1,
+    projectId: manifest.projectId,
+    allocations: [{ kind: "milestone", entityId: "external", number: 2, shortId: "ABCDE" }],
+  }), "utf8");
+
+  const result = await request(fx, "/features", {
+    ...json({ name: "Blocked by runtime", description: "This mutation must fail before allocating an identity." }),
+    expectStatus: 409,
+  });
+  assert.equal(result.body.error, "PLAN_UNSUPPORTED_ALLOCATION_KIND");
+  assert.equal(result.body.details.kind, "milestone");
+  assert.deepEqual(result.body.details.supportedKinds, ["feature", "phase", "task", "idea"]);
+  assert.match(result.body.message, /Upgrade all Agent Plan packages and reload the harness/);
+  assert.equal((await request(fx, "/features")).body.length, 1, "failed compatibility check must not create a feature");
 });
 
 test("feature governance gate: in-progress requires discussedAt/contextReady", async () => {
@@ -394,6 +418,36 @@ test("export, integrity and repair endpoints", async () => {
 
 // ── Atomicity + malformed input + methods + persistence ───────────────────
 
+test("no-field update payloads return typed no-op responses across entity routes", async () => {
+  const fx = await startServerFixture({ name: "t367-no-field-noops" });
+  const feature = (await request(fx, "/features")).body[0];
+  const phase = (await request(fx, "/phases")).body[0];
+  const task = phase.tasks[0];
+  const requirement = (await request(fx, "/requirements")).body.requirements[0];
+  const idea = (await request(fx, "/ideas", { ...json({ title: "No-op idea", description: "Original" }), expectStatus: 201 })).body;
+
+  const project = await request(fx, "/project", { ...put({}), expectStatus: 400 });
+  assert.equal(project.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
+  assert.equal(project.body.updated, false);
+
+  const featureNoop = await request(fx, `/features/${feature.id}`, { ...put({ expectedUpdatedAt: feature.updatedAt }), expectStatus: 400 });
+  assert.equal(featureNoop.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
+
+  const phaseNoop = await request(fx, `/phases/${phase.id}`, { ...put({ expectedUpdatedAt: phase.updatedAt }), expectStatus: 400 });
+  assert.equal(phaseNoop.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
+
+  const taskNoop = await request(fx, `/tasks/${task.id}`, { ...put({ phaseId: phase.id, expectedUpdatedAt: task.updatedAt }), expectStatus: 400 });
+  assert.equal(taskNoop.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
+
+  const requirementNoop = await request(fx, `/requirements/${requirement.id}`, { ...put({ expectedUpdatedAt: requirement.updatedAt }), expectStatus: 400 });
+  assert.equal(requirementNoop.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
+
+  const ideaNoop = await request(fx, `/ideas/${idea.id}`, { ...put({}), expectStatus: 400 });
+  assert.equal(ideaNoop.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
+  const persistedIdea = (await request(fx, "/ideas")).body.ideas.find((entry) => entry.id === idea.id);
+  assert.equal(persistedIdea.title, "No-op idea", "failed no-field update must not mutate the idea");
+});
+
 test("atomicity: rejected writes leave plan unchanged; malformed JSON and bad method per contract", async () => {
   const fx = await startServerFixture({ name: "t233-atomic" });
   const feature = (await request(fx, "/features")).body[0];
@@ -452,6 +506,43 @@ test("delete removes the phase file and its local backup (no resurrect via readJ
   await request(fx, `/phases/${id}`, { expectStatus: 404 });
 });
 
+test("an active root writer keeps reads available and returns typed HTTP 423 diagnostics for writes", async () => {
+  const fx = await startServerFixture({ name: "t233-writer-busy" });
+  const lockPath = join(fx.planRoot, ".local", "locks", "writer.lock");
+  await mkdir(lockPath, { recursive: true });
+  await writeFile(join(lockPath, "owner.json"), JSON.stringify({
+    token: "external-writer",
+    pid: process.pid,
+    hostname: hostname(),
+    cwd: fx.root,
+    acquiredAt: new Date().toISOString(),
+  }), "utf8");
+
+  const previousTimeout = process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS;
+  const previousRetry = process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS;
+  process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS = "60";
+  process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS = "10";
+  try {
+    const project = await request(fx, "/project");
+    assert.equal(project.body.name, "t233-writer-busy", "read-only routes remain available");
+
+    const blocked = await request(fx, "/project", {
+      ...put({ ...project.body, goal: "must not persist" }),
+      expectStatus: 423,
+    });
+    assert.equal(blocked.body.error, "PLAN_WRITER_BUSY");
+    assert.match(blocked.body.message, /Read-only operations remain available/);
+    assert.equal(blocked.body.details.planRoot, fx.planRoot);
+    assert.equal((await request(fx, "/project")).body.goal, "");
+  } finally {
+    if (previousTimeout === undefined) delete process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS;
+    else process.env.AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS = previousTimeout;
+    if (previousRetry === undefined) delete process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS;
+    else process.env.AGENT_PLAN_WRITE_LOCK_RETRY_MS = previousRetry;
+    await rm(lockPath, { recursive: true, force: true });
+  }
+});
+
 test("persistence across restart: a second server on the same planRoot sees the data", async () => {
   const fx = await startServerFixture({ name: "t233-restart" });
   const phase = (await request(fx, "/phases")).body[0];
@@ -493,4 +584,63 @@ test("Ideas CRUD remains independent and validates server-owned identity", async
   await request(fx, `/ideas/${created.body.id}`, { method: "DELETE" });
   assert.equal((await request(fx, "/ideas")).body.ideas.length, 0);
   await expectError(fx, `/ideas/${created.body.id}`, { method: "DELETE" }, { status: 404 });
+});
+
+
+test("stale two-client entity patches fail with PLAN_STALE_WRITE and preserve canonical fields", async () => {
+  const fx = await startServerFixture({ name: "stale-two-client-patches" });
+  const feature = (await request(fx, "/features")).body[0];
+  const phase = (await request(fx, "/phases")).body[0];
+  const task = phase.tasks[0];
+  const requirement = (await request(fx, "/requirements")).body.requirements[0];
+
+  const featureUpdate = await request(fx, `/features/${feature.id}`, put({
+    description: "new feature description",
+    expectedUpdatedAt: feature.updatedAt,
+  }));
+  assert.equal(featureUpdate.body.description, "new feature description");
+  const staleFeature = await request(fx, `/features/${feature.id}`, {
+    ...put({ workDone: "stale client write", expectedUpdatedAt: feature.updatedAt }),
+    expectStatus: 409,
+  });
+  assert.equal(staleFeature.body.error, "PLAN_STALE_WRITE");
+  assert.equal((await request(fx, `/features/${feature.id}`)).body.workDone, "");
+  assert.equal((await request(fx, `/features/${feature.id}`)).body.description, "new feature description");
+
+  const phaseUpdate = await request(fx, `/phases/${phase.id}`, put({
+    description: "new phase description",
+    expectedUpdatedAt: phase.updatedAt,
+  }));
+  assert.equal(phaseUpdate.body.description, "new phase description");
+  const stalePhase = await request(fx, `/phases/${phase.id}`, {
+    ...put({ summary: "stale client summary", expectedUpdatedAt: phase.updatedAt }),
+    expectStatus: 409,
+  });
+  assert.equal(stalePhase.body.error, "PLAN_STALE_WRITE");
+  assert.equal((await request(fx, `/phases/${phase.id}`)).body.summary, phase.summary);
+
+  const taskUpdate = await request(fx, `/tasks/${task.id}`, put({
+    phaseId: phase.id,
+    description: "new task description",
+    expectedUpdatedAt: task.updatedAt,
+  }));
+  assert.equal(taskUpdate.body.description, "new task description");
+  const staleTask = await request(fx, `/tasks/${task.id}`, {
+    ...put({ phaseId: phase.id, title: "stale client title", expectedUpdatedAt: task.updatedAt }),
+    expectStatus: 409,
+  });
+  assert.equal(staleTask.body.error, "PLAN_STALE_WRITE");
+  assert.equal((await request(fx, `/tasks/${task.id}`)).body.title, task.title);
+
+  const requirementUpdate = await request(fx, `/requirements/${requirement.id}`, put({
+    description: "new requirement description",
+    expectedUpdatedAt: requirement.updatedAt,
+  }));
+  assert.equal(requirementUpdate.body.description, "new requirement description");
+  const staleRequirement = await request(fx, `/requirements/${requirement.id}`, {
+    ...put({ title: "stale title", expectedUpdatedAt: requirement.updatedAt }),
+    expectStatus: 409,
+  });
+  assert.equal(staleRequirement.body.error, "PLAN_STALE_WRITE");
+  assert.equal((await request(fx, "/requirements")).body.requirements[0].title, requirement.title);
 });
