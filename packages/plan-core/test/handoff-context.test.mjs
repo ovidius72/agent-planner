@@ -98,6 +98,13 @@ function completeColdStartInventory(overrides = {}) {
   };
 }
 
+function completeReadBackSourceReviews() {
+  return HANDOFF_COLD_START_SOURCE_REVIEWS.map(({ id, label }) => ({
+    source: id,
+    detail: `${label} was compared again with the complete persisted handoff body and no omitted resume fact was found.`,
+  }));
+}
+
 function refreshInput(audit, doneTaskId, overrides = {}) {
   const completenessAudit = completeAudit();
   return {
@@ -170,6 +177,14 @@ describe("durable handoff context refresh", () => {
 
     const result = await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId));
     assert.equal(result.updatedTaskIds[0], doneTaskId);
+    assert.equal(result.handoffAudit.resumeReadyAt, "", "a structurally valid write is still only a candidate");
+    assert.deepEqual(result.handoffAudit.readBackSourceReviews, []);
+    const legacyAudit = structuredClone(result.handoffAudit);
+    delete legacyAudit.resumeReadyAt;
+    delete legacyAudit.readBackSourceReviews;
+    const parsedLegacy = PhaseSchema.parse({ ...result.phase, handoffAudit: legacyAudit });
+    assert.equal(parsedLegacy.handoffAudit.resumeReadyAt, "", "legacy audits remain readable as unverified candidates");
+    assert.deepEqual(parsedLegacy.handoffAudit.readBackSourceReviews, []);
     const phase = await store.loadPhase(phaseId);
     const task = phase.tasks.find((candidate) => candidate.id === doneTaskId);
     assert.match(task.description, /Completion summary/);
@@ -181,6 +196,57 @@ describe("durable handoff context refresh", () => {
     assert.match(feature.workRemaining, /Adapter integration remains/);
     const unrelatedAfter = (await store.loadFeatures()).features.find((candidate) => candidate.id === unrelatedFeature.id);
     assert.deepEqual(unrelatedAfter, unrelatedBefore, "handoff refresh must not rewrite unrelated feature metadata");
+  });
+
+  test("requires a separate persisted read-back before a handoff becomes resume-ready", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const written = await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId));
+    const summaryBefore = (await store.listHandoffs()).find((entry) => entry.phaseId === phaseId);
+    assert.equal(summaryBefore.resumeReady, false);
+
+    await assert.rejects(
+      store.verifyPhaseHandoffReadBack(phaseId, {
+        expectedContentHash: written.handoffAudit.contentHash,
+        sourceReviews: completeReadBackSourceReviews(),
+        omissionsFound: ["The prior rewrite sequence is missing."],
+      }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_READBACK_GAPS_FOUND");
+        assert.deepEqual(error.details.omissionsFound, ["The prior rewrite sequence is missing."]);
+        return true;
+      },
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoffAudit.resumeReadyAt, "");
+
+    const verified = await store.verifyPhaseHandoffReadBack(phaseId, {
+      expectedContentHash: written.handoffAudit.contentHash,
+      sourceReviews: completeReadBackSourceReviews(),
+      omissionsFound: [],
+    });
+    assert.equal(verified.contentHash, written.handoffAudit.contentHash);
+    assert.ok(verified.resumeReadyAt);
+    assert.equal(verified.sourceReviews.length, HANDOFF_COLD_START_SOURCE_REVIEWS.length);
+    const summaryAfter = (await store.listHandoffs()).find((entry) => entry.phaseId === phaseId);
+    assert.equal(summaryAfter.resumeReady, true);
+  });
+
+  test("rejects stale handoff read-back hashes without marking the candidate ready", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId));
+    await assert.rejects(
+      store.verifyPhaseHandoffReadBack(phaseId, {
+        expectedContentHash: "0".repeat(64),
+        sourceReviews: completeReadBackSourceReviews(),
+        omissionsFound: [],
+      }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_READBACK_VERIFICATION_REQUIRED");
+        return true;
+      },
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoffAudit.resumeReadyAt, "");
   });
 
   test("rejects stale handoff tokens and missing task evidence without mutation", async () => {

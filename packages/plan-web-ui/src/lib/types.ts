@@ -19,6 +19,7 @@ export interface Feature {
   priority: number;
   name: string;
   description: string;
+  descriptionRef?: string;
   descriptionUpdatedAt: string;
   status: FeatureStatus;
   discussedAt: string;
@@ -109,6 +110,7 @@ export interface Task {
   title: string;
   status: TaskStatus;
   description: string;
+  descriptionRef?: string;
   descriptionUpdatedAt: string;
   notes: string;
   statusLog: StatusLogEntry[];
@@ -184,6 +186,7 @@ export interface Phase {
   contextReadyReason: string;
   summary: string;
   description: string;
+  descriptionRef?: string;
   descriptionUpdatedAt: string;
   notes: string;
   goals: string[];
@@ -214,6 +217,10 @@ export interface HandoffSummary {
   updatedAt: string;
   firstLine: string;
   content: string;
+  contentHash?: string;
+  verifiedAt?: string;
+  resumeReady?: boolean;
+  resumeReadyAt?: string;
 }
 
 export interface ArchivedHandoffSummary {

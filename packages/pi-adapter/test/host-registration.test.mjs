@@ -62,9 +62,9 @@ describe("pi-adapter host harness", () => {
         "idea promote",
       ], "every interactive Ideas action must be discoverable from /planner completion");
 
-      // All 60 tools with the required definition fields.
-      assert.equal(host.tools.size, 60);
-      for (const name of ["plan_init", "feature_create", "task_pause", "task_switch", "task_start", "decision_record", "handoff_prepare", "handoff_write", "planner-web", "planner-load", "planner-stop", "project_guidelines_show", "project_guidelines_update", "project_context_migrate", "idea_list", "idea_show", "idea_create", "idea_update", "idea_delete", "idea_promotion_begin", "idea_promotion_finalize"]) {
+      // All 65 tools with the required definition fields.
+      assert.equal(host.tools.size, 65);
+      for (const name of ["plan_init", "feature_create", "phase_discuss", "task_pause", "task_switch", "task_start", "decision_record", "accepted_decision_create", "accepted_decision_update", "accepted_decision_delete", "handoff_prepare", "handoff_write", "handoff_verify", "planner-web", "planner-load", "planner-stop", "project_guidelines_show", "project_guidelines_update", "project_context_migrate", "idea_list", "idea_show", "idea_create", "idea_update", "idea_delete", "idea_promotion_begin", "idea_promotion_finalize"]) {
         const tool = host.tools.get(name);
         assert.ok(tool, `tool ${name} registered`);
         assert.ok(tool.label && tool.description, `tool ${name} has label/description`);
@@ -110,6 +110,28 @@ describe("pi-adapter host harness", () => {
       assert.match(message, /Plan schema: manifest schemaVersion 1/);
       assert.match(message, /Allocation registry: v1; supported kinds: feature, phase, task, idea/);
       assert.equal(existsSync(host.planRoot), false, "version lookup must not initialize planner state");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("planner overviews provide authoritative active-task evidence", async () => {
+    const host = await createPiHost({ name: "t384-active-evidence", seed: "minimal" });
+    try {
+      const initial = await host.runTool("plan_get", {});
+      assert.equal(toolDetails(initial).activeTaskState, "none");
+      assert.deepEqual(toolDetails(initial).activeTasks, []);
+      assert.match(toolText(initial), /Active tasks: none \(verified from all persisted phase task statuses\)/);
+
+      const phase = (await host.store.loadAllPhases())[0];
+      await host.store.updatePhase(phase.id, (current) => ({
+        ...current,
+        tasks: current.tasks.map((task, index) => index === 0 ? { ...task, status: "in-progress" } : task),
+      }));
+      await host.runCommand("show");
+      const message = host.ui.notifyCalls.at(-1)?.message ?? "";
+      assert.match(message, /Active tasks \(1\):/);
+      assert.match(message, /P001\(F001\)\/T001 — Implement login \(in-progress\)/);
     } finally {
       await closePiHost(host);
     }
@@ -196,6 +218,61 @@ describe("pi-adapter host harness", () => {
       const ideaNoop = await host.runTool("idea_update", { idea: "I001" });
       assert.equal(ideaNoop.isError, true);
       assert.equal(toolDetails(ideaNoop).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("accepted decision tools create, update, and delete semantic owner entries", async () => {
+    const host = await createPiHost({ name: "t369-accepted-decisions", seed: "minimal" });
+    try {
+      const created = await host.runTool("accepted_decision_create", {
+        targetType: "task",
+        targetRef: "P001/T001",
+        title: "Preserve task decisions",
+        decision: "Keep task decisions local to the task.",
+      });
+      assert.equal(toolDetails(created).created, true);
+      const decisionId = toolDetails(created).acceptedDecision.id;
+      const taskBefore = (await host.store.loadAllPhases())[0].tasks[0];
+      assert.equal(taskBefore.acceptedDecisions[0].id, decisionId);
+
+      const updated = await host.runTool("accepted_decision_update", {
+        targetType: "task",
+        targetRef: "P001/T001",
+        decisionId,
+        rationale: "Mutation parity needs entry-level updates.",
+      });
+      assert.equal(toolDetails(updated).updated, true);
+      assert.equal(toolDetails(updated).acceptedDecision.acceptedAt, toolDetails(created).acceptedDecision.acceptedAt);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].acceptedDecisions[0].rationale, "Mutation parity needs entry-level updates.");
+
+      const noFields = await host.runTool("accepted_decision_update", { targetType: "task", targetRef: "P001/T001", decisionId });
+      assert.equal(noFields.isError, true);
+      assert.equal(toolDetails(noFields).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+
+      const unconfirmed = await host.runTool("accepted_decision_delete", { targetType: "task", targetRef: "P001/T001", decisionId, confirmed: false });
+      assert.equal(toolDetails(unconfirmed).confirmRequired, true);
+      const deleted = await host.runTool("accepted_decision_delete", { targetType: "task", targetRef: "P001/T001", decisionId, confirmed: true });
+      assert.equal(toolDetails(deleted).deleted, true);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].acceptedDecisions.length, 0);
+
+      const missingTarget = await host.runTool("accepted_decision_create", {
+        targetType: "feature",
+        targetRef: "F999",
+        title: "Must not report success",
+      });
+      assert.equal(missingTarget.isError, true);
+      assert.deepEqual(toolDetails(missingTarget), { created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" });
+
+      const missingDecision = await host.runTool("accepted_decision_update", {
+        targetType: "project",
+        decisionId: "missing-decision",
+        title: "Must not report success",
+      });
+      assert.equal(missingDecision.isError, true);
+      assert.equal(toolDetails(missingDecision).updated, false);
+      assert.equal(toolDetails(missingDecision).errorCode, "ACCEPTED_DECISION_NOT_FOUND");
     } finally {
       await closePiHost(host);
     }

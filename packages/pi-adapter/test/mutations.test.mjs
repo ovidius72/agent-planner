@@ -43,6 +43,13 @@ function canonicalHandoff(title, detail) {
   return canonicalAuditedHandoff(title, detail, { file: "mutations.test.mjs", reason: "mutation fixture" });
 }
 
+function readBackSourceReviews() {
+  return ["conversation", "planner-entities", "working-tree", "verification-runtime", "peer-agent-output"].map((source) => ({
+    source,
+    detail: `${source} was compared again with the entire persisted handoff body and no missing resume fact was found.`,
+  }));
+}
+
 async function preparedHandoffArgs(host, phaseRef = "P001") {
   const prepared = await host.runTool("handoff_prepare", { phaseRef });
   return {
@@ -453,6 +460,83 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     }
   });
 
+  test("phase discuss and update parity persist planning fields, relinking, and task context", async () => {
+    const host = await createPiHost({ name: "t370-mutation-parity", seed: "minimal" });
+    try {
+      await host.runTool("feature_create", {
+        name: "Parity owner",
+        description: "src/parity.ts:1 owns the relinked phase while preserving canonical planner metadata and derived status behavior.",
+      });
+      const phase = (await host.store.loadAllPhases())[0];
+      const featureTwo = (await host.store.loadFeatures()).features.find((feature) => feature.number === 2);
+      const updated = await host.runTool("phase_update", {
+        phaseId: "P001",
+        featureId: "F002",
+        descriptionRef: ".planner/docs/phases/parity-phase.md",
+        goals: ["Close adapter parity"],
+        nonGoals: ["Change status rollups"],
+        dependencies: ["Canonical store"],
+        risks: ["Contract drift"],
+        openQuestions: ["Which client remains?"],
+        decisions: ["Use semantic mutations"],
+        completionCriteria: ["All surfaces agree"],
+      });
+      assert.equal(toolDetails(updated).updated, true);
+      let persistedPhase = await host.store.loadPhase(phase.id);
+      assert.equal(persistedPhase.featureId, featureTwo.id);
+      assert.equal(persistedPhase.descriptionRef, ".planner/docs/phases/parity-phase.md");
+      assert.deepEqual(persistedPhase.goals, ["Close adapter parity"]);
+      assert.deepEqual(persistedPhase.nonGoals, ["Change status rollups"]);
+      assert.deepEqual(persistedPhase.dependencies, ["Canonical store"]);
+      assert.deepEqual(persistedPhase.risks, ["Contract drift"]);
+      assert.deepEqual(persistedPhase.openQuestions, ["Which client remains?"]);
+      assert.deepEqual(persistedPhase.decisions, ["Use semantic mutations"]);
+      assert.deepEqual(persistedPhase.completionCriteria, ["All surfaces agree"]);
+      const owners = (await host.store.loadFeatures()).features;
+      assert.equal(owners.find((feature) => feature.number === 1).phaseIds.includes(phase.id), false);
+      assert.equal(owners.find((feature) => feature.number === 2).phaseIds.includes(phase.id), true);
+
+      const discussed = await host.runTool("phase_discuss", {
+        phaseId: "P001",
+        goals: ["Preserve derived status"],
+        summary: "Context is ready",
+        openQuestions: ["Who verifies parity?"],
+      });
+      assert.equal(toolDetails(discussed).discussed, true);
+      assert.equal(toolDetails(discussed).contextReady, true);
+      persistedPhase = await host.store.loadPhase(phase.id);
+      assert.equal(persistedPhase.status, "planned", "phase discuss preserves the derived task rollup");
+      assert.equal(persistedPhase.contextReady, true);
+      assert.deepEqual(persistedPhase.goals, ["Preserve derived status"]);
+      assert.deepEqual(persistedPhase.openQuestions, ["Who verifies parity?"]);
+
+      const taskUpdate = await host.runTool("task_update", {
+        taskId: "T001",
+        descriptionRef: ".planner/docs/tasks/parity-task.md",
+        notes: "Implementation context retained.",
+        decisions: ["Keep lifecycle tools authoritative"],
+      });
+      assert.equal(toolDetails(taskUpdate).updated, true);
+      const task = (await host.store.loadPhase(phase.id)).tasks[0];
+      assert.equal(task.descriptionRef, ".planner/docs/tasks/parity-task.md");
+      assert.equal(task.notes, "Implementation context retained.");
+      assert.deepEqual(task.decisions, ["Keep lifecycle tools authoritative"]);
+
+      for (const [tool, arguments_] of [
+        ["feature_update", { featureId: "F001", acceptedDecisions: [] }],
+        ["phase_update", { phaseId: "P001", acceptedDecisions: [] }],
+        ["task_update", { taskId: "T001", acceptedDecisions: [] }],
+      ]) {
+        const rejected = await host.runTool(tool, arguments_);
+        assert.equal(rejected.isError, true);
+        assert.equal(toolDetails(rejected).updated, false);
+        assert.equal(toolDetails(rejected).errorCode, "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED");
+      }
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
   test("requirements: create with links, then update status", async () => {
     const host = await createPiHost({ name: "t242-req", seed: "minimal" });
     try {
@@ -532,7 +616,10 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         confirmed: true,
         ...(await preparedHandoffArgs(host)),
       });
-      assert.match(toolText(written), /✅ Reconciled handoff and durable context on P001\(F001\)/);
+      assert.match(toolText(written), /candidate persisted on P001\(F001\), but it is NOT resume-ready yet/);
+      assert.equal(toolDetails(written).persisted, true);
+      assert.equal(toolDetails(written).resumeReady, false);
+      assert.equal(toolDetails(written).verificationRequired, true);
       assert.match((await phase()).handoff, /^# P001 — Auth API phase: fixture handoff/);
 
       // List + show round-trip.
@@ -546,6 +633,28 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolDetails(shown).content, /Body of the handoff\./);
       assert.equal(toolDetails(shown).truncated, false);
       assert.equal(toolDetails(shown).handoffAudit.version, 1);
+      assert.equal(toolDetails(shown).persistenceVerified, true);
+      assert.equal(toolDetails(shown).resumeReady, false);
+
+      const gaps = await host.runTool("handoff_verify", {
+        phaseRef: "P001",
+        expectedContentHash: toolDetails(shown).contentHash,
+        sourceReviews: readBackSourceReviews(),
+        omissionsFound: ["A prior rewrite is absent."],
+      });
+      assert.equal(gaps.isError, true);
+      assert.equal(toolDetails(gaps).errorCode, "HANDOFF_READBACK_GAPS_FOUND");
+      assert.equal((await phase()).handoffAudit.resumeReadyAt, "");
+
+      const verified = await host.runTool("handoff_verify", {
+        phaseRef: "P001",
+        expectedContentHash: toolDetails(shown).contentHash,
+        sourceReviews: readBackSourceReviews(),
+        omissionsFound: [],
+      });
+      assert.equal(toolDetails(verified).resumeReady, true);
+      assert.match(toolText(verified), /is resume-ready after persisted read-back/);
+      assert.equal(toolDetails(await host.runTool("handoff_list", {})).handoffs[0].resumeReady, true);
 
       // Clear archives and empties.
       const cleared = await host.runTool("handoff_clear", { phaseRef: "P001" });

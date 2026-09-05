@@ -210,14 +210,17 @@ test("done and rejected phases reject new handoffs and archive terminal handoffs
 // PUT /phases/:id returns persisted read-back rather than echoing a discarded
 // client field, so a taskless phase stays "draft" and can receive a handoff.
 
-test("taskless phase PUT status canceled returns persisted derived draft; handoff write still allowed", async () => {
+test("taskless phase rejects direct canceled status and remains eligible for a handoff", async () => {
   const fx = await startServerFixture({ name: "t234-noterm-canceled" });
   const feature = (await request(fx, "/features")).body[0];
   const p = await request(fx, "/phases", { ...json({ title: "No tasks", featureId: feature.id }), expectStatus: 201 });
 
-  const updated = await request(fx, `/phases/${p.body.id}`, put({ ...p.body, status: "canceled" }));
-  assert.equal(updated.status, 200);
-  assert.equal(updated.body.status, "draft", "PUT returns the persisted derived status");
+  const rejected = await request(fx, `/phases/${p.body.id}`, {
+    ...put({ ...p.body, status: "canceled" }),
+    expectStatus: 400,
+  });
+  assert.equal(rejected.body.updated, false);
+  assert.equal(rejected.body.errorCode, "DERIVED_STATUS_READ_ONLY");
   const derived = await request(fx, `/phases/${p.body.id}`);
   assert.equal(derived.body.status, "draft");
 

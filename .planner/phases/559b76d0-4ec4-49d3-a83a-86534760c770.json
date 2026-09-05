@@ -24,7 +24,9 @@
   "completionCriteria": [],
   "taskIds": [
     "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e",
-    "094c66e1-fca2-4ac1-a211-7c0883adf4f5"
+    "094c66e1-fca2-4ac1-a211-7c0883adf4f5",
+    "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38",
+    "a833a6a7-2992-4b21-bbe2-e48f3ba68d51"
   ],
   "tasks": [
     {
@@ -140,15 +142,183 @@
       "createdAt": "2026-09-01T15:01:08.437Z",
       "updatedAt": "2026-09-01T15:01:08.437Z",
       "sessionInfo": []
+    },
+    {
+      "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 384,
+      "shortId": "2WA33",
+      "priority": 3,
+      "shortName": "prevent-false-handoff-complete",
+      "title": "Prevent false handoff-completeness and active-task claims",
+      "status": "done",
+      "description": "Fix two release regressions in the cold-start contract. Current state: `packages/plan-core/src/handoff-context.ts:285-440` validates submitted audit strings and exact inventory echoes but a writer can still omit material history, skip the required persisted read-back, and later discover real gaps; `plugins/_shared/planner-skill.md.in` and generated copies describe verification but do not make an unverified write visibly non-final. Separately, `packages/plan-mcp/src/index.ts:418-454` returns counts and feature summaries from `planner-show` without an explicit active-task list or authoritative `none` state, allowing agents to infer “no active task” from absent task detail even when an in-progress task exists. Strengthen the handoff write/verification outcome so agents cannot report a handoff as resume-ready before a persisted read-back and concrete completeness check, preserve the canonical scaffold, bounded content, supporting-document contract, existing IDs/hashes/audit history, and Pi/MCP parity. Add explicit active-task evidence to compact overview/load surfaces and guidance: positive refs when active, an explicit verified-empty state when none, and conflict visibility when multiple tasks are active; never infer absence from counts or omitted fields. Update core, Pi/MCP surfaces, managed skill/template copies, and semantic regressions. Edge cases: multiple active tasks, checkpoint-only resumes, pending handoffs without active tasks, stale handoff tokens, terminal phases, empty plans, and backward-compatible reads of existing handoff audit data.\n\n---\n**Completion summary:**\nImplemented and verified the release-truthfulness regression fix. Handoff writes in `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts` now persist only a candidate and return `persisted:true`, `resumeReady:false`, and mandatory read-back next actions. Added semantic `PlanStore.verifyPhaseHandoffReadBack` in `packages/plan-core/src/plan-store.ts` plus validation in `packages/plan-core/src/handoff-context.ts`: the new Pi `handoff_verify` and MCP `planner-handoff-verify` require the exact persisted content hash, a second substantive review of conversation/planner/working-tree/runtime/peer sources, and an empty omissions list; discovered gaps return `HANDOFF_READBACK_GAPS_FOUND` and cannot mark the handoff ready. `packages/plan-core/src/schema.ts` stores backward-compatible `resumeReadyAt` and read-back source evidence; compact handoff lists, show responses, recap text, and the Web UI handoff route expose verification-required versus resume-ready state. `planner-show`, Pi `/planner show`, Pi `plan_get`, and shared recap logic now report authoritative active refs, an explicit verified-empty state, or a multiple-active conflict instead of permitting inference from omitted task detail. Updated `plugins/_shared/planner-skill.md.in`, synchronized core/Claude copies, `README.md`, surface/scenario inventories, and core/Pi/MCP/Web UI/Playwright regressions. Verification passed: `pnpm build`, `pnpm check`, `pnpm test:coverage` (561/561 Node tests and 94/94 Web UI tests; line 86.42%, branch 74.08%, functions 82.50%), `pnpm plugins:check`, `pnpm exec playwright test e2e/handoff-resume.spec.ts e2e/responsive.spec.ts` (10/10), and `git diff --check`. No known remaining work for T384; the previously paused T369 Accepted Decisions parity work remains preserved as the return target. No commit, push, PR, or merge was performed.",
+      "descriptionUpdatedAt": "2026-09-04T08:09:42.945Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38-check-001-planned-in-progress",
+          "date": "2026-09-04T07:35:23.110Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Add Accepted Decisions management parity."
+        },
+        {
+          "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38-check-002-in-progress-done",
+          "date": "2026-09-04T08:09:42.943Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented and verified the release-truthfulness regression fix. Handoff writes in `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts` now persist only a candidate and return `persisted:true`, `resumeReady:false`, and mandatory read-back next actions. Added semantic `PlanStore.verifyPhaseHandoffReadBack` in `packages/plan-core/src/plan-store.ts` plus validation in `packages/plan-core/src/handoff-context.ts`: the new Pi `handoff_verify` and MCP `planner-handoff-verify` require the exact persisted content hash, a second substantive review of conversation/planner/working-tree/runtime/peer sources, and an empty omissions list; discovered gaps return `HANDOFF_READBACK_GAPS_FOUND` and cannot mark the handoff ready. `packages/plan-core/src/schema.ts` stores backward-compatible `resumeReadyAt` and read-back source evidence; compact handoff lists, show responses, recap text, and the Web UI handoff route expose verification-required versus resume-ready state. `planner-show`, Pi `/planner show`, Pi `plan_get`, and shared recap logic now report authoritative active refs, an explicit verified-empty state, or a multiple-active conflict instead of permitting inference from omitted task detail. Updated `plugins/_shared/planner-skill.md.in`, synchronized core/Claude copies, `README.md`, surface/scenario inventories, and core/Pi/MCP/Web UI/Playwright regressions. Verification passed: `pnpm build`, `pnpm check`, `pnpm test:coverage` (561/561 Node tests and 94/94 Web UI tests; line 86.42%, branch 74.08%, functions 82.50%), `pnpm plugins:check`, `pnpm exec playwright test e2e/handoff-resume.spec.ts e2e/responsive.spec.ts` (10/10), and `git diff --check`. No known remaining work for T384; the previously paused T369 Accepted Decisions parity work remains preserved as the return target. No commit, push, PR, or merge was performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38-check-001-reproduce-and-characterize-how-a-structurally-valid-handoff-can-still-be-reported-complete-before-persisted-read-back-verification",
+          "number": 1,
+          "title": "Reproduce and characterize how a structurally valid handoff can still be reported complete before persisted read-back verification",
+          "checked": true
+        },
+        {
+          "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38-check-002-make-handoff-persistence-return-an-explicit-non-final-follow-up-verification-contract-or-equivalent-enforceable-resume-readiness-state",
+          "number": 2,
+          "title": "Make handoff persistence return an explicit non-final/follow-up verification contract or equivalent enforceable resume-readiness state",
+          "checked": true
+        },
+        {
+          "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38-check-003-add-explicit-active-task-refs-verified-empty-state-and-multi-active-conflict-evidence-to-compact-planner-overview-recap-surfaces",
+          "number": 3,
+          "title": "Add explicit active task refs, verified-empty state, and multi-active conflict evidence to compact planner overview/recap surfaces",
+          "checked": true
+        },
+        {
+          "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38-check-004-update-canonical-managed-planner-skill-and-synchronized-plugin-copies-to-prohibit-inference-from-absent-task-detail-and-completion-claims-before-verified-handoff-read-back",
+          "number": 4,
+          "title": "Update canonical managed planner skill and synchronized plugin copies to prohibit inference from absent task detail and completion claims before verified handoff read-back",
+          "checked": true
+        },
+        {
+          "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38-check-005-add-core-pi-mcp-and-release-surface-regressions-run-focused-and-full-verification",
+          "number": 5,
+          "title": "Add core, Pi, MCP, and release-surface regressions; run focused and full verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-04T07:35:23.110Z",
+      "completedAt": "2026-09-04T08:09:42.943Z",
+      "createdAt": "2026-09-04T07:34:37.038Z",
+      "updatedAt": "2026-09-04T08:09:42.943Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-04T07:35:23.058Z"
+        }
+      ]
+    },
+    {
+      "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 385,
+      "shortId": "CE2LA",
+      "priority": 4,
+      "shortName": "handoff-md-links",
+      "title": "Externalize oversized handoffs and open Markdown references in Web UI",
+      "status": "planned",
+      "description": "Redesign long-context recovery, Markdown navigation, and Web UI startup parity across `packages/plan-core/src/handoff-context.ts`, `packages/plan-core/src/plan-store.ts`, `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, `packages/plan-server/src/serve.ts`, `packages/plan-web-ui/src/`, shared planner skill copies, and cross-surface tests. Current failure is structural: real handoffs approach the 24,000-character ceiling while still omitting resume-critical facts; the generated operational audit is embedded in the handoff Markdown and duplicated again in structured `handoffAudit` metadata; free-text category coverage and same-agent `omissionsFound: []` behave as self-attestation rather than proof. MCP Web UI startup also lacks Pi parity because its successful start response does not clearly expose the reachable Web UI address.\n\nBuild a compact resume-capsule contract for new writes: target at most 8,000 inline characters, keep 24,000 only as a backward-compatible absolute read/write safety ceiling, and automatically externalize extended detail before the target is exceeded. The inline handoff must contain only the exact focus, first resume action, partial/current state, blockers/risks, ordered supporting-document links, and minimal preservation constraints. Do not embed the verbose completeness audit or cold-start inventory in Markdown; retain them once as structured metadata. Derive canonical evidence such as active task, phase, planner refs, branch/worktree state where available, persisted supporting-document hashes, and completed verification from authoritative sources instead of asking the agent to narrate duplicates. Persist planner-owned Markdown safely, retain a substantive inline summary and `supportingDocuments`, and either complete the write automatically or return one immediately executable typed continuation operation—never a dead-end size error or a false completeness claim. `resumeReady` must require persisted evidence and deterministic required fields; same-agent free-text attestation alone is insufficient. Add a cold-resume acceptance regression proving a fresh reader can identify the exact task, resume point, relevant files/documents, and next commands without conversation history.\n\nDetect valid planner-local Markdown references in shared formatted content and render accessible links that open a path-safe Markdown viewer in a new tab. Research a lightweight maintained editor library, using a dependency-free textarea plus existing Markdown preview as the baseline; add an explicitly confirmed save path only if justified. Restrict reads and writes to approved planner documentation roots and reject traversal and symlink escapes. Preserve existing handoff IDs, content hashes, audit history, legacy handoff parsing, source-review/cold-start metadata, supporting-document behavior, text/layout for non-reference content, and closed-by-default disclosures. Make MCP Web UI start responses match Pi behavior by returning and visibly printing the actual reachable Web UI address, with typed structured address/host/port metadata and tests for local/LAN startup. Cover plan-core, Pi, MCP, server, Web UI, shared skill guidance, capability inventory, unit/integration tests, and desktop/mobile Playwright behavior.",
+      "descriptionUpdatedAt": "2026-09-04T14:34:29.241Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-001-define-and-test-an-enforceable-over-limit-externalization-and-retry-contract-without-weakening-the-inline-budget",
+          "number": 1,
+          "title": "Define and test an enforceable over-limit externalization and retry contract without weakening the inline budget",
+          "checked": false
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-002-persist-planner-owned-supporting-markdown-safely-and-reconcile-it-with-handoff-metadata-read-back-readiness",
+          "number": 2,
+          "title": "Persist planner-owned supporting Markdown safely and reconcile it with handoff metadata/read-back readiness",
+          "checked": false
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-003-research-lightweight-maintained-markdown-editor-options-and-record-the-dependency-decision",
+          "number": 3,
+          "title": "Research lightweight maintained Markdown editor options and record the dependency decision",
+          "checked": false
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-004-add-path-safe-server-read-write-endpoints-and-web-ui-new-tab-markdown-viewer-plus-confirmed-editor-flow",
+          "number": 4,
+          "title": "Add path-safe server read/write endpoints and Web UI new-tab Markdown viewer plus confirmed editor flow",
+          "checked": false
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-005-link-valid-planner-local-md-references-from-descriptions-handoffs-and-other-shared-formatted-surfaces",
+          "number": 5,
+          "title": "Link valid planner-local .md references from descriptions, handoffs, and other shared formatted surfaces",
+          "checked": false
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-006-add-core-pi-mcp-server-web-ui-and-desktop-mobile-playwright-regressions-and-run-full-verification",
+          "number": 6,
+          "title": "Add core, Pi, MCP, server, Web UI, and desktop/mobile Playwright regressions and run full verification",
+          "checked": false
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-007-replace-verbose-duplicated-handoff-prose-with-an-8-000-character-resume-capsule-while-retaining-the-24-000-character-compatibility-ceiling",
+          "number": 7,
+          "title": "Replace verbose duplicated handoff prose with an <=8,000-character resume capsule while retaining the 24,000-character compatibility ceiling",
+          "checked": false
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-008-return-and-display-the-reachable-web-ui-address-from-mcp-startup-with-pi-equivalent-structured-host-and-port-diagnostics",
+          "number": 8,
+          "title": "Return and display the reachable Web UI address from MCP startup with Pi-equivalent structured host and port diagnostics",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-04T14:27:38.514Z",
+      "updatedAt": "2026-09-04T14:34:47.105Z",
+      "sessionInfo": []
     }
   ],
   "createdAt": "2026-09-01T15:00:40.024Z",
-  "updatedAt": "2026-09-01T15:01:08.437Z",
+  "updatedAt": "2026-09-04T14:34:47.105Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
-  "sessionInfo": []
+  "statusLog": [
+    {
+      "id": "91d75064-c0e0-4055-8502-a66d62670363",
+      "date": "2026-09-04T07:35:23.230Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-04T07:35:23.058Z"
+    }
+  ]
 }

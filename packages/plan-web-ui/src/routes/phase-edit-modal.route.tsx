@@ -21,7 +21,7 @@ export function PhaseEditModalRoute() {
   const formRef = useRef<HTMLFormElement>(null);
   const submit = useCallback(() => formRef.current?.requestSubmit(), []);
   useShortcut("submit", submit, { allowInEditable: true });
-  const data = useRouteLoaderData("phase-detail") as { feature: Feature; phase: Phase };
+  const data = useRouteLoaderData("phase-detail") as { feature: Feature; features: Feature[]; phase: Phase };
   const phase = data.phase;
 
   return (
@@ -29,18 +29,25 @@ export function PhaseEditModalRoute() {
       <Form ref={formRef} method="post" className="grid gap-4">
         <Field label="Title"><Input name="title" defaultValue={phase.title} required /></Field>
         <Field label="Status">
-          <Select name="status" defaultValue={phase.status}>
+          <Select name="status" defaultValue={phase.status} disabled title="Phase status is derived from child tasks.">
             {phaseStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Feature">
+          <Select name="featureId" defaultValue={phase.featureId ?? data.feature.id} required>
+            {data.features.map((feature) => <option key={feature.id} value={feature.id}>F{String(feature.number).padStart(3, "0")} — {feature.name}</option>)}
           </Select>
         </Field>
         <Field label="Priority"><Input type="number" name="priority" defaultValue={phase.priority ?? 0} min={0} /></Field>
         <Field label="Summary"><Textarea name="summary" defaultValue={phase.summary} /></Field>
         <Field label="Description"><Textarea name="description" defaultValue={phase.description} /></Field>
+        <Field label="Description reference"><Input name="descriptionRef" defaultValue={phase.descriptionRef ?? ""} placeholder=".planner/docs/phases/phase-details.md" /></Field>
         <Field label="Goals (one per line)"><Textarea name="goals" defaultValue={joinLines(phase.goals)} /></Field>
         <Field label="Non-goals (one per line)"><Textarea name="nonGoals" defaultValue={joinLines(phase.nonGoals)} /></Field>
         <Field label="Dependencies (one per line)"><Textarea name="dependencies" defaultValue={joinLines(phase.dependencies)} /></Field>
         <Field label="Risks (one per line)"><Textarea name="risks" defaultValue={joinLines(phase.risks)} /></Field>
         <Field label="Open questions (one per line)"><Textarea name="openQuestions" defaultValue={joinLines(phase.openQuestions)} /></Field>
+        <Field label="Decisions (one per line)"><Textarea name="decisions" defaultValue={joinLines(phase.decisions)} /></Field>
         <Field label="Completion criteria (one per line)"><Textarea name="completionCriteria" defaultValue={joinLines(phase.completionCriteria)} /></Field>
         <ModalActions>
           <Button type="submit" variant="primary" disabled={submitting} shortcut="submit">{submitting ? "Saving…" : "Save phase"}</Button>

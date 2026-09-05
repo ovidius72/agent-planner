@@ -64,6 +64,7 @@ test("listTools exposes the full published tool set with actionable input schema
       "planner-version", "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init", "planner-idea-list", "planner-idea-show", "planner-idea-create", "planner-idea-update", "planner-idea-delete", "planner-idea-promotion-begin", "planner-idea-promotion-finalize", "planner-requirement-list", "planner-requirement-create", "planner-requirement-update", "planner-requirement-delete",
       "planner-show", "planner-repair", "planner-cleanup-orphan-phases",
       "planner-project-language", "planner-project-discuss", "planner-project-guidelines-show", "planner-project-guidelines-update", "planner-project-context-migrate",
+      "planner-accepted-decision-create", "planner-accepted-decision-update", "planner-accepted-decision-delete",
       "planner-feature-list", "planner-phase-list", "planner-task-list",
       "planner-feature-add", "planner-feature-show", "planner-feature-discuss",
       "planner-feature-update", "planner-feature-delete",
@@ -75,7 +76,7 @@ test("listTools exposes the full published tool set with actionable input schema
       "planner-task-delete", "planner-task-recommend", "planner-task-deviation",
       "planner-task-pause", "planner-task-switch", "planner-task-start", "planner-task-complete",
       "planner-handoff-list", "planner-handoff-show", "planner-handoff-write",
-      "planner-handoff-prepare", "planner-handoff-clear",
+      "planner-handoff-prepare", "planner-handoff-verify", "planner-handoff-clear",
       "planner-web", "planner-load", "planner-disable",
     ];
     for (const toolName of expected) {
@@ -97,6 +98,12 @@ test("listTools exposes the full published tool set with actionable input schema
     const ideaPromotion = schema("planner-idea-promotion-begin");
     assert.deepEqual(ideaPromotion.properties.targetType.enum, ["feature", "phase", "task"], "idea promotion publishes every supported target type");
 
+    const acceptedDecisionCreate = schema("planner-accepted-decision-create");
+    assert.ok(acceptedDecisionCreate.required.includes("targetType"), "accepted-decision-create requires a target type");
+    assert.deepEqual(acceptedDecisionCreate.properties.targetType.enum, ["project", "feature", "phase", "task"], "accepted decisions can target every canonical owner");
+    const acceptedDecisionDelete = schema("planner-accepted-decision-delete");
+    assert.ok(acceptedDecisionDelete.required.includes("decisionId") && acceptedDecisionDelete.required.includes("confirmed"), "accepted-decision-delete requires decision id and confirmation");
+
     // feature-add: name + description required, description ≥ 50, status enum
     const featureAdd = schema("planner-feature-add");
     assert.ok(featureAdd.required.includes("name"), "feature-add requires name");
@@ -111,9 +118,21 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.ok(phaseAdd.required.includes("description"), "phase-add requires description");
     assert.equal(phaseAdd.properties.description.minLength, 50, "phase-add description enforces 50-char minimum");
 
-    // task-update exposes motivation for restricted transitions
+    const phaseDiscuss = schema("planner-phase-discuss");
+    for (const field of ["goals", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"]) {
+      assert.equal(phaseDiscuss.properties[field].type, "array", `phase-discuss exposes ${field}`);
+    }
+    const phaseUpdate = schema("planner-phase-update");
+    for (const field of ["featureId", "descriptionRef", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "completionCriteria"]) {
+      assert.ok(phaseUpdate.properties[field], `phase-update exposes ${field}`);
+    }
+
+    // task-update exposes complete context plus motivation for restricted transitions
     const taskUpdate = schema("planner-task-update");
     assert.equal(taskUpdate.properties.motivation.type, "string", "task-update exposes motivation");
+    assert.equal(taskUpdate.properties.notes.type, "string", "task-update exposes implementation notes");
+    assert.equal(taskUpdate.properties.decisions.type, "array", "task-update exposes decisions");
+    assert.equal(taskUpdate.properties.descriptionRef.type, "string", "task-update exposes descriptionRef");
 
     // handoff-write requires confirmed + phaseRef + content
     const handoffWrite = schema("planner-handoff-write");
@@ -124,6 +143,9 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.ok(handoffWrite.properties.coldStartInventory, "handoff-write publishes the mandatory cold-start inventory contract");
     assert.ok(handoffWrite.properties.coldStartInventory.properties.sourceReviews, "cold-start inventory publishes the pre-draft source-review contract");
     assert.equal(handoffWrite.properties.confirmed.type, "boolean", "confirmed is a boolean");
+    const handoffVerify = schema("planner-handoff-verify");
+    assert.ok(handoffVerify.required.includes("expectedContentHash"), "handoff-verify requires the shown persisted content hash");
+    assert.ok(handoffVerify.required.includes("sourceReviews") && handoffVerify.required.includes("omissionsFound"), "handoff-verify requires a separate source reconciliation result");
 
     // task-checklist-toggle requires task + item
     const toggle = schema("planner-task-checklist-toggle");
@@ -134,6 +156,107 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.deepEqual(web.properties.action.enum, ["start", "stop", "status"]);
     assert.equal(web.properties.action.default, "status");
     assert.equal(session.client.getServerVersion()?.version, MCP_VERSION, "MCP handshake advertises the installed package version");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-show exposes explicit persisted active-task evidence", async () => {
+  const session = await startMcpFixture({ name: "t384-active-evidence" });
+  try {
+    const initial = await callTool(session, "planner-show", {});
+    assert.equal(toolStructured(initial)?.overview.activeTaskState, "none");
+    assert.deepEqual(toolStructured(initial)?.overview.activeTasks, []);
+    assert.match(toolText(initial), /Active tasks: none \(verified from all persisted phase task statuses\)/);
+
+    const phase = (await session.store.loadAllPhases())[0];
+    await session.store.updatePhase(phase.id, (current) => ({
+      ...current,
+      tasks: current.tasks.map((task, index) => index === 0 ? { ...task, status: "in-progress" } : task),
+    }));
+    const active = await callTool(session, "planner-show", {});
+    assert.equal(toolStructured(active)?.overview.activeTaskState, "single");
+    assert.equal(toolStructured(active)?.overview.activeTasks[0].ref, "P001(F001)/T001");
+    assert.match(toolText(active), /P001\(F001\)\/T001 — Implement login \(in-progress\)/);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("accepted decision tools preserve identity and acceptedAt across every owner kind", async () => {
+  const session = await startMcpFixture({ name: "t369-accepted-decisions" });
+  try {
+    const targets = [
+      { targetType: "project" },
+      { targetType: "feature", targetRef: "F001" },
+      { targetType: "phase", targetRef: "P001" },
+      { targetType: "task", targetRef: "P001/T001" },
+    ];
+    for (const target of targets) {
+      const created = await callTool(session, "planner-accepted-decision-create", {
+        ...target,
+        title: `${target.targetType} decision`,
+        decision: "Use semantic entry-level mutation.",
+        rationale: "Preserve canonical decision identity.",
+        implementationNotes: "Never replace the owning array from this workflow.",
+      });
+      const createdDetails = toolStructured(created);
+      assert.equal(createdDetails.created, true);
+      const acceptedDecision = createdDetails.acceptedDecision;
+
+      const noFields = await callTool(session, "planner-accepted-decision-update", {
+        ...target,
+        decisionId: acceptedDecision.id,
+      });
+      expectToolError(noFields, /no mutable fields/i);
+      assert.equal(toolStructured(noFields)?.errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+
+      const updated = await callTool(session, "planner-accepted-decision-update", {
+        ...target,
+        decisionId: acceptedDecision.id,
+        rationale: `Updated ${target.targetType} rationale.`,
+      });
+      const updatedDetails = toolStructured(updated);
+      assert.equal(updatedDetails.updated, true);
+      assert.equal(updatedDetails.acceptedDecision.id, acceptedDecision.id);
+      assert.equal(updatedDetails.acceptedDecision.acceptedAt, acceptedDecision.acceptedAt);
+
+      const unconfirmed = await callTool(session, "planner-accepted-decision-delete", {
+        ...target,
+        decisionId: acceptedDecision.id,
+        confirmed: false,
+      });
+      assert.equal(toolStructured(unconfirmed).confirmRequired, true);
+      const deleted = await callTool(session, "planner-accepted-decision-delete", {
+        ...target,
+        decisionId: acceptedDecision.id,
+        confirmed: true,
+      });
+      assert.equal(toolStructured(deleted).deleted, true);
+    }
+
+    assert.equal((await session.store.loadProject()).acceptedDecisions.length, 0);
+    assert.equal((await session.store.loadFeatures()).features[0].acceptedDecisions.length, 0);
+    const phase = (await session.store.loadAllPhases())[0];
+    assert.equal(phase.acceptedDecisions.length, 0);
+    assert.equal(phase.tasks[0].acceptedDecisions.length, 0);
+
+    const missingTarget = await callTool(session, "planner-accepted-decision-create", {
+      targetType: "feature",
+      targetRef: "F999",
+      title: "Must not report success",
+    });
+    assert.equal(missingTarget.isError, true);
+    assert.deepEqual(toolStructured(missingTarget), { created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" });
+
+    const missingDecision = await callTool(session, "planner-accepted-decision-update", {
+      targetType: "project",
+      decisionId: "missing-decision",
+      title: "Must not report success",
+    });
+    assert.equal(missingDecision.isError, true);
+    assert.equal(toolStructured(missingDecision)?.updated, false);
+    assert.equal(toolStructured(missingDecision)?.errorCode, "ACCEPTED_DECISION_NOT_FOUND");
   } finally {
     await closeMcpFixture(session);
   }
@@ -311,8 +434,10 @@ test("handoff write (confirmed) + show return structured phase identifiers", asy
       phaseNoUpdateReason: "Harness does not change durable phase context.",
       featureNoUpdateReason: "Harness does not change durable feature context.",
     });
-    assert.match(toolText(written), /✅ Reconciled handoff and durable context on P001\(F001\)/);
+    assert.match(toolText(written), /candidate persisted on P001\(F001\), but it is NOT resume-ready yet/);
     const writtenStructured = toolStructured(written);
+    assert.equal(writtenStructured.resumeReady, false);
+    assert.equal(writtenStructured.verificationRequired, true);
     assert.equal(writtenStructured.phaseRef, "P001(F001)", "structured phaseRef");
     assert.ok(writtenStructured.phaseId, "structured phaseId present");
 

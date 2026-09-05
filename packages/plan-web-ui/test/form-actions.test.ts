@@ -8,6 +8,7 @@ import { action as editTask } from "../src/routes/task-edit.action";
 import { action as startTask } from "../src/routes/task-start.action";
 import { action as createRequirement } from "../src/routes/requirement-create.action";
 import { action as editRequirement } from "../src/routes/requirement-edit.action";
+import { action as mutateAcceptedDecision } from "../src/routes/accepted-decision.action";
 import { formRequest, installFetchMock, jsonResponse, makeFeature, makePhase, makeRequirement, makeTask, requestJson, textResponse } from "./fixtures";
 
 const params = { featureId: "feature-1", phaseId: "phase-1", taskId: "task-1", requirementId: "requirement-1" };
@@ -105,6 +106,27 @@ describe("entity form actions", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it("creates, updates, and deletes accepted decisions through semantic confirmed routes", async () => {
+    const requests: Array<{ path: string; method: string; body: Record<string, unknown> }> = [];
+    installFetchMock(async (path, init) => {
+      requests.push({ path, method: init.method ?? "GET", body: await requestJson(init) });
+      if (init.method === "DELETE") return jsonResponse({ deleted: true, decisionId: "decision-1" });
+      return jsonResponse({ acceptedDecision: { id: "decision-1", title: "Explicit lifecycle", decision: "Use semantic operations.", rationale: "Preserve metadata.", implementationNotes: "Keep the owner array canonical.", acceptedAt: "2026-09-03T00:00:00.000Z" } });
+    });
+
+    const common = { targetType: "feature", targetRef: "feature-1", returnTo: "/features/feature-1" };
+    const created = await mutateAcceptedDecision({ request: formRequest({ ...common, intent: "create", title: " Explicit lifecycle ", decision: " Use semantic operations. ", rationale: " Preserve metadata. ", implementationNotes: " Keep the owner array canonical. " }) });
+    const updated = await mutateAcceptedDecision({ request: formRequest({ ...common, intent: "update", decisionId: "decision-1", title: " Explicit lifecycle ", decision: " Use semantic operations. ", rationale: " Updated rationale. ", implementationNotes: " Keep the owner array canonical. " }) });
+    const deleted = await mutateAcceptedDecision({ request: formRequest({ ...common, intent: "delete", decisionId: "decision-1" }) });
+
+    expect([created, updated, deleted].map((response) => (response as Response).headers.get("Location"))).toEqual(["/features/feature-1", "/features/feature-1", "/features/feature-1"]);
+    expect(requests).toEqual([
+      { path: "/api/accepted-decisions", method: "POST", body: { targetType: "feature", targetRef: "feature-1", title: "Explicit lifecycle", decision: "Use semantic operations.", rationale: "Preserve metadata.", implementationNotes: "Keep the owner array canonical." } },
+      { path: "/api/accepted-decisions/decision-1", method: "PUT", body: { targetType: "feature", targetRef: "feature-1", title: "Explicit lifecycle", decision: "Use semantic operations.", rationale: "Updated rationale.", implementationNotes: "Keep the owner array canonical." } },
+      { path: "/api/accepted-decisions/decision-1", method: "DELETE", body: { targetType: "feature", targetRef: "feature-1", confirmed: true } },
+    ]);
+  });
+
   it("edits feature and phase records while normalizing malformed numeric input", async () => {
     const feature = makeFeature({ priority: 3 });
     const phase = makePhase({ priority: 4 });
@@ -119,13 +141,26 @@ describe("entity form actions", () => {
       throw new Error(`Unexpected request ${path}`);
     });
 
-    await editFeature({ request: formRequest({ name: "Updated", status: "done", priority: "not-a-number" }), params });
-    await editPhase({ request: formRequest({ title: "Updated phase", status: "discovery", priority: "Infinity", goals: "One\n Two ", nonGoals: "", dependencies: "", risks: "", openQuestions: "", completionCriteria: "" }), params });
+    await editFeature({ request: formRequest({ name: "Updated", status: "done", priority: "not-a-number", descriptionRef: " .planner/docs/features/feature.md " }), params });
+    await editPhase({ request: formRequest({ title: "Updated phase", status: "discovery", priority: "Infinity", featureId: "feature-2", descriptionRef: " .planner/docs/phases/phase.md ", goals: "One\n Two ", nonGoals: "", dependencies: "", risks: "", openQuestions: "Question", decisions: "Decision", completionCriteria: "Done" }), params });
 
-    expect(payloads[0]).toMatchObject({ id: "feature-1", name: "Updated", priority: 0, expectedUpdatedAt: feature.updatedAt });
+    expect(payloads[0]).toMatchObject({ id: "feature-1", name: "Updated", priority: 0, descriptionRef: ".planner/docs/features/feature.md", expectedUpdatedAt: feature.updatedAt });
+    expect(payloads[0]).not.toHaveProperty("status");
     expect(payloads[0]).not.toHaveProperty("phaseIds");
     expect(payloads[0]).not.toHaveProperty("acceptedDecisions");
-    expect(payloads[1]).toMatchObject({ id: "phase-1", title: "Updated phase", status: "discovery", priority: 0, goals: ["One", "Two"], expectedUpdatedAt: phase.updatedAt });
+    expect(payloads[1]).toMatchObject({
+      id: "phase-1",
+      title: "Updated phase",
+      priority: 0,
+      featureId: "feature-2",
+      descriptionRef: ".planner/docs/phases/phase.md",
+      goals: ["One", "Two"],
+      openQuestions: ["Question"],
+      decisions: ["Decision"],
+      completionCriteria: ["Done"],
+      expectedUpdatedAt: phase.updatedAt,
+    });
+    expect(payloads[1]).not.toHaveProperty("status");
     expect(payloads[1]).not.toHaveProperty("tasks");
     expect(payloads[1]).not.toHaveProperty("handoff");
   });
@@ -154,7 +189,16 @@ describe("entity form actions", () => {
       throw new Error(`Unexpected request ${path}`);
     });
 
-    const result = await editTask({ request: formRequest({ title: "Retitled", status: "planned", priority: "2", checklist: "Keep\nNew item" }), params });
+    const result = await editTask({ request: formRequest({
+      title: "Retitled",
+      status: "planned",
+      priority: "2",
+      descriptionRef: " .planner/docs/tasks/task.md ",
+      notes: " Implementation context ",
+      decisions: "First decision\nSecond decision",
+      motivation: " Return to planned ",
+      checklist: "Keep\nNew item",
+    }), params });
     expect((result as Response).headers.get("Location")).toBe("/features/feature-1/phases/phase-1/tasks/task-1");
     expect(updatePayload).toMatchObject({
       id: "task-1",
@@ -163,6 +207,10 @@ describe("entity form actions", () => {
       title: "Retitled",
       status: "planned",
       priority: 2,
+      descriptionRef: ".planner/docs/tasks/task.md",
+      notes: "Implementation context",
+      decisions: ["First decision", "Second decision"],
+      motivation: "Return to planned",
       checklist: [
         { id: "keep", number: 1, title: "Keep", checked: true },
         { id: "check-2-new-item", number: 2, title: "New item", checked: false },

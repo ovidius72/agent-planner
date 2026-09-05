@@ -34,6 +34,8 @@ import {
   PlanWorkspaceSchema,
   type Project,
   ProjectSchema,
+  type AcceptedDecision,
+  AcceptedDecisionSchema,
   type RequirementsDocument,
   type Requirement,
   RequirementSchema,
@@ -71,10 +73,13 @@ import {
   auditPhaseHandoff,
   handoffContentHash,
   HandoffContractError,
+  validateHandoffReadBackVerification,
   type HandoffSupportingDocumentInput,
   type PhaseHandoffAudit,
   type RefreshPhaseHandoffInput,
   type RefreshPhaseHandoffResult,
+  type VerifyPhaseHandoffReadBackInput,
+  type VerifyPhaseHandoffReadBackResult,
 } from "./handoff-context.js";
 import { withPlanRootWriteLock } from "./write-coordination.js";
 import {
@@ -122,6 +127,99 @@ export interface IdeaPromotionTargetInput {
   targetType: IdeaPromotionTargetType;
   targetId: string;
   promotedAt?: string;
+}
+
+export type AcceptedDecisionOwner =
+  | { kind: "project" }
+  | { kind: "feature"; featureId: string }
+  | { kind: "phase"; phaseId: string }
+  | { kind: "task"; phaseId: string; taskId: string };
+
+export interface AcceptedDecisionCreateInput {
+  title: string;
+  decision?: string;
+  rationale?: string;
+  implementationNotes?: string;
+}
+
+export interface AcceptedDecisionUpdateInput {
+  title?: string;
+  decision?: string;
+  rationale?: string;
+  implementationNotes?: string;
+}
+
+function normalizeAcceptedDecisionCreate(input: AcceptedDecisionCreateInput, acceptedAt: string): AcceptedDecision {
+  const title = input.title.trim();
+  if (!title) {
+    throw new PlanStoreError("Accepted decision title is required.", undefined, {
+      errorCode: "ACCEPTED_DECISION_TITLE_REQUIRED",
+      entity: "acceptedDecision",
+      operation: "create",
+    });
+  }
+  return AcceptedDecisionSchema.parse({
+    id: randomUUID(),
+    title,
+    decision: input.decision?.trim() ?? "",
+    rationale: input.rationale?.trim() ?? "",
+    implementationNotes: input.implementationNotes?.trim() ?? "",
+    acceptedAt,
+  });
+}
+
+function updateAcceptedDecisionList(
+  decisions: AcceptedDecision[],
+  decisionId: string,
+  input: AcceptedDecisionUpdateInput,
+): { decisions: AcceptedDecision[]; decision: AcceptedDecision } {
+  const mutableFields = ["title", "decision", "rationale", "implementationNotes"] as const;
+  const receivedFields = mutableFields.filter((field) => input[field] !== undefined);
+  if (receivedFields.length === 0) {
+    throw new PlanStoreError("No mutable accepted decision fields were received.", undefined, {
+      errorCode: "NO_MUTABLE_FIELDS_RECEIVED",
+      entity: "acceptedDecision",
+      operation: "update",
+      mutableFields,
+    });
+  }
+  const index = decisions.findIndex((decision) => decision.id === decisionId);
+  if (index < 0) {
+    throw new PlanStoreError(`Accepted decision ${decisionId} not found.`, undefined, {
+      errorCode: "ACCEPTED_DECISION_NOT_FOUND",
+      entity: "acceptedDecision",
+      operation: "update",
+      decisionId,
+    });
+  }
+  const current = decisions[index]!;
+  const next = AcceptedDecisionSchema.parse({
+    ...current,
+    ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+    ...(input.decision !== undefined ? { decision: input.decision.trim() } : {}),
+    ...(input.rationale !== undefined ? { rationale: input.rationale.trim() } : {}),
+    ...(input.implementationNotes !== undefined ? { implementationNotes: input.implementationNotes.trim() } : {}),
+  });
+  return {
+    decisions: decisions.map((decision) => decision.id === decisionId ? next : decision),
+    decision: next,
+  };
+}
+
+function deleteAcceptedDecisionFromList(
+  decisions: AcceptedDecision[],
+  decisionId: string,
+): { decisions: AcceptedDecision[]; decision: AcceptedDecision } {
+  const decision = decisions.find((entry) => entry.id === decisionId);
+  if (!decision) {
+    throw new PlanStoreError(`Accepted decision ${decisionId} not found.`, undefined, {
+      errorCode: "ACCEPTED_DECISION_NOT_FOUND",
+      entity: "acceptedDecision",
+      operation: "delete",
+      decisionId,
+    });
+  }
+  return { decisions: decisions.filter((entry) => entry.id !== decisionId), decision };
 }
 
 function upsertSessionInfo<T extends { sessionInfo: Array<{ sessionId: string; createdAt: string }> }>(
@@ -534,7 +632,11 @@ export interface PhaseHandoffSummary {
   auditVersion: number | null;
   contentLength: number;
   contentHash: string;
+  /** Structural write-time validation timestamp. */
   verifiedAt: string;
+  /** True only after separate persisted read-back/source reconciliation. */
+  resumeReady: boolean;
+  resumeReadyAt: string;
 }
 
 /** Summary of an archived handoff. The content remains recoverable under
@@ -2959,6 +3061,100 @@ export class PlanStore {
     return { phase, task: persisted! };
   }
 
+  async createAcceptedDecision(
+    owner: AcceptedDecisionOwner,
+    input: AcceptedDecisionCreateInput,
+    acceptedAt = nowISO(),
+  ): Promise<AcceptedDecision> {
+    const decision = normalizeAcceptedDecisionCreate(input, acceptedAt);
+    if (owner.kind === "project") {
+      await this.updateProject((project) => ({ ...project, acceptedDecisions: [...project.acceptedDecisions, decision] }));
+      return decision;
+    }
+    if (owner.kind === "feature") {
+      await this.updateFeature(owner.featureId, (feature) => ({ ...feature, acceptedDecisions: [...feature.acceptedDecisions, decision], updatedAt: acceptedAt }));
+      return decision;
+    }
+    if (owner.kind === "phase") {
+      await this.updatePhase(owner.phaseId, (phase) => ({ ...phase, acceptedDecisions: [...phase.acceptedDecisions, decision], updatedAt: acceptedAt }));
+      return decision;
+    }
+    await this.updateTask(owner.phaseId, owner.taskId, (task) => ({ ...task, acceptedDecisions: [...task.acceptedDecisions, decision], updatedAt: acceptedAt }));
+    return decision;
+  }
+
+  async updateAcceptedDecision(
+    owner: AcceptedDecisionOwner,
+    decisionId: string,
+    input: AcceptedDecisionUpdateInput,
+  ): Promise<AcceptedDecision> {
+    let updated: AcceptedDecision | undefined;
+    if (owner.kind === "project") {
+      await this.updateProject((project) => {
+        const result = updateAcceptedDecisionList(project.acceptedDecisions, decisionId, input);
+        updated = result.decision;
+        return { ...project, acceptedDecisions: result.decisions };
+      });
+      return updated!;
+    }
+    if (owner.kind === "feature") {
+      await this.updateFeature(owner.featureId, (feature) => {
+        const result = updateAcceptedDecisionList(feature.acceptedDecisions, decisionId, input);
+        updated = result.decision;
+        return { ...feature, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return updated!;
+    }
+    if (owner.kind === "phase") {
+      await this.updatePhase(owner.phaseId, (phase) => {
+        const result = updateAcceptedDecisionList(phase.acceptedDecisions, decisionId, input);
+        updated = result.decision;
+        return { ...phase, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return updated!;
+    }
+    await this.updateTask(owner.phaseId, owner.taskId, (task) => {
+      const result = updateAcceptedDecisionList(task.acceptedDecisions, decisionId, input);
+      updated = result.decision;
+      return { ...task, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+    });
+    return updated!;
+  }
+
+  async deleteAcceptedDecision(owner: AcceptedDecisionOwner, decisionId: string): Promise<AcceptedDecision> {
+    let deleted: AcceptedDecision | undefined;
+    if (owner.kind === "project") {
+      await this.updateProject((project) => {
+        const result = deleteAcceptedDecisionFromList(project.acceptedDecisions, decisionId);
+        deleted = result.decision;
+        return { ...project, acceptedDecisions: result.decisions };
+      });
+      return deleted!;
+    }
+    if (owner.kind === "feature") {
+      await this.updateFeature(owner.featureId, (feature) => {
+        const result = deleteAcceptedDecisionFromList(feature.acceptedDecisions, decisionId);
+        deleted = result.decision;
+        return { ...feature, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return deleted!;
+    }
+    if (owner.kind === "phase") {
+      await this.updatePhase(owner.phaseId, (phase) => {
+        const result = deleteAcceptedDecisionFromList(phase.acceptedDecisions, decisionId);
+        deleted = result.decision;
+        return { ...phase, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return deleted!;
+    }
+    await this.updateTask(owner.phaseId, owner.taskId, (task) => {
+      const result = deleteAcceptedDecisionFromList(task.acceptedDecisions, decisionId);
+      deleted = result.decision;
+      return { ...task, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+    });
+    return deleted!;
+  }
+
   /** Save a durable resume checkpoint without introducing a separate canonical task status. */
   async pauseTask(phaseId: string, taskId: string, input: TaskPauseSnapshot): Promise<Task> {
     const snapshot = TaskPauseSnapshotSchema.parse(input);
@@ -3168,6 +3364,34 @@ export class PlanStore {
     });
   }
 
+  /** Mark a persisted handoff resume-ready only after a separate full read-back
+   * has reconciled every required source and found no omissions. */
+  async verifyPhaseHandoffReadBack(
+    phaseId: string,
+    input: VerifyPhaseHandoffReadBackInput,
+  ): Promise<VerifyPhaseHandoffReadBackResult> {
+    const timestamp = nowISO();
+    const phase = await this.updatePhase(phaseId, (current) => {
+      const sourceReviews = validateHandoffReadBackVerification(current, input);
+      return {
+        ...current,
+        handoffReadAt: timestamp,
+        handoffAudit: {
+          ...current.handoffAudit!,
+          resumeReadyAt: timestamp,
+          readBackSourceReviews: sourceReviews,
+        },
+      };
+    });
+    return {
+      phaseId: phase.id,
+      handoffUpdatedAt: phase.handoffUpdatedAt,
+      contentHash: phase.handoffAudit!.contentHash,
+      resumeReadyAt: phase.handoffAudit!.resumeReadyAt,
+      sourceReviews: phase.handoffAudit!.readBackSourceReviews,
+    };
+  }
+
   /** Set the handoff text for a phase + stamp handoffUpdatedAt. A terminal
    * phase cannot receive a new operational handoff. Replacing an existing
    * handoff archives the previous content as `superseded` first. */
@@ -3301,6 +3525,8 @@ export class PlanStore {
         contentLength: p.handoff.length,
         contentHash: p.handoffAudit?.contentHash ?? handoffContentHash(p.handoff),
         verifiedAt: p.handoffAudit?.verifiedAt ?? "",
+        resumeReady: Boolean(p.handoffAudit?.resumeReadyAt),
+        resumeReadyAt: p.handoffAudit?.resumeReadyAt ?? "",
       });
     }
     out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

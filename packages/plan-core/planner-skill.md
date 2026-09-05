@@ -33,6 +33,7 @@ Discover before mutating:
 3. Use `task_recommend` / `planner-task-recommend` when choosing the next task.
 4. Read the exact entity with its full-detail show/get surface when full context is needed.
 5. Never infer an ambiguous bare reference. Ask for the exact composite reference.
+6. Never claim that no task is active from counts, feature summaries, or omitted task detail. Use an explicit `activeTaskState`/`activeTasks` result from `plan_get`, `planner-show`, or the lifecycle recommendation. Only `activeTaskState: none` (verified from all persisted task statuses) proves absence; `conflict` means multiple active tasks must be reconciled.
 
 Feature and phase statuses are derived from their children. Do not write their status directly; update the relevant child tasks. A `DERIVED_STATUS_READ_ONLY` result is a non-success result.
 
@@ -97,7 +98,11 @@ The mandatory completeness categories are: exact focus and resume point; first r
 
 Keep the canonical handoff within the tool-reported budget (currently 24,000 characters). Essential focus, resume point, first action, risks, and verification status must remain inline. Put extended logs, large mappings, command transcripts, and deep design detail in committed Markdown files under `.planner/docs/`; pass each through `supportingDocuments` with a substantive description of what it contains and why the next agent needs it. Links supplement rather than replace the inline resume contract.
 
-Then call `handoff_write` / `planner-handoff-write` once with the preparation token, completed scaffold, completeness audit, cold-start inventory, optional supporting-document manifest, and reconciled task/phase/feature context. Missing headings/placeholders, missing inventory categories, uncovered concrete items, oversized bodies, invalid documents, or failed persistence read-back are typed failures and must never be reported as success. Read the persisted handoff back with the exact phase reference and verify its body, content hash, audit metadata, cold-start inventory, branch, files, symbols, commands, runtime wiring, expected behavior, operator actions, and first resume action before stopping. `handoff_list` is a compact paginated summary-only index; use `handoff_show` for one bounded body and its metadata. Clear/archive only after explicit intent or when phase completion makes it obsolete.
+Then call `handoff_write` / `planner-handoff-write` once with the preparation token, completed scaffold, completeness audit, cold-start inventory, optional supporting-document manifest, and reconciled task/phase/feature context. Missing headings/placeholders, missing inventory categories, uncovered concrete items, oversized bodies, invalid documents, or failed persistence read-back are typed failures and must never be reported as success.
+
+A successful write persists only a **handoff candidate** and returns `resumeReady: false`; it is never sufficient to claim that the handoff is detailed or complete. Immediately call `handoff_show` / `planner-handoff-show` with the exact phase reference and read the entire persisted body. Compare it again—not from memory—against conversation corrections and approvals, planner entities and sibling tasks, the current working tree/diff, verification and runtime evidence, and peer-agent output. If this second pass finds any omission, pass those gaps through a new prepare+write cycle. If it finds none, call `handoff_verify` / `planner-handoff-verify` with the content hash returned by show, fresh substantive findings for all five source reviews, and an empty `omissionsFound` list. Only a successful verification result with `resumeReady: true` authorizes telling the user that the handoff is resume-ready. Never answer “yes” from the earlier write result or from the submitted inventory alone.
+
+`handoff_list` is a compact paginated summary-only index and exposes whether each handoff is resume-ready; use `handoff_show` for one bounded body and its metadata. Clear/archive only after explicit intent or when phase completion makes it obsolete.
 
 ## Ideas Inbox and promotion
 
@@ -164,6 +169,8 @@ Supported interactive command paths:
 - `/planner handoff write <P00x(F00x)>`
 - `/planner handoff clear <P00x(F00x)>`
 
+`handoff_verify` is an agent tool rather than an interactive command; call it only after `handoff_show` completes the separate persisted read-back.
+
 Pause, switch, deviation, recommendation, requirement, and decision operations are available through the registered Pi tools below rather than every interactive `/planner` path.
 
 ### Dashboard, export, and guard
@@ -182,23 +189,23 @@ The MCP adapter publishes these tools:
 
 - Core: `planner-version`, `planner-init`, `planner-show`, `planner-repair`, `planner-cleanup-orphan-phases`, `planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`, `planner-load`, `planner-disable`, `planner-web`.
 - Ideas: `planner-idea-list`, `planner-idea-show`, `planner-idea-create`, `planner-idea-update`, `planner-idea-delete`, `planner-idea-promotion-begin`, `planner-idea-promotion-finalize`.
-- Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-requirement-list`, `planner-requirement-create`, `planner-requirement-update`, `planner-requirement-delete`.
+- Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-accepted-decision-create`, `planner-accepted-decision-update`, `planner-accepted-decision-delete`, `planner-requirement-list`, `planner-requirement-create`, `planner-requirement-update`, `planner-requirement-delete`.
 - Features: `planner-feature-list`, `planner-feature-add`, `planner-feature-show`, `planner-feature-discuss`, `planner-feature-update`, `planner-feature-delete`.
 - Phases: `planner-phase-list`, `planner-phase-add`, `planner-phase-show`, `planner-phase-discuss`, `planner-phase-update`, `planner-phase-delete`.
 - Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
-- Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-clear`.
+- Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
 
 ## Pi tool inventory
 
 The Pi adapter registers these tools:
 
 - Ideas: `idea_list`, `idea_show`, `idea_create`, `idea_update`, `idea_delete`, `idea_promotion_begin`, `idea_promotion_finalize`.
-- Project and requirements: `project_set_language_preferences`, `project_update`, `project_guidelines_show`, `project_guidelines_update`, `project_context_migrate`, `requirement_list`, `requirement_create`, `requirement_update`, `requirement_delete`.
+- Project and requirements: `project_set_language_preferences`, `project_update`, `project_guidelines_show`, `project_guidelines_update`, `project_context_migrate`, `accepted_decision_create`, `accepted_decision_update`, `accepted_decision_delete`, `requirement_list`, `requirement_create`, `requirement_update`, `requirement_delete`.
 - Plan: `plan_init`, `plan_get`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
 - Features: `feature_list`, `feature_get`, `feature_create`, `feature_discuss`, `feature_update`, `feature_delete`.
-- Phases and decisions: `phase_list`, `phase_get`, `phase_create`, `phase_update`, `phase_delete`, `decision_record`.
+- Phases and decisions: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record`.
 - Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
-- Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_clear`.
+- Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_verify`, `handoff_clear`.
 - Dashboard and lifecycle: `planner-web`, `planner-load`, `planner-stop`.
 - Deprecated compatibility aliases: `plan_get_handoff`, `plan_write_handoff`, `plan_delete_handoff`. Prefer the entity-scoped handoff tools.
 

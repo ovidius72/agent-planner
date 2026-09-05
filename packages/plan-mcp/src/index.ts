@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, handoffContentHash, HandoffContractError } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -107,6 +107,15 @@ function mutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceive
     isError: true,
     content: [{ type: "text", text: outcome.message }],
     structuredContent: { ...outcome },
+  };
+}
+
+function acceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted"): ToolResult {
+  if (!(error instanceof PlanStoreError) || !String(error.details?.errorCode ?? "").startsWith("ACCEPTED_DECISION_")) throw error;
+  return {
+    isError: true,
+    content: [{ type: "text", text: `❌ Accepted Decision mutation failed [${error.details?.errorCode}]: ${error.message}` }],
+    structuredContent: { [outcome]: false, ...error.details },
   };
 }
 
@@ -250,6 +259,36 @@ function featureNumberOfPhase(phase: Phase, features: Feature[]): number | undef
 function taskCompositeRef(task: Task, phase: Phase, features: Feature[]): string {
   return `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${String(task.number).padStart(3, "0")}`;
 }
+
+type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
+type AcceptedDecisionTargetResolution =
+  | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; ref: string }
+  | { ok: false; error: string };
+
+async function resolveAcceptedDecisionTarget(st: PlanStore, targetType: AcceptedDecisionTargetType, targetRef: string | undefined): Promise<AcceptedDecisionTargetResolution> {
+  if (targetType === "project") {
+    const project = await st.loadProject();
+    return { ok: true, owner: { kind: "project" }, ref: project.name };
+  }
+  const ref = targetRef?.trim();
+  if (!ref) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions.` };
+  const [featuresDoc, phases] = await Promise.all([st.loadFeatures(), st.loadAllPhases()]);
+  const features = featuresDoc.features;
+  if (targetType === "feature") {
+    const resolved = resolveFeatureRefStrict(features, ref);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    return { ok: true, owner: { kind: "feature", featureId: resolved.feature.id }, ref: formatFeatureRef(resolved.feature.number) };
+  }
+  if (targetType === "phase") {
+    const phase = findPhaseByRef(phases, features, ref);
+    if (!phase) return { ok: false, error: `Phase not found: ${ref}` };
+    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)) };
+  }
+  const found = findTaskByRef(phases, features, ref);
+  if (!found) return { ok: false, error: `Task not found: ${ref}` };
+  return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, ref: taskCompositeRef(found.task, found.phase, features) };
+}
+
 function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): void {
   const previousStatus = task.status;
   if (nextStatus === "in-progress" && !task.startedAt) task.startedAt = now;
@@ -386,12 +425,24 @@ server.registerTool("planner-init", {
 });
 
 server.registerTool("planner-show", {
-  description: "Show a compact planner overview: project metadata, counts, and a one-line summary of each feature (F00x · shortId — name (status; N phases, M tasks)). Does NOT include full descriptions, phases, or tasks — use planner-feature-list / planner-phase-list / planner-task-list for discovery and planner-*-show for full detail of a single entity. Keeps the result small to avoid token overflow.",
+  description: "Show a compact planner overview with explicit active-task evidence: project metadata, counts, authoritative active task refs (or a verified-empty state), and a one-line summary of each feature. Never infer that no task is active from omitted task detail. Use planner-feature-list / planner-phase-list / planner-task-list for discovery and planner-*-show for full entity detail.",
 }, async () => {
   const st = await requireStore();
   const features = (await st.loadFeatures()).features;
   const phases = await st.loadAllPhases();
-  const totalTasks = phases.reduce((total, phase) => total + phase.tasks.length, 0);
+  const allTasks = phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
+  const totalTasks = allTasks.length;
+  const activeTasks = allTasks
+    .filter(({ task }) => task.status === "in-progress")
+    .map(({ phase, task }) => ({
+      id: task.id,
+      ref: taskCompositeRef(task, phase, features),
+      title: task.title,
+      phaseId: phase.id,
+      featureId: phase.featureId ?? null,
+      status: task.status,
+    }));
+  const activeTaskState = activeTasks.length === 0 ? "none" : activeTasks.length === 1 ? "single" : "conflict";
   const project = await st.loadProject();
   const manifest = await st.loadManifest();
   const featureLines = features.map((feature) => {
@@ -405,6 +456,9 @@ server.registerTool("planner-show", {
     ...(project.descriptionRef ? [`Description ref: ${project.descriptionRef}`] : []),
     `Goal: ${project.goal || "(not set)"}`,
     `Features: ${features.length}  |  Phases: ${phases.length}  |  Tasks: ${totalTasks}`,
+    activeTasks.length === 0
+      ? "Active tasks: none (verified from all persisted phase task statuses)"
+      : `Active tasks (${activeTasks.length})${activeTaskState === "conflict" ? " — CONFLICT: multiple tasks are in progress" : ""}:\n${activeTasks.map((task) => `- ${task.ref} — ${task.title} (in-progress)`).join("\n")}`,
     `Updated: ${manifest.updatedAt || "(unknown)"}`,
     "",
     "Features:",
@@ -413,7 +467,9 @@ server.registerTool("planner-show", {
   // Compact structured overview (no full plan: avoids 1M+ char token overflow).
   const overview = {
     project: { name: project.name, description: project.description || null, descriptionRef: project.descriptionRef || null, goal: project.goal || null, updatedAt: manifest.updatedAt || null },
-    counts: { features: features.length, phases: phases.length, tasks: totalTasks },
+    counts: { features: features.length, phases: phases.length, tasks: totalTasks, activeTasks: activeTasks.length },
+    activeTaskState,
+    activeTasks,
     features: features.map((feature) => ({
       ref: formatFeatureRef(feature.number),
       shortId: feature.shortId || null,
@@ -702,6 +758,120 @@ server.registerTool("planner-project-context-migrate", {
     const out = items.map((task) => `- ${task.ref}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
     return text(out.join("\n") || "No tasks", { tasks: items });
   });
+
+server.registerTool("planner-accepted-decision-create", {
+  description: "Create an accepted decision on the project, feature, phase, or task without replacing the full acceptedDecisions array.",
+  inputSchema: {
+    targetType: z.enum(["project", "feature", "phase", "task"]),
+    targetRef: z.string().optional().describe("Feature/phase/task ref. Omit for targetType=project."),
+    title: z.string().min(1),
+    decision: z.string().optional(),
+    rationale: z.string().optional(),
+    implementationNotes: z.string().optional(),
+  },
+}, async ({ targetType, targetRef, title, decision, rationale, implementationNotes }) => {
+  const st = await requireStore();
+  const target = await resolveAcceptedDecisionTarget(st, targetType, targetRef);
+  if (!target.ok) return { isError: true, content: [{ type: "text", text: target.error }], structuredContent: { created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" } };
+  const createInput = {
+    title,
+    ...(decision !== undefined ? { decision } : {}),
+    ...(rationale !== undefined ? { rationale } : {}),
+    ...(implementationNotes !== undefined ? { implementationNotes } : {}),
+  };
+  try {
+    const acceptedDecision = await st.createAcceptedDecision(target.owner, createInput);
+    return writeAndSummarize(st, `Accepted decision created on ${target.ref}: ${acceptedDecision.title}`, {
+      created: true,
+      targetType,
+      targetRef: target.ref,
+      acceptedDecision,
+    });
+  } catch (error) {
+    return acceptedDecisionMutationFailure(error, "created");
+  }
+});
+
+server.registerTool("planner-accepted-decision-update", {
+  description: "Update one accepted decision in place while preserving its id and acceptedAt timestamp.",
+  inputSchema: {
+    targetType: z.enum(["project", "feature", "phase", "task"]),
+    targetRef: z.string().optional().describe("Feature/phase/task ref. Omit for targetType=project."),
+    decisionId: z.string().min(1),
+    title: z.string().optional(),
+    decision: z.string().optional(),
+    rationale: z.string().optional(),
+    implementationNotes: z.string().optional(),
+  },
+}, async ({ targetType, targetRef, decisionId, title, decision, rationale, implementationNotes }) => {
+  const mutableFields = ["title", "decision", "rationale", "implementationNotes"] as const;
+  const receivedFields = mutableFields.filter((field) => ({ title, decision, rationale, implementationNotes })[field] !== undefined);
+  if (receivedFields.length === 0) {
+    return mutationNoFieldsFailure({
+      entity: "acceptedDecision",
+      ref: decisionId,
+      operation: "update",
+      mutableFields,
+      retryCommand: "planner-accepted-decision-update with title, decision, rationale, or implementationNotes",
+      readBackCommand: "planner-show or the owning entity show tool",
+    });
+  }
+  const st = await requireStore();
+  const target = await resolveAcceptedDecisionTarget(st, targetType, targetRef);
+  if (!target.ok) return { isError: true, content: [{ type: "text", text: target.error }], structuredContent: { updated: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" } };
+  const updateInput = {
+    ...(title !== undefined ? { title } : {}),
+    ...(decision !== undefined ? { decision } : {}),
+    ...(rationale !== undefined ? { rationale } : {}),
+    ...(implementationNotes !== undefined ? { implementationNotes } : {}),
+  };
+  try {
+    const acceptedDecision = await st.updateAcceptedDecision(target.owner, decisionId, updateInput);
+    return writeAndSummarize(st, `Accepted decision updated on ${target.ref}: ${acceptedDecision.title}`, {
+      updated: true,
+      targetType,
+      targetRef: target.ref,
+      acceptedDecision,
+    });
+  } catch (error) {
+    return acceptedDecisionMutationFailure(error, "updated");
+  }
+});
+
+server.registerTool("planner-accepted-decision-delete", {
+  description: "Delete one accepted decision from the project, feature, phase, or task without replacing the full acceptedDecisions array.",
+  inputSchema: {
+    targetType: z.enum(["project", "feature", "phase", "task"]),
+    targetRef: z.string().optional().describe("Feature/phase/task ref. Omit for targetType=project."),
+    decisionId: z.string().min(1),
+    confirmed: z.boolean().describe("Must be true to confirm deleting this accepted decision."),
+  },
+}, async ({ targetType, targetRef, decisionId, confirmed }) => {
+  const st = await requireStore();
+  const target = await resolveAcceptedDecisionTarget(st, targetType, targetRef);
+  if (!target.ok) return { isError: true, content: [{ type: "text", text: target.error }], structuredContent: { deleted: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" } };
+  if (!confirmed) {
+    return text(`Delete not confirmed for accepted decision ${decisionId} on ${target.ref}. Retry with confirmed=true.`, {
+      deleted: false,
+      confirmRequired: true,
+      targetType,
+      targetRef: target.ref,
+      decisionId,
+    });
+  }
+  try {
+    const acceptedDecision = await st.deleteAcceptedDecision(target.owner, decisionId);
+    return writeAndSummarize(st, `Accepted decision deleted from ${target.ref}: ${acceptedDecision.title}`, {
+      deleted: true,
+      targetType,
+      targetRef: target.ref,
+      decisionId,
+      acceptedDecision,
+    });
+  } catch (error) {
+    return acceptedDecisionMutationFailure(error, "deleted");
+  }
+});
 
 server.registerTool("planner-feature-add", {
   description: "Create a feature with a rich description. REQUIRED: description must include code references (file:line), current implementation state (what exists, what is unimplemented), systems/structs/traits involved, concrete goals, and behaviors to preserve. The description is the primary context for future agents resuming this feature; one-liners cause misalignment.",
@@ -1027,16 +1197,18 @@ server.registerTool("planner-phase-show", {
 });
 
 server.registerTool("planner-phase-discuss", {
-  description: "Persist phase discovery fields and mark phase planned.",
+  description: "Persist phase discovery fields and mark governance context ready without overriding derived status.",
   inputSchema: {
     phase: z.string().min(1).describe("Phase ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."),
-    goal: z.string().optional(),
+    goal: z.string().optional().describe("Backward-compatible single main goal."),
+    goals: z.array(z.string()).optional().describe("Replace the phase goals list."),
     summary: z.string().optional(),
     scope: z.string().optional(),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full phase description."),
     nonGoals: z.array(z.string()).optional(),
     dependencies: z.array(z.string()).optional(),
     risks: z.array(z.string()).optional(),
+    openQuestions: z.array(z.string()).optional(),
     completionCriteria: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, ...updates }) => {
@@ -1044,7 +1216,7 @@ server.registerTool("planner-phase-discuss", {
   const features = (await st.loadFeatures()).features;
   const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
-  const mutableFields = ["goal", "summary", "scope", "descriptionRef", "nonGoals", "dependencies", "risks", "completionCriteria"] as const;
+  const mutableFields = ["goal", "goals", "summary", "scope", "descriptionRef", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
   const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
   if (receivedFields.length === 0) {
     return mutationNoFieldsFailure({
@@ -1063,7 +1235,8 @@ server.registerTool("planner-phase-discuss", {
     });
   }
   const phase = await st.updatePhase(found.id, (entry) => {
-    if (updates.goal !== undefined) entry.goals = [updates.goal.trim()].filter(Boolean);
+    if (updates.goals !== undefined) entry.goals = updates.goals.map((item) => item.trim()).filter(Boolean);
+    else if (updates.goal !== undefined) entry.goals = [updates.goal.trim()].filter(Boolean);
     if (updates.summary !== undefined) entry.summary = updates.summary.trim();
     if (updates.scope !== undefined) entry.description = updates.scope.trim();
     if (updates.descriptionRef !== undefined) {
@@ -1074,19 +1247,19 @@ server.registerTool("planner-phase-discuss", {
     if (updates.nonGoals !== undefined) entry.nonGoals = updates.nonGoals.map((item) => item.trim()).filter(Boolean);
     if (updates.dependencies !== undefined) entry.dependencies = updates.dependencies.map((item) => item.trim()).filter(Boolean);
     if (updates.risks !== undefined) entry.risks = updates.risks.map((item) => item.trim()).filter(Boolean);
+    if (updates.openQuestions !== undefined) entry.openQuestions = updates.openQuestions.map((item) => item.trim()).filter(Boolean);
     if (updates.completionCriteria !== undefined) entry.completionCriteria = updates.completionCriteria.map((item) => item.trim()).filter(Boolean);
-    entry.status = "planned";
     entry.discussedAt = nowISO();
     entry.contextReady = true;
     entry.contextReadyReason = "Updated through planner-phase-discuss MCP tool.";
     entry.updatedAt = nowISO();
     return entry;
   });
-  return writeAndSummarize(st, `✅ Phase discussed/planned: ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { phase, discussed: true, updatedFields: receivedFields });
+  return writeAndSummarize(st, `✅ Phase discussed/context ready: ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { phase, discussed: true, contextReady: true, updatedFields: receivedFields });
 });
 
 server.registerTool("planner-phase-update", {
-  description: "Update phase fields.",
+  description: "Update phase fields, including parent relinking and planning metadata. Derived status remains read-only.",
   inputSchema: {
     phase: z.string().min(1),
     title: z.string().optional(),
@@ -1094,7 +1267,15 @@ server.registerTool("planner-phase-update", {
     summary: z.string().optional(),
     description: z.string().optional(),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full phase description."),
+    featureId: z.string().optional().describe("Feature ref to relink this phase to, or an empty string to unlink it."),
     priority: z.number().int().nonnegative().optional().describe("Display order within the feature (lower = higher)."),
+    goals: z.array(z.string()).optional(),
+    nonGoals: z.array(z.string()).optional(),
+    dependencies: z.array(z.string()).optional(),
+    risks: z.array(z.string()).optional(),
+    openQuestions: z.array(z.string()).optional(),
+    decisions: z.array(z.string()).optional(),
+    completionCriteria: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
@@ -1104,7 +1285,7 @@ server.registerTool("planner-phase-update", {
   if (updates.status !== undefined) {
     return derivedStatusReadOnlyResult("phase", formatPhaseRef(found.number, featureNumberOfPhase(found, features)), updates.status, found.status);
   }
-  const mutableFields = ["title", "summary", "description", "descriptionRef", "priority"] as const;
+  const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "completionCriteria"] as const;
   const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
   if (receivedFields.length === 0) {
     return mutationNoFieldsFailure({
@@ -1122,20 +1303,57 @@ server.registerTool("planner-phase-update", {
       },
     });
   }
-  const phase = await st.updatePhase(found.id, (entry) => {
-    if (updates.title !== undefined) entry.title = updates.title.trim();
-    if (updates.summary !== undefined) entry.summary = updates.summary.trim();
-    if (updates.description !== undefined) entry.description = updates.description.trim();
-    if (updates.descriptionRef !== undefined) {
-      const descriptionRef = normalizeDescriptionRef(updates.descriptionRef);
-      if (descriptionRef) entry.descriptionRef = descriptionRef;
-      else delete entry.descriptionRef;
+  const previousFeatureId = found.featureId;
+  let nextFeatureId = previousFeatureId;
+  if (updates.featureId !== undefined) {
+    if (updates.featureId.trim() === "") {
+      nextFeatureId = undefined;
+    } else {
+      const resolvedFeature = resolveFeatureRefStrict(features, updates.featureId);
+      if (!resolvedFeature.ok) return text(resolvedFeature.error);
+      nextFeatureId = resolvedFeature.feature.id;
     }
-    if (updates.priority !== undefined) entry.priority = updates.priority;
-    entry.updatedAt = nowISO();
-    return entry;
+  }
+  let phase: Phase | undefined;
+  await st.runBatch(async () => {
+    phase = await st.updatePhase(found.id, (entry) => {
+      if (updates.title !== undefined) {
+        entry.title = updates.title.trim();
+        entry.slug = normalizeSlug(updates.title);
+      }
+      if (updates.summary !== undefined) entry.summary = updates.summary.trim();
+      if (updates.description !== undefined) entry.description = updates.description.trim();
+      if (updates.descriptionRef !== undefined) {
+        const descriptionRef = normalizeDescriptionRef(updates.descriptionRef);
+        if (descriptionRef) entry.descriptionRef = descriptionRef;
+        else delete entry.descriptionRef;
+      }
+      if (updates.featureId !== undefined) entry.featureId = nextFeatureId;
+      if (updates.priority !== undefined) entry.priority = updates.priority;
+      if (updates.goals !== undefined) entry.goals = updates.goals.map((item) => item.trim()).filter(Boolean);
+      if (updates.nonGoals !== undefined) entry.nonGoals = updates.nonGoals.map((item) => item.trim()).filter(Boolean);
+      if (updates.dependencies !== undefined) entry.dependencies = updates.dependencies.map((item) => item.trim()).filter(Boolean);
+      if (updates.risks !== undefined) entry.risks = updates.risks.map((item) => item.trim()).filter(Boolean);
+      if (updates.openQuestions !== undefined) entry.openQuestions = updates.openQuestions.map((item) => item.trim()).filter(Boolean);
+      if (updates.decisions !== undefined) entry.decisions = updates.decisions.map((item) => item.trim()).filter(Boolean);
+      if (updates.completionCriteria !== undefined) entry.completionCriteria = updates.completionCriteria.map((item) => item.trim()).filter(Boolean);
+      entry.updatedAt = nowISO();
+      return entry;
+    });
+    if (updates.featureId !== undefined && nextFeatureId !== previousFeatureId) {
+      await st.updateFeatures((document) => {
+        for (const feature of document.features) {
+          if (feature.id === previousFeatureId) feature.phaseIds = feature.phaseIds.filter((phaseId) => phaseId !== found.id);
+          if (feature.id === nextFeatureId && !feature.phaseIds.includes(found.id)) feature.phaseIds.push(found.id);
+        }
+        return document;
+      });
+    }
+    await st.writeGenerated();
   });
-  return writeAndSummarize(st, `✅ Phase updated: ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { phase, updated: true, updatedFields: receivedFields });
+  const persisted = phase!;
+  const refreshedFeatures = (await st.loadFeatures()).features;
+  return text(`✅ Phase updated: ${formatPhaseRef(persisted.number, featureNumberOfPhase(persisted, refreshedFeatures))} — ${persisted.title}${persisted.shortId ? ` · ${persisted.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { phase: persisted, updated: true, updatedFields: receivedFields });
 });
 
 server.registerTool("planner-phase-delete", {
@@ -1323,11 +1541,13 @@ server.registerTool("planner-task-update", {
     status: z.enum(STATUS_VALUES).optional(),
     description: z.string().optional(),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full task description."),
+    notes: z.string().optional().describe("Implementation notes."),
+    decisions: z.array(z.string()).optional().describe("Replace the task decisions list."),
     motivation: z.string().optional(),
     priority: z.number().int().nonnegative().optional().describe("Display order within the phase (lower = higher)."),
     checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Agents should tick steps via planner-task-checklist-toggle, not write DONE in titles."),
   },
-}, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, motivation, priority, checklist }) => {
+}, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -1349,8 +1569,8 @@ server.registerTool("planner-task-update", {
     }
   }
 
-  const mutableFields = ["title", "status", "description", "descriptionRef", "motivation", "priority", "checklist"] as const;
-  const updateInputs = { title, status, description, descriptionRef: rawDescriptionRef, motivation, priority, checklist };
+  const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "decisions", "motivation", "priority", "checklist"] as const;
+  const updateInputs = { title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist };
   const receivedFields = mutableFields.filter((field) => updateInputs[field] !== undefined);
   if (receivedFields.length === 0) {
     return mutationNoFieldsFailure({
@@ -1381,6 +1601,16 @@ server.registerTool("planner-task-update", {
       const descriptionRef = normalizeDescriptionRef(rawDescriptionRef);
       if (descriptionRef) task.descriptionRef = descriptionRef;
       else delete task.descriptionRef;
+    }
+    if (notes !== undefined) task.notes = notes.trim();
+    if (decisions !== undefined) task.decisions = decisions.map((item) => item.trim()).filter(Boolean);
+    if (checklist !== undefined) {
+      task.checklist = checklist.map((item, index) => ({
+        id: createChecklistItemId(task.id, index + 1, item),
+        number: index + 1,
+        title: item.trim(),
+        checked: false,
+      }));
     }
     if (status !== undefined && status !== task.status) {
       // Record status change in the incremental statusLog.
@@ -2061,7 +2291,7 @@ server.registerTool("planner-handoff-list", {
   if (list.length === 0) return text("No phase handoffs set.", { count: 0, total: 0, page: 1, pageSize, totalPages: 1, handoffs: [] });
   const result = boundedPage(list, page, pageSize);
   const { items, ...pageInfo } = result;
-  const lines = items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars)`);
+  const lines = items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars; ${e.resumeReady ? "resume-ready" : "verification required"})`);
   return text(`Phase handoffs — page ${pageInfo.page}/${pageInfo.totalPages} (${pageInfo.total} total):\n${lines.join("\n")}`, { count: items.length, ...pageInfo, handoffs: items });
 });
 
@@ -2074,8 +2304,56 @@ server.registerTool("planner-handoff-show", {
   if (!r.ok) return text(`❌ ${r.error}`);
   const phase = await st.loadPhase(r.phase.id);
   const bounded = boundedHandoffForTransport(phase.handoff);
-  if (!bounded.content.trim()) return text(`No handoff set on ${r.compositeRef}.`, { phaseRef: r.compositeRef, phaseId: r.phase.id, content: "", empty: true, handoffAudit: phase.handoffAudit });
-  return text(`Handoff for ${r.compositeRef}:\n\n${bounded.content}`, { phaseRef: r.compositeRef, phaseId: r.phase.id, ...bounded, handoffAudit: phase.handoffAudit });
+  if (!bounded.content.trim()) return text(`No handoff set on ${r.compositeRef}.`, { phaseRef: r.compositeRef, phaseId: r.phase.id, content: "", empty: true, resumeReady: false, handoffAudit: phase.handoffAudit });
+  const contentHash = handoffContentHash(phase.handoff);
+  const persistenceVerified = Boolean(phase.handoffAudit
+    && phase.handoffAudit.contentHash === contentHash
+    && phase.handoffAudit.contentLength === phase.handoff.length);
+  const resumeReady = persistenceVerified && Boolean(phase.handoffAudit?.resumeReadyAt);
+  const status = resumeReady
+    ? "Resume-ready: persisted read-back and source reconciliation completed."
+    : "NOT resume-ready: after reading this entire persisted body, call planner-handoff-verify with its contentHash and a fresh comparison against every required source. If any gap exists, rewrite instead of verifying.";
+  return text(`Handoff for ${r.compositeRef}\n${status}\nContent hash: ${contentHash}\n\n${bounded.content}`, {
+    phaseRef: r.compositeRef,
+    phaseId: r.phase.id,
+    ...bounded,
+    contentHash,
+    persistenceVerified,
+    resumeReady,
+    verificationRequired: !resumeReady,
+    handoffAudit: phase.handoffAudit,
+  });
+});
+
+server.registerTool("planner-handoff-verify", {
+  description: "Finalize one persisted handoff as resume-ready only after planner-handoff-show has displayed the entire body and the agent has compared it again with conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer output. Any discovered omission blocks verification and requires prepare+rewrite.",
+  inputSchema: {
+    phaseRef: z.string().min(1),
+    expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+    sourceReviews: z.array(z.object({
+      source: z.enum(["conversation", "planner-entities", "working-tree", "verification-runtime", "peer-agent-output"]),
+      detail: z.string().min(12),
+    })),
+    omissionsFound: z.array(z.string().min(1)),
+  },
+}, async ({ phaseRef, expectedContentHash, sourceReviews, omissionsFound }) => {
+  const st = await requireStore();
+  const r = await resolvePhaseForHandoff(st, phaseRef);
+  if (!r.ok) return text(`❌ ${r.error}`, { resumeReady: false });
+  try {
+    const result = await st.verifyPhaseHandoffReadBack(r.phase.id, { expectedContentHash, sourceReviews, omissionsFound });
+    await st.writeGenerated();
+    return text(`✅ Handoff on ${r.compositeRef} is resume-ready after persisted read-back and source reconciliation.`, {
+      phaseRef: r.compositeRef,
+      ...result,
+      resumeReady: true,
+      verificationRequired: false,
+    });
+  } catch (error) {
+    if (error instanceof HandoffContractError) return handoffContractFailure(error);
+    const message = error instanceof Error ? error.message : String(error);
+    return text(`❌ Handoff read-back verification denied: ${message}`, { resumeReady: false, error: message });
+  }
 });
 
 server.registerTool("planner-requirement-list", {
@@ -2310,7 +2588,7 @@ server.registerTool("planner-idea-promotion-finalize", {
 });
 
 server.registerTool("planner-handoff-write", {
-  description: "Reconcile one active handoff with durable context synchronization and a mandatory versioned completeness audit. Run planner-handoff-prepare first; link extended detail from committed .planner/docs/ Markdown.",
+  description: "Persist a reconciled handoff candidate with durable context synchronization and mandatory audits. The result always has resumeReady=false until a separate planner-handoff-show read-back and planner-handoff-verify source reconciliation succeeds. Run planner-handoff-prepare first; link extended detail from committed .planner/docs/ Markdown.",
   inputSchema: {
     phaseRef: z.string().min(1).describe("Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title."),
     title: z.string().min(3).optional().describe("Meaningful handoff title summarizing the work."),
@@ -2413,12 +2691,20 @@ server.registerTool("planner-handoff-write", {
       },
     });
     await st.writeGenerated();
-    return text(`✅ Reconciled handoff and durable context on ${r.compositeRef}; updated ${result.updatedTaskIds.length} task(s).`, {
+    return text(`⚠️ Handoff candidate persisted on ${r.compositeRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${r.compositeRef}, read the entire persisted body, compare it again with every required source, then call planner-handoff-verify with the returned contentHash. If that review finds any gap, run prepare+write again instead of verifying.`, {
       phaseRef: r.compositeRef,
       phaseId: r.phase.id,
       updatedTaskIds: result.updatedTaskIds,
       handoffUpdatedAt: result.handoffUpdatedAt,
       handoffAudit: result.handoffAudit,
+      persisted: true,
+      resumeReady: false,
+      verificationRequired: true,
+      nextActions: [
+        `Call planner-handoff-show ${r.compositeRef} and read the entire persisted body.`,
+        "Compare the persisted body against conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer-agent output.",
+        "If any omission exists, run planner-handoff-prepare and planner-handoff-write again; otherwise call planner-handoff-verify with the shown contentHash.",
+      ],
     });
   } catch (error) {
     if (error instanceof HandoffContractError) return handoffContractFailure(error);

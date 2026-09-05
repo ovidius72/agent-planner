@@ -108,6 +108,7 @@ export function HandoffRoute() {
               title={(
                 <>
                   <CopyableBadge id={h.compositeRef}>{h.compositeRef}</CopyableBadge>
+                  <span className="text-xs font-normal text-[var(--text-muted)]">{h.resumeReady ? "Resume-ready" : "Verification required"}</span>
                   <span className="text-xs font-normal text-[var(--text-muted)]">Updated {formatDateTime(h.updatedAt)}</span>
                 </>
               )}

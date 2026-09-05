@@ -174,7 +174,7 @@ export function FeatureDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="feature" targetRef={feature.id} />
         <StatusHistoryAccordion statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
       </Card>
 

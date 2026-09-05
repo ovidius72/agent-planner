@@ -12,6 +12,7 @@ export async function action({ request, params }: { request: Request; params: Re
     updatedAt: current.updatedAt,
     name: requiredString(formData, "name"),
     description: optionalString(formData, "description"),
+    descriptionRef: optionalString(formData, "descriptionRef"),
     startDate: optionalString(formData, "startDate"),
     endDate: optionalString(formData, "endDate"),
     priority: optionalNumber(formData, "priority"),

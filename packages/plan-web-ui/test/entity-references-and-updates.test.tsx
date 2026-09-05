@@ -24,7 +24,7 @@ describe("entity references and timestamps", () => {
       globalRules: ["Legacy rule"],
       acceptedDecisions: [{ id: "decision-1", title: "Use file storage", decision: "Store plans in .planner/.", rationale: "Portable.", implementationNotes: "Keep the format open.", acceptedAt: "2026-01-01T00:00:00.000Z" }],
     });
-    render(<MemoryRouter><ProjectContext project={project} /></MemoryRouter>);
+    renderRoute([{ path: "/", element: <ProjectContext project={project} /> }], "/");
 
     expect(screen.getByText("Project Context")).toBeInTheDocument();
     expect(screen.queryByText("AI Consolidated Context")).not.toBeInTheDocument();
@@ -209,6 +209,8 @@ describe("entity references and timestamps", () => {
     expect(screen.getByLabelText("Priority 3")).toBeInTheDocument();
     expect(screen.getByLabelText("Priority 4")).toBeInTheDocument();
     expect(screen.getByLabelText("Priority 5")).toBeInTheDocument();
+    expect(screen.getByTitle("Feature status is derived from child phases and tasks.")).toBeDisabled();
+    expect(screen.getByTitle("Phase status is derived from child tasks.")).toBeDisabled();
   });
 });
 

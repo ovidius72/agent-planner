@@ -101,10 +101,10 @@ export function FeatureRow({
             <select
               name="status"
               value={status}
-              disabled={isUpdatingStatus || isDeleting}
-              aria-busy={isUpdatingStatus}
+              disabled
+              aria-disabled="true"
+              title="Feature status is derived from child phases and tasks."
               className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]"
-              onChange={(event) => statusFetcher.submit(event.currentTarget.form)}
             >
               {featureStatuses.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>

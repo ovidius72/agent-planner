@@ -259,19 +259,59 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
     assert.equal(toolStructured(rejectedStatus).effectiveStatus, "draft");
     const storedAfterRejection = await session.store.loadPhase(id);
     assert.equal(storedAfterRejection.title, "Payouts", "mixed status update is rejected atomically");
-    const updated = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2" });
-    assert.match(toolText(updated), /P002\(F001\)/);
-    const stored = await session.store.loadPhase(id);
+    await callTool(session, "planner-feature-add", { name: "Parity owner", description: LONG });
+    const updated = await callTool(session, "planner-phase-update", {
+      phase: shortId,
+      title: "Payouts v2",
+      featureId: "F002",
+      descriptionRef: ".planner/docs/phases/payouts.md",
+      goals: ["Ship payouts"],
+      nonGoals: ["Redesign billing"],
+      dependencies: ["Provider contract"],
+      risks: ["Provider outage"],
+      openQuestions: ["Which region first?"],
+      decisions: ["Use provider tokens"],
+      completionCriteria: ["Payout succeeds"],
+    });
+    assert.match(toolText(updated), /P002\(F002\)/);
+    let stored = await session.store.loadPhase(id);
     assert.equal(stored.title, "Payouts v2");
+    assert.equal(stored.featureId, (await session.store.loadFeatures()).features.find((entry) => entry.number === 2).id);
+    assert.equal(stored.descriptionRef, ".planner/docs/phases/payouts.md");
+    assert.deepEqual(stored.goals, ["Ship payouts"]);
+    assert.deepEqual(stored.nonGoals, ["Redesign billing"]);
+    assert.deepEqual(stored.dependencies, ["Provider contract"]);
+    assert.deepEqual(stored.risks, ["Provider outage"]);
+    assert.deepEqual(stored.openQuestions, ["Which region first?"]);
+    assert.deepEqual(stored.decisions, ["Use provider tokens"]);
+    assert.deepEqual(stored.completionCriteria, ["Payout succeeds"]);
+    const featureOwners = (await session.store.loadFeatures()).features;
+    assert.equal(featureOwners.find((entry) => entry.number === 1).phaseIds.includes(id), false);
+    assert.equal(featureOwners.find((entry) => entry.number === 2).phaseIds.includes(id), true);
+
+    const discussed = await callTool(session, "planner-phase-discuss", {
+      phase: "P002",
+      goals: ["Keep derived status"],
+      summary: "Governance context captured",
+      openQuestions: ["Who signs off?"],
+    });
+    assert.equal(toolStructured(discussed).contextReady, true);
+    stored = await session.store.loadPhase(id);
+    assert.equal(stored.status, "draft", "phase discuss does not override derived status");
+    assert.equal(stored.contextReady, true);
+    assert.deepEqual(stored.goals, ["Keep derived status"]);
+    assert.deepEqual(stored.openQuestions, ["Who signs off?"]);
+
     const readBack = await callTool(session, "planner-phase-show", { phase: "P002" });
     assert.match(toolText(readBack), /Payouts v2/, "renamed phase reads back through MCP");
+    assert.match(toolText(readBack), /P002\(F002\)/, "relinked phase reads back with its new owner");
     assert.match(toolText(readBack), /\(draft; 0 tasks\)/, "status stays derived (draft) with no tasks");
 
     // delete → gone from store, feature phaseIds cleaned
     const deleted = await callTool(session, "planner-phase-delete", { phase: "P002" });
-    assert.match(toolText(deleted), /Phase deleted: P002\(F001\)/);
+    assert.match(toolText(deleted), /Phase deleted: P002\(F002\)/);
     assert.equal((await session.store.loadAllPhases()).some((entry) => entry.id === id), false);
-    const feature = (await session.store.loadFeatures()).features.find((entry) => entry.name === "Auth API");
+    const feature = (await session.store.loadFeatures()).features.find((entry) => entry.name === "Parity owner");
     assert.equal(feature.phaseIds.includes(id), false, "feature.phaseIds cleaned on phase delete");
 
     // invalid phase ref on show/delete → error, no mutation
@@ -319,6 +359,20 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
       assert.match(toolText(shown), /P001\(F001\)\/T002/, `task-show resolves ref ${ref}`);
     }
 
+    const parityUpdate = await callTool(session, "planner-task-update", {
+      task: "T002",
+      descriptionRef: ".planner/docs/tasks/refund-flow.md",
+      notes: "Provider behavior verified.",
+      decisions: ["Retry idempotently"],
+      checklist: ["Review", "Execute"],
+    });
+    assert.equal(toolStructured(parityUpdate).updated, true);
+    const parityTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
+    assert.equal(parityTask.descriptionRef, ".planner/docs/tasks/refund-flow.md");
+    assert.equal(parityTask.notes, "Provider behavior verified.");
+    assert.deepEqual(parityTask.decisions, ["Retry idempotently"]);
+    assert.deepEqual(parityTask.checklist.map((item) => item.title), ["Review", "Execute"]);
+
     // status gate: blocked without motivation → error, no mutation
     const noMotivation = await callTool(session, "planner-task-update", { task: "T002", status: "blocked" });
     expectToolError(noMotivation, /requires a motivation/);
@@ -342,7 +396,7 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     await callTool(session, "planner-task-checklist-toggle", { task: "T002", item: "C1" });
     await callTool(session, "planner-task-checklist-remove", { task: "T002", item: "C2" });
     const checklist = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).checklist;
-    assert.deepEqual(checklist.map((item) => item.title), ["Validate", "Ship"], "checklist add/toggle/remove renumbers cleanly");
+    assert.deepEqual(checklist.map((item) => item.title), ["Review", "Ship"], "checklist add/toggle/remove renumbers cleanly");
     assert.equal(checklist[0].checked, true, "toggle marks C1 done");
 
     // make T002 the highest-priority ready task (seed T001 has priority 10)
@@ -357,7 +411,8 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
 
     const preservedFeatureDescription = "Updated through MCP before task lifecycle synchronization.";
-    await callTool(session, "planner-feature-update", { feature: "F001", description: preservedFeatureDescription });
+    await callTool(session, "planner-feature-update", { feature: "F001", description: preservedFeatureDescription, descriptionRef: ".planner/docs/features/auth-api.md" });
+    assert.equal((await session.store.loadFeatures()).features.find((entry) => entry.number === 1).descriptionRef, ".planner/docs/features/auth-api.md");
 
     // Lifecycle work is rejected without the required full context reads.
     const deniedWithoutReads = await callTool(session, "planner-task-start", { task: "T002" });

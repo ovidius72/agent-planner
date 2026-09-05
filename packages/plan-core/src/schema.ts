@@ -326,7 +326,11 @@ export const HandoffCompletenessAuditSchema = z.object({
   supportingDocuments: z.array(HandoffSupportingDocumentSchema).default([]),
   contentHash: z.string().regex(/^[a-f0-9]{64}$/),
   contentLength: z.number().int().nonnegative(),
+  /** Structural validation timestamp written with the handoff candidate. */
   verifiedAt: TimestampSchema,
+  /** Set only after a separate persisted read-back and source reconciliation. */
+  resumeReadyAt: z.union([TimestampSchema, z.literal("")]).default(""),
+  readBackSourceReviews: z.array(HandoffColdStartSourceReviewSchema).default([]),
 });
 
 export const PhaseSchema = z.object({

@@ -482,7 +482,7 @@ test("consistent status/handoff results after reopening MCP server", async () =>
     
     // Set a handoff
     const handoffWrite = await writePreparedHandoff(session, "P002", "Consistency Handoff", "# Consistency Handoff\nTesting consistency.");
-    assert.match(toolText(handoffWrite), /Reconciled handoff and durable context/);
+    assert.match(toolText(handoffWrite), /Handoff candidate persisted.*NOT resume-ready/);
     
     // Show handoff - should show our content
     handoffShow = await callTool(session, "planner-handoff-show", { phaseRef: "P002" });

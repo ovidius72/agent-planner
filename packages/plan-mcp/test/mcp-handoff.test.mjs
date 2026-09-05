@@ -62,6 +62,13 @@ function canonicalHandoff(title, detail) {
   return canonicalAuditedHandoff(title, detail, { file: "mcp-handoff.test.mjs", reason: "test fixture" });
 }
 
+function readBackSourceReviews() {
+  return ["conversation", "planner-entities", "working-tree", "verification-runtime", "peer-agent-output"].map((source) => ({
+    source,
+    detail: `${source} was compared again with the entire persisted handoff body and no missing resume fact was found.`,
+  }));
+}
+
 async function writePreparedHandoff(session, input) {
   return callTool(session, "planner-handoff-write", {
     ...input,
@@ -132,7 +139,7 @@ test("planner-handoff-write without confirmed returns a proposal with exact comp
   }
 });
 
-test("planner-handoff-write with confirmed=true writes the handoff and can be read back", async () => {
+test("planner-handoff-write persists a candidate that requires separate read-back verification", async () => {
   const session = await startMcpFixture({ name: "t238-write-confirmed" });
   try {
     // First, write a handoff with confirmed=true
@@ -142,24 +149,46 @@ test("planner-handoff-write with confirmed=true writes the handoff and can be re
       content: "# Test handoff\nThis is a test handoff for T238.",
     });
     const writeText = toolText(writeRes);
-    assert.match(writeText, /Reconciled handoff and durable context on P001\(F001\)/);
+    assert.match(writeText, /candidate persisted on P001\(F001\), but it is NOT resume-ready yet/);
+    assert.equal(writeRes.structuredContent.persisted, true);
+    assert.equal(writeRes.structuredContent.resumeReady, false);
+    assert.equal(writeRes.structuredContent.verificationRequired, true);
 
-    // Now show the handoff
     const showRes = await callTool(session, "planner-handoff-show", { phaseRef: "P001" });
     const showText = toolText(showRes);
+    assert.match(showText, /NOT resume-ready/);
     assert.match(showText, /# P001 — Test handoff/);
     assert.match(showText, /This is a test handoff for T238/);
-    // Should also show the phase ref in the header? The tool returns the content only.
-    // But we can also check that the handoff is not empty.
-    assert.doesNotMatch(showText, /^No handoff set/);
+    assert.equal(showRes.structuredContent.persistenceVerified, true);
+    assert.equal(showRes.structuredContent.resumeReady, false);
+    const contentHash = showRes.structuredContent.contentHash;
 
-    // List handoffs should show this phase
+    const gaps = await callTool(session, "planner-handoff-verify", {
+      phaseRef: "P001",
+      expectedContentHash: contentHash,
+      sourceReviews: readBackSourceReviews(),
+      omissionsFound: ["Prior rewrites were not recorded."],
+    });
+    expectToolError(gaps, /HANDOFF_READBACK_GAPS_FOUND|not resume-ready/i);
+    assert.equal((await session.store.loadPhase((await session.store.loadAllPhases())[0].id)).handoffAudit.resumeReadyAt, "");
+
+    const verified = await callTool(session, "planner-handoff-verify", {
+      phaseRef: "P001",
+      expectedContentHash: contentHash,
+      sourceReviews: readBackSourceReviews(),
+      omissionsFound: [],
+    });
+    assert.equal(verified.structuredContent.resumeReady, true);
+    assert.match(toolText(verified), /is resume-ready after persisted read-back/);
+
     const listRes = await callTool(session, "planner-handoff-list", {});
     const listText = toolText(listRes);
     assert.match(listText, /P001\(F001\)/);
     assert.match(listText, /Test handoff/);
+    assert.match(listText, /resume-ready/);
     assert.equal(listRes.structuredContent.page, 1);
     assert.equal(listRes.structuredContent.totalPages, 1);
+    assert.equal(listRes.structuredContent.handoffs[0].resumeReady, true);
     assert.equal(Object.hasOwn(listRes.structuredContent.handoffs[0], "content"), false, "compact list must never embed full handoff bodies");
   } finally {
     await closeMcpFixture(session);

@@ -39,6 +39,7 @@ import { action as projectEditAction } from "../routes/project-edit.action";
 import { action as requirementCreateAction } from "../routes/requirement-create.action";
 import { action as requirementEditAction } from "../routes/requirement-edit.action";
 import { action as requirementDeleteAction } from "../routes/requirement-delete.action";
+import { action as acceptedDecisionAction } from "../routes/accepted-decision.action";
 import { HandoffRoute, loader as handoffLoader } from "../routes/handoff.route";
 import { HandoffArchiveRoute, loader as handoffArchiveLoader } from "../routes/handoff-archive.route";
 import { action as taskChecklistToggleAction } from "../routes/task-checklist-toggle.action";
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
       },
       { path: "ideas", id: "ideas", loader: ideasLoader, action: ideasAction, element: <IdeasRoute /> },
       { path: "project/edit", element: <ProjectEditRoute />, action: projectEditAction },
+      { path: "accepted-decisions", action: acceptedDecisionAction },
       { path: "handoff", loader: handoffLoader, element: <HandoffRoute /> },
       { path: "handoff/archive", loader: handoffArchiveLoader, element: <HandoffArchiveRoute /> },
       { path: "features/:featureId/delete", action: featureDeleteAction },

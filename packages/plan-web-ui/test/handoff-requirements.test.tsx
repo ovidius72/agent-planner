@@ -100,12 +100,14 @@ describe("handoff and requirement routes", () => {
     const requirement = makeRequirement({ linkedPhaseIds: [phase.id] });
     installFetchMock((path) => {
       if (path === "/api/features/feature-1") return jsonResponse(feature);
+      if (path === "/api/features") return jsonResponse([feature]);
       if (path === "/api/phases/phase-1") return jsonResponse(phase);
       if (path === "/api/requirements") return jsonResponse({ requirements: [requirement] });
       throw new Error(`Unexpected request ${path}`);
     });
 
     await expect(phaseDetailLoader({ params: { featureId: feature.id, phaseId: phase.id } })).resolves.toMatchObject({
+      features: [{ id: feature.id }],
       phase: { id: phase.id, linkedRequirements: [requirement] },
     });
     const { container } = renderRoute([{ path: "/", element: <PhaseRequirementLink phaseId={phase.id} phaseTitle={phase.title} count={1} /> }]);

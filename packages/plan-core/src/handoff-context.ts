@@ -83,7 +83,7 @@ export const HANDOFF_CANONICAL_SECTIONS = [
 
 export type HandoffCompletenessCategory = typeof HANDOFF_COMPLETENESS_CATEGORIES[number]["id"];
 export type HandoffColdStartInventoryCategory = typeof HANDOFF_COLD_START_INVENTORY_CATEGORIES[number]["id"];
-export type HandoffContractErrorCode = "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED";
+export type HandoffContractErrorCode = "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND";
 
 export class HandoffContractError extends Error {
   readonly code: HandoffContractErrorCode;
@@ -179,6 +179,20 @@ export interface RefreshPhaseHandoffResult {
   updatedTaskIds: string[];
   handoffUpdatedAt: string;
   handoffAudit: HandoffCompletenessAudit;
+}
+
+export interface VerifyPhaseHandoffReadBackInput {
+  expectedContentHash: string;
+  sourceReviews: Array<{ source: string; detail: string }>;
+  omissionsFound: string[];
+}
+
+export interface VerifyPhaseHandoffReadBackResult {
+  phaseId: string;
+  handoffUpdatedAt: string;
+  contentHash: string;
+  resumeReadyAt: string;
+  sourceReviews: Array<{ source: string; detail: string }>;
 }
 
 export function hasTaskCompletionEvidence(task: Task): boolean {
@@ -426,6 +440,59 @@ export function validateHandoffColdStartInventory(
   });
 }
 
+export function validateHandoffReadBackVerification(
+  phase: Phase,
+  input: VerifyPhaseHandoffReadBackInput,
+): Array<{ source: string; detail: string }> {
+  const audit = phase.handoffAudit;
+  const actualContentHash = phase.handoff.trim() ? handoffContentHash(phase.handoff) : "";
+  if (!phase.handoff.trim() || !audit || audit.contentHash !== actualContentHash || audit.contentLength !== phase.handoff.length) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_VERIFICATION_REQUIRED",
+      "The persisted handoff or its audit metadata is missing or inconsistent. Run handoff_prepare, rewrite the handoff, then read it back before verification.",
+      { expectedContentHash: input.expectedContentHash, actualContentHash, auditContentHash: audit?.contentHash ?? "" },
+    );
+  }
+  if (!input.expectedContentHash.trim() || input.expectedContentHash !== actualContentHash) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_VERIFICATION_REQUIRED",
+      "The handoff changed after the read-back candidate was selected. Call handoff_show again and verify the returned contentHash.",
+      { expectedContentHash: input.expectedContentHash, actualContentHash },
+    );
+  }
+
+  const requiredSources = HANDOFF_COLD_START_SOURCE_REVIEWS.map((entry) => entry.id);
+  const bySource = new Map<string, string>();
+  const duplicateSources: string[] = [];
+  for (const review of input.sourceReviews) {
+    if (bySource.has(review.source)) duplicateSources.push(review.source);
+    else bySource.set(review.source, review.detail.trim());
+  }
+  const missingSources = requiredSources.filter((source) => !bySource.has(source));
+  const unknownSources = [...bySource.keys()].filter((source) => !requiredSources.includes(source as typeof requiredSources[number]));
+  const invalidSources = requiredSources.filter((source) => {
+    const detail = bySource.get(source);
+    return detail !== undefined && !isSubstantive(detail);
+  });
+  if (missingSources.length > 0 || unknownSources.length > 0 || duplicateSources.length > 0 || invalidSources.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_VERIFICATION_REQUIRED",
+      "Read-back verification must re-check every required source against the persisted handoff with substantive findings.",
+      { missingSources, unknownSources, duplicateSources: [...new Set(duplicateSources)], invalidSources },
+    );
+  }
+
+  const omissionsFound = uniqueStrings(input.omissionsFound);
+  if (omissionsFound.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_GAPS_FOUND",
+      "The persisted handoff is not resume-ready because the read-back found omissions. Run handoff_prepare again, reconcile every listed gap, and rewrite before retrying verification.",
+      { omissionsFound },
+    );
+  }
+  return requiredSources.map((source) => ({ source, detail: bySource.get(source)! }));
+}
+
 export function renderHandoffCompletenessAudit(audit: HandoffCompletenessAuditInput): string {
   const entries = validateHandoffCompletenessAudit(audit);
   const labels = new Map(HANDOFF_COMPLETENESS_CATEGORIES.map((entry) => [entry.id, entry.label] as const));
@@ -661,6 +728,8 @@ export function applyHandoffContextSync(
     contentHash: handoffContentHash(handoffContent),
     contentLength: handoffContent.length,
     verifiedAt: timestamp,
+    resumeReadyAt: "",
+    readBackSourceReviews: [],
   };
   nextPhase.handoffReadAt = "";
   nextPhase.updatedAt = timestamp;

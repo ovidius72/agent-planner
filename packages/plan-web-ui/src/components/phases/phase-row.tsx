@@ -71,7 +71,7 @@ export function PhaseRow({ featureId, feature, phase }: { featureId: string; fea
 
         <statusFetcher.Form method="post" action={`/features/${featureId}/phases/${phase.id}/status`} className="w-full lg:w-auto">
           <div className="relative">
-            <select name="status" value={status} disabled={isUpdatingStatus || isDeleting} aria-busy={isUpdatingStatus} className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]" onChange={(event) => statusFetcher.submit(event.currentTarget.form)}>
+            <select name="status" value={status} disabled aria-disabled="true" title="Phase status is derived from child tasks." className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]">
               {phaseStatuses.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}

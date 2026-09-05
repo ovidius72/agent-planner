@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { AcceptedDecisionsList } from "../src/components/ui/accepted-decisions-list";
 import { Accordion } from "../src/components/ui/accordion";
 import { StatusHistoryAccordion } from "../src/components/ui/status-history-accordion";
 import { FeatureDetailRoute } from "../src/routes/feature-detail/route";
@@ -56,6 +57,32 @@ describe("closed-by-default disclosures", () => {
     expect(screen.getByRole("columnheader", { name: "Motivation" })).toBeInTheDocument();
   });
 
+  it("renders accepted decision management forms with preserved target metadata", async () => {
+    const decision = {
+      id: "decision-1",
+      title: "Keep lifecycle explicit",
+      decision: "Agents must start tasks before editing.",
+      rationale: "Planner state stays truthful.",
+      implementationNotes: "Use task_start before mutations.",
+      acceptedAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const { container } = renderRoute([{ path: "/features/:featureId", element: <AcceptedDecisionsList decisions={[decision]} targetType="feature" targetRef="feature-1" /> }], "/features/feature-1");
+
+    expect(detailsWithSummary(container, "Accepted decisions").open).toBe(false);
+    expect(screen.getByText("Keep lifecycle explicit")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add decision" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save decision" })).toBeInTheDocument();
+    const deleteButton = screen.getByRole("button", { name: "Delete decision" });
+    expect(deleteButton).toBeInTheDocument();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.submit(deleteButton.closest("form")!);
+    expect(confirm).toHaveBeenCalledWith("Delete accepted decision “Keep lifecycle explicit”? This cannot be undone.");
+    confirm.mockRestore();
+    expect(container.querySelector('input[name="targetType"]')).toHaveAttribute("value", "feature");
+    expect(container.querySelector('input[name="targetRef"]')).toHaveAttribute("value", "feature-1");
+  });
+
   it("starts feature, phase, and task detail accordions closed", async () => {
     const feature = makeFeature({ description: "Feature description", descriptionUpdatedAt: "2026-01-01T12:00:00.000Z", workDone: "Done", workRemaining: "Remaining" });
     const task = makeTask({ status: "in-progress", description: "Task description", descriptionUpdatedAt: "2026-01-01T12:00:00.000Z", startedAt: "2026-01-01T12:00:00.000Z", statusLog: [{ id: "status-1", date: "2026-01-01T12:00:00.000Z", fromStatus: "planned", toStatus: "in-progress", title: "Started", description: "Started work." }] });
@@ -102,6 +129,7 @@ describe("closed-by-default disclosures", () => {
 
     const handoffRender = renderRoute([{ path: "/handoff", loader: () => ({ handoffs: [pendingHandoff] }), element: <HandoffRoute /> }], "/handoff");
     await screen.findAllByText("Resume route tests");
+    expect(screen.getByText("Verification required")).toBeInTheDocument();
     expectAllDetailsClosed(handoffRender.container);
     handoffRender.unmount();
 

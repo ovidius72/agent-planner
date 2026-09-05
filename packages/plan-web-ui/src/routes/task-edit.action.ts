@@ -38,6 +38,10 @@ export async function action({ request, params }: { request: Request; params: Re
     status,
     priority: optionalNumber(formData, "priority"),
     description: optionalString(formData, "description"),
+    descriptionRef: optionalString(formData, "descriptionRef"),
+    notes: optionalString(formData, "notes"),
+    decisions: stringList(formData, "decisions"),
+    motivation: optionalString(formData, "motivation"),
     checklist: mergeChecklist(current.checklist, stringList(formData, "checklist")),
   });
 

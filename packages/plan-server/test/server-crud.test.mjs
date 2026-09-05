@@ -164,13 +164,76 @@ test("phase create validation: title and featureId required, governance gate on 
   const err2 = await expectError(fx, "/phases", json({ title: "No feature" }), { status: 400 });
   assert.match(err2.message, /featureId required/);
 
-  // governance gate on PUT: fresh phase → in-progress without discuss → 400
+  // Derived status is read-only even when governance metadata is absent.
   const feature = (await request(fx, "/features")).body[0];
   const phase = await request(fx, "/phases", { ...json({ title: "Gov", featureId: feature.id }), expectStatus: 201 });
-  await request(fx, `/phases/${phase.body.id}`, {
+  const rejected = await request(fx, `/phases/${phase.body.id}`, {
     ...put({ ...phase.body, status: "in-progress" }),
     expectStatus: 400,
   });
+  assert.equal(rejected.body.errorCode, "DERIVED_STATUS_READ_ONLY");
+});
+
+test("feature, phase, and task update routes persist canonical context and reject unsafe replacements atomically", async () => {
+  const fx = await startServerFixture({ name: "t370-server-mutation-parity" });
+  const sourceFeature = (await request(fx, "/features")).body[0];
+  const targetFeature = await request(fx, "/features", { ...json({ name: "Relink target", description: "Target owner" }), expectStatus: 201 });
+  const phase = (await request(fx, "/phases")).body[0];
+
+  const updatedPhase = await request(fx, `/phases/${phase.id}`, put({
+    id: phase.id,
+    featureId: targetFeature.body.id,
+    descriptionRef: ".planner/docs/phases/phase-context.md",
+    goals: ["Deliver parity"],
+    nonGoals: ["Change derived status"],
+    dependencies: ["Core schema"],
+    risks: ["Contract drift"],
+    openQuestions: ["None"],
+    decisions: ["Use semantic fields"],
+    completionCriteria: ["All harnesses agree"],
+  }));
+  assert.equal(updatedPhase.body.featureId, targetFeature.body.id);
+  assert.equal(updatedPhase.body.descriptionRef, ".planner/docs/phases/phase-context.md");
+  assert.deepEqual(updatedPhase.body.goals, ["Deliver parity"]);
+  assert.deepEqual(updatedPhase.body.decisions, ["Use semantic fields"]);
+  assert.ok(!(await request(fx, `/features/${sourceFeature.id}`)).body.phaseIds.includes(phase.id));
+  assert.ok((await request(fx, `/features/${targetFeature.body.id}`)).body.phaseIds.includes(phase.id));
+
+  const task = updatedPhase.body.tasks[0];
+  const checklist = [{ id: "parity-check", number: 1, title: "Verify parity", checked: true }];
+  const updatedTask = await request(fx, `/tasks/${task.id}`, put({
+    phaseId: phase.id,
+    title: "Updated through canonical fields",
+    descriptionRef: ".planner/docs/tasks/task-context.md",
+    notes: "Implementation evidence",
+    decisions: ["Keep transport parity"],
+    checklist,
+  }));
+  assert.equal(updatedTask.body.descriptionRef, ".planner/docs/tasks/task-context.md");
+  assert.equal(updatedTask.body.notes, "Implementation evidence");
+  assert.deepEqual(updatedTask.body.decisions, ["Keep transport parity"]);
+  assert.deepEqual(updatedTask.body.checklist, checklist);
+
+  const phaseStatusRejected = await request(fx, `/phases/${phase.id}`, {
+    ...put({ title: "Must not persist", status: "done" }),
+    expectStatus: 400,
+  });
+  assert.equal(phaseStatusRejected.body.errorCode, "DERIVED_STATUS_READ_ONLY");
+  assert.notEqual((await request(fx, `/phases/${phase.id}`)).body.title, "Must not persist");
+
+  const featureStatusRejected = await request(fx, `/features/${targetFeature.body.id}`, {
+    ...put({ name: "Must not persist", status: "done" }),
+    expectStatus: 400,
+  });
+  assert.equal(featureStatusRejected.body.errorCode, "DERIVED_STATUS_READ_ONLY");
+  assert.equal((await request(fx, `/features/${targetFeature.body.id}`)).body.name, "Relink target");
+
+  const decisionReplacementRejected = await request(fx, `/tasks/${task.id}`, {
+    ...put({ phaseId: phase.id, title: "Must not persist", acceptedDecisions: [{ id: "replacement" }] }),
+    expectStatus: 400,
+  });
+  assert.equal(decisionReplacementRejected.body.errorCode, "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED");
+  assert.equal((await request(fx, `/tasks/${task.id}`)).body.title, "Updated through canonical fields");
 });
 
 // ── Task CRUD + composite refs ─────────────────────────────────────────────
@@ -561,6 +624,42 @@ test("persistence across restart: a second server on the same planRoot sees the 
   assert.ok(phase2.tasks.some((t) => t.id === task.body.id), "task survived restart");
   // composite ref stable after restart
   assert.equal(phase2.tasks.find((t) => t.id === task.body.id).title, "Persistent task");
+});
+
+// ── Accepted Decisions CRUD ──────────────────────────────────────────────
+
+test("accepted decision routes manage project, feature, phase, and task owners semantically", async () => {
+  const fx = await startServerFixture({ name: "accepted-decisions-crud" });
+  const feature = (await request(fx, "/features")).body[0];
+  const phase = (await request(fx, "/phases")).body[0];
+  const task = phase.tasks[0];
+
+  const projectDecision = await request(fx, "/accepted-decisions", { ...json({ targetType: "project", title: "Project policy", decision: "Keep accepted decisions structured." }), expectStatus: 201 });
+  assert.equal(projectDecision.body.created, true);
+  assert.ok(projectDecision.body.acceptedDecision.id);
+  assert.equal((await request(fx, "/project")).body.acceptedDecisions[0].id, projectDecision.body.acceptedDecision.id);
+
+  const featureDecision = await request(fx, "/accepted-decisions", { ...json({ targetType: "feature", targetRef: feature.id, title: "Feature policy" }), expectStatus: 201 });
+  assert.equal((await request(fx, `/features/${feature.id}`)).body.acceptedDecisions[0].id, featureDecision.body.acceptedDecision.id);
+
+  const phaseDecision = await request(fx, "/accepted-decisions", { ...json({ targetType: "phase", targetRef: phase.id, title: "Phase policy" }), expectStatus: 201 });
+  assert.equal((await request(fx, `/phases/${phase.id}`)).body.acceptedDecisions[0].id, phaseDecision.body.acceptedDecision.id);
+
+  const taskDecision = await request(fx, "/accepted-decisions", { ...json({ targetType: "task", targetRef: task.id, title: "Task policy" }), expectStatus: 201 });
+  const updated = await request(fx, `/accepted-decisions/${taskDecision.body.acceptedDecision.id}`, put({ targetType: "task", targetRef: task.id, rationale: "Preserve task-level rationale." }));
+  assert.equal(updated.body.updated, true);
+  assert.equal(updated.body.acceptedDecision.id, taskDecision.body.acceptedDecision.id);
+  assert.equal(updated.body.acceptedDecision.acceptedAt, taskDecision.body.acceptedDecision.acceptedAt);
+  assert.equal((await request(fx, `/tasks/${task.id}`)).body.acceptedDecisions[0].rationale, "Preserve task-level rationale.");
+
+  const noFields = await request(fx, `/accepted-decisions/${taskDecision.body.acceptedDecision.id}`, { ...put({ targetType: "task", targetRef: task.id }), expectStatus: 400 });
+  assert.equal(noFields.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
+
+  const unconfirmed = await request(fx, `/accepted-decisions/${projectDecision.body.acceptedDecision.id}`, { ...json({ targetType: "project" }), method: "DELETE", expectStatus: 400 });
+  assert.equal(unconfirmed.body.confirmRequired, true);
+  const deleted = await request(fx, `/accepted-decisions/${projectDecision.body.acceptedDecision.id}`, { ...json({ targetType: "project", confirmed: true }), method: "DELETE" });
+  assert.equal(deleted.body.deleted, true);
+  assert.equal((await request(fx, "/project")).body.acceptedDecisions.length, 0);
 });
 
 // ── Ideas Inbox CRUD ─────────────────────────────────────────────────────

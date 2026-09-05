@@ -147,7 +147,7 @@ export function TaskDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="task" targetRef={task.id} />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Checklist items</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{checklist.length}</p></CompactCard>

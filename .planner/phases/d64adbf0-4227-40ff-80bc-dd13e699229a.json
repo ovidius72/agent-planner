@@ -107,11 +107,44 @@
       "priority": 10,
       "shortName": "add-accepted-decisions-managem",
       "title": "Add Accepted Decisions management parity",
-      "status": "planned",
-      "description": "Provide explicit project and entity Accepted Decisions create/update/delete workflows across plan-core, Pi, MCP, plan-server, and Web UI. Preserve decision IDs, acceptedAt, rationale, implementationNotes, user confirmation, and planner-owned metadata; avoid raw array replacement where safer semantic operations are required; cover migrations and audit history.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:10.202Z",
+      "status": "done",
+      "description": "Provide explicit project and entity Accepted Decisions create/update/delete workflows across plan-core, Pi, MCP, plan-server, and Web UI. Preserve decision IDs, acceptedAt, rationale, implementationNotes, user confirmation, and planner-owned metadata; avoid raw array replacement where safer semantic operations are required; cover migrations and audit history.\n\n---\n**Completion summary:**\nImplemented explicit semantic Accepted Decisions create/update/delete parity for project, feature, phase, and task owners across plan-core, plan-server HTTP APIs, MCP tools, Pi tools, and the Web UI. PlanStore operations preserve decision IDs and acceptedAt on update, avoid whole-array replacement, return typed NO_MUTABLE_FIELDS_RECEIVED, ACCEPTED_DECISION_NOT_FOUND, and ACCEPTED_DECISION_TARGET_NOT_FOUND failures without mutation, and require explicit confirmation before deletion. The Web UI provides accessible closed-by-default management forms, safe redirects, explicit irreversible-delete confirmation, and desktop/mobile create-update-delete flows. Shared planner skill inventories and the P2 capability surface manifest include all new contracts. Legacy explicit project-context migration behavior and planner-owned metadata remain preserved. Verification: affected builds and focused semantic suites passed; full pnpm build and pnpm check passed; pnpm test:coverage passed 562/562 repository tests and 95/95 Web UI tests with FINAL coverage 87.10% lines, 74.13% branches, 82.90% functions; pnpm plugins:check passed; Playwright accepted-decisions, handoff-resume, and responsive suites passed 12/12 on chromium/mobile-chromium; git diff --check passed. No commit, push, PR, or merge was performed.",
+      "descriptionUpdatedAt": "2026-09-04T14:37:13.783Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-001-planned-in-progress",
+          "date": "2026-09-03T09:17:58.863Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "bce126b3-dd9a-4d0d-9b34-b4262dff8d60",
+          "date": "2026-09-04T07:35:23.110Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: The user reported two regressions in the newly released planner: a handoff was treated as complete before the agent discovered material omissions, and planner-show omission was misreported as proof that no task was active. These release-truthfulness defects take priority over the in-progress Accepted Decisions parity work.\nWhat was being done: Implementing Accepted Decisions semantic create/update/delete parity across plan-core, Pi, MCP, plan-server, and Web UI. Core methods and transport/UI surfaces are present; focused builds exposed and fixed exactOptionalPropertyTypes issues; new core/server/Pi/Web UI tests were being added. MCP and Pi discovery count expectations were updated, but the complete focused suite has not yet passed and T369 must resume from verification and remaining coverage.\nResume location: Resume at packages/plan-core/test/accepted-decisions.test.mjs and packages/plan-server/test/server-crud.test.mjs, then packages/plan-mcp/test/mcp-harness.test.mjs, packages/pi-adapter/test/host-registration.test.mjs, and packages/plan-web-ui/test/disclosure-defaults.test.tsx. Working tree also contains the production changes in plan-store.ts, plan-mcp/src/index.ts, pi-adapter/src/index.ts, plan-server/src/serve.ts, and Web UI Accepted Decisions files.\nHow to resume: First rerun affected package builds and focused tests. Fix any failures without discarding the existing T369 working tree. Add MCP semantic create/update/delete coverage if still missing, verify server DELETE request construction, confirm route-level project/feature/phase/task management props, then run pnpm check and the required broader suite. Reconcile T369 checklist and complete it only after all persisted read-backs pass."
+        },
+        {
+          "id": "a8e82106-df5c-4335-9181-043a2f962c8e",
+          "date": "2026-09-04T08:10:14.258Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from Resume at packages/plan-core/test/accepted-decisions.test.mjs and packages/plan-server/test/server-crud.test.mjs, then packages/plan-mcp/test/mcp-harness.test.mjs, packages/pi-adapter/test/host-registration.test.mjs, and packages/plan-web-ui/test/disclosure-defaults.test.tsx. Working tree also contains the production changes in plan-store.ts, plan-mcp/src/index.ts, pi-adapter/src/index.ts, plan-server/src/serve.ts, and Web UI Accepted Decisions files.. First rerun affected package builds and focused tests. Fix any failures without discarding the existing T369 working tree. Add MCP semantic create/update/delete coverage if still missing, verify server DELETE request construction, confirm route-level project/feature/phase/task management props, then run pnpm check and the required broader suite. Reconcile T369 checklist and complete it only after all persisted read-backs pass."
+        },
+        {
+          "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-004-in-progress-done",
+          "date": "2026-09-04T14:37:13.781Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented explicit semantic Accepted Decisions create/update/delete parity for project, feature, phase, and task owners across plan-core, plan-server HTTP APIs, MCP tools, Pi tools, and the Web UI. PlanStore operations preserve decision IDs and acceptedAt on update, avoid whole-array replacement, return typed NO_MUTABLE_FIELDS_RECEIVED, ACCEPTED_DECISION_NOT_FOUND, and ACCEPTED_DECISION_TARGET_NOT_FOUND failures without mutation, and require explicit confirmation before deletion. The Web UI provides accessible closed-by-default management forms, safe redirects, explicit irreversible-delete confirmation, and desktop/mobile create-update-delete flows. Shared planner skill inventories and the P2 capability surface manifest include all new contracts. Legacy explicit project-context migration behavior and planner-owned metadata remain preserved. Verification: affected builds and focused semantic suites passed; full pnpm build and pnpm check passed; pnpm test:coverage passed 562/562 repository tests and 95/95 Web UI tests with FINAL coverage 87.10% lines, 74.13% branches, 82.90% functions; pnpm plugins:check passed; Playwright accepted-decisions, handoff-resume, and responsive suites passed 12/12 on chromium/mobile-chromium; git diff --check passed. No commit, push, PR, or merge was performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -119,42 +152,58 @@
           "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-001-define-semantic-decision-mutation-api",
           "number": 1,
           "title": "Define semantic decision mutation API",
-          "checked": false
+          "checked": true
         },
         {
           "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-002-implement-core-atomic-operations",
           "number": 2,
           "title": "Implement core atomic operations",
-          "checked": false
+          "checked": true
         },
         {
           "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-003-expose-pi-and-mcp-parity",
           "number": 3,
           "title": "Expose Pi and MCP parity",
-          "checked": false
+          "checked": true
         },
         {
           "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-004-add-accessible-web-ui-management",
           "number": 4,
           "title": "Add accessible Web UI management",
-          "checked": false
+          "checked": true
         },
         {
           "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08-check-005-verify-project-entity-separation-and-history-preservation",
           "number": 5,
           "title": "Verify project/entity separation and history preservation",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseHistory": [
+        {
+          "id": "82f5d135-d279-4cb4-bcda-ea5b45bae6d2",
+          "reason": "The user reported two regressions in the newly released planner: a handoff was treated as complete before the agent discovered material omissions, and planner-show omission was misreported as proof that no task was active. These release-truthfulness defects take priority over the in-progress Accepted Decisions parity work.",
+          "whatWasBeingDone": "Implementing Accepted Decisions semantic create/update/delete parity across plan-core, Pi, MCP, plan-server, and Web UI. Core methods and transport/UI surfaces are present; focused builds exposed and fixed exactOptionalPropertyTypes issues; new core/server/Pi/Web UI tests were being added. MCP and Pi discovery count expectations were updated, but the complete focused suite has not yet passed and T369 must resume from verification and remaining coverage.",
+          "resumeLocation": "Resume at packages/plan-core/test/accepted-decisions.test.mjs and packages/plan-server/test/server-crud.test.mjs, then packages/plan-mcp/test/mcp-harness.test.mjs, packages/pi-adapter/test/host-registration.test.mjs, and packages/plan-web-ui/test/disclosure-defaults.test.tsx. Working tree also contains the production changes in plan-store.ts, plan-mcp/src/index.ts, pi-adapter/src/index.ts, plan-server/src/serve.ts, and Web UI Accepted Decisions files.",
+          "howToResume": "First rerun affected package builds and focused tests. Fix any failures without discarding the existing T369 working tree. Add MCP semantic create/update/delete coverage if still missing, verify server DELETE request construction, confirm route-level project/feature/phase/task management props, then run pnpm check and the required broader suite. Reconcile T369 checklist and complete it only after all persisted read-backs pass.",
+          "relatedTaskId": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38",
+          "pausedAt": "2026-09-04T07:35:23.110Z",
+          "pausedBy": "pi"
+        }
+      ],
+      "startedAt": "2026-09-03T09:17:58.863Z",
+      "completedAt": "2026-09-04T14:37:13.781Z",
       "createdAt": "2026-09-01T10:16:10.157Z",
-      "updatedAt": "2026-09-01T10:16:10.301Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-04T14:37:13.781Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-04T08:10:14.171Z"
+        }
+      ]
     },
     {
       "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c",
@@ -164,11 +213,28 @@
       "priority": 20,
       "shortName": "align-feature-phase-and-task-m",
       "title": "Align feature phase and task mutation and discuss governance parity",
-      "status": "planned",
-      "description": "Close Pi/MCP/Web UI field mismatches for feature, phase, and task updates, including phase relinking/goals/non-goals/dependencies/risks/questions/completion criteria, task notes/decisions, and registered phase-discuss readiness. Preserve derived-status read-only rules and human-supervisor exemptions while adding compatibility-safe typed responses.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:10.513Z",
+      "status": "done",
+      "description": "Close Pi/MCP/Web UI field mismatches for feature, phase, and task updates, including phase relinking/goals/non-goals/dependencies/risks/questions/completion criteria, task notes/decisions, and registered phase-discuss readiness. Preserve derived-status read-only rules and human-supervisor exemptions while adding compatibility-safe typed responses.\n\n---\n**Completion summary:**\nCompleted cross-harness feature, phase, and task mutation/discuss parity. MCP phase updates now persist feature relinking plus descriptionRef, goals, non-goals, dependencies, risks, open questions, decisions, and completion criteria; MCP task updates persist descriptionRef, notes, decisions, and checklist values. Pi now registers phase_discuss with typed readiness outcomes, exposes the canonical phase/task fields, and rejects deprecated raw Accepted Decisions replacement through ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED. Plan-server update routes preserve Web UI human-supervisor task-transition exemptions, normalize empty descriptionRef values as removal, reject direct feature/phase derived-status changes through DERIVED_STATUS_READ_ONLY, and reject unsafe raw Accepted Decisions replacement while tolerating unchanged deprecated compatibility payloads. Web UI edit flows expose description references, phase parent relinking/planning fields, and task notes/decisions/motivation/checklist; feature and phase derived-status controls are disabled without changing established layout. Canonical skill and capability inventories include phase_discuss and the parity surfaces. Verification passed: pnpm build; pnpm check; pnpm test:coverage (564/564 repository tests and 96/96 Web UI tests); pnpm plugins:check; full Playwright desktop/mobile suite (40/40); git diff --check. All five task checklist items were verified and completed. No remaining T370 work or unverified behavior; no commit, push, PR, or merge performed.",
+      "descriptionUpdatedAt": "2026-09-05T12:07:43.204Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-001-planned-in-progress",
+          "date": "2026-09-04T14:37:55.311Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-002-in-progress-done",
+          "date": "2026-09-05T12:07:43.202Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed cross-harness feature, phase, and task mutation/discuss parity. MCP phase updates now persist feature relinking plus descriptionRef, goals, non-goals, dependencies, risks, open questions, decisions, and completion criteria; MCP task updates persist descriptionRef, notes, decisions, and checklist values. Pi now registers phase_discuss with typed readiness outcomes, exposes the canonical phase/task fields, and rejects deprecated raw Accepted Decisions replacement through ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED. Plan-server update routes preserve Web UI human-supervisor task-transition exemptions, normalize empty descriptionRef values as removal, reject direct feature/phase derived-status changes through DERIVED_STATUS_READ_ONLY, and reject unsafe raw Accepted Decisions replacement while tolerating unchanged deprecated compatibility payloads. Web UI edit flows expose description references, phase parent relinking/planning fields, and task notes/decisions/motivation/checklist; feature and phase derived-status controls are disabled without changing established layout. Canonical skill and capability inventories include phase_discuss and the parity surfaces. Verification passed: pnpm build; pnpm check; pnpm test:coverage (564/564 repository tests and 96/96 Web UI tests); pnpm plugins:check; full Playwright desktop/mobile suite (40/40); git diff --check. All five task checklist items were verified and completed. No remaining T370 work or unverified behavior; no commit, push, PR, or merge performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -176,42 +242,47 @@
           "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-001-build-field-level-parity-inventory",
           "number": 1,
           "title": "Build field-level parity inventory",
-          "checked": false
+          "checked": true
         },
         {
           "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-002-implement-missing-mcp-and-pi-surfaces",
           "number": 2,
           "title": "Implement missing MCP and Pi surfaces",
-          "checked": false
+          "checked": true
         },
         {
           "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-003-align-phase-discuss-contextready-semantics",
           "number": 3,
           "title": "Align phase discuss contextReady semantics",
-          "checked": false
+          "checked": true
         },
         {
           "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-004-add-web-ui-controls-only-for-human-owned-fields",
           "number": 4,
           "title": "Add Web UI controls only for human-owned fields",
-          "checked": false
+          "checked": true
         },
         {
           "id": "0c425f35-9d42-4ea4-aca8-44f789723b5c-check-005-verify-backward-compatibility-and-governance-outcomes",
           "number": 5,
           "title": "Verify backward compatibility and governance outcomes",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-04T14:37:55.311Z",
+      "completedAt": "2026-09-05T12:07:43.202Z",
       "createdAt": "2026-09-01T10:16:10.474Z",
-      "updatedAt": "2026-09-01T10:16:10.624Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-05T12:07:43.202Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-04T14:37:55.229Z"
+        }
+      ]
     },
     {
       "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f",
@@ -272,12 +343,38 @@
     }
   ],
   "createdAt": "2026-09-01T10:16:09.397Z",
-  "updatedAt": "2026-09-01T10:16:10.956Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-09-05T12:07:43.202Z",
+  "handoff": "# Handoff — before compact\n\nCreated at: 2026-09-05T12:08:09.332Z\nUpdated at: 2026-09-05T12:08:09.332Z\nReason: before compact\n\n## Progress snapshot\n- Features: 20/21 done, 1 active\n- Phases: 94/98 done, 2 active/discovery\n- Tasks: 373/384 done, 0 active\n\n## Current focus\n- Feature: `39d5b62f-6c16-4bed-9fc2-749d4b189f82` — Product vertical completeness and runtime integrity (in-progress)\n- Phase: `d64adbf0-4227-40ff-80bc-dd13e699229a` — P1 agent context and mutation parity (in-progress)\n- Task: `3ebe4454-ecac-4c17-ad50-efce3acbb53f` — Scope Requirement read attestations to delivered linked context (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase d64adbf0-4227-40ff-80bc-dd13e699229a)\n- 📋 `44841443-4365-4c54-afc5-17764f762c01` — Deliver Accepted Decisions in canonical full reads and work context (planned)\n- ✅ `4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08` — Add Accepted Decisions management parity (done)\n- ✅ `0c425f35-9d42-4ea4-aca8-44f789723b5c` — Align feature phase and task mutation and discuss governance parity (done)\n- 📋 `3ebe4454-ecac-4c17-ad50-efce3acbb53f` — Scope Requirement read attestations to delivered linked context (planned)\n\n## How to resume\n1. Open task 3ebe4454-ecac-4c17-ad50-efce3acbb53f (Scope Requirement read attestations to delivered linked context).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start 3ebe4454-ecac-4c17-ad50-efce3acbb53f (or call task_start).\n4. Continue with the next activity: Start task 3ebe4454-ecac-4c17-ad50-efce3acbb53f — Scope Requirement read attestations to delivered linked context with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/d64adbf0-4227-40ff-80bc-dd13e699229a.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task 3ebe4454-ecac-4c17-ad50-efce3acbb53f — Scope Requirement read attestations to delivered linked context with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase d64adbf0-4227-40ff-80bc-dd13e699229a.\n\n## Recent activity\n- 2026-08-24T07:32:57.613Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → done\n- 2026-08-24T07:32:51.157Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-09-05T12:08:09.357Z",
   "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-05T12-08-09-333Z.md",
+      "clearedAt": "2026-09-05T12:08:09.333Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-05T11-57-15-322Z.md",
+      "clearedAt": "2026-09-05T11:57:15.322Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-05T11-46-31-437Z.md",
+      "clearedAt": "2026-09-05T11:46:31.437Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-04T14-47-57-069Z.md",
+      "clearedAt": "2026-09-04T14:47:57.069Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-04T14-32-24-480Z.md",
+      "clearedAt": "2026-09-04T14:32:24.480Z",
+      "reason": "superseded"
+    }
+  ],
   "statusLog": [
     {
       "id": "b06b12a1-f89a-4d6f-8142-4b70565bbb4d",
@@ -286,7 +383,36 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "db220331-7621-4129-b533-bc8aef4c9ca0",
+      "date": "2026-09-03T09:17:58.892Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "4ef4f74b-0972-42b9-aec5-eb049bf25885",
+      "date": "2026-09-04T07:35:23.175Z",
+      "fromStatus": "in-progress",
+      "toStatus": "planned",
+      "title": "in-progress → planned",
+      "description": ""
+    },
+    {
+      "id": "f4d3f917-e3db-4bf1-80f2-75446db3f77b",
+      "date": "2026-09-04T08:10:14.286Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-04T14:37:55.229Z"
+    }
+  ]
 }

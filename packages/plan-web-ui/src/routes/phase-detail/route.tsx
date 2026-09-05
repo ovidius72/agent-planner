@@ -282,7 +282,7 @@ export function PhaseDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="phase" targetRef={phase.id} />
         <StatusHistoryAccordion statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
       </Card>
 

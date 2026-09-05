@@ -61,6 +61,38 @@ function noMutableFieldsResponse(fields: readonly string[]) {
   };
 }
 
+type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
+type AcceptedDecisionTargetResolution =
+  | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; targetRef: string; event: { type: "project" } | { type: "feature"; featureId: string } | { type: "phase"; phaseId: string; featureId: string } | { type: "task"; phaseId: string; taskId: string; featureId: string } }
+  | { ok: false; error: string };
+
+async function resolveAcceptedDecisionTarget(store: PlanStore, targetType: AcceptedDecisionTargetType, rawTargetRef?: string): Promise<AcceptedDecisionTargetResolution> {
+  if (targetType === "project") return { ok: true, owner: { kind: "project" }, targetRef: "project", event: { type: "project" } };
+  const targetRef = rawTargetRef?.trim();
+  if (!targetRef) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions` };
+  const [featuresDocument, phases] = await Promise.all([store.loadFeatures(), store.loadAllPhases()]);
+  const features = featuresDocument.features;
+  if (targetType === "feature") {
+    const feature = features.find((entry) => entry.id === targetRef || `F${String(entry.number).padStart(3, "0")}`.toLowerCase() === targetRef.toLowerCase() || entry.shortId?.toLowerCase() === targetRef.toLowerCase());
+    if (!feature) return { ok: false, error: `feature not found: ${targetRef}` };
+    return { ok: true, owner: { kind: "feature", featureId: feature.id }, targetRef: `F${String(feature.number).padStart(3, "0")}`, event: { type: "feature", featureId: feature.id } };
+  }
+  if (targetType === "phase") {
+    const phase = findPhaseByRef(phases, features, targetRef);
+    if (!phase) return { ok: false, error: `phase not found: ${targetRef}` };
+    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, targetRef: `P${String(phase.number).padStart(3, "0")}`, event: { type: "phase", phaseId: phase.id, featureId: phase.featureId ?? "" } };
+  }
+  const found = phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task }))).find(({ task }) => task.id === targetRef)
+    ?? (() => {
+      const taskNumberMatch = targetRef.match(/^T(\d+)$/i);
+      return taskNumberMatch
+        ? phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task }))).find(({ task }) => task.number === Number(taskNumberMatch[1]))
+        : undefined;
+    })();
+  if (!found) return { ok: false, error: `task not found: ${targetRef}` };
+  return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, targetRef: `P${String(found.phase.number).padStart(3, "0")}/T${String(found.task.number).padStart(3, "0")}`, event: { type: "task", phaseId: found.phase.id, taskId: found.task.id, featureId: found.phase.featureId ?? "" } };
+}
+
 function nextTaskNumber(phase: Phase): number {
   const numbers = phase.tasks.map((task) => task.number || 0).filter((n) => Number.isFinite(n));
   return (numbers.length > 0 ? Math.max(...numbers) : 0) + 1;
@@ -211,6 +243,9 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (err instanceof PlanStoreError && (err.details?.errorCode === "PLAN_UNSUPPORTED_ALLOCATION_KIND" || err.details?.errorCode === "PLAN_RUNTIME_SCHEMA_INCOMPATIBLE")) {
       return c.json({ error: err.details.errorCode, message: err.message, details: err.details }, 409);
     }
+    if (err instanceof PlanStoreError && typeof err.details?.errorCode === "string" && err.details.errorCode.startsWith("ACCEPTED_DECISION_")) {
+      return c.json({ error: err.details.errorCode, message: err.message, details: err.details }, err.details.errorCode === "ACCEPTED_DECISION_NOT_FOUND" ? 404 : 400);
+    }
     const isStoreRead = err instanceof PlanStoreError || /ENOENT|read failed/i.test(err.message);
     if (isStoreRead) {
       return c.json({ error: "not found", message: err.message }, 404);
@@ -268,14 +303,16 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   app.put(route("/project"), async (c) => {
     const body = await c.req.json<Partial<Project> & { expectedGuidelinesUpdatedAt?: string }>();
-    const mutableFields = ["name", "goal", "description", "descriptionRef", "webPort", "scope", "outOfScope", "decisions", "globalRules", "technologies", "tools", "contentLanguage", "chatLanguage", "workflowRules", "acceptedDecisions", "projectGuidelines"];
+    const existingProject = await store.loadProject();
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingProject.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    const mutableFields = ["name", "goal", "description", "descriptionRef", "webPort", "scope", "outOfScope", "decisions", "globalRules", "technologies", "tools", "contentLanguage", "chatLanguage", "workflowRules", "projectGuidelines"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const persisted = await store.updateProject((current) => ({
       ...current,
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.goal !== undefined ? { goal: body.goal } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
-      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef.trim() || undefined } : {}),
       ...(body.webPort !== undefined ? { webPort: body.webPort } : {}),
       ...(body.scope !== undefined ? { scope: body.scope } : {}),
       ...(body.outOfScope !== undefined ? { outOfScope: body.outOfScope } : {}),
@@ -286,7 +323,6 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       ...(body.contentLanguage !== undefined ? { contentLanguage: body.contentLanguage } : {}),
       ...(body.chatLanguage !== undefined ? { chatLanguage: body.chatLanguage } : {}),
       ...(body.workflowRules !== undefined ? { workflowRules: body.workflowRules } : {}),
-      ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
       ...(body.projectGuidelines !== undefined
         ? { projectGuidelines: { ...current.projectGuidelines, content: body.projectGuidelines.content } }
         : {}),
@@ -316,6 +352,64 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     hub()?.broadcast({ type: "project-updated", data: result.project });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     return c.json(result);
+  });
+
+  const broadcastAcceptedDecisionMutation = (event: Extract<AcceptedDecisionTargetResolution, { ok: true }>["event"], action: "created" | "updated" | "deleted") => {
+    if (event.type === "project") hub()?.broadcast({ type: "project-updated", data: { action } });
+    if (event.type === "feature") hub()?.broadcast({ type: "features-updated", data: { action, id: event.featureId, featureId: event.featureId } });
+    if (event.type === "phase") hub()?.broadcast({ type: "phases-updated", data: { action, id: event.phaseId, phaseId: event.phaseId, featureId: event.featureId } });
+    if (event.type === "task") hub()?.broadcast({ type: "phases-updated", data: { action: `task-${action}`, id: event.phaseId, phaseId: event.phaseId, featureId: event.featureId, taskId: event.taskId } });
+    hub()?.broadcast({ type: "plan-rendered", data: {} });
+  };
+
+  app.post(route("/accepted-decisions"), async (c) => {
+    const body = await c.req.json<{ targetType?: AcceptedDecisionTargetType; targetRef?: string; title?: string; decision?: string; rationale?: string; implementationNotes?: string }>();
+    if (!body.targetType) return c.json({ error: "targetType required" }, 400);
+    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    if (!target.ok) return c.json({ error: target.error, created: false }, 404);
+    const createInput = {
+      title: body.title ?? "",
+      ...(body.decision !== undefined ? { decision: body.decision } : {}),
+      ...(body.rationale !== undefined ? { rationale: body.rationale } : {}),
+      ...(body.implementationNotes !== undefined ? { implementationNotes: body.implementationNotes } : {}),
+    };
+    const acceptedDecision = await store.createAcceptedDecision(target.owner, createInput);
+    await store.writeGenerated();
+    broadcastAcceptedDecisionMutation(target.event, "created");
+    return c.json({ acceptedDecision, created: true, targetRef: target.targetRef }, 201);
+  });
+
+  app.put(route("/accepted-decisions/:decisionId"), async (c) => {
+    const decisionId = c.req.param("decisionId") ?? "";
+    const body = await c.req.json<{ targetType?: AcceptedDecisionTargetType; targetRef?: string; title?: string; decision?: string; rationale?: string; implementationNotes?: string }>();
+    if (!body.targetType) return c.json({ error: "targetType required", updated: false }, 400);
+    const mutableFields = ["title", "decision", "rationale", "implementationNotes"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
+    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    if (!target.ok) return c.json({ error: target.error, updated: false }, 404);
+    const updateInput = {
+      ...(body.title !== undefined ? { title: body.title } : {}),
+      ...(body.decision !== undefined ? { decision: body.decision } : {}),
+      ...(body.rationale !== undefined ? { rationale: body.rationale } : {}),
+      ...(body.implementationNotes !== undefined ? { implementationNotes: body.implementationNotes } : {}),
+    };
+    const acceptedDecision = await store.updateAcceptedDecision(target.owner, decisionId, updateInput);
+    await store.writeGenerated();
+    broadcastAcceptedDecisionMutation(target.event, "updated");
+    return c.json({ acceptedDecision, updated: true, targetRef: target.targetRef });
+  });
+
+  app.delete(route("/accepted-decisions/:decisionId"), async (c) => {
+    const decisionId = c.req.param("decisionId") ?? "";
+    const body = await c.req.json<{ targetType?: AcceptedDecisionTargetType; targetRef?: string; confirmed?: boolean }>().catch((): { targetType?: AcceptedDecisionTargetType; targetRef?: string; confirmed?: boolean } => ({}));
+    if (!body.targetType) return c.json({ error: "targetType required", deleted: false }, 400);
+    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    if (!target.ok) return c.json({ error: target.error, deleted: false }, 404);
+    if (body.confirmed !== true) return c.json({ error: "confirmation required", deleted: false, confirmRequired: true }, 400);
+    const acceptedDecision = await store.deleteAcceptedDecision(target.owner, decisionId);
+    await store.writeGenerated();
+    broadcastAcceptedDecisionMutation(target.event, "deleted");
+    return c.json({ acceptedDecision, deleted: true, decisionId, targetRef: target.targetRef });
   });
 
   // ── Requirements ─────────────────────────────────────────────────
@@ -515,19 +609,16 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
     const existing = (await store.loadFeatures()).features.find((feature) => feature.id === id);
     if (!existing) return c.json({ error: "not found" }, 404);
-    const mutableFields = ["name", "description", "descriptionRef", "discussedAt", "contextReady", "contextReadyReason", "startDate", "endDate", "workDone", "workRemaining", "priority", "phaseIds", "dependsOn", "notes", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "acceptedDecisions", "contentLanguage", "chatLanguage", "status", "scope", "outOfScope", "technologies", "tools"];
+    if (body.status !== undefined && body.status !== existing.status) return c.json({ updated: false, errorCode: "DERIVED_STATUS_READ_ONLY", message: "Feature status is derived from child phases and tasks and cannot be updated directly." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    const mutableFields = ["name", "description", "descriptionRef", "discussedAt", "contextReady", "contextReadyReason", "startDate", "endDate", "workDone", "workRemaining", "priority", "dependsOn"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
-    const projected = { ...existing, ...body };
-    if (entersGovernedState(existing.status, body.status) && !fromWebUi(c) && !featureGovernanceReady(projected)) {
-      return c.json({ error: "feature governance required: discuss the feature first, or set contextReady=true with a reason before starting work." }, 400);
-    }
-
     const timestamp = nowISO();
     const persisted = await store.updateFeature(id, (current) => ({
       ...current,
       ...(name !== undefined ? { name } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
-      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef.trim() || undefined } : {}),
       ...(body.discussedAt !== undefined ? { discussedAt: body.discussedAt } : {}),
       ...(body.contextReady !== undefined ? { contextReady: body.contextReady } : {}),
       ...(body.contextReadyReason !== undefined ? { contextReadyReason: body.contextReadyReason } : {}),
@@ -536,7 +627,6 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       ...(body.endDate !== undefined ? { endDate: body.endDate } : {}),
       ...(body.workDone !== undefined ? { workDone: body.workDone } : {}),
       ...(body.workRemaining !== undefined ? { workRemaining: body.workRemaining } : {}),
-      ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
       ...(body.dependsOn !== undefined ? { dependsOn: body.dependsOn } : {}),
       updatedAt: timestamp,
     }), body.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: body.expectedUpdatedAt } : {});
@@ -693,25 +783,30 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (body.title !== undefined && !title) return c.json({ error: "title required" }, 400);
     const existingPhase = await store.loadPhase(id).catch(() => null);
     if (!existingPhase) return c.json({ error: "phase not found" }, 404);
-    const mutableFields = ["title", "status", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "acceptedDecisions", "completionCriteria", "notes", "discussedAt", "contextReady", "contextReadyReason"];
-    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
-    const projected = { ...existingPhase, ...body };
-    if (entersGovernedState(existingPhase.status, body.status) && !fromWebUi(c) && !phaseGovernanceReady(projected)) {
-      return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
+    if (body.status !== undefined && body.status !== existingPhase.status) return c.json({ updated: false, errorCode: "DERIVED_STATUS_READ_ONLY", message: "Phase status is derived from child tasks and cannot be updated directly." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingPhase.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    let nextFeatureId = existingPhase.featureId;
+    if (body.featureId !== undefined) {
+      nextFeatureId = body.featureId.trim() || undefined;
+      if (nextFeatureId && !(await store.loadFeatures()).features.some((feature) => feature.id === nextFeatureId)) {
+        return c.json({ updated: false, errorCode: "FEATURE_NOT_FOUND", message: `Feature not found: ${body.featureId}` }, 404);
+      }
     }
+    const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "completionCriteria", "notes", "discussedAt", "contextReady", "contextReadyReason"];
+    if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const timestamp = nowISO();
     const persisted = await store.updatePhase(id, (current) => ({
       ...current,
       ...(title !== undefined ? { title } : {}),
       ...(body.slug !== undefined ? { slug: body.slug } : {}),
-      ...(body.featureId !== undefined ? { featureId: body.featureId } : {}),
+      ...(body.featureId !== undefined ? { featureId: nextFeatureId } : {}),
       ...(body.priority !== undefined ? { priority: body.priority } : {}),
       ...(body.discussedAt !== undefined ? { discussedAt: body.discussedAt } : {}),
       ...(body.contextReady !== undefined ? { contextReady: body.contextReady } : {}),
       ...(body.contextReadyReason !== undefined ? { contextReadyReason: body.contextReadyReason } : {}),
       ...(body.summary !== undefined ? { summary: body.summary } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
-      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+      ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef.trim() || undefined } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
       ...(body.goals !== undefined ? { goals: body.goals } : {}),
       ...(body.nonGoals !== undefined ? { nonGoals: body.nonGoals } : {}),
@@ -720,12 +815,11 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       ...(body.risks !== undefined ? { risks: body.risks } : {}),
       ...(body.openQuestions !== undefined ? { openQuestions: body.openQuestions } : {}),
       ...(body.decisions !== undefined ? { decisions: body.decisions } : {}),
-      ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
       ...(body.completionCriteria !== undefined ? { completionCriteria: body.completionCriteria } : {}),
       updatedAt: timestamp,
     }), body.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: body.expectedUpdatedAt } : {});
-    const targetFeatureId = body.featureId;
-    if (targetFeatureId !== undefined && targetFeatureId !== existingPhase.featureId) {
+    const targetFeatureId = body.featureId !== undefined ? nextFeatureId : undefined;
+    if (body.featureId !== undefined && targetFeatureId !== existingPhase.featureId) {
       await store.updateFeatures((document) => {
         for (const feature of document.features) {
           feature.phaseIds = feature.id === targetFeatureId
@@ -1013,7 +1107,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!phase) return c.json({ error: "phase not found" }, 404);
     const existing = phase.tasks.find((task) => task.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
-    const mutableFields = ["title", "description", "descriptionRef", "status", "notes", "decisions", "acceptedDecisions", "priority", "checklist"];
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    const mutableFields = ["title", "description", "descriptionRef", "status", "notes", "decisions", "priority", "checklist"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
 
     if (body.status && body.status !== existing.status && (body.status === "in-progress" || (body.status as string) === "paused" || (existing.status as string) === "paused")) {
@@ -1044,13 +1139,10 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
         ...(body.status !== undefined ? { status: body.status } : {}),
         ...(body.priority !== undefined ? { priority: body.priority } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
-        ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef } : {}),
+        ...(body.descriptionRef !== undefined ? { descriptionRef: body.descriptionRef.trim() || undefined } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(body.decisions !== undefined ? { decisions: body.decisions } : {}),
-        ...(body.acceptedDecisions !== undefined ? { acceptedDecisions: body.acceptedDecisions } : {}),
         ...(body.checklist !== undefined ? { checklist: body.checklist } : {}),
-        ...(body.subtasks !== undefined ? { subtasks: body.subtasks } : {}),
-        ...(body.dependsOn !== undefined ? { dependsOn: body.dependsOn } : {}),
         updatedAt: now,
       };
       if (body.status !== undefined) applyTaskLifecycleDates(next, body.status, now);

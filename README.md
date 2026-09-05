@@ -336,6 +336,7 @@ Current Phase 1 tools include:
 - `planner-handoff-prepare`
 - `planner-handoff-show`
 - `planner-handoff-write`
+- `planner-handoff-verify`
 - `planner-handoff-clear`
 
 ### Export
@@ -676,10 +677,10 @@ are archived under `.planner/handoff-archive/` for recovery.
 Slash commands (`/planner handoff ...`):
 
 - `/planner handoff list` — list phases with a non-empty `phase.handoff`
-- `/planner handoff show <P00x>` — read a phase handoff (omit ref → current in-progress phase)
-- `/planner handoff write` — write/refresh the phase handoff (capture design context)
-- `/planner handoff prepare` — tell the agent to create/update the handoff
-- `/planner handoff clear <P00x>` — delete a phase handoff
+- `/planner handoff show <P00x(F00x)>` — read one exact phase handoff and its resume-readiness status
+- `/planner handoff write <P00x(F00x)>` — route agents through prepare/write; direct unsynchronized writes are disabled
+- `/planner handoff prepare` — tell the agent to prepare a candidate for one explicitly confirmed phase
+- `/planner handoff clear <P00x(F00x)>` — archive and clear a phase handoff
 
 MCP tools:
 
@@ -687,14 +688,12 @@ MCP tools:
 - `planner-handoff-show`
 - `planner-handoff-write`
 - `planner-handoff-prepare`
+- `planner-handoff-verify`
 - `planner-handoff-clear`
 
-Lifecycle: a handoff is auto-cleared when its phase transitions to `done`;
-on resume it is a previous-session hint to validate against the current plan
-state, not a lock — `task_start` is never blocked by a pending handoff.
+Lifecycle: a handoff is archived when its phase reaches any terminal outcome. A confirmed write persists a candidate with `resumeReady: false`; the agent must show and read the complete persisted body, compare it again with all required sources, then call the verify tool with the shown content hash. Only `resumeReady: true` permits a completeness claim. On resume it remains context to validate against current plan state, not a lock—`task_start` is never blocked by a pending handoff.
 
-The handoff should describe current focus, work in progress, resume steps,
-files touched, blockers, next steps, and recent decisions.
+The handoff must describe current focus, work in progress, resume steps, files touched, blockers, next steps, recent decisions, working-tree ownership, runtime wiring, preservation constraints, verification evidence, related work, and operator actions.
 
 ---
 

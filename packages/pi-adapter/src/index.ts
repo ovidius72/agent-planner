@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, HandoffContractError } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, handoffContentHash, HandoffContractError } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -113,6 +113,15 @@ function mutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceive
     isError: true,
     content: [{ type: "text" as const, text: outcome.message }],
     details: outcome,
+  };
+}
+
+function acceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted") {
+  if (!(error instanceof PlanStoreError) || !String(error.details?.errorCode ?? "").startsWith("ACCEPTED_DECISION_")) throw error;
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text: `❌ Accepted Decision mutation failed [${error.details?.errorCode}]: ${error.message}` }],
+    details: { [outcome]: false, ...error.details },
   };
 }
 
@@ -779,6 +788,36 @@ function statusIcon(status: string): string {
 function pad(n: number): string {
   return String(n).padStart(3, "0");
 }
+
+type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
+type AcceptedDecisionTargetResolution =
+  | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; ref: string }
+  | { ok: false; error: string };
+
+async function resolveAcceptedDecisionTarget(st: PlanStore, targetType: AcceptedDecisionTargetType, targetRef: string | undefined): Promise<AcceptedDecisionTargetResolution> {
+  if (targetType === "project") {
+    const project = await st.loadProject();
+    return { ok: true, owner: { kind: "project" }, ref: project.name };
+  }
+  const ref = targetRef?.trim();
+  if (!ref) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions.` };
+  const [featuresDoc, phases] = await Promise.all([st.loadFeatures(), st.loadAllPhases()]);
+  const features = featuresDoc.features;
+  if (targetType === "feature") {
+    const resolved = resolveFeatureRefStrict(features, ref);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    return { ok: true, owner: { kind: "feature", featureId: resolved.feature.id }, ref: formatFeatureRef(resolved.feature.number) };
+  }
+  if (targetType === "phase") {
+    const phase = findPhaseByRef(phases, features, ref);
+    if (!phase) return { ok: false, error: `Phase not found: ${ref}` };
+    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)) };
+  }
+  const found = findTaskByRef(phases, features, ref);
+  if (!found) return { ok: false, error: `Task not found: ${ref}` };
+  return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, ref: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}` };
+}
+
 function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): void {
   const previousStatus = task.status;
   if (nextStatus === "in-progress" && !task.startedAt) {
@@ -1418,12 +1457,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // ── show ──
     if (a === "show") {
       const plan = await st.loadAll();
+      const activeTasks = plan.phases.flatMap((phase) => phase.tasks
+        .filter((task) => task.status === "in-progress")
+        .map((task) => `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}/T${pad(task.number)} — ${task.title} (in-progress)`));
       ctx.ui.notify([
         `📋 **${plan.project.name}**`,
         `   Description: ${plan.project.description || "*not set*"}`,
         `   Goal: ${plan.project.goal || "*not set*"}`,
         `   Phases: ${plan.phases.length}`,
         `   Requirements: ${plan.requirements.requirements.length}`,
+        ...(activeTasks.length === 0
+          ? ["   Active tasks: none (verified from all persisted phase task statuses)"]
+          : [`   Active tasks (${activeTasks.length})${activeTasks.length > 1 ? " — CONFLICT: multiple tasks are in progress" : ""}:`, ...activeTasks.map((task) => `   - ${task}`)]),
         `   Updated: ${plan.manifest.updatedAt}`,
       ].join("\n"), "info");
       return;
@@ -2167,10 +2212,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ...(answers.deps ? { dependencies: splitCsv(answers.deps) } : {}),
           ...(answers.risks ? { risks: splitCsv(answers.risks) } : {}),
           ...(answers.completion ? { completionCriteria: splitCsv(answers.completion) } : {}),
+          discussedAt: nowISO(),
+          contextReady: true,
+          contextReadyReason: "Updated through /planner phase discuss.",
           updatedAt: nowISO(),
         }));
         await st.writeGenerated();
-        ctx.ui.notify(`Phase ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))} is now **planned**.${phase.shortId ? ` · ${phase.shortId}` : ""}`, "info");
+        ctx.ui.notify(`Phase ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))} is now **context ready**; derived status remains ${phase.status}.${phase.shortId ? ` · ${phase.shortId}` : ""}`, "info");
         return;
       }
       if (b === "show") {
@@ -2674,8 +2722,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (action === "show") {
         const r = await resolvePhaseForHandoff(st, phaseRef);
         if (!r.ok) { ctx.ui.notify(r.error, "warning"); return; }
-        const content = await st.getPhaseHandoff(r.phase.id);
-        ctx.ui.notify(content.trim() ? `Handoff ${r.compositeRef}:\n${content}` : `No handoff set on ${r.compositeRef}.`, "info");
+        const phase = await st.loadPhase(r.phase.id);
+        const content = phase.handoff;
+        const contentHash = content.trim() ? handoffContentHash(content) : "";
+        const resumeReady = Boolean(phase.handoffAudit?.resumeReadyAt)
+          && phase.handoffAudit?.contentHash === contentHash
+          && phase.handoffAudit?.contentLength === content.length;
+        ctx.ui.notify(content.trim()
+          ? `Handoff ${r.compositeRef} (${resumeReady ? "resume-ready" : "verification required"}; contentHash ${contentHash}):\n${content}`
+          : `No handoff set on ${r.compositeRef}.`, "info");
         return;
       }
       if (action === "write") {
@@ -2688,7 +2743,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           "Prepare a canonical session handoff proposal. Do not write anything yet. First identify from this conversation and the latest planner lifecycle events the exact feature and phase where the decisions/work belong. Never use the first in-progress phase or a stale resume pointer as a target.\n\n" +
           "If the last phase was just completed, do not create an operational handoff for it; its existing handoff must have been archived by the phase-done lifecycle. If another non-done phase is the real continuation, identify that phase explicitly.\n\n" +
           "Before writing, tell the user exactly: `I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?` Wait for an explicit confirmation. If the target is ambiguous, ask the user to identify the feature and phase instead of guessing.\n\n" +
-          "After confirmation, call `handoff_prepare` with that exact phaseRef. BEFORE drafting prose, use its exact returned scaffold and cold-start inventory categories. Read the entire existing handoff and its handoffUpdatedAt token. Complete every source review by checking the conversation and approvals, planner entities and sibling tasks, current diff/implementation, verification/runtime evidence, and peer-agent or network messages (or explicitly record that no peer output exists). Inventory every exact file, symbol, working-tree ownership/completion state, commit authorization, work or deletion not yet started, command/tool path, runtime call site, preservation constraint, proof observation, related planned capability, user-visible behavior, operator action, blocker/risk, remaining item, and ordered resume step known from this session. Then call `handoff_write` once with the exact token, the completed scaffold, the structured coldStartInventory, taskUpdates for every missing task, and either durable phase/feature updates or explicit no-update reasons. Every inventory item must appear verbatim in the inline handoff or a validated supporting document. Never overwrite an existing handoff without retaining its still-relevant decisions, solved problems, architecture, files, and constraints. Replace stale focus, blockers, and next steps.\n\n" +
+          "After confirmation, call `handoff_prepare` with that exact phaseRef. BEFORE drafting prose, use its exact returned scaffold and cold-start inventory categories. Read the entire existing handoff and its handoffUpdatedAt token. Complete every source review by checking the conversation and approvals, planner entities and sibling tasks, current diff/implementation, verification/runtime evidence, and peer-agent or network messages (or explicitly record that no peer output exists). Inventory every exact file, symbol, working-tree ownership/completion state, commit authorization, work or deletion not yet started, command/tool path, runtime call site, preservation constraint, proof observation, related planned capability, user-visible behavior, operator action, blocker/risk, remaining item, and ordered resume step known from this session. Then call `handoff_write` once with the exact token, the completed scaffold, the structured coldStartInventory, taskUpdates for every missing task, and either durable phase/feature updates or explicit no-update reasons. Every inventory item must appear verbatim in the inline handoff or a validated supporting document. Never overwrite an existing handoff without retaining its still-relevant decisions, solved problems, architecture, files, and constraints. Replace stale focus, blockers, and next steps. The write persists only a candidate and returns resumeReady=false. Immediately call `handoff_show`, read the entire persisted body, compare it again against all five sources, and either rewrite every discovered omission or call `handoff_verify` with the shown contentHash. Never tell the user the handoff is complete until verification returns resumeReady=true.\n\n" +
           "The reconciled handoff MUST contain at minimum:\n" +
           "- `Created at:` and `Updated at:` lines (ISO timestamps)\n" +
           "- `Reason:` why this handoff is being written\n" +
@@ -3381,15 +3436,26 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_get",
     label: "Plan Get",
-    description: "Read the full plan: manifest, project, features, phases (with their tasks), and requirements. Call this first to understand current state before planning work.",
+    description: "Read the full plan plus explicit active-task evidence: manifest, project, features, phases (with their tasks), requirements, activeTaskState, and activeTasks. Never infer that no task is active from counts or omitted detail.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Use plan_init first." }], details: {} };
       const plan = await st.loadAll();
+      const activeTasks = plan.phases.flatMap((phase) => phase.tasks
+        .filter((task) => task.status === "in-progress")
+        .map((task) => ({
+          id: task.id,
+          ref: `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}/T${pad(task.number)}`,
+          title: task.title,
+          status: task.status,
+        })));
+      const activeTaskEvidence = activeTasks.length === 0
+        ? "Active tasks: none (verified from all persisted phase task statuses)"
+        : `Active tasks (${activeTasks.length})${activeTasks.length > 1 ? " — CONFLICT" : ""}: ${activeTasks.map((task) => `${task.ref} — ${task.title}`).join("; ")}`;
       return {
-        content: [{ type: "text", text: `Plan "${plan.project.name}": ${plan.features.features.length} features, ${plan.phases.length} phases, ${plan.requirements.requirements.length} requirements` }],
-        details: plan,
+        content: [{ type: "text", text: `Plan "${plan.project.name}": ${plan.features.features.length} features, ${plan.phases.length} phases, ${plan.requirements.requirements.length} requirements. ${activeTaskEvidence}` }],
+        details: { ...plan, activeTaskState: activeTasks.length === 0 ? "none" : activeTasks.length === 1 ? "single" : "conflict", activeTasks },
       };
     },
   });
@@ -3473,7 +3539,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (list.length === 0) return { content: [{ type: "text", text: "⚠️ plan_get_handoff is deprecated — no phase handoffs set. Use handoff_list / handoff_show (entity-scoped, phase.handoff field)." }], details: { deprecated: true, count: 0, total: 0, page: 1, totalPages: 1, handoffs: [] } };
       const result = boundedPage(list, 1, 10);
       const { items, ...pageInfo } = result;
-      const lines = items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars)`);
+      const lines = items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars; ${e.resumeReady ? "resume-ready" : "verification required"})`);
       return { content: [{ type: "text", text: `⚠️ plan_get_handoff is deprecated — use handoff_list / handoff_show. Page 1/${pageInfo.totalPages} (${pageInfo.total} total):\n${lines.join("\n")}` }], details: { deprecated: true, count: items.length, ...pageInfo, handoffs: items } };
     },
   });
@@ -3591,7 +3657,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (list.length === 0) return { content: [{ type: "text", text: "No phase handoffs set." }], details: { count: 0, total: 0, page: 1, totalPages: 1, handoffs: [] } };
       const result = boundedPage(list, params.page ?? 1, params.pageSize ?? 10);
       const { items, ...pageInfo } = result;
-      const lines = items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars)`);
+      const lines = items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars; ${e.resumeReady ? "resume-ready" : "verification required"})`);
       return { content: [{ type: "text", text: `Phase handoffs — page ${pageInfo.page}/${pageInfo.totalPages} (${pageInfo.total} total):\n${lines.join("\n")}` }], details: { count: items.length, ...pageInfo, handoffs: items } };
     },
   });
@@ -3608,11 +3674,56 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
       const phase = await st.loadPhase(r.phase.id);
       const bounded = boundedHandoffForTransport(phase.handoff);
-      if (!bounded.content.trim()) return { content: [{ type: "text", text: `No handoff set on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id, content: "", empty: true, handoffAudit: phase.handoffAudit } };
+      if (!bounded.content.trim()) return { content: [{ type: "text", text: `No handoff set on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id, content: "", empty: true, resumeReady: false, handoffAudit: phase.handoffAudit } };
+      const contentHash = handoffContentHash(phase.handoff);
+      const persistenceVerified = Boolean(phase.handoffAudit
+        && phase.handoffAudit.contentHash === contentHash
+        && phase.handoffAudit.contentLength === phase.handoff.length);
+      const resumeReady = persistenceVerified && Boolean(phase.handoffAudit?.resumeReadyAt);
+      const status = resumeReady
+        ? "Resume-ready: persisted read-back and source reconciliation completed."
+        : "NOT resume-ready: after reading this entire persisted body, call handoff_verify with its contentHash and a fresh comparison against every required source. If any gap exists, rewrite instead of verifying.";
       return {
-        content: [{ type: "text", text: `Handoff for ${r.compositeRef}:\n\n${bounded.content}` }],
-        details: { phaseRef: r.compositeRef, phaseId: r.phase.id, ...bounded, handoffAudit: phase.handoffAudit },
+        content: [{ type: "text", text: `Handoff for ${r.compositeRef}\n${status}\nContent hash: ${contentHash}\n\n${bounded.content}` }],
+        details: { phaseRef: r.compositeRef, phaseId: r.phase.id, ...bounded, contentHash, persistenceVerified, resumeReady, verificationRequired: !resumeReady, handoffAudit: phase.handoffAudit },
       };
+    },
+  });
+
+  pi.registerTool({
+    name: "handoff_verify",
+    label: "Handoff Verify",
+    description: "Finalize one persisted handoff as resume-ready only after handoff_show has displayed the entire body and the agent has compared it again with conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer output. Any discovered omission blocks verification and requires prepare+rewrite.",
+    parameters: Type.Object({
+      phaseRef: Type.String(),
+      expectedContentHash: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+      sourceReviews: Type.Array(Type.Object({
+        source: Type.Union([Type.Literal("conversation"), Type.Literal("planner-entities"), Type.Literal("working-tree"), Type.Literal("verification-runtime"), Type.Literal("peer-agent-output")]),
+        detail: Type.String({ minLength: 12 }),
+      })),
+      omissionsFound: Type.Array(Type.String({ minLength: 1 })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const r = await resolvePhaseForHandoff(st, params.phaseRef);
+      if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { resumeReady: false, error: r.error } };
+      try {
+        const result = await st.verifyPhaseHandoffReadBack(r.phase.id, {
+          expectedContentHash: params.expectedContentHash,
+          sourceReviews: params.sourceReviews,
+          omissionsFound: params.omissionsFound,
+        });
+        await st.writeGenerated();
+        return {
+          content: [{ type: "text", text: `✅ Handoff on ${r.compositeRef} is resume-ready after persisted read-back and source reconciliation.` }],
+          details: { phaseRef: r.compositeRef, ...result, resumeReady: true, verificationRequired: false },
+        };
+      } catch (error) {
+        if (error instanceof HandoffContractError) return handoffContractFailure(error);
+        const message = error instanceof Error ? error.message : String(error);
+        return { isError: true, content: [{ type: "text", text: `❌ Handoff read-back verification denied: ${message}` }], details: { resumeReady: false, error: message } };
+      }
     },
   });
 
@@ -3666,7 +3777,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_write",
     label: "Handoff Write",
-    description: "Reconcile and refresh one active handoff with durable context synchronization and a mandatory versioned completeness audit. Run handoff_prepare first. Every category must be captured or substantively not-applicable; extended detail belongs in linked .planner/docs/ Markdown.",
+    description: "Persist a reconciled handoff candidate with durable context synchronization and mandatory audits. The result always has resumeReady=false until a separate handoff_show read-back and handoff_verify source reconciliation succeeds. Run handoff_prepare first; extended detail belongs in linked .planner/docs/ Markdown.",
     parameters: Type.Object({
       phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }),
       title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists)." })),
@@ -3777,13 +3888,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         });
         await st.writeGenerated();
         return {
-          content: [{ type: "text", text: `✅ Reconciled handoff and durable context on ${r.compositeRef}; updated ${result.updatedTaskIds.length} task(s).` }],
+          content: [{ type: "text", text: `⚠️ Handoff candidate persisted on ${r.compositeRef}, but it is NOT resume-ready yet. Required next action: call handoff_show ${r.compositeRef}, read the entire persisted body, compare it again with every required source, then call handoff_verify with the returned contentHash. If that review finds any gap, run prepare+write again instead of verifying.` }],
           details: {
             phaseRef: r.compositeRef,
             phaseId: r.phase.id,
             updatedTaskIds: result.updatedTaskIds,
             handoffUpdatedAt: result.handoffUpdatedAt,
             handoffAudit: result.handoffAudit,
+            persisted: true,
+            resumeReady: false,
+            verificationRequired: true,
+            nextActions: [
+              `Call handoff_show ${r.compositeRef} and read the entire persisted body.`,
+              "Compare the persisted body against conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer-agent output.",
+              "If any omission exists, run handoff_prepare and handoff_write again; otherwise call handoff_verify with the shown contentHash.",
+            ],
           },
         };
       } catch (error) {
@@ -4012,13 +4131,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "feature_update",
     label: "Feature Update",
-    description: "Update one or more fields of a feature. Only provided fields are changed. IMPORTANT: feature status is derived from child phases/tasks, so do not update feature.status directly unless truly necessary.",
+    description: "Update one or more canonical feature fields. Feature status is derived from child phases/tasks and cannot be changed directly.",
     parameters: Type.Object({
       featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name" }),
       name: Type.Optional(Type.String({ description: "New name" })),
       description: Type.Optional(Type.String({ description: "New description" })),
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full feature description." })),
-      status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled. Avoid setting this directly unless you truly need an override: feature status is derived from child phases/tasks." })),
+      status: Type.Optional(Type.String({ description: "Deprecated compatibility field. Feature status is derived from child phases/tasks; supplying this field returns DERIVED_STATUS_READ_ONLY." })),
       startDate: Type.Optional(Type.String({ description: "Start date (YYYY-MM-DD)" })),
       endDate: Type.Optional(Type.String({ description: "End date (YYYY-MM-DD)" })),
       workDone: Type.Optional(Type.String({ description: "Notes on work done" })),
@@ -4031,7 +4150,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         rationale: Type.String(),
         implementationNotes: Type.String(),
         acceptedAt: Type.String(),
-      }), { description: "Replace accepted decisions list" })),
+      }), { description: "Deprecated compatibility field. Raw replacement is rejected; use accepted_decision_create, accepted_decision_update, or accepted_decision_delete." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -4043,6 +4162,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (params.status !== undefined) {
         return derivedStatusReadOnlyResult("feature", formatFeatureRef(resolvedFeature.feature.number), String(params.status), resolvedFeature.feature.status);
       }
+      if (params.acceptedDecisions !== undefined) {
+        return {
+          content: [{ type: "text", text: "Raw acceptedDecisions replacement is disabled. Use accepted_decision_create, accepted_decision_update, or accepted_decision_delete so IDs and acceptedAt are preserved." }],
+          details: { updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", targetType: "feature", targetRef: formatFeatureRef(resolvedFeature.feature.number) },
+          isError: true,
+        };
+      }
       const mutableFields = [
         "name",
         "description",
@@ -4052,7 +4178,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "workDone",
         "workRemaining",
         "priority",
-        "acceptedDecisions",
       ] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
@@ -4090,7 +4215,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (params.startDate !== undefined) feature.startDate = params.startDate.trim();
           if (params.endDate !== undefined) feature.endDate = params.endDate.trim();
           if (params.priority !== undefined) feature.priority = params.priority;
-          if (params.acceptedDecisions !== undefined) feature.acceptedDecisions = params.acceptedDecisions;
 
           feature.updatedAt = nowISO();
           return doc;
@@ -4277,13 +4401,81 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "phase_discuss",
+    label: "Phase Discuss",
+    description: "Persist phase discovery fields and mark governance context ready without overriding derived status.",
+    parameters: Type.Object({
+      phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title" }),
+      goal: Type.Optional(Type.String({ description: "Backward-compatible single main goal" })),
+      goals: Type.Optional(Type.Array(Type.String(), { description: "Replace the phase goals list" })),
+      summary: Type.Optional(Type.String()),
+      scope: Type.Optional(Type.String({ description: "Current phase scope; stored as the phase description" })),
+      descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full phase description." })),
+      nonGoals: Type.Optional(Type.Array(Type.String())),
+      dependencies: Type.Optional(Type.Array(Type.String())),
+      risks: Type.Optional(Type.Array(Type.String())),
+      openQuestions: Type.Optional(Type.Array(Type.String())),
+      completionCriteria: Type.Optional(Type.Array(Type.String())),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features;
+      const resolvedPhase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
+      if (!resolvedPhase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: { discussed: false, errorCode: "PHASE_NOT_FOUND" }, isError: true };
+      const mutableFields = ["goal", "goals", "summary", "scope", "descriptionRef", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
+      const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
+      if (receivedFields.length === 0) {
+        return mutationNoFieldsFailure({
+          entity: "phase",
+          ref: formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)),
+          operation: "discuss",
+          mutableFields,
+          retryCommand: `phase_discuss ${formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features))}`,
+          readBackCommand: `phase_get ${formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features))} with full=true`,
+          descriptionFallback: {
+            entityId: resolvedPhase.id,
+            inputField: "scope",
+            storedField: "phase description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      }
+      const phase = await st.updatePhase(resolvedPhase.id, (current) => {
+        if (params.goals !== undefined) current.goals = params.goals.map((item) => item.trim()).filter(Boolean);
+        else if (params.goal !== undefined) current.goals = [params.goal.trim()].filter(Boolean);
+        if (params.summary !== undefined) current.summary = params.summary.trim();
+        if (params.scope !== undefined) current.description = params.scope.trim();
+        if (params.descriptionRef !== undefined) {
+          const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
+          if (descriptionRef) current.descriptionRef = descriptionRef;
+          else delete current.descriptionRef;
+        }
+        if (params.nonGoals !== undefined) current.nonGoals = params.nonGoals.map((item) => item.trim()).filter(Boolean);
+        if (params.dependencies !== undefined) current.dependencies = params.dependencies.map((item) => item.trim()).filter(Boolean);
+        if (params.risks !== undefined) current.risks = params.risks.map((item) => item.trim()).filter(Boolean);
+        if (params.openQuestions !== undefined) current.openQuestions = params.openQuestions.map((item) => item.trim()).filter(Boolean);
+        if (params.completionCriteria !== undefined) current.completionCriteria = params.completionCriteria.map((item) => item.trim()).filter(Boolean);
+        current.discussedAt = nowISO();
+        current.contextReady = true;
+        current.contextReadyReason = "Updated through phase_discuss tool.";
+        current.updatedAt = nowISO();
+        return current;
+      });
+      await st.writeGenerated();
+      const phaseRef = formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
+      return { content: [{ type: "text", text: `✅ Phase discussed/context ready: ${phaseRef} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...phase, discussed: true, contextReady: true, updatedFields: receivedFields } };
+    },
+  });
+
+  pi.registerTool({
     name: "phase_update",
     label: "Phase Update",
-    description: "Update one or more fields of a phase. Only provided fields are changed. Supports re-linking to a feature via featureId. IMPORTANT: phase status is derived from task statuses, so do not update phase.status directly unless truly necessary.",
+    description: "Update one or more canonical phase fields and optionally re-link the phase via featureId. Phase status is derived from task statuses and cannot be changed directly.",
     parameters: Type.Object({
       phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title" }),
       title: Type.Optional(Type.String({ description: "New title" })),
-      status: Type.Optional(Type.String({ description: "New status: draft|discovery|planned|in-progress|done|blocked|canceled. Avoid setting this directly unless you truly need an override: phase status is derived from task statuses." })),
+      status: Type.Optional(Type.String({ description: "Deprecated compatibility field. Phase status is derived from task statuses; supplying this field returns DERIVED_STATUS_READ_ONLY." })),
       summary: Type.Optional(Type.String({ description: "New summary" })),
       description: Type.Optional(Type.String({ description: "New description" })),
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full phase description." })),
@@ -4302,7 +4494,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         rationale: Type.String(),
         implementationNotes: Type.String(),
         acceptedAt: Type.String(),
-      }), { description: "Replace accepted decisions list" })),
+      }), { description: "Deprecated compatibility field. Raw replacement is rejected; use accepted_decision_create, accepted_decision_update, or accepted_decision_delete." })),
       completionCriteria: Type.Optional(Type.Array(Type.String(), { description: "Replace completion criteria list" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -4322,7 +4514,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (params.status !== undefined) {
         return derivedStatusReadOnlyResult("phase", formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)), String(params.status), resolvedPhase.status);
       }
-      const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "acceptedDecisions", "completionCriteria"] as const;
+      if (params.acceptedDecisions !== undefined) {
+        return {
+          content: [{ type: "text", text: "Raw acceptedDecisions replacement is disabled. Use accepted_decision_create, accepted_decision_update, or accepted_decision_delete so IDs and acceptedAt are preserved." }],
+          details: { updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", targetType: "phase", targetRef: formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)) },
+          isError: true,
+        };
+      }
+      const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "completionCriteria"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
         return mutationNoFieldsFailure({
@@ -4367,7 +4566,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             ...(params.risks !== undefined ? { risks: params.risks.map((item) => item.trim()).filter(Boolean) } : {}),
             ...(params.openQuestions !== undefined ? { openQuestions: params.openQuestions.map((item) => item.trim()).filter(Boolean) } : {}),
             ...(params.decisions !== undefined ? { decisions: params.decisions.map((item) => item.trim()).filter(Boolean) } : {}),
-            ...(params.acceptedDecisions !== undefined ? { acceptedDecisions: params.acceptedDecisions } : {}),
             ...(params.completionCriteria !== undefined ? { completionCriteria: params.completionCriteria.map((item) => item.trim()).filter(Boolean) } : {}),
             ...(params.featureId !== undefined ? { featureId: nextFeatureIdForUpdate } : {}),
             updatedAt: nowISO(),
@@ -4459,6 +4657,117 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }));
       await st.writeGenerated();
       return { content: [{ type: "text", text: `✅ Decision recorded on ${formatFeatureRef(resolvedFeature.feature.number)} and ${formatPhaseRef(resolvedPhase.number, resolvedFeature.feature.number)}: ${acceptedDecision.title}` }], details: acceptedDecision };
+    },
+  });
+
+  pi.registerTool({
+    name: "accepted_decision_create",
+    label: "Accepted Decision Create",
+    description: "Create an accepted decision on the project, feature, phase, or task without replacing the full acceptedDecisions array.",
+    parameters: Type.Object({
+      targetType: Type.Union([Type.Literal("project"), Type.Literal("feature"), Type.Literal("phase"), Type.Literal("task")]),
+      targetRef: Type.Optional(Type.String({ description: "Feature/phase/task ref. Omit for targetType=project." })),
+      title: Type.String({ minLength: 1 }),
+      decision: Type.Optional(Type.String()),
+      rationale: Type.Optional(Type.String()),
+      implementationNotes: Type.Optional(Type.String()),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const target = await resolveAcceptedDecisionTarget(st, params.targetType, params.targetRef);
+      if (!target.ok) return { content: [{ type: "text", text: target.error }], details: { created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" }, isError: true };
+      const createInput = {
+        title: params.title,
+        ...(params.decision !== undefined ? { decision: params.decision } : {}),
+        ...(params.rationale !== undefined ? { rationale: params.rationale } : {}),
+        ...(params.implementationNotes !== undefined ? { implementationNotes: params.implementationNotes } : {}),
+      };
+      try {
+        const acceptedDecision = await st.createAcceptedDecision(target.owner, createInput);
+        await st.writeGenerated();
+        return { content: [{ type: "text", text: `✅ Accepted decision created on ${target.ref}: ${acceptedDecision.title}` }], details: { created: true, targetType: params.targetType, targetRef: target.ref, acceptedDecision } };
+      } catch (error) {
+        return acceptedDecisionMutationFailure(error, "created");
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "accepted_decision_update",
+    label: "Accepted Decision Update",
+    description: "Update one accepted decision while preserving its id and acceptedAt timestamp.",
+    parameters: Type.Object({
+      targetType: Type.Union([Type.Literal("project"), Type.Literal("feature"), Type.Literal("phase"), Type.Literal("task")]),
+      targetRef: Type.Optional(Type.String({ description: "Feature/phase/task ref. Omit for targetType=project." })),
+      decisionId: Type.String({ minLength: 1 }),
+      title: Type.Optional(Type.String()),
+      decision: Type.Optional(Type.String()),
+      rationale: Type.Optional(Type.String()),
+      implementationNotes: Type.Optional(Type.String()),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const mutableFields = ["title", "decision", "rationale", "implementationNotes"] as const;
+      const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
+      if (receivedFields.length === 0) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "❌ ACCEPTED DECISION UPDATE FAILED [NO_MUTABLE_FIELDS_RECEIVED]\nNo accepted decision fields were supplied." }],
+          details: noMutableFieldsReceived({
+            entity: "acceptedDecision",
+            ref: params.decisionId,
+            operation: "update",
+            mutableFields,
+            retryCommand: "accepted_decision_update with title, decision, rationale, or implementationNotes",
+            readBackCommand: "Read back the owning project, feature, phase, or task.",
+          }),
+        };
+      }
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const target = await resolveAcceptedDecisionTarget(st, params.targetType, params.targetRef);
+      if (!target.ok) return { content: [{ type: "text", text: target.error }], details: { updated: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" }, isError: true };
+      const updateInput = {
+        ...(params.title !== undefined ? { title: params.title } : {}),
+        ...(params.decision !== undefined ? { decision: params.decision } : {}),
+        ...(params.rationale !== undefined ? { rationale: params.rationale } : {}),
+        ...(params.implementationNotes !== undefined ? { implementationNotes: params.implementationNotes } : {}),
+      };
+      try {
+        const acceptedDecision = await st.updateAcceptedDecision(target.owner, params.decisionId, updateInput);
+        await st.writeGenerated();
+        return { content: [{ type: "text", text: `✅ Accepted decision updated on ${target.ref}: ${acceptedDecision.title}` }], details: { updated: true, targetType: params.targetType, targetRef: target.ref, acceptedDecision, updatedFields: receivedFields } };
+      } catch (error) {
+        return acceptedDecisionMutationFailure(error, "updated");
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "accepted_decision_delete",
+    label: "Accepted Decision Delete",
+    description: "Delete one accepted decision from the project, feature, phase, or task. Requires confirmed=true.",
+    parameters: Type.Object({
+      targetType: Type.Union([Type.Literal("project"), Type.Literal("feature"), Type.Literal("phase"), Type.Literal("task")]),
+      targetRef: Type.Optional(Type.String({ description: "Feature/phase/task ref. Omit for targetType=project." })),
+      decisionId: Type.String({ minLength: 1 }),
+      confirmed: Type.Boolean({ description: "Must be true to confirm deleting this accepted decision." }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const target = await resolveAcceptedDecisionTarget(st, params.targetType, params.targetRef);
+      if (!target.ok) return { content: [{ type: "text", text: target.error }], details: { deleted: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" }, isError: true };
+      if (!params.confirmed) {
+        return { content: [{ type: "text", text: `Delete not confirmed for accepted decision ${params.decisionId} on ${target.ref}. Retry with confirmed=true.` }], details: { deleted: false, confirmRequired: true, targetType: params.targetType, targetRef: target.ref, decisionId: params.decisionId } };
+      }
+      try {
+        const acceptedDecision = await st.deleteAcceptedDecision(target.owner, params.decisionId);
+        await st.writeGenerated();
+        return { content: [{ type: "text", text: `✅ Accepted decision deleted from ${target.ref}: ${acceptedDecision.title}` }], details: { deleted: true, targetType: params.targetType, targetRef: target.ref, decisionId: params.decisionId, acceptedDecision } };
+      } catch (error) {
+        return acceptedDecisionMutationFailure(error, "deleted");
+      }
     },
   });
 
@@ -4685,7 +4994,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         rationale: Type.String(),
         implementationNotes: Type.String(),
         acceptedAt: Type.String(),
-      }), { description: "Replace accepted decisions list" })),
+      }), { description: "Deprecated compatibility field. Raw replacement is rejected; use accepted_decision_create, accepted_decision_update, or accepted_decision_delete." })),
       priority: Type.Optional(Type.Number({ description: "Display order within the phase (lower = higher)" })),
       checklist: Type.Optional(Type.Array(Type.String(), { description: "Replace checklist (plain strings). For interactive toggling use the web UI." })),
     }),
@@ -4714,6 +5023,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           details: {},
         };
       }
+      if (params.acceptedDecisions !== undefined) {
+        return {
+          content: [{ type: "text", text: "Raw acceptedDecisions replacement is disabled. Use accepted_decision_create, accepted_decision_update, or accepted_decision_delete so IDs and acceptedAt are preserved." }],
+          details: { updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", targetType: "task", targetRef: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}` },
+          isError: true,
+        };
+      }
       if (
         params.status !== undefined &&
         params.status !== found.task.status &&
@@ -4726,7 +5042,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           };
         }
       }
-      const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "decisions", "acceptedDecisions", "priority", "checklist"] as const;
+      const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "decisions", "priority", "checklist"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
         return mutationNoFieldsFailure({
@@ -4758,7 +5074,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           }
           if (params.notes !== undefined) task.notes = params.notes.trim();
           if (params.decisions !== undefined) task.decisions = params.decisions.map((item) => item.trim()).filter(Boolean);
-          if (params.acceptedDecisions !== undefined) task.acceptedDecisions = params.acceptedDecisions;
           if (params.checklist !== undefined) {
             task.checklist = params.checklist.map((itemTitle, index) => ({ number: index + 1,
               id: createChecklistItemId(task.id, index + 1, itemTitle),
