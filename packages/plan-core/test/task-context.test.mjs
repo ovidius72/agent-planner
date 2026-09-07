@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildPhaseContextBlock } from "../dist/task-context.js";
+import { buildBoundedAcceptedDecisionContext, buildPhaseContextBlock, MAX_ACCEPTED_DECISION_CONTEXT_CHARS } from "../dist/task-context.js";
 
 const phase = {
   id: "phase-id",
@@ -35,4 +35,44 @@ test("buildPhaseContextBlock explicitly reports phases without requirements", ()
   const output = buildPhaseContextBlock(phase, feature);
   assert.match(output, /Feature linked requirements \(0\):\n  - None linked to this feature\./);
   assert.match(output, /Phase linked requirements \(0\):\n  - None linked to this phase\./);
+});
+
+test("buildPhaseContextBlock delivers canonical Accepted Decisions for the active lineage", () => {
+  const decision = {
+    id: "decision-1",
+    title: "Preserve semantic context",
+    decision: "Deliver every accepted field.",
+    rationale: "A title alone cannot guide implementation.",
+    implementationNotes: "Keep identity and acceptedAt visible.",
+    acceptedAt: "2026-01-02T03:04:05.000Z",
+  };
+  const output = buildPhaseContextBlock(
+    { ...phase, acceptedDecisions: [{ ...decision, id: "phase-decision", title: "Phase decision" }] },
+    { ...feature, acceptedDecisions: [{ ...decision, id: "feature-decision", title: "Feature decision" }] },
+    [],
+    [],
+    { acceptedDecisions: [{ ...decision, id: "task-decision", title: "Task decision" }] },
+    { acceptedDecisions: [{ ...decision, id: "project-decision", title: "Project decision" }] },
+  );
+
+  for (const expected of ["Project decision", "Feature decision", "Phase decision", "Task decision", "Deliver every accepted field.", "A title alone cannot guide implementation.", "Keep identity and acceptedAt visible.", "2026-01-02T03:04:05.000Z"]) {
+    assert.ok(output.includes(expected), `missing Accepted Decision context: ${expected}`);
+  }
+});
+
+test("ambient Accepted Decision context is explicitly bounded", () => {
+  const context = buildBoundedAcceptedDecisionContext([{
+    scope: "project",
+    decisions: [{
+      id: "decision-1",
+      title: "Oversized decision",
+      decision: "x".repeat(MAX_ACCEPTED_DECISION_CONTEXT_CHARS),
+      rationale: "Bound ambient context.",
+      implementationNotes: "Use full entity reads for canonical detail.",
+      acceptedAt: "2026-01-02T03:04:05.000Z",
+    }],
+  }]);
+  assert.equal(context.content.length, MAX_ACCEPTED_DECISION_CONTEXT_CHARS);
+  assert.equal(context.truncated, true);
+  assert.match(context.content, /truncated for transport safety/);
 });

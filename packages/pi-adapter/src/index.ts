@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markFeatureReadForSessionId, markPhaseReadForSessionId, markTaskReadForSessionId, contextReadEligibilityForSession, hasValidSessionAttestation, hasReadRequirementsForSession, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, handoffContentHash, HandoffContractError } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, handoffContentHash, HandoffContractError } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -177,9 +177,10 @@ function piContextReadActions(
   actions.push(...(eligibility.requiredReads ?? []).flatMap((read) => {
     if (read.kind === "task") return [`task_get ${refs.task} with full=true`];
     if (read.kind === "phase") return [`phase_get ${refs.phase} with full=true`];
-    return refs.feature ? [`feature_get ${refs.feature} with full=true`] : [];
+    if (read.kind === "feature") return refs.feature ? [`feature_get ${refs.feature} with full=true`] : [];
+    return [];
   }));
-  if (requirementReadRequired) actions.push("requirement_list");
+  if (requirementReadRequired) actions.push(`requirement_list with phaseRef=${refs.phase}`);
   actions.push(retryAction);
   return actions;
 }
@@ -2530,7 +2531,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             requirementIds: linkedRequirementIds,
           };
           const contextEligibility = contextReadEligibilityForSession(contextInput);
-          const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+          const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+          const requirementsReady = requirementEligibility.eligible;
           const project = await st.loadProject();
           const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
           const projectGuidelinesReady = projectGuidelinesReadState === "valid" || projectGuidelinesReadState === "not-required";
@@ -2560,7 +2562,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             return;
           }
           if (!requirementsReady) {
-            ctx.ui.notify("❌ TASK START FAILED [REQUIREMENTS_READ_REQUIRED]\nstarted: false\nRun requirement_list, then retry /planner task start. The task remains unchanged.", "error");
+            ctx.ui.notify(`❌ TASK START FAILED [REQUIREMENTS_READ_REQUIRED]\nstarted: false\n${requirementEligibility.reason}\nRun requirement_list with phaseRef=${phaseRef}, then retry /planner task start. The task remains unchanged.`, "error");
             return;
           }
           if (!hasValidSessionAttestation(contextInput)) {
@@ -3229,16 +3231,44 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "requirement_list",
     label: "Requirement List",
-    description: "List all top-level requirements in requirements.json.",
-    parameters: Type.Object({}),
-    async execute(_id, _params, _signal, _onUpdate, ctx) {
+    description: "List top-level requirements. Pass phaseRef to deliver and attest only the requirements linked to that phase or its owning feature; an unscoped inventory does not satisfy task-start read gates.",
+    parameters: Type.Object({
+      phaseRef: Type.Optional(Type.String({ description: "Optional target phase ref. When supplied, return full target-relevant requirements and record only those delivered requirements as read." })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const requirements = await st.loadRequirements();
-      requirements.requirements.forEach((req) => markRequirementReadForSessionId(plannerSessionId, req.id));
+      if (!params.phaseRef?.trim()) {
+        return {
+          content: [{ type: "text", text: requirements.requirements.map((req) => `- ${req.id} — ${req.title} (${req.status})`).join("\n") || "No requirements" }],
+          details: { ...requirements, attestedRequirementIds: [], readScope: "inventory" },
+        };
+      }
+      const features = (await st.loadFeatures()).features;
+      const phase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseRef.trim());
+      if (!phase) return { isError: true, content: [{ type: "text", text: `Phase not found: ${params.phaseRef}` }], details: { attestedRequirementIds: [] } };
+      const delivered = [
+        ...(await st.linkedRequirementsForPhase(phase.id)),
+        ...(phase.featureId ? await st.linkedRequirementsForFeature(phase.featureId) : []),
+      ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+      delivered.forEach((requirement) => markRequirementReadForSessionId(plannerSessionId, requirement.id));
+      const targetRef = formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
+      const body = delivered.map((requirement) => [
+        `- ${requirement.id} — ${requirement.title} (${requirement.status})`,
+        `  Description: ${requirement.description || "None"}`,
+        `  Linked phases: ${requirement.linkedPhaseIds.join(", ") || "None"}`,
+        `  Macro tasks: ${requirement.macroTasks.map((item) => `${item.title} (${item.status})`).join("; ") || "None"}`,
+      ].join("\n")).join("\n");
       return {
-        content: [{ type: "text", text: requirements.requirements.map((req) => `- ${req.id} — ${req.title} (${req.status})`).join("\n") || "No requirements" }],
-        details: requirements,
+        content: [{ type: "text", text: body || `No requirements linked to ${targetRef}` }],
+        details: {
+          ...requirements,
+          requirements: delivered,
+          attestedRequirementIds: delivered.map((requirement) => requirement.id),
+          readScope: "target",
+          target: { phaseId: phase.id, phaseRef: targetRef, featureId: phase.featureId },
+        },
       };
     },
   });
@@ -3436,7 +3466,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "plan_get",
     label: "Plan Get",
-    description: "Read the full plan plus explicit active-task evidence: manifest, project, features, phases (with their tasks), requirements, activeTaskState, and activeTasks. Never infer that no task is active from counts or omitted detail.",
+    description: "Read the full plan plus explicit active-task evidence: manifest, project (including Accepted Decisions), features, phases (with their tasks), requirements, activeTaskState, and activeTasks. Never infer that no task is active from counts or omitted detail.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3453,8 +3483,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const activeTaskEvidence = activeTasks.length === 0
         ? "Active tasks: none (verified from all persisted phase task statuses)"
         : `Active tasks (${activeTasks.length})${activeTasks.length > 1 ? " — CONFLICT" : ""}: ${activeTasks.map((task) => `${task.ref} — ${task.title}`).join("; ")}`;
+      const projectDecisionContext = buildBoundedAcceptedDecisionContext([{ scope: "project", decisions: plan.project.acceptedDecisions }]);
       return {
-        content: [{ type: "text", text: `Plan "${plan.project.name}": ${plan.features.features.length} features, ${plan.phases.length} phases, ${plan.requirements.requirements.length} requirements. ${activeTaskEvidence}` }],
+        content: [{ type: "text", text: `Plan "${plan.project.name}": ${plan.features.features.length} features, ${plan.phases.length} phases, ${plan.requirements.requirements.length} requirements. ${activeTaskEvidence}\n${projectDecisionContext.content}` }],
         details: { ...plan, activeTaskState: activeTasks.length === 0 ? "none" : activeTasks.length === 1 ? "single" : "conflict", activeTasks },
       };
     },
@@ -3665,7 +3696,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_show",
     label: "Handoff Show",
-    description: "Read the entity-scoped handoff of a phase. phaseRef is required and accepts P00x, P00x(F00x), UUID, or title. Never infer a phase automatically.",
+    description: "Read the active entity-scoped handoff of a phase, or its latest terminal archive after phase completion/rejection/cancellation so closeout document references remain discoverable. phaseRef is required and accepts P00x, P00x(F00x), UUID, or title. Never infer a phase automatically.",
     parameters: Type.Object({ phaseRef: Type.String({ description: "Exact phase ref: P00x | P00x(F00x) | UUID | title. Ask the user when the target is ambiguous." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3674,7 +3705,38 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
       const phase = await st.loadPhase(r.phase.id);
       const bounded = boundedHandoffForTransport(phase.handoff);
-      if (!bounded.content.trim()) return { content: [{ type: "text", text: `No handoff set on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id, content: "", empty: true, resumeReady: false, handoffAudit: phase.handoffAudit } };
+      if (!bounded.content.trim()) {
+        const archived = (await st.listArchivedHandoffs()).find((entry) => entry.phaseId === phase.id
+          && new Set(["phase-done", "phase-rejected", "phase-canceled"]).has(entry.reason));
+        if (archived) {
+          const archivedContent = boundedHandoffForTransport(archived.content);
+          const supportingDocuments = phase.handoffAudit?.supportingDocuments ?? [];
+          const documentLines = supportingDocuments.map((document) => `- ${document.path} — ${document.description}`);
+          return {
+            content: [{ type: "text", text: [
+              `Archived terminal-phase handoff for ${r.compositeRef} (${archived.reason}; archived ${archived.archivedAt})`,
+              ...(documentLines.length ? ["Supporting documents:", ...documentLines] : []),
+              "",
+              archivedContent.content,
+            ].join("\n") }],
+            details: {
+              phaseRef: r.compositeRef,
+              phaseId: phase.id,
+              active: false,
+              archived: true,
+              archiveReason: archived.reason,
+              archivedAt: archived.archivedAt,
+              archiveFile: archived.file,
+              ...archivedContent,
+              supportingDocuments,
+              empty: false,
+              resumeReady: false,
+              handoffAudit: phase.handoffAudit,
+            },
+          };
+        }
+        return { content: [{ type: "text", text: `No handoff set on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id, content: "", empty: true, resumeReady: false, handoffAudit: phase.handoffAudit } };
+      }
       const contentHash = handoffContentHash(phase.handoff);
       const persistenceVerified = Boolean(phase.handoffAudit
         && phase.handoffAudit.contentHash === contentHash
@@ -3983,7 +4045,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "feature_get",
       label: "Feature Get",
-      description: "Show a feature. Compact identity by default (saves tokens); pass full=true to include the description and derived linked requirements.",
+      description: "Show a feature. Compact identity by default (saves tokens); pass full=true to include the description, every canonical Accepted Decision field, and derived linked requirements.",
       parameters: Type.Object({
         featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name" }),
         full: Type.Optional(Type.Boolean({ description: "If true, include the feature description. Default: compact identity only." })),
@@ -3996,7 +4058,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const resolvedFeature = resolveFeatureRefStrict(features, ref);
         if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
         const feature = resolvedFeature.feature;
-        if (params.full) markFeatureReadForSessionId(plannerSessionId, feature.id);
         const phases = (await st.loadAllPhases()).filter((p) => p.featureId === feature.id);
         const linkedRequirements = await st.linkedRequirementsForFeature(feature.id);
         const summary = `${feature.name} — ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} (${feature.status}; ${phases.length} phases${linkedRequirements.length ? `; ${linkedRequirements.length} linked requirement${linkedRequirements.length === 1 ? "" : "s"}` : ""})`;
@@ -4004,10 +4065,22 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const requirementsBlock = linkedRequirements.length > 0
           ? `\n\nLinked requirements:\n${linkedRequirements.map((requirement) => `- ${requirement.title} (${requirement.status})`).join("\n")}`
           : "\n\nLinked requirements:\n- None linked to this feature.";
-        return {
-          content: [{ type: "text", text: params.full ? `${summary}\n\n${feature.description || ""}${descriptionRefBlock}${requirementsBlock}` : summary }],
-          details: { feature: params.full ? { ref: formatFeatureRef(feature.number), description: feature.description, descriptionRef: feature.descriptionRef ?? "" } : undefined, linkedRequirements },
+        if (!params.full) return { content: [{ type: "text", text: summary }], details: { linkedRequirements } };
+        const decisionBlock = renderAcceptedDecisionsSection("Accepted Decisions", feature.acceptedDecisions);
+        const result = {
+          content: [{ type: "text" as const, text: `${summary}\n\n${feature.description || ""}${descriptionRefBlock}${requirementsBlock}\n\n${decisionBlock}` }],
+          details: {
+            feature: {
+              ref: formatFeatureRef(feature.number),
+              description: feature.description,
+              descriptionRef: feature.descriptionRef ?? "",
+              acceptedDecisions: feature.acceptedDecisions,
+            },
+            linkedRequirements,
+          },
         };
+        markCanonicalFullReadForSessionId(plannerSessionId, "feature", feature, result.content[0]!.text);
+        return result;
       },
     });
 
@@ -4307,7 +4380,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "phase_get",
       label: "Phase Get",
-      description: "Show a phase. Compact identity by default (saves tokens); pass full=true to include the description and derived linked requirements.",
+      description: "Show a phase. Compact identity by default (saves tokens); pass full=true to include the description, every canonical Accepted Decision field, and derived linked requirements.",
       parameters: Type.Object({
         phaseId: Type.String({ description: "Phase ref: F00x/P00x, bare P00x (global), shortId, UUID, or title" }),
         full: Type.Optional(Type.Boolean({ description: "If true, include the phase description. Default: compact identity only." })),
@@ -4318,7 +4391,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const features = (await st.loadFeatures()).features;
         const phase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
         if (!phase) return { content: [{ type: "text", text: `Phase not found: ${params.phaseId}` }], details: {} };
-        if (params.full) markPhaseReadForSessionId(plannerSessionId, phase.id);
         const linkedRequirements = await st.linkedRequirementsForPhase(phase.id);
         const reqCount = linkedRequirements.length;
         const summary = `${phase.title} — ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}${phase.shortId ? ` · ${phase.shortId}` : ""} (${phase.status}; ${phase.tasks.length} tasks${reqCount ? `; ${reqCount} linked requirement${reqCount === 1 ? "" : "s"}` : ""})`;
@@ -4326,10 +4398,22 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const requirementsBlock = reqCount > 0
           ? `\n\nLinked requirements:\n${linkedRequirements.map((requirement) => `- ${requirement.title} (${requirement.status})`).join("\n")}`
           : "";
-        return {
-          content: [{ type: "text", text: params.full ? `${summary}\n\n${phase.description || ""}${descriptionRefBlock}${requirementsBlock}` : summary }],
-          details: { phase: params.full ? { ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)), description: phase.description, descriptionRef: phase.descriptionRef ?? "" } : undefined, linkedRequirements },
+        if (!params.full) return { content: [{ type: "text", text: summary }], details: { linkedRequirements } };
+        const decisionBlock = renderAcceptedDecisionsSection("Accepted Decisions", phase.acceptedDecisions);
+        const result = {
+          content: [{ type: "text" as const, text: `${summary}\n\n${phase.description || ""}${descriptionRefBlock}${requirementsBlock}\n\n${decisionBlock}` }],
+          details: {
+            phase: {
+              ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)),
+              description: phase.description,
+              descriptionRef: phase.descriptionRef ?? "",
+              acceptedDecisions: phase.acceptedDecisions,
+            },
+            linkedRequirements,
+          },
         };
+        markCanonicalFullReadForSessionId(plannerSessionId, "phase", phase, result.content[0]!.text);
+        return result;
       },
     });
 
@@ -4851,7 +4935,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: "task_get",
       label: "Task Get",
-      description: "Show a task. Compact identity by default (saves tokens); pass full=true to include the description, resume checkpoint/advisory, and statusLog.",
+      description: "Show a task. Compact identity by default (saves tokens); pass full=true to include the description, every canonical Accepted Decision field, resume checkpoint/advisory, and statusLog.",
       parameters: Type.Object({
         taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
         full: Type.Optional(Type.Boolean({ description: "If true, include the task description, resume checkpoint/advisory, and statusLog. Default: compact identity only." })),
@@ -4862,7 +4946,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const features = (await st.loadFeatures()).features;
         const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
         if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
-        if (params.full) markTaskReadForSessionId(plannerSessionId, found.task.id);
         const summary = `${found.task.title} — ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status})`;
         if (!params.full) return { content: [{ type: "text", text: summary }], details: {} };
         const project = await st.loadProject();
@@ -4889,7 +4972,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ].filter(Boolean).join("\n"));
         }
         if (log) sections.push(`Status log:\n${log}`);
-        return { content: [{ type: "text", text: sections.join("\n\n") }], details: { task: { ref: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}`, description: found.task.description, descriptionRef: found.task.descriptionRef ?? "" } } };
+        sections.push(renderAcceptedDecisionsSection("Accepted Decisions", found.task.acceptedDecisions));
+        const result = {
+          content: [{ type: "text" as const, text: sections.join("\n\n") }],
+          details: {
+            task: {
+              ref: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}`,
+              description: found.task.description,
+              descriptionRef: found.task.descriptionRef ?? "",
+              acceptedDecisions: found.task.acceptedDecisions,
+            },
+          },
+        };
+        markCanonicalFullReadForSessionId(plannerSessionId, "task", found.task, result.content[0]!.text);
+        return result;
       },
     });
 
@@ -5290,7 +5386,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         requirementIds: linkedRequirementIds,
       };
       const contextEligibility = contextReadEligibilityForSession(contextInput);
-      const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+      const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+      const requirementsReady = requirementEligibility.eligible;
       const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
       const projectGuidelinesReady = projectGuidelinesReadState === "valid" || projectGuidelinesReadState === "not-required";
       const targetPhaseRef = formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features));
@@ -5320,7 +5417,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return { content: [{ type: "text", text: `Task switch denied: context reads required. ${contextEligibility.reason}` }], details: { ...contextEligibility, nextActions } };
       }
       if (!requirementsReady) {
-        return { content: [{ type: "text", text: "Task switch denied: read the requirements linked to the target phase and feature before switching." }], details: { requirementIds: linkedRequirementIds, nextActions: ["requirement_list", `Retry task_switch to ${targetTaskRef}`] } };
+        return { content: [{ type: "text", text: `Task switch denied: ${requirementEligibility.reason}` }], details: { requirementIds: linkedRequirementIds, requirementEligibility, nextActions: [`requirement_list with phaseRef=${targetPhaseRef}`, `Retry task_switch to ${targetTaskRef}`] } };
       }
       if (!hasValidSessionAttestation(contextInput)) {
         await st.recordContextRead({ sessionId: plannerSessionId, phaseId: target.phase.id, taskId: target.task.id, ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}), requirementIds: linkedRequirementIds });
@@ -5465,7 +5562,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         requirementIds: linkedRequirementIds,
       };
       const contextEligibility = contextReadEligibilityForSession(contextInput);
-      const requirementsReady = hasReadRequirementsForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+      const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+      const requirementsReady = requirementEligibility.eligible;
       const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
       const projectGuidelinesReady = projectGuidelinesReadState === "valid" || projectGuidelinesReadState === "not-required";
       if (!projectGuidelinesReady) {
@@ -5499,10 +5597,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!requirementsReady) {
         return taskStartFailure(taskStartDenied(
           "REQUIREMENTS_READ_REQUIRED",
-          "Linked requirements were not read; the task remains unchanged.",
-          ["requirement_list", `Retry task_start ${taskRef}`],
+          `Linked requirements were not read; the task remains unchanged. ${requirementEligibility.reason}`,
+          [`requirement_list with phaseRef=${phaseRef}`, `Retry task_start ${taskRef}`],
           { taskId: task.id, requirementIds: linkedRequirementIds },
-        ));
+        ), { requirementEligibility });
       }
       if (!hasValidSessionAttestation(contextInput)) {
         await st.recordContextRead({
@@ -5578,6 +5676,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         parentFeature,
         phaseWithRequirements.linkedRequirements ?? [],
         featureRequirements,
+        found.task,
+        project,
       );
       const advisory = selection.candidate && selection.candidate.task.id !== task.id
         ? selection.kind === "resume"
@@ -6021,12 +6121,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         .flatMap((phase: Phase) => phase.openQuestions.map((question: string) => `[${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}] ${question}`))
         .slice(0, 8);
 
-      const acceptedDecisions = [
-        ...project.acceptedDecisions.map((decision: AcceptedDecision) => `[project] ${decision.title}`),
-        ...plan.features.features.flatMap((feature: Feature) => feature.acceptedDecisions.map((decision: AcceptedDecision) => `[feature ${formatFeatureRef(feature.number)}] ${decision.title}`)),
-        ...plan.phases.flatMap((phase: Phase) => phase.acceptedDecisions.map((decision: AcceptedDecision) => `[phase ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}] ${decision.title}`)),
-        ...plan.phases.flatMap((phase: Phase) => phase.tasks.flatMap((task: Task) => task.acceptedDecisions.map((decision: AcceptedDecision) => `[task ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}/T${pad(task.number)}] ${decision.title}`))),
-      ].slice(0, 20);
+      const acceptedDecisionContext = buildBoundedAcceptedDecisionContext([
+        { scope: "project", decisions: project.acceptedDecisions },
+        ...plan.features.features.map((feature: Feature) => ({ scope: `feature ${formatFeatureRef(feature.number)}`, decisions: feature.acceptedDecisions })),
+        ...plan.phases.map((phase: Phase) => ({ scope: `phase ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}`, decisions: phase.acceptedDecisions })),
+        ...plan.phases.flatMap((phase: Phase) => phase.tasks.map((task: Task) => ({
+          scope: `task ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}/T${pad(task.number)}`,
+          decisions: task.acceptedDecisions,
+        }))),
+      ]);
       const webServer = server as ServeHandle | null;
       const webLocalUrl = webServer?.localUrl ?? webServer?.url ?? "";
       const webLanUrl = webServer?.lanUrl ?? "";
@@ -6096,8 +6199,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         `Scope: ${project.scope.join(", ") || "(none)"}`,
         `Out of scope: ${project.outOfScope.join(", ") || "(none)"}`,
         "",
-        acceptedDecisions.length ? "Accepted decisions (do not re-litigate):" : "",
-        ...acceptedDecisions.map((decision) => `- ${decision}`),
+        acceptedDecisionContext.content,
         openQuestions.length ? "" : "",
         openQuestions.length ? "Open questions:" : "",
         ...openQuestions.map((question) => `- ${question}`),

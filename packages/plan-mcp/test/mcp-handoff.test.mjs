@@ -27,6 +27,8 @@
 
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   startMcpFixture,
   closeMcpFixture,
@@ -305,7 +307,7 @@ test("planner-task-start retains a pending handoff", async () => {
     await callTool(session, "planner-task-show", { task: "T001", full: true });
     await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     await callTool(session, "planner-task-start", { task: "T001" });
     const phase = (await session.store.loadAllPhases())[0];
     assert.equal(phase.tasks[0].status, "in-progress");
@@ -320,7 +322,9 @@ test("planner-task-update rejection archives the active handoff through MCP", as
   const session = await startMcpFixture({ name: "t379-rejected-handoff" });
   try {
     const phase = (await session.store.loadAllPhases())[0];
-    await session.store.setPhaseHandoff(phase.id, "# rejected through MCP");
+    await mkdir(join(session.planRoot, "docs"), { recursive: true });
+    await writeFile(join(session.planRoot, "docs", "p097-closeout.md"), "# P097 closeout\n", "utf8");
+    await session.store.setPhaseHandoff(phase.id, "# rejected through MCP\n\n- [.planner/docs/p097-closeout.md](.planner/docs/p097-closeout.md)");
 
     const updated = await callTool(session, "planner-task-update", {
       task: "T001",
@@ -335,6 +339,13 @@ test("planner-task-update rejection archives the active handoff through MCP", as
     assert.equal(persisted.handoffHistory[0].reason, "phase-rejected");
     const active = await callTool(session, "planner-handoff-list", {});
     assert.equal(active.structuredContent.count, 0);
+    const archived = await callTool(session, "planner-handoff-show", { phaseRef: "P001" });
+    assert.match(toolText(archived), /Archived terminal-phase handoff/);
+    assert.match(toolText(archived), /rejected through MCP/);
+    assert.match(toolText(archived), /.planner\/docs\/p097-closeout\.md/);
+    assert.equal(archived.structuredContent.archived, true);
+    assert.equal(archived.structuredContent.archiveReason, "phase-rejected");
+    assert.equal(archived.structuredContent.active, false);
   } finally {
     await closeMcpFixture(session);
   }

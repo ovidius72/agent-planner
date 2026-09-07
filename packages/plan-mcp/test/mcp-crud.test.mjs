@@ -46,7 +46,7 @@ async function readTaskContext(session, task = "T001", phase = "P001", feature =
   await callTool(session, "planner-task-show", { task, full: true });
   await callTool(session, "planner-phase-show", { phase, full: true });
   await callTool(session, "planner-feature-show", { feature, full: true });
-  await callTool(session, "planner-requirement-list", {});
+  await callTool(session, "planner-requirement-list", { phaseRef: phase });
 }
 
 test("writer contention stays readable and surfaces PLAN_WRITER_BUSY through MCP", async () => {
@@ -428,11 +428,20 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const deniedWithoutRequirements = await callTool(session, "planner-task-start", { task: "T002" });
     assert.equal(deniedWithoutRequirements.isError, true);
     assert.equal(toolStructured(deniedWithoutRequirements).errorCode, "REQUIREMENTS_READ_REQUIRED");
-    assert.deepEqual(toolStructured(deniedWithoutRequirements).nextActions, ["planner-requirement-list", "Retry planner-task-start P001(F001)/T002"]);
+    assert.deepEqual(toolStructured(deniedWithoutRequirements).nextActions, ["planner-requirement-list with phaseRef=P001(F001)", "Retry planner-task-start P001(F001)/T002"]);
+    assert.deepEqual(toolStructured(deniedWithoutRequirements).requirementEligibility.requiredReads.map(({ kind, state }) => ({ kind, state })), [{ kind: "requirement", state: "missing" }]);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
 
-    // lifecycle: requirement read + retry succeeds with a verified postcondition.
-    await callTool(session, "planner-requirement-list", {});
+    // A broad inventory is informative but does not claim every requirement was read.
+    const inventory = await callTool(session, "planner-requirement-list", {});
+    assert.equal(toolStructured(inventory).readScope, "inventory");
+    assert.deepEqual(toolStructured(inventory).attestedRequirementIds, []);
+    assert.equal(toolStructured(await callTool(session, "planner-task-start", { task: "T002" })).errorCode, "REQUIREMENTS_READ_REQUIRED");
+
+    // Target-scoped requirement delivery + retry succeeds with a verified postcondition.
+    const scopedRequirements = await callTool(session, "planner-requirement-list", { phaseRef: "P001(F001)" });
+    assert.equal(toolStructured(scopedRequirements).readScope, "target");
+    assert.deepEqual(toolStructured(scopedRequirements).attestedRequirementIds, toolStructured(deniedWithoutRequirements).requirementIds);
     const started = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(started), /Task started: P001\(F001\)\/T002/);
     assert.equal(started.isError, undefined);
@@ -504,7 +513,7 @@ test("distinct MCP server processes cannot reuse each other's context attestatio
       "planner-task-show P001(F001)/T001 with full=true",
       "planner-phase-show P001(F001) with full=true",
       "planner-feature-show F001 with full=true",
-      "planner-requirement-list",
+      "planner-requirement-list with phaseRef=P001(F001)",
       "Retry planner-task-start P001(F001)/T001",
     ]);
   } finally {
@@ -548,7 +557,7 @@ test("context reads in any order satisfy task_start (no out-of-order gate)", asy
   try {
     // Read in reversed order: requirements, feature, phase, task — the opposite
     // of the old task→phase→feature ordering requirement.
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
     await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     await callTool(session, "planner-task-show", { task: "T001", full: true });
@@ -633,7 +642,8 @@ test("planner-phase-show gives structured-content clients the full phase read mo
       taskCount: storedPhase.tasks.length,
       description: storedPhase.description,
       descriptionRef: storedPhase.descriptionRef || "",
-    }, "Claude-style structured-content consumers receive the phase title and detailed description");
+      acceptedDecisions: storedPhase.acceptedDecisions,
+    }, "Claude-style structured-content consumers receive the phase title, detailed description, and canonical Accepted Decisions");
     assert.ok(Array.isArray(structured.linkedRequirements), "phase-show exposes linkedRequirements");
     assert.equal(structured.linkedRequirements.length, 1);
     assert.equal(structured.linkedRequirements[0].title, "Users can authenticate");

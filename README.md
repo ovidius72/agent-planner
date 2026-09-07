@@ -339,6 +339,8 @@ Current Phase 1 tools include:
 - `planner-handoff-verify`
 - `planner-handoff-clear`
 
+`planner-handoff-list` indexes active handoffs. `planner-handoff-show <phaseRef>` also recovers the latest terminal archive after a phase becomes done, rejected, or canceled, preserving discoverability of closeout content and linked `.planner/docs/` references.
+
 ### Export
 
 - `planner-export` (with optional `full` boolean for detailed hierarchical output)
@@ -1014,6 +1016,18 @@ Publishing is automated by GitHub Actions. The workflow `.github/workflows/publi
 
 Do **not** run `npm publish` manually per package: it would publish stale `workspace:*` ranges that npm cannot install.
 
+### Bounded verification
+
+Use the canonical runner instead of repeatedly chaining broad commands:
+
+```bash
+pnpm verify:focused -- --package plan-mcp
+pnpm verify:focused -- --test packages/plan-mcp/test/mcp-harness.test.mjs
+pnpm verify:final
+```
+
+Focused mode runs one package or test file. Final mode captures complete logs under `.planner/.local/verification/`, prints only concise summaries or bounded failure excerpts, and reuses a successful result while the repository content fingerprint is unchanged. The final gate covers build, typecheck, coverage, plugin synchronization, browser E2E, and a clean `mkdtemp` installation from freshly packed public packages.
+
 ### Versioning & release
 
 All public packages share a **single unified version** per release. Releases are driven by the `release` script (`scripts/release.cjs`).
@@ -1033,7 +1047,7 @@ The script does everything:
 1. **Pre-flight** — clean working tree, on `develop`, up to date with `origin/develop`.
 2. **Compute the unified target version** — fetch canonical `vX.Y.Z` tags and bump the latest stable tag. While tag history is being bootstrapped, fall back to the unified stable version on `origin/main`. Develop prerelease suffixes such as `-next.N` never affect the stable base; explicit versions retain a downgrade guard.
 3. **Create `release/v<version>`** from `develop` and bump all 5 packages to that version.
-4. **Verify** — `pnpm install` + `pnpm -r build` + `pnpm check` (rolls back the branch on failure).
+4. **Verify** — `pnpm install` + the canonical `pnpm verify:final` gate (bounded logs, build, typecheck, coverage, plugin sync, Playwright, and freshly packed/installed artifact smoke); rolls back the branch on failure.
 5. **Commit, push, and open a PR → `main`**.
 
 Merge the release PR into `main` to trigger `publish.yml` (npm publish + stable `vX.Y.Z` tag). Then sync `develop`:

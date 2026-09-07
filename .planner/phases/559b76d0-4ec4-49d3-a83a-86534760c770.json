@@ -26,7 +26,9 @@
     "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e",
     "094c66e1-fca2-4ac1-a211-7c0883adf4f5",
     "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38",
-    "a833a6a7-2992-4b21-bbe2-e48f3ba68d51"
+    "a833a6a7-2992-4b21-bbe2-e48f3ba68d51",
+    "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1",
+    "a2fed338-41b4-4ec4-a9f6-82f80e24cef9"
   ],
   "tasks": [
     {
@@ -296,15 +298,162 @@
       "createdAt": "2026-09-04T14:27:38.514Z",
       "updatedAt": "2026-09-04T14:34:47.105Z",
       "sessionInfo": []
+    },
+    {
+      "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 386,
+      "shortId": "G2BAF",
+      "priority": 5,
+      "shortName": "allow-concurrent-task-starts-a",
+      "title": "Allow concurrent task starts across agent sessions",
+      "status": "planned",
+      "description": "Current state: task_start in packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts delegates to global recommendNextTask/checkExplicitTaskStart logic, so an already in-progress task owned by another agent/session is reported as ACTIVE_TASK_CONFLICT. The suggested task_switch path snapshots and moves that other task back to planned, incorrectly interrupting concurrent work. Implement durable session-aware active-task ownership in harness-agnostic plan-core schema/store/lifecycle helpers, then update Pi and MCP task_start/task_switch behavior so different sessions may hold different in-progress tasks concurrently while task_switch remains required only when the requesting session intentionally leaves its own active task. Preserve existing task statuses, status history, context-read attestations, priority/deviation advisories, resume checkpoints, legacy planner compatibility, and authoritative active-task overview evidence. Add core, Pi, MCP, multi-process, persisted read-back, and release-surface regressions proving a second agent can start another eligible task without pausing/demoting the first; the same session still receives explicit switch guidance when appropriate; failed starts are atomic no-ops; and multiple active tasks are surfaced as valid concurrent ownership rather than an automatic corruption claim.",
+      "descriptionUpdatedAt": "2026-09-05T21:16:19.481Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1-check-001-define-durable-backward-compatible-session-ownership-for-in-progress-tasks",
+          "number": 1,
+          "title": "Define durable backward-compatible session ownership for in-progress tasks",
+          "checked": false
+        },
+        {
+          "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1-check-002-make-task-start-allow-active-tasks-owned-by-other-sessions-without-mutating-them",
+          "number": 2,
+          "title": "Make task_start allow active tasks owned by other sessions without mutating them",
+          "checked": false
+        },
+        {
+          "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1-check-003-keep-task-switch-scoped-to-the-requesting-session-s-active-task",
+          "number": 3,
+          "title": "Keep task_switch scoped to the requesting session's active task",
+          "checked": false
+        },
+        {
+          "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1-check-004-update-active-task-diagnostics-for-valid-concurrency-versus-ownership-conflicts",
+          "number": 4,
+          "title": "Update active-task diagnostics for valid concurrency versus ownership conflicts",
+          "checked": false
+        },
+        {
+          "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1-check-005-add-core-pi-mcp-multi-process-and-persisted-state-regressions",
+          "number": 5,
+          "title": "Add core, Pi, MCP, multi-process, and persisted-state regressions",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-05T21:16:19.479Z",
+      "updatedAt": "2026-09-05T21:16:19.479Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 387,
+      "shortId": "R769E",
+      "priority": 6,
+      "shortName": "enforce-bounded-verification-a",
+      "title": "Enforce bounded verification and installed-artifact release gates",
+      "status": "done",
+      "description": "Add durable, mechanically enforced development and release verification discipline across AGENTS.md, package.json, scripts/, and .github/workflows/ci.yml. Current workflows invite repeated broad pnpm build/check/test:coverage/Playwright runs, stream very large logs into agent context, lack a content-fingerprint success cache, and primarily validate workspace dist rather than freshly packed and installed public artifacts. Implement a canonical verification runner with focused and final modes; capture verbose command logs to planner-local or OS-temporary files while printing concise summaries/failure excerpts; reuse a successful final result only when the relevant source fingerprint is unchanged; prevent accidental repeated full gates during a task; and add clean temporary-install smoke coverage for packed core/MCP/server/CLI/Pi artifacts with fresh Pi/MCP cold-start flows including planner-load recap/Web UI metadata and terminal-phase handoff/document discoverability. Wire CI and release pre-flight to the same contract without weakening existing coverage thresholds, Playwright coverage, plugin synchronization, clean-tree rules, unified versioning, or user-only commit/push/PR/merge authority. All temporary installs and planner fixtures must use mkdtemp and never touch another real project.\n\n---\n**Completion summary:**\nImplemented mechanically bounded verification and installed-artifact release gates. Added scripts/verify.mjs with focused package/test modes, a canonical final gate, complete log capture without streaming, bounded failure excerpts, repository content fingerprinting, unchanged-success reuse, and unchanged-failure blocking until a focused fix changes the fingerprint. Added scripts/installed-artifact-smoke.mjs, which packs all five public packages, installs tarballs into an mkdtemp application, exercises installed CLI/core/server/Pi registration and real MCP stdio planner-load, verifies structured recap plus typed Web UI address/host/port, and proves a terminally archived phase handoff still exposes its linked .planner/docs closeout reference. Wired package scripts, stable and next release scripts, and CI to the canonical final gate; CI uploads bounded verification evidence. Persisted non-negotiable cost/release rules in AGENTS.md and documented usage in README.md. Hardened MCP planner-load structuredContent so hosts that prioritize structured output receive loaded, recap, and webUi metadata rather than only agent skill context. Pi and MCP handoff_show now recover the latest done/rejected/canceled phase archive while active handoff lists remain active-only. Updated canonical/generated planner skill guidance, capability inventory, and targeted regressions. Verification: focused runner/release/MCP/Pi/inventory tests passed; packed-install smoke passed. The first canonical final run correctly stopped with a bounded excerpt for one obsolete skill-copy expectation; after a focused 14/14 fix, one final rerun passed build, typecheck, coverage 573/573, Web UI 96/96, plugin synchronization, Playwright 40/40, packed-install smoke, and git diff --check. No real external project was touched. No commit, push, PR, merge, release, or publish was performed.",
+      "descriptionUpdatedAt": "2026-09-07T14:25:00.528Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9-check-001-planned-in-progress",
+          "date": "2026-09-07T13:33:46.827Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9-check-002-in-progress-done",
+          "date": "2026-09-07T14:25:00.526Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented mechanically bounded verification and installed-artifact release gates. Added scripts/verify.mjs with focused package/test modes, a canonical final gate, complete log capture without streaming, bounded failure excerpts, repository content fingerprinting, unchanged-success reuse, and unchanged-failure blocking until a focused fix changes the fingerprint. Added scripts/installed-artifact-smoke.mjs, which packs all five public packages, installs tarballs into an mkdtemp application, exercises installed CLI/core/server/Pi registration and real MCP stdio planner-load, verifies structured recap plus typed Web UI address/host/port, and proves a terminally archived phase handoff still exposes its linked .planner/docs closeout reference. Wired package scripts, stable and next release scripts, and CI to the canonical final gate; CI uploads bounded verification evidence. Persisted non-negotiable cost/release rules in AGENTS.md and documented usage in README.md. Hardened MCP planner-load structuredContent so hosts that prioritize structured output receive loaded, recap, and webUi metadata rather than only agent skill context. Pi and MCP handoff_show now recover the latest done/rejected/canceled phase archive while active handoff lists remain active-only. Updated canonical/generated planner skill guidance, capability inventory, and targeted regressions. Verification: focused runner/release/MCP/Pi/inventory tests passed; packed-install smoke passed. The first canonical final run correctly stopped with a bounded excerpt for one obsolete skill-copy expectation; after a focused 14/14 fix, one final rerun passed build, typecheck, coverage 573/573, Web UI 96/96, plugin synchronization, Playwright 40/40, packed-install smoke, and git diff --check. No real external project was touched. No commit, push, PR, merge, release, or publish was performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9-check-001-define-focused-final-verification-modes-and-fingerprint-cache-contract",
+          "number": 1,
+          "title": "Define focused/final verification modes and fingerprint/cache contract",
+          "checked": true
+        },
+        {
+          "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9-check-002-implement-concise-log-capture-and-failure-summaries",
+          "number": 2,
+          "title": "Implement concise log capture and failure summaries",
+          "checked": true
+        },
+        {
+          "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9-check-003-add-packed-artifact-clean-install-smoke-harness",
+          "number": 3,
+          "title": "Add packed-artifact clean-install smoke harness",
+          "checked": true
+        },
+        {
+          "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9-check-004-wire-ci-and-release-pre-flight-to-canonical-verification",
+          "number": 4,
+          "title": "Wire CI and release pre-flight to canonical verification",
+          "checked": true
+        },
+        {
+          "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9-check-005-persist-non-bypass-governance-in-agents-md-and-add-regression-tests",
+          "number": 5,
+          "title": "Persist non-bypass governance in AGENTS.md and add regression tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-07T13:33:46.827Z",
+      "completedAt": "2026-09-07T14:25:00.526Z",
+      "createdAt": "2026-09-07T13:33:07.546Z",
+      "updatedAt": "2026-09-07T14:25:00.526Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-07T13:33:46.739Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-09-01T15:00:40.024Z",
-  "updatedAt": "2026-09-04T14:34:47.105Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
+  "updatedAt": "2026-09-07T14:25:00.526Z",
+  "handoff": "# Handoff — before compact\n\nCreated at: 2026-09-07T14:25:31.627Z\nUpdated at: 2026-09-07T14:25:31.627Z\nReason: before compact\n\n## Progress snapshot\n- Features: 20/21 done, 1 active\n- Phases: 95/98 done, 1 active/discovery\n- Tasks: 376/386 done, 0 active\n\n## Current focus\n- Feature: `39d5b62f-6c16-4bed-9fc2-749d4b189f82` — Product vertical completeness and runtime integrity (in-progress)\n- Phase: `559b76d0-4ec4-49d3-a83a-86534760c770` — Plan-context coherence and hierarchical freshness (in-progress)\n- Task: `c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1` — Allow concurrent task starts across agent sessions (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 559b76d0-4ec4-49d3-a83a-86534760c770)\n- 📋 `8a4c178d-2abe-48ca-82e5-3a2b49f45b6e` — Include sibling tasks and related planned capabilities in resume context (planned)\n- 📋 `094c66e1-fca2-4ac1-a211-7c0883adf4f5` — Detect and reconcile hierarchical description drift (planned)\n- ✅ `68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38` — Prevent false handoff-completeness and active-task claims (done)\n- 📋 `a833a6a7-2992-4b21-bbe2-e48f3ba68d51` — Externalize oversized handoffs and open Markdown references in Web UI (planned)\n- 📋 `c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1` — Allow concurrent task starts across agent sessions (planned)\n- ✅ `a2fed338-41b4-4ec4-a9f6-82f80e24cef9` — Enforce bounded verification and installed-artifact release gates (done)\n\n## How to resume\n1. Open task c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 (Allow concurrent task starts across agent sessions).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 (or call task_start).\n4. Continue with the next activity: Start task c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 — Allow concurrent task starts across agent sessions with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/559b76d0-4ec4-49d3-a83a-86534760c770.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 — Allow concurrent task starts across agent sessions with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase 559b76d0-4ec4-49d3-a83a-86534760c770.\n\n## Recent activity\n- 2026-08-24T07:32:57.613Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → done\n- 2026-08-24T07:32:51.157Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-09-07T14:25:31.652Z",
   "handoffAudit": null,
   "handoffReadAt": "",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-07T14-25-31-628Z.md",
+      "clearedAt": "2026-09-07T14:25:31.628Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-06T11-42-41-958Z.md",
+      "clearedAt": "2026-09-06T11:42:41.958Z",
+      "reason": "superseded"
+    }
+  ],
   "statusLog": [
     {
       "id": "91d75064-c0e0-4055-8502-a66d62670363",
@@ -318,7 +467,7 @@
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-04T07:35:23.058Z"
+      "createdAt": "2026-09-07T13:33:46.739Z"
     }
   ]
 }

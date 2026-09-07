@@ -24,10 +24,12 @@ import {
   markRequirementRead,
   markRequirementReadForSessionId,
   markTaskRead,
+  markCanonicalFullReadForSessionId,
   markFeatureReadForSessionId,
   markPhaseReadForSessionId,
   markTaskReadForSessionId,
   projectGuidelinesReadStateForSession,
+  requirementReadEligibilityForSession,
   readTrackingSnapshot,
   requirementReadAdvisory,
   startReadSession,
@@ -263,7 +265,34 @@ test("legacy canonical rules are upgraded in memory without rewriting project ov
   }
 });
 
-test("requirement attestations are reused and invalidated independently", () => {
+test("canonical full-read attestation rejects omitted Accepted Decision fields", () => {
+  invalidateReads();
+  const feature = {
+    id: "F1",
+    acceptedDecisions: [{
+      id: "decision-1",
+      title: "Keep full context",
+      decision: "Deliver the decision.",
+      rationale: "Titles are insufficient.",
+      implementationNotes: "Render every field.",
+      acceptedAt: "2026-01-02T03:04:05.000Z",
+    }],
+  };
+  assert.throws(
+    () => markCanonicalFullReadForSessionId("session-a", "feature", feature, "decision-1 Keep full context"),
+    /omitted Accepted Decision fields/,
+  );
+  assert.deepEqual(readTrackingSnapshot("session-a").features, []);
+  markCanonicalFullReadForSessionId(
+    "session-a",
+    "feature",
+    feature,
+    "Accepted Decisions (1): decision-1 Keep full context Deliver the decision. Titles are insufficient. Render every field. 2026-01-02T03:04:05.000Z",
+  );
+  assert.deepEqual(readTrackingSnapshot("session-a").features, ["F1"]);
+});
+
+test("requirement attestations are reused and invalidated independently with precise diagnostics", () => {
   invalidateReads();
   const requirement = {
     id: "R1",
@@ -271,7 +300,12 @@ test("requirement attestations are reused and invalidated independently", () => 
     sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-02T00:00:00.000Z" }],
   };
   assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [requirement]), true);
-  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [{ ...requirement, updatedAt: "2026-01-03T00:00:00.000Z" }]), false);
+  const staleRequirement = { ...requirement, updatedAt: "2026-01-03T00:00:00.000Z" };
+  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [staleRequirement]), false);
+  assert.deepEqual(requirementReadEligibilityForSession("session-a", ["R1", "R2"], [staleRequirement]).requiredReads, [
+    { kind: "requirement", id: "R1", state: "stale" },
+    { kind: "requirement", id: "R2", state: "missing" },
+  ]);
   markRequirementReadForSessionId("session-a", "R1");
-  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [{ ...requirement, updatedAt: "2026-01-03T00:00:00.000Z" }]), true);
+  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [staleRequirement]), true);
 });

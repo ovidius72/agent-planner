@@ -46,7 +46,7 @@ When denied:
 1. Confirm `started` is `false` and read `errorCode` plus `nextActions`.
 2. Perform only the missing or stale reads listed in `nextActions`. Reads may be completed in any order within the current session.
 3. If Project Guidelines are listed, call `project_guidelines_show` or `planner-project-guidelines-show` and retain the content while working.
-4. Read each task on every start or resume. Fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session.
+4. Read each task on every start or resume. Fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session. When linked requirements are requested, call `requirement_list` or `planner-requirement-list` with the exact `phaseRef` from `nextActions`; a broad unscoped inventory does not attest that every requirement was read. A full feature/phase/task read is complete only when it delivers all canonical Accepted Decision fields (`id`, `title`, `decision`, `rationale`, `implementationNotes`, `acceptedAt`); title-only summaries never satisfy the read gate.
 5. Retry the lifecycle operation. Only `started: true` proves work is active.
 
 Do not convert a denial into a planner status change merely to bypass the gate. Common typed denials include `PROJECT_GUIDELINES_READ_REQUIRED`, `CONTEXT_READ_REQUIRED`, `REQUIREMENTS_READ_REQUIRED`, `START_NOT_ALLOWED`, `ACTIVE_TASK_CONFLICT`, `TASK_DONE`, and persistence verification failures.
@@ -102,7 +102,7 @@ Then call `handoff_write` / `planner-handoff-write` once with the preparation to
 
 A successful write persists only a **handoff candidate** and returns `resumeReady: false`; it is never sufficient to claim that the handoff is detailed or complete. Immediately call `handoff_show` / `planner-handoff-show` with the exact phase reference and read the entire persisted body. Compare it again—not from memory—against conversation corrections and approvals, planner entities and sibling tasks, the current working tree/diff, verification and runtime evidence, and peer-agent output. If this second pass finds any omission, pass those gaps through a new prepare+write cycle. If it finds none, call `handoff_verify` / `planner-handoff-verify` with the content hash returned by show, fresh substantive findings for all five source reviews, and an empty `omissionsFound` list. Only a successful verification result with `resumeReady: true` authorizes telling the user that the handoff is resume-ready. Never answer “yes” from the earlier write result or from the submitted inventory alone.
 
-`handoff_list` is a compact paginated summary-only index and exposes whether each handoff is resume-ready; use `handoff_show` for one bounded body and its metadata. Clear/archive only after explicit intent or when phase completion makes it obsolete.
+`handoff_list` is a compact paginated index of active handoffs and exposes whether each is resume-ready. Use `handoff_show` for one bounded active body and its metadata; after phase completion/rejection/cancellation, the same exact phase-scoped show call returns the latest terminal archive so its closeout and `.planner/docs/` references remain discoverable. Clear/archive only after explicit intent or when phase completion makes the handoff non-operational.
 
 ## Ideas Inbox and promotion
 

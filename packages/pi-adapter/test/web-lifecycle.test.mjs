@@ -24,7 +24,7 @@ async function readTaskContext(host) {
   await host.runTool("task_get", { taskId: "T001", full: true });
   await host.runTool("phase_get", { phaseId: "P001", full: true });
   await host.runTool("feature_get", { featureId: "F001", full: true });
-  await host.runTool("requirement_list", {});
+  await host.runTool("requirement_list", { phaseRef: "P001" });
 }
 
 async function injectedPrompt(host, prompt = "continue") {

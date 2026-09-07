@@ -626,7 +626,7 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
       await session.client.callTool({ name: "planner-task-show", arguments: { task: temporaryId, full: true } });
       await session.client.callTool({ name: "planner-phase-show", arguments: { phase: "P001", full: true } });
       await session.client.callTool({ name: "planner-feature-show", arguments: { feature: "F001", full: true } });
-      await session.client.callTool({ name: "planner-requirement-list", arguments: {} });
+      await session.client.callTool({ name: "planner-requirement-list", arguments: { phaseRef: "P001" } });
       assert.match(toolText(await session.client.callTool({ name: "planner-task-start", arguments: { task: temporaryId } })), /Task started/);
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "active");
       assert.match(toolText(await session.client.callTool({ name: "planner-task-complete", arguments: { task: temporaryId, description_update: "Temporary deviation task completed and verified." } })), /Task completed.*RESUME REQUIRED/s);

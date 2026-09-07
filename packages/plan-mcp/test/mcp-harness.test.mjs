@@ -49,7 +49,7 @@ async function readTaskContext(session, task, phase, feature) {
   await callTool(session, "planner-task-show", { task, full: true });
   await callTool(session, "planner-phase-show", { phase, full: true });
   await callTool(session, "planner-feature-show", { feature, full: true });
-  await callTool(session, "planner-requirement-list", {});
+  await callTool(session, "planner-requirement-list", { phaseRef: phase });
 }
 
 // ── Tool discovery: published schema surface ───────────────────────────────
@@ -97,6 +97,10 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.ok(ideaDelete.required.includes("idea") && ideaDelete.required.includes("confirmed"), "idea-delete requires the target and confirmation");
     const ideaPromotion = schema("planner-idea-promotion-begin");
     assert.deepEqual(ideaPromotion.properties.targetType.enum, ["feature", "phase", "task"], "idea promotion publishes every supported target type");
+
+    const requirementList = schema("planner-requirement-list");
+    assert.equal(requirementList.properties.phaseRef.type, "string", "requirement-list exposes optional target-scoped phaseRef delivery");
+    assert.ok(!requirementList.required?.includes("phaseRef"), "unscoped requirement inventory remains backward compatible");
 
     const acceptedDecisionCreate = schema("planner-accepted-decision-create");
     assert.ok(acceptedDecisionCreate.required.includes("targetType"), "accepted-decision-create requires a target type");
@@ -257,6 +261,60 @@ test("accepted decision tools preserve identity and acceptedAt across every owne
     assert.equal(missingDecision.isError, true);
     assert.equal(toolStructured(missingDecision)?.updated, false);
     assert.equal(toolStructured(missingDecision)?.errorCode, "ACCEPTED_DECISION_NOT_FOUND");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("full reads, task start, and planner-load agentContext deliver canonical Accepted Decisions", async () => {
+  const session = await startMcpFixture({ name: "t368-decision-context" });
+  try {
+    const targets = [
+      { targetType: "project", title: "Project decision" },
+      { targetType: "feature", targetRef: "F001", title: "Feature decision" },
+      { targetType: "phase", targetRef: "P001", title: "Phase decision" },
+      { targetType: "task", targetRef: "T001", title: "Task decision" },
+    ];
+    for (const target of targets) {
+      const created = await callTool(session, "planner-accepted-decision-create", {
+        ...target,
+        decision: `Apply ${target.title}.`,
+        rationale: `Rationale for ${target.title}.`,
+        implementationNotes: `Implementation notes for ${target.title}.`,
+      });
+      assert.equal(toolStructured(created).created, true);
+    }
+
+    const overview = await callTool(session, "planner-show", {});
+    assert.match(toolText(overview), /Project decision/);
+    assert.equal(toolStructured(overview).overview.project.acceptedDecisions[0].rationale, "Rationale for Project decision.");
+
+    for (const [tool, args, key, title] of [
+      ["planner-feature-show", { feature: "F001", full: true }, "feature", "Feature decision"],
+      ["planner-phase-show", { phase: "P001", full: true }, "phase", "Phase decision"],
+      ["planner-task-show", { task: "T001", full: true }, "task", "Task decision"],
+    ]) {
+      const result = await callTool(session, tool, args);
+      assert.match(toolText(result), new RegExp(title));
+      assert.match(toolText(result), new RegExp(`Rationale for ${title}`));
+      assert.equal(toolStructured(result)[key].acceptedDecisions[0].implementationNotes, `Implementation notes for ${title}.`);
+    }
+
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    for (const title of targets.map((target) => target.title)) assert.match(toolText(started), new RegExp(title));
+
+    const loaded = await callTool(session, "planner-load", {});
+    const loadedText = toolText(loaded);
+    const loadedStructured = toolStructured(loaded);
+    assert.doesNotMatch(loadedText, /Project decision/, "Accepted Decision agentContext must not leak into the human recap");
+    assert.equal(loadedStructured.recap.text, loadedText, "structured clients receive the consolidated recap instead of only the skill payload");
+    assert.equal(loadedStructured.webUi.running, true);
+    assert.match(loadedStructured.webUi.address, /^http:\/\//);
+    const decisionContext = loadedStructured.agentContext.acceptedDecisions;
+    assert.equal(decisionContext.truncated, false);
+    for (const title of targets.map((target) => target.title)) assert.match(decisionContext.content, new RegExp(title));
+    assert.match(decisionContext.content, /Implementation notes for Task decision/);
   } finally {
     await closeMcpFixture(session);
   }

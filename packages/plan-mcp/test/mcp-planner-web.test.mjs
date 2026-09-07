@@ -228,7 +228,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-task-show", { task: "T001", full: true });
     await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     await callTool(session, "planner-task-start", { task: "T001" });
     await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified before rollup coverage." });
 
@@ -268,7 +268,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-task-show", { task: "T002", full: true });
     await callTool(session, "planner-phase-show", { phase: "P002", full: true });
     await callTool(session, "planner-feature-show", { feature: "F002", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P002" });
     await callTool(session, "planner-task-start", { task: "T002" });
     await callTool(session, "planner-task-complete", { task: "T002", force: true, description_update: "First rollup task completed and verified." });
     const pageShowAfter = await callTool(session, "planner-phase-show", { phase: "P002" });
@@ -278,7 +278,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-task-show", { task: "T003", full: true });
     await callTool(session, "planner-phase-show", { phase: "P002", full: true });
     await callTool(session, "planner-feature-show", { feature: "F002", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P002" });
     await callTool(session, "planner-task-start", { task: "T003" });
     const recap = await callTool(session, "planner-load", {});
     const recapText = toolText(recap);
@@ -319,6 +319,13 @@ test("recap context and generated/export operations", async () => {
     // its last non-empty line, which Codex can present verbatim.
     const loadResult = await callTool(session, "planner-load", {});
     const loadText = toolText(loadResult);
+    assert.equal(loadResult.structuredContent.loaded, true);
+    assert.equal(loadResult.structuredContent.recap.text, loadText, "structured MCP clients receive the same consolidated recap");
+    assert.equal(loadResult.structuredContent.webUi.running, true);
+    assert.match(loadResult.structuredContent.webUi.address, /^http:\/\//);
+    assert.equal(typeof loadResult.structuredContent.webUi.host, "string");
+    assert.equal(typeof loadResult.structuredContent.webUi.port, "number");
+    assert.ok(loadResult.structuredContent.webUi.port > 0);
     assert.equal(loadResult.structuredContent.preparation.migrated, true);
     assert.match(loadText, /Migrated legacy project context: 1 guideline, 1 accepted decision/);
     assert.match(loadText, /## Project Guidelines/);
@@ -351,7 +358,7 @@ test("recap context and generated/export operations", async () => {
     await callTool(session, "planner-task-show", { task: "T001", full: true });
     await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     const startAfterLoad = await callTool(session, "planner-task-start", { task: "T001" });
     assert.equal(startAfterLoad.structuredContent.started, true, "planner-load records the project-guidelines read attestation");
 

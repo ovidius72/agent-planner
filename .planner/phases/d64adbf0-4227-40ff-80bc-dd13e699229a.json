@@ -50,11 +50,28 @@
       "priority": 0,
       "shortName": "deliver-accepted-decisions-in",
       "title": "Deliver Accepted Decisions in canonical full reads and work context",
-      "status": "planned",
-      "description": "Include project, feature, phase, and task Accepted Decisions in bounded canonical full-read outputs, MCP planner-load agentContext, Pi agent-only context, and task-start phase context where relevant. Update read-attestation semantics so a full read is never certified while canonical decision context was omitted, preserve transport ceilings, and add Pi/MCP/load/start regressions.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:09.824Z",
+      "status": "done",
+      "description": "Include project, feature, phase, and task Accepted Decisions in bounded canonical full-read outputs, MCP planner-load agentContext, Pi agent-only context, and task-start phase context where relevant. Update read-attestation semantics so a full read is never certified while canonical decision context was omitted, preserve transport ceilings, and add Pi/MCP/load/start regressions.\n\n---\n**Completion summary:**\nImplemented canonical Accepted Decision delivery across plan-core, Pi, and MCP. Feature, phase, and task full reads now render and return every accepted decision field (id, title, decision, rationale, implementationNotes, acceptedAt) before recording read attestations. New markCanonicalFullReadForSessionId mechanically rejects title-only or otherwise omitted Accepted Decision context, including a required explicit zero-decision marker. Task-start context now includes bounded project/feature/phase/task Accepted Decisions for the active lineage alongside linked Requirements. Pi plan_get and agent-only before_agent_start context include project and bounded cross-entity decision context; MCP planner-show exposes project decisions and planner-load returns bounded typed Accepted Decision agentContext with total/truncation metadata. Ambient/load/task-start decision context is capped at 8,000 characters with explicit full-read guidance when truncated, and regressions prove it does not leak into human recap text. Updated tool descriptions, canonical/generated planner skill guidance, and P2 capability surfaces. Verification: full pnpm build and pnpm check passed; pnpm test:coverage passed 569/569 Node tests and 96/96 Web UI tests; pnpm plugins:check and git diff --check passed. After the final no-recap-leak assertions, focused MCP/Pi tests passed 27/27 and diff check remained clean. No Web UI runtime changed, so Playwright was not rerun. Files include packages/plan-core/src/task-context.ts, packages/plan-core/src/read-tracking.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, targeted tests, planner skill copies, and test/surfaces.mjs. No commit, push, PR, or merge performed.",
+      "descriptionUpdatedAt": "2026-09-05T21:40:52.659Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "44841443-4365-4c54-afc5-17764f762c01-check-001-planned-in-progress",
+          "date": "2026-09-05T21:22:15.140Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "44841443-4365-4c54-afc5-17764f762c01-check-002-in-progress-done",
+          "date": "2026-09-05T21:40:52.657Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented canonical Accepted Decision delivery across plan-core, Pi, and MCP. Feature, phase, and task full reads now render and return every accepted decision field (id, title, decision, rationale, implementationNotes, acceptedAt) before recording read attestations. New markCanonicalFullReadForSessionId mechanically rejects title-only or otherwise omitted Accepted Decision context, including a required explicit zero-decision marker. Task-start context now includes bounded project/feature/phase/task Accepted Decisions for the active lineage alongside linked Requirements. Pi plan_get and agent-only before_agent_start context include project and bounded cross-entity decision context; MCP planner-show exposes project decisions and planner-load returns bounded typed Accepted Decision agentContext with total/truncation metadata. Ambient/load/task-start decision context is capped at 8,000 characters with explicit full-read guidance when truncated, and regressions prove it does not leak into human recap text. Updated tool descriptions, canonical/generated planner skill guidance, and P2 capability surfaces. Verification: full pnpm build and pnpm check passed; pnpm test:coverage passed 569/569 Node tests and 96/96 Web UI tests; pnpm plugins:check and git diff --check passed. After the final no-recap-leak assertions, focused MCP/Pi tests passed 27/27 and diff check remained clean. No Web UI runtime changed, so Playwright was not rerun. Files include packages/plan-core/src/task-context.ts, packages/plan-core/src/read-tracking.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, targeted tests, planner skill copies, and test/surfaces.mjs. No commit, push, PR, or merge performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -62,42 +79,47 @@
           "id": "44841443-4365-4c54-afc5-17764f762c01-check-001-map-decision-ownership-and-delivery-boundaries",
           "number": 1,
           "title": "Map decision ownership and delivery boundaries",
-          "checked": false
+          "checked": true
         },
         {
           "id": "44841443-4365-4c54-afc5-17764f762c01-check-002-update-full-show-read-payloads",
           "number": 2,
           "title": "Update full show/read payloads",
-          "checked": false
+          "checked": true
         },
         {
           "id": "44841443-4365-4c54-afc5-17764f762c01-check-003-align-pi-and-mcp-load-start-agent-context",
           "number": 3,
           "title": "Align Pi and MCP load/start agent context",
-          "checked": false
+          "checked": true
         },
         {
           "id": "44841443-4365-4c54-afc5-17764f762c01-check-004-tie-attestations-to-delivered-canonical-fields",
           "number": 4,
           "title": "Tie attestations to delivered canonical fields",
-          "checked": false
+          "checked": true
         },
         {
           "id": "44841443-4365-4c54-afc5-17764f762c01-check-005-add-bounded-output-and-no-user-recap-leak-regressions",
           "number": 5,
           "title": "Add bounded-output and no-user-recap-leak regressions",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-05T21:22:15.140Z",
+      "completedAt": "2026-09-05T21:40:52.657Z",
       "createdAt": "2026-09-01T10:16:09.785Z",
-      "updatedAt": "2026-09-01T10:16:09.926Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-05T21:40:52.657Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-05T21:22:15.053Z"
+        }
+      ]
     },
     {
       "id": "4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08",
@@ -292,11 +314,28 @@
       "priority": 30,
       "shortName": "scope-requirement-read-attesta",
       "title": "Scope Requirement read attestations to delivered linked context",
-      "status": "planned",
-      "description": "Refine packages/plan-core/src/read-tracking.ts and Pi/MCP requirement read flows so starting work requires and reuses only linked Requirements actually delivered to the session, rather than marking every top-level Requirement read after a broad list. Preserve any-order freshness, Project Guidelines gates, sibling-task reuse, and precise missing/stale diagnostics.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:10.851Z",
+      "status": "done",
+      "description": "Refine packages/plan-core/src/read-tracking.ts and Pi/MCP requirement read flows so starting work requires and reuses only linked Requirements actually delivered to the session, rather than marking every top-level Requirement read after a broad list. Preserve any-order freshness, Project Guidelines gates, sibling-task reuse, and precise missing/stale diagnostics.\n\n---\n**Completion summary:**\nImplemented target-scoped Requirement read attestations across plan-core, Pi, and MCP. Broad requirement_list/planner-requirement-list calls remain backward-compatible inventories but no longer attest every Requirement. Supplying phaseRef resolves the exact phase plus owning feature, delivers only deduplicated linked Requirements, and records only those IDs for the current logical session. task_start/task_switch nextActions now request the exact scoped phaseRef, expose requirementEligibility with precise missing/stale Requirement IDs, preserve any-order reads, fresh persisted/in-memory reuse, sibling-task reuse, Project Guidelines gates, and atomic denial behavior. Updated canonical/generated planner skill guidance and P2 capability surfaces/scenario coverage. Verification: focused builds passed for core/MCP/Pi; focused core/Pi/MCP/lifecycle/matrix tests passed 168/168; full pnpm build, pnpm check, pnpm test:coverage passed 564/564 Node tests and 96/96 Web UI tests; pnpm plugins:check and git diff --check passed. No Playwright rerun because this task changed no Web UI runtime code. Files include packages/plan-core/src/read-tracking.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, their targeted tests, packages/plan-core/planner-skill.md and generated plugin copies, test/surfaces.mjs, and test/scenario-matrix.mjs. Separate planned P097(F021)/T386 captures the newly reported multi-agent concurrent task-start issue. No commit, push, PR, or merge performed.",
+      "descriptionUpdatedAt": "2026-09-05T21:20:14.924Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-001-planned-in-progress",
+          "date": "2026-09-05T12:09:31.818Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-002-in-progress-done",
+          "date": "2026-09-05T21:20:14.921Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented target-scoped Requirement read attestations across plan-core, Pi, and MCP. Broad requirement_list/planner-requirement-list calls remain backward-compatible inventories but no longer attest every Requirement. Supplying phaseRef resolves the exact phase plus owning feature, delivers only deduplicated linked Requirements, and records only those IDs for the current logical session. task_start/task_switch nextActions now request the exact scoped phaseRef, expose requirementEligibility with precise missing/stale Requirement IDs, preserve any-order reads, fresh persisted/in-memory reuse, sibling-task reuse, Project Guidelines gates, and atomic denial behavior. Updated canonical/generated planner skill guidance and P2 capability surfaces/scenario coverage. Verification: focused builds passed for core/MCP/Pi; focused core/Pi/MCP/lifecycle/matrix tests passed 168/168; full pnpm build, pnpm check, pnpm test:coverage passed 564/564 Node tests and 96/96 Web UI tests; pnpm plugins:check and git diff --check passed. No Playwright rerun because this task changed no Web UI runtime code. Files include packages/plan-core/src/read-tracking.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, their targeted tests, packages/plan-core/planner-skill.md and generated plugin copies, test/surfaces.mjs, and test/scenario-matrix.mjs. Separate planned P097(F021)/T386 captures the newly reported multi-agent concurrent task-start issue. No commit, push, PR, or merge performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -304,51 +343,66 @@
           "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-001-define-requirement-delivery-attestation-contract",
           "number": 1,
           "title": "Define requirement delivery-attestation contract",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-002-add-targeted-show-read-surface-if-needed",
           "number": 2,
           "title": "Add targeted show/read surface if needed",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-003-update-pi-and-mcp-tracking",
           "number": 3,
           "title": "Update Pi and MCP tracking",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-004-preserve-sibling-reuse-and-invalidation-semantics",
           "number": 4,
           "title": "Preserve sibling reuse and invalidation semantics",
-          "checked": false
+          "checked": true
         },
         {
           "id": "3ebe4454-ecac-4c17-ad50-efce3acbb53f-check-005-add-cross-session-and-linked-only-regressions",
           "number": 5,
           "title": "Add cross-session and linked-only regressions",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-05T12:09:31.818Z",
+      "completedAt": "2026-09-05T21:20:14.921Z",
       "createdAt": "2026-09-01T10:16:10.807Z",
-      "updatedAt": "2026-09-01T10:16:10.956Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-05T21:20:14.921Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-05T12:09:31.719Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-09-01T10:16:09.397Z",
-  "updatedAt": "2026-09-05T12:07:43.202Z",
-  "handoff": "# Handoff — before compact\n\nCreated at: 2026-09-05T12:08:09.332Z\nUpdated at: 2026-09-05T12:08:09.332Z\nReason: before compact\n\n## Progress snapshot\n- Features: 20/21 done, 1 active\n- Phases: 94/98 done, 2 active/discovery\n- Tasks: 373/384 done, 0 active\n\n## Current focus\n- Feature: `39d5b62f-6c16-4bed-9fc2-749d4b189f82` — Product vertical completeness and runtime integrity (in-progress)\n- Phase: `d64adbf0-4227-40ff-80bc-dd13e699229a` — P1 agent context and mutation parity (in-progress)\n- Task: `3ebe4454-ecac-4c17-ad50-efce3acbb53f` — Scope Requirement read attestations to delivered linked context (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase d64adbf0-4227-40ff-80bc-dd13e699229a)\n- 📋 `44841443-4365-4c54-afc5-17764f762c01` — Deliver Accepted Decisions in canonical full reads and work context (planned)\n- ✅ `4cdcbfe6-ccc0-4b1f-9511-68f45fd99f08` — Add Accepted Decisions management parity (done)\n- ✅ `0c425f35-9d42-4ea4-aca8-44f789723b5c` — Align feature phase and task mutation and discuss governance parity (done)\n- 📋 `3ebe4454-ecac-4c17-ad50-efce3acbb53f` — Scope Requirement read attestations to delivered linked context (planned)\n\n## How to resume\n1. Open task 3ebe4454-ecac-4c17-ad50-efce3acbb53f (Scope Requirement read attestations to delivered linked context).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start 3ebe4454-ecac-4c17-ad50-efce3acbb53f (or call task_start).\n4. Continue with the next activity: Start task 3ebe4454-ecac-4c17-ad50-efce3acbb53f — Scope Requirement read attestations to delivered linked context with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/d64adbf0-4227-40ff-80bc-dd13e699229a.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task 3ebe4454-ecac-4c17-ad50-efce3acbb53f — Scope Requirement read attestations to delivered linked context with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase d64adbf0-4227-40ff-80bc-dd13e699229a.\n\n## Recent activity\n- 2026-08-24T07:32:57.613Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → done\n- 2026-08-24T07:32:51.157Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
-  "handoffUpdatedAt": "2026-09-05T12:08:09.357Z",
+  "updatedAt": "2026-09-05T21:40:52.657Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-05T12:19:02.306Z",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [
+    {
+      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-05T21-40-52-682Z.md",
+      "clearedAt": "2026-09-05T21:40:52.682Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-05T12-19-02-285Z.md",
+      "clearedAt": "2026-09-05T12:19:02.285Z",
+      "reason": "superseded"
+    },
     {
       "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-05T12-08-09-333Z.md",
       "clearedAt": "2026-09-05T12:08:09.333Z",
@@ -362,16 +416,6 @@
     {
       "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-05T11-46-31-437Z.md",
       "clearedAt": "2026-09-05T11:46:31.437Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-04T14-47-57-069Z.md",
-      "clearedAt": "2026-09-04T14:47:57.069Z",
-      "reason": "superseded"
-    },
-    {
-      "file": "handoff-archive/d64adbf0-4227-40ff-80bc-dd13e699229a-2026-09-04T14-32-24-480Z.md",
-      "clearedAt": "2026-09-04T14:32:24.480Z",
       "reason": "superseded"
     }
   ],
@@ -407,12 +451,20 @@
       "toStatus": "in-progress",
       "title": "planned → in-progress",
       "description": ""
+    },
+    {
+      "id": "e5f265e3-cfc3-4a79-86ae-a70061571012",
+      "date": "2026-09-05T21:40:52.725Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-04T14:37:55.229Z"
+      "createdAt": "2026-09-05T21:22:15.053Z"
     }
   ]
 }

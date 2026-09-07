@@ -36,7 +36,7 @@ async function readTaskContext(host, taskId, phaseId = "P001", featureId = "F001
   await host.runTool("task_get", { taskId, full: true });
   await host.runTool("phase_get", { phaseId, full: true });
   await host.runTool("feature_get", { featureId, full: true });
-  await host.runTool("requirement_list", {});
+  await host.runTool("requirement_list", { phaseRef: phaseId });
 }
 
 function canonicalHandoff(title, detail) {
@@ -280,11 +280,20 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(deniedWithoutRequirements.isError, true);
       assert.equal(toolDetails(deniedWithoutRequirements).started, false);
       assert.equal(toolDetails(deniedWithoutRequirements).errorCode, "REQUIREMENTS_READ_REQUIRED");
-      assert.deepEqual(toolDetails(deniedWithoutRequirements).nextActions, ["requirement_list", "Retry task_start P001(F001)/T001"]);
+      assert.deepEqual(toolDetails(deniedWithoutRequirements).nextActions, ["requirement_list with phaseRef=P001(F001)", "Retry task_start P001(F001)/T001"]);
+      assert.deepEqual(toolDetails(deniedWithoutRequirements).requirementEligibility.requiredReads.map(({ kind, state }) => ({ kind, state })), [{ kind: "requirement", state: "missing" }]);
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "planned");
 
-      // Start — response carries the composite ref only after requirements are read.
-      await host.runTool("requirement_list", {});
+      // A broad inventory is informative but does not claim that every requirement was read.
+      const inventory = await host.runTool("requirement_list", {});
+      assert.equal(toolDetails(inventory).readScope, "inventory");
+      assert.deepEqual(toolDetails(inventory).attestedRequirementIds, []);
+      assert.equal(toolDetails(await host.runTool("task_start", { taskId: "T001" })).errorCode, "REQUIREMENTS_READ_REQUIRED");
+
+      // Start — response carries the composite ref only after target-scoped requirements are delivered.
+      const scopedRequirements = await host.runTool("requirement_list", { phaseRef: "P001(F001)" });
+      assert.equal(toolDetails(scopedRequirements).readScope, "target");
+      assert.deepEqual(toolDetails(scopedRequirements).attestedRequirementIds, toolDetails(deniedWithoutRequirements).requirementIds);
       const preservedWorkDone = "Metadata committed after Pi read the task context.";
       await host.runTool("feature_update", { featureId: "F001", workDone: preservedWorkDone });
       const started = await host.runTool("task_start", { taskId: "T001" });
@@ -848,7 +857,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         "task_get P001(F001)/T001 with full=true",
         "phase_get P001(F001) with full=true",
         "feature_get F001 with full=true",
-        "requirement_list",
+        "requirement_list with phaseRef=P001(F001)",
         "Retry task_start P001(F001)/T001",
       ]);
     } finally {
@@ -860,7 +869,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     const host = await createPiHost({ name: "t379-rejected-handoff", seed: "minimal" });
     try {
       const phase = (await host.store.loadAllPhases())[0];
-      await host.store.setPhaseHandoff(phase.id, "# rejected through Pi");
+      await host.store.setPhaseHandoff(phase.id, "# rejected through Pi\n\n- [.planner/docs/p097-closeout.md](.planner/docs/p097-closeout.md)");
 
       const updated = await host.runTool("task_update", {
         taskId: "T001",
@@ -874,6 +883,13 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(persisted.handoff, "");
       assert.equal(persisted.handoffHistory[0].reason, "phase-rejected");
       assert.equal(toolDetails(await host.runTool("handoff_list", {})).count, 0);
+      const archived = await host.runTool("handoff_show", { phaseRef: "P001" });
+      assert.match(toolText(archived), /Archived terminal-phase handoff/);
+      assert.match(toolText(archived), /rejected through Pi/);
+      assert.match(toolText(archived), /.planner\/docs\/p097-closeout\.md/);
+      assert.equal(toolDetails(archived).archived, true);
+      assert.equal(toolDetails(archived).archiveReason, "phase-rejected");
+      assert.equal(toolDetails(archived).active, false);
     } finally {
       await closePiHost(host);
     }

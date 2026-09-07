@@ -33,7 +33,20 @@ type ReadState = {
   nextSequence: number;
 };
 
-export type ContextReadEntityKind = "task" | "phase" | "feature";
+export type ContextReadEntityKind = "task" | "phase" | "feature" | "requirement";
+export type CanonicalFullReadEntityKind = "task" | "phase" | "feature";
+
+type CanonicalReadEntity = ReadTrackedEntity & {
+  id: string;
+  acceptedDecisions?: Array<{
+    id: string;
+    title: string;
+    decision: string;
+    rationale: string;
+    implementationNotes: string;
+    acceptedAt: string;
+  }>;
+};
 
 export type RequiredContextRead = {
   kind: ContextReadEntityKind;
@@ -113,6 +126,44 @@ export function markFeatureReadForSessionId(sessionId: string, featureId: string
   markFeatureReadForSession(sessionId, featureId);
 }
 
+function deliveredAcceptedDecisionField(content: string, value: string): boolean {
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return lines.every((line) => content.includes(line));
+}
+
+/**
+ * Record a canonical feature/phase/task full read only after its visible tool
+ * content contains every field of every Accepted Decision. This prevents an
+ * adapter from certifying a title-only or otherwise incomplete decision read.
+ */
+export function markCanonicalFullReadForSessionId(
+  sessionId: string,
+  kind: CanonicalFullReadEntityKind,
+  entity: CanonicalReadEntity,
+  deliveredContent: string,
+): void {
+  const acceptedDecisions = entity.acceptedDecisions ?? [];
+  const omitted = [
+    ...(!deliveredContent.includes(`Accepted Decisions (${acceptedDecisions.length}):`) ? ["context-marker"] : []),
+    ...acceptedDecisions.flatMap((acceptedDecision) => ([
+      ["id", acceptedDecision.id],
+      ["title", acceptedDecision.title],
+      ["decision", acceptedDecision.decision],
+      ["rationale", acceptedDecision.rationale],
+      ["implementationNotes", acceptedDecision.implementationNotes],
+      ["acceptedAt", acceptedDecision.acceptedAt],
+    ] as const)
+      .filter(([, value]) => !deliveredAcceptedDecisionField(deliveredContent, value))
+      .map(([field]) => `${acceptedDecision.id}.${field}`)),
+  ];
+  if (omitted.length > 0) {
+    throw new Error(`Cannot attest ${kind} ${entity.id} as fully read: omitted Accepted Decision fields: ${omitted.join(", ")}.`);
+  }
+  if (kind === "feature") markFeatureReadForSession(sessionId, entity.id);
+  else if (kind === "phase") markPhaseReadForSession(sessionId, entity.id);
+  else markTaskReadForSession(sessionId, entity.id);
+}
+
 /** Record a full phase read in the default compatibility session. */
 export function markPhaseRead(phaseId: string, _featureId?: string): void {
   markPhaseReadForSession(DEFAULT_SESSION_ID, phaseId);
@@ -159,7 +210,7 @@ function orderedEligibility(sessionId: string, taskId: string, phaseId: string, 
 
 type StoredReadState = "valid" | "missing" | "stale";
 
-function entityRevision(entity: ReadTrackedEntity, kind: ContextReadEntityKind | "requirement"): string {
+function entityRevision(entity: ReadTrackedEntity, kind: ContextReadEntityKind): string {
   if ((kind === "phase" || kind === "feature") && entity.descriptionUpdatedAt?.trim()) {
     return entity.descriptionUpdatedAt;
   }
@@ -169,7 +220,7 @@ function entityRevision(entity: ReadTrackedEntity, kind: ContextReadEntityKind |
 function storedReadState(
   entity: ReadTrackedEntity | undefined,
   sessionId: string,
-  kind: ContextReadEntityKind | "requirement",
+  kind: ContextReadEntityKind,
 ): StoredReadState {
   const entry = entity?.sessionInfo?.find((candidate) => candidate.sessionId === sessionId);
   if (!entity || !entry) return "missing";
@@ -179,7 +230,7 @@ function storedReadState(
 function validSessionInfo(
   entity: ReadTrackedEntity | undefined,
   sessionId: string,
-  kind: ContextReadEntityKind | "requirement" = "requirement",
+  kind: ContextReadEntityKind = "requirement",
 ): boolean {
   return storedReadState(entity, sessionId, kind) === "valid";
 }
@@ -275,16 +326,34 @@ export function hasReadParents(featureId: string | undefined, phaseId: string): 
 }
 
 /**
- * Whether linked requirements are read in memory or have valid persisted
- * attestations for the current session and entity revisions.
+ * Report the exact linked requirements whose delivered read evidence is missing
+ * or stale for this session. A broad requirement inventory must not call the
+ * mark function; only a target-scoped response that actually includes the
+ * linked requirement records may create fresh in-memory evidence.
  */
+export function requirementReadEligibilityForSession(
+  sessionId: string,
+  requirementIds: string[],
+  requirements: Array<ReadTrackedEntity & { id: string }> = [],
+): ContextReadEligibility {
+  const state = stateFor(sessionId);
+  const requiredReads: RequiredContextRead[] = [];
+  for (const id of [...new Set(requirementIds)]) {
+    const stored = storedReadState(requirements.find((requirement) => requirement.id === id), sessionId, "requirement");
+    if (state.requirements.has(id) || stored === "valid") continue;
+    requiredReads.push({ kind: "requirement", id, state: stored === "stale" ? "stale" : "missing" });
+  }
+  if (requiredReads.length === 0) return { eligible: true, reason: "" };
+  return { eligible: false, reason: requiredReadReason(requiredReads), requiredReads };
+}
+
+/** Whether every linked requirement has fresh delivered read evidence. */
 export function hasReadRequirementsForSession(
   sessionId: string,
   requirementIds: string[],
   requirements: Array<ReadTrackedEntity & { id: string }> = [],
 ): boolean {
-  const state = stateFor(sessionId);
-  return requirementIds.every((id) => state.requirements.has(id) || validSessionInfo(requirements.find((requirement) => requirement.id === id), sessionId));
+  return requirementReadEligibilityForSession(sessionId, requirementIds, requirements).eligible;
 }
 
 /** Legacy requirement check for the default compatibility session. */

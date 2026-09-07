@@ -104,7 +104,8 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   assert.match(plannerCommand, /## Handoff protocol/);
   assert.match(plannerCommand, /branch and worktree; commands and tools/);
   assert.match(plannerCommand, /HANDOFF_COMPLETENESS_AUDIT_REQUIRED/);
-  assert.match(plannerCommand, /compact paginated summary-only index/);
+  assert.match(plannerCommand, /compact paginated index of active handoffs/);
+  assert.match(plannerCommand, /latest terminal archive/);
   assert.doesNotMatch(plannerCommand, /read the exact lineage in this order/);
   const claudeSettings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
   assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write"));

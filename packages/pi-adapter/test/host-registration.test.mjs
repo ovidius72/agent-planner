@@ -72,6 +72,10 @@ describe("pi-adapter host harness", () => {
         assert.equal(typeof tool.execute, "function", `tool ${name} has execute`);
       }
 
+      const requirementList = host.tools.get("requirement_list");
+      assert.ok(requirementList.parameters.properties.phaseRef, "requirement_list exposes optional target-scoped phaseRef delivery");
+      assert.ok(!requirementList.parameters.required?.includes("phaseRef"), "unscoped requirement inventory remains backward compatible");
+
       // Every lifecycle hook the adapter subscribes to.
       for (const event of EXPECTED_HOOKS) {
         assert.equal(typeof host.handlers.get(event), "function", `hook ${event} registered`);
@@ -273,6 +277,59 @@ describe("pi-adapter host harness", () => {
       assert.equal(missingDecision.isError, true);
       assert.equal(toolDetails(missingDecision).updated, false);
       assert.equal(toolDetails(missingDecision).errorCode, "ACCEPTED_DECISION_NOT_FOUND");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("full reads, task start, and agent context deliver canonical Accepted Decisions", async () => {
+    const host = await createPiHost({ name: "t368-decision-context", seed: "minimal" });
+    try {
+      const targets = [
+        { targetType: "project", title: "Project decision" },
+        { targetType: "feature", targetRef: "F001", title: "Feature decision" },
+        { targetType: "phase", targetRef: "P001", title: "Phase decision" },
+        { targetType: "task", targetRef: "T001", title: "Task decision" },
+      ];
+      for (const target of targets) {
+        const created = await host.runTool("accepted_decision_create", {
+          ...target,
+          decision: `Apply ${target.title}.`,
+          rationale: `Rationale for ${target.title}.`,
+          implementationNotes: `Implementation notes for ${target.title}.`,
+        });
+        assert.equal(toolDetails(created).created, true);
+      }
+
+      const plan = await host.runTool("plan_get", {});
+      assert.match(toolText(plan), /Project decision/);
+      assert.equal(toolDetails(plan).project.acceptedDecisions[0].rationale, "Rationale for Project decision.");
+
+      for (const [tool, params, title] of [
+        ["feature_get", { featureId: "F001", full: true }, "Feature decision"],
+        ["phase_get", { phaseId: "P001", full: true }, "Phase decision"],
+        ["task_get", { taskId: "T001", full: true }, "Task decision"],
+      ]) {
+        const result = await host.runTool(tool, params);
+        assert.match(toolText(result), new RegExp(title));
+        assert.match(toolText(result), new RegExp(`Rationale for ${title}`));
+        assert.equal(toolDetails(result)[tool.split("_")[0]].acceptedDecisions[0].implementationNotes, `Implementation notes for ${title}.`);
+      }
+
+      await host.runTool("requirement_list", { phaseRef: "P001" });
+      const started = await host.runTool("task_start", { taskId: "T001" });
+      for (const title of targets.map((target) => target.title)) assert.match(toolText(started), new RegExp(title));
+
+      const loaded = await host.runTool("planner-load", {});
+      assert.doesNotMatch(toolText(loaded), /Project decision/, "Accepted Decision agent context must not leak into the human recap");
+      const before = await host.emit("before_agent_start", {
+        type: "before_agent_start",
+        prompt: "continue",
+        systemPrompt: "base-system-prompt",
+        systemPromptOptions: {},
+      });
+      for (const title of targets.map((target) => target.title)) assert.match(before.systemPrompt, new RegExp(title));
+      assert.match(before.systemPrompt, /Implementation notes for Task decision/);
     } finally {
       await closePiHost(host);
     }

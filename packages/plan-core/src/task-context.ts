@@ -1,5 +1,57 @@
-import type { Feature, Phase, Requirement } from "./schema.js";
+import type { AcceptedDecision, Feature, Phase, Project, Requirement, Task } from "./schema.js";
 import { formatPhaseRef } from "./naming.js";
+
+export const MAX_ACCEPTED_DECISION_CONTEXT_CHARS = 8_000;
+
+export interface ScopedAcceptedDecisions {
+  scope: string;
+  decisions: AcceptedDecision[] | undefined;
+}
+
+function indentDecisionValue(value: string): string {
+  const normalized = value.trim() || "(not provided)";
+  return normalized.split(/\r?\n/).map((line) => `    ${line}`).join("\n");
+}
+
+/** Render every canonical field needed to understand an Accepted Decision. */
+export function renderAcceptedDecisionsSection(label: string, decisions: AcceptedDecision[] | undefined): string {
+  const entries = decisions ?? [];
+  const lines = [`${label} (${entries.length}):`];
+  if (entries.length === 0) return `${lines[0]}\n  - None.`;
+  for (const decision of entries) {
+    lines.push(`  - ${decision.title}`);
+    lines.push(`    ID: ${decision.id}`);
+    lines.push(`    Accepted at: ${decision.acceptedAt}`);
+    lines.push("    Decision:");
+    lines.push(indentDecisionValue(decision.decision));
+    lines.push("    Rationale:");
+    lines.push(indentDecisionValue(decision.rationale));
+    lines.push("    Implementation notes:");
+    lines.push(indentDecisionValue(decision.implementationNotes));
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Build bounded ambient/load context. This is an orientation summary, not a
+ * full-read attestation: truncation is explicit and points to entity full reads.
+ */
+export function buildBoundedAcceptedDecisionContext(
+  scopes: ScopedAcceptedDecisions[],
+  maxChars = MAX_ACCEPTED_DECISION_CONTEXT_CHARS,
+): { content: string; total: number; truncated: boolean; maxChars: number } {
+  const populated = scopes
+    .map((scope) => ({ ...scope, decisions: scope.decisions ?? [] }))
+    .filter((scope) => scope.decisions.length > 0);
+  const total = populated.reduce((count, scope) => count + scope.decisions.length, 0);
+  const full = total === 0
+    ? "Accepted decisions: none."
+    : populated.map((scope) => renderAcceptedDecisionsSection(`Accepted decisions — ${scope.scope}`, scope.decisions)).join("\n\n");
+  if (full.length <= maxChars) return { content: full, total, truncated: false, maxChars };
+  const suffix = "\n\n[Accepted Decision context truncated for transport safety. Use the relevant full entity read to retrieve every canonical field.]";
+  const limit = Math.max(0, maxChars - suffix.length);
+  return { content: `${full.slice(0, limit)}${suffix}`.slice(0, maxChars), total, truncated: true, maxChars };
+}
 
 /**
  * Build a compact, agent-facing context block that surfaces the PARENT PHASE
@@ -19,6 +71,8 @@ export function buildPhaseContextBlock(
   feature: Feature | undefined,
   linkedRequirements: Requirement[] = [],
   featureRequirements: Requirement[] = [],
+  task?: Pick<Task, "acceptedDecisions">,
+  project?: Pick<Project, "acceptedDecisions">,
 ): string {
   const lines: string[] = [];
   const phaseRef = formatPhaseRef(phase.number, feature?.number);
@@ -34,6 +88,12 @@ export function buildPhaseContextBlock(
   };
 
   lines.push(`\n📋 Task context — read this BEFORE touching code:`);
+  lines.push(`\n${buildBoundedAcceptedDecisionContext([
+    ...(project ? [{ scope: "project", decisions: project.acceptedDecisions }] : []),
+    ...(feature ? [{ scope: `feature F${String(feature.number).padStart(3, "0")}`, decisions: feature.acceptedDecisions }] : []),
+    { scope: `phase ${phaseRef}`, decisions: phase.acceptedDecisions },
+    ...(task ? [{ scope: "task", decisions: task.acceptedDecisions }] : []),
+  ]).content}`);
   if (feature) {
     lines.push(`Feature F${String(feature.number).padStart(3, "0")} — ${feature.name}`);
     if (feature.description && feature.description.trim()) {

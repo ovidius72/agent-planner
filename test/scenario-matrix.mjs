@@ -671,8 +671,9 @@ export const scenarios = [
     category: "lifecycle",
     harnesses: ["core", "api", "mcp", "pi"],
     fixture: "minimal",
-    surfaces: ["core.updatePhase", "api.updateTask", "mcp.taskStart", "mcp.taskComplete", "pi.tool.taskStart", "pi.tool.taskComplete"],
+    surfaces: ["core.updatePhase", "core.requirementReadEligibility", "api.updateTask", "mcp.requirementList", "mcp.taskStart", "mcp.taskComplete", "pi.tool.requirementList", "pi.tool.taskStart", "pi.tool.taskComplete"],
     steps: [
+      "Deliver only the task target's linked Requirements; assert broad unscoped inventories do not create read attestations and missing/stale diagnostics name the exact Requirement IDs.",
       "Start a planned task; assert startedAt is set and status in-progress.",
       "Complete it; assert completedAt is set and status done.",
       "Assert the statusLog gained entries for both transitions.",
