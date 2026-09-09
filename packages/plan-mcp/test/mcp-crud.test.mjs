@@ -364,14 +364,21 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
       notes: "Provider behavior verified.",
       decisions: ["Retry idempotently"],
       checklist: ["Review", "Execute"],
+      subtasks: [{ title: "Validate provider", description: "Check contract" }, { title: "Execute refund" }],
     });
     assert.equal(toolStructured(parityUpdate).updated, true);
-    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes"]);
+    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes", "subtasks"]);
     const parityTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(parityTask.descriptionRef, ".planner/docs/tasks/refund-flow.md");
     assert.equal(parityTask.notes, "Provider behavior verified.");
     assert.deepEqual(parityTask.decisions, ["Retry idempotently"]);
     assert.deepEqual(parityTask.checklist.map((item) => item.title), ["Review", "Execute"]);
+    assert.deepEqual(parityTask.subtasks.map((item) => item.title), ["Validate provider", "Execute refund"]);
+    assert.ok(parityTask.subtasks.every((item) => item.id && item.id !== "forged-subtask"), "subtask IDs are planner-owned and non-empty");
+
+    const forgedSubtask = await callTool(session, "planner-task-update", { task: "T002", subtasks: [{ id: "forged-subtask", title: "Invalid" }] });
+    assert.equal(forgedSubtask.isError, true);
+    assert.equal(toolStructured(forgedSubtask).errorCode, "SUBTASK_ID_INVALID");
 
     // status gate: blocked without motivation → error, no mutation
     const noMotivation = await callTool(session, "planner-task-update", { task: "T002", status: "blocked" });

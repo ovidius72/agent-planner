@@ -27,6 +27,7 @@ import {
   PhaseSchema,
   type Phase,
   type Task,
+  type Subtask,
   TaskSchema,
   type TaskPauseSnapshot,
   TaskPauseSnapshotSchema,
@@ -3276,6 +3277,81 @@ export class PlanStore {
       return phase;
     });
     return reopened!;
+  }
+
+  /** Add a validated dependency edge from one task to another. */
+  async addTaskDependency(phaseId: string, taskId: string, dependencyId: string, timestamp = nowISO()): Promise<Task> {
+    const phases = await this.loadAllPhases();
+    const tasks = phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
+    const source = tasks.find((entry) => entry.phase.id === phaseId && entry.task.id === taskId);
+    const dependency = tasks.find((entry) => entry.task.id === dependencyId);
+    if (!source) throw new PlanStoreError("Task not found.", undefined, { errorCode: "TASK_NOT_FOUND" });
+    if (!dependency) throw new PlanStoreError("Dependency task not found.", undefined, { errorCode: "DEPENDENCY_TASK_NOT_FOUND" });
+    if (taskId === dependencyId) throw new PlanStoreError("A task cannot depend on itself.", undefined, { errorCode: "DEPENDENCY_SELF" });
+    if (source.task.dependsOn.includes(dependencyId)) return source.task;
+    const graph = new Map(tasks.map(({ task }) => [task.id, [...task.dependsOn]]));
+    graph.set(taskId, [...(graph.get(taskId) ?? []), dependencyId]);
+    const visit = (id: string, path = new Set<string>()): boolean => { if (path.has(id)) return true; const next = new Set(path); next.add(id); return (graph.get(id) ?? []).some((child) => visit(child, next)); };
+    if (visit(taskId)) throw new PlanStoreError("Dependency would create a cycle.", undefined, { errorCode: "DEPENDENCY_CYCLE" });
+    return (await this.updateTask(phaseId, taskId, (task) => ({ ...task, dependsOn: [...task.dependsOn, dependencyId], updatedAt: timestamp }))).task;
+  }
+
+  /** Remove a dependency edge without affecting either task. */
+  async deleteTaskDependency(phaseId: string, taskId: string, dependencyId: string): Promise<Task> {
+    return (await this.updateTask(phaseId, taskId, (task) => {
+      if (!task.dependsOn.includes(dependencyId)) throw new PlanStoreError("Dependency not found.", undefined, { errorCode: "DEPENDENCY_NOT_FOUND" });
+      return { ...task, dependsOn: task.dependsOn.filter((id) => id !== dependencyId), updatedAt: nowISO() };
+    })).task;
+  }
+
+  /** Create a planner-owned subtask with a stable ID under a task. */
+  async createSubtask(phaseId: string, taskId: string, input: { title: string; description?: string; status?: Subtask["status"] }, timestamp = nowISO()): Promise<Subtask> {
+    const title = input.title.trim();
+    if (!title) throw new PlanStoreError("Subtask title is required.", undefined, { errorCode: "SUBTASK_TITLE_REQUIRED" });
+    let created: Subtask | undefined;
+    await this.updateTask(phaseId, taskId, (task) => {
+      created = { id: randomUUID(), title, status: input.status ?? "planned", description: input.description?.trim() ?? "", createdAt: timestamp, updatedAt: timestamp };
+      task.subtasks = [...(task.subtasks ?? []), created];
+      return task;
+    });
+    return created!;
+  }
+
+  /** Update a subtask by its parent task and planner-owned ID. */
+  async updateSubtask(phaseId: string, taskId: string, subtaskId: string, input: Partial<Pick<Subtask, "title" | "description" | "status">>, timestamp = nowISO()): Promise<Subtask> {
+    let updated: Subtask | undefined;
+    await this.updateTask(phaseId, taskId, (task) => {
+      const index = (task.subtasks ?? []).findIndex((subtask) => subtask.id === subtaskId);
+      if (index < 0) throw new PlanStoreError(`Subtask ${subtaskId} was not found.`, undefined, { errorCode: "SUBTASK_NOT_FOUND" });
+      const current = task.subtasks[index]!;
+      if (input.title !== undefined && !input.title.trim()) throw new PlanStoreError("Subtask title is required.", undefined, { errorCode: "SUBTASK_TITLE_REQUIRED" });
+      updated = { ...current, ...(input.title !== undefined ? { title: input.title.trim() } : {}), ...(input.description !== undefined ? { description: input.description.trim() } : {}), ...(input.status !== undefined ? { status: input.status } : {}), updatedAt: timestamp };
+      task.subtasks = task.subtasks.map((candidate, candidateIndex) => candidateIndex === index ? updated! : candidate);
+      return task;
+    });
+    return updated!;
+  }
+
+  /** Delete a subtask by its planner-owned ID. */
+  async deleteSubtask(phaseId: string, taskId: string, subtaskId: string): Promise<void> {
+    await this.updateTask(phaseId, taskId, (task) => {
+      if (!(task.subtasks ?? []).some((subtask) => subtask.id === subtaskId)) throw new PlanStoreError(`Subtask ${subtaskId} was not found.`, undefined, { errorCode: "SUBTASK_NOT_FOUND" });
+      task.subtasks = task.subtasks.filter((subtask) => subtask.id !== subtaskId);
+      return task;
+    });
+  }
+
+  /** Reorder subtasks without changing their stable identities. */
+  async reorderSubtasks(phaseId: string, taskId: string, orderedIds: string[]): Promise<Subtask[]> {
+    let ordered: Subtask[] = [];
+    await this.updateTask(phaseId, taskId, (task) => {
+      const current = task.subtasks ?? [];
+      if (orderedIds.length !== current.length || new Set(orderedIds).size !== current.length || orderedIds.some((id) => !current.some((subtask) => subtask.id === id))) throw new PlanStoreError("Subtask order must contain every existing subtask exactly once.", undefined, { errorCode: "SUBTASK_ORDER_INVALID" });
+      ordered = orderedIds.map((id) => current.find((subtask) => subtask.id === id)!);
+      task.subtasks = ordered;
+      return task;
+    });
+    return ordered;
   }
 
   // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────

@@ -2,13 +2,14 @@ import { watch, existsSync, readFileSync, statSync } from "node:fs";
 import { lstat, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { networkInterfaces } from "node:os";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, type MacroTaskMutationInput } from "@agent-plan/core";
-import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
+import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
 // ─── Watcher ────────────────────────────────────────────────────────────
@@ -1189,6 +1190,20 @@ app.put(route("/docs/save"), async (c) => {
     }
   }));
 
+  app.post(route("/tasks/:id/dependencies"), async (c) => store.runBatch(async () => {
+    const taskId = c.req.param("id") ?? ""; const body = await c.req.json<{ phaseId?: string; dependsOnId?: string }>();
+    if (!body.phaseId || !body.dependsOnId) return c.json({ updated: false, errorCode: "DEPENDENCY_INPUT_REQUIRED" }, 400);
+    try { const result = await store.addTaskDependency(body.phaseId, taskId, body.dependsOnId); await store.writeGenerated(); return c.json({ updated: true, task: result }); }
+    catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return c.json({ updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_UPDATE_FAILED", message: error instanceof Error ? error.message : "Dependency update failed." }, 400); }
+  }));
+
+  app.delete(route("/tasks/:id/dependencies/:dependencyId"), async (c) => store.runBatch(async () => {
+    const taskId = c.req.param("id") ?? ""; const dependencyId = c.req.param("dependencyId") ?? ""; const body = await c.req.json<{ phaseId?: string; confirmed?: boolean }>().catch(() => ({} as { phaseId?: string; confirmed?: boolean }));
+    if (!body.phaseId || body.confirmed !== true) return c.json({ updated: false, errorCode: "CONFIRMATION_REQUIRED" }, 400);
+    try { const result = await store.deleteTaskDependency(body.phaseId, taskId, dependencyId); await store.writeGenerated(); return c.json({ updated: true, task: result }); }
+    catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return c.json({ updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_DELETE_FAILED", message: error instanceof Error ? error.message : "Dependency deletion failed." }, 400); }
+  }));
+
   app.get(route("/tasks/:id"), async (c) => {
     const taskId = c.req.param("id");
     const phases = await store.loadAllPhases();
@@ -1198,6 +1213,49 @@ app.put(route("/docs/save"), async (c) => {
     }
     return c.json({ error: "task not found" }, 404);
   });
+
+  app.post(route("/tasks/:id/subtasks"), async (c) => store.runBatch(async () => {
+    const taskId = c.req.param("id") ?? "";
+    const body = await c.req.json<{ phaseId?: string; title?: string; description?: string; status?: Subtask["status"] }>();
+    if (!body.phaseId) return c.json({ errorCode: "PHASE_ID_REQUIRED", created: false }, 400);
+    const task = (await store.loadPhase(body.phaseId).catch(() => null))?.tasks.find((candidate) => candidate.id === taskId);
+    if (!task) return c.json({ errorCode: "TASK_NOT_FOUND", created: false }, 404);
+    try {
+      const subtask = await store.createSubtask(body.phaseId, taskId, { title: body.title ?? "", ...(body.description !== undefined ? { description: body.description } : {}), ...(body.status !== undefined ? { status: body.status } : {}) });
+      await store.writeGenerated();
+      return c.json({ created: true, subtask, task: (await store.loadPhase(body.phaseId)).tasks.find((candidate) => candidate.id === taskId) }, 201);
+    } catch (error) {
+      const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined;
+      return c.json({ created: false, errorCode: details?.errorCode ?? "SUBTASK_CREATE_FAILED", message: error instanceof Error ? error.message : "Subtask creation failed." }, 400);
+    }
+  }));
+
+  app.put(route("/tasks/:id/subtasks/:subtaskId"), async (c) => store.runBatch(async () => {
+    const taskId = c.req.param("id") ?? ""; const subtaskId = c.req.param("subtaskId") ?? "";
+    const body = await c.req.json<{ phaseId?: string; title?: string; description?: string; status?: Subtask["status"] }>();
+    if (!body.phaseId) return c.json({ errorCode: "PHASE_ID_REQUIRED", updated: false }, 400);
+    try {
+      const subtask = await store.updateSubtask(body.phaseId, taskId, subtaskId, { ...(body.title !== undefined ? { title: body.title } : {}), ...(body.description !== undefined ? { description: body.description } : {}), ...(body.status !== undefined ? { status: body.status } : {}) });
+      await store.writeGenerated(); return c.json({ updated: true, subtask });
+    } catch (error) {
+      const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined;
+      return c.json({ updated: false, errorCode: details?.errorCode ?? "SUBTASK_UPDATE_FAILED", message: error instanceof Error ? error.message : "Subtask update failed." }, 400);
+    }
+  }));
+
+  app.delete(route("/tasks/:id/subtasks/:subtaskId"), async (c) => store.runBatch(async () => {
+    const taskId = c.req.param("id") ?? ""; const subtaskId = c.req.param("subtaskId") ?? ""; const body = await c.req.json<{ phaseId?: string; confirmed?: boolean }>().catch(() => ({} as { phaseId?: string; confirmed?: boolean }));
+    if (!body.phaseId || body.confirmed !== true) return c.json({ deleted: false, errorCode: body.confirmed === true ? "PHASE_ID_REQUIRED" : "CONFIRMATION_REQUIRED" }, 400);
+    try { await store.deleteSubtask(body.phaseId, taskId, subtaskId); await store.writeGenerated(); return c.json({ deleted: true, subtaskId }); }
+    catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return c.json({ deleted: false, errorCode: details?.errorCode ?? "SUBTASK_DELETE_FAILED", message: error instanceof Error ? error.message : "Subtask deletion failed." }, 400); }
+  }));
+
+  app.put(route("/tasks/:id/subtasks/order"), async (c) => store.runBatch(async () => {
+    const taskId = c.req.param("id") ?? ""; const body = await c.req.json<{ phaseId?: string; orderedIds?: string[] }>();
+    if (!body.phaseId || !Array.isArray(body.orderedIds)) return c.json({ updated: false, errorCode: "SUBTASK_ORDER_INVALID" }, 400);
+    try { const subtasks = await store.reorderSubtasks(body.phaseId, taskId, body.orderedIds); await store.writeGenerated(); return c.json({ updated: true, subtasks }); }
+    catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return c.json({ updated: false, errorCode: details?.errorCode ?? "SUBTASK_ORDER_INVALID", message: error instanceof Error ? error.message : "Subtask reorder failed." }, 400); }
+  }));
 
   app.put(route("/tasks/:id"), async (c) => store.runBatch(async () => {
     const taskId = c.req.param("id");
@@ -1209,7 +1267,7 @@ app.put(route("/docs/save"), async (c) => {
     const existing = phase.tasks.find((task) => task.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
     if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
-    const mutableFields = ["title", "description", "descriptionRef", "status", "notes", "decisions", "priority", "checklist"];
+    const mutableFields = ["title", "description", "descriptionRef", "status", "notes", "decisions", "priority", "checklist", "subtasks"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
 
     if (body.status && body.status !== existing.status && (body.status === "in-progress" || (body.status as string) === "paused" || (existing.status as string) === "paused")) {
@@ -1230,6 +1288,10 @@ app.put(route("/docs/save"), async (c) => {
       }
     }
 
+    if (body.subtasks !== undefined) {
+      const existingSubtaskIds = new Set(existing.subtasks.map((subtask) => subtask.id));
+      if (body.subtasks.some((subtask) => subtask.id !== undefined && !existingSubtaskIds.has(subtask.id))) return c.json({ updated: false, errorCode: "SUBTASK_ID_INVALID", message: "Subtask IDs must belong to the target task." }, 400);
+    }
     const now = nowISO();
     const expectedUpdatedAt = body.expectedUpdatedAt ?? body.updatedAt;
     const result = await store.updateTask(phase.id, existing.id, (current) => {
@@ -1244,6 +1306,7 @@ app.put(route("/docs/save"), async (c) => {
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(body.decisions !== undefined ? { decisions: body.decisions } : {}),
         ...(body.checklist !== undefined ? { checklist: body.checklist } : {}),
+        ...(body.subtasks !== undefined ? { subtasks: body.subtasks.map((subtask) => ({ ...subtask, id: subtask.id || randomUUID(), title: subtask.title.trim(), description: subtask.description ?? "", status: subtask.status ?? "planned", createdAt: subtask.createdAt || now, updatedAt: now })) } : {}),
         updatedAt: now,
       };
       if (body.status !== undefined) applyTaskLifecycleDates(next, body.status, now);

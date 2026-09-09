@@ -199,7 +199,7 @@ The MCP adapter publishes these tools:
 - Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-accepted-decision-create`, `planner-accepted-decision-update`, `planner-accepted-decision-delete`, `planner-requirement-list`, `planner-requirement-create`, `planner-requirement-update`, `planner-requirement-delete`.
 - Features: `planner-feature-list`, `planner-feature-add`, `planner-feature-show`, `planner-feature-discuss`, `planner-feature-update`, `planner-feature-delete`.
 - Phases: `planner-phase-list`, `planner-phase-add`, `planner-phase-show`, `planner-phase-discuss`, `planner-phase-update`, `planner-phase-delete`.
-- Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-reopen`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
+- Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-dependency-add`, `planner-task-dependency-delete`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-reopen`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
 - Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
 
 ## Pi tool inventory
@@ -211,7 +211,7 @@ The Pi adapter registers these tools:
 - Plan: `plan_init`, `plan_get`, `description_freshness`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
 - Features: `feature_list`, `feature_get`, `feature_create`, `feature_discuss`, `feature_update`, `feature_delete`.
 - Phases and decisions: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record`.
-- Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_reopen`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
+- Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_dependency_add`, `task_dependency_delete`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_reopen`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
 - Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_verify`, `handoff_clear`.
 - Dashboard and lifecycle: `planner-web`, `planner-load`, `planner-stop`.
 - Deprecated compatibility aliases: `plan_get_handoff`, `plan_write_handoff`, `plan_delete_handoff`. Prefer the entity-scoped handoff tools.

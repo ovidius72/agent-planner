@@ -10,7 +10,7 @@ import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivat
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
-import type { Feature, Phase, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
+import type { Feature, Phase, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -1634,6 +1634,27 @@ server.registerTool("planner-task-discuss", {
   return writeAndSummarize(st, `✅ Task discussed/updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { task: t, discussed: true, updatedFields: receivedFields });
 });
 
+server.registerTool("planner-task-dependency-add", {
+  description: "Add a validated task dependency atomically; rejects self-dependencies, foreign tasks, and cycles.",
+  inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1) },
+}, async ({ task: ref, dependsOn }, extra) => {
+  const st = await requireStore(); const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, ref); const dependency = findTaskByRef(await st.loadAllPhases(), features, dependsOn);
+  if (!found || !dependency) return { ...text("Dependency target not found.", { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }), isError: true };
+  try { const result = await st.addTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return text(`✅ Dependency added: ${taskCompositeRef(found.task, found.phase, features)} depends on ${taskCompositeRef(dependency.task, dependency.phase, features)}.`, { updated: true, task: result }); }
+  catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { ...text(error instanceof Error ? error.message : "Dependency update failed.", { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_UPDATE_FAILED" }), isError: true }; }
+});
+
+server.registerTool("planner-task-dependency-delete", {
+  description: "Remove a task dependency atomically after explicit confirmation.",
+  inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1), confirmed: z.boolean() },
+}, async ({ task: ref, dependsOn, confirmed }) => {
+  if (!confirmed) return { ...text("Explicit confirmation is required to remove a dependency.", { updated: false, errorCode: "CONFIRMATION_REQUIRED" }), isError: true };
+  const st = await requireStore(); const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, ref); const dependency = findTaskByRef(await st.loadAllPhases(), features, dependsOn);
+  if (!found || !dependency) return { ...text("Dependency target not found.", { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }), isError: true };
+  try { const result = await st.deleteTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return text("✅ Dependency removed.", { updated: true, task: result }); }
+  catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { ...text(error instanceof Error ? error.message : "Dependency deletion failed.", { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_DELETE_FAILED" }), isError: true }; }
+});
+
 server.registerTool("planner-task-update", {
   description: "Update task fields. A motivation is REQUIRED when changing to blocked, canceled, deferred, rejected, waiting, or back to planned from another status.",
   inputSchema: {
@@ -1647,8 +1668,9 @@ server.registerTool("planner-task-update", {
     motivation: z.string().optional(),
     priority: z.number().int().nonnegative().optional().describe("Display order within the phase (lower = higher)."),
     checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Agents should tick steps via planner-task-checklist-toggle, not write DONE in titles."),
+    subtasks: z.array(z.object({ id: z.string().optional(), title: z.string().min(1), description: z.string().optional(), status: z.enum(STATUS_VALUES).optional() })).optional().describe("Replace subtasks; existing IDs must belong to this task and omitted IDs are planner-generated."),
   },
-}, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist }) => {
+}, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -1670,8 +1692,8 @@ server.registerTool("planner-task-update", {
     }
   }
 
-  const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "decisions", "motivation", "priority", "checklist"] as const;
-  const updateInputs = { title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist };
+  const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "decisions", "motivation", "priority", "checklist", "subtasks"] as const;
+  const updateInputs = { title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks };
   const receivedFields = mutableFields.filter((field) => updateInputs[field] !== undefined);
   if (receivedFields.length === 0) {
     return mutationNoFieldsFailure({
@@ -1690,6 +1712,12 @@ server.registerTool("planner-task-update", {
     });
   }
 
+  if (subtasks !== undefined) {
+    const existingIds = new Set(found.task.subtasks.map((item) => item.id));
+    if (subtasks.some((item) => item.id !== undefined && !existingIds.has(item.id))) {
+      return { ...text("Subtask IDs must belong to the target task.", { updated: false, errorCode: "SUBTASK_ID_INVALID" }), isError: true };
+    }
+  }
   let updatedTask: Task | undefined;
   const timestamp = nowISO();
   await st.updatePhase(found.phase.id, (phase) => {
@@ -1712,6 +1740,13 @@ server.registerTool("planner-task-update", {
         title: item.trim(),
         checked: false,
       }));
+    }
+    if (subtasks !== undefined) {
+      const existingIds = new Set(task.subtasks.map((item) => item.id));
+      if (subtasks.some((item) => item.id !== undefined && !existingIds.has(item.id))) {
+        throw new PlanStoreError("Subtask IDs must belong to the target task.", undefined, { errorCode: "SUBTASK_ID_INVALID" });
+      }
+      task.subtasks = subtasks.map((item) => ({ id: item.id ?? randomUUID(), title: item.title.trim(), description: item.description?.trim() ?? "", status: item.status ?? "planned", createdAt: task.subtasks.find((candidate) => candidate.id === item.id)?.createdAt ?? timestamp, updatedAt: timestamp }));
     }
     if (status !== undefined && status !== task.status) {
       // Record status change in the incremental statusLog.

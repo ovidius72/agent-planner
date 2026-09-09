@@ -313,6 +313,25 @@ test("task create: 201 with global composite label and checklist transform", asy
   assert.equal(t2.body.label, `T003(P${pnum}/F001) - Run them`);
 });
 
+test("work graph lifecycle persists dependencies and subtasks atomically", async () => {
+  const fx = await startServerFixture({ name: "t374-work-graph" });
+  const phase = (await request(fx, "/phases")).body[0];
+  const first = await request(fx, `/phases/${phase.id}/tasks`, { ...json({ title: "Blocked work" }), expectStatus: 201 });
+  const prerequisite = await request(fx, `/phases/${phase.id}/tasks`, { ...json({ title: "Prerequisite" }), expectStatus: 201 });
+  const linked = await request(fx, `/tasks/${first.body.id}/dependencies`, { ...json({ phaseId: phase.id, dependsOnId: prerequisite.body.id }), expectStatus: 200 });
+  assert.deepEqual(linked.body.task.dependsOn, [prerequisite.body.id]);
+  const subtask = await request(fx, `/tasks/${first.body.id}/subtasks`, { ...json({ phaseId: phase.id, title: "Implement" }), expectStatus: 201 });
+  assert.equal(subtask.body.created, true);
+  assert.equal(subtask.body.subtask.title, "Implement");
+  const persisted = await request(fx, `/tasks/${first.body.id}`);
+  assert.equal(persisted.body.dependsOn[0], prerequisite.body.id);
+  assert.equal(persisted.body.subtasks[0].id, subtask.body.subtask.id);
+  await request(fx, `/tasks/${first.body.id}/subtasks/${subtask.body.subtask.id}`, { method: "DELETE", body: JSON.stringify({ phaseId: phase.id }), expectStatus: 400 });
+  assert.equal((await request(fx, `/tasks/${first.body.id}`)).body.subtasks.length, 1);
+  await request(fx, `/tasks/${first.body.id}/subtasks/${subtask.body.subtask.id}`, { method: "DELETE", body: JSON.stringify({ phaseId: phase.id, confirmed: true }), expectStatus: 200 });
+  assert.equal((await request(fx, `/tasks/${first.body.id}`)).body.subtasks.length, 0);
+});
+
 test("task create validation: title/phase/status governance", async () => {
   const fx = await startServerFixture({ name: "t233-task-validate" });
   const phase = (await request(fx, "/phases")).body[0];

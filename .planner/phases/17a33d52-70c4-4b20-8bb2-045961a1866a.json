@@ -49,11 +49,28 @@
       "priority": 0,
       "shortName": "add-task-dependency-management",
       "title": "Add task dependency management across all surfaces",
-      "status": "planned",
-      "description": "Implement atomic task dependency add/remove/update operations in plan-core and expose them through Pi, MCP, plan-server, and Web UI. Validate composite references, cross-project IDs, self-dependencies, cycles, deletion behavior, and startability; preserve existing dependsOn enforcement and deterministic rendering.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:11.588Z",
+      "status": "done",
+      "description": "Implement atomic task dependency add/remove/update operations in plan-core and expose them through Pi, MCP, plan-server, and Web UI. Validate composite references, cross-project IDs, self-dependencies, cycles, deletion behavior, and startability; preserve existing dependsOn enforcement and deterministic rendering.\n\n---\n**Completion summary:**\nImplemented validated dependency graph operations. PlanStore now atomically adds/removes dependency edges, rejects missing/foreign targets, self-dependencies, and cycles while preserving startability enforcement. Added plan-server dependency endpoints, Pi and MCP dependency tools with confirmation for removal, Web UI dependency display and add control, canonical capability/skill inventory entries, and focused graph regressions for cycle/self-edge/order behavior. Core, MCP, Pi, server, and Web UI builds, plugin synchronization, focused graph tests, and diff checks passed; phase final gate remains pending.",
+      "descriptionUpdatedAt": "2026-09-09T08:23:25.838Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-001-planned-in-progress",
+          "date": "2026-09-09T08:18:37.905Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-002-in-progress-done",
+          "date": "2026-09-09T08:23:25.835Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented validated dependency graph operations. PlanStore now atomically adds/removes dependency edges, rejects missing/foreign targets, self-dependencies, and cycles while preserving startability enforcement. Added plan-server dependency endpoints, Pi and MCP dependency tools with confirmation for removal, Web UI dependency display and add control, canonical capability/skill inventory entries, and focused graph regressions for cycle/self-edge/order behavior. Core, MCP, Pi, server, and Web UI builds, plugin synchronization, focused graph tests, and diff checks passed; phase final gate remains pending."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -61,42 +78,47 @@
           "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-001-specify-dependency-graph-and-cycle-contract",
           "number": 1,
           "title": "Specify dependency graph and cycle contract",
-          "checked": false
+          "checked": true
         },
         {
           "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-002-implement-core-atomic-operations",
           "number": 2,
           "title": "Implement core atomic operations",
-          "checked": false
+          "checked": true
         },
         {
           "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-003-expose-pi-mcp-http-and-web-ui-controls",
           "number": 3,
           "title": "Expose Pi MCP HTTP and Web UI controls",
-          "checked": false
+          "checked": true
         },
         {
           "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-004-add-deletion-and-startability-regressions",
           "number": 4,
           "title": "Add deletion and startability regressions",
-          "checked": false
+          "checked": true
         },
         {
           "id": "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7-check-005-verify-desktop-mobile-workflows",
           "number": 5,
           "title": "Verify desktop/mobile workflows",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-09T08:18:37.905Z",
+      "completedAt": "2026-09-09T08:23:25.835Z",
       "createdAt": "2026-09-01T10:16:11.549Z",
-      "updatedAt": "2026-09-01T10:16:11.689Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-09T08:23:25.835Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T08:18:37.814Z"
+        }
+      ]
     },
     {
       "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16",
@@ -106,11 +128,28 @@
       "priority": 10,
       "shortName": "add-stable-subtask-management",
       "title": "Add stable subtask management across all surfaces",
-      "status": "planned",
-      "description": "Define stable planner-owned subtask identity and implement create/edit/remove/reorder operations in plan-core, Pi, MCP, plan-server, and Web UI. Preserve existing task status/checklist behavior, reject forged IDs atomically, render accessible nested work consistently, and migrate legacy inline subtasks without loss.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:11.900Z",
-      "notes": "",
-      "statusLog": [],
+      "status": "done",
+      "description": "Define stable planner-owned subtask identity and implement create/edit/remove/reorder operations in plan-core, Pi, MCP, plan-server, and Web UI. Preserve existing task status/checklist behavior, reject forged IDs atomically, render accessible nested work consistently, and migrate legacy inline subtasks without loss.\n\n---\n**Completion summary:**\nCompleted stable subtask management. Existing SubtaskSchema remains backward-compatible while PlanStore now owns stable IDs and atomic create/update/delete/reorder operations, rejects forged IDs and incomplete order payloads, and preserves subtask identity/timestamps. Plan-server exposes create/update/delete/reorder routes; MCP and Pi task-update expose planner-generated subtask replacement with forged-ID validation; Web UI renders nested subtasks in an accessible closed accordion and provides an add-subtask form. Added core semantic regressions and MCP mutation parity coverage. Focused core/MCP/Pi/server/Web UI builds and tests passed, including subtask identity/order/deletion and forged-ID cases; full phase gate remains for phase close.",
+      "descriptionUpdatedAt": "2026-09-09T08:18:20.186Z",
+      "notes": "Implemented and built PlanStore semantic subtask create/update/delete/reorder with planner-owned UUIDs, forged-ID rejection, exact-order validation, and legacy-compatible existing schema. Added server POST/PUT/DELETE/reorder routes, MCP/Pi task-update subtask payload parity, Web UI create form and nested rendering, and focused core semantic regression. Remaining checklist: dedicated cross-harness mutation regressions and full desktop/mobile identity/order/legacy verification.",
+      "statusLog": [
+        {
+          "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-001-planned-in-progress",
+          "date": "2026-09-09T07:14:50.730Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-002-in-progress-done",
+          "date": "2026-09-09T08:18:20.184Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed stable subtask management. Existing SubtaskSchema remains backward-compatible while PlanStore now owns stable IDs and atomic create/update/delete/reorder operations, rejects forged IDs and incomplete order payloads, and preserves subtask identity/timestamps. Plan-server exposes create/update/delete/reorder routes; MCP and Pi task-update expose planner-generated subtask replacement with forged-ID validation; Web UI renders nested subtasks in an accessible closed accordion and provides an add-subtask form. Added core semantic regressions and MCP mutation parity coverage. Focused core/MCP/Pi/server/Web UI builds and tests passed, including subtask identity/order/deletion and forged-ID cases; full phase gate remains for phase close."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -118,42 +157,47 @@
           "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-001-confirm-or-migrate-subtask-schema",
           "number": 1,
           "title": "Confirm or migrate subtask schema",
-          "checked": false
+          "checked": true
         },
         {
           "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-002-implement-atomic-semantic-operations",
           "number": 2,
           "title": "Implement atomic semantic operations",
-          "checked": false
+          "checked": true
         },
         {
           "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-003-expose-cross-harness-mutation-parity",
           "number": 3,
           "title": "Expose cross-harness mutation parity",
-          "checked": false
+          "checked": true
         },
         {
           "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-004-add-responsive-accessible-web-ui-controls",
           "number": 4,
           "title": "Add responsive accessible Web UI controls",
-          "checked": false
+          "checked": true
         },
         {
           "id": "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16-check-005-verify-identity-ordering-and-legacy-compatibility",
           "number": 5,
           "title": "Verify identity ordering and legacy compatibility",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-09T07:14:50.730Z",
+      "completedAt": "2026-09-09T08:18:20.184Z",
       "createdAt": "2026-09-01T10:16:11.864Z",
-      "updatedAt": "2026-09-01T10:16:11.996Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-09T08:18:20.184Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T07:14:50.638Z"
+        }
+      ]
     },
     {
       "id": "599476ab-18e3-449a-8356-0f870602bcb2",
@@ -163,11 +207,28 @@
       "priority": 20,
       "shortName": "verify-complete-work-graph-lif",
       "title": "Verify complete work-graph lifecycle end to end",
-      "status": "planned",
-      "description": "Add real PlanStore, Pi-host, stdio MCP, plan-server, and desktop/mobile Playwright scenarios covering dependency creation, blocked start, prerequisite completion, unblocked start, subtask editing, deletion/cascade behavior, and generated PLAN.md output. Ensure Ideas and unrelated rollups remain isolated.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:12.217Z",
+      "status": "done",
+      "description": "Add real PlanStore, Pi-host, stdio MCP, plan-server, and desktop/mobile Playwright scenarios covering dependency creation, blocked start, prerequisite completion, unblocked start, subtask editing, deletion/cascade behavior, and generated PLAN.md output. Ensure Ideas and unrelated rollups remain isolated.\n\n---\n**Completion summary:**\nCompleted end-to-end work-graph verification. Added real PlanStore dependency/subtask semantic regressions, MCP/Pi registration and mutation coverage, plan-server lifecycle persistence/deletion coverage, and preserved desktop/mobile browser coverage through the canonical Playwright suite. Focused builds/tests passed and canonical pnpm verify:final passed fingerprint 8190bd4ac753: build, typecheck, coverage, plugin synchronization, browser end-to-end, packed-install smoke, and diff check.",
+      "descriptionUpdatedAt": "2026-09-09T08:28:40.177Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-001-planned-in-progress",
+          "date": "2026-09-09T08:23:46.624Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-002-in-progress-done",
+          "date": "2026-09-09T08:28:40.175Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed end-to-end work-graph verification. Added real PlanStore dependency/subtask semantic regressions, MCP/Pi registration and mutation coverage, plan-server lifecycle persistence/deletion coverage, and preserved desktop/mobile browser coverage through the canonical Playwright suite. Focused builds/tests passed and canonical pnpm verify:final passed fingerprint 8190bd4ac753: build, typecheck, coverage, plugin synchronization, browser end-to-end, packed-install smoke, and diff check."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -175,46 +236,51 @@
           "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-001-author-shared-work-graph-scenarios",
           "number": 1,
           "title": "Author shared work-graph scenarios",
-          "checked": false
+          "checked": true
         },
         {
           "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-002-cover-pi-and-real-mcp-transports",
           "number": 2,
           "title": "Cover Pi and real MCP transports",
-          "checked": false
+          "checked": true
         },
         {
           "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-003-cover-server-and-web-ui-workflows",
           "number": 3,
           "title": "Cover server and Web UI workflows",
-          "checked": false
+          "checked": true
         },
         {
           "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-004-exercise-lifecycle-and-deletion-edges",
           "number": 4,
           "title": "Exercise lifecycle and deletion edges",
-          "checked": false
+          "checked": true
         },
         {
           "id": "599476ab-18e3-449a-8356-0f870602bcb2-check-005-run-full-coverage-and-playwright-gates",
           "number": 5,
           "title": "Run full coverage and Playwright gates",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-09T08:23:46.624Z",
+      "completedAt": "2026-09-09T08:28:40.175Z",
       "createdAt": "2026-09-01T10:16:12.178Z",
-      "updatedAt": "2026-09-01T10:16:12.320Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-09T08:28:40.175Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T08:23:46.531Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-09-01T10:16:11.137Z",
-  "updatedAt": "2026-09-01T10:16:12.320Z",
+  "updatedAt": "2026-09-09T08:28:40.175Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -228,7 +294,28 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "ef20ac50-0afe-4686-a7b6-17120400188e",
+      "date": "2026-09-09T07:14:50.763Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "e0d6d079-57b2-426d-bab7-9b86bcc981e8",
+      "date": "2026-09-09T08:28:40.202Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-09T08:23:46.531Z"
+    }
+  ]
 }

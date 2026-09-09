@@ -413,6 +413,21 @@ export async function reopenTask(taskId: string): Promise<Task> {
   return normalizeTask(result.task);
 }
 
+export async function createSubtask(taskId: string, phaseId: string, payload: { title: string; description?: string }): Promise<Task> {
+  const result = await request<{ task: Task }>(`/tasks/${taskId}/subtasks`, { method: "POST", body: JSON.stringify({ phaseId, ...payload }) });
+  return normalizeTask(result.task);
+}
+
+export async function addTaskDependency(taskId: string, phaseId: string, dependsOnId: string): Promise<Task> {
+  const result = await request<{ task: Task }>(`/tasks/${taskId}/dependencies`, { method: "POST", body: JSON.stringify({ phaseId, dependsOnId }) });
+  return normalizeTask(result.task);
+}
+
+export async function deleteTaskDependency(taskId: string, phaseId: string, dependencyId: string): Promise<Task> {
+  const result = await request<{ task: Task }>(`/tasks/${taskId}/dependencies/${dependencyId}`, { method: "DELETE", body: JSON.stringify({ phaseId, confirmed: true }) });
+  return normalizeTask(result.task);
+}
+
 export async function deleteTask(taskId: string): Promise<{ deleted: string }> {
   return request(`/tasks/${taskId}`, { method: "DELETE" });
 }

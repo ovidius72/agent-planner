@@ -14,13 +14,13 @@ import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
 import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, handoffContentHash, HandoffContractError } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
-import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Task } from "@agent-plan/core/schema";
+import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { serve } from "@agent-plan/server/serve";
@@ -5106,6 +5106,35 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "task_dependency_add",
+    label: "Task Dependency Add",
+    description: "Add a validated task dependency atomically; rejects self-dependencies, foreign tasks, and cycles.",
+    parameters: Type.Object({ taskId: Type.String(), dependsOn: Type.String() }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId); const dependency = findTaskByRef(await st.loadAllPhases(), features, params.dependsOn);
+      if (!found || !dependency) return { content: [{ type: "text", text: "Dependency target not found." }], details: { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }, isError: true };
+      try { const task = await st.addTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return { content: [{ type: "text", text: "Dependency added." }], details: { updated: true, task } }; }
+      catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { content: [{ type: "text", text: error instanceof Error ? error.message : "Dependency update failed." }], details: { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_UPDATE_FAILED" }, isError: true }; }
+    },
+  });
+
+  pi.registerTool({
+    name: "task_dependency_delete",
+    label: "Task Dependency Delete",
+    description: "Remove a task dependency atomically after explicit confirmation.",
+    parameters: Type.Object({ taskId: Type.String(), dependsOn: Type.String(), confirmed: Type.Boolean() }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      if (!params.confirmed) return { content: [{ type: "text", text: "Explicit confirmation is required." }], details: { updated: false, errorCode: "CONFIRMATION_REQUIRED" }, isError: true };
+      const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId); const dependency = findTaskByRef(await st.loadAllPhases(), features, params.dependsOn);
+      if (!found || !dependency) return { content: [{ type: "text", text: "Dependency target not found." }], details: { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }, isError: true };
+      try { const task = await st.deleteTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return { content: [{ type: "text", text: "Dependency removed." }], details: { updated: true, task } }; }
+      catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { content: [{ type: "text", text: error instanceof Error ? error.message : "Dependency deletion failed." }], details: { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_DELETE_FAILED" }, isError: true }; }
+    },
+  });
+
+  pi.registerTool({
     name: "task_update",
     label: "Task Update",
     description: "Update one or more fields of a task. Only provided fields are changed. Do NOT use this tool to start or complete work; use task_start and task_complete for lifecycle transitions so startedAt/completedAt stay correct.",
@@ -5128,6 +5157,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }), { description: "Deprecated compatibility field. Raw replacement is rejected; use accepted_decision_create, accepted_decision_update, or accepted_decision_delete." })),
       priority: Type.Optional(Type.Number({ description: "Display order within the phase (lower = higher)" })),
       checklist: Type.Optional(Type.Array(Type.String(), { description: "Replace checklist (plain strings). For interactive toggling use the web UI." })),
+      subtasks: Type.Optional(Type.Array(Type.Object({ id: Type.Optional(Type.String()), title: Type.String(), description: Type.Optional(Type.String()), status: Type.Optional(Type.String()) }), { description: "Replace subtasks; existing IDs must belong to this task and omitted IDs are planner-generated." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -5173,7 +5203,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           };
         }
       }
-      const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "decisions", "priority", "checklist"] as const;
+      if (params.subtasks !== undefined) {
+        const existingIds = new Set(found.task.subtasks.map((item) => item.id));
+        if (params.subtasks.some((item) => item.id !== undefined && !existingIds.has(item.id))) return { content: [{ type: "text", text: "Subtask IDs must belong to the target task." }], details: { updated: false, errorCode: "SUBTASK_ID_INVALID" }, isError: true };
+      }
+      const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "decisions", "priority", "checklist", "subtasks"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
         return mutationNoFieldsFailure({
@@ -5211,6 +5245,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
               title: itemTitle,
               checked: false,
             }));
+          }
+          if (params.subtasks !== undefined) {
+            task.subtasks = params.subtasks.map((item) => ({ id: item.id ?? randomUUID(), title: item.title.trim(), description: item.description?.trim() ?? "", status: (item.status ?? "planned") as Subtask["status"], createdAt: task.subtasks.find((candidate) => candidate.id === item.id)?.createdAt ?? now, updatedAt: now }));
           }
           if (params.status !== undefined) {
             if (params.status !== task.status) {

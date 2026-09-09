@@ -196,19 +196,29 @@ export function TaskDetailRoute() {
           )}
         </div>
 
-        {task.subtasks?.length ? (
-          <Accordion title="Subtasks" count={task.subtasks.length} defaultOpen={false} contentClassName="grid gap-2">
-            {task.subtasks.map((subtask) => (
-              <div key={subtask.id} className="surface-card flex items-center justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text)]">{subtask.title}</p>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">{subtask.id}</p>
-                </div>
-                <StatusBadge status={subtask.status} />
+        <Accordion title="Dependencies" count={task.dependsOn?.length ?? 0} defaultOpen={false} contentClassName="grid gap-2">
+          {task.dependsOn?.map((dependency) => <p key={dependency} className="surface-card px-4 py-3 text-sm font-mono text-[var(--text)]">{dependency}</p>)}
+          <Form method="post" action="dependencies/add" className="flex gap-2 rounded-xl border border-dashed border-[var(--border-strong)] p-3">
+            <input name="dependsOn" required placeholder="Task ref or ID" aria-label="Dependency task" className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
+            <Button type="submit" className="h-9">Add dependency</Button>
+          </Form>
+        </Accordion>
+        <Accordion title="Subtasks" count={task.subtasks?.length ?? 0} defaultOpen={false} contentClassName="grid gap-2">
+          {task.subtasks?.map((subtask) => (
+            <div key={subtask.id} className="surface-card flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--text)]">{subtask.title}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{subtask.description || subtask.id}</p>
               </div>
-            ))}
-          </Accordion>
-        ) : null}
+              <StatusBadge status={subtask.status} />
+            </div>
+          ))}
+          <Form method="post" action="subtasks/new" className="grid gap-2 rounded-xl border border-dashed border-[var(--border-strong)] p-3 sm:grid-cols-[1fr_1fr_auto]">
+            <input name="title" required placeholder="New subtask title" aria-label="New subtask title" className="h-9 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
+            <input name="description" placeholder="Description (optional)" aria-label="New subtask description" className="h-9 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
+            <Button type="submit" className="h-9">Add subtask</Button>
+          </Form>
+        </Accordion>
       </Card>
       <Outlet />
     </div>
