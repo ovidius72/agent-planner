@@ -25,6 +25,7 @@ test("a pending handoff is browser-visible, then completing the final task archi
   await page.goto(`${planner.url}/handoff`);
   const pending = page.locator("summary").filter({ hasText: "Resume checkout work" });
   await expect(pending).toBeVisible();
+  await expect(pending.getByText("Verification required")).toBeVisible();
   await pending.click();
   await expect(page.getByText("Verify final browser flow.")).toBeVisible();
   await page.reload();
@@ -55,6 +56,7 @@ test("replacement archives superseded content and browser clear archives the act
 
   await page.goto(`${planner.url}/handoff`);
   await expect(page.locator("summary").filter({ hasText: "Current handoff" })).toBeVisible();
+  await expect(page.getByText("Verification required")).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Clear" }).click();
   await expect(page.getByText("No pending phase handoffs.")).toBeVisible();

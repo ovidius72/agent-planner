@@ -69,7 +69,6 @@ function summarizeSnapshot(snapshot) {
     requirements: (normalized.requirements ?? [])
       .map((requirement) => ({
         title: requirement.title ?? "",
-        status: requirement.status ?? null,
         linkedPhaseRefs: [...(requirement.linkedPhaseRefs ?? [])].sort(),
       }))
       .sort((left, right) => left.title.localeCompare(right.title)),

@@ -13,9 +13,15 @@ function pushTextNodes(chunk: string, nodes: ReactNode[], keyPrefix: string) {
   });
 }
 
-function renderInline(text: string, keyPrefix: string) {
+const PLANNER_DOC_PATTERN = /\.planner\/docs\/[A-Za-z0-9][A-Za-z0-9_\-./]*\.md/g;
+
+export function docViewerHref(path: string): string {
+  return `/docs/view?path=${encodeURIComponent(path)}`;
+}
+
+function renderMarkdownInline(text: string, keyPrefix: string) {
   const nodes: ReactNode[] = [];
-  const regex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*)/g;
+  const regex = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(\*\*([^*]+)\*\*)|`([^`]+)`|\*([^*]+)\*/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
   let tokenIndex = 0;
@@ -31,12 +37,14 @@ function renderInline(text: string, keyPrefix: string) {
           {match[2]}
         </a>,
       );
-    } else if (match[4]) {
-      nodes.push(<strong key={`${keyPrefix}-strong-${tokenIndex}`} className="font-semibold text-[var(--text)]">{match[4]}</strong>);
     } else if (match[5]) {
-      nodes.push(<code key={`${keyPrefix}-code-${tokenIndex}`} className="rounded-md border border-[var(--border)] px-1.5 py-0.5 font-mono text-[0.95em] text-[var(--text)]">{match[5]}</code>);
+      nodes.push(<strong key={`${keyPrefix}-strong-${tokenIndex}`} className="font-semibold text-[var(--text)]">{match[5]}</strong>);
     } else if (match[6]) {
-      nodes.push(<em key={`${keyPrefix}-em-${tokenIndex}`} className="italic">{match[6]}</em>);
+      nodes.push(<code key={`${keyPrefix}-code-${tokenIndex}`} className="rounded-md border border-[var(--border)] px-1.5 py-0.5 font-mono text-[0.95em] text-[var(--text)]">{match[6]}</code>);
+    } else if (match[7]) {
+      nodes.push(<em key={`${keyPrefix}-em-${tokenIndex}`} className="italic">{match[7]}</em>);
+    } else if (match[1]) {
+      pushTextNodes(match[1], nodes, `${keyPrefix}-raw-${tokenIndex}`);
     }
 
     lastIndex = regex.lastIndex;
@@ -47,6 +55,31 @@ function renderInline(text: string, keyPrefix: string) {
     pushTextNodes(text.slice(lastIndex), nodes, `${keyPrefix}-tail`);
   }
 
+  return nodes;
+}
+
+function renderInline(text: string, keyPrefix: string) {
+  const nodes: ReactNode[] = [];
+  PLANNER_DOC_PATTERN.lastIndex = 0;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+  let tokenIndex = 0;
+  while ((match = PLANNER_DOC_PATTERN.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(...renderMarkdownInline(text.slice(lastIndex, match.index), `${keyPrefix}-md-${tokenIndex}`));
+    }
+    const docPath = match[0];
+    nodes.push(
+      <a key={`${keyPrefix}-doc-${tokenIndex}`} href={docViewerHref(docPath)} target="_blank" rel="noreferrer" className="font-semibold text-[var(--accent)] underline-offset-4 hover:underline" aria-label={`Open planner document ${docPath} in a new tab`}>
+        {docPath}
+      </a>,
+    );
+    lastIndex = match.index + docPath.length;
+    tokenIndex += 1;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(...renderMarkdownInline(text.slice(lastIndex), `${keyPrefix}-md-tail`));
+  }
   return nodes;
 }
 

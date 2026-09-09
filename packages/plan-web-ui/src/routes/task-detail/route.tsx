@@ -10,13 +10,14 @@ import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-m
 import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
+import { DescriptionFreshnessNotice } from "../../components/ui/description-freshness-notice";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { ResumeSnapshot } from "../../components/task/resume-snapshot";
 import { useShortcut } from "../../lib/shortcuts";
-import type { Feature, Phase, Task, ChecklistItem } from "../../lib/types";
+import type { Feature, Phase, Task, ChecklistItem, HierarchicalDescriptionFreshness } from "../../lib/types";
 
 function ChecklistItemToggle({
   featureId,
@@ -62,7 +63,7 @@ function ChecklistItemToggle({
 }
 
 export function TaskDetailRoute() {
-  const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
+  const { feature, phase, task, pendingResume, descriptionFreshness } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean; descriptionFreshness: HierarchicalDescriptionFreshness };
   const canStart = task.status === "planned" || task.status === "waiting";
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
@@ -111,6 +112,13 @@ export function TaskDetailRoute() {
               <Button type="submit" variant="primary">{task.pauseSnapshot || pendingResume ? "Resume task" : "Start task"}</Button>
             </Form>
           ) : null}
+          {task.status === "done" ? (
+            <Form method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/reopen`} className="inline-flex" onSubmit={(event) => {
+              if (!window.confirm(`Reopen task “${task.title}”? Its completion history will be retained.`)) event.preventDefault();
+            }}>
+              <Button type="submit" variant="primary">Reopen task</Button>
+            </Form>
+          ) : null}
           <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>
           <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/delete`} className="inline-flex" onSubmit={(event) => {
             if (!window.confirm(`Delete task \"${task.title}\"?`)) event.preventDefault();
@@ -119,6 +127,8 @@ export function TaskDetailRoute() {
           </Form>
         </div>
       </div>
+
+      <DescriptionFreshnessNotice freshness={descriptionFreshness} ownerIds={[phase.id, feature.id]} />
 
       <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} createdAt={task.createdAt} updatedAt={task.updatedAt} startedAt={task.startedAt} completedAt={task.completedAt} />
 
@@ -147,7 +157,7 @@ export function TaskDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="task" targetRef={task.id} />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Checklist items</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{checklist.length}</p></CompactCard>
@@ -186,19 +196,29 @@ export function TaskDetailRoute() {
           )}
         </div>
 
-        {task.subtasks?.length ? (
-          <Accordion title="Subtasks" count={task.subtasks.length} defaultOpen={false} contentClassName="grid gap-2">
-            {task.subtasks.map((subtask) => (
-              <div key={subtask.id} className="surface-card flex items-center justify-between gap-4 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[var(--text)]">{subtask.title}</p>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">{subtask.id}</p>
-                </div>
-                <StatusBadge status={subtask.status} />
+        <Accordion title="Dependencies" count={task.dependsOn?.length ?? 0} defaultOpen={false} contentClassName="grid gap-2">
+          {task.dependsOn?.map((dependency) => <p key={dependency} className="surface-card px-4 py-3 text-sm font-mono text-[var(--text)]">{dependency}</p>)}
+          <Form method="post" action="dependencies/add" className="flex gap-2 rounded-xl border border-dashed border-[var(--border-strong)] p-3">
+            <input name="dependsOn" required placeholder="Task ref or ID" aria-label="Dependency task" className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
+            <Button type="submit" className="h-9">Add dependency</Button>
+          </Form>
+        </Accordion>
+        <Accordion title="Subtasks" count={task.subtasks?.length ?? 0} defaultOpen={false} contentClassName="grid gap-2">
+          {task.subtasks?.map((subtask) => (
+            <div key={subtask.id} className="surface-card flex items-center justify-between gap-4 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--text)]">{subtask.title}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{subtask.description || subtask.id}</p>
               </div>
-            ))}
-          </Accordion>
-        ) : null}
+              <StatusBadge status={subtask.status} />
+            </div>
+          ))}
+          <Form method="post" action="subtasks/new" className="grid gap-2 rounded-xl border border-dashed border-[var(--border-strong)] p-3 sm:grid-cols-[1fr_1fr_auto]">
+            <input name="title" required placeholder="New subtask title" aria-label="New subtask title" className="h-9 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
+            <input name="description" placeholder="Description (optional)" aria-label="New subtask description" className="h-9 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
+            <Button type="submit" className="h-9">Add subtask</Button>
+          </Form>
+        </Accordion>
       </Card>
       <Outlet />
     </div>

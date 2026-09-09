@@ -211,7 +211,6 @@ export function normalizePersistedSnapshot(snapshot) {
     })),
     requirements: requirements.map((requirement) => ({
       title: requirement.title,
-      status: requirement.status,
       linkedPhaseRefs: (requirement.linkedPhaseIds ?? []).map((id) => phaseById.get(id) ?? id),
     })),
     workDeviations: (snapshot.project?.workDeviations ?? []).map((deviation) => ({

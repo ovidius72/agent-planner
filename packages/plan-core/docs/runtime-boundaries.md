@@ -54,6 +54,7 @@ view* by `loadProject()`. `saveProject()` strips `workDeviations` so shared
 | `generated/` | Generated output (e.g. codebase maps) | Derived/transient, regenerable |
 | `backups/` | Atomic-write `.bak` crash-recovery copies | Transient safety copies |
 | `tmp/` | Scratch space | Transient |
+| `locks/writer.lock/` | Short-lived cross-process owner record and heartbeat for the active root write transaction | Machine-local coordination; readers never acquire it and dead owners are recovered safely |
 | `handoff-archive/` | Archived handoffs (auto-archived on terminal-phase completion) | Local history; keeps active `handoffs/` clean |
 
 ## Invariants (adapters & UI rely on these)
@@ -92,6 +93,41 @@ view* by `loadProject()`. `saveProject()` strips `workDeviations` so shared
    proposes outstanding resume-required work explicitly (T296) but honors an
    explicit start of a different task. The proposal is standardized via
    `buildResumeRequiredProposal` so Pi, MCP, and Web UI present it identically.
+9. **One root write transaction runs at a time.** `withPlanRootWriteLock` and
+   `PlanStore.runBatch` serialize canonical and local mutations across Pi, MCP,
+   CLI, development, and standalone server processes that target the same plan
+   root. Nested writes are re-entrant, read-only access never waits, contention
+   returns `PLAN_WRITER_BUSY`, and a dead owner is recovered from its local
+   heartbeat metadata. Multi-file domain operations must use `runBatch` so
+   another process cannot observe or create a partially applied transaction.
+
+## Runtime diagnostics and safe upgrades
+
+Every harness exposes loaded-runtime diagnostics before it needs an initialized
+planner root: Pi `/planner version`, MCP `planner-version`, and CLI
+`agent-plan version` all report package provenance from the package manifests
+actually loaded by the current process, plus the core compatibility capabilities
+that affect persisted planner data. `installedVersion` and `loadedVersion` are
+reported as explicit fields so operators can distinguish the package installed
+on disk from the runtime currently held by a long-lived harness process after an
+upgrade.
+
+The current runtime capabilities are:
+
+- plan manifest schema version: `1`
+- allocation registry version: `1`
+- allocation kinds: `feature`, `phase`, `task`, `idea`
+
+Mutations that allocate planner identities validate these capabilities before
+writing. If an adapter or stale registry data requests a kind the loaded core
+does not support, the mutation fails with `PLAN_UNSUPPORTED_ALLOCATION_KIND` and
+an upgrade/reload action instead of a low-level schema validation error. If the
+allocation registry shape is from an incompatible runtime, the mutation fails
+with `PLAN_RUNTIME_SCHEMA_INCOMPATIBLE`. Both outcomes are atomic no-ops: no
+number, short id, entity, or generated view is written. Safe remediation is to
+upgrade every Agent Plan package used by the harness, reload or restart the
+harness so it uses the new loaded runtime, rerun the version diagnostics, and
+only then retry the mutation.
 
 ## Cross-worktree isolation
 
@@ -110,6 +146,7 @@ features/phases/tasks/requirements/ideas. This is covered by the T297 isolation 
   coupling. It can be localized later if per-worktree port preferences are
   needed.
 - **Entity `createdAt` / `updatedAt`** timestamps are part of canonical data
-  and are shared. Concurrent edits to the same canonical entity from different
-  worktrees can still conflict — that is inherent to shared canonical data, not
-  runtime state, and is out of scope for this boundary.
+  and are shared. Root write coordination prevents simultaneous mutation
+  transactions, but it cannot make a stale whole-entity client payload current;
+  optimistic/patch mutation semantics remain the separate P093(F021)/T365
+  responsibility.

@@ -21,19 +21,30 @@ function toolText(result) {
 
 function loadPiTools() {
   const tools = new Map();
+  let sessionStart;
   planPiExtension({
-    on() {},
+    on(event, handler) {
+      if (event === "session_start") sessionStart = handler;
+    },
     sendMessage() {},
     registerCommand() {},
     registerTool(def) { tools.set(def.name, def); },
   });
-  return tools;
+  return {
+    tools,
+    startSession: async (ctx) => { if (sessionStart) await sessionStart({}, ctx); },
+  };
 }
 
 function makeCtx(cwd) {
+  const sessionSuffix = cwd.split("/").filter(Boolean).pop() ?? "session";
   return {
     cwd,
     hasUI: false,
+    sessionManager: {
+      getSessionId() { return `pi-ref-validation-${sessionSuffix}`; },
+      getEntries() { return []; },
+    },
     ui: {
       notify() {},
       async input() { return undefined; },
@@ -98,10 +109,11 @@ async function setup() {
     nextTaskNumber: 2,
   }));
 
+  await startSession(makeCtx(root));
   return { root, st, featureA, featureB, phase, taskId: phase.tasks[0].id };
 }
 
-const tools = loadPiTools();
+const { tools, startSession } = loadPiTools();
 
 describe("pi-adapter strict ref validation", () => {
   test("phase_create resolves human feature ref F00x to the internal feature id", async () => {
@@ -505,20 +517,32 @@ describe("pi-adapter strict ref validation", () => {
     assert.deepEqual(numbers, [2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
-  test("task recommendation and approved deviation retain an explicit resume target", async () => {
+  test("task recommendation keeps deviation targets structured and treats unverified handoff prose as insufficient", async () => {
     const { root, st, phase, taskId } = await setup();
     const temporaryId = createTaskId();
-    await st.updatePhase(phase.id, (stored) => ({ ...stored, tasks: [...stored.tasks, { ...stored.tasks[0], id: temporaryId, phaseId: phase.id, number: 2, title: "Temporary task", shortName: "temporary-task", priority: 20 }], taskIds: [...stored.taskIds, temporaryId] }));
+    await st.updatePhase(phase.id, (stored) => ({ ...stored, tasks: [{ ...stored.tasks[0], priority: 1 }, { ...stored.tasks[0], id: temporaryId, phaseId: phase.id, number: 2, title: "Temporary task", shortName: "temporary-task", priority: 0 }], taskIds: [...stored.taskIds, temporaryId] }));
+    await st.updatePhase(phase.id, (stored) => ({
+      ...stored,
+      handoff: "# Resume later\nHow to resume: task_start P001(F001)/T001\nNext action: resume the preserved task before new work.",
+      handoffUpdatedAt: nowISO(),
+      handoffAudit: null,
+    }));
     const ctx = makeCtx(root);
-    assert.match(toolText(await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx)), /Recommended \(priority\): P001\(F001\)\/T002/);
+    const recommended = await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx);
+    assert.match(toolText(recommended), /Next work \(priority\): P001\(F001\)\/T002/);
+    assert.equal(recommended.details.nextTask?.id, temporaryId);
+    assert.equal(recommended.details.nextTask?.priority, 0);
+    assert.equal(recommended.details.nextPhase?.id, phase.id);
+    assert.equal(recommended.details.claims.some((claim) => claim.source === "handoff" && claim.kind === "insufficient"), true);
     const recorded = await tools.get("task_deviation").execute("id", { temporary_task: temporaryId, resume_task: taskId, reason: "Approved urgent work" }, undefined, undefined, ctx);
     assert.match(toolText(recorded), /Approved deviation/);
     let project = await st.loadProject();
     assert.equal(project.workDeviations.at(-1)?.resumeTaskId, taskId);
     await tools.get("task_get").execute("id", { taskId: temporaryId, full: true }, undefined, undefined, ctx);
+    assert.equal((await st.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === temporaryId)?.priority, 0);
     await tools.get("phase_get").execute("id", { phaseId: "P001", full: true }, undefined, undefined, ctx);
     await tools.get("feature_get").execute("id", { featureId: "F001", full: true }, undefined, undefined, ctx);
-    await tools.get("requirement_list").execute("id", {}, undefined, undefined, ctx);
+    await tools.get("requirement_list").execute("id", { phaseRef: "P001" }, undefined, undefined, ctx);
     const started = await tools.get("task_start").execute("id", { taskId: temporaryId }, undefined, undefined, ctx);
     const startedText = toolText(started);
     assert.match(startedText, /Task started/);
@@ -528,7 +552,9 @@ describe("pi-adapter strict ref validation", () => {
     assert.match(toolText(await tools.get("task_complete").execute("id", { taskId: temporaryId, description_update: "Temporary deviation task completed and verified." }, undefined, undefined, ctx)), /Task completed.*RESUME REQUIRED/s);
     project = await st.loadProject();
     assert.equal(project.workDeviations.at(-1)?.state, "resume-required");
-    assert.match(toolText(await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx)), /Recommended \(resume\): P001\(F001\)\/T001/);
+    const resumed = await tools.get("task_recommend").execute("id", {}, undefined, undefined, ctx);
+    assert.match(toolText(resumed), /Next work \(resume\): P001\(F001\)\/T001/);
+    assert.equal(resumed.details.nextTask?.id, taskId);
   });
 
   test("project_context_migrate previews without mutation and applies only when explicitly confirmed", async () => {
@@ -565,16 +591,18 @@ describe("pi-adapter strict ref validation", () => {
       title: "Credential flow", description: "Secure access.", linkedPhaseIds: ["P001"],
       macroTasks: [{ title: "Validate credentials", description: "Check input.", status: "planned" }],
     }, undefined, undefined, ctx);
-    assert.equal(created.details.macroTasks[0].id, "MT-001");
+    assert.equal(created.details.created, true);
+    assert.equal(created.details.requirement.macroTasks[0].id, "MT-001");
     const updated = await tools.get("requirement_update").execute("id", {
-      requirementId: created.details.id,
+      requirementId: created.details.requirement.id,
       macroTasks: [
         { id: "MT-001", title: "Validate credentials", description: "Check input.", status: "done" },
         { title: "Record decision", description: "Persist audit.", status: "planned" },
       ],
     }, undefined, undefined, ctx);
-    assert.equal(updated.details.macroTasks[0].createdAt, created.details.macroTasks[0].createdAt);
-    assert.equal(updated.details.macroTasks[1].id, "MT-002");
+    assert.equal(updated.details.updated, true);
+    assert.equal(updated.details.requirement.macroTasks[0].createdAt, created.details.requirement.macroTasks[0].createdAt);
+    assert.equal(updated.details.requirement.macroTasks[1].id, "MT-002");
   });
 });
 

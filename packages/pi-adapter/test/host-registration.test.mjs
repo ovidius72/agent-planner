@@ -2,7 +2,7 @@
  * T240 (P056/F015) — Pi adapter host and registration harness tests.
  *
  * Verifies the fake Pi host (test/helpers/pi-host-fixture.mjs):
- *  - captures the REAL adapter's registrations (command, 46 tools, 9 hooks)
+ *  - captures the REAL adapter's registrations (command, tools, and hooks)
  *  - supplies a realistic ExtensionContext (ui/sessionManager/cwd)
  *  - keeps adapter-to-core persistence REAL (real PlanStore on temp .planner)
  *  - drives command handlers and tool executes with notifications, prompts,
@@ -52,16 +52,29 @@ describe("pi-adapter host harness", () => {
       assert.ok(Array.isArray(completions) && completions.length > 0);
       assert.ok(completions.some((c) => c.value === "task start"), "task subcommand completion");
       assert.ok(planner.getArgumentCompletions("ver").some((c) => c.value === "version"), "version subcommand completion");
+      const ideaCompletions = planner.getArgumentCompletions("idea").map((completion) => completion.value);
+      assert.deepEqual(ideaCompletions, [
+        "idea list",
+        "idea add",
+        "idea show",
+        "idea update",
+        "idea delete",
+        "idea promote",
+      ], "every interactive Ideas action must be discoverable from /planner completion");
 
-      // All 60 tools with the required definition fields.
-      assert.equal(host.tools.size, 60);
-      for (const name of ["plan_init", "feature_create", "task_pause", "task_switch", "task_start", "decision_record", "handoff_prepare", "handoff_write", "planner-web", "planner-load", "planner-stop", "project_guidelines_show", "project_guidelines_update", "project_context_migrate", "idea_list", "idea_show", "idea_create", "idea_update", "idea_delete", "idea_promotion_begin", "idea_promotion_finalize"]) {
+      // All 69 tools with the required definition fields.
+      assert.equal(host.tools.size, 69);
+      for (const name of ["plan_init", "description_freshness", "feature_create", "phase_discuss", "task_pause", "task_switch", "task_start", "task_reopen", "task_dependency_add", "task_dependency_delete", "decision_record", "accepted_decision_create", "accepted_decision_update", "accepted_decision_delete", "handoff_prepare", "handoff_write", "handoff_verify", "planner-web", "planner-load", "planner-stop", "project_guidelines_show", "project_guidelines_update", "project_context_migrate", "idea_list", "idea_show", "idea_create", "idea_update", "idea_delete", "idea_promotion_begin", "idea_promotion_finalize"]) {
         const tool = host.tools.get(name);
         assert.ok(tool, `tool ${name} registered`);
         assert.ok(tool.label && tool.description, `tool ${name} has label/description`);
         assert.ok(tool.parameters, `tool ${name} has a parameter schema`);
         assert.equal(typeof tool.execute, "function", `tool ${name} has execute`);
       }
+
+      const requirementList = host.tools.get("requirement_list");
+      assert.ok(requirementList.parameters.properties.phaseRef, "requirement_list exposes optional target-scoped phaseRef delivery");
+      assert.ok(!requirementList.parameters.required?.includes("phaseRef"), "unscoped requirement inventory remains backward compatible");
 
       // Every lifecycle hook the adapter subscribes to.
       for (const event of EXPECTED_HOOKS) {
@@ -75,15 +88,54 @@ describe("pi-adapter host harness", () => {
     }
   });
 
-  test("/planner version reports loaded package manifests without requiring a planner", async () => {
+  test("/planner idea add is reachable through the interactive command dispatcher", async () => {
+    const host = await createPiHost({ name: "t378-idea-command", seed: "minimal" });
+    try {
+      host.ui.editorAnswer = "Captured from the interactive Pi command.";
+      await host.runCommand("idea add Discoverable idea");
+      const ideas = (await host.store.loadIdeas()).ideas;
+      assert.equal(ideas.length, 1);
+      assert.equal(ideas[0].title, "Discoverable idea");
+      assert.equal(ideas[0].description, "Captured from the interactive Pi command.");
+      assert.match(host.ui.notifyCalls.at(-1)?.message ?? "", /Idea created: I001/);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("/planner version reports loaded runtime provenance and compatibility without requiring a planner", async () => {
     const host = await createPiHost({ name: "t293-version", seed: null });
     try {
       await host.runCommand("version");
       const message = host.ui.notifyCalls.at(-1)?.message ?? "";
-      assert.match(message, new RegExp(`@agent-plan/pi-adapter: ${PI_ADAPTER_VERSION.replaceAll(".", "\\.")}`));
-      assert.match(message, new RegExp(`@agent-plan/core: ${CORE_VERSION.replaceAll(".", "\\.")}`));
-      assert.match(message, new RegExp(`@agent-plan/server: ${SERVER_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/pi-adapter: loaded ${PI_ADAPTER_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/core: loaded ${CORE_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, new RegExp(`@agent-plan/server: loaded ${SERVER_VERSION.replaceAll(".", "\\.")}`));
+      assert.match(message, /Plan schema: manifest schemaVersion 1/);
+      assert.match(message, /Allocation registry: v1; supported kinds: feature, phase, task, idea/);
       assert.equal(existsSync(host.planRoot), false, "version lookup must not initialize planner state");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("planner overviews provide authoritative active-task evidence", async () => {
+    const host = await createPiHost({ name: "t384-active-evidence", seed: "minimal" });
+    try {
+      const initial = await host.runTool("plan_get", {});
+      assert.equal(toolDetails(initial).activeTaskState, "none");
+      assert.deepEqual(toolDetails(initial).activeTasks, []);
+      assert.match(toolText(initial), /Active tasks: none \(verified from all persisted phase task statuses\)/);
+
+      const phase = (await host.store.loadAllPhases())[0];
+      await host.store.updatePhase(phase.id, (current) => ({
+        ...current,
+        tasks: current.tasks.map((task, index) => index === 0 ? { ...task, status: "in-progress" } : task),
+      }));
+      await host.runCommand("show");
+      const message = host.ui.notifyCalls.at(-1)?.message ?? "";
+      assert.match(message, /Active tasks \(1\):/);
+      assert.match(message, /P001\(F001\)\/T001 — Implement login \(in-progress\)/);
     } finally {
       await closePiHost(host);
     }
@@ -147,6 +199,137 @@ describe("pi-adapter host harness", () => {
       const features = await st.loadFeatures();
       assert.equal(features.features.length, 1);
       assert.equal(features.features[0].name, "Feature One");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("mutation tools return typed no-op and persisted outcome details", async () => {
+    const host = await createPiHost({ name: "t367-mutation-outcomes", seed: "minimal" });
+    try {
+      const requirement = (await host.store.loadRequirements()).requirements[0];
+      const requirementNoop = await host.runTool("requirement_update", { requirementId: requirement.id });
+      assert.equal(requirementNoop.isError, true);
+      assert.equal(toolDetails(requirementNoop).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+      assert.equal((await host.store.loadRequirements()).requirements[0].updatedAt, requirement.updatedAt, "no-field requirement update must not restamp persisted data");
+
+      const requirementUpdate = await host.runTool("requirement_update", { requirementId: requirement.id, title: "Updated requirement" });
+      assert.equal(toolDetails(requirementUpdate).updated, true);
+      assert.equal(toolDetails(requirementUpdate).requirement.title, "Updated requirement");
+
+      const ideaCreate = await host.runTool("idea_create", { title: "Outcome idea" });
+      assert.equal(toolDetails(ideaCreate).created, true);
+      const ideaNoop = await host.runTool("idea_update", { idea: "I001" });
+      assert.equal(ideaNoop.isError, true);
+      assert.equal(toolDetails(ideaNoop).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("accepted decision tools create, update, and delete semantic owner entries", async () => {
+    const host = await createPiHost({ name: "t369-accepted-decisions", seed: "minimal" });
+    try {
+      const created = await host.runTool("accepted_decision_create", {
+        targetType: "task",
+        targetRef: "P001/T001",
+        title: "Preserve task decisions",
+        decision: "Keep task decisions local to the task.",
+      });
+      assert.equal(toolDetails(created).created, true);
+      const decisionId = toolDetails(created).acceptedDecision.id;
+      const taskBefore = (await host.store.loadAllPhases())[0].tasks[0];
+      assert.equal(taskBefore.acceptedDecisions[0].id, decisionId);
+
+      const updated = await host.runTool("accepted_decision_update", {
+        targetType: "task",
+        targetRef: "P001/T001",
+        decisionId,
+        rationale: "Mutation parity needs entry-level updates.",
+      });
+      assert.equal(toolDetails(updated).updated, true);
+      assert.equal(toolDetails(updated).acceptedDecision.acceptedAt, toolDetails(created).acceptedDecision.acceptedAt);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].acceptedDecisions[0].rationale, "Mutation parity needs entry-level updates.");
+
+      const noFields = await host.runTool("accepted_decision_update", { targetType: "task", targetRef: "P001/T001", decisionId });
+      assert.equal(noFields.isError, true);
+      assert.equal(toolDetails(noFields).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+
+      const unconfirmed = await host.runTool("accepted_decision_delete", { targetType: "task", targetRef: "P001/T001", decisionId, confirmed: false });
+      assert.equal(toolDetails(unconfirmed).confirmRequired, true);
+      const deleted = await host.runTool("accepted_decision_delete", { targetType: "task", targetRef: "P001/T001", decisionId, confirmed: true });
+      assert.equal(toolDetails(deleted).deleted, true);
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].acceptedDecisions.length, 0);
+
+      const missingTarget = await host.runTool("accepted_decision_create", {
+        targetType: "feature",
+        targetRef: "F999",
+        title: "Must not report success",
+      });
+      assert.equal(missingTarget.isError, true);
+      assert.deepEqual(toolDetails(missingTarget), { created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" });
+
+      const missingDecision = await host.runTool("accepted_decision_update", {
+        targetType: "project",
+        decisionId: "missing-decision",
+        title: "Must not report success",
+      });
+      assert.equal(missingDecision.isError, true);
+      assert.equal(toolDetails(missingDecision).updated, false);
+      assert.equal(toolDetails(missingDecision).errorCode, "ACCEPTED_DECISION_NOT_FOUND");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("full reads, task start, and agent context deliver canonical Accepted Decisions", async () => {
+    const host = await createPiHost({ name: "t368-decision-context", seed: "minimal" });
+    try {
+      const targets = [
+        { targetType: "project", title: "Project decision" },
+        { targetType: "feature", targetRef: "F001", title: "Feature decision" },
+        { targetType: "phase", targetRef: "P001", title: "Phase decision" },
+        { targetType: "task", targetRef: "T001", title: "Task decision" },
+      ];
+      for (const target of targets) {
+        const created = await host.runTool("accepted_decision_create", {
+          ...target,
+          decision: `Apply ${target.title}.`,
+          rationale: `Rationale for ${target.title}.`,
+          implementationNotes: `Implementation notes for ${target.title}.`,
+        });
+        assert.equal(toolDetails(created).created, true);
+      }
+
+      const plan = await host.runTool("plan_get", {});
+      assert.match(toolText(plan), /Project decision/);
+      assert.equal(toolDetails(plan).project.acceptedDecisions[0].rationale, "Rationale for Project decision.");
+
+      for (const [tool, params, title] of [
+        ["feature_get", { featureId: "F001", full: true }, "Feature decision"],
+        ["phase_get", { phaseId: "P001", full: true }, "Phase decision"],
+        ["task_get", { taskId: "T001", full: true }, "Task decision"],
+      ]) {
+        const result = await host.runTool(tool, params);
+        assert.match(toolText(result), new RegExp(title));
+        assert.match(toolText(result), new RegExp(`Rationale for ${title}`));
+        assert.equal(toolDetails(result)[tool.split("_")[0]].acceptedDecisions[0].implementationNotes, `Implementation notes for ${title}.`);
+      }
+
+      await host.runTool("requirement_list", { phaseRef: "P001" });
+      const started = await host.runTool("task_start", { taskId: "T001" });
+      for (const title of targets.map((target) => target.title)) assert.match(toolText(started), new RegExp(title));
+
+      const loaded = await host.runTool("planner-load", {});
+      assert.doesNotMatch(toolText(loaded), /Project decision/, "Accepted Decision agent context must not leak into the human recap");
+      const before = await host.emit("before_agent_start", {
+        type: "before_agent_start",
+        prompt: "continue",
+        systemPrompt: "base-system-prompt",
+        systemPromptOptions: {},
+      });
+      for (const title of targets.map((target) => target.title)) assert.match(before.systemPrompt, new RegExp(title));
+      assert.match(before.systemPrompt, /Implementation notes for Task decision/);
     } finally {
       await closePiHost(host);
     }

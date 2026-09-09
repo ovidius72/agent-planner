@@ -159,7 +159,7 @@ if (compareStableVersions(pluginTarget, pluginCurrent) <= 0) {
 console.log(`    ${"plugin (claude-code)".padEnd(26)} ${pluginCurrent} → ${pluginTarget}`);
 
 if (dryRun) {
-  console.log("\n[dry-run] Would: create release/v" + target + ", bump all packages to " + target + ", bump plugin to " + pluginTarget + ", install, build, check, commit, push, open PR → main.");
+  console.log("\n[dry-run] Would: create release/v" + target + ", bump all packages to " + target + ", bump plugin to " + pluginTarget + ", install, run the canonical final verification gate, commit, push, open PR → main.");
   process.exit(0);
 }
 
@@ -174,17 +174,15 @@ sh(`git switch -c ${branchName}`);
 for (const p of PACKAGES) writeVersion(p.dir, target);
 writePluginVersion(pluginTarget);
 
-// --- install + build + check (rollback on failure) ---
+// --- install + canonical final verification gate (rollback on failure) ---
 function rollback() {
   try { sh("git switch develop"); } catch {}
   try { sh(`git branch -D ${branchName}`); } catch {}
 }
 console.log("› pnpm install (relink workspace)...");
 try { run("pnpm install"); } catch { rollback(); console.error("✗ pnpm install failed. Rolled back."); process.exit(1); }
-console.log("› pnpm -r build...");
-try { run("pnpm -r build"); } catch { rollback(); console.error("✗ build failed. Rolled back."); process.exit(1); }
-console.log("› pnpm check...");
-try { run("pnpm check"); } catch { rollback(); console.error("✗ type-check failed. Rolled back."); process.exit(1); }
+console.log("› Canonical final verification (bounded logs + packed-install smoke)...");
+try { run("pnpm verify:final -- --force"); } catch { rollback(); console.error("✗ final verification failed. Rolled back."); process.exit(1); }
 
 // --- commit ---
 console.log("› Committing bump...");

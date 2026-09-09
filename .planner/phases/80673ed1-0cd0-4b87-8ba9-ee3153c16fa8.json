@@ -1,0 +1,146 @@
+{
+  "id": "80673ed1-0cd0-4b87-8ba9-ee3153c16fa8",
+  "featureId": "2f99bd64-b58c-4635-963e-31b45f0ccff6",
+  "number": 99,
+  "shortId": "Z775N",
+  "priority": 5,
+  "slug": "handoff-authoring-preflight-and-cold-start-completeness",
+  "title": "Handoff authoring preflight and cold-start completeness",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Prevent late structural rejection and enforce concrete cold-agent resume context before persisting handoffs.",
+  "description": "`packages/plan-core/src/handoff-context.ts`, `packages/plan-core/src/plan-store.ts`, `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, and the canonical planner skill currently validate an 18-category handoff audit but can still accept generic behavioral prose that omits concrete runtime wiring, files, symbols, commands, operator actions, and exact resume steps. `handoff_prepare` also does not expose the exact required canonical headings and draft scaffold early enough, so an agent can spend substantial tokens drafting a handoff and only then receive a missing-sections rejection. Add a pre-authoring contract that returns the exact required section scaffold and bounded budget before drafting; require a structured cold-start evidence inventory for files, symbols, commands/tools, runtime wiring, user-visible behavior, operator actions, risks, partial work, and ordered next steps; deterministically verify every declared inventory item is represented in the inline handoff or a validated linked `.planner/docs/` supporting document; preserve the 24,000-character inline ceiling, legacy readability, atomic write/read-back/hash guarantees, and Pi/MCP parity. Regression coverage must reproduce the reported omission of `drain_pending_drops`, `install_drop_sink`, `pending_drops`, `pane_drop_row`, `DragItemRegistry`, `column_drop`, `accept_drop`, `showcase`, `Dropped`, `startup.rs`, `drag_identity`, `paint_drag_feedback`, `resolve_at_for`, and `DropHit`, ensuring a cold agent receives concrete wiring context without a second full rewrite.",
+  "descriptionUpdatedAt": "2026-09-02T07:37:51.967Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "69100ae0-1971-4c73-9969-5da0b47d5ee0"
+  ],
+  "tasks": [
+    {
+      "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0",
+      "phaseId": "80673ed1-0cd0-4b87-8ba9-ee3153c16fa8",
+      "number": 383,
+      "shortId": "MJ8CR",
+      "priority": 1,
+      "shortName": "handoff-preflight-completeness",
+      "title": "Make handoff preparation scaffold-first and cold-agent complete",
+      "status": "done",
+      "description": "`packages/plan-core/src/handoff-context.ts`, `packages/plan-core/src/plan-store.ts`, Pi/MCP handoff prepare/write handlers in `packages/pi-adapter/src/index.ts` and `packages/plan-mcp/src/index.ts`, and `packages/plan-core/planner-skill.md` currently expose a late-failing structural contract and an audit that can be satisfied with generic prose. Implement a single-pass authoring workflow: handoff_prepare must return the exact required canonical headings, a ready-to-fill bounded template, required audit categories, existing handoff/task evidence, and the 24,000-character budget before prose generation. Extend handoff_write with a versioned structured cold-start inventory covering exact files, symbols, commands/tools, runtime wiring, user-visible behavior, operator actions, blockers/risks, partial/remaining work, and ordered resume steps; validate that every inventory item appears in the inline body or a hash-validated committed `.planner/docs/` supporting document before mutation. Return precise typed preflight diagnostics rather than a generic post-generation missing-sections error, preserve legacy handoff reads, reconciliation, atomic hash verification, rollback, bounded transport, and Web UI full-content behavior. Add regressions using the reported missing symbols `drain_pending_drops`, `install_drop_sink`, `pending_drops`, `pane_drop_row`, `DragItemRegistry`, `column_drop`, `accept_drop`, `showcase`, `Dropped`, `startup.rs`, `drag_identity`, `paint_drag_feedback`, `resolve_at_for`, and `DropHit`, proving incomplete wiring cannot be certified and a complete prepared template persists once without rewrite.\n\n---\n**Completion summary:**\nCompleted scaffold-first, cold-agent-complete handoff authoring. `packages/plan-core/src/handoff-context.ts` now returns a 16-section canonical draft scaffold before prose, requires five substantive source reviews (including peer-agent/network output), and validates a 14-category cold-start inventory whose every category contains a concrete item represented verbatim inline or in a hash-validated `.planner/docs/` supporting document. The contract captures exact files/symbols/commands, working-tree ownership and commit authorization, negative state, runtime wiring, preservation constraints, verification evidence, sibling/related planned work, user-visible behavior, operator actions, risks, remaining work, and ordered resume steps. Pi and MCP prepare/write schemas, agent guidance, planner rules, persisted audit metadata, fixtures, and public-surface inventory were synchronized. Existing bounded transport, 24,000-character inline ceiling, legacy reads, atomic read-back/hash verification, exact rollback, and Web UI full-content behavior remain preserved. Verified with `pnpm check`, targeted core/MCP/Pi handoff suites (122/122 test assertions across the focused commands, with package-only Pi coverage below its standalone baseline but zero test failures), `pnpm plugins:sync`, `pnpm plugins:check`, `git diff --check`, and `pnpm test:coverage`: 536/536 Node tests, 88/88 Web UI tests, final coverage 86.76% lines, 74.34% branches, 81.76% functions. No commit or push was performed.",
+      "descriptionUpdatedAt": "2026-09-02T12:35:42.553Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0-check-001-planned-in-progress",
+          "date": "2026-09-02T07:38:55.167Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Replace stale whole-entity Web UI writes with concurrency-safe mutations."
+        },
+        {
+          "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0-check-002-in-progress-done",
+          "date": "2026-09-02T12:35:42.551Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed scaffold-first, cold-agent-complete handoff authoring. `packages/plan-core/src/handoff-context.ts` now returns a 16-section canonical draft scaffold before prose, requires five substantive source reviews (including peer-agent/network output), and validates a 14-category cold-start inventory whose every category contains a concrete item represented verbatim inline or in a hash-validated `.planner/docs/` supporting document. The contract captures exact files/symbols/commands, working-tree ownership and commit authorization, negative state, runtime wiring, preservation constraints, verification evidence, sibling/related planned work, user-visible behavior, operator actions, risks, remaining work, and ordered resume steps. Pi and MCP prepare/write schemas, agent guidance, planner rules, persisted audit metadata, fixtures, and public-surface inventory were synchronized. Existing bounded transport, 24,000-character inline ceiling, legacy reads, atomic read-back/hash verification, exact rollback, and Web UI full-content behavior remain preserved. Verified with `pnpm check`, targeted core/MCP/Pi handoff suites (122/122 test assertions across the focused commands, with package-only Pi coverage below its standalone baseline but zero test failures), `pnpm plugins:sync`, `pnpm plugins:check`, `git diff --check`, and `pnpm test:coverage`: 536/536 Node tests, 88/88 Web UI tests, final coverage 86.76% lines, 74.34% branches, 81.76% functions. No commit or push was performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0-check-001-return-exact-canonical-headings-and-a-ready-to-fill-bounded-template-from-handoff-prepare-before-drafting",
+          "number": 1,
+          "title": "Return exact canonical headings and a ready-to-fill bounded template from handoff_prepare before drafting",
+          "checked": true
+        },
+        {
+          "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0-check-002-add-a-versioned-structured-cold-start-inventory-covering-resume-critical-files-symbols-commands-wiring-behavior-operator-actions-risks-remaining-work-and-ordered-next-steps",
+          "number": 2,
+          "title": "Add a versioned structured cold-start inventory covering resume-critical files, symbols, commands, wiring, behavior, operator actions, risks, remaining work, and ordered next steps",
+          "checked": true
+        },
+        {
+          "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0-check-003-validate-every-declared-inventory-item-against-the-inline-handoff-or-validated-supporting-documents-before-any-persistence",
+          "number": 3,
+          "title": "Validate every declared inventory item against the inline handoff or validated supporting documents before any persistence",
+          "checked": true
+        },
+        {
+          "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0-check-004-align-pi-mcp-canonical-skill-guidance-typed-diagnostics-and-bounded-transport-without-breaking-legacy-reads",
+          "number": 4,
+          "title": "Align Pi, MCP, canonical skill guidance, typed diagnostics, and bounded transport without breaking legacy reads",
+          "checked": true
+        },
+        {
+          "id": "69100ae0-1971-4c73-9969-5da0b47d5ee0-check-005-add-the-concrete-omitted-symbol-regression-and-pass-full-build-coverage-plugin-sync-and-browser-gates",
+          "number": 5,
+          "title": "Add the concrete omitted-symbol regression and pass full build, coverage, plugin-sync, and browser gates",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-02T07:38:55.167Z",
+      "completedAt": "2026-09-02T12:35:42.551Z",
+      "createdAt": "2026-09-02T07:38:14.149Z",
+      "updatedAt": "2026-09-02T12:35:42.551Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+          "createdAt": "2026-09-02T07:38:55.119Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-09-02T07:37:51.966Z",
+  "updatedAt": "2026-09-02T12:35:42.551Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-02T08:16:05.386Z",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/80673ed1-0cd0-4b87-8ba9-ee3153c16fa8-2026-09-02T12-35-42-577Z.md",
+      "clearedAt": "2026-09-02T12:35:42.577Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "2ea14c72-4fb4-4fc3-9a9a-94190a28ec68",
+      "date": "2026-09-02T07:38:55.269Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "7cfa0c4a-844d-4eff-9182-7f3e3286ab41",
+      "date": "2026-09-02T12:35:42.646Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
+      "createdAt": "2026-09-02T07:38:55.119Z"
+    }
+  ]
+}

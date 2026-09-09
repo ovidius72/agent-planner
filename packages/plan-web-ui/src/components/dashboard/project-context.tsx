@@ -1,6 +1,7 @@
 import { Card } from "../ui/card";
+import { AcceptedDecisionsList } from "../ui/accepted-decisions-list";
 import { FormattedText } from "../ui/formatted-text";
-import type { AcceptedDecision, Project } from "../../lib/types";
+import type { Project } from "../../lib/types";
 
 function ListSection({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
@@ -11,27 +12,6 @@ function ListSection({ title, items }: { title: string; items: string[] }) {
         {items.map((item) => <li key={item} className="list-disc">{item}</li>)}
       </ul>
     </section>
-  );
-}
-
-function AcceptedDecisions({ decisions }: { decisions: AcceptedDecision[] }) {
-  if (decisions.length === 0) return null;
-  return (
-    <details className="group rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
-      <summary className="cursor-pointer select-none font-semibold text-[var(--text)]">
-        Accepted decisions ({decisions.length})
-      </summary>
-      <div className="mt-4 grid gap-3">
-        {decisions.map((entry) => (
-          <article key={entry.id} className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3">
-            <h3 className="text-sm font-semibold text-[var(--text)]">{entry.title}</h3>
-            {entry.decision ? <div className="mt-2 text-sm text-[var(--text-muted)]"><span className="font-semibold text-[var(--text)]">Decision:</span> <FormattedText text={entry.decision} /></div> : null}
-            {entry.rationale ? <div className="mt-1 text-sm text-[var(--text-muted)]"><span className="font-semibold text-[var(--text)]">Rationale:</span> <FormattedText text={entry.rationale} /></div> : null}
-            {entry.implementationNotes ? <div className="mt-1 text-sm text-[var(--text-muted)]"><span className="font-semibold text-[var(--text)]">Implementation:</span> <FormattedText text={entry.implementationNotes} /></div> : null}
-          </article>
-        ))}
-      </div>
-    </details>
   );
 }
 
@@ -74,7 +54,7 @@ export function ProjectContext({ project }: { project: Project }) {
               <div className="mt-2 text-sm text-[var(--text-muted)]"><FormattedText text={guidelines} /></div>
             </section>
           ) : null}
-          <AcceptedDecisions decisions={project.acceptedDecisions} />
+          <AcceptedDecisionsList decisions={project.acceptedDecisions} targetType="project" />
           {legacyCount > 0 ? (
             <aside className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-muted)]" aria-label="Legacy project context">
               <span className="font-semibold text-[var(--text)]">Legacy project context remains.</span>{" "}

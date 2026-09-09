@@ -1,5 +1,6 @@
 import type { PlanStore } from "./plan-store.js";
 import { formatPhaseRef, formatTwoDigitNumber } from "./naming.js";
+import { buildPhaseWorkMap } from "./task-context.js";
 
 /**
  * Web UI info for the recap (harness-agnostic — no module globals).
@@ -55,7 +56,8 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   const activeP = phases.filter((x) => x.status === "in-progress" || x.status === "discovery").length;
   const totalT = allTasks.length;
   const doneT = allTasks.filter(({ task }) => task.status === "done").length;
-  const activeT = allTasks.filter(({ task }) => task.status === "in-progress").length;
+  const activeTasks = allTasks.filter(({ task }) => task.status === "in-progress");
+  const activeT = activeTasks.length;
   const checkpointedTasks = allTasks.filter(({ task }) => !["done", "canceled", "rejected"].includes(task.status) && task.pauseSnapshot);
   const checkpointedT = checkpointedTasks.length;
   const pendingDeviation = [...plan.project.workDeviations]
@@ -75,8 +77,9 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   // (totalT > 0 guards the empty/unstarted case from looking "complete".)
   const planComplete = totalT > 0 && doneT === totalT && doneP === totalP && doneF === totalF;
 
-  // Current focus = first in-progress task (and its phase/feature).
-  const focusTask = allTasks.find(({ task }) => task.status === "in-progress");
+  // Current focus is authoritative only when exactly one task is in progress.
+  // Multiple active tasks are an explicit conflict, never a reason to pick the first silently.
+  const focusTask = activeTasks.length === 1 ? activeTasks[0] : undefined;
   const focusPhase = focusTask?.phase;
   const focusFeature = focusPhase ? feats.find((x) => x.id === focusPhase.featureId) : undefined;
 
@@ -109,7 +112,19 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
       : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active, ${checkpointedT} with checkpoints)`,
   );
 
-  if (focusTask && focusPhase) {
+  if (activeTasks.length > 1) {
+    const conflicts = activeTasks.map(({ phase, task }) => {
+      const feature = feats.find((entry) => entry.id === phase.featureId);
+      return `${formatPhaseRef(phase.number, feature?.number)}/${tref(task.number)} — ${task.title}`;
+    });
+    lines.push(
+      `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "CONFLITTO TASK ATTIVI" : "ACTIVE TASK CONFLICT"} — ${activeTasks.length} ${italian ? "task risultano in-progress" : "tasks are in progress"}: ${conflicts.join("; ")}`,
+      "",
+      italian
+        ? `Esegui ${cmd("task_recommend", "planner-task-recommend")} e riconcilia esplicitamente il conflitto prima di dichiarare un focus.`
+        : `Run ${cmd("task_recommend", "planner-task-recommend")} and explicitly reconcile the conflict before claiming a current focus.`,
+    );
+  } else if (focusTask && focusPhase) {
     const fr = focusFeature ? fref(focusFeature.number) : "?";
     const pr = formatPhaseRef(focusPhase.number, focusFeature?.number);
     const tr = tref(focusTask.task.number);
@@ -135,7 +150,7 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   } else if (handoffs.length > 0) {
     const top = handoffs[0]!;
     lines.push(
-      `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "nessun task attivo" : "no active task"} · ${italian ? "handoff pendente più recente" : "most recent pending handoff"}: ${top.compositeRef} — "${top.firstLine}"`,
+      `${italian ? "Focus corrente" : "Current focus"}: ${italian ? "nessun task attivo (verificato dagli stati persistiti di tutti i task)" : "no active task (verified from all persisted task statuses)"} · ${italian ? "handoff pendente più recente" : "most recent pending handoff"}: ${top.compositeRef} — "${top.firstLine}" (${top.resumeReady ? "resume-ready" : italian ? "verifica read-back richiesta" : "read-back verification required"})`,
     );
   } else if (planComplete) {
     lines.push(
@@ -144,7 +159,19 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
         : "Current focus: plan complete — all features/phases/tasks are done.",
     );
   } else {
-    lines.push(`${italian ? "Focus corrente" : "Current focus"}: ${italian ? "nessun task attivo — rivedi il piano e scegli il prossimo task concreto" : "no active task — review the plan and pick the next concrete task"}`);
+    lines.push(`${italian ? "Focus corrente" : "Current focus"}: ${italian ? "nessun task attivo (verificato dagli stati persistiti di tutti i task) — rivedi il piano e scegli il prossimo task concreto" : "no active task (verified from all persisted task statuses) — review the plan and pick the next concrete task"}`);
+  }
+
+  const orientation = focusTask ?? pendingResume ?? latestStandaloneCheckpoint;
+  if (orientation) {
+    const feature = feats.find((entry) => entry.id === orientation.phase.featureId);
+    lines.push(
+      "",
+      buildPhaseWorkMap(orientation.phase, feature?.number, orientation.task.id, 4_000).content,
+      italian
+        ? "Prima di proporre nuovo lavoro, rileggi la fase canonica e il task fratello pertinente: non duplicare capability già assegnate."
+        : "Before proposing new work, reread the canonical phase and the relevant sibling task: do not duplicate an already-owned capability.",
+    );
   }
 
   // Next step: the phase handoff (phase.handoff) is the authoritative,
@@ -169,10 +196,15 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
         : `Resume advisory: evaluate the newest checkpoint, ${ref}, with ${taskStartCmd} before deciding whether to return to it or start other work.`,
     );
   } else if (handoffs.length > 0) {
+    const unverified = handoffs.filter((handoff) => !handoff.resumeReady);
     lines.push(
-      italian
-        ? `Prossimo step: leggi l'handoff di fase pendente sotto (fonte autorevole, gestita attivamente). I nextSteps legacy di resume.json sono soppressi perché possono essere stale.`
-        : `Next step: read the pending phase handoff below (authoritative, actively maintained). Legacy resume.json nextSteps are suppressed because they may be stale.`,
+      unverified.length > 0
+        ? (italian
+          ? `Prossimo step: ${unverified.length} handoff candidato richiede ancora verifica read-back; non trattarlo come completo o autorevole finché handoff_verify non restituisce resumeReady=true.`
+          : `Next step: ${unverified.length} handoff candidate still requires read-back verification; do not treat it as complete or authoritative until ${cmd("handoff_verify", "planner-handoff-verify")} returns resumeReady=true.`)
+        : (italian
+          ? `Prossimo step: leggi l'handoff di fase pendente sotto (fonte autorevole, gestita attivamente). I nextSteps legacy di resume.json sono soppressi perché possono essere stale.`
+          : `Next step: read the pending phase handoff below (authoritative, actively maintained). Legacy resume.json nextSteps are suppressed because they may be stale.`),
     );
   } else if (!planComplete && resume?.nextSteps?.length) {
     lines.push(`${italian ? "Prossimo step" : "Next step"}: ${resume.nextSteps[0]}`);

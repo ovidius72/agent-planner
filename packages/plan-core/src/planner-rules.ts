@@ -16,6 +16,8 @@ const EXPECTED_OPERATIONAL_RULE = "When you begin work, task_start and task_swit
 
 const LEGACY_DETAIL_WRITING_RULE = "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge. Before starting, resuming, or switching to a task, read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order; read linked requirements explicitly when present. Cite entities with composite IDs, not bare UUIDs.";
 const LEGACY_EXPECTED_OPERATIONAL_RULE = "When you begin work, task_start and task_switch enforce the required ordered full reads. Read any relevant phase handoff as additional context, then update the planner before and after significant changes. If you change an architectural decision, document it explicitly.";
+const LEGACY_PROJECT_GUIDELINES_RULE = "When a project defines the canonical Project Guidelines section, read it on planner load and before starting or switching task work whenever the current-session attestation is missing or stale. Keep coding standards, formatting, styling, and other project-specific rules from that section in working memory while executing the task.";
+const PROJECT_GUIDELINES_RULE = "When a project defines the canonical Project Guidelines section, read it on planner load and before starting or switching task work whenever the current-session attestation is missing or stale. Keep coding standards, formatting, styling, verification process, best practices, and other project-specific rules only in Project Guidelines. Requirements are separate declarative user, business, or system outcomes with no lifecycle status; never store guidelines or agent behavior in Requirements. Nested Requirement macro-tasks retain implementation status.";
 
 export const PLANNER_EXTENSION_RULES: string[] = [
   // §1 — source of truth
@@ -25,7 +27,7 @@ export const PLANNER_EXTENSION_RULES: string[] = [
   // §3 — markdown not source of truth
   "Do not treat markdown as the source of truth for the plan. The plan's primary source is structured data in .planner/; markdown is a generated, human/agent-readable view.",
   // §4 — project guidelines
-  "When a project defines the canonical Project Guidelines section, read it on planner load and before starting or switching task work whenever the current-session attestation is missing or stale. Keep coding standards, formatting, styling, and other project-specific rules from that section in working memory while executing the task.",
+  PROJECT_GUIDELINES_RULE,
   // §5 — plan location
   "The plan lives in .planner/ within the target project. Whether .planner/ is git-tracked is at the project's discretion.",
   // §6 — discuss per phase
@@ -37,7 +39,7 @@ export const PLANNER_EXTENSION_RULES: string[] = [
   // §10 — references
   "Reference entities with human, unique, composite IDs — Feature 'F001 - Name', Phase 'P001(F001) - Title', Task 'T003 - Number'. Short forms P003/T007 and the 5-char global shortId (e.g. UUXD1) are also valid. Never reference raw UUIDs. To locate an entity, use the compact list tools (feature_list/phase_list/task_list), not by reading .planner/*.json files.",
   // §12 — handoff
-  "Handoff is per-phase (phase.handoff), not a file. Write it only on explicit user request and only after the exact feature+phase target is confirmed. Run handoff_prepare for that phase, reconcile all still-relevant existing content into one active handoff, and synchronize durable task/phase/feature context in the same handoff_write operation. A pending handoff never blocks task_start and is archived only when the phase completes or the user explicitly clears it; refreshing it must not create superseded copies.",
+  "Handoff is per-phase (phase.handoff), not a file. Write it only on explicit user request and only after the exact feature+phase target is confirmed. Run handoff_prepare before drafting, use its exact scaffold, review conversation/approvals, planner and sibling context, diff/implementation, verification/runtime evidence, and peer-agent/network messages, then inventory concrete files, symbols, ownership/completion state, work not started, runtime wiring, preservation constraints, proof observations, related planned work, operator actions, and ordered resume steps. Every inventory item must appear in the handoff or a validated supporting document. Reconcile all still-relevant existing content and synchronize durable task/phase/feature context in the same handoff_write operation. A pending handoff never blocks task_start; every canonical terminal phase outcome archives it automatically, explicit clear also archives it, and refresh must not create superseded copies.",
   // §12 — operational hygiene
   "Operational hygiene: start the task (task_start) before thinking about implementation; complete it (task_complete) as part of delivering the deliverable, not after; motivate every block so a third party can understand the impediment.",
   // Planner startup
@@ -56,6 +58,7 @@ function normalizeLegacyRules(rules: string[]): string[] {
   return rules.map((rule) => {
     if (rule === LEGACY_DETAIL_WRITING_RULE) return DETAIL_WRITING_RULE;
     if (rule === LEGACY_EXPECTED_OPERATIONAL_RULE) return EXPECTED_OPERATIONAL_RULE;
+    if (rule === LEGACY_PROJECT_GUIDELINES_RULE) return PROJECT_GUIDELINES_RULE;
     return rule;
   });
 }

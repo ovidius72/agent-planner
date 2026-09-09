@@ -10,6 +10,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { surfacesByHarness, surfaceById, surfaceCount } from "./surfaces.mjs";
+import { fieldCapabilityManifest } from "./field-capabilities.mjs";
 import { scenarios, scenarioById, scenariosByGroup, scenarioCount, scenariosForHarness } from "./scenario-matrix.mjs";
 import { createPlannerFixture, readPlanSnapshot, cleanupFixtures, trackedRoots, BASE_TIME } from "./helpers/fixtures.mjs";
 import { registerExecutor, missingExecutors, assertScenarioExpectations, normalizeToolResult } from "./helpers/runner.mjs";
@@ -31,6 +32,21 @@ test("surface inventory is coherent", () => {
   }
   assert.equal(new Set(ids).size, ids.length, "surface ids must be unique");
   for (const id of ids) assert.ok(surfaceById.has(id), `surfaceById missing ${id}`);
+});
+
+test("field capability manifest is executable against the public surface inventory", () => {
+  const harnesses = ["core", "pi", "mcp", "api", "ui"];
+  const allSurfaces = Object.values(surfacesByHarness).flat();
+  const documented = allSurfaces.filter((entry) => /read|persist|mutat|update|create|delete|context|no-op|parity/i.test(`${entry.name} ${entry.description}`));
+  assert.ok(documented.length > 0, "surface inventory must expose semantic operation anchors");
+  for (const entry of fieldCapabilityManifest) {
+    assert.ok(entry.entity && entry.name, "field capability identity required");
+    if (entry.exception) continue;
+    for (const harness of harnesses) assert.equal(entry.surfaces[harness === "api" ? "http" : harness === "ui" ? "web-ui" : harness], true, `${entry.entity}.${entry.name} missing ${harness}`);
+    assert.ok(entry.operations.some((operation) => ["read", "create", "update", "delete", "agent-context"].includes(operation)), `${entry.entity}.${entry.name} has no semantic operation`);
+  }
+  assert.ok(fieldCapabilityManifest.some((entry) => entry.operations.includes("agent-context")), "agent context coverage must be declared");
+  assert.ok(documented.some((entry) => /no-op|false-success|persisted outcome/i.test(entry.description)), "false-success behavior must remain inventoried");
 });
 
 test("scenario matrix is coherent", () => {

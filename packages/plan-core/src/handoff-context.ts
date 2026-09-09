@@ -3,13 +3,17 @@ import type {
   Feature,
   HandoffCompletenessAudit,
   HandoffCompletenessEntry,
+  HandoffColdStartInventoryEntry,
   HandoffSupportingDocument,
   Phase,
   Task,
 } from "./schema.js";
+import { buildPhaseWorkMap, type PhaseWorkMap } from "./task-context.js";
 
 export const COMPLETION_SUMMARY_HEADING = "**Completion summary:**";
 export const HANDOFF_COMPLETENESS_AUDIT_VERSION = 1;
+export const HANDOFF_COLD_START_INVENTORY_VERSION = 1;
+export const TARGET_HANDOFF_CONTENT_CHARS = 8_000;
 export const MAX_HANDOFF_CONTENT_CHARS = 24_000;
 export const HANDOFF_AUDIT_START_MARKER = "<!-- agent-plan:handoff-audit:start -->";
 export const HANDOFF_AUDIT_END_MARKER = "<!-- agent-plan:handoff-audit:end -->";
@@ -35,8 +39,50 @@ export const HANDOFF_COMPLETENESS_CATEGORIES = [
   { id: "conversation-only-facts", label: "Conversation-only facts" },
 ] as const;
 
+export const HANDOFF_COLD_START_SOURCE_REVIEWS = [
+  { id: "conversation", label: "Conversation, user corrections, and authorization state" },
+  { id: "planner-entities", label: "Task, sibling tasks, phase, feature, requirements, and prior handoff" },
+  { id: "working-tree", label: "Changed files, diffs, implementation state, and ownership" },
+  { id: "verification-runtime", label: "Commands, test results, runtime observations, and limitations" },
+  { id: "peer-agent-output", label: "Peer-agent messages and delegated-work results, or confirmation that none exist" },
+] as const;
+
+export const HANDOFF_COLD_START_INVENTORY_CATEGORIES = [
+  { id: "files", label: "Exact files" },
+  { id: "symbols", label: "Exact symbols and identifiers" },
+  { id: "working-tree-ownership", label: "Working-tree state, work ownership, and commit/discard authorization" },
+  { id: "negative-state", label: "Work not started, removals not performed, and intentionally untouched state" },
+  { id: "commands-tools", label: "Commands and tool paths" },
+  { id: "runtime-wiring", label: "Runtime wiring, call sites, and data flow" },
+  { id: "preservation-constraints", label: "Behavior and code paths that must survive" },
+  { id: "verification-evidence", label: "Concrete observations proving completed, live, dead, or inert state" },
+  { id: "related-planned-work", label: "Sibling tasks and related planned capabilities" },
+  { id: "user-visible-behavior", label: "User-visible behavior" },
+  { id: "operator-actions", label: "Operator actions" },
+  { id: "blockers-risks", label: "Blockers and risks" },
+  { id: "remaining-work", label: "Remaining work" },
+  { id: "ordered-resume-steps", label: "Ordered resume steps" },
+] as const;
+
+export const HANDOFF_CANONICAL_SECTIONS = [
+  "Current focus",
+  "Current and partial state",
+  "Preservation constraints",
+  "Supporting documents",
+  "Blockers and risks",
+  "How to resume",
+] as const;
+
+const LEGACY_HANDOFF_CANONICAL_SECTIONS = [
+  "Created at", "Updated at", "Reason", "Current focus", "What was being done",
+  "Working tree and ownership", "Work not started or intentionally untouched", "Runtime wiring",
+  "Preservation constraints", "Verification evidence", "Related planned work", "How to resume",
+  "Files touched", "Blockers", "Next steps", "Recent decisions",
+] as const;
+
 export type HandoffCompletenessCategory = typeof HANDOFF_COMPLETENESS_CATEGORIES[number]["id"];
-export type HandoffContractErrorCode = "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED";
+export type HandoffColdStartInventoryCategory = typeof HANDOFF_COLD_START_INVENTORY_CATEGORIES[number]["id"];
+export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND";
 
 export class HandoffContractError extends Error {
   readonly code: HandoffContractErrorCode;
@@ -55,9 +101,22 @@ export interface HandoffCompletenessAuditInput {
   entries: HandoffCompletenessEntry[];
 }
 
+export interface HandoffColdStartInventoryInput {
+  version: number;
+  sourceReviews: Array<{ source: string; detail: string }>;
+  entries: HandoffColdStartInventoryEntry[];
+}
+
 export interface HandoffSupportingDocumentInput {
   path: string;
   description: string;
+}
+
+export interface HandoffContentExternalization {
+  content: string;
+  externalized: boolean;
+  extendedContent: string;
+  supportingDocument?: HandoffSupportingDocumentInput;
 }
 
 export interface HandoffTaskContextUpdate {
@@ -96,19 +155,32 @@ export interface PhaseHandoffAudit {
   missingCompletionTaskIds: string[];
   missingCompletionTasks: Array<{ id: string; number: number; title: string }>;
   completenessVersion: number;
+  targetContentChars: number;
   maxContentChars: number;
   completenessCategories: ReadonlyArray<{ id: HandoffCompletenessCategory; label: string }>;
+  canonicalSections: ReadonlyArray<string>;
+  requiredHumanInputs: ReadonlyArray<{ id: "title" | "reason"; label: string; description: string }>;
+  draftTemplate: string;
+  coldStartInventoryVersion: number;
+  coldStartSourceReviews: ReadonlyArray<{ id: string; label: string }>;
+  coldStartInventoryCategories: ReadonlyArray<{ id: HandoffColdStartInventoryCategory; label: string }>;
   existingCompletenessAudit: HandoffCompletenessAudit | null;
+  phaseWorkMap: PhaseWorkMap;
 }
 
 export interface RefreshPhaseHandoffInput {
+  /** Structured, human-supplied explanation; rendered by the planner. */
+  reason: string;
   content: string;
   expectedHandoffUpdatedAt: string;
   reconciledExistingHandoff: boolean;
   completenessAudit?: HandoffCompletenessAuditInput;
+  coldStartInventory?: HandoffColdStartInventoryInput;
   supportingDocuments?: HandoffSupportingDocumentInput[];
   /** Populated and verified by PlanStore before pure domain application. */
   verifiedSupportingDocuments?: HandoffSupportingDocument[];
+  /** Content is kept in-memory only for cold-start coverage validation. */
+  verifiedSupportingDocumentContents?: string[];
   contextSync: PhaseHandoffContextSync;
 }
 
@@ -120,10 +192,56 @@ export interface RefreshPhaseHandoffResult {
   handoffAudit: HandoffCompletenessAudit;
 }
 
+export interface VerifyPhaseHandoffReadBackInput {
+  expectedContentHash: string;
+  sourceReviews: Array<{ source: string; detail: string }>;
+  omissionsFound: string[];
+}
+
+export interface VerifyPhaseHandoffReadBackResult {
+  phaseId: string;
+  handoffUpdatedAt: string;
+  contentHash: string;
+  resumeReadyAt: string;
+  sourceReviews: Array<{ source: string; detail: string }>;
+}
+
 export function hasTaskCompletionEvidence(task: Task): boolean {
   if (task.status !== "done") return true;
   if (task.description.includes(COMPLETION_SUMMARY_HEADING)) return true;
   return task.statusLog.some((entry) => entry.toStatus === "done" && entry.description.trim().length > 0);
+}
+
+export function buildHandoffDraftTemplate(phase: Phase, feature: Feature): string {
+  const featureRef = `F${String(feature.number).padStart(3, "0")}`;
+  const phaseRef = `P${String(phase.number).padStart(3, "0")}(${featureRef})`;
+  return [
+    `# ${phaseRef} — {{REQUIRED: meaningful handoff title}}`,
+    "",
+    "<!-- Planner-generated: Created at, Updated at, and structured Reason. Do not write these lines in the draft. -->",
+    "",
+    "## Current focus",
+    `- Feature: ${featureRef} — ${feature.name}`,
+    `- Phase: ${phaseRef} — ${phase.title}`,
+    "- Task: {{REQUIRED: exact composite task ref and title}}",
+    "- Exact resume point: {{REQUIRED: file, symbol, command, or state boundary}}",
+    "",
+    "## Current and partial state",
+    "{{REQUIRED: concise completed/current/partial state only; keep extended detail in supporting documents}}",
+    "",
+    "## Preservation constraints",
+    "{{REQUIRED: minimal behaviors and boundaries that must survive}}",
+    "",
+    "## Supporting documents",
+    "- {{REQUIRED: ordered .planner/docs/*.md links with why each is needed, or an explicit verified statement that none are needed}}",
+    "",
+    "## Blockers and risks",
+    "- {{REQUIRED: blocker/risk, or a substantive verified statement that none apply}}",
+    "",
+    "## How to resume",
+    "1. {{REQUIRED: first exact action, including file/symbol/command}}",
+    "2. {{REQUIRED: subsequent ordered actions and verification}}",
+  ].join("\n");
 }
 
 export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffAudit {
@@ -138,9 +256,20 @@ export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffA
     missingCompletionTaskIds: missingCompletionTasks.map((task) => task.id),
     missingCompletionTasks,
     completenessVersion: HANDOFF_COMPLETENESS_AUDIT_VERSION,
+    targetContentChars: TARGET_HANDOFF_CONTENT_CHARS,
     maxContentChars: MAX_HANDOFF_CONTENT_CHARS,
     completenessCategories: HANDOFF_COMPLETENESS_CATEGORIES,
+    canonicalSections: HANDOFF_CANONICAL_SECTIONS,
+    requiredHumanInputs: [
+      { id: "title", label: "Meaningful title", description: "A concise handoff title; the planner renders it as the H1." },
+      { id: "reason", label: "Reason", description: "Why work is stopping and why a cold agent needs this handoff; the planner renders it as metadata." },
+    ],
+    draftTemplate: buildHandoffDraftTemplate(phase, feature),
+    coldStartInventoryVersion: HANDOFF_COLD_START_INVENTORY_VERSION,
+    coldStartSourceReviews: HANDOFF_COLD_START_SOURCE_REVIEWS,
+    coldStartInventoryCategories: HANDOFF_COLD_START_INVENTORY_CATEGORIES,
     existingCompletenessAudit: phase.handoffAudit,
+    phaseWorkMap: buildPhaseWorkMap(phase, feature.number),
   };
 }
 
@@ -210,6 +339,228 @@ export function validateHandoffCompletenessAudit(audit: HandoffCompletenessAudit
   return expectedIds.map((id) => byCategory.get(id)!);
 }
 
+export function validateHandoffColdStartInventory(
+  inventory: HandoffColdStartInventoryInput | undefined,
+  content: string,
+  supportingDocumentContents: string[] = [],
+): HandoffColdStartInventoryEntry[] {
+  const expectedIds = HANDOFF_COLD_START_INVENTORY_CATEGORIES.map((entry) => entry.id);
+  if (!inventory || inventory.version !== HANDOFF_COLD_START_INVENTORY_VERSION) {
+    throw new HandoffContractError(
+      "HANDOFF_COLD_START_INVENTORY_REQUIRED",
+      `Cold-start inventory version ${HANDOFF_COLD_START_INVENTORY_VERSION} is required before handoff persistence. Populate it from the scaffold returned by handoff_prepare.`,
+      { requiredVersion: HANDOFF_COLD_START_INVENTORY_VERSION, missingCategories: expectedIds },
+    );
+  }
+
+  const requiredSources = HANDOFF_COLD_START_SOURCE_REVIEWS.map((entry) => entry.id);
+  const requiredSourceIds = new Set<string>(requiredSources);
+  const sourceReviews = new Map<string, string>();
+  const duplicateSources: string[] = [];
+  for (const review of inventory.sourceReviews) {
+    if (sourceReviews.has(review.source)) duplicateSources.push(review.source);
+    else sourceReviews.set(review.source, review.detail);
+  }
+  const missingSources = requiredSources.filter((source) => !sourceReviews.has(source));
+  const unknownSources = [...sourceReviews.keys()].filter((source) => !requiredSourceIds.has(source));
+  const invalidSources = requiredSources.filter((source) => {
+    const detail = sourceReviews.get(source);
+    return detail !== undefined && !isSubstantive(detail);
+  });
+
+  const byCategory = new Map<string, HandoffColdStartInventoryEntry>();
+  const duplicates: string[] = [];
+  for (const entry of inventory.entries) {
+    if (byCategory.has(entry.category)) duplicates.push(entry.category);
+    else byCategory.set(entry.category, entry);
+  }
+  const missingCategories = expectedIds.filter((id) => !byCategory.has(id));
+  const unknownCategories = [...byCategory.keys()].filter((id) => !expectedIds.includes(id as HandoffColdStartInventoryCategory));
+  const invalidCategories: string[] = [];
+  for (const id of expectedIds) {
+    const entry = byCategory.get(id);
+    if (!entry) continue;
+    const items = uniqueStrings(entry.items);
+    const notApplicableReason = entry.notApplicableReason?.trim() ?? "";
+    if (items.length === 0) invalidCategories.push(id);
+    if (notApplicableReason && !isSubstantive(notApplicableReason)) invalidCategories.push(id);
+    if (items.some((item) => /^(?:n\/?a|none|nothing|unknown|tbd|see above)$/i.test(item.trim()))) invalidCategories.push(id);
+  }
+  if (
+    missingSources.length > 0 || unknownSources.length > 0 || duplicateSources.length > 0 || invalidSources.length > 0
+    || missingCategories.length > 0 || unknownCategories.length > 0 || duplicates.length > 0 || invalidCategories.length > 0
+  ) {
+    throw new HandoffContractError(
+      "HANDOFF_COLD_START_INVENTORY_REQUIRED",
+      "The cold-start inventory is incomplete. Review every prepared source before drafting; every category needs at least one concrete item. When nothing exists, the item must explicitly state the verified absence and why it matters (for example, 'No deletion has started; all original files remain intact').",
+      {
+        missingSources,
+        invalidSources,
+        unknownSources,
+        duplicateSources: [...new Set(duplicateSources)],
+        missingCategories,
+        invalidCategories: [...new Set(invalidCategories)],
+        unknownCategories,
+        duplicateCategories: [...new Set(duplicates)],
+      },
+    );
+  }
+
+  const normalize = (value: string): string => value.normalize("NFKC").replace(/[`*_]/g, "").replace(/\s+/g, " ").toLowerCase();
+  const corpus = normalize([content, ...supportingDocumentContents].join("\n"));
+  const uncoveredItems = expectedIds.flatMap((id) => {
+    const entry = byCategory.get(id)!;
+    return uniqueStrings(entry.items)
+      .filter((item) => !corpus.includes(normalize(item)))
+      .map((item) => ({ category: id, item }));
+  });
+  if (uncoveredItems.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_COLD_START_INVENTORY_UNCOVERED",
+      "Resume-critical inventory items are missing from the canonical handoff and validated supporting documents. Add each exact item before retrying; do not certify from generic prose.",
+      { uncoveredItems },
+    );
+  }
+  return expectedIds.map((id) => {
+    const entry = byCategory.get(id)!;
+    return {
+      category: entry.category,
+      items: uniqueStrings(entry.items),
+      ...(entry.notApplicableReason?.trim() ? { notApplicableReason: entry.notApplicableReason.trim() } : {}),
+    };
+  });
+}
+
+export function validateHandoffReadBackVerification(
+  phase: Phase,
+  input: VerifyPhaseHandoffReadBackInput,
+): Array<{ source: string; detail: string }> {
+  const audit = phase.handoffAudit;
+  const actualContentHash = phase.handoff.trim() ? handoffContentHash(phase.handoff) : "";
+  if (!phase.handoff.trim() || !audit || audit.contentHash !== actualContentHash || audit.contentLength !== phase.handoff.length) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_VERIFICATION_REQUIRED",
+      "The persisted handoff or its audit metadata is missing or inconsistent. Run handoff_prepare, rewrite the handoff, then read it back before verification.",
+      { expectedContentHash: input.expectedContentHash, actualContentHash, auditContentHash: audit?.contentHash ?? "" },
+    );
+  }
+  if (!input.expectedContentHash.trim() || input.expectedContentHash !== actualContentHash) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_VERIFICATION_REQUIRED",
+      "The handoff changed after the read-back candidate was selected. Call handoff_show again and verify the returned contentHash.",
+      { expectedContentHash: input.expectedContentHash, actualContentHash },
+    );
+  }
+
+  const requiredSources = HANDOFF_COLD_START_SOURCE_REVIEWS.map((entry) => entry.id);
+  const bySource = new Map<string, string>();
+  const duplicateSources: string[] = [];
+  for (const review of input.sourceReviews) {
+    if (bySource.has(review.source)) duplicateSources.push(review.source);
+    else bySource.set(review.source, review.detail.trim());
+  }
+  const missingSources = requiredSources.filter((source) => !bySource.has(source));
+  const unknownSources = [...bySource.keys()].filter((source) => !requiredSources.includes(source as typeof requiredSources[number]));
+  const invalidSources = requiredSources.filter((source) => {
+    const detail = bySource.get(source);
+    return detail !== undefined && !isSubstantive(detail);
+  });
+  if (missingSources.length > 0 || unknownSources.length > 0 || duplicateSources.length > 0 || invalidSources.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_VERIFICATION_REQUIRED",
+      "Read-back verification must re-check every required source against the persisted handoff with substantive findings.",
+      { missingSources, unknownSources, duplicateSources: [...new Set(duplicateSources)], invalidSources },
+    );
+  }
+
+  const omissionsFound = uniqueStrings(input.omissionsFound);
+  if (omissionsFound.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_READBACK_GAPS_FOUND",
+      "The persisted handoff is not resume-ready because the read-back found omissions. Run handoff_prepare again, reconcile every listed gap, and rewrite before retrying verification.",
+      { omissionsFound },
+    );
+  }
+  return requiredSources.map((source) => ({ source, detail: bySource.get(source)! }));
+}
+
+function sectionBody(content: string, headings: string[]): string {
+  const lines = content.split(/\r?\n/);
+  const normalized = new Set(headings.map((heading) => heading.toLowerCase()));
+  const start = lines.findIndex((line) => {
+    const match = line.match(/^##\s+(.+?)\s*$/);
+    return Boolean(match && normalized.has(match[1]!.toLowerCase()));
+  });
+  if (start < 0) return "";
+  const body: string[] = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index]!)) break;
+    body.push(lines[index]!);
+  }
+  return body.join("\n").trim();
+}
+
+function boundedSection(value: string, fallback: string, maxChars: number): string {
+  const normalized = value.trim() || fallback;
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxChars - 86)).trimEnd()}\n\n[Extended detail continues in the linked planner document.]`;
+}
+
+/**
+ * Mechanically compact oversized legacy or verbose handoffs while retaining the
+ * complete submitted body in one planner-owned Markdown document.
+ */
+export function externalizeOversizedHandoffContent(
+  content: string,
+  supportingDocumentPath: string,
+): HandoffContentExternalization {
+  const base = stripRenderedCompletenessAudit(content);
+  if (base.length <= TARGET_HANDOFF_CONTENT_CHARS) {
+    return { content: base, externalized: false, extendedContent: "" };
+  }
+  const firstHeading = base.split(/\r?\n/).find((line) => /^#\s+/.test(line.trim()))?.trim() ?? "# Handoff resume capsule";
+  const metadata = ["Created at", "Updated at", "Reason"].map((label) =>
+    base.split(/\r?\n/).find((line) => line.toLowerCase().startsWith(`${label.toLowerCase()}:`))?.trim() ?? `${label}: See supporting document.`,
+  );
+  const currentFocus = boundedSection(sectionBody(base, ["Current focus"]), "Exact focus and resume point are preserved in the supporting document.", 1_200);
+  const currentState = boundedSection(sectionBody(base, ["Current and partial state", "What was being done"]), "Current and partial work details are preserved in the supporting document.", 1_500);
+  const preservation = boundedSection(sectionBody(base, ["Preservation constraints"]), "Preservation constraints are recorded in the supporting document.", 900);
+  const blockers = boundedSection(sectionBody(base, ["Blockers and risks", "Blockers"]), "Blockers and risks are recorded in the supporting document.", 900);
+  const resume = boundedSection(sectionBody(base, ["How to resume", "Next steps"]), "1. Read the linked supporting document completely, then resume from its first ordered action.", 1_500);
+  const compact = [
+    firstHeading,
+    "",
+    ...metadata,
+    "",
+    "## Current focus",
+    currentFocus,
+    "",
+    "## Current and partial state",
+    currentState,
+    "",
+    "## Preservation constraints",
+    preservation,
+    "",
+    "## Supporting documents",
+    `- ${supportingDocumentPath} — Full submitted handoff detail externalized automatically because the inline resume capsule exceeded ${TARGET_HANDOFF_CONTENT_CHARS} characters. Read this document before resuming.`,
+    "",
+    "## Blockers and risks",
+    blockers,
+    "",
+    "## How to resume",
+    resume,
+  ].join("\n").trim();
+  return {
+    content: compact,
+    externalized: true,
+    extendedContent: `${firstHeading} — extended detail\n\n${base}\n`,
+    supportingDocument: {
+      path: supportingDocumentPath,
+      description: "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+    },
+  };
+}
+
 export function renderHandoffCompletenessAudit(audit: HandoffCompletenessAuditInput): string {
   const entries = validateHandoffCompletenessAudit(audit);
   const labels = new Map(HANDOFF_COMPLETENESS_CATEGORIES.map((entry) => [entry.id, entry.label] as const));
@@ -227,19 +578,50 @@ export function renderHandoffCompletenessAudit(audit: HandoffCompletenessAuditIn
   ].join("\n").trim();
 }
 
-export function renderVerifiedHandoffContent(content: string, audit?: HandoffCompletenessAuditInput): string {
+export function renderVerifiedHandoffContent(
+  content: string,
+  audit?: HandoffCompletenessAuditInput,
+  coldStartInventory?: HandoffColdStartInventoryInput,
+  supportingDocumentContents: string[] = [],
+): string {
   const base = stripRenderedCompletenessAudit(content);
   validateCanonicalHandoffContent(base);
   validateHandoffCompletenessAudit(audit);
-  const rendered = `${base}\n\n${renderHandoffCompletenessAudit(audit!)}`.trim();
-  if (rendered.length > MAX_HANDOFF_CONTENT_CHARS) {
+  validateHandoffColdStartInventory(coldStartInventory, base, supportingDocumentContents);
+  if (base.length > MAX_HANDOFF_CONTENT_CHARS) {
     throw new HandoffContractError(
       "HANDOFF_CONTENT_LIMIT_EXCEEDED",
-      `Canonical handoff content is ${rendered.length} characters; the maximum is ${MAX_HANDOFF_CONTENT_CHARS}. Move extended detail to committed Markdown under .planner/docs/ and link it with a substantive explanation.`,
-      { contentLength: rendered.length, maxContentChars: MAX_HANDOFF_CONTENT_CHARS },
+      `Inline handoff content is ${base.length} characters after compaction; the absolute compatibility ceiling is ${MAX_HANDOFF_CONTENT_CHARS}. Retry through PlanStore so extended detail can be externalized automatically.`,
+      { contentLength: base.length, targetContentChars: TARGET_HANDOFF_CONTENT_CHARS, maxContentChars: MAX_HANDOFF_CONTENT_CHARS, continuation: "externalize-and-retry" },
     );
   }
-  return rendered;
+  return base;
+}
+
+export function materializeHandoffMetadata(content: string, reason: string, createdAt: string, updatedAt: string): string {
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) {
+    throw new HandoffContractError(
+      "HANDOFF_REASON_REQUIRED",
+      "A structured handoff reason is required before drafting or persistence. Run handoff_prepare and provide reason; timestamps are planner-generated.",
+      { requiredInputs: ["title", "reason"], generatedMetadata: ["Created at", "Updated at"] },
+    );
+  }
+  const existingCreatedAt = content.match(/^Created at:\s*(\S+)\s*$/im)?.[1] ?? createdAt;
+  const withoutMetadata = content
+    .split(/\r?\n/)
+    .filter((line) => !/^(?:Created at|Updated at|Reason):\s*/i.test(line.trim()))
+    .join("\n")
+    .trim();
+  const lines = withoutMetadata.split("\n");
+  const firstContent = lines.findIndex((line) => line.trim().length > 0);
+  const metadata = [`Created at: ${existingCreatedAt}`, `Updated at: ${updatedAt}`, `Reason: ${normalizedReason}`];
+  if (firstContent >= 0 && /^#\s+/.test(lines[firstContent] ?? "")) {
+    lines.splice(firstContent + 1, 0, "", ...metadata);
+  } else {
+    lines.unshift(...metadata, "");
+  }
+  return lines.join("\n").trim();
 }
 
 export function validateCanonicalHandoffContent(content: string): void {
@@ -249,15 +631,37 @@ export function validateCanonicalHandoffContent(content: string): void {
     { label: "Updated at", pattern: /^Updated at:\s*\S+/im },
     { label: "Reason", pattern: /^Reason:\s*\S+/im },
     { label: "Current focus", pattern: /^##\s+Current focus\s*$/im },
-    { label: "What was being done", pattern: /^##\s+What was being done\s*$/im },
+    { label: "Current and partial state", pattern: /^##\s+Current and partial state\s*$/im },
+    { label: "Preservation constraints", pattern: /^##\s+Preservation constraints\s*$/im },
+    { label: "Supporting documents", pattern: /^##\s+Supporting documents\s*$/im },
+    { label: "Blockers and risks", pattern: /^##\s+Blockers and risks\s*$/im },
     { label: "How to resume", pattern: /^##\s+How to resume\s*$/im },
-    { label: "Files touched", pattern: /^##\s+Files touched\s*$/im },
-    { label: "Blockers", pattern: /^##\s+Blockers\s*$/im },
-    { label: "Next steps", pattern: /^##\s+Next steps\s*$/im },
-    { label: "Recent decisions", pattern: /^##\s+Recent decisions\s*$/im },
   ];
   const missing = required.filter((entry) => !entry.pattern.test(body)).map((entry) => entry.label);
-  if (missing.length > 0) throw new Error(`Canonical handoff is missing required sections: ${missing.join(", ")}.`);
+  if (missing.length === 0) {
+    const unresolvedPlaceholders = [...body.matchAll(/\{\{REQUIRED:[^}]+\}\}/g)].map((match) => match[0]);
+    if (unresolvedPlaceholders.length > 0) {
+      throw new HandoffContractError(
+        "HANDOFF_CANONICAL_SECTIONS_REQUIRED",
+        "The canonical handoff still contains unresolved placeholders. Replace every placeholder before writing.",
+        { missingSections: [], unresolvedPlaceholders: [...new Set(unresolvedPlaceholders)] },
+      );
+    }
+    return;
+  }
+  const legacyMissing = LEGACY_HANDOFF_CANONICAL_SECTIONS.filter((label) => {
+    if (label === "Created at") return !/^Created at:\s*\S+/im.test(body);
+    if (label === "Updated at") return !/^Updated at:\s*\S+/im.test(body);
+    if (label === "Reason") return !/^Reason:\s*\S+/im.test(body);
+    return !new RegExp(`^##\\s+${label.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\s*$`, "im").test(body);
+  });
+  if (legacyMissing.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_CANONICAL_SECTIONS_REQUIRED",
+      "The canonical handoff does not match the prepared scaffold. Fill every required heading and replace every placeholder before writing.",
+      { missingSections: missing, legacyMissingSections: legacyMissing, unresolvedPlaceholders: [...new Set([...body.matchAll(/\{\{REQUIRED:[^}]+\}\}/g)].map((m) => m[0]))] },
+    );
+  }
 }
 
 export function validateHandoffContextSync(
@@ -265,7 +669,6 @@ export function validateHandoffContextSync(
   feature: Feature,
   input: RefreshPhaseHandoffInput,
 ): void {
-  renderVerifiedHandoffContent(input.content, input.completenessAudit);
   const requestedDocuments = input.supportingDocuments ?? [];
   const verifiedDocuments = input.verifiedSupportingDocuments ?? [];
   if (requestedDocuments.length !== verifiedDocuments.length) {
@@ -273,6 +676,14 @@ export function validateHandoffContextSync(
       "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
       "Every supporting document must be validated by PlanStore before the handoff is written.",
       { requestedCount: requestedDocuments.length, verifiedCount: verifiedDocuments.length },
+    );
+  }
+  const verifiedContents = input.verifiedSupportingDocumentContents ?? [];
+  if (verifiedContents.length !== verifiedDocuments.length) {
+    throw new HandoffContractError(
+      "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+      "Validated supporting-document content is required for cold-start inventory coverage checks.",
+      { verifiedDocumentCount: verifiedDocuments.length, verifiedContentCount: verifiedContents.length },
     );
   }
   for (let index = 0; index < requestedDocuments.length; index += 1) {
@@ -293,8 +704,9 @@ export function validateHandoffContextSync(
       );
     }
   }
-  if (phase.status === "done" || phase.status === "canceled") {
-    throw new Error(`Cannot write a handoff on ${phase.status} phase ${phase.id}; completed phases have no pending handoff.`);
+  renderVerifiedHandoffContent(input.content, input.completenessAudit, input.coldStartInventory, verifiedContents);
+  if (phase.status === "done" || phase.status === "rejected" || phase.status === "canceled") {
+    throw new Error(`Cannot write a handoff on ${phase.status} phase ${phase.id}; terminal phases have no pending handoff.`);
   }
   if (phase.handoffUpdatedAt !== input.expectedHandoffUpdatedAt) {
     throw new Error("Handoff changed after preparation. Run handoff_prepare again and reconcile the latest content before writing.");
@@ -344,8 +756,18 @@ export function applyHandoffContextSync(
   timestamp: string,
 ): { phase: Phase; feature: Feature; updatedTaskIds: string[] } {
   validateHandoffContextSync(phase, feature, input);
-  const handoffContent = renderVerifiedHandoffContent(input.content, input.completenessAudit);
+  const handoffContent = renderVerifiedHandoffContent(
+    input.content,
+    input.completenessAudit,
+    input.coldStartInventory,
+    input.verifiedSupportingDocumentContents ?? [],
+  );
   const auditEntries = validateHandoffCompletenessAudit(input.completenessAudit);
+  const coldStartInventoryEntries = validateHandoffColdStartInventory(
+    input.coldStartInventory,
+    stripRenderedCompletenessAudit(input.content),
+    input.verifiedSupportingDocumentContents ?? [],
+  );
   const nextPhase = structuredClone(phase);
   const nextFeature = structuredClone(feature);
   const updatedTaskIds: string[] = [];
@@ -396,10 +818,20 @@ export function applyHandoffContextSync(
   nextPhase.handoffAudit = {
     version: HANDOFF_COMPLETENESS_AUDIT_VERSION,
     entries: auditEntries,
+    coldStartInventory: {
+      version: HANDOFF_COLD_START_INVENTORY_VERSION,
+      sourceReviews: HANDOFF_COLD_START_SOURCE_REVIEWS.map(({ id }) => {
+        const review = input.coldStartInventory!.sourceReviews.find((entry) => entry.source === id)!;
+        return { source: id, detail: review.detail.trim() };
+      }),
+      entries: coldStartInventoryEntries,
+    },
     supportingDocuments: input.verifiedSupportingDocuments ?? [],
     contentHash: handoffContentHash(handoffContent),
     contentLength: handoffContent.length,
     verifiedAt: timestamp,
+    resumeReadyAt: "",
+    readBackSourceReviews: [],
   };
   nextPhase.handoffReadAt = "";
   nextPhase.updatedAt = timestamp;

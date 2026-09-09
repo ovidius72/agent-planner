@@ -11,8 +11,12 @@ import { taskTransitionStatuses } from "../lib/statuses";
 import { useShortcut } from "../lib/shortcuts";
 import type { Feature, Phase, Task } from "../lib/types";
 
-function joinLines(values: { title: string }[]) {
+function joinChecklistLines(values: { title: string }[]) {
   return values.map((value) => value.title).join("\n");
+}
+
+function joinLines(values: string[]) {
+  return values.join("\n");
 }
 
 export function TaskEditModalRoute() {
@@ -41,7 +45,11 @@ export function TaskEditModalRoute() {
         </Field>
         <Field label="Priority"><Input type="number" name="priority" defaultValue={task.priority ?? 0} min={0} /></Field>
         <Field label="Description"><Textarea name="description" defaultValue={task.description} /></Field>
-        <Field label="Checklist (one per line)"><Textarea name="checklist" defaultValue={joinLines(task.checklist)} /></Field>
+        <Field label="Description reference"><Input name="descriptionRef" defaultValue={task.descriptionRef ?? ""} placeholder=".planner/docs/tasks/task-details.md" /></Field>
+        <Field label="Implementation notes"><Textarea name="notes" defaultValue={task.notes} /></Field>
+        <Field label="Decisions (one per line)"><Textarea name="decisions" defaultValue={joinLines(task.decisions)} /></Field>
+        <Field label="Status change motivation"><Textarea name="motivation" placeholder="Required for blocked, canceled, rejected, deferred, waiting, or reopening to planned." /></Field>
+        <Field label="Checklist (one per line)"><Textarea name="checklist" defaultValue={joinChecklistLines(task.checklist)} /></Field>
         <ModalActions>
           <Button type="submit" variant="primary" disabled={submitting} shortcut="submit">{submitting ? "Saving…" : "Save task"}</Button>
         </ModalActions>

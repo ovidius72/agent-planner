@@ -44,7 +44,8 @@
     "08e732e1-3120-44e1-a955-e53b16edb0aa",
     "8d96c7fb-9767-4628-8c8b-7c5aed53fc49",
     "d086fbe1-102c-4c5c-93ac-7a36d6653af5",
-    "3efa2651-56e4-4701-810f-93e11ddfd83c"
+    "3efa2651-56e4-4701-810f-93e11ddfd83c",
+    "80673ed1-0cd0-4b87-8ba9-ee3153c16fa8"
   ],
   "dependsOn": [],
   "statusLog": [
@@ -203,6 +204,22 @@
     {
       "id": "75f7d409-735b-4ce9-8841-c718a874f785",
       "date": "2026-08-29T07:36:25.336Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "b7350295-0690-4b82-9e95-86975a3892f7",
+      "date": "2026-09-02T07:38:55.329Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "5bb471ca-78c2-489d-bd72-0e7ca4316771",
+      "date": "2026-09-02T12:35:42.711Z",
       "fromStatus": "in-progress",
       "toStatus": "done",
       "title": "in-progress → done",

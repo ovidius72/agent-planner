@@ -1,0 +1,146 @@
+{
+  "id": "b5ae2400-ea8a-46c7-936d-27c668371cdf",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 98,
+  "shortId": "M9FAV",
+  "priority": 32,
+  "slug": "closed-by-default-entity-detail-disclosures",
+  "title": "Closed-by-default entity detail disclosures",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make every entity-detail accordion closed on first render across planner Web UI surfaces.",
+  "description": "packages/plan-web-ui/src/components/ui/accordion.tsx currently defaults defaultOpen to true, while feature-detail/route.tsx, phase-detail/route.tsx, task-detail/route.tsx, and status-history-accordion.tsx omit or override that contract and therefore open Description, Handoff, and Status history disclosures on initial navigation. Handoff list/archive and Requirements cards already pass defaultOpen=false, and the current Ideas route has no accordion. Change the shared disclosure contract and explicit callers so all accordions on feature, phase, task, handoff, requirement, and Ideas-related surfaces are closed on first render while remaining keyboard-accessible and user-expandable. Add component/route regressions covering native details.open state and real-browser navigation on desktop/mobile. Preserve existing content, styling, counts, actions, deep links, and edit flows; do not introduce persisted expansion state or unrelated layout changes.",
+  "descriptionUpdatedAt": "2026-09-02T07:26:23.349Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c"
+  ],
+  "tasks": [
+    {
+      "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c",
+      "phaseId": "b5ae2400-ea8a-46c7-936d-27c668371cdf",
+      "number": 382,
+      "shortId": "LXFZ3",
+      "priority": 1,
+      "shortName": "close-every-entity-accordion-o",
+      "title": "Close every entity accordion on initial detail-page render",
+      "status": "done",
+      "description": "Implement the approved closed-by-default disclosure behavior in packages/plan-web-ui/src/components/ui/accordion.tsx and its entity-surface callers. Existing state: Accordion defaults defaultOpen=true; feature-detail/route.tsx and task-detail/route.tsx descriptions, phase-detail/route.tsx description and Handoff, and StatusHistoryAccordion can open initially. Requirements cards plus handoff list/archive already opt into false, AcceptedDecisionsList and current Ideas native disclosures are closed by omission, and IdeasRoute currently has no accordion. Desired state: every accordion/disclosure rendered for feature, phase, task, handoff, requirement, and Ideas surfaces starts closed on each page navigation and remains accessible and user-expandable. Prefer one shared safe default plus removal/alignment of contradictory explicit defaults. Add typed unit regressions asserting HTMLDetailsElement.open is false for shared Accordion, Status history, descriptions, phase Handoff, Requirements, handoff pages, and any current Ideas disclosure; add desktop/mobile Playwright coverage for representative detail navigation. Preserve all content, actions, styles, counts, anchors, responsive behavior, and edit flows, and do not persist expansion state or redesign layouts.\n\n---\n**Completion summary:**\nImplemented closed-by-default Web UI disclosures for P098(F005)/T382. Shipped work: packages/plan-web-ui/src/components/ui/accordion.tsx now defaults defaultOpen to false, preserving the existing explicit opt-in API for callers that truly need initially-open details. packages/plan-web-ui/src/components/ui/status-history-accordion.tsx no longer overrides the shared default when transitions are present, so status history starts closed while content remains accessible and user-expandable. Added packages/plan-web-ui/test/disclosure-defaults.test.tsx with typed regressions for the shared Accordion, StatusHistoryAccordion with transitions, feature/phase/task detail Description and Status history disclosures, phase Handoff, Requirements route cards, Handoff pending/archive pages, and the current Ideas surface. Extended e2e/responsive.spec.ts with desktop/mobile browser navigation coverage for feature, phase, and task detail pages plus a handoff archive open-state assertion. Rebuilt Web UI assets with pnpm build:web-ui and copied them into packages/pi-adapter/web-ui-dist and packages/plan-server/web-ui-dist via scripts/copy-web-ui.sh; the later full pnpm build also completed. While running the full coverage gate, fixed prior T367 test expectations in packages/pi-adapter/test/mutations.test.mjs, packages/pi-adapter/test/ref-validation.test.mjs, and packages/plan-mcp/test/ref-validation.test.mjs so they assert the standardized requirement mutation response shape ({requirement, created/updated} and {deleted: true, requirementId}). Verification: pnpm --filter @agent-plan/web-ui test -- disclosure-defaults.test.tsx status-history-accordion.test.tsx handoff-requirements.test.tsx ideas-route.test.tsx passed; pnpm exec playwright test e2e/responsive.spec.ts passed 6/6 across chromium and mobile-chromium; pnpm check passed; git diff --check passed; pnpm build completed before coverage; pnpm test:coverage passed 551/551 with FINAL gate report; pnpm plugins:check passed with all derived plugin files in sync. Preserved existing content, styles, counts, anchors, responsive behavior, and edit flows, and did not introduce persisted expansion state. No commit, push, PR, or merge performed.",
+      "descriptionUpdatedAt": "2026-09-03T09:11:24.910Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c-check-001-planned-in-progress",
+          "date": "2026-09-03T09:01:53.152Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c-check-002-in-progress-done",
+          "date": "2026-09-03T09:11:24.908Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented closed-by-default Web UI disclosures for P098(F005)/T382. Shipped work: packages/plan-web-ui/src/components/ui/accordion.tsx now defaults defaultOpen to false, preserving the existing explicit opt-in API for callers that truly need initially-open details. packages/plan-web-ui/src/components/ui/status-history-accordion.tsx no longer overrides the shared default when transitions are present, so status history starts closed while content remains accessible and user-expandable. Added packages/plan-web-ui/test/disclosure-defaults.test.tsx with typed regressions for the shared Accordion, StatusHistoryAccordion with transitions, feature/phase/task detail Description and Status history disclosures, phase Handoff, Requirements route cards, Handoff pending/archive pages, and the current Ideas surface. Extended e2e/responsive.spec.ts with desktop/mobile browser navigation coverage for feature, phase, and task detail pages plus a handoff archive open-state assertion. Rebuilt Web UI assets with pnpm build:web-ui and copied them into packages/pi-adapter/web-ui-dist and packages/plan-server/web-ui-dist via scripts/copy-web-ui.sh; the later full pnpm build also completed. While running the full coverage gate, fixed prior T367 test expectations in packages/pi-adapter/test/mutations.test.mjs, packages/pi-adapter/test/ref-validation.test.mjs, and packages/plan-mcp/test/ref-validation.test.mjs so they assert the standardized requirement mutation response shape ({requirement, created/updated} and {deleted: true, requirementId}). Verification: pnpm --filter @agent-plan/web-ui test -- disclosure-defaults.test.tsx status-history-accordion.test.tsx handoff-requirements.test.tsx ideas-route.test.tsx passed; pnpm exec playwright test e2e/responsive.spec.ts passed 6/6 across chromium and mobile-chromium; pnpm check passed; git diff --check passed; pnpm build completed before coverage; pnpm test:coverage passed 551/551 with FINAL gate report; pnpm plugins:check passed with all derived plugin files in sync. Preserved existing content, styles, counts, anchors, responsive behavior, and edit flows, and did not introduce persisted expansion state. No commit, push, PR, or merge performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c-check-001-audit-every-accordion-and-native-details-caller-on-feature-phase-task-handoff-requirement-and-ideas-surfaces",
+          "number": 1,
+          "title": "Audit every Accordion and native details caller on feature, phase, task, handoff, requirement, and Ideas surfaces",
+          "checked": true
+        },
+        {
+          "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c-check-002-make-the-shared-disclosure-default-closed-and-align-explicit-entity-callers",
+          "number": 2,
+          "title": "Make the shared disclosure default closed and align explicit entity callers",
+          "checked": true
+        },
+        {
+          "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c-check-003-add-component-and-route-regressions-for-initial-closed-state-and-user-expansion",
+          "number": 3,
+          "title": "Add component and route regressions for initial closed state and user expansion",
+          "checked": true
+        },
+        {
+          "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c-check-004-verify-representative-desktop-and-mobile-real-browser-navigation",
+          "number": 4,
+          "title": "Verify representative desktop and mobile real-browser navigation",
+          "checked": true
+        },
+        {
+          "id": "d7ab4b18-3b98-4091-ac49-2cc14d1f7a5c-check-005-run-full-build-coverage-plugin-sync-and-browser-verification",
+          "number": 5,
+          "title": "Run full build, coverage, plugin-sync, and browser verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-03T09:01:53.152Z",
+      "completedAt": "2026-09-03T09:11:24.908Z",
+      "createdAt": "2026-09-02T07:26:41.580Z",
+      "updatedAt": "2026-09-03T09:11:24.908Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-03T09:01:53.049Z"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-09-02T07:26:23.349Z",
+  "updatedAt": "2026-09-03T09:11:24.908Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-03T09:02:43.074Z",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/b5ae2400-ea8a-46c7-936d-27c668371cdf-2026-09-03T09-11-24-931Z.md",
+      "clearedAt": "2026-09-03T09:11:24.931Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "77db2c8c-611a-46c9-807b-3144cc43c320",
+      "date": "2026-09-03T09:01:53.179Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "2520cce1-cdbf-44c9-a1ad-98b61044fc3d",
+      "date": "2026-09-03T09:11:24.982Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-03T09:01:53.049Z"
+    }
+  ]
+}

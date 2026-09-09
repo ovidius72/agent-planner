@@ -37,7 +37,7 @@ export function Accordion({
   subtitle,
   leading,
   actions,
-  defaultOpen = true,
+  defaultOpen = false,
   count,
   className,
   summaryClassName,

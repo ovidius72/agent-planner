@@ -181,7 +181,6 @@ export class PlanRenderer {
           lines.push(req.description);
         }
         lines.push("");
-        lines.push(`Status: ${statusBadge(req.status)}`);
         if (req.linkedPhaseIds.length > 0) {
           lines.push(`Phases: ${req.linkedPhaseIds.map((p) => `\`${p}\``).join(", ")}`);
         }
