@@ -97,7 +97,9 @@ describe("entity references and timestamps", () => {
     ]);
 
     expect(screen.getByRole("heading", { name: "Next work" })).toBeInTheDocument();
+    expect(screen.getByText("Next", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Suggested task" })).toHaveAttribute("href", "/features/feature-1/phases/phase-2/tasks/task-6");
+    expect(screen.getByRole("link", { name: "Suggested task" }).closest("article")).toHaveClass("border-dashed", "bg-[var(--accent)]/5");
     expect(screen.getByText("Select the lowest-priority ready feature, then phase, then task.")).toBeInTheDocument();
   });
 

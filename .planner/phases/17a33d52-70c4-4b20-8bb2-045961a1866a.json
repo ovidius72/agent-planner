@@ -38,7 +38,8 @@
   "taskIds": [
     "caa7cc21-1947-4e7b-aff3-3e310d7c2dd7",
     "26b0997e-7c65-42b4-b1ce-0e7ba85b0a16",
-    "599476ab-18e3-449a-8356-0f870602bcb2"
+    "599476ab-18e3-449a-8356-0f870602bcb2",
+    "6db49fb0-13bd-4cb1-b43b-d3924431ec3a"
   ],
   "tasks": [
     {
@@ -277,10 +278,58 @@
           "createdAt": "2026-09-09T08:23:46.531Z"
         }
       ]
+    },
+    {
+      "id": "6db49fb0-13bd-4cb1-b43b-d3924431ec3a",
+      "phaseId": "17a33d52-70c4-4b20-8bb2-045961a1866a",
+      "number": 395,
+      "shortId": "6AU95",
+      "priority": 21,
+      "shortName": "next-work-visual",
+      "title": "Differentiate Next work header visually",
+      "status": "done",
+      "description": "Update packages/plan-web-ui/src/components/layout/app-shell.tsx TaskFocusHeader and FocusTaskRow usage so the suggested Next work item is visually distinct from Active tasks without changing layout structure, content, navigation, accessibility, or active-task styling. Add focused UI regression coverage for the dedicated label and styling hooks, then rebuild and run affected tests.\n\n---\n**Completion summary:**\nDifferentiated the Next work header without changing active-task presentation or behavior. Next work now uses an accent-tinted dashed card, a visible NEXT badge, and retains the existing heading, content, navigation, and accessibility. Added UI regression coverage for the dedicated visual hooks. Web UI tests passed 103/103, build passed, and git diff --check passed.",
+      "descriptionUpdatedAt": "2026-09-09T09:36:40.920Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "6db49fb0-13bd-4cb1-b43b-d3924431ec3a-check-001-planned-in-progress",
+          "date": "2026-09-09T09:35:05.844Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "6db49fb0-13bd-4cb1-b43b-d3924431ec3a-check-002-in-progress-done",
+          "date": "2026-09-09T09:36:40.917Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Differentiated the Next work header without changing active-task presentation or behavior. Next work now uses an accent-tinted dashed card, a visible NEXT badge, and retains the existing heading, content, navigation, and accessibility. Added UI regression coverage for the dedicated visual hooks. Web UI tests passed 103/103, build passed, and git diff --check passed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-09T09:35:05.844Z",
+      "completedAt": "2026-09-09T09:36:40.917Z",
+      "createdAt": "2026-09-09T09:34:47.349Z",
+      "updatedAt": "2026-09-09T09:36:40.917Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T09:35:05.746Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-09-01T10:16:11.137Z",
-  "updatedAt": "2026-09-09T08:28:40.175Z",
+  "updatedAt": "2026-09-09T09:36:40.917Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -310,12 +359,28 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "81581132-9493-4d92-8d46-2529921d40ca",
+      "date": "2026-09-09T09:35:05.869Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "b5196167-a40e-45f8-bea8-61b40f5235eb",
+      "date": "2026-09-09T09:36:40.948Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-09T08:23:46.531Z"
+      "createdAt": "2026-09-09T09:35:05.746Z"
     }
   ]
 }

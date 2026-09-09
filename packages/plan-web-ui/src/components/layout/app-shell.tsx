@@ -10,16 +10,18 @@ import type { Project } from "../../lib/types";
 
 export type LiveStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
-export function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
+export function FocusTaskRow({ task, variant = "active" }: { task: FocusTaskSummary; variant?: "active" | "next" }) {
   const navigate = useNavigate();
   const to = task.featureId
     ? `/features/${task.featureId}/phases/${task.phaseId}/tasks/${task.id}`
     : "/features";
   return (
     <article
-      className={`min-w-0 rounded-[12px] border bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text)] ${task.pendingResume
-        ? "border-[var(--accent)]"
-        : "border-[var(--border)]"}`}
+      className={`min-w-0 rounded-[12px] border bg-[var(--surface-card)] px-3 py-2 text-sm text-[var(--text)] ${variant === "next"
+        ? "border-dashed border-[var(--accent)] bg-[var(--accent)]/5"
+        : task.pendingResume
+          ? "border-[var(--accent)]"
+          : "border-[var(--border)]"}`}
     >
       <div className="flex min-w-0 items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -35,6 +37,7 @@ export function FocusTaskRow({ task }: { task: FocusTaskSummary }) {
             <span className="sr-only">Copy task path</span>
           </CopyableBadge>
           {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
+          {variant === "next" ? <span className="shrink-0 rounded-full border border-[var(--accent)]/50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--accent)]">Next</span> : null}
           <span className="shrink-0"><StatusBadge status={task.status} /></span>
           <Link to={to} className="min-w-0 flex-1 truncate font-medium hover:text-[var(--accent)]">
             {task.title}
@@ -91,7 +94,7 @@ export function TaskFocusHeader({ taskFocus }: { taskFocus: TaskFocusSummary }) 
             <h2 id="next-work-heading" className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
               Next work
             </h2>
-            <FocusTaskRow task={taskFocus.nextWork} />
+            <FocusTaskRow task={taskFocus.nextWork} variant="next" />
             {taskFocus.nextWorkReason ? <p className="text-xs text-[var(--text-muted)]">{taskFocus.nextWorkReason}</p> : null}
           </section>
         ) : null}
