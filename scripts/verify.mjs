@@ -148,6 +148,7 @@ function finalSteps() {
     { name: "Typecheck", command: "pnpm", args: ["check"] },
     { name: "Coverage", command: process.execPath, args: ["scripts/test-all.mjs", "--gate", "--no-build"] },
     { name: "Plugin synchronization", command: "pnpm", args: ["plugins:check"] },
+    { name: "Capability audit", command: "pnpm", args: ["test:capability-audit"] },
     { name: "Browser end-to-end", command: "pnpm", args: ["exec", "playwright", "test"] },
     { name: "Packed installation smoke", command: process.execPath, args: ["scripts/installed-artifact-smoke.mjs"] },
   ];

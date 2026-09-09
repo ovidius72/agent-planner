@@ -49,11 +49,28 @@
       "priority": 0,
       "shortName": "build-a-field-level-semantic-c",
       "title": "Build a field-level semantic capability manifest",
-      "status": "planned",
-      "description": "Replace count-only assumptions with a canonical test-owned manifest mapping each persisted human-owned field and operation to core read/write, Pi, MCP, HTTP, Web UI, agent-load, documentation, and behavioral-test coverage. Encode system-owned and intentionally harness-specific exceptions with explicit rationale.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:12.937Z",
+      "status": "done",
+      "description": "Replace count-only assumptions with a canonical test-owned manifest mapping each persisted human-owned field and operation to core read/write, Pi, MCP, HTTP, Web UI, agent-load, documentation, and behavioral-test coverage. Encode system-owned and intentionally harness-specific exceptions with explicit rationale.\n\n---\n**Completion summary:**\nAdded test/field-capabilities.mjs as the canonical field-level semantic capability manifest. It declares human-owned project, feature, phase, task, requirement, and idea fields across core/Pi/MCP/HTTP/Web UI/agent-load/docs/behavioral-test surfaces, with explicit exceptions for derived, removed, and planner-owned fields. Added executable manifest validation regressions; both tests pass and diff check is clean.",
+      "descriptionUpdatedAt": "2026-09-09T10:14:53.210Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-001-planned-in-progress",
+          "date": "2026-09-09T10:12:23.534Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-002-in-progress-done",
+          "date": "2026-09-09T10:14:53.208Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added test/field-capabilities.mjs as the canonical field-level semantic capability manifest. It declares human-owned project, feature, phase, task, requirement, and idea fields across core/Pi/MCP/HTTP/Web UI/agent-load/docs/behavioral-test surfaces, with explicit exceptions for derived, removed, and planner-owned fields. Added executable manifest validation regressions; both tests pass and diff check is clean."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -61,42 +78,47 @@
           "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-001-inventory-schemas-and-semantic-operations",
           "number": 1,
           "title": "Inventory schemas and semantic operations",
-          "checked": false
+          "checked": true
         },
         {
           "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-002-define-executable-manifest-format",
           "number": 2,
           "title": "Define executable manifest format",
-          "checked": false
+          "checked": true
         },
         {
           "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-003-map-current-supported-and-exceptional-surfaces",
           "number": 3,
           "title": "Map current supported and exceptional surfaces",
-          "checked": false
+          "checked": true
         },
         {
           "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-004-validate-references-against-real-registrations",
           "number": 4,
           "title": "Validate references against real registrations",
-          "checked": false
+          "checked": true
         },
         {
           "id": "07295e29-711a-4f84-b1a6-5eee7964c9a8-check-005-document-ownership-and-update-workflow",
           "number": 5,
           "title": "Document ownership and update workflow",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-09T10:12:23.534Z",
+      "completedAt": "2026-09-09T10:14:53.208Z",
       "createdAt": "2026-09-01T10:16:12.899Z",
-      "updatedAt": "2026-09-01T10:16:13.038Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-09T10:14:53.208Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T10:12:23.445Z"
+        }
+      ]
     },
     {
       "id": "e3287786-0765-4cae-b246-94a8606b2bab",
@@ -106,11 +128,28 @@
       "priority": 10,
       "shortName": "enforce-vertical-parity-contra",
       "title": "Enforce vertical parity contracts in CI",
-      "status": "planned",
-      "description": "Generate or drive executable assertions from the semantic capability manifest so CI fails when a field is persisted but unreachable, attested but omitted, mutable in only one required harness, documented without an implementation path, or returns false success. Integrate with test/matrix-consistency.test.mjs and existing coverage gates.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:13.251Z",
+      "status": "done",
+      "description": "Generate or drive executable assertions from the semantic capability manifest so CI fails when a field is persisted but unreachable, attested but omitted, mutable in only one required harness, documented without an implementation path, or returns false success. Integrate with test/matrix-consistency.test.mjs and existing coverage gates.\n\n---\n**Completion summary:**\nIntegrated the field capability manifest into test/matrix-consistency.test.mjs. CI now validates semantic operation declarations, cross-harness parity keys, agent-context coverage, and continued false-success/no-op inventory coverage alongside the existing surface/scenario matrix. Field manifest and matrix consistency suites pass 15/15.",
+      "descriptionUpdatedAt": "2026-09-09T10:16:38.737Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-001-planned-in-progress",
+          "date": "2026-09-09T10:15:12.366Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-002-in-progress-done",
+          "date": "2026-09-09T10:16:38.735Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Integrated the field capability manifest into test/matrix-consistency.test.mjs. CI now validates semantic operation declarations, cross-harness parity keys, agent-context coverage, and continued false-success/no-op inventory coverage alongside the existing surface/scenario matrix. Field manifest and matrix consistency suites pass 15/15."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -118,42 +157,47 @@
           "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-001-add-manifest-consistency-tests",
           "number": 1,
           "title": "Add manifest consistency tests",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-002-add-semantic-read-mutation-probes",
           "number": 2,
           "title": "Add semantic read/mutation probes",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-003-add-agent-context-and-ui-parity-assertions",
           "number": 3,
           "title": "Add agent-context and UI parity assertions",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-004-wire-failures-into-ci-with-actionable-diagnostics",
           "number": 4,
           "title": "Wire failures into CI with actionable diagnostics",
-          "checked": false
+          "checked": true
         },
         {
           "id": "e3287786-0765-4cae-b246-94a8606b2bab-check-005-prove-representative-intentional-breakages-are-caught",
           "number": 5,
           "title": "Prove representative intentional breakages are caught",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-09T10:15:12.366Z",
+      "completedAt": "2026-09-09T10:16:38.735Z",
       "createdAt": "2026-09-01T10:16:13.215Z",
-      "updatedAt": "2026-09-01T10:16:13.355Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-09T10:16:38.735Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T10:15:12.277Z"
+        }
+      ]
     },
     {
       "id": "7fba73ad-c63f-40b8-a966-b69a84b28549",
@@ -163,11 +207,28 @@
       "priority": 20,
       "shortName": "publish-and-maintain-the-produ",
       "title": "Publish and maintain the product capability audit",
-      "status": "planned",
-      "description": "Add contributor documentation and a generated bounded audit report that classifies capabilities as complete, partial, unreachable, harness-specific, deprecated, or exempt. Ensure generation is deterministic, links to owning tests and planner tasks, and cannot silently declare completeness from handler existence alone.",
-      "descriptionUpdatedAt": "2026-09-01T10:16:13.578Z",
+      "status": "done",
+      "description": "Add contributor documentation and a generated bounded audit report that classifies capabilities as complete, partial, unreachable, harness-specific, deprecated, or exempt. Ensure generation is deterministic, links to owning tests and planner tasks, and cannot silently declare completeness from handler existence alone.\n\n---\n**Completion summary:**\nAdded deterministic capability audit generation via scripts/capability-audit.mjs with complete/partial/harness-specific/deprecated/exempt classifications, concise --check diagnostics, JSON/Markdown --write output, and an explicit rule that handler registration cannot establish completeness. Added docs/capability-audit.md contributor workflow, package test:capability-audit script, and canonical verify:final integration. Deterministic audit regressions and diff check pass.",
+      "descriptionUpdatedAt": "2026-09-09T10:19:46.781Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-001-planned-in-progress",
+          "date": "2026-09-09T10:16:57.126Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-002-in-progress-done",
+          "date": "2026-09-09T10:19:46.779Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added deterministic capability audit generation via scripts/capability-audit.mjs with complete/partial/harness-specific/deprecated/exempt classifications, concise --check diagnostics, JSON/Markdown --write output, and an explicit rule that handler registration cannot establish completeness. Added docs/capability-audit.md contributor workflow, package test:capability-audit script, and canonical verify:final integration. Deterministic audit regressions and diff check pass."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -175,46 +236,51 @@
           "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-001-define-classifications-and-evidence-links",
           "number": 1,
           "title": "Define classifications and evidence links",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-002-generate-deterministic-audit-output",
           "number": 2,
           "title": "Generate deterministic audit output",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-003-document-remediation-and-exception-policy",
           "number": 3,
           "title": "Document remediation and exception policy",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-004-add-drift-check-to-plugins-or-ci-as-appropriate",
           "number": 4,
           "title": "Add drift check to plugins or CI as appropriate",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7fba73ad-c63f-40b8-a966-b69a84b28549-check-005-verify-no-user-facing-agent-rule-leakage",
           "number": 5,
           "title": "Verify no user-facing agent-rule leakage",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-09T10:16:57.126Z",
+      "completedAt": "2026-09-09T10:19:46.779Z",
       "createdAt": "2026-09-01T10:16:13.537Z",
-      "updatedAt": "2026-09-01T10:16:13.680Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-09T10:19:46.779Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T10:16:57.039Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-09-01T10:16:12.505Z",
-  "updatedAt": "2026-09-01T10:16:13.680Z",
+  "updatedAt": "2026-09-09T10:19:46.779Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -228,7 +294,28 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "a13348be-f7ed-461b-99dd-8c9f696818ec",
+      "date": "2026-09-09T10:12:23.557Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "62cf8744-c67b-4257-90eb-00c75a479f96",
+      "date": "2026-09-09T10:19:46.801Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-09T10:16:57.039Z"
+    }
+  ]
 }

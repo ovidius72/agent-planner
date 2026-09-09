@@ -29,6 +29,7 @@
     "test:e2e:install": "playwright install chromium",
     "test:coverage": "node scripts/test-all.mjs --gate",
     "test:matrix": "node --test test/matrix-consistency.test.mjs",
+    "test:capability-audit": "node scripts/capability-audit.mjs --check",
     "test:compatibility": "node scripts/compatibility-report.mjs",
     "verify:focused": "node scripts/verify.mjs focused",
     "verify:final": "node scripts/verify.mjs final",

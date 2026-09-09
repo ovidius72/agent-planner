@@ -34,6 +34,14 @@
       "toStatus": "in-progress",
       "title": "planned → in-progress",
       "description": ""
+    },
+    {
+      "id": "db2ac706-771d-43b6-9707-0a955774ee51",
+      "date": "2026-09-09T10:19:46.869Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-09-01T10:13:26.005Z",
@@ -41,7 +49,7 @@
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-09T09:35:05.746Z"
+      "createdAt": "2026-09-09T10:16:57.039Z"
     },
     {
       "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
