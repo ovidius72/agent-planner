@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Form, Link, useFetcher, useLoaderData } from "react-router-dom";
 import { createIdea, deleteIdea, getIdeas, updateIdea } from "../../lib/api";
 import type { Idea } from "../../lib/types";
+import { Accordion } from "../../components/ui/accordion";
 
 export async function loader(): Promise<{ ideas: Idea[] }> {
   return { ideas: await getIdeas() };
@@ -82,22 +83,28 @@ export function IdeasRoute() {
       ) : (
         <section aria-label="Ideas" className="mt-6 grid gap-3">
           {ideas.map((idea) => (
-            <article key={idea.id} className="surface-card min-w-0 rounded-2xl border border-[var(--border)] p-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+            <article key={idea.id} className="min-w-0">
+              <Accordion
+                defaultOpen={false}
+                className="surface-card mt-0 rounded-2xl"
+                summaryClassName="hover:bg-[var(--surface-hover)]/60 focus-visible:bg-[var(--surface-hover)]/60"
+                title={(
+                  <>
                     <span className="rounded-lg bg-[var(--accent-soft)] px-2 py-1 font-mono text-xs font-bold text-[var(--accent)]">I{String(idea.number).padStart(3, "0")}</span>
-                    <span className="font-mono text-xs text-[var(--text-muted)]">{idea.shortId}</span>
+                    <span className="font-mono text-xs font-normal text-[var(--text-muted)]">{idea.shortId}</span>
                     {idea.promotion ? (idea.targetHref ? <Link to={idea.targetHref} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400">Promoted to {idea.promotion.targetRef}</Link> : <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Promoted to {idea.promotion.targetRef}</span>) : null}
+                    <h2 className="break-words text-base font-bold">{idea.title}</h2>
+                  </>
+                )}
+                actions={(
+                  <div className="flex gap-2" onClick={(event) => event.stopPropagation()}>
+                    <button type="button" onClick={() => setEditor(idea)} aria-label={`Edit ${idea.title}`} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-strong)] text-[var(--text-muted)] hover:text-[var(--text)]"><Pencil className="h-4 w-4" /></button>
+                    <DeleteIdeaButton idea={idea} />
                   </div>
-                  <h2 className="mt-2 break-words text-base font-bold">{idea.title}</h2>
-                  {idea.description ? <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--text-muted)]">{idea.description}</p> : null}
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" onClick={() => setEditor(idea)} aria-label={`Edit ${idea.title}`} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-strong)] text-[var(--text-muted)] hover:text-[var(--text)]"><Pencil className="h-4 w-4" /></button>
-                  <DeleteIdeaButton idea={idea} />
-                </div>
-              </div>
+                )}
+              >
+                {idea.description ? <p className="whitespace-pre-wrap break-words text-sm text-[var(--text-muted)]">{idea.description}</p> : <p className="text-sm italic text-[var(--text-muted)]">No description provided.</p>}
+              </Accordion>
             </article>
           ))}
         </section>

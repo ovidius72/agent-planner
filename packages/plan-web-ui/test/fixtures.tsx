@@ -101,7 +101,6 @@ export function makeRequirement(overrides: Partial<Requirement> = {}): Requireme
     id: "requirement-1",
     title: "Example requirement",
     description: "Requirement context",
-    status: "planned",
     macroTasks: [],
     linkedPhaseIds: ["phase-1"],
     createdAt: timestamp,

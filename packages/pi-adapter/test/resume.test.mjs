@@ -46,6 +46,7 @@ function canonicalHandoff(title, detail) {
 async function preparedHandoffArgs(host, phaseRef = "P001") {
   const prepared = await host.runTool("handoff_prepare", { phaseRef });
   return {
+    reason: "Resume fixture session boundary requires a cold-resume handoff.",
     expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
     completenessAudit: completeHandoffAudit(),
@@ -227,6 +228,7 @@ describe("pi-adapter resume flow and CLI smoke", () => {
   test("/planner task start also retains a pending handoff", async () => {
     const host = await createPiHost({ name: "t243-command-handoff-retention", seed: "minimal" });
     try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
       await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — command retention handoff",

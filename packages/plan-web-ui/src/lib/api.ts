@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { AcceptedDecision, ArchivedHandoffSummary, Feature, HandoffSummary, Idea, MacroTask, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
+import type { AcceptedDecision, ArchivedHandoffSummary, Feature, HandoffSummary, HierarchicalDescriptionFreshness, Idea, MacroTask, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -19,6 +19,16 @@ function normalizeTask(task: Task): Task {
     startedAt: task.startedAt ?? "",
     completedAt: task.completedAt ?? "",
     descriptionUpdatedAt: task.descriptionUpdatedAt ?? "",
+  };
+}
+
+function normalizeFocusTask(task: FocusTaskSummary | null | undefined): FocusTaskSummary | null {
+  if (!task) return null;
+  return {
+    ...task,
+    pauseSnapshot: task.pauseSnapshot ?? null,
+    pendingResume: Boolean(task.pendingResume),
+    deviationId: task.deviationId ?? "",
   };
 }
 
@@ -169,6 +179,8 @@ export interface FocusTaskSummary extends ActiveTaskSummary {
 export interface TaskFocusSummary {
   active: FocusTaskSummary[];
   pendingResume: FocusTaskSummary[];
+  nextWork: FocusTaskSummary | null;
+  nextWorkReason: string;
 }
 
 export async function getProject(): Promise<Project> {
@@ -251,6 +263,23 @@ export async function getUiConfig(): Promise<UiConfig> {
   return request("/ui-config");
 }
 
+export interface PlannerDocument {
+  path: string;
+  content: string;
+}
+
+export async function getPlannerDocument(path: string): Promise<PlannerDocument> {
+  return request<PlannerDocument>(`/docs/view?path=${encodeURIComponent(path)}`);
+}
+
+export async function savePlannerDocument(path: string, content: string): Promise<{ path: string; saved: boolean }> {
+  return request(`/docs/save`, { method: "PUT", body: JSON.stringify({ path, content, confirmed: true }) });
+}
+
+export async function getDescriptionFreshness(): Promise<HierarchicalDescriptionFreshness> {
+  return request<HierarchicalDescriptionFreshness>("/description-freshness");
+}
+
 export async function getFeatures(): Promise<Feature[]> {
   return (await request<Feature[]>("/features")).map(normalizeFeature);
 }
@@ -301,7 +330,7 @@ export async function getRequirements(): Promise<Requirement[]> {
 
 export type MacroTaskInput = Pick<MacroTask, "title" | "description" | "status"> & { id?: string };
 
-export async function createRequirement(requirement: Pick<Requirement, "title" | "description" | "status" | "linkedPhaseIds"> & { macroTasks: MacroTaskInput[] }): Promise<Requirement> {
+export async function createRequirement(requirement: Pick<Requirement, "title" | "description" | "linkedPhaseIds"> & { macroTasks: MacroTaskInput[] }): Promise<Requirement> {
   return normalizeRequirement(await request("/requirements", {
     method: "POST",
     body: JSON.stringify(requirement),
@@ -309,7 +338,7 @@ export async function createRequirement(requirement: Pick<Requirement, "title" |
 }
 
 export type RequirementUpdateInput = Pick<Requirement, "id" | "updatedAt"> & Partial<Pick<Requirement,
-  "title" | "description" | "status" | "linkedPhaseIds"
+  "title" | "description" | "linkedPhaseIds"
 >> & { macroTasks?: MacroTaskInput[] };
 
 export async function updateRequirement(requirement: RequirementUpdateInput): Promise<Requirement> {
@@ -378,6 +407,12 @@ export async function startTask(taskId: string): Promise<Task> {
   return normalizeTask(await request(`/tasks/${taskId}/start`, { method: "POST" }));
 }
 
+/** Reopen completed work through the confirmation-gated lifecycle endpoint. */
+export async function reopenTask(taskId: string): Promise<Task> {
+  const result = await request<{ reopened: true; task: Task }>(`/tasks/${taskId}/reopen`, { method: "POST", body: JSON.stringify({ confirmed: true }) });
+  return normalizeTask(result.task);
+}
+
 export async function deleteTask(taskId: string): Promise<{ deleted: string }> {
   return request(`/tasks/${taskId}`, { method: "DELETE" });
 }
@@ -388,7 +423,12 @@ export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
 
 export async function getTaskFocus(): Promise<TaskFocusSummary> {
   const result = await request<TaskFocusSummary>("/tasks/focus");
-  return { active: result.active ?? [], pendingResume: result.pendingResume ?? [] };
+  return {
+    active: (result.active ?? []).map((task) => normalizeFocusTask(task)!),
+    pendingResume: (result.pendingResume ?? []).map((task) => normalizeFocusTask(task)!),
+    nextWork: normalizeFocusTask(result.nextWork),
+    nextWorkReason: result.nextWorkReason ?? "",
+  };
 }
 
 export async function listHandoffs(): Promise<HandoffSummary[]> {

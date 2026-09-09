@@ -62,7 +62,7 @@ test("listTools exposes the full published tool set with actionable input schema
 
     const expected = [
       "planner-version", "planner-export", "planner-authorize-bypass", "planner-clear-bypass", "planner-init", "planner-idea-list", "planner-idea-show", "planner-idea-create", "planner-idea-update", "planner-idea-delete", "planner-idea-promotion-begin", "planner-idea-promotion-finalize", "planner-requirement-list", "planner-requirement-create", "planner-requirement-update", "planner-requirement-delete",
-      "planner-show", "planner-repair", "planner-cleanup-orphan-phases",
+      "planner-show", "planner-description-freshness", "planner-repair", "planner-cleanup-orphan-phases",
       "planner-project-language", "planner-project-discuss", "planner-project-guidelines-show", "planner-project-guidelines-update", "planner-project-context-migrate",
       "planner-accepted-decision-create", "planner-accepted-decision-update", "planner-accepted-decision-delete",
       "planner-feature-list", "planner-phase-list", "planner-task-list",
@@ -74,7 +74,7 @@ test("listTools exposes the full published tool set with actionable input schema
       "planner-task-update", "planner-task-checklist-toggle",
       "planner-task-checklist-add", "planner-task-checklist-remove",
       "planner-task-delete", "planner-task-recommend", "planner-task-deviation",
-      "planner-task-pause", "planner-task-switch", "planner-task-start", "planner-task-complete",
+      "planner-task-pause", "planner-task-switch", "planner-task-start", "planner-task-reopen", "planner-task-complete",
       "planner-handoff-list", "planner-handoff-show", "planner-handoff-write",
       "planner-handoff-prepare", "planner-handoff-verify", "planner-handoff-clear",
       "planner-web", "planner-load", "planner-disable",
@@ -275,6 +275,12 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
       { targetType: "phase", targetRef: "P001", title: "Phase decision" },
       { targetType: "task", targetRef: "T001", title: "Task decision" },
     ];
+    await callTool(session, "planner-task-add", {
+      feature: "F001",
+      phase: "P001",
+      title: "Sibling capability owner",
+      description: "Own the sibling capability that must remain visible in task-start context so agents do not propose duplicate work.",
+    });
     for (const target of targets) {
       const created = await callTool(session, "planner-accepted-decision-create", {
         ...target,
@@ -303,6 +309,9 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
     await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     const started = await callTool(session, "planner-task-start", { task: "T001" });
     for (const title of targets.map((target) => target.title)) assert.match(toolText(started), new RegExp(title));
+    assert.match(toolText(started), /Phase work map — canonical sibling capability ownership/);
+    assert.match(toolText(started), /P001\(F001\)\/T002.*Sibling capability owner/s);
+    assert.match(toolText(started), /P001\(F001\)\/T002 owns this remaining capability; do not duplicate it/);
 
     const loaded = await callTool(session, "planner-load", {});
     const loadedText = toolText(loaded);
@@ -315,6 +324,33 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
     assert.equal(decisionContext.truncated, false);
     for (const title of targets.map((target) => target.title)) assert.match(decisionContext.content, new RegExp(title));
     assert.match(decisionContext.content, /Implementation notes for Task decision/);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("description freshness reports exact stale parents and explicit leaf-to-root reconciliation", async () => {
+  const session = await startMcpFixture({ name: "t381-description-freshness" });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const taskUpdate = await callTool(session, "planner-task-update", { task: "T001", description: "Changed task context that invalidates only its owning parents." });
+    assert.deepEqual(toolStructured(taskUpdate).staleParentRefs, ["P001(F001)", "F001"]);
+    assert.match(toolText(taskUpdate), /Parent description review required: P001\(F001\), F001/);
+
+    const preview = await callTool(session, "planner-description-freshness", {});
+    assert.deepEqual(toolStructured(preview).staleParentRefs, ["P001(F001)", "F001"]);
+    assert.deepEqual(toolStructured(preview).reconciliationPreview.map((step) => step.ownerRef), ["P001(F001)", "F001"]);
+    assert.match(toolText(preview), /without rewriting|explicitly update/i);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const phaseUpdate = await callTool(session, "planner-phase-update", { phase: "P001", description: "Reconciled phase context." });
+    assert.deepEqual(toolStructured(phaseUpdate).staleParentRefs, ["F001"]);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await callTool(session, "planner-feature-update", { feature: "F001", description: "Reconciled feature context." });
+    const fresh = await callTool(session, "planner-description-freshness", {});
+    assert.equal(toolStructured(fresh).reconciliationRequired, false);
+    assert.deepEqual(toolStructured(fresh).staleParentRefs, []);
   } finally {
     await closeMcpFixture(session);
   }
@@ -410,6 +446,7 @@ test("harness drives a CRUD round trip; composite refs in output, state persiste
     assert.ok(structured, "task-recommend returns structuredContent");
     assert.equal(structured.kind, "priority", "structured content carries the selection kind");
     assert.ok(typeof structured.taskId === "string" && structured.taskId.length > 0, "structured content carries a resolved task id");
+    assert.ok(structured.nextTask, "structured content carries nextTask");
   } finally {
     await closeMcpFixture(session);
   }
@@ -482,6 +519,7 @@ test("handoff write (confirmed) + show return structured phase identifiers", asy
     const written = await callTool(session, "planner-handoff-write", {
       phaseRef: "P001(F001)",
       title: "T236 — confirmed handoff",
+      reason: "Harness fixture session boundary requires a cold-resume handoff.",
       content: canonicalAuditedHandoff("T236 — confirmed handoff", "Handoff body for the harness.", { file: "mcp-harness.test.mjs", reason: "harness fixture" }),
       confirmed: true,
       completenessAudit: completeHandoffAudit(),

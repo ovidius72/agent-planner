@@ -6,6 +6,7 @@ export * from "./recap.js";
 export * from "./planner-rules.js";
 export * from "./planner-skill.js";
 export * from "./display-status.js";
+export * from "./description-freshness.js";
 export * from "./task-context.js";
 export * from "./task-selection.js";
 export * from "./task-start-outcome.js";

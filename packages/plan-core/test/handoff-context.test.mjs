@@ -108,6 +108,7 @@ function completeReadBackSourceReviews() {
 function refreshInput(audit, doneTaskId, overrides = {}) {
   const completenessAudit = completeAudit();
   return {
+    reason: "Session boundary requires a cold-resume handoff.",
     content: [
       "# P001(F001) — reconciled handoff",
       "",
@@ -116,18 +117,11 @@ function refreshInput(audit, doneTaskId, overrides = {}) {
       "Reason: session boundary",
       "",
       "## Current focus", "Continue the phase.",
-      "## What was being done", "Implementing the reconciled handoff contract. User-visible handoff resume behavior remains stable.",
-      "## Working tree and ownership", "The handoff diff is complete and must be preserved; commit approval remains with the user.",
-      "## Work not started or intentionally untouched", "No deletion has started and unrelated files remain untouched.",
-      "## Runtime wiring", "applyHandoffContextSync preserves runtime wiring between phase and feature context.",
-      "## Preservation constraints", "Existing handoff archive behavior must survive.",
-      "## Verification evidence", "Focused unit verification passed for the refresh contract.",
-      "## Related planned work", "Adapter wiring remains tracked as related planned work.",
-      "## How to resume", "1. Continue adapter wiring with pnpm test.",
-      "## Files touched", "- packages/plan-core/src/handoff-context.ts",
-      "## Blockers", "- No known blocker.",
-      "## Next steps", "- Wire adapters. Operator action: run pnpm test and inspect the persisted handoff.",
-      "## Recent decisions", "- Keep one active handoff",
+      "## Current and partial state", "Implementing the reconciled handoff contract. User-visible handoff resume behavior remains stable. The handoff diff is complete and must be preserved; applyHandoffContextSync preserves runtime wiring between phase and feature context. Focused unit verification passed for the refresh contract. Adapter wiring remains tracked as related planned work. Wire adapters.",
+      "## Preservation constraints", "Existing handoff archive behavior must survive. No deletion has started and unrelated files remain untouched.",
+      "## Supporting documents", "- packages/plan-core/src/handoff-context.ts — Inline resume capsule reference; extended detail in .planner/docs/handoff-core-refresh.md.",
+      "## Blockers and risks", "- No known blocker.",
+      "## How to resume", "1. Continue adapter wiring with pnpm test; run pnpm test and inspect the persisted handoff.",
     ].join("\n"),
     expectedHandoffUpdatedAt: audit.handoffUpdatedAt,
     reconciledExistingHandoff: true,
@@ -169,9 +163,15 @@ describe("durable handoff context refresh", () => {
     const audit = await store.preparePhaseHandoff(phaseId);
     assert.deepEqual(audit.missingCompletionTaskIds, [doneTaskId]);
     assert.match(audit.handoff, /Keep this decision/);
-    assert.deepEqual(audit.canonicalSections, ["Created at", "Updated at", "Reason", "Current focus", "What was being done", "Working tree and ownership", "Work not started or intentionally untouched", "Runtime wiring", "Preservation constraints", "Verification evidence", "Related planned work", "How to resume", "Files touched", "Blockers", "Next steps", "Recent decisions"]);
-    assert.match(audit.draftTemplate, /Created at: \{\{REQUIRED: ISO-8601 timestamp\}\}/);
+    assert.deepEqual(audit.canonicalSections, ["Current focus", "Current and partial state", "Preservation constraints", "Supporting documents", "Blockers and risks", "How to resume"]);
+    assert.deepEqual(audit.requiredHumanInputs.map((input) => input.id), ["title", "reason"]);
+    assert.match(audit.draftTemplate, /Planner-generated: Created at, Updated at, and structured Reason/);
     assert.match(audit.draftTemplate, /## How to resume/);
+    assert.equal(audit.phaseWorkMap.total, 2);
+    assert.deepEqual(audit.phaseWorkMap.entries.map((entry) => entry.ref), ["P001(F001)/T001", "P001(F001)/T002"]);
+    assert.equal(audit.phaseWorkMap.entries[0].remainingCapabilityOwner, false);
+    assert.equal(audit.phaseWorkMap.entries[1].remainingCapabilityOwner, true);
+    assert.equal(audit.phaseWorkMap.entries[1].ref, "P001(F001)/T002");
     assert.equal(audit.coldStartSourceReviews.length, HANDOFF_COLD_START_SOURCE_REVIEWS.length);
     assert.equal(audit.coldStartInventoryCategories.length, HANDOFF_COLD_START_INVENTORY_CATEGORIES.length);
 
@@ -339,7 +339,7 @@ describe("durable handoff context refresh", () => {
       store.refreshPhaseHandoff(phaseId, { ...input, content: "# Expensive draft without the prepared scaffold" }),
       (error) => {
         assert.equal(error.code, "HANDOFF_CANONICAL_SECTIONS_REQUIRED");
-        assert.ok(error.details.missingSections.includes("Updated at"));
+        assert.ok(error.details.missingSections.includes("Current focus"));
         assert.ok(error.details.missingSections.includes("How to resume"));
         return true;
       },
@@ -379,9 +379,10 @@ describe("durable handoff context refresh", () => {
       : entry);
     await store.refreshPhaseHandoff(phaseId, { ...input, completenessAudit: complete });
     const persisted = await store.loadPhase(phaseId);
-    assert.match(persisted.handoff, /feat\/notification-system-app/);
-    assert.match(persisted.handoff, /Notification::info\("x"\)\.send\(\)/);
-    assert.match(persisted.handoff, /Antonio must launch the app/);
+    const details = Object.fromEntries(persisted.handoffAudit.entries.map((entry) => [entry.category, entry.detail]));
+    assert.match(details["branch-worktree"], /feat\/notification-system-app/);
+    assert.match(details["commands-tools"], /Notification::info\("x"\)\.send\(\)/);
+    assert.match(details["operator-actions"], /Antonio must launch the app/);
   });
 
   test("rejects omitted concrete wiring before persistence and accepts it once represented", async () => {
@@ -499,18 +500,143 @@ describe("durable handoff context refresh", () => {
     assert.deepEqual(await store.loadFeatures(), beforeFeatures);
   });
 
-  test("rejects canonical handoff bodies above the deterministic inline limit", async () => {
+  test("automatically externalizes oversized handoffs instead of failing the write", async () => {
     const { store, phaseId, doneTaskId } = await setup();
     const audit = await store.preparePhaseHandoff(phaseId);
     const baseInput = refreshInput(audit, doneTaskId);
-    const input = { ...baseInput, content: `${baseInput.content}\n${"x".repeat(24_001)}` };
-    await assert.rejects(
-      store.refreshPhaseHandoff(phaseId, input),
+    const oversized = `${baseInput.content}\n${"x".repeat(9_000)}`;
+    const result = await store.refreshPhaseHandoff(phaseId, { ...baseInput, content: oversized });
+    assert.ok(result.phase.handoff.length <= 8_000, `compact handoff is ${result.phase.handoff.length} chars`);
+    assert.equal(result.phase.handoffAudit.supportingDocuments.length, 1);
+    const autoDoc = result.phase.handoffAudit.supportingDocuments[0];
+    assert.match(autoDoc.path, /^\.planner\/docs\/handoff-p001-.*\.md$/);
+    assert.match(result.phase.handoff, new RegExp(autoDoc.path.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
+    const { readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const extended = await readFile(join(store.root, autoDoc.path.slice(".planner/".length)), "utf8");
+    assert.ok(extended.includes("x".repeat(100)));
+  });
+
+  test("keeps the absolute compatibility ceiling on non-externalized rendering", async () => {
+    const { renderVerifiedHandoffContent } = await import("../dist/index.js");
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    const oversized = `${baseInput.content}\n${"x".repeat(24_001)}`;
+    assert.throws(
+      () => renderVerifiedHandoffContent(oversized, baseInput.completenessAudit, baseInput.coldStartInventory, []),
       (error) => {
         assert.equal(error.code, "HANDOFF_CONTENT_LIMIT_EXCEEDED");
         assert.equal(error.details.maxContentChars, 24_000);
         return true;
       },
+    );
+  });
+
+  test("cold resume recovers exact task, resume point, documents, and next commands", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    const docPath = join(store.root, "docs", "cold-resume.md");
+    const docContent = "# Cold resume detail\n\nExact extended design mapping and command transcript for the fresh reader.\n";
+    await writeFile(docPath, docContent, "utf8");
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    const content = [
+      "# P001(F001) — cold resume capsule",
+      "",
+      "Created at: 2026-08-24T00:00:00.000Z",
+      "Updated at: 2026-08-24T00:00:00.000Z",
+      "Reason: session boundary",
+      "",
+      "## Current focus",
+      "Feature F001 — Feature. Phase P001(F001) — Phase. Task P001(F001)/T002 — Still planned.",
+      "Exact resume point: packages/plan-core/src/handoff-context.ts applyHandoffContextSync.",
+      "",
+      "## Current and partial state",
+      "Implementing the reconciled handoff contract. User-visible handoff resume behavior remains stable. The handoff diff is complete and must be preserved; applyHandoffContextSync preserves runtime wiring between phase and feature context. Focused unit verification passed for the refresh contract. Adapter wiring remains tracked as related planned work. Wire adapters.",
+      "## Preservation constraints",
+      "Existing handoff archive behavior must survive. No deletion has started and unrelated files remain untouched.",
+      "## Supporting documents",
+      "- .planner/docs/cold-resume.md — Exact extended design mapping and command transcript for the fresh reader.",
+      "- packages/plan-core/src/handoff-context.ts — Inline resume capsule reference.",
+      "## Blockers and risks",
+      "- No known blocker.",
+      "## How to resume",
+      "1. Continue adapter wiring with pnpm test; run pnpm test and inspect the persisted handoff.",
+    ].join("\n");
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...baseInput,
+      content,
+      coldStartInventory: completeColdStartInventory({ files: ["packages/plan-core/src/handoff-context.ts"], "commands-tools": ["pnpm test", "Exact extended design mapping"] }),
+      supportingDocuments: [{ path: ".planner/docs/cold-resume.md", description: "Exact extended design mapping and command transcript for the fresh reader." }],
+    });
+    assert.equal(written.handoffAudit.resumeReadyAt, "");
+    const verified = await store.verifyPhaseHandoffReadBack(phaseId, {
+      expectedContentHash: written.handoffAudit.contentHash,
+      sourceReviews: completeReadBackSourceReviews(),
+      omissionsFound: [],
+    });
+    assert.ok(verified.resumeReadyAt);
+    // Fresh reader without conversation history: reload from disk in a new store.
+    const { PlanStore: FreshStore } = await import("../dist/index.js");
+    const fresh = new FreshStore(store.root);
+    const phase = await fresh.loadPhase(phaseId);
+    assert.match(phase.handoff, /P001\(F001\)\/T002/);
+    assert.match(phase.handoff, /applyHandoffContextSync/);
+    assert.match(phase.handoff, /\.planner\/docs\/cold-resume\.md/);
+    assert.match(phase.handoff, /pnpm test/);
+    assert.equal(phase.handoffAudit.supportingDocuments[0].path, ".planner/docs/cold-resume.md");
+    assert.ok(phase.handoffAudit.resumeReadyAt, "fresh reader sees persisted resume readiness");
+  });
+
+  test("rejects symlinked supporting documents without writing", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    const realPath = join(store.root, "docs", "real-detail.md");
+    await writeFile(realPath, "# Real detail\n\nSubstantive linked content.\n", "utf8");
+    const linkPath = join(store.root, "docs", "linked-detail.md");
+    try {
+      const { symlink } = await import("node:fs/promises");
+      await symlink(realPath, linkPath);
+    } catch {
+      return; // Filesystem does not support symlinks; nothing to enforce here.
+    }
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, {
+        ...baseInput,
+        content: `${baseInput.content}\n- .planner/docs/linked-detail.md — symlinked content.`,
+        supportingDocuments: [{ path: ".planner/docs/linked-detail.md", description: "Substantive symlinked content for resumption." }],
+      }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /symlink/i);
+        return true;
+      },
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, "");
+  });
+
+  test("materializes required metadata from structured preflight inputs without late draft retries", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const input = refreshInput(audit, doneTaskId);
+    const draftWithoutMetadata = input.content
+      .split("\n")
+      .filter((line) => !/^(?:Created at|Updated at|Reason):/.test(line))
+      .join("\n");
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...input,
+      content: draftWithoutMetadata,
+      reason: "A session boundary requires a cold-resume handoff.",
+    });
+    assert.match(written.phase.handoff, /^Created at: \d{4}-\d{2}-\d{2}T/im);
+    assert.match(written.phase.handoff, /^Updated at: \d{4}-\d{2}-\d{2}T/im);
+    assert.match(written.phase.handoff, /^Reason: A session boundary requires a cold-resume handoff\.$/im);
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, { ...input, reason: "" }),
+      (error) => error.code === "HANDOFF_REASON_REQUIRED",
     );
   });
 

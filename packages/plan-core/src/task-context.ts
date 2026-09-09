@@ -2,6 +2,28 @@ import type { AcceptedDecision, Feature, Phase, Project, Requirement, Task } fro
 import { formatPhaseRef } from "./naming.js";
 
 export const MAX_ACCEPTED_DECISION_CONTEXT_CHARS = 8_000;
+export const MAX_PHASE_WORK_MAP_CHARS = 8_000;
+
+export interface PhaseWorkMapEntry {
+  taskId: string;
+  ref: string;
+  number: number;
+  priority: number;
+  status: Task["status"];
+  title: string;
+  conciseGoal: string;
+  dependencies: string[];
+  remainingCapabilityOwner: boolean;
+  current: boolean;
+}
+
+export interface PhaseWorkMap {
+  content: string;
+  entries: PhaseWorkMapEntry[];
+  total: number;
+  truncated: boolean;
+  maxChars: number;
+}
 
 export interface ScopedAcceptedDecisions {
   scope: string;
@@ -53,6 +75,60 @@ export function buildBoundedAcceptedDecisionContext(
   return { content: `${full.slice(0, limit)}${suffix}`.slice(0, maxChars), total, truncated: true, maxChars };
 }
 
+function conciseTaskGoal(task: Task): string {
+  const source = task.description?.trim() || task.notes?.trim() || task.title;
+  const firstParagraph = source.split(/\n\s*\n|\r?\n/).find((line) => line.trim())?.trim() ?? task.title;
+  return firstParagraph.length <= 240 ? firstParagraph : `${firstParagraph.slice(0, 237).trimEnd()}...`;
+}
+
+/** Build a bounded, priority-ordered map of sibling capability ownership. */
+export function buildPhaseWorkMap(
+  phase: Phase,
+  featureNumber?: number,
+  currentTaskId?: string,
+  maxChars = MAX_PHASE_WORK_MAP_CHARS,
+): PhaseWorkMap {
+  const phaseRef = formatPhaseRef(phase.number, featureNumber);
+  const tasks = phase.tasks ?? [];
+  const refById = new Map(tasks.map((task) => [task.id, `${phaseRef}/T${String(task.number).padStart(3, "0")}`]));
+  const entries = [...tasks]
+    .sort((left, right) => (left.priority ?? left.number) - (right.priority ?? right.number) || left.number - right.number)
+    .map((task): PhaseWorkMapEntry => ({
+      taskId: task.id,
+      ref: `${phaseRef}/T${String(task.number).padStart(3, "0")}`,
+      number: task.number,
+      priority: task.priority ?? task.number,
+      status: task.status,
+      title: task.title,
+      conciseGoal: conciseTaskGoal(task),
+      dependencies: (task.dependsOn ?? []).map((dependency) => refById.get(dependency) ?? dependency),
+      remainingCapabilityOwner: !["done", "canceled", "rejected"].includes(task.status),
+      current: task.id === currentTaskId,
+    }));
+  const header = `Phase work map — canonical sibling capability ownership (${entries.length}, priority order):`;
+  const blocks = entries.map((entry) => [
+    `- ${entry.ref}${entry.current ? " (current)" : ""} — ${entry.title} [priority ${entry.priority}; ${entry.status}]`,
+    `  Goal: ${entry.conciseGoal}`,
+    `  Depends on: ${entry.dependencies.length > 0 ? entry.dependencies.join(", ") : "None."}`,
+    entry.remainingCapabilityOwner
+      ? `  Ownership: ${entry.ref} owns this remaining capability; do not duplicate it in another task.`
+      : "  Ownership: no remaining capability ownership (terminal task).",
+  ].join("\n"));
+  const suffix = "[Phase work map truncated for transport safety. Read the canonical phase and task full views before proposing work; place deeper context under .planner/docs/.]";
+  const included: string[] = [];
+  let truncated = false;
+  for (const block of blocks) {
+    const candidate = [header, ...included, block].join("\n");
+    if (candidate.length + suffix.length + 1 > maxChars) {
+      truncated = true;
+      break;
+    }
+    included.push(block);
+  }
+  const content = [header, ...included, ...(truncated ? [suffix] : [])].join("\n").slice(0, maxChars);
+  return { content, entries, total: entries.length, truncated, maxChars };
+}
+
 /**
  * Build a compact, agent-facing context block that surfaces the PARENT PHASE
  * (and grandparent FEATURE) description when a task is started. The phase
@@ -71,7 +147,7 @@ export function buildPhaseContextBlock(
   feature: Feature | undefined,
   linkedRequirements: Requirement[] = [],
   featureRequirements: Requirement[] = [],
-  task?: Pick<Task, "acceptedDecisions">,
+  task?: Pick<Task, "id" | "acceptedDecisions">,
   project?: Pick<Project, "acceptedDecisions">,
 ): string {
   const lines: string[] = [];
@@ -99,10 +175,10 @@ export function buildPhaseContextBlock(
     if (feature.description && feature.description.trim()) {
       lines.push(`\nFeature description:\n${feature.description.trim()}`);
     }
-    requirementsBlock("Feature linked requirements", featureRequirements, "None linked to this feature.");
+    requirementsBlock("Product requirements linked to feature (outcomes, never coding/process rules)", featureRequirements, "None linked to this feature.");
   } else {
     lines.push("Feature context: no parent feature linked to this phase.");
-    requirementsBlock("Feature linked requirements", [], "None linked to this feature.");
+    requirementsBlock("Product requirements linked to feature (outcomes, never coding/process rules)", [], "None linked to this feature.");
   }
 
   lines.push(`\nPhase ${phaseRef} — ${phase.title}`);
@@ -126,7 +202,9 @@ export function buildPhaseContextBlock(
   bullet("Decisions", phase.decisions);
   bullet("Completion criteria", phase.completionCriteria);
 
-  requirementsBlock("Phase linked requirements", linkedRequirements, "None linked to this phase.");
+  requirementsBlock("Product requirements linked to phase (outcomes, never coding/process rules)", linkedRequirements, "None linked to this phase.");
+  lines.push(`\n${buildPhaseWorkMap(phase, feature?.number, task?.id).content}`);
+  lines.push("Before proposing or creating work, reread this canonical phase work map and the relevant sibling task full view so an already-owned capability is not duplicated.");
   lines.push(`\n(End of phase context. Now proceed with the task.)`);
   return lines.join("\n");
 }

@@ -8,10 +8,12 @@ import type {
   Phase,
   Task,
 } from "./schema.js";
+import { buildPhaseWorkMap, type PhaseWorkMap } from "./task-context.js";
 
 export const COMPLETION_SUMMARY_HEADING = "**Completion summary:**";
 export const HANDOFF_COMPLETENESS_AUDIT_VERSION = 1;
 export const HANDOFF_COLD_START_INVENTORY_VERSION = 1;
+export const TARGET_HANDOFF_CONTENT_CHARS = 8_000;
 export const MAX_HANDOFF_CONTENT_CHARS = 24_000;
 export const HANDOFF_AUDIT_START_MARKER = "<!-- agent-plan:handoff-audit:start -->";
 export const HANDOFF_AUDIT_END_MARKER = "<!-- agent-plan:handoff-audit:end -->";
@@ -63,27 +65,24 @@ export const HANDOFF_COLD_START_INVENTORY_CATEGORIES = [
 ] as const;
 
 export const HANDOFF_CANONICAL_SECTIONS = [
-  "Created at",
-  "Updated at",
-  "Reason",
   "Current focus",
-  "What was being done",
-  "Working tree and ownership",
-  "Work not started or intentionally untouched",
-  "Runtime wiring",
+  "Current and partial state",
   "Preservation constraints",
-  "Verification evidence",
-  "Related planned work",
+  "Supporting documents",
+  "Blockers and risks",
   "How to resume",
-  "Files touched",
-  "Blockers",
-  "Next steps",
-  "Recent decisions",
+] as const;
+
+const LEGACY_HANDOFF_CANONICAL_SECTIONS = [
+  "Created at", "Updated at", "Reason", "Current focus", "What was being done",
+  "Working tree and ownership", "Work not started or intentionally untouched", "Runtime wiring",
+  "Preservation constraints", "Verification evidence", "Related planned work", "How to resume",
+  "Files touched", "Blockers", "Next steps", "Recent decisions",
 ] as const;
 
 export type HandoffCompletenessCategory = typeof HANDOFF_COMPLETENESS_CATEGORIES[number]["id"];
 export type HandoffColdStartInventoryCategory = typeof HANDOFF_COLD_START_INVENTORY_CATEGORIES[number]["id"];
-export type HandoffContractErrorCode = "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND";
+export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND";
 
 export class HandoffContractError extends Error {
   readonly code: HandoffContractErrorCode;
@@ -111,6 +110,13 @@ export interface HandoffColdStartInventoryInput {
 export interface HandoffSupportingDocumentInput {
   path: string;
   description: string;
+}
+
+export interface HandoffContentExternalization {
+  content: string;
+  externalized: boolean;
+  extendedContent: string;
+  supportingDocument?: HandoffSupportingDocumentInput;
 }
 
 export interface HandoffTaskContextUpdate {
@@ -149,17 +155,22 @@ export interface PhaseHandoffAudit {
   missingCompletionTaskIds: string[];
   missingCompletionTasks: Array<{ id: string; number: number; title: string }>;
   completenessVersion: number;
+  targetContentChars: number;
   maxContentChars: number;
   completenessCategories: ReadonlyArray<{ id: HandoffCompletenessCategory; label: string }>;
   canonicalSections: ReadonlyArray<string>;
+  requiredHumanInputs: ReadonlyArray<{ id: "title" | "reason"; label: string; description: string }>;
   draftTemplate: string;
   coldStartInventoryVersion: number;
   coldStartSourceReviews: ReadonlyArray<{ id: string; label: string }>;
   coldStartInventoryCategories: ReadonlyArray<{ id: HandoffColdStartInventoryCategory; label: string }>;
   existingCompletenessAudit: HandoffCompletenessAudit | null;
+  phaseWorkMap: PhaseWorkMap;
 }
 
 export interface RefreshPhaseHandoffInput {
+  /** Structured, human-supplied explanation; rendered by the planner. */
+  reason: string;
   content: string;
   expectedHandoffUpdatedAt: string;
   reconciledExistingHandoff: boolean;
@@ -204,58 +215,32 @@ export function hasTaskCompletionEvidence(task: Task): boolean {
 export function buildHandoffDraftTemplate(phase: Phase, feature: Feature): string {
   const featureRef = `F${String(feature.number).padStart(3, "0")}`;
   const phaseRef = `P${String(phase.number).padStart(3, "0")}(${featureRef})`;
-  const taskLines = phase.tasks.length > 0
-    ? phase.tasks.map((task) => `- ${phaseRef}/T${String(task.number).padStart(3, "0")} — ${task.title} (${task.status})`).join("\n")
-    : "- No tasks currently belong to this phase.";
   return [
     `# ${phaseRef} — {{REQUIRED: meaningful handoff title}}`,
     "",
-    "Created at: {{REQUIRED: ISO-8601 timestamp}}",
-    "Updated at: {{REQUIRED: ISO-8601 timestamp}}",
-    "Reason: {{REQUIRED: why work is stopping and why a cold agent needs this handoff}}",
+    "<!-- Planner-generated: Created at, Updated at, and structured Reason. Do not write these lines in the draft. -->",
     "",
     "## Current focus",
     `- Feature: ${featureRef} — ${feature.name}`,
     `- Phase: ${phaseRef} — ${phase.title}`,
+    "- Task: {{REQUIRED: exact composite task ref and title}}",
     "- Exact resume point: {{REQUIRED: file, symbol, command, or state boundary}}",
     "",
-    "## What was being done",
-    "{{REQUIRED: concrete completed and partial work}}",
-    "",
-    "## Working tree and ownership",
-    "{{REQUIRED: branch/worktree, whether the diff is finished or in flight, who produced it, preserve/discard rule, and commit authorization}}",
-    "",
-    "## Work not started or intentionally untouched",
-    "{{REQUIRED: destructive work not yet performed, files not changed, and boundaries intentionally left intact}}",
-    "",
-    "## Runtime wiring",
-    "{{REQUIRED: exact call sites, symbols, state transitions, and data flow}}",
+    "## Current and partial state",
+    "{{REQUIRED: concise completed/current/partial state only; keep extended detail in supporting documents}}",
     "",
     "## Preservation constraints",
-    "{{REQUIRED: behavior and code paths that must continue working}}",
+    "{{REQUIRED: minimal behaviors and boundaries that must survive}}",
     "",
-    "## Verification evidence",
-    "{{REQUIRED: commands, results, observations, and evidence for live/dead/inert claims}}",
+    "## Supporting documents",
+    "- {{REQUIRED: ordered .planner/docs/*.md links with why each is needed, or an explicit verified statement that none are needed}}",
     "",
-    "## Related planned work",
-    taskLines,
-    "{{REQUIRED: sibling-task boundaries and related capabilities that must not be duplicated}}",
+    "## Blockers and risks",
+    "- {{REQUIRED: blocker/risk, or a substantive verified statement that none apply}}",
     "",
     "## How to resume",
-    "1. {{REQUIRED: first exact action, including the file/symbol/command to use}}",
-    "2. {{REQUIRED: subsequent ordered actions and required verification}}",
-    "",
-    "## Files touched",
-    "- {{REQUIRED: path — exact symbols and why they matter}}",
-    "",
-    "## Blockers",
-    "- {{REQUIRED: blocker/risk, or a substantive reason none apply}}",
-    "",
-    "## Next steps",
-    "1. {{REQUIRED: remaining implementation step}}",
-    "",
-    "## Recent decisions",
-    "- {{REQUIRED: decision — rationale — behavior to preserve}}",
+    "1. {{REQUIRED: first exact action, including file/symbol/command}}",
+    "2. {{REQUIRED: subsequent ordered actions and verification}}",
   ].join("\n");
 }
 
@@ -271,14 +256,20 @@ export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffA
     missingCompletionTaskIds: missingCompletionTasks.map((task) => task.id),
     missingCompletionTasks,
     completenessVersion: HANDOFF_COMPLETENESS_AUDIT_VERSION,
+    targetContentChars: TARGET_HANDOFF_CONTENT_CHARS,
     maxContentChars: MAX_HANDOFF_CONTENT_CHARS,
     completenessCategories: HANDOFF_COMPLETENESS_CATEGORIES,
     canonicalSections: HANDOFF_CANONICAL_SECTIONS,
+    requiredHumanInputs: [
+      { id: "title", label: "Meaningful title", description: "A concise handoff title; the planner renders it as the H1." },
+      { id: "reason", label: "Reason", description: "Why work is stopping and why a cold agent needs this handoff; the planner renders it as metadata." },
+    ],
     draftTemplate: buildHandoffDraftTemplate(phase, feature),
     coldStartInventoryVersion: HANDOFF_COLD_START_INVENTORY_VERSION,
     coldStartSourceReviews: HANDOFF_COLD_START_SOURCE_REVIEWS,
     coldStartInventoryCategories: HANDOFF_COLD_START_INVENTORY_CATEGORIES,
     existingCompletenessAudit: phase.handoffAudit,
+    phaseWorkMap: buildPhaseWorkMap(phase, feature.number),
   };
 }
 
@@ -493,6 +484,83 @@ export function validateHandoffReadBackVerification(
   return requiredSources.map((source) => ({ source, detail: bySource.get(source)! }));
 }
 
+function sectionBody(content: string, headings: string[]): string {
+  const lines = content.split(/\r?\n/);
+  const normalized = new Set(headings.map((heading) => heading.toLowerCase()));
+  const start = lines.findIndex((line) => {
+    const match = line.match(/^##\s+(.+?)\s*$/);
+    return Boolean(match && normalized.has(match[1]!.toLowerCase()));
+  });
+  if (start < 0) return "";
+  const body: string[] = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index]!)) break;
+    body.push(lines[index]!);
+  }
+  return body.join("\n").trim();
+}
+
+function boundedSection(value: string, fallback: string, maxChars: number): string {
+  const normalized = value.trim() || fallback;
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxChars - 86)).trimEnd()}\n\n[Extended detail continues in the linked planner document.]`;
+}
+
+/**
+ * Mechanically compact oversized legacy or verbose handoffs while retaining the
+ * complete submitted body in one planner-owned Markdown document.
+ */
+export function externalizeOversizedHandoffContent(
+  content: string,
+  supportingDocumentPath: string,
+): HandoffContentExternalization {
+  const base = stripRenderedCompletenessAudit(content);
+  if (base.length <= TARGET_HANDOFF_CONTENT_CHARS) {
+    return { content: base, externalized: false, extendedContent: "" };
+  }
+  const firstHeading = base.split(/\r?\n/).find((line) => /^#\s+/.test(line.trim()))?.trim() ?? "# Handoff resume capsule";
+  const metadata = ["Created at", "Updated at", "Reason"].map((label) =>
+    base.split(/\r?\n/).find((line) => line.toLowerCase().startsWith(`${label.toLowerCase()}:`))?.trim() ?? `${label}: See supporting document.`,
+  );
+  const currentFocus = boundedSection(sectionBody(base, ["Current focus"]), "Exact focus and resume point are preserved in the supporting document.", 1_200);
+  const currentState = boundedSection(sectionBody(base, ["Current and partial state", "What was being done"]), "Current and partial work details are preserved in the supporting document.", 1_500);
+  const preservation = boundedSection(sectionBody(base, ["Preservation constraints"]), "Preservation constraints are recorded in the supporting document.", 900);
+  const blockers = boundedSection(sectionBody(base, ["Blockers and risks", "Blockers"]), "Blockers and risks are recorded in the supporting document.", 900);
+  const resume = boundedSection(sectionBody(base, ["How to resume", "Next steps"]), "1. Read the linked supporting document completely, then resume from its first ordered action.", 1_500);
+  const compact = [
+    firstHeading,
+    "",
+    ...metadata,
+    "",
+    "## Current focus",
+    currentFocus,
+    "",
+    "## Current and partial state",
+    currentState,
+    "",
+    "## Preservation constraints",
+    preservation,
+    "",
+    "## Supporting documents",
+    `- ${supportingDocumentPath} — Full submitted handoff detail externalized automatically because the inline resume capsule exceeded ${TARGET_HANDOFF_CONTENT_CHARS} characters. Read this document before resuming.`,
+    "",
+    "## Blockers and risks",
+    blockers,
+    "",
+    "## How to resume",
+    resume,
+  ].join("\n").trim();
+  return {
+    content: compact,
+    externalized: true,
+    extendedContent: `${firstHeading} — extended detail\n\n${base}\n`,
+    supportingDocument: {
+      path: supportingDocumentPath,
+      description: "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+    },
+  };
+}
+
 export function renderHandoffCompletenessAudit(audit: HandoffCompletenessAuditInput): string {
   const entries = validateHandoffCompletenessAudit(audit);
   const labels = new Map(HANDOFF_COMPLETENESS_CATEGORIES.map((entry) => [entry.id, entry.label] as const));
@@ -520,15 +588,40 @@ export function renderVerifiedHandoffContent(
   validateCanonicalHandoffContent(base);
   validateHandoffCompletenessAudit(audit);
   validateHandoffColdStartInventory(coldStartInventory, base, supportingDocumentContents);
-  const rendered = `${base}\n\n${renderHandoffCompletenessAudit(audit!)}`.trim();
-  if (rendered.length > MAX_HANDOFF_CONTENT_CHARS) {
+  if (base.length > MAX_HANDOFF_CONTENT_CHARS) {
     throw new HandoffContractError(
       "HANDOFF_CONTENT_LIMIT_EXCEEDED",
-      `Canonical handoff content is ${rendered.length} characters; the maximum is ${MAX_HANDOFF_CONTENT_CHARS}. Move extended detail to committed Markdown under .planner/docs/ and link it with a substantive explanation.`,
-      { contentLength: rendered.length, maxContentChars: MAX_HANDOFF_CONTENT_CHARS },
+      `Inline handoff content is ${base.length} characters after compaction; the absolute compatibility ceiling is ${MAX_HANDOFF_CONTENT_CHARS}. Retry through PlanStore so extended detail can be externalized automatically.`,
+      { contentLength: base.length, targetContentChars: TARGET_HANDOFF_CONTENT_CHARS, maxContentChars: MAX_HANDOFF_CONTENT_CHARS, continuation: "externalize-and-retry" },
     );
   }
-  return rendered;
+  return base;
+}
+
+export function materializeHandoffMetadata(content: string, reason: string, createdAt: string, updatedAt: string): string {
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) {
+    throw new HandoffContractError(
+      "HANDOFF_REASON_REQUIRED",
+      "A structured handoff reason is required before drafting or persistence. Run handoff_prepare and provide reason; timestamps are planner-generated.",
+      { requiredInputs: ["title", "reason"], generatedMetadata: ["Created at", "Updated at"] },
+    );
+  }
+  const existingCreatedAt = content.match(/^Created at:\s*(\S+)\s*$/im)?.[1] ?? createdAt;
+  const withoutMetadata = content
+    .split(/\r?\n/)
+    .filter((line) => !/^(?:Created at|Updated at|Reason):\s*/i.test(line.trim()))
+    .join("\n")
+    .trim();
+  const lines = withoutMetadata.split("\n");
+  const firstContent = lines.findIndex((line) => line.trim().length > 0);
+  const metadata = [`Created at: ${existingCreatedAt}`, `Updated at: ${updatedAt}`, `Reason: ${normalizedReason}`];
+  if (firstContent >= 0 && /^#\s+/.test(lines[firstContent] ?? "")) {
+    lines.splice(firstContent + 1, 0, "", ...metadata);
+  } else {
+    lines.unshift(...metadata, "");
+  }
+  return lines.join("\n").trim();
 }
 
 export function validateCanonicalHandoffContent(content: string): void {
@@ -538,26 +631,35 @@ export function validateCanonicalHandoffContent(content: string): void {
     { label: "Updated at", pattern: /^Updated at:\s*\S+/im },
     { label: "Reason", pattern: /^Reason:\s*\S+/im },
     { label: "Current focus", pattern: /^##\s+Current focus\s*$/im },
-    { label: "What was being done", pattern: /^##\s+What was being done\s*$/im },
-    { label: "Working tree and ownership", pattern: /^##\s+Working tree and ownership\s*$/im },
-    { label: "Work not started or intentionally untouched", pattern: /^##\s+Work not started or intentionally untouched\s*$/im },
-    { label: "Runtime wiring", pattern: /^##\s+Runtime wiring\s*$/im },
+    { label: "Current and partial state", pattern: /^##\s+Current and partial state\s*$/im },
     { label: "Preservation constraints", pattern: /^##\s+Preservation constraints\s*$/im },
-    { label: "Verification evidence", pattern: /^##\s+Verification evidence\s*$/im },
-    { label: "Related planned work", pattern: /^##\s+Related planned work\s*$/im },
+    { label: "Supporting documents", pattern: /^##\s+Supporting documents\s*$/im },
+    { label: "Blockers and risks", pattern: /^##\s+Blockers and risks\s*$/im },
     { label: "How to resume", pattern: /^##\s+How to resume\s*$/im },
-    { label: "Files touched", pattern: /^##\s+Files touched\s*$/im },
-    { label: "Blockers", pattern: /^##\s+Blockers\s*$/im },
-    { label: "Next steps", pattern: /^##\s+Next steps\s*$/im },
-    { label: "Recent decisions", pattern: /^##\s+Recent decisions\s*$/im },
   ];
   const missing = required.filter((entry) => !entry.pattern.test(body)).map((entry) => entry.label);
-  const unresolvedPlaceholders = [...body.matchAll(/\{\{REQUIRED:[^}]+\}\}/g)].map((match) => match[0]);
-  if (missing.length > 0 || unresolvedPlaceholders.length > 0) {
+  if (missing.length === 0) {
+    const unresolvedPlaceholders = [...body.matchAll(/\{\{REQUIRED:[^}]+\}\}/g)].map((match) => match[0]);
+    if (unresolvedPlaceholders.length > 0) {
+      throw new HandoffContractError(
+        "HANDOFF_CANONICAL_SECTIONS_REQUIRED",
+        "The canonical handoff still contains unresolved placeholders. Replace every placeholder before writing.",
+        { missingSections: [], unresolvedPlaceholders: [...new Set(unresolvedPlaceholders)] },
+      );
+    }
+    return;
+  }
+  const legacyMissing = LEGACY_HANDOFF_CANONICAL_SECTIONS.filter((label) => {
+    if (label === "Created at") return !/^Created at:\s*\S+/im.test(body);
+    if (label === "Updated at") return !/^Updated at:\s*\S+/im.test(body);
+    if (label === "Reason") return !/^Reason:\s*\S+/im.test(body);
+    return !new RegExp(`^##\\s+${label.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\s*$`, "im").test(body);
+  });
+  if (legacyMissing.length > 0) {
     throw new HandoffContractError(
       "HANDOFF_CANONICAL_SECTIONS_REQUIRED",
       "The canonical handoff does not match the prepared scaffold. Fill every required heading and replace every placeholder before writing.",
-      { missingSections: missing, unresolvedPlaceholders: [...new Set(unresolvedPlaceholders)] },
+      { missingSections: missing, legacyMissingSections: legacyMissing, unresolvedPlaceholders: [...new Set([...body.matchAll(/\{\{REQUIRED:[^}]+\}\}/g)].map((m) => m[0]))] },
     );
   }
 }

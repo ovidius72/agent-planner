@@ -83,8 +83,8 @@ describe("entity form actions", () => {
     await expectResponseError(() => createTask({ request: formRequest({ title: "Duplicate" }), params }), 422, "Title already exists");
   });
 
-  it("creates requirements with linked phases and rejects missing status", async () => {
-    await expectResponseError(() => createRequirement({ request: formRequest({ title: "Outcome" }) }), 400, "Missing field: status");
+  it("creates statusless requirements with linked phases", async () => {
+    await expectResponseError(() => createRequirement({ request: formRequest({ title: " " }) }), 400, "Missing field: title");
 
     const fetchMock = installFetchMock(async (path, init) => {
       expect(path).toBe("/api/requirements");
@@ -92,7 +92,6 @@ describe("entity form actions", () => {
       expect(body).toMatchObject({
         title: "Outcome",
         description: "",
-        status: "in-progress",
         linkedPhaseIds: ["phase-1", "phase-2"],
         macroTasks: [],
       });
@@ -101,7 +100,7 @@ describe("entity form actions", () => {
       expect(body).not.toHaveProperty("updatedAt");
       return jsonResponse(makeRequirement());
     });
-    const result = await createRequirement({ request: formRequest({ title: " Outcome ", status: "in-progress", linkedPhaseIds: [" phase-1 ", "", "phase-2"] }) });
+    const result = await createRequirement({ request: formRequest({ title: " Outcome ", linkedPhaseIds: [" phase-1 ", "", "phase-2"] }) });
     expect((result as Response).headers.get("Location")).toBe("/requirements");
     expect(fetchMock).toHaveBeenCalledOnce();
   });
@@ -232,15 +231,15 @@ describe("entity form actions", () => {
       throw new Error(`Unexpected request ${path}`);
     });
 
-    await editRequirement({ request: formRequest({ title: "Changed", description: "", status: "done", linkedPhaseIds: ["phase-2"] }), params });
+    await editRequirement({ request: formRequest({ title: "Changed", description: "", linkedPhaseIds: ["phase-2"] }), params });
     expect(updatePayload).toMatchObject({
       id: "requirement-1",
       expectedUpdatedAt: requirement.updatedAt,
       title: "Changed",
-      status: "done",
       linkedPhaseIds: ["phase-2"],
       macroTasks: requirement.macroTasks,
     });
+    expect(updatePayload).not.toHaveProperty("status");
     expect(updatePayload).not.toHaveProperty("sessionInfo");
     expect(updatePayload).not.toHaveProperty("createdAt");
 
@@ -248,6 +247,6 @@ describe("entity form actions", () => {
       expect(path).toBe("/api/requirements");
       return jsonResponse({ requirements: [] });
     });
-    await expectResponseError(() => editRequirement({ request: formRequest({ title: "Missing", status: "planned" }), params }), 404, "Requirement not found: requirement-1");
+    await expectResponseError(() => editRequirement({ request: formRequest({ title: "Missing" }), params }), 404, "Requirement not found: requirement-1");
   });
 });

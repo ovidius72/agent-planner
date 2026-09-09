@@ -2,7 +2,7 @@
  * T240 (P056/F015) — Pi adapter host and registration harness tests.
  *
  * Verifies the fake Pi host (test/helpers/pi-host-fixture.mjs):
- *  - captures the REAL adapter's registrations (command, 46 tools, 9 hooks)
+ *  - captures the REAL adapter's registrations (command, tools, and hooks)
  *  - supplies a realistic ExtensionContext (ui/sessionManager/cwd)
  *  - keeps adapter-to-core persistence REAL (real PlanStore on temp .planner)
  *  - drives command handlers and tool executes with notifications, prompts,
@@ -62,9 +62,9 @@ describe("pi-adapter host harness", () => {
         "idea promote",
       ], "every interactive Ideas action must be discoverable from /planner completion");
 
-      // All 65 tools with the required definition fields.
-      assert.equal(host.tools.size, 65);
-      for (const name of ["plan_init", "feature_create", "phase_discuss", "task_pause", "task_switch", "task_start", "decision_record", "accepted_decision_create", "accepted_decision_update", "accepted_decision_delete", "handoff_prepare", "handoff_write", "handoff_verify", "planner-web", "planner-load", "planner-stop", "project_guidelines_show", "project_guidelines_update", "project_context_migrate", "idea_list", "idea_show", "idea_create", "idea_update", "idea_delete", "idea_promotion_begin", "idea_promotion_finalize"]) {
+      // All 67 tools with the required definition fields.
+      assert.equal(host.tools.size, 67);
+      for (const name of ["plan_init", "description_freshness", "feature_create", "phase_discuss", "task_pause", "task_switch", "task_start", "task_reopen", "decision_record", "accepted_decision_create", "accepted_decision_update", "accepted_decision_delete", "handoff_prepare", "handoff_write", "handoff_verify", "planner-web", "planner-load", "planner-stop", "project_guidelines_show", "project_guidelines_update", "project_context_migrate", "idea_list", "idea_show", "idea_create", "idea_update", "idea_delete", "idea_promotion_begin", "idea_promotion_finalize"]) {
         const tool = host.tools.get(name);
         assert.ok(tool, `tool ${name} registered`);
         assert.ok(tool.label && tool.description, `tool ${name} has label/description`);

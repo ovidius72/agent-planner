@@ -10,13 +10,14 @@ import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-m
 import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
+import { DescriptionFreshnessNotice } from "../../components/ui/description-freshness-notice";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { ResumeSnapshot } from "../../components/task/resume-snapshot";
 import { useShortcut } from "../../lib/shortcuts";
-import type { Feature, Phase, Task, ChecklistItem } from "../../lib/types";
+import type { Feature, Phase, Task, ChecklistItem, HierarchicalDescriptionFreshness } from "../../lib/types";
 
 function ChecklistItemToggle({
   featureId,
@@ -62,7 +63,7 @@ function ChecklistItemToggle({
 }
 
 export function TaskDetailRoute() {
-  const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
+  const { feature, phase, task, pendingResume, descriptionFreshness } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean; descriptionFreshness: HierarchicalDescriptionFreshness };
   const canStart = task.status === "planned" || task.status === "waiting";
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
@@ -111,6 +112,13 @@ export function TaskDetailRoute() {
               <Button type="submit" variant="primary">{task.pauseSnapshot || pendingResume ? "Resume task" : "Start task"}</Button>
             </Form>
           ) : null}
+          {task.status === "done" ? (
+            <Form method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/reopen`} className="inline-flex" onSubmit={(event) => {
+              if (!window.confirm(`Reopen task “${task.title}”? Its completion history will be retained.`)) event.preventDefault();
+            }}>
+              <Button type="submit" variant="primary">Reopen task</Button>
+            </Form>
+          ) : null}
           <Link to="edit"><Button type="button" shortcut="edit">Edit task</Button></Link>
           <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/delete`} className="inline-flex" onSubmit={(event) => {
             if (!window.confirm(`Delete task \"${task.title}\"?`)) event.preventDefault();
@@ -119,6 +127,8 @@ export function TaskDetailRoute() {
           </Form>
         </div>
       </div>
+
+      <DescriptionFreshnessNotice freshness={descriptionFreshness} ownerIds={[phase.id, feature.id]} />
 
       <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} createdAt={task.createdAt} updatedAt={task.updatedAt} startedAt={task.startedAt} completedAt={task.completedAt} />
 

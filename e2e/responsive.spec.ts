@@ -113,3 +113,20 @@ test("handoff archive stays navigable and horizontally contained", async ({ page
   }));
   expect(size.scrollWidth).toBeLessThanOrEqual(size.clientWidth + 1);
 });
+
+test("planner document references open the viewer in a new tab", async ({ page, planner }) => {
+  await planner.seed("minimal");
+  await planner.request("/docs/save", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: ".planner/docs/responsive-note.md", content: "# Responsive note\n\nSafe viewer content.\n", confirmed: true }),
+    expectStatus: 200,
+  });
+  await page.goto(`${planner.url}/docs/view?path=${encodeURIComponent(".planner/docs/responsive-note.md")}`);
+  await expect(page.getByRole("heading", { name: "Planner document" })).toBeVisible();
+  await expect(page.getByText("Safe viewer content.")).toBeVisible();
+  const size = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(size.scrollWidth).toBeLessThanOrEqual(size.clientWidth + 1);
+});

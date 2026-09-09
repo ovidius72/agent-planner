@@ -236,6 +236,54 @@ test("feature, phase, and task update routes persist canonical context and rejec
   assert.equal((await request(fx, `/tasks/${task.id}`)).body.title, "Updated through canonical fields");
 });
 
+test("planner docs viewer rejects traversal and requires confirmed saves", async () => {
+  const fx = await startServerFixture({ name: "t385-docs-viewer" });
+  await mkdir(join(fx.planRoot, "docs"), { recursive: true });
+  await writeFile(join(fx.planRoot, "docs", "viewer-note.md"), "# Viewer note\n\nSafe planner content.\n", "utf8");
+  const viewed = await request(fx, "/docs/view?path=.planner/docs/viewer-note.md");
+  assert.equal(viewed.body.path, ".planner/docs/viewer-note.md");
+  assert.match(viewed.body.content, /Safe planner content/);
+  await request(fx, "/docs/view?path=.planner/docs/../manifest.json", { expectStatus: 400 });
+  await request(fx, "/docs/view?path=/etc/passwd", { expectStatus: 400 });
+  const unconfirmed = await request(fx, "/docs/save", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: ".planner/docs/viewer-note.md", content: "# Changed\n" }),
+    expectStatus: 400,
+  });
+  assert.equal(unconfirmed.body.confirmRequired, true);
+  const saved = await request(fx, "/docs/save", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: ".planner/docs/viewer-note.md", content: "# Changed\n\nConfirmed editor save.\n", confirmed: true }),
+  });
+  assert.equal(saved.body.saved, true);
+  assert.match((await request(fx, "/docs/view?path=.planner/docs/viewer-note.md")).body.content, /Confirmed editor save/);
+});
+
+test("description freshness endpoint previews exact stale parents without rewriting prose", async () => {
+  const fx = await startServerFixture({ name: "t381-server-description-freshness" });
+  const feature = (await request(fx, "/features")).body[0];
+  const phase = (await request(fx, "/phases")).body[0];
+  const task = phase.tasks[0];
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await request(fx, `/tasks/${task.id}`, put({ phaseId: phase.id, description: "Changed task context." }));
+  const stale = await request(fx, "/description-freshness");
+  assert.deepEqual(stale.body.staleParentRefs, ["P001(F001)", "F001"]);
+  assert.deepEqual(stale.body.reconciliationPreview.map((step) => step.ownerRef), ["P001(F001)", "F001"]);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await request(fx, `/phases/${phase.id}`, put({ description: "Reconciled phase context." }));
+  assert.deepEqual((await request(fx, "/description-freshness")).body.staleParentRefs, ["F001"]);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await request(fx, `/features/${feature.id}`, put({ description: "Reconciled feature context." }));
+  const fresh = await request(fx, "/description-freshness");
+  assert.equal(fresh.body.reconciliationRequired, false);
+  assert.deepEqual(fresh.body.staleParentRefs, []);
+});
+
 // ── Task CRUD + composite refs ─────────────────────────────────────────────
 
 test("task create: 201 with global composite label and checklist transform", async () => {
@@ -387,19 +435,26 @@ test("requirement CRUD: create with phase ref resolution, update, delete, valida
 
   const created = await request(fx, "/requirements", {
     ...json({
-      id: crypto.randomUUID(), title: "Auth must work", description: "", status: "planned",
+      id: crypto.randomUUID(), title: "Auth must work", description: "",
       macroTasks: [{ title: "Authenticate request", description: "Verify credentials", status: "planned" }], linkedPhaseIds: ["P001"], createdAt: now, updatedAt: now,
     }),
     expectStatus: 201,
   });
   assert.equal(created.body.linkedPhaseIds[0], phase.id, "composite ref P001 resolved to UUID");
+  assert.equal(Object.hasOwn(created.body, "status"), false, "top-level Requirement has no lifecycle status");
   assert.equal(created.body.macroTasks[0].id, "MT-001", "server owns macro-task identity");
   assert.equal(created.body.macroTasks[0].createdAt, created.body.macroTasks[0].updatedAt, "server owns macro-task timestamps");
+
+  const rejectedLegacyStatus = await request(fx, "/requirements", {
+    ...json({ title: "Legacy status", description: "", status: "planned", linkedPhaseIds: ["P001"] }),
+    expectStatus: 400,
+  });
+  assert.equal(rejectedLegacyStatus.body.errorCode, "REQUIREMENT_STATUS_REMOVED");
 
   // empty links → 400 (no partial write)
   await request(fx, "/requirements", {
     ...json({
-      id: crypto.randomUUID(), title: "Bad", description: "", status: "planned",
+      id: crypto.randomUUID(), title: "Bad", description: "",
       macroTasks: [], linkedPhaseIds: [], createdAt: now, updatedAt: now,
     }),
     expectStatus: 400,

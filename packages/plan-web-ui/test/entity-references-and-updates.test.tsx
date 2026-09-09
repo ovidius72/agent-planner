@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import { ActiveTasksHeader } from "../src/components/layout/app-shell";
+import { ActiveTasksHeader, TaskFocusHeader } from "../src/components/layout/app-shell";
 import { ResumeRequiredSection } from "../src/components/dashboard/resume-required";
 import { ProjectContext } from "../src/components/dashboard/project-context";
 import { TopNav } from "../src/components/layout/top-nav";
@@ -64,6 +64,41 @@ describe("entity references and timestamps", () => {
     expect(screen.getByRole("link", { name: "T003" })).toHaveAttribute("href", "/features/feature-1/phases/phase-2/tasks/task-3");
     expect(screen.getByRole("button", { name: "Copy F001/P002/T003" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy TSK03" })).toBeInTheDocument();
+  });
+
+  it("shows the next work recommendation when no task is active", () => {
+    renderRoute([
+      {
+        path: "/",
+        element: (
+          <TaskFocusHeader
+            taskFocus={{
+              active: [],
+              pendingResume: [],
+              nextWork: {
+                id: "task-6",
+                number: 6,
+                shortId: "TSK06",
+                title: "Suggested task",
+                phaseId: "phase-2",
+                phaseNumber: 2,
+                featureId: "feature-1",
+                featureNumber: 1,
+                status: "planned",
+                pauseSnapshot: null,
+                pendingResume: false,
+                deviationId: "",
+              },
+              nextWorkReason: "Select the lowest-priority ready feature, then phase, then task.",
+            }}
+          />
+        ),
+      },
+    ]);
+
+    expect(screen.getByRole("heading", { name: "Next work" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Suggested task" })).toHaveAttribute("href", "/features/feature-1/phases/phase-2/tasks/task-6");
+    expect(screen.getByText("Select the lowest-priority ready feature, then phase, then task.")).toBeInTheDocument();
   });
 
   it("keeps the resume section compact while preserving canonical status and resume markers", () => {

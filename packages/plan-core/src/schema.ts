@@ -172,7 +172,7 @@ export const ProjectSchema = z.object({
 export const SubtaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
 export const TaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
 export const PhaseStatusSchema = z.enum(["draft", "discovery", "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
-export const RequirementStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
+export const MacroTaskStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
 export const FeatureStatusSchema = z.enum(["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"]);
 
 export const SubtaskSchema = z.object({
@@ -272,6 +272,8 @@ export const TaskSchema = z.object({
   updatedAt: TimestampSchema,
   /** Durable attestations of completed full context reads by harness session. */
   sessionInfo: z.array(SessionInfoSchema).default([]),
+  /** Session currently owning this in-progress task ("" when not in-progress or legacy). Enables concurrent starts across agent sessions. */
+  activeOwnerSession: z.string().default(""),
 }).transform((task) => ({
   ...task,
   checklist: task.checklist
@@ -429,7 +431,7 @@ export const MacroTaskSchema = z.object({
   id: z.string().regex(/^MT-\d{3}$/),
   title: z.string().min(1),
   description: z.string().default(""),
-  status: RequirementStatusSchema,
+  status: MacroTaskStatusSchema,
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 });
@@ -438,14 +440,13 @@ export const RequirementSchema = z.object({
   id: z.string(),
   title: z.string().min(1),
   description: z.string().default(""),
-  status: RequirementStatusSchema,
   macroTasks: z.array(MacroTaskSchema).default([]),
   linkedPhaseIds: z.array(z.string().min(1)).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
   /** Durable attestations of completed full context reads by harness session. */
   sessionInfo: z.array(SessionInfoSchema).default([]),
-});
+}).strip(); // Legacy persisted top-level `status` is accepted as unknown input and removed from canonical output.
 
 export const RequirementsDocumentSchema = z.object({
   requirements: z.array(RequirementSchema),
@@ -499,7 +500,7 @@ export type Feature = z.infer<typeof FeatureSchema> & { status: FeatureStatus };
 export type FeaturesDocument = { features: Feature[] };
 export type PhaseStatus = z.infer<typeof PhaseStatusSchema>;
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
-export type RequirementStatus = z.infer<typeof RequirementStatusSchema>;
+export type MacroTaskStatus = z.infer<typeof MacroTaskStatusSchema>;
 export type SubtaskStatus = z.infer<typeof SubtaskStatusSchema>;
 export type Manifest = z.infer<typeof ManifestSchema>;
 export type WorkflowRules = z.infer<typeof WorkflowRulesSchema>;

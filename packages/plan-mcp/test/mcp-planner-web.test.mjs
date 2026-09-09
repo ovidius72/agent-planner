@@ -43,6 +43,7 @@ async function writePreparedHandoff(session, phaseRef, title, content) {
   return callTool(session, "planner-handoff-write", {
     phaseRef,
     title,
+    reason: "Planner web fixture session boundary requires a cold-resume handoff.",
     content: canonicalHandoff(title, content),
     confirmed: true,
     expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
@@ -72,6 +73,10 @@ test("planner-web start/status/stop lifecycle", async () => {
     const startText = toolText(startResult);
     assert.match(startText, /planner-web started:/);
     assert.match(startText, /\(mode: .+\)/);
+    assert.equal(toolStructured(startResult).running, true);
+    assert.match(toolStructured(startResult).localUrl, /^http:\/\/(localhost|127\.0\.0\.1):[0-9]+$/);
+    assert.ok(toolStructured(startResult).port > 0);
+    assert.ok(String(toolStructured(startResult).host).length > 0);
 
     // Wait a bit for server to fully start
     await waitForServer(200);
@@ -82,6 +87,8 @@ test("planner-web start/status/stop lifecycle", async () => {
     assert.match(statusText, /planner-web running:/);
     assert.match(statusText, /\(mode: .+\)/);
     assert.match(statusText, /bindHost: 0\.0\.0\.0/); // Should be bound to LAN
+    assert.equal(toolStructured(status).running, true);
+    assert.ok(toolStructured(status).port > 0);
 
     // Test idempotent start (should say already running)
     const startAgain = await callTool(session, "planner-web", { action: "start" });

@@ -101,6 +101,9 @@ describe("buildRecap — active task", () => {
     assert.ok(r.includes("Current focus: F01 — Feat One / P001(F001) — Phase 1 / T01 — task 1 (in-progress)"), "focus line with composite IDs");
     assert.ok(r.includes("Continue with /planner task start T01."), "Pi recap invokes lifecycle validation first");
     assert.ok(r.includes("follow only the missing or stale reads in its nextActions"), "Pi recap keeps reads demand-driven");
+    assert.match(r, /Phase work map — canonical sibling capability ownership/);
+    assert.match(r, /P001\(F001\)\/T002 owns this remaining capability; do not duplicate it/);
+    assert.match(r, /reread the canonical phase and the relevant sibling task/);
     assert.doesNotMatch(r, /re-read the full context|\/planner task show T01/);
   });
 

@@ -13,9 +13,10 @@ import { HandoffBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { DetailFilters } from "../../components/ui/detail-filters";
+import { DescriptionFreshnessNotice } from "../../components/ui/description-freshness-notice";
 import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
-import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
+import { DisplayStatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { clearPhaseHandoff } from "../../lib/api";
@@ -24,7 +25,7 @@ import { matchesListQuery, passesDetailFilters, type DetailFilterValue } from ".
 import { useShortcut } from "../../lib/shortcuts";
 import { taskStatuses } from "../../lib/statuses";
 import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
-import type { Feature, Phase } from "../../lib/types";
+import type { Feature, HierarchicalDescriptionFreshness, Phase } from "../../lib/types";
 
 function summarizeTasks(phase: Phase) {
   let inProgress = 0;
@@ -43,7 +44,7 @@ function summarizeTasks(phase: Phase) {
 }
 
 export function PhaseDetailRoute() {
-  const { feature, phase } = useLoaderData() as { feature: Feature; phase: Phase };
+  const { feature, phase, descriptionFreshness } = useLoaderData() as { feature: Feature; phase: Phase; descriptionFreshness: HierarchicalDescriptionFreshness };
   const phaseDecisions = phase.decisions ?? [];
   const acceptedDecisions = phase.acceptedDecisions ?? [];
   const linkedRequirements = phase.linkedRequirements ?? [];
@@ -166,6 +167,8 @@ export function PhaseDetailRoute() {
         </div>
       </div>
 
+      <DescriptionFreshnessNotice freshness={descriptionFreshness} ownerIds={[phase.id, feature.id]} />
+
       <Card className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <CompactCard>
@@ -248,10 +251,11 @@ export function PhaseDetailRoute() {
                 <div key={requirement.id} className="min-w-0 rounded-[18px] border border-[var(--border)] bg-[var(--surface-card)] px-4 py-4">
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StatusBadge status={requirement.status} />
-                        {requirement.macroTasks.length > 0 ? <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-subtle)]">{requirement.macroTasks.length} macro task{requirement.macroTasks.length === 1 ? "" : "s"}</span> : null}
-                      </div>
+                      {requirement.macroTasks.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-subtle)]">{requirement.macroTasks.length} macro task{requirement.macroTasks.length === 1 ? "" : "s"}</span>
+                        </div>
+                      ) : null}
                       <h3 className="mt-2 text-lg font-black tracking-tight text-[var(--text)] [overflow-wrap:anywhere]">{requirement.title}</h3>
                       {requirement.description ? <p className="mt-2 text-sm text-[var(--text-muted)] [overflow-wrap:anywhere]">{requirement.description}</p> : null}
                     </div>

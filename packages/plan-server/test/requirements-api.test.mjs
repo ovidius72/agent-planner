@@ -23,7 +23,6 @@ function requirement(overrides = {}) {
     id: crypto.randomUUID(),
     title: "Requirements API fixture",
     description: "",
-    status: "planned",
     macroTasks: [],
     linkedPhaseIds: ["P001"],
     createdAt: now,

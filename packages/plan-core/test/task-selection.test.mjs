@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkExplicitTaskStart, recommendNextTask } from "../dist/index.js";
+import { checkExplicitTaskStart, recommendNextTask, recommendNextWork } from "../dist/index.js";
 
 const NOW = "2026-08-10T00:00:00.000Z";
 const feature = (number, priority = 10, status = "planned") => ({ id: `feature-${number}`, number, priority, status });
@@ -17,7 +17,7 @@ const deviation = (temporaryTaskId, resumeTaskId, state = "approved") => ({
   createdAt: NOW, activatedAt: "", resolvedAt: "",
 });
 
-const recommendation = (features, phases, deviations = []) => recommendNextTask(features, phases, deviations);
+const recommendation = (features, phases, deviations = [], currentPhaseId = "", sessionId = "") => recommendNextTask(features, phases, deviations, currentPhaseId, sessionId);
 
 test("selects the lowest feature → phase → task priority with number tie-breakers", () => {
   const features = [feature(1, 20), feature(2, 10)];
@@ -29,6 +29,18 @@ test("selects the lowest feature → phase → task priority with number tie-bre
   const result = recommendation(features, phases);
   assert.equal(result.kind, "priority");
   assert.equal(result.candidate.task.id, "tie-break");
+});
+
+ test("preserves zero priority ahead of priority one in recommendation ordering", () => {
+  const features = [feature(1, 1)];
+  const phases = [phase("p", "feature-1", 1, 1, [task("one", 1, 1), task("zero", 2, 0)])];
+  const result = recommendation(features, phases);
+  assert.equal(result.kind, "priority");
+  assert.equal(result.candidate.task.id, "zero");
+  assert.equal(result.candidate.task.priority, 0);
+  const work = recommendNextWork(features, phases);
+  assert.equal(work.nextTask?.id, "zero");
+  assert.equal(work.nextTask?.priority, 0);
 });
 
 test("continues ready work in the current phase before global priority", () => {
@@ -53,7 +65,7 @@ test("falls back to global priority when the current phase has no ready task", (
 
   const result = recommendNextTask(features, phases, [], "current");
   assert.equal(result.candidate.task.id, "global");
-  assert.match(result.reason, /feature, phase, then task/i);
+  assert.match(result.reason, /lowest-priority ready feature, then phase, then task/i);
 });
 
 test("active and resume work still override current-phase continuity", () => {
@@ -78,6 +90,72 @@ test("returns one active task, but reports an unsafe multiple-active conflict", 
   const conflict = recommendation(features, phases);
   assert.equal(conflict.kind, "conflict");
   assert.equal(conflict.activeCandidates.length, 2);
+  const work = recommendNextWork(features, phases);
+  assert.equal(work.selection.kind, "conflict");
+  assert.equal(work.claims.filter((claim) => claim.kind === "conflict" && claim.source === "active-task").length, 2);
+});
+
+test("session-owned active tasks do not block other sessions", () => {
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [
+    task("owned", 1, 1, "in-progress"),
+    task("other-owned", 2, 1, "in-progress"),
+    task("ready", 3, 1),
+  ])];
+  phases[0].tasks[0].activeOwnerSession = "session-a";
+  phases[0].tasks[1].activeOwnerSession = "session-b";
+
+  assert.equal(recommendation(features, phases, [], "", "session-a").kind, "active");
+  assert.equal(recommendation(features, phases, [], "", "session-a").candidate.task.id, "owned");
+  assert.equal(recommendation(features, phases, [], "", "session-b").candidate.task.id, "other-owned");
+  assert.equal(recommendation(features, phases, [], "", "session-c").candidate.task.id, "ready");
+  assert.equal(recommendation(features, phases).kind, "conflict");
+});
+
+test("next work exposes the active task, priority-selected chain, and persisted claims", () => {
+  const features = [feature(1, 10, "in-progress"), feature(2, 20)];
+  const phases = [
+    phase("p-active", "feature-1", 1, 10, [task("active", 1, 10, "in-progress")], "in-progress"),
+    phase("p-next", "feature-2", 2, 20, [task("next", 2, 1)]),
+  ];
+
+  const result = recommendNextWork(features, phases, [], "", "", {
+    handoffs: [{ compositeRef: "P001(F001)", firstLine: "Resume next task", resumeReady: true }],
+  });
+  assert.equal(result.activeTask?.id, "active");
+  assert.equal(result.nextFeature?.id, "feature-1");
+  assert.equal(result.nextPhase?.id, "p-active");
+  assert.equal(result.nextTask?.id, "active");
+  assert.equal(result.selection.kind, "active");
+  assert.equal(result.claims[0]?.source, "active-task");
+  assert.ok(result.claims.some((claim) => claim.source === "handoff" && claim.ref === "P001(F001)"));
+});
+
+test("next work never promotes free-form handoff prose and surfaces durable dependency evidence", () => {
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [
+    task("priority", 1, 1),
+    task("prerequisite", 2, 2, "done"),
+    task("unblocked", 3, 20, "planned", ["prerequisite"]),
+  ])];
+
+  const result = recommendNextWork(features, phases, [], "", "", {
+    handoffs: [{ compositeRef: "P001(F001)", firstLine: "How to resume: task_start P001(F001)/T999", resumeReady: false }],
+    archivedHandoffs: [{ compositeRef: "P099(F001)", firstLine: "How to resume: task_start P099(F001)/T999", reason: "phase-done" }],
+  });
+
+  assert.equal(result.nextTask?.id, "priority");
+  assert.ok(result.claims.some((claim) => claim.source === "dependency-ready" && claim.taskId === "unblocked"));
+  assert.ok(result.claims.some((claim) => claim.source === "handoff" && claim.kind === "insufficient"));
+  assert.equal(result.claims.some((claim) => claim.source === "archived-handoff"), false);
+});
+
+test("next work reports insufficient evidence when no task is ready", () => {
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [task("blocked", 1, 1, "blocked")])];
+  const result = recommendNextWork(features, phases);
+  assert.equal(result.selection.kind, "none");
+  assert.deepEqual(result.claims.map((claim) => claim.kind), ["insufficient"]);
 });
 
 test("explicit starts preserve readiness gates but do not enforce priority or single-active selection", () => {

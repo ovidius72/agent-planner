@@ -1,4 +1,4 @@
-import type { FeatureStatus, PhaseStatus, RequirementStatus, TaskStatus } from "./types";
+import type { FeatureStatus, MacroTaskStatus, PhaseStatus, TaskStatus } from "./types";
 
 export const featureStatuses: Array<{ value: FeatureStatus; label: string }> = [
   { value: "planned", label: "Planned" },
@@ -37,7 +37,7 @@ export const taskStatuses: Array<{ value: TaskStatus; label: string }> = [
 
 export const taskTransitionStatuses = taskStatuses;
 
-export const requirementStatuses: Array<{ value: RequirementStatus; label: string }> = [
+export const macroTaskStatuses: Array<{ value: MacroTaskStatus; label: string }> = [
   { value: "planned", label: "Planned" },
   { value: "in-progress", label: "In progress" },
   { value: "done", label: "Done" },

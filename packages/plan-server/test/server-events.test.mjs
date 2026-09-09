@@ -209,6 +209,8 @@ test("task focus endpoint keeps checkpointed work in pending resume and marks pe
   assert.equal(focus.pendingResume[0].id, task.id);
   assert.equal(focus.pendingResume[0].pendingResume, true);
   assert.equal(focus.pendingResume[0].pauseSnapshot.resumeLocation, "src/serve.ts:640");
+  assert.equal(focus.nextWork?.id, task.id);
+  assert.match(focus.nextWorkReason, /Resume required|Select|Continue/);
 
   const unsafeResume = await request(fx, `/tasks/${task.id}`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
@@ -321,7 +323,7 @@ test("WS events on feature/requirement/phase/task mutations carry revalidation i
   const phase = (await request(fx, "/phases")).body[0];
   const req2 = (await request(fx, "/requirements", {
     ...json({
-      id: crypto.randomUUID(), title: "Req events", description: "", status: "planned",
+      id: crypto.randomUUID(), title: "Req events", description: "",
       macroTasks: [], linkedPhaseIds: ["P001"], createdAt: now, updatedAt: now,
     }),
     expectStatus: 201,

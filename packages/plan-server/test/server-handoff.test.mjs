@@ -63,6 +63,16 @@ test("empty states: no handoffs, no archive, phase without handoff", async () =>
   assert.equal(h.body.updatedAt, "");
 });
 
+test("handoff preflight exposes every human input before drafting and generated metadata", async () => {
+  const fx = await startServerFixture({ name: "t394-preflight" });
+  const phase = (await request(fx, "/phases")).body[0];
+  const preflight = await request(fx, `/phases/${phase.id}/handoff/preflight`);
+  assert.deepEqual(preflight.body.requiredHumanInputs.map((input) => input.id), ["title", "reason"]);
+  assert.deepEqual(preflight.body.generatedMetadata, ["Created at", "Updated at", "Reason"]);
+  assert.equal(preflight.body.canonicalSections.includes("Created at"), false);
+  assert.match(preflight.body.draftTemplate, /Planner-generated: Created at, Updated at, and structured Reason/);
+});
+
 // ── Write / read round trip + active list + composite refs ────────────────
 
 test("handoff write → read round trip; active /handoffs lists pending with composite refs", async () => {

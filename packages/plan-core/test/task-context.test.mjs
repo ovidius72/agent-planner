@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBoundedAcceptedDecisionContext, buildPhaseContextBlock, MAX_ACCEPTED_DECISION_CONTEXT_CHARS } from "../dist/task-context.js";
+import { buildBoundedAcceptedDecisionContext, buildPhaseContextBlock, buildPhaseWorkMap, MAX_ACCEPTED_DECISION_CONTEXT_CHARS } from "../dist/task-context.js";
 
 const phase = {
   id: "phase-id",
@@ -12,13 +12,31 @@ const phase = {
 };
 const feature = { id: "feature-id", number: 3, name: "Feature context", description: "Feature description" };
 
+test("buildPhaseWorkMap orders siblings and exposes dependency and capability ownership", () => {
+  const mapped = buildPhaseWorkMap({
+    ...phase,
+    tasks: [
+      { id: "task-done", number: 2, priority: 20, title: "Existing capability", description: "Already delivered.", status: "done", dependsOn: [] },
+      { id: "task-next", number: 3, priority: 10, title: "Remaining capability", description: "Own the remaining behavior.", status: "planned", dependsOn: ["task-done"] },
+    ],
+  }, feature.number, "task-next");
+
+  assert.deepEqual(mapped.entries.map((entry) => entry.taskId), ["task-next", "task-done"]);
+  assert.deepEqual(mapped.entries[0].dependencies, ["P007(F003)/T002"]);
+  assert.equal(mapped.entries[0].current, true);
+  assert.equal(mapped.entries[0].remainingCapabilityOwner, true);
+  assert.equal(mapped.entries[1].remainingCapabilityOwner, false);
+  assert.match(mapped.content, /P007\(F003\)\/T003 \(current\).*priority 10; planned/);
+  assert.match(mapped.content, /owns this remaining capability; do not duplicate it/);
+});
+
 test("buildPhaseContextBlock includes linked requirement details", () => {
   const output = buildPhaseContextBlock(phase, feature, [
     { title: "Canonical links", description: "Store UUID phase IDs." },
     { title: "Priority protocol", description: "" },
   ]);
 
-  assert.match(output, /Phase linked requirements \(2\):/);
+  assert.match(output, /Product requirements linked to phase \(outcomes, never coding\/process rules\) \(2\):/);
   assert.match(output, /Canonical links — Store UUID phase IDs\./);
   assert.match(output, /Priority protocol/);
   assert.match(output, /Phase description/);
@@ -33,8 +51,8 @@ test("buildPhaseContextBlock puts feature requirements before phase context", ()
 
 test("buildPhaseContextBlock explicitly reports phases without requirements", () => {
   const output = buildPhaseContextBlock(phase, feature);
-  assert.match(output, /Feature linked requirements \(0\):\n  - None linked to this feature\./);
-  assert.match(output, /Phase linked requirements \(0\):\n  - None linked to this phase\./);
+  assert.match(output, /Product requirements linked to feature \(outcomes, never coding\/process rules\) \(0\):\n  - None linked to this feature\./);
+  assert.match(output, /Product requirements linked to phase \(outcomes, never coding\/process rules\) \(0\):\n  - None linked to this phase\./);
 });
 
 test("buildPhaseContextBlock delivers canonical Accepted Decisions for the active lineage", () => {

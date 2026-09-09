@@ -27,6 +27,7 @@ describe("handoff and requirement routes", () => {
     renderRoute([{ path: "/", loader: () => ({ handoffs: [pending] }), element: <HandoffRoute /> }]);
 
     expect(await screen.findAllByText("Resume route tests")).not.toHaveLength(0);
+    expect(screen.getByText(/Handoff preflight supplies the required title and reason/i)).toBeInTheDocument();
     expect(screen.queryByText("Archived handoffs")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
 
@@ -103,6 +104,7 @@ describe("handoff and requirement routes", () => {
       if (path === "/api/features") return jsonResponse([feature]);
       if (path === "/api/phases/phase-1") return jsonResponse(phase);
       if (path === "/api/requirements") return jsonResponse({ requirements: [requirement] });
+      if (path === "/api/description-freshness") return jsonResponse({ diagnostics: [], staleParentRefs: [], reconciliationRequired: false, reconciliationPreview: [] });
       throw new Error(`Unexpected request ${path}`);
     });
 

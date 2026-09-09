@@ -604,7 +604,7 @@ describe("plan-mcp strict ref validation", () => {
   const session = await startClient(plannerRoot);
   try {
     const result = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
-    assert.match(toolText(result), /Recommended \(priority\): P002\(F002\)\/T002/);
+    assert.match(toolText(result), /Next work \(priority\): P002\(F002\)\/T002/);
     assert.match(toolText(result), /Continue the current phase/);
   } finally {
     await session.close();
@@ -619,7 +619,7 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
     const session = await startClient(plannerRoot);
     try {
       const initial = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
-      assert.match(toolText(initial), /Recommended \(priority\): P001\(F001\)\/T002/);
+      assert.match(toolText(initial), /Next work \(priority\): P001\(F001\)\/T001/);
       const recorded = await session.client.callTool({ name: "planner-task-deviation", arguments: { temporary_task: temporaryId, resume_task: resumeId, reason: "Approved urgent work" } });
       assert.match(toolText(recorded), /Approved deviation/);
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.resumeTaskId, resumeId);
@@ -632,7 +632,7 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
       assert.match(toolText(await session.client.callTool({ name: "planner-task-complete", arguments: { task: temporaryId, description_update: "Temporary deviation task completed and verified." } })), /Task completed.*RESUME REQUIRED/s);
       assert.equal((await st.loadProject()).workDeviations.at(-1)?.state, "resume-required");
       const resumed = await session.client.callTool({ name: "planner-task-recommend", arguments: {} });
-      assert.match(toolText(resumed), /Recommended \(resume\): P001\(F001\)\/T001/);
+      assert.match(toolText(resumed), /Next work \(resume\): P001\(F001\)\/T001/);
     } finally {
       await session.close();
     }
@@ -707,6 +707,7 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
         },
       });
       const requirement = created.structuredContent.requirement;
+      assert.equal(Object.hasOwn(requirement, "status"), false, "top-level Requirement has no lifecycle status");
       assert.equal(requirement.macroTasks[0].id, "MT-001");
       const updated = await session.client.callTool({
         name: "planner-requirement-update",

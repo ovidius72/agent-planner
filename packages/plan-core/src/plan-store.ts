@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z, ZodError } from "zod";
@@ -58,6 +58,7 @@ import {
 } from "./schema.js";
 import { createFeatureId, createIdeaId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatFeatureRef, formatIdeaRef, formatPhaseRef, formatThreeDigitNumber, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
+import { buildHierarchicalDescriptionFreshness, type HierarchicalDescriptionFreshness } from "./description-freshness.js";
 import { loadExtensionRules, PLANNER_EXTENSION_RULES } from "./planner-rules.js";
 import { loadProjectGrillMeSkill, syncProjectGrillMeSkill, syncProjectPlannerSkill, type PlannerSkillSyncResult } from "./planner-skill.js";
 import {
@@ -71,8 +72,11 @@ import {
 import {
   applyHandoffContextSync,
   auditPhaseHandoff,
+  externalizeOversizedHandoffContent,
   handoffContentHash,
+  materializeHandoffMetadata,
   HandoffContractError,
+  TARGET_HANDOFF_CONTENT_CHARS,
   validateHandoffReadBackVerification,
   type HandoffSupportingDocumentInput,
   type PhaseHandoffAudit,
@@ -1012,13 +1016,15 @@ export class PlanStore {
         fromStatus: (entry.fromStatus as string) === "paused" ? "planned" : entry.fromStatus,
         toStatus: (entry.toStatus as string) === "paused" ? "planned" : entry.toStatus,
       }));
+      const activeOwnerSession = normalizedStatus === "in-progress" ? task.activeOwnerSession?.trim() ?? "" : "";
       if (
         descriptionUpdatedAt !== task.descriptionUpdatedAt
         || normalizedStatus !== task.status
         || pauseSnapshot !== task.pauseSnapshot
+        || activeOwnerSession !== task.activeOwnerSession
         || statusLog.some((entry, index) => entry !== task.statusLog[index])
       ) {
-        return { ...task, descriptionUpdatedAt, status: normalizedStatus, pauseSnapshot, statusLog };
+        return { ...task, descriptionUpdatedAt, status: normalizedStatus, pauseSnapshot, statusLog, activeOwnerSession };
       }
       return task;
     });
@@ -1979,6 +1985,15 @@ export class PlanStore {
     const features: Feature[] = rawFeatures.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
     const normalized = this.normalizeStructureSnapshot({ features }, phases);
     return { manifest, project, requirements, ideas, phases: normalized.phases, features: normalized.features };
+  }
+
+  /**
+   * Preview child-to-parent description drift without rewriting user-authored
+   * feature or phase prose. Callers decide whether to reconcile each parent.
+   */
+  async previewDescriptionReconciliation(): Promise<HierarchicalDescriptionFreshness> {
+    const workspace = await this.loadAll();
+    return buildHierarchicalDescriptionFreshness(workspace.features.features, workspace.phases);
   }
 
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
@@ -3176,6 +3191,7 @@ export class PlanStore {
         status: "planned",
         pauseSnapshot: snapshot,
         pauseHistory: [...task.pauseHistory, snapshot],
+        activeOwnerSession: "",
         statusLog: [...task.statusLog, {
           id: createStatusLogEntryId(),
           date: snapshot.pausedAt,
@@ -3193,7 +3209,7 @@ export class PlanStore {
   }
 
   /** Resume a checkpointed task without resetting its original startedAt. */
-  async resumeTask(phaseId: string, taskId: string, timestamp = nowISO()): Promise<Task> {
+  async resumeTask(phaseId: string, taskId: string, timestamp = nowISO(), ownerSessionId = ""): Promise<Task> {
     let resumed: Task | undefined;
     await this.updatePhase(phaseId, (phase) => {
       const task = phase.tasks.find((candidate) => candidate.id === taskId);
@@ -3209,6 +3225,7 @@ export class PlanStore {
         ...task,
         status: "in-progress",
         pauseSnapshot: null,
+        activeOwnerSession: ownerSessionId.trim() || task.activeOwnerSession,
         startedAt: task.startedAt || timestamp,
         statusLog: [...task.statusLog, {
           id: createStatusLogEntryId(),
@@ -3224,6 +3241,41 @@ export class PlanStore {
       return phase;
     });
     return resumed!;
+  }
+
+  /** Reopen a completed task atomically without changing any other task.
+   * Completion evidence remains in the description and status log; completedAt is
+   * cleared because the task is once again active work. */
+  async reopenTask(phaseId: string, taskId: string, options: { confirmed: boolean; ownerSessionId?: string; timestamp?: string }): Promise<Task> {
+    if (!options.confirmed) {
+      throw new PlanStoreError("Task reopening requires explicit confirmation.", undefined, { errorCode: "TASK_REOPEN_CONFIRMATION_REQUIRED", taskId });
+    }
+    const timestamp = options.timestamp ?? nowISO();
+    let reopened: Task | undefined;
+    await this.updatePhase(phaseId, (phase) => {
+      const task = phase.tasks.find((candidate) => candidate.id === taskId);
+      if (!task) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`, undefined, { errorCode: "TASK_NOT_FOUND", taskId });
+      if (task.status !== "done") throw new PlanStoreError(`Task ${taskId} is not completed.`, undefined, { errorCode: "TASK_REOPEN_NOT_DONE", taskId });
+      reopened = {
+        ...task,
+        status: "in-progress",
+        completedAt: "",
+        pauseSnapshot: null,
+        activeOwnerSession: options.ownerSessionId?.trim() ?? "",
+        statusLog: [...task.statusLog, {
+          id: createStatusLogEntryId(),
+          date: timestamp,
+          fromStatus: "done",
+          toStatus: "in-progress",
+          title: "done → in-progress (reopened)",
+          description: "Reopened through the confirmed lifecycle operation; prior completion evidence is retained.",
+        }],
+        updatedAt: timestamp,
+      };
+      phase.tasks = phase.tasks.map((candidate) => candidate.id === taskId ? reopened! : candidate);
+      return phase;
+    });
+    return reopened!;
   }
 
   // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────
@@ -3262,6 +3314,14 @@ export class PlanStore {
         throw new HandoffContractError(
           "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
           `Supporting document escapes .planner/docs/: ${normalizedPath}`,
+          { path: normalizedPath },
+        );
+      }
+      const fileStat = await lstat(target).catch(() => null);
+      if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) {
+        throw new HandoffContractError(
+          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+          `Supporting document must be a regular file under .planner/docs/ (symlinks rejected): ${normalizedPath}`,
           { path: normalizedPath },
         );
       }
@@ -3311,9 +3371,41 @@ export class PlanStore {
       const featureIndex = originalFeatures.features.findIndex((candidate) => candidate.id === originalPhase.featureId);
       if (featureIndex < 0) throw new PlanStoreError(`Parent feature ${originalPhase.featureId} not found for phase ${phaseId}.`);
       const timestamp = nowISO();
-      const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(input.supportingDocuments ?? []);
+      const existingCreatedAt = originalPhase.handoff.match(/^Created at:\s*(\S+)\s*$/im)?.[1] ?? timestamp;
+      const materializedContent = materializeHandoffMetadata(
+        input.content,
+        input.reason,
+        existingCreatedAt,
+        timestamp,
+      );
+      let effectiveInput: RefreshPhaseHandoffInput = { ...input, content: materializedContent };
+      if (materializedContent.length > TARGET_HANDOFF_CONTENT_CHARS) {
+        const stamp = timestamp.replace(/[:.]/g, "-");
+        const autoPath = `.planner/docs/handoff-p${String(originalPhase.number).padStart(3, "0")}-${stamp}.md`;
+        const externalized = externalizeOversizedHandoffContent(materializedContent, autoPath);
+        if (externalized.externalized) {
+          const docsDir = resolve(this.root, "docs");
+          await mkdir(docsDir, { recursive: true });
+          const target = resolve(this.root, autoPath.slice(".planner/".length));
+          if (!target.startsWith(`${docsDir}${sep}`)) {
+            throw new HandoffContractError(
+              "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+              `Auto-externalized supporting document escapes .planner/docs/: ${autoPath}`,
+              { path: autoPath },
+            );
+          }
+          await writeFile(target, externalized.extendedContent, "utf8");
+          const autoDoc = externalized.supportingDocument!;
+          effectiveInput = {
+            ...input,
+            content: externalized.content,
+            supportingDocuments: [...(input.supportingDocuments ?? []), autoDoc],
+          };
+        }
+      }
+      const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(effectiveInput.supportingDocuments ?? []);
       const verifiedInput: RefreshPhaseHandoffInput = {
-        ...input,
+        ...effectiveInput,
         verifiedSupportingDocuments: verifiedSupportingDocuments.metadata,
         verifiedSupportingDocumentContents: verifiedSupportingDocuments.contents,
       };

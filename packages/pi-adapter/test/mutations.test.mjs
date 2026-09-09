@@ -300,6 +300,9 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolText(started), /✅ Task started:/);
       assert.match(toolText(started), /P001\(F001\)/);
       assert.match(toolText(started), /Implement login/);
+      assert.match(toolText(started), /Phase work map — canonical sibling capability ownership/);
+      assert.match(toolText(started), /P001\(F001\)\/T001 \(current\)/);
+      assert.match(toolText(started), /reread this canonical phase work map and the relevant sibling task full view/);
       assert.equal(toolDetails(started).started, true);
       assert.equal(toolDetails(started).status, "in-progress");
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress");
@@ -524,12 +527,15 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         descriptionRef: ".planner/docs/tasks/parity-task.md",
         notes: "Implementation context retained.",
         decisions: ["Keep lifecycle tools authoritative"],
+        checklist: ["Review", "Execute"],
       });
       assert.equal(toolDetails(taskUpdate).updated, true);
+      assert.deepEqual(toolDetails(taskUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes"]);
       const task = (await host.store.loadPhase(phase.id)).tasks[0];
       assert.equal(task.descriptionRef, ".planner/docs/tasks/parity-task.md");
       assert.equal(task.notes, "Implementation context retained.");
       assert.deepEqual(task.decisions, ["Keep lifecycle tools authoritative"]);
+      assert.deepEqual(task.checklist.map((item) => item.title), ["Review", "Execute"]);
 
       for (const [tool, arguments_] of [
         ["feature_update", { featureId: "F001", acceptedDecisions: [] }],
@@ -546,7 +552,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     }
   });
 
-  test("requirements: create with links, then update status", async () => {
+  test("requirements: create without lifecycle status, then update product outcome", async () => {
     const host = await createPiHost({ name: "t242-req", seed: "minimal" });
     try {
       const phaseId = (await host.store.loadAllPhases())[0].id;
@@ -561,10 +567,45 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.ok(req, "requirement created");
       assert.ok(req.linkedPhaseIds.includes(phaseId), "linked to the phase");
 
-      const updated = await host.runTool("requirement_update", { requirementId: req.id, status: "in-progress" });
+      assert.equal(Object.hasOwn(req, "status"), false, "top-level Requirement has no lifecycle status");
+
+      const rejectedStatus = await host.runTool("requirement_update", { requirementId: req.id, status: "in-progress" });
+      assert.equal(rejectedStatus.isError, true);
+      assert.equal(toolDetails(rejectedStatus).updated, false);
+      assert.equal(toolDetails(rejectedStatus).errorCode, "NO_MUTABLE_FIELDS_RECEIVED");
+
+      const updated = await host.runTool("requirement_update", { requirementId: req.id, title: "Auth outcome" });
       assert.match(toolText(updated), /Requirement updated: /);
       reqs = (await host.store.loadRequirements()).requirements;
-      assert.equal(reqs.find((r) => r.title === "Auth requirement").status, "in-progress");
+      assert.equal(reqs.find((r) => r.id === req.id).title, "Auth outcome");
+      assert.equal(Object.hasOwn(reqs.find((r) => r.id === req.id), "status"), false);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("description freshness reports exact stale parents and explicit leaf-to-root reconciliation", async () => {
+    const host = await createPiHost({ name: "t381-description-freshness", seed: "minimal" });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const taskUpdate = await host.runTool("task_update", { taskId: "T001", description: "Changed task context that invalidates only its owning parents." });
+      assert.deepEqual(toolDetails(taskUpdate).staleParentRefs, ["P001(F001)", "F001"]);
+      assert.match(toolText(taskUpdate), /Parent description review required: P001\(F001\), F001/);
+
+      const preview = await host.runTool("description_freshness", {});
+      assert.deepEqual(toolDetails(preview).staleParentRefs, ["P001(F001)", "F001"]);
+      assert.deepEqual(toolDetails(preview).reconciliationPreview.map((step) => step.ownerRef), ["P001(F001)", "F001"]);
+      assert.match(toolText(preview), /explicitly update/i);
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const phaseUpdate = await host.runTool("phase_update", { phaseId: "P001", description: "Reconciled phase context." });
+      assert.deepEqual(toolDetails(phaseUpdate).staleParentRefs, ["F001"]);
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await host.runTool("feature_update", { featureId: "F001", description: "Reconciled feature context." });
+      const fresh = await host.runTool("description_freshness", {});
+      assert.equal(toolDetails(fresh).reconciliationRequired, false);
+      assert.deepEqual(toolDetails(fresh).staleParentRefs, []);
     } finally {
       await closePiHost(host);
     }
@@ -576,11 +617,14 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const phase = async () => (await host.store.loadAllPhases())[0];
       const prepared = await host.runTool("handoff_prepare", { phaseRef: "P001" });
       assert.match(toolText(prepared), /Use this exact scaffold before drafting/);
-      assert.match(toolText(prepared), /Created at: \{\{REQUIRED: ISO-8601 timestamp\}\}/);
+      assert.match(toolText(prepared), /Required human inputs before drafting/);
+      assert.match(toolText(prepared), /Planner-generated metadata \(do not add these to Markdown\)/);
       assert.match(toolText(prepared), /Required cold-start source review v1/);
-      assert.match(toolDetails(prepared).draftTemplate, /## Working tree and ownership/);
-      assert.match(toolDetails(prepared).draftTemplate, /## Files touched/);
+      assert.match(toolDetails(prepared).draftTemplate, /## Current and partial state/);
+      assert.match(toolDetails(prepared).draftTemplate, /## Supporting documents/);
       assert.equal(toolDetails(prepared).coldStartInventoryCategories.length, 14);
+      assert.equal(toolDetails(prepared).phaseWorkMap.total, 1);
+      assert.match(toolDetails(prepared).phaseWorkMap.content, /P001\(F001\)\/T001/);
 
       // Proposal only — no confirmation flag, nothing written.
       const proposal = await host.runTool("handoff_write", { phaseRef: "P001", content: "Body of the handoff.", completenessAudit: completeHandoffAudit() });
@@ -589,12 +633,24 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolDetails(proposal).phaseRef, /P001/);
       assert.equal((await phase()).handoff, "", "proposal must not write");
 
+      const missingReason = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        title: "P001 — missing reason",
+        content: canonicalHandoff("P001 — missing reason", "The Markdown body deliberately contains no generated metadata."),
+        confirmed: true,
+        ...(await preparedHandoffArgs(host)),
+      });
+      assert.equal(missingReason.isError, true);
+      assert.equal(toolDetails(missingReason).errorCode, "HANDOFF_REASON_REQUIRED");
+      assert.equal((await phase()).handoff, "", "missing reason must not write");
+
       // Confirmed writes require a complete versioned audit and fail atomically with typed diagnostics.
       const missingAuditArgs = await preparedHandoffArgs(host);
       delete missingAuditArgs.completenessAudit;
       const missingAudit = await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — missing completeness audit",
+        reason: "Fixture requires completeness-audit validation.",
         content: canonicalHandoff("P001 — missing completeness audit", "The audit payload is intentionally absent."),
         confirmed: true,
         ...missingAuditArgs,
@@ -609,6 +665,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const missingInventory = await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — missing cold-start inventory",
+        reason: "Fixture requires cold-start inventory validation.",
         content: canonicalHandoff("P001 — missing cold-start inventory", "The inventory payload is intentionally absent."),
         confirmed: true,
         ...missingInventoryArgs,
@@ -621,6 +678,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const written = await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — Auth API phase: fixture handoff",
+        reason: "Fixture session boundary requires a cold-resume handoff.",
         content: canonicalHandoff("P001 — Auth API phase: fixture handoff", "Body of the handoff."),
         confirmed: true,
         ...(await preparedHandoffArgs(host)),
@@ -644,6 +702,8 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(toolDetails(shown).handoffAudit.version, 1);
       assert.equal(toolDetails(shown).persistenceVerified, true);
       assert.equal(toolDetails(shown).resumeReady, false);
+      assert.equal(toolDetails(shown).phaseWorkMap.total, 1);
+      assert.match(toolText(shown), /Before proposing new work, reread the canonical phase and relevant sibling task full view/);
 
       const gaps = await host.runTool("handoff_verify", {
         phaseRef: "P001",
@@ -678,7 +738,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Fixture completed and verified through the adapter mutation test." });
       assert.equal((await phase()).status, "done");
       const late = await host.runTool("handoff_write", {
-        phaseRef: "P001", title: "P001 — late handoff", content: canonicalHandoff("P001 — late handoff", "Late handoff."), confirmed: true,
+        phaseRef: "P001", title: "P001 — late handoff", reason: "Fixture terminal-phase rejection coverage.", content: canonicalHandoff("P001 — late handoff", "Late handoff."), confirmed: true,
         ...(await preparedHandoffArgs(host)),
       });
       assert.match(toolText(late), /Cannot write a handoff on done phase/);
@@ -862,6 +922,46 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       ]);
     } finally {
       await closePiHost(second);
+    }
+  });
+
+  test("Pi logical sessions can start different tasks concurrently", async () => {
+    const first = await createPiHost({ name: "t337-concurrent-one", seed: "minimal", keepRootOnClose: true, sessionId: "logical-session-one" });
+    const root = first.root;
+    try {
+      await first.emit("session_start", { type: "session_start", reason: "startup" });
+      const create = await first.runTool("task_create", {
+        featureId: "F001",
+        phaseId: "P001",
+        title: "Concurrent sibling",
+        description: "src/task-start.ts:1 deliberately select temporary work while preserving the prior checkpoint.",
+      });
+      assert.match(toolText(create), /Task created/);
+
+      const second = await createPiHost({ name: "t337-concurrent-two", root, sessionId: "logical-session-two" });
+      try {
+        await second.emit("session_start", { type: "session_start", reason: "resume" });
+        const siblingTask = (await first.store.loadAllPhases())[0].tasks.find((task) => task.title === "Concurrent sibling");
+        assert.ok(siblingTask);
+        await readTaskContext(first, "T001");
+        await readTaskContext(second, `T${String(siblingTask.number).padStart(3, "0")}`);
+
+        const starts = await Promise.all([
+          first.runTool("task_start", { taskId: "T001" }),
+          second.runTool("task_start", { taskId: `T${String(siblingTask.number).padStart(3, "0")}` }),
+        ]);
+        assert.equal(toolDetails(starts[0]).started, true);
+        assert.equal(toolDetails(starts[1]).started, true);
+        assert.equal(toolDetails(starts[0]).task.activeOwnerSession, "pi:logical-session-one");
+        assert.equal(toolDetails(starts[1]).task.activeOwnerSession, "pi:logical-session-two");
+        const active = (await first.store.loadAllPhases()).flatMap((phase) => phase.tasks).filter((task) => task.status === "in-progress");
+        assert.equal(active.length, 2);
+        assert.deepEqual(active.map((task) => task.activeOwnerSession).sort(), ["pi:logical-session-one", "pi:logical-session-two"]);
+      } finally {
+        await closePiHost(second);
+      }
+    } finally {
+      await closePiHost(first);
     }
   });
 

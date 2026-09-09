@@ -74,6 +74,7 @@ function readBackSourceReviews() {
 async function writePreparedHandoff(session, input) {
   return callTool(session, "planner-handoff-write", {
     ...input,
+    reason: input.reason ?? "Fixture handoff reason for a cold resume.",
     content: canonicalHandoff(input.title, input.content),
     confirmed: true,
     ...(await preparedHandoffArgs(session, input.phaseRef)),
@@ -102,13 +103,17 @@ test("planner-handoff-prepare returns the complete pre-draft scaffold and invent
     const result = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
     const prepared = result.structuredContent;
     assert.match(toolText(result), /Use this exact scaffold before drafting/);
-    assert.match(toolText(result), /Created at: \{\{REQUIRED: ISO-8601 timestamp\}\}/);
+    assert.match(toolText(result), /Required human inputs before drafting/);
+    assert.match(toolText(result), /Planner-generated metadata \(do not add these to Markdown\)/);
     assert.match(toolText(result), /Required cold-start source review v1/);
-    assert.match(prepared.draftTemplate, /## Working tree and ownership/);
+    assert.match(prepared.draftTemplate, /## Current and partial state/);
     assert.match(prepared.draftTemplate, /## How to resume/);
-    assert.equal(prepared.canonicalSections.length, 16);
+    assert.deepEqual(prepared.requiredHumanInputs.map((input) => input.id), ["title", "reason"]);
+    assert.equal(prepared.canonicalSections.length, 6);
     assert.equal(prepared.coldStartSourceReviews.length, 5);
     assert.equal(prepared.coldStartInventoryCategories.length, 14);
+    assert.equal(prepared.phaseWorkMap.total, 1);
+    assert.match(prepared.phaseWorkMap.content, /P001\(F001\)\/T001/);
   } finally {
     await closeMcpFixture(session);
   }
@@ -141,6 +146,25 @@ test("planner-handoff-write without confirmed returns a proposal with exact comp
   }
 });
 
+test("planner-handoff-write rejects a missing structured reason before mutating", async () => {
+  const session = await startMcpFixture({ name: "t394-reason-required" });
+  try {
+    const prepared = await preparedHandoffArgs(session, "P001");
+    const result = await callTool(session, "planner-handoff-write", {
+      phaseRef: "P001",
+      title: "P001 — missing reason",
+      content: canonicalHandoff("P001 — missing reason", "The Markdown body deliberately contains no generated metadata."),
+      confirmed: true,
+      ...prepared,
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.errorCode, "HANDOFF_REASON_REQUIRED");
+    assert.equal((await session.store.loadAllPhases())[0].handoff, "");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 test("planner-handoff-write persists a candidate that requires separate read-back verification", async () => {
   const session = await startMcpFixture({ name: "t238-write-confirmed" });
   try {
@@ -163,6 +187,8 @@ test("planner-handoff-write persists a candidate that requires separate read-bac
     assert.match(showText, /This is a test handoff for T238/);
     assert.equal(showRes.structuredContent.persistenceVerified, true);
     assert.equal(showRes.structuredContent.resumeReady, false);
+    assert.equal(showRes.structuredContent.phaseWorkMap.total, 1);
+    assert.match(showText, /Before proposing new work, reread the canonical phase and relevant sibling task full view/);
     const contentHash = showRes.structuredContent.contentHash;
 
     const gaps = await callTool(session, "planner-handoff-verify", {
@@ -205,6 +231,7 @@ test("planner-handoff-write returns typed completeness diagnostics before mutati
     const result = await callTool(session, "planner-handoff-write", {
       phaseRef: "P001",
       title: "P001 — missing completeness audit",
+      reason: "Fixture requires completeness-audit validation.",
       content: canonicalHandoff("P001 — missing completeness audit", "The body is operational but the audit payload is intentionally absent."),
       confirmed: true,
       expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
@@ -230,6 +257,7 @@ test("planner-handoff-write returns typed cold-start inventory diagnostics befor
     const result = await callTool(session, "planner-handoff-write", {
       phaseRef: "P001",
       title: "P001 — missing cold-start inventory",
+      reason: "Fixture requires cold-start inventory validation.",
       content: canonicalHandoff("P001 — missing cold-start inventory", "The body intentionally omits the structured inventory."),
       confirmed: true,
       completenessAudit: completeHandoffAudit(),
@@ -378,6 +406,28 @@ test("planner-handoff-write rejects writing to a done phase", async () => {
     const showRes = await callTool(session, "planner-handoff-show", { phaseRef: "P001" });
     const showText = toolText(showRes);
     assert.match(showText, /^No handoff set on P001\(F001\)\./);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-recommend distinguishes unverified active handoffs from non-actionable archives", async () => {
+  const session = await startMcpFixture({ name: "t238-task-recommend-claims" });
+  try {
+    await writePreparedHandoff(session, {
+      phaseRef: "P001",
+      title: "Handoff with resume work",
+      content: "# Handoff with resume work\nHow to resume: task_start P001(F001)/T001\nNext action: resume the preserved task before new work.",
+    });
+
+    const active = await callTool(session, "planner-task-recommend", {});
+    assert.match(toolText(active), /Claims:/);
+    assert.equal(active.structuredContent.claims.some((claim) => claim.source === "handoff" && claim.kind === "insufficient"), true);
+
+    await callTool(session, "planner-handoff-clear", { phaseRef: "P001" });
+    const archived = await callTool(session, "planner-task-recommend", {});
+    assert.equal(archived.structuredContent.claims.some((claim) => claim.source === "archived-handoff"), false);
+    assert.doesNotMatch(toolText(archived), /archived-handoff/);
   } finally {
     await closeMcpFixture(session);
   }

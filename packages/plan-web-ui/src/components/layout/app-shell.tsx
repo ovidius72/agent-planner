@@ -74,7 +74,7 @@ export function TaskFocusHeader({ taskFocus }: { taskFocus: TaskFocusSummary }) 
     };
   }, [taskFocus.active, taskFocus.pendingResume]);
 
-  if (focus.active.length === 0) return null;
+  if (focus.active.length === 0 && !taskFocus.nextWork) return null;
 
   return (
     <div className="relative z-10 border-t border-[var(--border)] bg-[var(--surface-elevated)]/95 backdrop-blur-xl">
@@ -85,6 +85,14 @@ export function TaskFocusHeader({ taskFocus }: { taskFocus: TaskFocusSummary }) 
               Active tasks ({focus.active.length})
             </h2>
             {focus.active.map((task) => <FocusTaskRow key={task.id} task={task} />)}
+          </section>
+        ) : taskFocus.nextWork ? (
+          <section aria-labelledby="next-work-heading" className="grid gap-1.5">
+            <h2 id="next-work-heading" className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
+              Next work
+            </h2>
+            <FocusTaskRow task={taskFocus.nextWork} />
+            {taskFocus.nextWorkReason ? <p className="text-xs text-[var(--text-muted)]">{taskFocus.nextWorkReason}</p> : null}
           </section>
         ) : null}
       </div>
@@ -101,7 +109,7 @@ export function ActiveTasksHeader({ activeTasks }: { activeTasks: ActiveTaskSumm
     pendingResume: false,
     deviationId: "",
   }));
-  return <TaskFocusHeader taskFocus={{ active, pendingResume: [] }} />;
+  return <TaskFocusHeader taskFocus={{ active, pendingResume: [], nextWork: null, nextWorkReason: "" }} />;
 }
 
 export function AppShell({ project, taskFocus, serverInfo }: { project: Project; taskFocus: TaskFocusSummary; serverInfo?: ServerInfo | undefined }) {

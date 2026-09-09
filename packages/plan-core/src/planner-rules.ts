@@ -16,6 +16,8 @@ const EXPECTED_OPERATIONAL_RULE = "When you begin work, task_start and task_swit
 
 const LEGACY_DETAIL_WRITING_RULE = "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge. Before starting, resuming, or switching to a task, read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order; read linked requirements explicitly when present. Cite entities with composite IDs, not bare UUIDs.";
 const LEGACY_EXPECTED_OPERATIONAL_RULE = "When you begin work, task_start and task_switch enforce the required ordered full reads. Read any relevant phase handoff as additional context, then update the planner before and after significant changes. If you change an architectural decision, document it explicitly.";
+const LEGACY_PROJECT_GUIDELINES_RULE = "When a project defines the canonical Project Guidelines section, read it on planner load and before starting or switching task work whenever the current-session attestation is missing or stale. Keep coding standards, formatting, styling, and other project-specific rules from that section in working memory while executing the task.";
+const PROJECT_GUIDELINES_RULE = "When a project defines the canonical Project Guidelines section, read it on planner load and before starting or switching task work whenever the current-session attestation is missing or stale. Keep coding standards, formatting, styling, verification process, best practices, and other project-specific rules only in Project Guidelines. Requirements are separate declarative user, business, or system outcomes with no lifecycle status; never store guidelines or agent behavior in Requirements. Nested Requirement macro-tasks retain implementation status.";
 
 export const PLANNER_EXTENSION_RULES: string[] = [
   // §1 — source of truth
@@ -25,7 +27,7 @@ export const PLANNER_EXTENSION_RULES: string[] = [
   // §3 — markdown not source of truth
   "Do not treat markdown as the source of truth for the plan. The plan's primary source is structured data in .planner/; markdown is a generated, human/agent-readable view.",
   // §4 — project guidelines
-  "When a project defines the canonical Project Guidelines section, read it on planner load and before starting or switching task work whenever the current-session attestation is missing or stale. Keep coding standards, formatting, styling, and other project-specific rules from that section in working memory while executing the task.",
+  PROJECT_GUIDELINES_RULE,
   // §5 — plan location
   "The plan lives in .planner/ within the target project. Whether .planner/ is git-tracked is at the project's discretion.",
   // §6 — discuss per phase
@@ -56,6 +58,7 @@ function normalizeLegacyRules(rules: string[]): string[] {
   return rules.map((rule) => {
     if (rule === LEGACY_DETAIL_WRITING_RULE) return DETAIL_WRITING_RULE;
     if (rule === LEGACY_EXPECTED_OPERATIONAL_RULE) return EXPECTED_OPERATIONAL_RULE;
+    if (rule === LEGACY_PROJECT_GUIDELINES_RULE) return PROJECT_GUIDELINES_RULE;
     return rule;
   });
 }

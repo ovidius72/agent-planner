@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { TopNav } from "../src/components/layout/top-nav";
@@ -26,12 +26,20 @@ describe("Ideas Inbox UI", () => {
     expect(screen.getAllByRole("link", { name: "Ideas" }).length).toBeGreaterThan(0);
   });
 
-  it("renders stable refs, promotion history, and accessible management actions", async () => {
-    renderRoute([{ path: "/ideas", loader: () => ({ ideas: [idea] }), element: <IdeasRoute /> }], "/ideas");
+  it("keeps ideas closed by default while preserving refs, promotion history, and management actions", async () => {
+    const { container } = renderRoute([{ path: "/ideas", loader: () => ({ ideas: [idea] }), element: <IdeasRoute /> }], "/ideas");
     expect(await screen.findByRole("heading", { name: "Ideas Inbox" })).toBeInTheDocument();
+    const disclosure = container.querySelector("details");
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute("open");
     expect(screen.getByText("I001")).toBeInTheDocument();
+    expect(screen.getByText("Native notifications")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Promoted to F012" })).toHaveAttribute("href", "/features/feature-1");
     expect(screen.getByRole("button", { name: "Edit Native notifications" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete Native notifications" })).toBeInTheDocument();
+
+    fireEvent.click(disclosure!.querySelector("summary")!);
+    expect(disclosure).toHaveAttribute("open");
+    expect(screen.getByText("Evaluate the platform notification path.")).toBeInTheDocument();
   });
 });

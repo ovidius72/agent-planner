@@ -50,7 +50,7 @@ test("creates feature, phase, task and linked requirement through the browser an
   await page.getByLabel("Description").fill("Persist the charge result.");
   await page.getByLabel("Checklist (one per line)").fill("Authorize card\nStore receipt");
   await page.getByRole("dialog", { name: "Create task" }).getByRole("button", { name: /^Create task/ }).click();
-  await expect(page.getByText("Capture card payment")).toBeVisible();
+  await expect(page.locator("a.entity-link--task", { hasText: "Capture card payment" })).toBeVisible();
 
   const phase = await planner.request(`/phases/${createdPhase!.id}`);
   const persistedPhase = phase.body as { tasks: Array<{ title: string; checklist: Array<{ title: string }> }> };
@@ -192,7 +192,13 @@ test("Ideas Inbox navigation and CRUD stay responsive and rollup-independent", a
   await page.getByLabel("Title").fill("Native notifications");
   await page.getByLabel("Description").fill("Evaluate platform notification delivery.");
   await page.getByRole("dialog", { name: "Add idea" }).getByRole("button", { name: "Add idea" }).click();
-  await expect(page.getByRole("heading", { name: "Native notifications" })).toBeVisible();
+  const ideaDisclosure = page.locator("details").filter({ has: page.getByRole("heading", { name: "Native notifications" }) });
+  await expect(ideaDisclosure).toBeVisible();
+  await expect(ideaDisclosure).not.toHaveAttribute("open", "");
+  await expect(ideaDisclosure.getByText("Evaluate platform notification delivery.")).not.toBeVisible();
+  await ideaDisclosure.locator("summary").click();
+  await expect(ideaDisclosure).toHaveAttribute("open", "");
+  await expect(ideaDisclosure.getByText("Evaluate platform notification delivery.")).toBeVisible();
 
   const created = await planner.request("/ideas");
   const ideas = (created.body as { ideas: Array<{ id: string; title: string }> }).ideas;

@@ -1,5 +1,6 @@
 import type { PlanStore } from "./plan-store.js";
 import { formatPhaseRef, formatTwoDigitNumber } from "./naming.js";
+import { buildPhaseWorkMap } from "./task-context.js";
 
 /**
  * Web UI info for the recap (harness-agnostic — no module globals).
@@ -159,6 +160,18 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     );
   } else {
     lines.push(`${italian ? "Focus corrente" : "Current focus"}: ${italian ? "nessun task attivo (verificato dagli stati persistiti di tutti i task) — rivedi il piano e scegli il prossimo task concreto" : "no active task (verified from all persisted task statuses) — review the plan and pick the next concrete task"}`);
+  }
+
+  const orientation = focusTask ?? pendingResume ?? latestStandaloneCheckpoint;
+  if (orientation) {
+    const feature = feats.find((entry) => entry.id === orientation.phase.featureId);
+    lines.push(
+      "",
+      buildPhaseWorkMap(orientation.phase, feature?.number, orientation.task.id, 4_000).content,
+      italian
+        ? "Prima di proporre nuovo lavoro, rileggi la fase canonica e il task fratello pertinente: non duplicare capability già assegnate."
+        : "Before proposing new work, reread the canonical phase and the relevant sibling task: do not duplicate an already-owned capability.",
+    );
   }
 
   // Next step: the phase handoff (phase.handoff) is the authoritative,

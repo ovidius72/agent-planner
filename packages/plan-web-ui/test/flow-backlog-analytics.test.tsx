@@ -145,7 +145,7 @@ describe("FlowBacklogAnalytics", () => {
     const phase = makePhase({ tasks: [openTask, doneTask], taskIds: [openTask.id, doneTask.id] });
     const { router } = renderRoute([{
       id: "root",
-      loader: () => ({ project: makeProject(), taskFocus: { active: [], pendingResume: [] } }),
+      loader: () => ({ project: makeProject(), taskFocus: { active: [], pendingResume: [], nextWork: null, nextWorkReason: "" } }),
       element: <Outlet />,
       children: [{
         index: true,
@@ -185,7 +185,7 @@ describe("FlowBacklogAnalytics", () => {
     const phase = makePhase({ tasks: [task], taskIds: [task.id] });
     renderRoute([{
       id: "root",
-      loader: () => ({ project: makeProject(), taskFocus: { active: [], pendingResume: [] } }),
+      loader: () => ({ project: makeProject(), taskFocus: { active: [], pendingResume: [], nextWork: null, nextWorkReason: "" } }),
       element: <Outlet />,
       children: [{
         index: true,

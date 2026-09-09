@@ -105,7 +105,7 @@ test("concurrent MCP processes create linked phases without duplicate priority o
   }
 });
 
-test("concurrent MCP task starts preserve the single-active-task invariant", async () => {
+test("concurrent MCP task starts preserve per-session active ownership", async () => {
   const first = await startMcpFixture({ name: "concurrent-task-start" });
   const second = await startMcpClient({ planRoot: first.planRoot, name: "concurrent-task-start-second" });
   try {
@@ -121,13 +121,12 @@ test("concurrent MCP task starts preserve the single-active-task invariant", asy
       callTool(first, "planner-task-start", { task: seedRef }),
       callTool(second, "planner-task-start", { task: siblingRef }),
     ]);
-    assert.equal(starts.filter((result) => toolStructured(result)?.started === true).length, 1);
-    const denied = starts.find((result) => toolStructured(result)?.started !== true);
-    assert.ok(denied);
-    assert.match(toolStructured(denied).errorCode, /^(START_NOT_ALLOWED|ACTIVE_TASK_CONFLICT)$/);
-    assert.match(toolText(denied), /active/i);
+    assert.equal(starts.filter((result) => toolStructured(result)?.started === true).length, 2);
+    const activeOwnership = starts.map((result) => toolStructured(result).task.activeOwnerSession);
+    assert.equal(new Set(activeOwnership).size, 2, "each active task should record a distinct owning session");
     const active = (await first.store.loadAllPhases()).flatMap((phase) => phase.tasks).filter((task) => task.status === "in-progress");
-    assert.equal(active.length, 1);
+    assert.equal(active.length, 2);
+    assert.deepEqual(active.map((task) => task.activeOwnerSession).filter(Boolean).length, 2);
   } finally {
     await closeMcpFixture(second);
     await closeMcpFixture(first);
@@ -367,6 +366,7 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
       checklist: ["Review", "Execute"],
     });
     assert.equal(toolStructured(parityUpdate).updated, true);
+    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes"]);
     const parityTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(parityTask.descriptionRef, ".planner/docs/tasks/refund-flow.md");
     assert.equal(parityTask.notes, "Provider behavior verified.");
@@ -400,7 +400,8 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.equal(checklist[0].checked, true, "toggle marks C1 done");
 
     // make T002 the highest-priority ready task (seed T001 has priority 10)
-    await callTool(session, "planner-task-update", { task: "T002", priority: 5 });
+    await callTool(session, "planner-task-update", { task: "T002", priority: 0 });
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).priority, 0);
 
     // blocked is not startable → reopen to planned (motivation required) first
     await callTool(session, "planner-task-update", { task: "T002", status: "planned", motivation: "Provider contract signed; resume work." });
@@ -472,6 +473,7 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.match(toolText(done), /\(done\)/);
     const doneTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(doneTask.status, "done");
+    assert.equal(doneTask.priority, 0);
     assert.ok(doneTask.completedAt);
     assert.equal((await session.store.loadFeatures()).features[0].description, preservedFeatureDescription, "MCP lifecycle writes preserve newer feature metadata");
 

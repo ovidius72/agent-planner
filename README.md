@@ -289,6 +289,7 @@ Current Phase 1 tools include:
 
 - `planner-init`
 - `planner-show`
+- `planner-description-freshness` — non-mutating child-to-parent drift preview with exact stale refs
 - `planner-repair`
 - `planner-load`
 - `planner-disable`
@@ -644,7 +645,7 @@ The web UI visualizes:
 - accepted decisions;
 - handoff state.
 
-The `planner-web` MCP tool fully manages the web lifecycle (start / status / stop) in-process, binding LAN (`0.0.0.0`) with a dynamic OS-assigned port. The same lifecycle is exposed in the Pi adapter as agent tools (`planner-web`, `planner-load`, `planner-stop`) and as `/planner web` / `/planner load` / `/planner stop` slash commands.
+The `planner-web` MCP tool fully manages the web lifecycle (start / status / stop) in-process, binding LAN (`0.0.0.0`) with a dynamic OS-assigned port. Every start/status response returns the reachable address plus typed `running`/`address`/`localUrl`/`lanUrl`/`host`/`port`/`mode` metadata (Pi parity). The same lifecycle is exposed in the Pi adapter as agent tools (`planner-web`, `planner-load`, `planner-stop`) and as `/planner web` / `/planner load` / `/planner stop` slash commands.
 
 ### Planner housekeeping
 
@@ -695,7 +696,7 @@ MCP tools:
 
 Lifecycle: a handoff is archived when its phase reaches any terminal outcome. A confirmed write persists a candidate with `resumeReady: false`; the agent must show and read the complete persisted body, compare it again with all required sources, then call the verify tool with the shown content hash. Only `resumeReady: true` permits a completeness claim. On resume it remains context to validate against current plan state, not a lock—`task_start` is never blocked by a pending handoff.
 
-The handoff must describe current focus, work in progress, resume steps, files touched, blockers, next steps, recent decisions, working-tree ownership, runtime wiring, preservation constraints, verification evidence, related work, and operator actions.
+New handoffs are compact resume capsules targeting at most 8,000 inline characters (24,000 remains only as an absolute compatibility ceiling). Inline sections are: Current focus, Current and partial state, Preservation constraints, Supporting documents, Blockers and risks, and How to resume. The verbose completeness audit and cold-start inventory are retained once as structured metadata and never embedded in Markdown. Oversized writes auto-externalize the full body to one planner-owned `.planner/docs/handoff-*.md` document and complete the write; there is no dead-end size error. Supporting `.planner/docs/*.md` references render as new-tab links in shared formatted content and open the path-safe viewer at `/docs/view` (traversal/symlink rejected); the viewer includes a dependency-free textarea editor with live preview and an explicitly confirmed save (`confirmed=true`). Editor decision: `@uiw/react-md-editor` and CodeMirror 6 were evaluated and rejected to avoid bundle/maintenance cost; the baseline textarea plus existing preview is the shipped editor.
 
 ---
 

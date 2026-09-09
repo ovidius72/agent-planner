@@ -1,13 +1,13 @@
 import { watch, existsSync, readFileSync, statSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { lstat, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve, sep } from "node:path";
 import { networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, reconcileRequirementMacroTasks, RequirementMacroTaskError, type MacroTaskMutationInput } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, type MacroTaskMutationInput } from "@agent-plan/core";
 import type { Feature, Phase, Project, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -42,7 +42,7 @@ async function resolveRequirementPhaseIds(
   return { linkedPhaseIds: [...new Set(resolved.map((phase) => phase!.id))] };
 }
 
-type RequirementMutationBody = Partial<Requirement> & { macroTasks?: MacroTaskMutationInput[] };
+type RequirementMutationBody = Partial<Requirement> & { macroTasks?: MacroTaskMutationInput[]; status?: unknown };
 
 function macroTaskInputs(value: unknown): MacroTaskMutationInput[] | null {
   return Array.isArray(value) ? value as MacroTaskMutationInput[] : null;
@@ -417,6 +417,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
 
   app.post(route("/requirements"), async (c) => {
     const body = await c.req.json<RequirementMutationBody>();
+    if (body.status !== undefined) return c.json({ error: "Requirements are declarative product outcomes and have no lifecycle status.", errorCode: "REQUIREMENT_STATUS_REMOVED" }, 400);
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title required" }, 400);
     const links = await resolveRequirementPhaseIds(store, body.linkedPhaseIds);
@@ -435,7 +436,6 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       id: createRequirementId(),
       title,
       description: body.description?.trim() ?? "",
-      status: body.status ?? "planned",
       macroTasks,
       linkedPhaseIds: links.linkedPhaseIds,
       createdAt: now,
@@ -453,9 +453,10 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const id = c.req.param("id");
     if (!id) return c.json({ error: "id required" }, 400);
     const body = await c.req.json<RequirementMutationBody & { expectedUpdatedAt?: string }>();
+    if (body.status !== undefined) return c.json({ error: "Requirements are declarative product outcomes and have no lifecycle status.", errorCode: "REQUIREMENT_STATUS_REMOVED" }, 400);
     const existing = (await store.loadRequirements()).requirements.find((requirement) => requirement.id === id);
     if (!existing) return c.json({ error: "not found" }, 404);
-    const mutableFields = ["title", "description", "status", "linkedPhaseIds", "macroTasks"];
+    const mutableFields = ["title", "description", "linkedPhaseIds", "macroTasks"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const title = body.title?.trim();
     if (body.title !== undefined && !title) return c.json({ error: "title required" }, 400);
@@ -475,7 +476,6 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       ...current,
       ...(title !== undefined ? { title } : {}),
       ...(body.description !== undefined ? { description: body.description.trim() } : {}),
-      ...(body.status !== undefined ? { status: body.status } : {}),
       ...(body.macroTasks !== undefined ? { macroTasks } : {}),
       ...(body.linkedPhaseIds !== undefined ? { linkedPhaseIds: links.linkedPhaseIds } : {}),
       updatedAt: now,
@@ -543,6 +543,70 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     return c.json({ deleted: id });
   });
+
+  // ── Hierarchical description freshness ──────────────────────────
+  app.get(route("/description-freshness"), async (c) => c.json(await store.previewDescriptionReconciliation()));
+
+// ── Planner Markdown docs (path-safe viewer/editor) ─────────────
+// Reads/writes are restricted to <planRoot>/docs/*.md. Traversal and
+// symlink escapes are rejected. The Web UI opens viewer links in a new
+// tab; saves require explicit confirmed=true. Editor baseline is a
+// dependency-free textarea plus existing Markdown preview (no external
+// editor dependency; see docs decision in T385: @uiw/react-md-editor
+// and CodeMirror 6 were evaluated and rejected to avoid bundle cost).
+function resolvePlannerDocPath(planRoot: string, rawPath: string): string {
+  const normalized = rawPath.trim().replace(/\\/g, "/");
+  if (!/^\.planner\/docs\/.+\.md$/i.test(normalized) || normalized.includes("/../")) {
+    throw new Error(`Document path must be a Markdown file under .planner/docs/: ${rawPath}`);
+  }
+  const docsRoot = resolve(planRoot, "docs");
+  const target = resolve(planRoot, normalized.slice(".planner/".length));
+  if (!target.startsWith(`${docsRoot}${sep}`)) {
+    throw new Error(`Document escapes .planner/docs/: ${normalized}`);
+  }
+  return target;
+}
+
+app.get(route("/docs/view"), async (c) => {
+  const rawPath = c.req.query("path") ?? "";
+  let target: string;
+  try {
+    target = resolvePlannerDocPath(store.root, rawPath);
+  } catch (error) {
+    return c.json({ error: (error as Error).message, path: rawPath }, 400);
+  }
+  const fileStat = await lstat(target).catch(() => null);
+  if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) {
+    return c.json({ error: "Document must be a regular file under .planner/docs/ (symlinks rejected).", path: rawPath }, 404);
+  }
+  const content = await readFile(target, "utf8").catch(() => null);
+  if (content === null) return c.json({ error: "Document not found.", path: rawPath }, 404);
+  return c.json({ path: rawPath, content });
+});
+
+app.put(route("/docs/save"), async (c) => {
+  const body = await c.req.json<{ path?: string; content?: string; confirmed?: boolean }>().catch(() => ({ path: "", content: "", confirmed: false }));
+  const rawPath = typeof body.path === "string" ? body.path : "";
+  if (body.confirmed !== true) {
+    return c.json({ error: "Saving a planner document requires explicit confirmed=true.", path: rawPath, confirmRequired: true, saved: false }, 400);
+  }
+  let target: string;
+  try {
+    target = resolvePlannerDocPath(store.root, rawPath);
+  } catch (error) {
+    return c.json({ error: (error as Error).message, path: rawPath }, 400);
+  }
+  const fileStat = await lstat(target).catch(() => null);
+  if (fileStat && (fileStat.isSymbolicLink() || !fileStat.isFile())) {
+    return c.json({ error: "Document must be a regular file under .planner/docs/ (symlinks rejected).", path: rawPath }, 400);
+  }
+  const content = typeof body.content === "string" ? body.content : "";
+  if (!content.trim()) return c.json({ error: "Document content must be non-empty Markdown.", path: rawPath }, 400);
+  const { mkdir: mkdirDoc } = await import("node:fs/promises");
+  await mkdirDoc(dirname(target), { recursive: true });
+  await writeFile(target, content, "utf8");
+  return c.json({ path: rawPath, saved: true });
+});
 
   // ── Features ─────────────────────────────────────────────────────
   app.get(route("/features"), async (c) => c.json((await store.loadFeatures()).features));
@@ -909,6 +973,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       dependsOn: [],
       pauseSnapshot: null,
       pauseHistory: [],
+      activeOwnerSession: "",
       startedAt: initialStatus === "in-progress" || initialStatus === "done" ? now : "",
       completedAt: initialStatus === "done" ? now : "",
       createdAt: now,
@@ -971,8 +1036,8 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   });
 
   app.get(route("/tasks/focus"), async (c) => {
-    const [phases, featuresDoc, project] = await Promise.all([
-      store.loadAllPhases(), store.loadFeatures(), store.loadProject(),
+    const [phases, featuresDoc, project, resume] = await Promise.all([
+      store.loadAllPhases(), store.loadFeatures(), store.loadProject(), store.loadResume(),
     ]);
     const featureIdToNum = new Map(featuresDoc.features.map((feature) => [feature.id, feature.number]));
     const openReturn = [...project.workDeviations]
@@ -988,6 +1053,20 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       featureId: string; featureNumber: number; status: Task["status"];
       pauseSnapshot: Task["pauseSnapshot"]; pendingResume: boolean; deviationId: string;
     };
+    const summarizeFocusTask = (candidate: NonNullable<ReturnType<typeof recommendNextWork>["selection"]["candidate"]>, deviation?: ReturnType<typeof recommendNextWork>["selection"]["deviation"]): FocusSummary => ({
+      id: candidate.task.id,
+      number: candidate.task.number,
+      shortId: candidate.task.shortId,
+      title: candidate.task.title,
+      phaseId: candidate.phase.id,
+      phaseNumber: candidate.phase.number,
+      featureId: candidate.feature?.id ?? "",
+      featureNumber: candidate.feature?.number ?? 0,
+      status: candidate.task.status,
+      pauseSnapshot: candidate.task.pauseSnapshot ?? deviation?.snapshot ?? null,
+      pendingResume: Boolean(candidate.task.pauseSnapshot ?? deviation),
+      deviationId: deviation?.id ?? "",
+    });
     const active: FocusSummary[] = [];
     const pendingResume: FocusSummary[] = [];
     for (const phase of phases) {
@@ -1021,7 +1100,9 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       if (leftOrder !== rightOrder) return leftOrder - rightOrder;
       return (right.pauseSnapshot?.pausedAt ?? "").localeCompare(left.pauseSnapshot?.pausedAt ?? "");
     });
-    return c.json({ active, pendingResume });
+    const recommendation = recommendNextWork(featuresDoc.features, phases, project.workDeviations, resume?.currentPhaseId);
+    const nextWork = recommendation.selection.candidate ? summarizeFocusTask(recommendation.selection.candidate, recommendation.selection.deviation) : null;
+    return c.json({ active, pendingResume, nextWork, nextWorkReason: recommendation.selection.reason });
   });
 
   /** Canonical HTTP task-entry path. Generic task updates must never start work,
@@ -1086,6 +1167,26 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.appendActivity("task_status", existing.id, `Task ${existing.id} → in-progress`);
     return c.json(updated ?? existing);
+  }));
+
+  app.post(route("/tasks/:id/reopen"), async (c) => store.runBatch(async () => {
+    const taskId = c.req.param("id") ?? "";
+    const body: { confirmed?: boolean } = await c.req.json<{ confirmed?: boolean }>().catch(() => ({}));
+    const phase = (await store.loadAllPhases()).find((entry) => entry.tasks.some((task) => task.id === taskId));
+    if (!phase) return c.json({ reopened: false, errorCode: "TASK_NOT_FOUND" }, 404);
+    if (body.confirmed !== true) return c.json({ reopened: false, errorCode: "TASK_REOPEN_CONFIRMATION_REQUIRED", message: "Explicit confirmation is required to reopen a completed task." }, 400);
+    try {
+      const task = await store.reopenTask(phase.id, taskId, { confirmed: true });
+      await store.syncTaskStatusRollup(phase.id);
+      await store.writeGenerated();
+      hub()?.broadcast({ type: "phases-updated", data: { action: "task-reopened", id: phase.id, phaseId: phase.id, featureId: phase.featureId ?? "", taskId } });
+      hub()?.broadcast({ type: "plan-rendered", data: {} });
+      await store.appendActivity("task_status", taskId, `Task ${taskId} reopened`);
+      return c.json({ reopened: true, task });
+    } catch (error) {
+      const details = error instanceof PlanStoreError ? error.details : undefined;
+      return c.json({ reopened: false, errorCode: details?.errorCode ?? "TASK_REOPEN_FAILED", message: error instanceof Error ? error.message : "Task reopen failed." }, 409);
+    }
   }));
 
   app.get(route("/tasks/:id"), async (c) => {
@@ -1343,6 +1444,23 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.get(route("/handoffs/archive"), async (c) => {
     const archived = await store.listArchivedHandoffs();
     return c.json({ archived });
+  });
+
+  app.get(route("/phases/:id/handoff/preflight"), async (c) => {
+    const id = c.req.param("id");
+    if (!id) return c.json({ error: "id required" }, 400);
+    const phase = await store.loadPhase(id).catch(() => null);
+    if (!phase) return c.json({ error: "phase not found" }, 404);
+    const audit = await store.preparePhaseHandoff(id);
+    return c.json({
+      handoffUpdatedAt: audit.handoffUpdatedAt,
+      targetContentChars: audit.targetContentChars,
+      maxContentChars: audit.maxContentChars,
+      canonicalSections: audit.canonicalSections,
+      requiredHumanInputs: audit.requiredHumanInputs,
+      generatedMetadata: ["Created at", "Updated at", "Reason"],
+      draftTemplate: audit.draftTemplate,
+    });
   });
 
   app.get(route("/phases/:id/handoff"), async (c) => {

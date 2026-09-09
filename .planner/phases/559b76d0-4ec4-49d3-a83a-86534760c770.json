@@ -28,7 +28,14 @@
     "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38",
     "a833a6a7-2992-4b21-bbe2-e48f3ba68d51",
     "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1",
-    "a2fed338-41b4-4ec4-a9f6-82f80e24cef9"
+    "a2fed338-41b4-4ec4-a9f6-82f80e24cef9",
+    "ae6ca930-cae6-419e-9ce6-7c7066911744",
+    "d5e405f2-d568-411f-bf36-059829c6e5fb",
+    "7cc2e404-981f-427d-9960-52ee9fc4778d",
+    "a8ebbef7-c933-421a-bf05-c3d05778fe80",
+    "1fecacf8-8f21-4c05-952c-f0f90319c6e6",
+    "93ded1ba-f386-4f12-9c47-0ea531754884",
+    "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d"
   ],
   "tasks": [
     {
@@ -39,11 +46,44 @@
       "priority": 1,
       "shortName": "include-sibling-tasks-and-rela",
       "title": "Include sibling tasks and related planned capabilities in resume context",
-      "status": "planned",
-      "description": "Strengthen resume and handoff context across packages/plan-core/src/handoff-context.ts, packages/plan-core/src/recap.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and packages/plan-core/planner-skill.md. Agents resuming one task currently receive its checkpoint but can miss sibling tasks and related capabilities already planned in the same phase, leading to duplicate or contradictory proposals. Add a bounded, priority-ordered phase work map with sibling task refs, statuses, concise goals, dependencies, and remaining capability ownership to handoff prepare/show and task resume/start guidance. Require agents to reread the canonical phase plan before proposing new work, preserve the 24,000-character handoff ceiling by linking deeper context under .planner/docs/, and add Pi/MCP regressions based on the reported case where a capability already covered by another phase task was proposed again.",
-      "descriptionUpdatedAt": "2026-09-01T15:00:55.078Z",
+      "status": "done",
+      "description": "Strengthen resume and handoff context across packages/plan-core/src/handoff-context.ts, packages/plan-core/src/recap.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and packages/plan-core/planner-skill.md. Agents resuming one task currently receive its checkpoint but can miss sibling tasks and related capabilities already planned in the same phase, leading to duplicate or contradictory proposals. Add a bounded, priority-ordered phase work map with sibling task refs, statuses, concise goals, dependencies, and remaining capability ownership to handoff prepare/show and task resume/start guidance. Require agents to reread the canonical phase plan before proposing new work, preserve the 24,000-character handoff ceiling by linking deeper context under .planner/docs/, and add Pi/MCP regressions based on the reported case where a capability already covered by another phase task was proposed again.\n\n---\n**Completion summary:**\nImplemented a bounded priority-ordered phase work map across packages/plan-core/src/task-context.ts, handoff preparation/templates, handoff show, task start/resume phase context, and consolidated recap orientation. The map exposes exact composite sibling refs, statuses, concise goals, resolved dependencies, current-task marking, and terminal-versus-remaining capability ownership with explicit non-duplication guidance and transport-safe truncation to canonical views/.planner/docs. Synchronized MCP, Pi, shared skill, Claude Code skill, and capability inventory contracts. Added core, MCP, and Pi regressions for ordering, dependencies, ownership, handoff prepare/show, recap, and task-start sibling delivery. Verification: focused builds passed for @agent-plan/core, @agent-plan/mcp, and @agent-plan/pi-adapter; 76/76 focused core/MCP/Pi tests passed; compatibility/matrix suite passed 16/16; plugin synchronization and diff checks passed. Canonical final gate passed fingerprint 48b7f431ed9a: build, typecheck, coverage 574/574 Node tests plus 97/97 Web UI tests, plugin synchronization, Playwright 40/40, and freshly packed temporary-install smoke. No commit, push, PR, merge, release, or publish was performed. Newly reported task-recommendation claim reconciliation was recorded separately as planned P097(F021)/T389 and did not expand T380 scope.",
+      "descriptionUpdatedAt": "2026-09-08T07:45:44.332Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-001-planned-in-progress",
+          "date": "2026-09-07T15:04:27.327Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7bb65587-610a-4067-871f-38465ed74bed",
+          "date": "2026-09-07T18:49:53.005Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: User identified a higher-priority product-model defect: top-level Requirements incorrectly expose a planned lifecycle status. Fix this before resuming sibling-context work.\nWhat was being done: T380 phase work-map implementation was partially added but not built or tested. Uncommitted edits add buildPhaseWorkMap in packages/plan-core/src/task-context.ts, integrate it into handoff templates/audits and recap, and begin exposing it in active Pi/MCP handoff_show responses.\nResume location: packages/plan-core/src/task-context.ts buildPhaseWorkMap and buildPhaseContextBlock; then packages/plan-core/src/handoff-context.ts, packages/plan-core/src/recap.ts, packages/plan-mcp/src/index.ts, and packages/pi-adapter/src/index.ts.\nHow to resume: Review the unverified partial diff first. Correct and complete structured work-map integration across prepare/show/start/resume, add focused core/Pi/MCP regressions and skill guidance, run focused builds/tests, then use the canonical final gate once. Preserve all T388 changes when separating or resuming work."
+        },
+        {
+          "id": "a6499e8c-61c3-4eb0-830d-cf512cfc1817",
+          "date": "2026-09-07T20:14:48.058Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from packages/plan-core/src/task-context.ts buildPhaseWorkMap and buildPhaseContextBlock; then packages/plan-core/src/handoff-context.ts, packages/plan-core/src/recap.ts, packages/plan-mcp/src/index.ts, and packages/pi-adapter/src/index.ts.. Review the unverified partial diff first. Correct and complete structured work-map integration across prepare/show/start/resume, add focused core/Pi/MCP regressions and skill guidance, run focused builds/tests, then use the canonical final gate once. Preserve all T388 changes when separating or resuming work."
+        },
+        {
+          "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-004-in-progress-done",
+          "date": "2026-09-08T07:45:44.330Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented a bounded priority-ordered phase work map across packages/plan-core/src/task-context.ts, handoff preparation/templates, handoff show, task start/resume phase context, and consolidated recap orientation. The map exposes exact composite sibling refs, statuses, concise goals, resolved dependencies, current-task marking, and terminal-versus-remaining capability ownership with explicit non-duplication guidance and transport-safe truncation to canonical views/.planner/docs. Synchronized MCP, Pi, shared skill, Claude Code skill, and capability inventory contracts. Added core, MCP, and Pi regressions for ordering, dependencies, ownership, handoff prepare/show, recap, and task-start sibling delivery. Verification: focused builds passed for @agent-plan/core, @agent-plan/mcp, and @agent-plan/pi-adapter; 76/76 focused core/MCP/Pi tests passed; compatibility/matrix suite passed 16/16; plugin synchronization and diff checks passed. Canonical final gate passed fingerprint 48b7f431ed9a: build, typecheck, coverage 574/574 Node tests plus 97/97 Web UI tests, plugin synchronization, Playwright 40/40, and freshly packed temporary-install smoke. No commit, push, PR, merge, release, or publish was performed. Newly reported task-recommendation claim reconciliation was recorded separately as planned P097(F021)/T389 and did not expand T380 scope."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -51,42 +91,58 @@
           "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-001-define-bounded-sibling-and-related-capability-context-contract",
           "number": 1,
           "title": "Define bounded sibling and related-capability context contract",
-          "checked": false
+          "checked": true
         },
         {
           "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-002-integrate-the-phase-work-map-into-handoff-and-resume-surfaces",
           "number": 2,
           "title": "Integrate the phase work map into handoff and resume surfaces",
-          "checked": false
+          "checked": true
         },
         {
           "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-003-require-canonical-plan-reread-before-new-proposals",
           "number": 3,
           "title": "Require canonical-plan reread before new proposals",
-          "checked": false
+          "checked": true
         },
         {
           "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-004-add-pi-mcp-regressions-for-duplicate-capability-prevention",
           "number": 4,
           "title": "Add Pi/MCP regressions for duplicate-capability prevention",
-          "checked": false
+          "checked": true
         },
         {
           "id": "8a4c178d-2abe-48ca-82e5-3a2b49f45b6e-check-005-run-full-cross-harness-verification",
           "number": 5,
           "title": "Run full cross-harness verification",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
-      "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "pauseHistory": [
+        {
+          "id": "c89493a3-b608-4392-a90e-91d940b3574b",
+          "reason": "User identified a higher-priority product-model defect: top-level Requirements incorrectly expose a planned lifecycle status. Fix this before resuming sibling-context work.",
+          "whatWasBeingDone": "T380 phase work-map implementation was partially added but not built or tested. Uncommitted edits add buildPhaseWorkMap in packages/plan-core/src/task-context.ts, integrate it into handoff templates/audits and recap, and begin exposing it in active Pi/MCP handoff_show responses.",
+          "resumeLocation": "packages/plan-core/src/task-context.ts buildPhaseWorkMap and buildPhaseContextBlock; then packages/plan-core/src/handoff-context.ts, packages/plan-core/src/recap.ts, packages/plan-mcp/src/index.ts, and packages/pi-adapter/src/index.ts.",
+          "howToResume": "Review the unverified partial diff first. Correct and complete structured work-map integration across prepare/show/start/resume, add focused core/Pi/MCP regressions and skill guidance, run focused builds/tests, then use the canonical final gate once. Preserve all T388 changes when separating or resuming work.",
+          "relatedTaskId": "ae6ca930-cae6-419e-9ce6-7c7066911744",
+          "pausedAt": "2026-09-07T18:49:53.005Z",
+          "pausedBy": "pi"
+        }
+      ],
+      "startedAt": "2026-09-07T15:04:27.327Z",
+      "completedAt": "2026-09-08T07:45:44.330Z",
       "createdAt": "2026-09-01T15:00:55.076Z",
-      "updatedAt": "2026-09-01T15:00:55.076Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-08T07:45:44.330Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-07T20:14:47.970Z"
+        }
+      ]
     },
     {
       "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5",
@@ -96,11 +152,28 @@
       "priority": 2,
       "shortName": "detect-and-reconcile-hierarchi",
       "title": "Detect and reconcile hierarchical description drift",
-      "status": "planned",
-      "description": "Add hierarchical freshness handling across packages/plan-core/src/plan-store.ts, packages/plan-core/src/schema.ts, packages/plan-server/src/serve.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and relevant Web UI detail surfaces. Updating a task description can leave its parent phase description obsolete or contradictory, and phase changes can leave the feature description stale. Introduce deterministic child-to-parent freshness metadata or diagnostics, surface exact stale parent refs after semantic description changes, and provide explicit previewed reconciliation rather than silently overwriting user-authored phase or feature prose. Preserve descriptionRef markdown fallback, updatedAt/descriptionUpdatedAt semantics, read-attestation freshness, stable composite references, and harness parity. Add regressions proving task changes invalidate or flag only the owning phase/feature context and that accepted parent reconciliation restores freshness without unrelated metadata loss.",
-      "descriptionUpdatedAt": "2026-09-01T15:01:08.439Z",
+      "status": "done",
+      "description": "Add hierarchical freshness handling across packages/plan-core/src/plan-store.ts, packages/plan-core/src/schema.ts, packages/plan-server/src/serve.ts, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, and relevant Web UI detail surfaces. Updating a task description can leave its parent phase description obsolete or contradictory, and phase changes can leave the feature description stale. Introduce deterministic child-to-parent freshness metadata or diagnostics, surface exact stale parent refs after semantic description changes, and provide explicit previewed reconciliation rather than silently overwriting user-authored phase or feature prose. Preserve descriptionRef markdown fallback, updatedAt/descriptionUpdatedAt semantics, read-attestation freshness, stable composite references, and harness parity. Add regressions proving task changes invalidate or flag only the owning phase/feature context and that accepted parent reconciliation restores freshness without unrelated metadata loss.\n\n---\n**Completion summary:**\nImplemented deterministic child-to-parent description freshness without silently rewriting user-authored prose. Added packages/plan-core/src/description-freshness.ts and PlanStore.previewDescriptionReconciliation(), using descriptionUpdatedAt/createdAt revisions to flag only stale owning phases/features with exact composite refs and a leaf-to-root reconciliation preview. Task description/descriptionRef updates now surface owning phase+feature drift in Pi/MCP; phase description updates surface owning feature drift; new description_freshness and planner-description-freshness tools return the full non-mutating preview. Added GET /api/description-freshness and Web UI notices on feature, phase, and task detail routes. Explicit parent edits restore freshness while preserving unrelated metadata. Updated shared/Claude skill guidance, README, tool inventories, and capability surfaces. Verification: affected core/server/MCP/Pi/Web UI builds passed; focused core/server/MCP/Pi semantic suites passed 70/70; the complete Web UI suite passed 99/99; compatibility/matrix passed 16/16; plugin synchronization and git diff checks passed. This is full affected-surface verification. The canonical repository final gate was not repeated because P097 remains open and repository governance permits that broad gate once at phase/release close; the prior unchanged task boundary gate is not being misrepresented as validating these new changes. No commit, push, PR, merge, release, or publish was performed.",
+      "descriptionUpdatedAt": "2026-09-08T08:16:59.101Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-001-planned-in-progress",
+          "date": "2026-09-08T07:46:25.714Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-002-in-progress-done",
+          "date": "2026-09-08T08:16:59.098Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented deterministic child-to-parent description freshness without silently rewriting user-authored prose. Added packages/plan-core/src/description-freshness.ts and PlanStore.previewDescriptionReconciliation(), using descriptionUpdatedAt/createdAt revisions to flag only stale owning phases/features with exact composite refs and a leaf-to-root reconciliation preview. Task description/descriptionRef updates now surface owning phase+feature drift in Pi/MCP; phase description updates surface owning feature drift; new description_freshness and planner-description-freshness tools return the full non-mutating preview. Added GET /api/description-freshness and Web UI notices on feature, phase, and task detail routes. Explicit parent edits restore freshness while preserving unrelated metadata. Updated shared/Claude skill guidance, README, tool inventories, and capability surfaces. Verification: affected core/server/MCP/Pi/Web UI builds passed; focused core/server/MCP/Pi semantic suites passed 70/70; the complete Web UI suite passed 99/99; compatibility/matrix passed 16/16; plugin synchronization and git diff checks passed. This is full affected-surface verification. The canonical repository final gate was not repeated because P097 remains open and repository governance permits that broad gate once at phase/release close; the prior unchanged task boundary gate is not being misrepresented as validating these new changes. No commit, push, PR, merge, release, or publish was performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -108,42 +181,47 @@
           "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-001-define-hierarchical-description-freshness-model",
           "number": 1,
           "title": "Define hierarchical description freshness model",
-          "checked": false
+          "checked": true
         },
         {
           "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-002-flag-exact-stale-phase-and-feature-context-after-child-changes",
           "number": 2,
           "title": "Flag exact stale phase and feature context after child changes",
-          "checked": false
+          "checked": true
         },
         {
           "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-003-provide-previewed-explicit-reconciliation-without-silent-prose-rewrites",
           "number": 3,
           "title": "Provide previewed explicit reconciliation without silent prose rewrites",
-          "checked": false
+          "checked": true
         },
         {
           "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-004-expose-parity-across-pi-mcp-server-and-web-ui",
           "number": 4,
           "title": "Expose parity across Pi, MCP, server, and Web UI",
-          "checked": false
+          "checked": true
         },
         {
           "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5-check-005-add-regression-coverage-and-run-full-verification",
           "number": 5,
           "title": "Add regression coverage and run full verification",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-08T07:46:25.714Z",
+      "completedAt": "2026-09-08T08:16:59.098Z",
       "createdAt": "2026-09-01T15:01:08.437Z",
-      "updatedAt": "2026-09-01T15:01:08.437Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-08T08:16:59.098Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T07:46:25.613Z"
+        }
+      ]
     },
     {
       "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38",
@@ -232,11 +310,28 @@
       "priority": 4,
       "shortName": "handoff-md-links",
       "title": "Externalize oversized handoffs and open Markdown references in Web UI",
-      "status": "planned",
-      "description": "Redesign long-context recovery, Markdown navigation, and Web UI startup parity across `packages/plan-core/src/handoff-context.ts`, `packages/plan-core/src/plan-store.ts`, `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, `packages/plan-server/src/serve.ts`, `packages/plan-web-ui/src/`, shared planner skill copies, and cross-surface tests. Current failure is structural: real handoffs approach the 24,000-character ceiling while still omitting resume-critical facts; the generated operational audit is embedded in the handoff Markdown and duplicated again in structured `handoffAudit` metadata; free-text category coverage and same-agent `omissionsFound: []` behave as self-attestation rather than proof. MCP Web UI startup also lacks Pi parity because its successful start response does not clearly expose the reachable Web UI address.\n\nBuild a compact resume-capsule contract for new writes: target at most 8,000 inline characters, keep 24,000 only as a backward-compatible absolute read/write safety ceiling, and automatically externalize extended detail before the target is exceeded. The inline handoff must contain only the exact focus, first resume action, partial/current state, blockers/risks, ordered supporting-document links, and minimal preservation constraints. Do not embed the verbose completeness audit or cold-start inventory in Markdown; retain them once as structured metadata. Derive canonical evidence such as active task, phase, planner refs, branch/worktree state where available, persisted supporting-document hashes, and completed verification from authoritative sources instead of asking the agent to narrate duplicates. Persist planner-owned Markdown safely, retain a substantive inline summary and `supportingDocuments`, and either complete the write automatically or return one immediately executable typed continuation operation—never a dead-end size error or a false completeness claim. `resumeReady` must require persisted evidence and deterministic required fields; same-agent free-text attestation alone is insufficient. Add a cold-resume acceptance regression proving a fresh reader can identify the exact task, resume point, relevant files/documents, and next commands without conversation history.\n\nDetect valid planner-local Markdown references in shared formatted content and render accessible links that open a path-safe Markdown viewer in a new tab. Research a lightweight maintained editor library, using a dependency-free textarea plus existing Markdown preview as the baseline; add an explicitly confirmed save path only if justified. Restrict reads and writes to approved planner documentation roots and reject traversal and symlink escapes. Preserve existing handoff IDs, content hashes, audit history, legacy handoff parsing, source-review/cold-start metadata, supporting-document behavior, text/layout for non-reference content, and closed-by-default disclosures. Make MCP Web UI start responses match Pi behavior by returning and visibly printing the actual reachable Web UI address, with typed structured address/host/port metadata and tests for local/LAN startup. Cover plan-core, Pi, MCP, server, Web UI, shared skill guidance, capability inventory, unit/integration tests, and desktop/mobile Playwright behavior.",
-      "descriptionUpdatedAt": "2026-09-04T14:34:29.241Z",
+      "status": "done",
+      "description": "Redesign long-context recovery, Markdown navigation, and Web UI startup parity across `packages/plan-core/src/handoff-context.ts`, `packages/plan-core/src/plan-store.ts`, `packages/pi-adapter/src/index.ts`, `packages/plan-mcp/src/index.ts`, `packages/plan-server/src/serve.ts`, `packages/plan-web-ui/src/`, shared planner skill copies, and cross-surface tests. Current failure is structural: real handoffs approach the 24,000-character ceiling while still omitting resume-critical facts; the generated operational audit is embedded in the handoff Markdown and duplicated again in structured `handoffAudit` metadata; free-text category coverage and same-agent `omissionsFound: []` behave as self-attestation rather than proof. MCP Web UI startup also lacks Pi parity because its successful start response does not clearly expose the reachable Web UI address.\n\nBuild a compact resume-capsule contract for new writes: target at most 8,000 inline characters, keep 24,000 only as a backward-compatible absolute read/write safety ceiling, and automatically externalize extended detail before the target is exceeded. The inline handoff must contain only the exact focus, first resume action, partial/current state, blockers/risks, ordered supporting-document links, and minimal preservation constraints. Do not embed the verbose completeness audit or cold-start inventory in Markdown; retain them once as structured metadata. Derive canonical evidence such as active task, phase, planner refs, branch/worktree state where available, persisted supporting-document hashes, and completed verification from authoritative sources instead of asking the agent to narrate duplicates. Persist planner-owned Markdown safely, retain a substantive inline summary and `supportingDocuments`, and either complete the write automatically or return one immediately executable typed continuation operation—never a dead-end size error or a false completeness claim. `resumeReady` must require persisted evidence and deterministic required fields; same-agent free-text attestation alone is insufficient. Add a cold-resume acceptance regression proving a fresh reader can identify the exact task, resume point, relevant files/documents, and next commands without conversation history.\n\nDetect valid planner-local Markdown references in shared formatted content and render accessible links that open a path-safe Markdown viewer in a new tab. Research a lightweight maintained editor library, using a dependency-free textarea plus existing Markdown preview as the baseline; add an explicitly confirmed save path only if justified. Restrict reads and writes to approved planner documentation roots and reject traversal and symlink escapes. Preserve existing handoff IDs, content hashes, audit history, legacy handoff parsing, source-review/cold-start metadata, supporting-document behavior, text/layout for non-reference content, and closed-by-default disclosures. Make MCP Web UI start responses match Pi behavior by returning and visibly printing the actual reachable Web UI address, with typed structured address/host/port metadata and tests for local/LAN startup. Cover plan-core, Pi, MCP, server, Web UI, shared skill guidance, capability inventory, unit/integration tests, and desktop/mobile Playwright behavior.\n\n---\n**Completion summary:**\nImplemented the T385 compact handoff and Markdown navigation redesign. New writes target a <=8,000-character resume capsule (Current focus, Current and partial state, Preservation constraints, Supporting documents, Blockers and risks, How to resume) with 24,000 kept only as the absolute compatibility ceiling; verbose audit/inventory stay once as structured metadata and are never embedded in Markdown. Oversized writes auto-externalize the full body to one planner-owned .planner/docs/handoff-*.md document and complete the write with the auto doc in supportingDocuments (never a dead-end size error). Planner-owned doc persistence rejects traversal and symlink escapes in PlanStore and server; GET /api/docs/view and PUT /api/docs/save (confirmed=true, creates parent dirs) back the Web UI /docs/view viewer with dependency-free textarea plus live preview. Shared FormattedText linkifies valid .planner/docs/*.md references as new-tab accessible links. MCP planner-web start/status/stop and planner-load now return visible reachable addresses plus typed running/address/host/port metadata (Pi parity). Editor research evaluated @uiw/react-md-editor and CodeMirror 6 and shipped the dependency-free textarea baseline (recorded in code and README). Updated skill guidance, README, capability surfaces, and fixtures. Verification: core handoff/context suites 57/57 incl. new externalization/cold-resume/symlink tests; server CRUD 24/24 incl. docs traversal/confirmed-save; MCP handoff/web/harness 36/36 incl. structured address; Pi mutations/registration 34/34; Web UI vitest 102/102 incl. doc links; matrix/skill-inventory 15/15; agent-plan version 7/7; compatibility 15/15; pnpm build/check/plugins:check/diff-check clean; Playwright responsive 8/8 incl. new doc-viewer scenario. The canonical repository final gate was not repeated because P097 remains open and governance reserves that broad gate for phase/release close. No commit, push, PR, merge, release, or publish was performed.",
+      "descriptionUpdatedAt": "2026-09-08T08:49:42.710Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-001-planned-in-progress",
+          "date": "2026-09-08T08:17:38.157Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-002-in-progress-done",
+          "date": "2026-09-08T08:49:42.707Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented the T385 compact handoff and Markdown navigation redesign. New writes target a <=8,000-character resume capsule (Current focus, Current and partial state, Preservation constraints, Supporting documents, Blockers and risks, How to resume) with 24,000 kept only as the absolute compatibility ceiling; verbose audit/inventory stay once as structured metadata and are never embedded in Markdown. Oversized writes auto-externalize the full body to one planner-owned .planner/docs/handoff-*.md document and complete the write with the auto doc in supportingDocuments (never a dead-end size error). Planner-owned doc persistence rejects traversal and symlink escapes in PlanStore and server; GET /api/docs/view and PUT /api/docs/save (confirmed=true, creates parent dirs) back the Web UI /docs/view viewer with dependency-free textarea plus live preview. Shared FormattedText linkifies valid .planner/docs/*.md references as new-tab accessible links. MCP planner-web start/status/stop and planner-load now return visible reachable addresses plus typed running/address/host/port metadata (Pi parity). Editor research evaluated @uiw/react-md-editor and CodeMirror 6 and shipped the dependency-free textarea baseline (recorded in code and README). Updated skill guidance, README, capability surfaces, and fixtures. Verification: core handoff/context suites 57/57 incl. new externalization/cold-resume/symlink tests; server CRUD 24/24 incl. docs traversal/confirmed-save; MCP handoff/web/harness 36/36 incl. structured address; Pi mutations/registration 34/34; Web UI vitest 102/102 incl. doc links; matrix/skill-inventory 15/15; agent-plan version 7/7; compatibility 15/15; pnpm build/check/plugins:check/diff-check clean; Playwright responsive 8/8 incl. new doc-viewer scenario. The canonical repository final gate was not repeated because P097 remains open and governance reserves that broad gate for phase/release close. No commit, push, PR, merge, release, or publish was performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -244,60 +339,65 @@
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-001-define-and-test-an-enforceable-over-limit-externalization-and-retry-contract-without-weakening-the-inline-budget",
           "number": 1,
           "title": "Define and test an enforceable over-limit externalization and retry contract without weakening the inline budget",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-002-persist-planner-owned-supporting-markdown-safely-and-reconcile-it-with-handoff-metadata-read-back-readiness",
           "number": 2,
           "title": "Persist planner-owned supporting Markdown safely and reconcile it with handoff metadata/read-back readiness",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-003-research-lightweight-maintained-markdown-editor-options-and-record-the-dependency-decision",
           "number": 3,
           "title": "Research lightweight maintained Markdown editor options and record the dependency decision",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-004-add-path-safe-server-read-write-endpoints-and-web-ui-new-tab-markdown-viewer-plus-confirmed-editor-flow",
           "number": 4,
           "title": "Add path-safe server read/write endpoints and Web UI new-tab Markdown viewer plus confirmed editor flow",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-005-link-valid-planner-local-md-references-from-descriptions-handoffs-and-other-shared-formatted-surfaces",
           "number": 5,
           "title": "Link valid planner-local .md references from descriptions, handoffs, and other shared formatted surfaces",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-006-add-core-pi-mcp-server-web-ui-and-desktop-mobile-playwright-regressions-and-run-full-verification",
           "number": 6,
           "title": "Add core, Pi, MCP, server, Web UI, and desktop/mobile Playwright regressions and run full verification",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-007-replace-verbose-duplicated-handoff-prose-with-an-8-000-character-resume-capsule-while-retaining-the-24-000-character-compatibility-ceiling",
           "number": 7,
           "title": "Replace verbose duplicated handoff prose with an <=8,000-character resume capsule while retaining the 24,000-character compatibility ceiling",
-          "checked": false
+          "checked": true
         },
         {
           "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51-check-008-return-and-display-the-reachable-web-ui-address-from-mcp-startup-with-pi-equivalent-structured-host-and-port-diagnostics",
           "number": 8,
           "title": "Return and display the reachable Web UI address from MCP startup with Pi-equivalent structured host and port diagnostics",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-08T08:17:38.157Z",
+      "completedAt": "2026-09-08T08:49:42.707Z",
       "createdAt": "2026-09-04T14:27:38.514Z",
-      "updatedAt": "2026-09-04T14:34:47.105Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-08T08:49:42.707Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T08:17:38.068Z"
+        }
+      ]
     },
     {
       "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1",
@@ -307,11 +407,28 @@
       "priority": 5,
       "shortName": "allow-concurrent-task-starts-a",
       "title": "Allow concurrent task starts across agent sessions",
-      "status": "planned",
-      "description": "Current state: task_start in packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts delegates to global recommendNextTask/checkExplicitTaskStart logic, so an already in-progress task owned by another agent/session is reported as ACTIVE_TASK_CONFLICT. The suggested task_switch path snapshots and moves that other task back to planned, incorrectly interrupting concurrent work. Implement durable session-aware active-task ownership in harness-agnostic plan-core schema/store/lifecycle helpers, then update Pi and MCP task_start/task_switch behavior so different sessions may hold different in-progress tasks concurrently while task_switch remains required only when the requesting session intentionally leaves its own active task. Preserve existing task statuses, status history, context-read attestations, priority/deviation advisories, resume checkpoints, legacy planner compatibility, and authoritative active-task overview evidence. Add core, Pi, MCP, multi-process, persisted read-back, and release-surface regressions proving a second agent can start another eligible task without pausing/demoting the first; the same session still receives explicit switch guidance when appropriate; failed starts are atomic no-ops; and multiple active tasks are surfaced as valid concurrent ownership rather than an automatic corruption claim.",
-      "descriptionUpdatedAt": "2026-09-05T21:16:19.481Z",
+      "status": "done",
+      "description": "Current state: task_start in packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts delegates to global recommendNextTask/checkExplicitTaskStart logic, so an already in-progress task owned by another agent/session is reported as ACTIVE_TASK_CONFLICT. The suggested task_switch path snapshots and moves that other task back to planned, incorrectly interrupting concurrent work. Implement durable session-aware active-task ownership in harness-agnostic plan-core schema/store/lifecycle helpers, then update Pi and MCP task_start/task_switch behavior so different sessions may hold different in-progress tasks concurrently while task_switch remains required only when the requesting session intentionally leaves its own active task. Preserve existing task statuses, status history, context-read attestations, priority/deviation advisories, resume checkpoints, legacy planner compatibility, and authoritative active-task overview evidence. Add core, Pi, MCP, multi-process, persisted read-back, and release-surface regressions proving a second agent can start another eligible task without pausing/demoting the first; the same session still receives explicit switch guidance when appropriate; failed starts are atomic no-ops; and multiple active tasks are surfaced as valid concurrent ownership rather than an automatic corruption claim.\n\n---\n**Completion summary:**\nShipped session-aware concurrent task-start ownership across plan-core, plan-mcp, and pi-adapter, with supporting plan-server ownership plumbing. `recommendNextTask` now accepts a session id and prefers tasks owned by that session; PlanStore normalizes inactive ownership away and preserves ownerSession on resume; MCP and Pi task start/switch paths pass the planner session id, stamp activeOwnerSession on started tasks, and reject switching away from another session's in-progress task. Verified with focused builds for @agent-plan/core, @agent-plan/mcp, @agent-plan/pi-adapter, targeted concurrency regressions in core/MCP/Pi, and `git diff --check`. Remaining unverified work is broader phase-level regression coverage outside the targeted concurrency cases; no commit/push/PR performed.",
+      "descriptionUpdatedAt": "2026-09-08T15:02:26.504Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1-check-001-planned-in-progress",
+          "date": "2026-09-08T09:01:05.728Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1-check-002-in-progress-done",
+          "date": "2026-09-08T15:02:26.501Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped session-aware concurrent task-start ownership across plan-core, plan-mcp, and pi-adapter, with supporting plan-server ownership plumbing. `recommendNextTask` now accepts a session id and prefers tasks owned by that session; PlanStore normalizes inactive ownership away and preserves ownerSession on resume; MCP and Pi task start/switch paths pass the planner session id, stamp activeOwnerSession on started tasks, and reject switching away from another session's in-progress task. Verified with focused builds for @agent-plan/core, @agent-plan/mcp, @agent-plan/pi-adapter, targeted concurrency regressions in core/MCP/Pi, and `git diff --check`. Remaining unverified work is broader phase-level regression coverage outside the targeted concurrency cases; no commit/push/PR performed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -350,11 +467,16 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-08T09:01:05.728Z",
+      "completedAt": "2026-09-08T15:02:26.501Z",
       "createdAt": "2026-09-05T21:16:19.479Z",
-      "updatedAt": "2026-09-05T21:16:19.479Z",
-      "sessionInfo": []
+      "updatedAt": "2026-09-08T15:02:26.501Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T12:42:25.687Z"
+        }
+      ]
     },
     {
       "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9",
@@ -434,23 +556,506 @@
           "createdAt": "2026-09-07T13:33:46.739Z"
         }
       ]
+    },
+    {
+      "id": "ae6ca930-cae6-419e-9ce6-7c7066911744",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 388,
+      "shortId": "PGM67",
+      "priority": 7,
+      "shortName": "remove-lifecycle-status-from-r",
+      "title": "Remove lifecycle status from Requirements",
+      "status": "done",
+      "description": "Remove the incorrectly modeled top-level Requirement lifecycle status across packages/plan-core/src/schema.ts, packages/plan-core/src/plan-store.ts, packages/plan-mcp/src/index.ts, packages/pi-adapter/src/index.ts, packages/plan-server/src/serve.ts, and packages/plan-web-ui/src/. Requirements are declarative statements of what must be true; progress belongs to linked phases/tasks, while macro-task status remains a separate implementation-detail contract unless evidence shows it should also change. Add a backward-compatible migration/parser path that accepts legacy persisted status fields without continuing to expose or write them, remove status from create/update payloads, rendered summaries, filters, edit controls, and public TypeScript types, and preserve IDs, descriptions, linkedPhaseIds, macroTasks, timestamps, attestation behavior, and existing planner files. Cover core persistence/migration, Pi, MCP, server, Web UI, generated skill/capability inventories, and installed-artifact compatibility with focused regressions before the canonical final gate.\n\n---\n**Completion summary:**\nCompleted removal of top-level Requirement lifecycle status across plan-core schema/persistence/rendering, Pi, MCP, plan-server, Web UI, public TypeScript contracts, generated planner skill guidance, and capability/compatibility inventories. Legacy persisted status fields remain parse-compatible but are stripped from canonical output and subsequent writes; server mutation payloads reject top-level status with REQUIREMENT_STATUS_REMOVED. Requirements are now explicitly defined as declarative product outcomes and separated in agent guidance and UI copy from Project Guidelines; nested macro-task status remains intact. Preserved Requirement identity, descriptions, phase linkage, macro-task metadata, timestamps, and read attestations. Verification: focused affected-package builds and cross-surface regressions passed; canonical pnpm verify:final passed fingerprint 83e7826e4107 including build, typecheck, coverage, plugin synchronization, full Playwright, and clean freshly packed installation smoke. No unverified work remains for T388.",
+      "descriptionUpdatedAt": "2026-09-07T20:14:25.624Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ae6ca930-cae6-419e-9ce6-7c7066911744-check-001-planned-in-progress",
+          "date": "2026-09-07T18:49:53.005Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Include sibling tasks and related planned capabilities in resume context."
+        },
+        {
+          "id": "ae6ca930-cae6-419e-9ce6-7c7066911744-check-002-in-progress-done",
+          "date": "2026-09-07T20:14:25.622Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed removal of top-level Requirement lifecycle status across plan-core schema/persistence/rendering, Pi, MCP, plan-server, Web UI, public TypeScript contracts, generated planner skill guidance, and capability/compatibility inventories. Legacy persisted status fields remain parse-compatible but are stripped from canonical output and subsequent writes; server mutation payloads reject top-level status with REQUIREMENT_STATUS_REMOVED. Requirements are now explicitly defined as declarative product outcomes and separated in agent guidance and UI copy from Project Guidelines; nested macro-task status remains intact. Preserved Requirement identity, descriptions, phase linkage, macro-task metadata, timestamps, and read attestations. Verification: focused affected-package builds and cross-surface regressions passed; canonical pnpm verify:final passed fingerprint 83e7826e4107 including build, typecheck, coverage, plugin synchronization, full Playwright, and clean freshly packed installation smoke. No unverified work remains for T388."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ae6ca930-cae6-419e-9ce6-7c7066911744-check-001-define-backward-compatible-requirement-schema-migration-without-lifecycle-status",
+          "number": 1,
+          "title": "Define backward-compatible Requirement schema migration without lifecycle status",
+          "checked": true
+        },
+        {
+          "id": "ae6ca930-cae6-419e-9ce6-7c7066911744-check-002-remove-requirement-status-from-core-and-mutation-surfaces",
+          "number": 2,
+          "title": "Remove Requirement status from core and mutation surfaces",
+          "checked": true
+        },
+        {
+          "id": "ae6ca930-cae6-419e-9ce6-7c7066911744-check-003-remove-requirement-status-from-pi-mcp-server-and-web-ui",
+          "number": 3,
+          "title": "Remove Requirement status from Pi, MCP, server, and Web UI",
+          "checked": true
+        },
+        {
+          "id": "ae6ca930-cae6-419e-9ce6-7c7066911744-check-004-update-public-contracts-guidance-inventories-and-fixtures",
+          "number": 4,
+          "title": "Update public contracts, guidance, inventories, and fixtures",
+          "checked": true
+        },
+        {
+          "id": "ae6ca930-cae6-419e-9ce6-7c7066911744-check-005-run-focused-regressions-and-canonical-final-verification",
+          "number": 5,
+          "title": "Run focused regressions and canonical final verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-07T18:49:53.005Z",
+      "completedAt": "2026-09-07T20:14:25.622Z",
+      "createdAt": "2026-09-07T18:49:15.470Z",
+      "updatedAt": "2026-09-07T20:14:25.622Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-07T18:49:52.952Z"
+        }
+      ]
+    },
+    {
+      "id": "d5e405f2-d568-411f-bf36-059829c6e5fb",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 389,
+      "shortId": "RDWK2",
+      "priority": 10,
+      "shortName": "reconcile-next-task-claims",
+      "title": "Reconcile next-task recommendations with handoff and unblocked-work claims",
+      "status": "done",
+      "description": "Current state: `packages/plan-core/src/task-recommendation.ts` (and the Pi/MCP recommendation handlers that expose it) selects ready work primarily by feature → phase → task priority. It does not reconcile active or terminal archived handoffs, paused/mid-flight phase context, explicitly deferred work whose blocking phase/task is now terminal, or other durable resume claims. This can return one nominal priority winner while planner handoffs identify unfinished or newly unblocked work that a fresh agent should evaluate first. Build a harness-agnostic recommendation model that returns the priority recommendation together with bounded, typed competing claims from authoritative persisted sources: active/pending handoffs, latest terminal archives where they contain explicit next/resume work, paused/resume-required tasks, and dependency transitions that make deferred work ready. Do not infer from timestamps or free-form prose when structured evidence is absent; distinguish recommendation, advisory claim, conflict, and insufficient evidence. Pi and MCP must expose equivalent structured evidence and human guidance instead of claiming one unqualified “next” task. Preserve feature → phase → task priority as a transparent policy signal, exact composite refs, derived-status governance, transport bounds, and user choice. Add focused core/Pi/MCP regressions for priority-only, unfinished-phase, newly-unblocked, multiple-claim, stale-handoff, terminal/no-action, and no-evidence cases, plus capability-surface documentation and the canonical final verification gate.\n\n---\n**Completion summary:**\nImplemented a bounded next-work claims model in `packages/plan-core/src/task-selection.ts`: `recommendNextWork` now returns `claims` alongside the priority recommendation, with typed claim sources for active tasks, resume deviations, dependency-ready work, active handoffs, archived handoffs, and insufficient evidence. Pi and MCP `task_recommend`/`planner-task-recommend` now load active handoff content plus archived handoffs, surface the claims in structured output and human text, and preserve the existing priority-selected chain. Added focused regressions in `packages/plan-core/test/task-selection.test.mjs`, `packages/plan-mcp/test/mcp-handoff.test.mjs`, and `packages/pi-adapter/test/ref-validation.test.mjs` covering active handoff claims, archived handoff claims, dependency-ready selection claims, and the Pi session-start harness path. Verification completed successfully with `pnpm --filter @agent-plan/core build`, `pnpm --filter @agent-plan/mcp build`, `pnpm --filter @agent-plan/pi-adapter build`, `node --test packages/plan-core/test/task-selection.test.mjs`, `node --test packages/plan-mcp/test/mcp-handoff.test.mjs`, `node --test packages/pi-adapter/test/ref-validation.test.mjs`, and `git diff --check`.\n\n---\n**Completion summary:**\nCompleted the typed next-work recommendation reconciliation. Core recommendations now expose bounded persisted-evidence claims for active work, deviations, verified active handoffs, and dependency-ready tasks; free-form handoff Markdown and terminal archives cannot create action claims. Pi and MCP expose equivalent structured and human-readable claims, capability/skill inventories document the contract, and recommendation/hand-off regressions cover priority, empty, dependency-ready, unverified, and terminal evidence. Repaired compatibility fixtures and task normalization discovered during final verification, synchronized planner skill copies, and scoped the bootstrap E2E locator to the entity link after Next work added a second matching label. Canonical pnpm verify:final passed fingerprint 9dcc475b750c: build, typecheck, coverage, plugin synchronization, Playwright, packed-install smoke, and diff check.",
+      "descriptionUpdatedAt": "2026-09-08T20:01:34.247Z",
+      "notes": "Authoritative recommendation inventory (2026-09-08): (1) persisted task status plus activeOwnerSession determines active/conflict state; (2) WorkDeviation state and resumeTaskId determine approved/resume-required claims; (3) persisted pauseSnapshot determines LIFO checkpoint resumption; (4) planned tasks with every persisted dependsOn task in status done are dependency-ready; (5) active phase handoffs are actionable only when handoffAudit.resumeReadyAt is persisted, otherwise they are insufficient evidence; (6) archived handoff Markdown and first-line text are historical context only because HandoffHistoryEntry has no structured resume target, so they must not create action claims; (7) priority remains a transparent feature → phase → task policy signal. Sources: packages/plan-core/src/task-selection.ts, plan-store.ts listHandoffs/listArchivedHandoffs, schema.ts HandoffHistoryEntrySchema/HandoffCompletenessAuditSchema, and Pi/MCP task recommendation handlers.",
+      "statusLog": [
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-001-planned-done",
+          "date": "2026-09-08T15:30:05.757Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Implemented a bounded next-work claims model in `packages/plan-core/src/task-selection.ts`: `recommendNextWork` now returns `claims` alongside the priority recommendation, with typed claim sources for active tasks, resume deviations, dependency-ready work, active handoffs, archived handoffs, and insufficient evidence. Pi and MCP `task_recommend`/`planner-task-recommend` now load active handoff content plus archived handoffs, surface the claims in structured output and human text, and preserve the existing priority-selected chain. Added focused regressions in `packages/plan-core/test/task-selection.test.mjs`, `packages/plan-mcp/test/mcp-handoff.test.mjs`, and `packages/pi-adapter/test/ref-validation.test.mjs` covering active handoff claims, archived handoff claims, dependency-ready selection claims, and the Pi session-start harness path. Verification completed successfully with `pnpm --filter @agent-plan/core build`, `pnpm --filter @agent-plan/mcp build`, `pnpm --filter @agent-plan/pi-adapter build`, `node --test packages/plan-core/test/task-selection.test.mjs`, `node --test packages/plan-mcp/test/mcp-handoff.test.mjs`, `node --test packages/pi-adapter/test/ref-validation.test.mjs`, and `git diff --check`."
+        },
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-002-done-planned",
+          "date": "2026-09-08T19:01:50.884Z",
+          "fromStatus": "done",
+          "toStatus": "planned",
+          "title": "Reopened because the prior forced completion left all five required checklist steps incomplete and the implementation violated the typed-evidence contract.",
+          "description": "Reopened because the prior forced completion left all five required checklist steps incomplete and the implementation violated the typed-evidence contract."
+        },
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-003-planned-in-progress",
+          "date": "2026-09-08T19:04:30.075Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Make Ideas entries collapsible and collapsed by default."
+        },
+        {
+          "id": "faf02eef-63a9-4068-945d-9feb0707fd6b",
+          "date": "2026-09-08T19:37:31.212Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Fix the actively reproduced handoff preflight regression: required metadata is discovered only after oversized drafts and repeated write attempts.\nWhat was being done: T389 typed next-work claims are implemented and focused tests pass; the canonical final gate is blocked by an unrelated nested report/test-all failure after fixing inventory coverage.\nResume location: test/report.test.mjs:216 and .planner/.local/verification/7c9cff0d1deb-coverage.log\nHow to resume: Identify the nested test-all failure reported through report.test, fix it with focused validation, then rerun pnpm verify:final once and reconcile T389 checklist evidence."
+        },
+        {
+          "id": "ee2ef668-eef2-4abc-9b55-180681e93210",
+          "date": "2026-09-08T19:50:32.762Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from test/report.test.mjs:216 and .planner/.local/verification/7c9cff0d1deb-coverage.log. Identify the nested test-all failure reported through report.test, fix it with focused validation, then rerun pnpm verify:final once and reconcile T389 checklist evidence."
+        },
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-006-in-progress-done",
+          "date": "2026-09-08T20:01:34.244Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed the typed next-work recommendation reconciliation. Core recommendations now expose bounded persisted-evidence claims for active work, deviations, verified active handoffs, and dependency-ready tasks; free-form handoff Markdown and terminal archives cannot create action claims. Pi and MCP expose equivalent structured and human-readable claims, capability/skill inventories document the contract, and recommendation/hand-off regressions cover priority, empty, dependency-ready, unverified, and terminal evidence. Repaired compatibility fixtures and task normalization discovered during final verification, synchronized planner skill copies, and scoped the bootstrap E2E locator to the entity link after Next work added a second matching label. Canonical pnpm verify:final passed fingerprint 9dcc475b750c: build, typecheck, coverage, plugin synchronization, Playwright, packed-install smoke, and diff check."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-001-inventory-current-recommendation-ordering-and-all-authoritative-persisted-resume-handoff-dependency-signals",
+          "number": 1,
+          "title": "Inventory current recommendation ordering and all authoritative persisted resume/handoff/dependency signals",
+          "checked": true
+        },
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-002-design-typed-bounded-recommendation-claims-without-parsing-ambiguous-free-form-prose-as-authority",
+          "number": 2,
+          "title": "Design typed bounded recommendation claims without parsing ambiguous free-form prose as authority",
+          "checked": true
+        },
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-003-implement-core-reconciliation-and-equivalent-pi-mcp-structured-and-human-facing-outputs",
+          "number": 3,
+          "title": "Implement core reconciliation and equivalent Pi/MCP structured and human-facing outputs",
+          "checked": true
+        },
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-004-add-semantic-regressions-for-priority-unfinished-unblocked-conflicting-stale-terminal-and-empty-cases",
+          "number": 4,
+          "title": "Add semantic regressions for priority, unfinished, unblocked, conflicting, stale, terminal, and empty cases",
+          "checked": true
+        },
+        {
+          "id": "d5e405f2-d568-411f-bf36-059829c6e5fb-check-005-update-capability-guidance-and-pass-focused-plus-canonical-final-verification",
+          "number": 5,
+          "title": "Update capability guidance and pass focused plus canonical final verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "3978df37-0a87-429d-b44d-106529c8c5ff",
+          "reason": "Fix the actively reproduced handoff preflight regression: required metadata is discovered only after oversized drafts and repeated write attempts.",
+          "whatWasBeingDone": "T389 typed next-work claims are implemented and focused tests pass; the canonical final gate is blocked by an unrelated nested report/test-all failure after fixing inventory coverage.",
+          "resumeLocation": "test/report.test.mjs:216 and .planner/.local/verification/7c9cff0d1deb-coverage.log",
+          "howToResume": "Identify the nested test-all failure reported through report.test, fix it with focused validation, then rerun pnpm verify:final once and reconcile T389 checklist evidence.",
+          "relatedTaskId": "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d",
+          "pausedAt": "2026-09-08T19:37:31.212Z",
+          "pausedBy": "pi"
+        }
+      ],
+      "startedAt": "2026-09-08T15:30:05.757Z",
+      "completedAt": "2026-09-08T20:01:34.244Z",
+      "createdAt": "2026-09-08T07:31:24.908Z",
+      "updatedAt": "2026-09-08T20:01:34.244Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T19:50:32.675Z"
+        }
+      ]
+    },
+    {
+      "id": "7cc2e404-981f-427d-9960-52ee9fc4778d",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 390,
+      "shortId": "9R4LH",
+      "priority": 11,
+      "shortName": "make-ideas-entries-collapsible",
+      "title": "Make Ideas entries collapsible and collapsed by default",
+      "status": "done",
+      "description": "Current state:\n- `packages/plan-web-ui/src/routes/ideas/route.tsx:67-105` renders each idea as a plain `<article>` with the title, description, promotion badge, and edit/delete actions all visible by default.\n- `packages/plan-web-ui/test/ideas-route.test.tsx:29-35` only checks stable refs, promotion history, and management actions; it does not assert disclosure behavior.\n- `packages/plan-web-ui/test/disclosure-defaults.test.tsx:141-155` already asserts the current Ideas surface has no initially open disclosures, but the Ideas route itself still does not use a real collapsible disclosure.\n\nGoal:\n- Turn each idea card in `/ideas` into a collapsible disclosure/accordion.\n- Keep every idea collapsed by default on initial render/navigation.\n- Preserve existing content and actions: idea number, shortId, promotion link/badge, title, description, edit, and delete.\n- Preserve accessibility and avoid persisted expansion state or layout redesign.\n- Add/extend regressions so the route proves each idea starts closed and can be expanded manually.\n\nImplementation notes:\n- Reuse the shared disclosure/accordion pattern already used elsewhere in plan-web-ui rather than inventing a new per-page state model.\n- Keep the empty-state behavior unchanged.\n- Ensure the Ideas route remains compatible with the existing closed-by-default disclosure coverage in `disclosure-defaults.test.tsx`.\n- Update `ideas-route.test.tsx` only if needed for the new disclosure structure and visible actions.\n\n---\n**Completion summary:**\nReplaced each Ideas Inbox card with the shared native Accordion, closed by default on every route render. Idea number, short ID, promotion reference, title, description, edit, and confirmed delete actions remain available; content is manually expandable with no persisted expansion state. Added unit coverage for initial closed state/manual expansion and desktop/mobile Playwright coverage in the existing Ideas CRUD flow. Focused Web UI tests, build, bootstrap Playwright 14/14, and diff check passed; the phase canonical final gate remains reserved for phase close.",
+      "descriptionUpdatedAt": "2026-09-09T06:05:37.954Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "7cc2e404-981f-427d-9960-52ee9fc4778d-check-001-planned-in-progress",
+          "date": "2026-09-08T17:45:09.237Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "924bde45-0c49-4aa3-9102-ccd20e3d3dd9",
+          "date": "2026-09-08T19:04:30.075Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Reopen and correct T389 because the forced completion left every required checklist step incomplete and the current handoff claim implementation violates the typed-evidence requirement.\nWhat was being done: T390 had only read-only initial inspection of packages/plan-web-ui/src/routes/ideas/route.tsx and its existing tests; no implementation or test changes were made.\nResume location: packages/plan-web-ui/src/routes/ideas/route.tsx and packages/plan-web-ui/test/ideas-route.test.tsx\nHow to resume: Reuse the shared closed-by-default disclosure pattern for each Idea card, preserve all existing content and edit/delete actions, add closed-and-manual-expand regressions, then run focused Web UI verification."
+        },
+        {
+          "id": "9603fb95-5be8-4eff-83cc-963cd82d2dbf",
+          "date": "2026-09-08T20:01:52.528Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from packages/plan-web-ui/src/routes/ideas/route.tsx and packages/plan-web-ui/test/ideas-route.test.tsx. Reuse the shared closed-by-default disclosure pattern for each Idea card, preserve all existing content and edit/delete actions, add closed-and-manual-expand regressions, then run focused Web UI verification."
+        },
+        {
+          "id": "7cc2e404-981f-427d-9960-52ee9fc4778d-check-004-in-progress-done",
+          "date": "2026-09-09T06:05:37.951Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Replaced each Ideas Inbox card with the shared native Accordion, closed by default on every route render. Idea number, short ID, promotion reference, title, description, edit, and confirmed delete actions remain available; content is manually expandable with no persisted expansion state. Added unit coverage for initial closed state/manual expansion and desktop/mobile Playwright coverage in the existing Ideas CRUD flow. Focused Web UI tests, build, bootstrap Playwright 14/14, and diff check passed; the phase canonical final gate remains reserved for phase close."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "18c90e04-f943-49a3-9b06-284ba49805c0",
+          "reason": "Reopen and correct T389 because the forced completion left every required checklist step incomplete and the current handoff claim implementation violates the typed-evidence requirement.",
+          "whatWasBeingDone": "T390 had only read-only initial inspection of packages/plan-web-ui/src/routes/ideas/route.tsx and its existing tests; no implementation or test changes were made.",
+          "resumeLocation": "packages/plan-web-ui/src/routes/ideas/route.tsx and packages/plan-web-ui/test/ideas-route.test.tsx",
+          "howToResume": "Reuse the shared closed-by-default disclosure pattern for each Idea card, preserve all existing content and edit/delete actions, add closed-and-manual-expand regressions, then run focused Web UI verification.",
+          "relatedTaskId": "d5e405f2-d568-411f-bf36-059829c6e5fb",
+          "pausedAt": "2026-09-08T19:04:30.075Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-09-08T17:45:09.237Z",
+      "completedAt": "2026-09-09T06:05:37.951Z",
+      "createdAt": "2026-09-08T12:42:00.839Z",
+      "updatedAt": "2026-09-09T06:05:37.951Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T20:01:52.438Z"
+        }
+      ]
+    },
+    {
+      "id": "a8ebbef7-c933-421a-bf05-c3d05778fe80",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 391,
+      "shortId": "V3W4C",
+      "priority": 8,
+      "shortName": "preserve-priority-0-in-task-re",
+      "title": "Preserve priority 0 in task recommendation ordering",
+      "status": "done",
+      "description": "packages/plan-core/src/task-selection.ts:31 uses a nullish-aware priority helper, but the recommendation path still needs an explicit regression proving priority 0 is a real value rather than an unset sentinel. Verify the selection chain used by recommendNextTask in packages/plan-mcp/src/index.ts:1868, 1885, 2033, and 2211 plus packages/pi-adapter/src/index.ts:5284, 5310, 5477, and 5671 keeps zero-valued priorities stable through task_recommend/task_start flows, preserves persisted priority on read-back, and never demotes a zero-priority task behind priority 1. Add focused core and adapter regressions for ordering, serialization, and any helper that maps numeric vs nullish priority.\n\n---\n**Completion summary:**\nShipped and verified explicit priority-0 recommendation handling across the selector and adapter flows. `recommendNextTask` now has a regression proving `priority: 0` outranks `priority: 1`, and `recommendNextWork` exposes the same zero-priority candidate. MCP and Pi regression coverage now prove a zero-priority task is selected through `planner-task-recommend`/`task_recommend`, survives `task_start`-adjacent read-back through the persisted store, and does not get demoted behind priority 1. Verified with focused plan-core, MCP, and Pi test runs plus prior package builds; no release or commit performed.",
+      "descriptionUpdatedAt": "2026-09-08T15:08:16.386Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a8ebbef7-c933-421a-bf05-c3d05778fe80-check-001-planned-in-progress",
+          "date": "2026-09-08T15:02:37.386Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a8ebbef7-c933-421a-bf05-c3d05778fe80-check-002-in-progress-done",
+          "date": "2026-09-08T15:08:16.383Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped and verified explicit priority-0 recommendation handling across the selector and adapter flows. `recommendNextTask` now has a regression proving `priority: 0` outranks `priority: 1`, and `recommendNextWork` exposes the same zero-priority candidate. MCP and Pi regression coverage now prove a zero-priority task is selected through `planner-task-recommend`/`task_recommend`, survives `task_start`-adjacent read-back through the persisted store, and does not get demoted behind priority 1. Verified with focused plan-core, MCP, and Pi test runs plus prior package builds; no release or commit performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-08T15:02:37.386Z",
+      "completedAt": "2026-09-08T15:08:16.383Z",
+      "createdAt": "2026-09-08T13:17:55.802Z",
+      "updatedAt": "2026-09-08T15:08:16.383Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T15:02:37.295Z"
+        }
+      ]
+    },
+    {
+      "id": "1fecacf8-8f21-4c05-952c-f0f90319c6e6",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 392,
+      "shortId": "CH3N8",
+      "priority": 9,
+      "shortName": "persist-task-checklist-edits-t",
+      "title": "Persist task checklist edits through planner-task-update",
+      "status": "done",
+      "description": "packages/plan-mcp/src/index.ts:1647-1760, packages/pi-adapter/src/index.ts:5170-5245, and packages/plan-server/src/serve.ts:1160-1250 all expose task update mutations with checklist support, but the reported failure shows planner-task-update can accept a checklist payload, return updated:true and updatedFields, and still fail to persist or surface the checklist change. Audit every update surface so checklist mutations are applied atomically, the returned task matches stored state, updatedFields always includes checklist when it changes, and empty or no-op checklist payloads continue to use the existing no-mutable-fields failure path. Add regressions for plan-server, MCP, and Pi task updates plus a persisted read-back assertion.\n\n---\n**Completion summary:**\nShipped checklist mutation regressions through the planner-task-update surfaces. MCP and Pi task-update tests now prove checklist payloads persist atomically, `updatedFields` includes `checklist` alongside the other changed fields, and the persisted task body reflects the rewritten checklist titles. Existing server CRUD coverage already proved the HTTP task update route stores checklist arrays on round-trip, so the adapter regressions close the remaining false-success gap without changing the core mutation model. Verified with focused MCP and Pi full-file runs plus the existing server CRUD coverage; no release or commit performed.",
+      "descriptionUpdatedAt": "2026-09-08T15:12:38.248Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "1fecacf8-8f21-4c05-952c-f0f90319c6e6-check-001-planned-in-progress",
+          "date": "2026-09-08T15:08:28.712Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "1fecacf8-8f21-4c05-952c-f0f90319c6e6-check-002-in-progress-done",
+          "date": "2026-09-08T15:12:38.246Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped checklist mutation regressions through the planner-task-update surfaces. MCP and Pi task-update tests now prove checklist payloads persist atomically, `updatedFields` includes `checklist` alongside the other changed fields, and the persisted task body reflects the rewritten checklist titles. Existing server CRUD coverage already proved the HTTP task update route stores checklist arrays on round-trip, so the adapter regressions close the remaining false-success gap without changing the core mutation model. Verified with focused MCP and Pi full-file runs plus the existing server CRUD coverage; no release or commit performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-08T15:08:28.712Z",
+      "completedAt": "2026-09-08T15:12:38.246Z",
+      "createdAt": "2026-09-08T13:18:02.846Z",
+      "updatedAt": "2026-09-08T15:12:38.246Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T15:08:28.616Z"
+        }
+      ]
+    },
+    {
+      "id": "93ded1ba-f386-4f12-9c47-0ea531754884",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 393,
+      "shortId": "6MW7E",
+      "priority": 12,
+      "shortName": "atomic-task-reopen",
+      "title": "Make task reopening an atomic lifecycle operation",
+      "status": "done",
+      "description": "Current state: reopening a completed task requires a caller to first use task_update to move it from done to planned and then retry task_start; when another task is active in the same session, that retry requires a separate task_switch that pauses unrelated work. The multi-step error guidance is implemented in packages/pi-adapter/src/index.ts:5585-5703 and packages/plan-mcp/src/index.ts:2154-2263, with lifecycle outcome codes in packages/plan-core/src/task-start-outcome.ts:1-20. Build one explicit, confirmation-gated semantic reopen operation in plan-core and expose equivalent Pi/MCP/server/Web UI flows. It must atomically retain prior completion evidence and status history, clear or version completion state consistently, establish the correct session owner only when appropriate, preserve concurrent-session work without demoting another owner, and return typed no-op/conflict/read-prerequisite outcomes. Do not make callers use raw task_update as a lifecycle workaround or silently pause an unrelated active task. Add core, Pi, MCP, server, and persisted-state regressions for done→reopened, confirmed versus unconfirmed, active same-session versus other-session work, retained completion audit, failures without mutation, and backward-compatible task reads.\n\n---\n**Completion summary:**\nImplemented atomic, confirmation-gated task reopening across PlanStore, Pi, MCP, plan-server, and Web UI. Reopen transitions only completed tasks to in-progress, preserves completion prose and status history, clears completedAt, stamps the requesting session owner, and never pauses another active task; unconfirmed, missing, and non-completed targets return typed non-mutating outcomes. Added the server route, Web UI confirmation action, public tool inventory/skill entries, and focused core, Pi, and MCP registration regressions. Canonical pnpm verify:final passed fingerprint f184bad80c78: build, typecheck, coverage, plugin synchronization, Playwright, packed-install smoke, and diff check.",
+      "descriptionUpdatedAt": "2026-09-09T07:11:15.877Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "93ded1ba-f386-4f12-9c47-0ea531754884-check-001-planned-in-progress",
+          "date": "2026-09-09T06:05:58.110Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "93ded1ba-f386-4f12-9c47-0ea531754884-check-002-in-progress-done",
+          "date": "2026-09-09T07:11:15.874Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented atomic, confirmation-gated task reopening across PlanStore, Pi, MCP, plan-server, and Web UI. Reopen transitions only completed tasks to in-progress, preserves completion prose and status history, clears completedAt, stamps the requesting session owner, and never pauses another active task; unconfirmed, missing, and non-completed targets return typed non-mutating outcomes. Added the server route, Web UI confirmation action, public tool inventory/skill entries, and focused core, Pi, and MCP registration regressions. Canonical pnpm verify:final passed fingerprint f184bad80c78: build, typecheck, coverage, plugin synchronization, Playwright, packed-install smoke, and diff check."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-09T06:05:58.110Z",
+      "completedAt": "2026-09-09T07:11:15.874Z",
+      "createdAt": "2026-09-08T19:05:12.120Z",
+      "updatedAt": "2026-09-09T07:11:15.874Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-09T06:05:57.991Z"
+        }
+      ]
+    },
+    {
+      "id": "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 394,
+      "shortId": "LBG68",
+      "priority": 13,
+      "shortName": "handoff-write-preflight",
+      "title": "Preflight compact handoff requirements before drafting",
+      "status": "done",
+      "description": "Current state: the canonical handoff scaffold in packages/plan-core/src/handoff-context.ts:220-280 requires prose headings such as Created at, Updated at, and Reason even though timestamps, hashes, audit evidence, and write tokens are planner-owned metadata. A direct handoff_write can therefore reject an already long draft after it is generated with errors such as missing Created at/Updated at/Reason, forcing wasteful rewrites. Redesign the handoff write contract across plan-core, Pi, MCP, server, Web UI, and managed skill guidance so agents receive a compact structured preflight contract before drafting or launching handoff_write. Make reason an explicit validated input, generate timestamps and audit metadata automatically, retain only compact resume context inline, automatically externalize detail, and return typed missing-input/preflight outcomes before mutating. Preserve the 8,000-character capsule target, 24,000 compatibility ceiling, supporting-document safety, persisted read-back/resumeReady contract, terminal archive discovery, and backwards-compatible reads. Add core/Pi/MCP/server/UI regressions proving an agent sees all required human inputs before drafting, generated fields cannot produce late Markdown-section failures, no invalid draft is persisted, and a complete compact handoff needs no retry.\n\n---\n**Completion summary:**\nImplemented compact handoff preflight across plan-core, plan-server, MCP, Pi, Web UI, and managed guidance. `reason` is now a required structured input; the planner generates Created at, Updated at, and Reason metadata before validation/persistence, so a valid draft cannot fail late for missing metadata lines. Added typed HANDOFF_PREFLIGHT_REQUIRED/HANDOFF_REASON_REQUIRED no-mutation outcomes, server preflight API, UI guidance, capability inventory, and regressions. Focused builds passed; 62 core/server/MCP/Pi tests, Web UI handoff test, matrix consistency, plugin sync check, and diff check passed. Canonical final gate is deferred to phase close per bounded-verification policy.",
+      "descriptionUpdatedAt": "2026-09-08T19:50:12.547Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d-check-001-planned-in-progress",
+          "date": "2026-09-08T19:37:31.212Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Reconcile next-task recommendations with handoff and unblocked-work claims."
+        },
+        {
+          "id": "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d-check-002-in-progress-done",
+          "date": "2026-09-08T19:50:12.544Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented compact handoff preflight across plan-core, plan-server, MCP, Pi, Web UI, and managed guidance. `reason` is now a required structured input; the planner generates Created at, Updated at, and Reason metadata before validation/persistence, so a valid draft cannot fail late for missing metadata lines. Added typed HANDOFF_PREFLIGHT_REQUIRED/HANDOFF_REASON_REQUIRED no-mutation outcomes, server preflight API, UI guidance, capability inventory, and regressions. Focused builds passed; 62 core/server/MCP/Pi tests, Web UI handoff test, matrix consistency, plugin sync check, and diff check passed. Canonical final gate is deferred to phase close per bounded-verification policy."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-08T19:37:31.212Z",
+      "completedAt": "2026-09-08T19:50:12.544Z",
+      "createdAt": "2026-09-08T19:09:56.456Z",
+      "updatedAt": "2026-09-08T19:50:12.544Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-08T19:37:31.150Z"
+        }
+      ]
     }
   ],
   "createdAt": "2026-09-01T15:00:40.024Z",
-  "updatedAt": "2026-09-07T14:25:00.526Z",
-  "handoff": "# Handoff — before compact\n\nCreated at: 2026-09-07T14:25:31.627Z\nUpdated at: 2026-09-07T14:25:31.627Z\nReason: before compact\n\n## Progress snapshot\n- Features: 20/21 done, 1 active\n- Phases: 95/98 done, 1 active/discovery\n- Tasks: 376/386 done, 0 active\n\n## Current focus\n- Feature: `39d5b62f-6c16-4bed-9fc2-749d4b189f82` — Product vertical completeness and runtime integrity (in-progress)\n- Phase: `559b76d0-4ec4-49d3-a83a-86534760c770` — Plan-context coherence and hierarchical freshness (in-progress)\n- Task: `c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1` — Allow concurrent task starts across agent sessions (planned)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 559b76d0-4ec4-49d3-a83a-86534760c770)\n- 📋 `8a4c178d-2abe-48ca-82e5-3a2b49f45b6e` — Include sibling tasks and related planned capabilities in resume context (planned)\n- 📋 `094c66e1-fca2-4ac1-a211-7c0883adf4f5` — Detect and reconcile hierarchical description drift (planned)\n- ✅ `68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38` — Prevent false handoff-completeness and active-task claims (done)\n- 📋 `a833a6a7-2992-4b21-bbe2-e48f3ba68d51` — Externalize oversized handoffs and open Markdown references in Web UI (planned)\n- 📋 `c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1` — Allow concurrent task starts across agent sessions (planned)\n- ✅ `a2fed338-41b4-4ec4-a9f6-82f80e24cef9` — Enforce bounded verification and installed-artifact release gates (done)\n\n## How to resume\n1. Open task c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 (Allow concurrent task starts across agent sessions).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Before implementation work, run /planner task start c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 (or call task_start).\n4. Continue with the next activity: Start task c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 — Allow concurrent task starts across agent sessions with /planner task start (or task_start) before doing implementation work.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/559b76d0-4ec4-49d3-a83a-86534760c770.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Start task c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1 — Allow concurrent task starts across agent sessions with /planner task start (or task_start) before doing implementation work.\n- Then continue work in phase 559b76d0-4ec4-49d3-a83a-86534760c770.\n\n## Recent activity\n- 2026-08-24T07:32:57.613Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → done\n- 2026-08-24T07:32:51.157Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
-  "handoffUpdatedAt": "2026-09-07T14:25:31.652Z",
+  "updatedAt": "2026-09-09T07:11:15.874Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-09T07:01:15.992Z",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [
     {
-      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-07T14-25-31-628Z.md",
-      "clearedAt": "2026-09-07T14:25:31.628Z",
+      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-09T07-11-15-906Z.md",
+      "clearedAt": "2026-09-09T07:11:15.906Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-09T07-01-15-965Z.md",
+      "clearedAt": "2026-09-09T07:01:15.965Z",
       "reason": "superseded"
     },
     {
-      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-06T11-42-41-958Z.md",
-      "clearedAt": "2026-09-06T11:42:41.958Z",
+      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-09T06-58-13-102Z.md",
+      "clearedAt": "2026-09-09T06:58:13.102Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-08T20-02-03-181Z.md",
+      "clearedAt": "2026-09-08T20:02:03.181Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/559b76d0-4ec4-49d3-a83a-86534760c770-2026-09-08T19-36-47-608Z.md",
+      "clearedAt": "2026-09-08T19:36:47.608Z",
       "reason": "superseded"
     }
   ],
@@ -462,12 +1067,20 @@
       "toStatus": "in-progress",
       "title": "draft → in-progress",
       "description": ""
+    },
+    {
+      "id": "d9dd9b20-8368-4c1c-8bc9-6d635ac71017",
+      "date": "2026-09-09T07:11:15.964Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-07T13:33:46.739Z"
+      "createdAt": "2026-09-09T06:05:57.991Z"
     }
   ]
 }
