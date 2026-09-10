@@ -177,10 +177,14 @@ function startWatcher(planRoot: string, hubRef: { current: WsHub | null }): void
   watcherHubRef = hubRef;
 
   try {
-    watch(planRoot, { recursive: true, signal: ac.signal }, (_event: string, filename: string | null) => {
+    const watcher = watch(planRoot, { recursive: true, signal: ac.signal }, (_event: string, filename: string | null) => {
       if (filename && !filename.includes(".tmp.")) {
         hubRef.current?.broadcast({ type: "file-changed", data: { filename } });
       }
+    });
+    watcher.on("error", () => {
+      // Planner lock directories are intentionally short-lived; recursive watchers
+      // may report ENOENT when a writer releases a lock during a scan.
     });
   } catch {
     // recursive watch may fail on some systems
