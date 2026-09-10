@@ -136,7 +136,7 @@ async function acquirePlanRootLock(planRoot: string): Promise<() => Promise<void
         if (await pathExists(recoveryPath)) {
           const persistedOwner = await readOwner(lockPath);
           if (persistedOwner?.token === owner.token) {
-            await rm(lockPath, { recursive: true, force: true });
+            await rm(lockPath, { recursive: true, force: true }).catch(() => {});
           }
           await new Promise((resolveDelay) => setTimeout(resolveDelay, retryMs));
           continue;
