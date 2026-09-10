@@ -94,9 +94,14 @@ async function acquirePlanRootLock(planRoot: string): Promise<() => Promise<void
     acquiredAt: new Date().toISOString(),
   };
 
-  await mkdir(locksRoot, { recursive: true });
-
   for (;;) {
+    try {
+      await mkdir(locksRoot, { recursive: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, retryMs));
+      continue;
+    }
     if (await pathExists(recoveryPath)) {
       try {
         const recovery = await stat(recoveryPath);
@@ -131,7 +136,7 @@ async function acquirePlanRootLock(planRoot: string): Promise<() => Promise<void
         if (await pathExists(recoveryPath)) {
           const persistedOwner = await readOwner(lockPath);
           if (persistedOwner?.token === owner.token) {
-            await rm(lockPath, { recursive: true, force: true });
+            await rm(lockPath, { recursive: true, force: true }).catch(() => {});
           }
           await new Promise((resolveDelay) => setTimeout(resolveDelay, retryMs));
           continue;
@@ -159,6 +164,10 @@ async function acquirePlanRootLock(planRoot: string): Promise<() => Promise<void
       };
     } catch (error) {
       const fsError = error as NodeJS.ErrnoException;
+      if (fsError.code === "ENOENT") {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, retryMs));
+        continue;
+      }
       if (fsError.code !== "EEXIST") throw error;
 
       const currentOwner = await readOwner(lockPath);
