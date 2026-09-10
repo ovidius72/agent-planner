@@ -30,7 +30,8 @@
     "fd9506a6-684a-47ae-b2df-8abf5a62be2a",
     "6863da25-76dc-434c-967b-0a374f7ba097",
     "b23c07cb-7597-45c2-a185-304c2a8d64c9",
-    "da95b2c5-5ddb-4b8a-926b-34f45afc7e57"
+    "da95b2c5-5ddb-4b8a-926b-34f45afc7e57",
+    "a878e02d-9bb2-4839-826c-602630731963"
   ],
   "tasks": [
     {
@@ -73,7 +74,9 @@
       "startedAt": "2026-08-23T11:32:26.112Z",
       "completedAt": "2026-08-23T11:35:35.130Z",
       "createdAt": "2026-08-23T11:27:04.866Z",
-      "updatedAt": "2026-08-23T11:35:35.130Z"
+      "updatedAt": "2026-08-23T11:35:35.130Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "e2f24834-0bb5-41a7-a4d1-a0d2eaa76fa7",
@@ -115,7 +118,9 @@
       "startedAt": "2026-08-23T11:28:08.774Z",
       "completedAt": "2026-08-23T11:29:43.493Z",
       "createdAt": "2026-08-23T11:27:04.908Z",
-      "updatedAt": "2026-08-23T11:29:43.493Z"
+      "updatedAt": "2026-08-23T11:29:43.493Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "3ad7c45b-8c1d-4fe5-acb3-105bbb800ca2",
@@ -157,7 +162,9 @@
       "startedAt": "2026-08-23T11:30:40.898Z",
       "completedAt": "2026-08-23T11:32:03.404Z",
       "createdAt": "2026-08-23T11:27:04.986Z",
-      "updatedAt": "2026-08-23T11:32:03.404Z"
+      "updatedAt": "2026-08-23T11:32:03.404Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "3ae4d86a-8a76-4615-9c0e-a35bd8208d22",
@@ -199,7 +206,9 @@
       "startedAt": "2026-08-23T11:32:11.046Z",
       "completedAt": "2026-08-23T11:32:20.035Z",
       "createdAt": "2026-08-23T11:27:05.028Z",
-      "updatedAt": "2026-08-23T11:32:20.035Z"
+      "updatedAt": "2026-08-23T11:32:20.035Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "fd9506a6-684a-47ae-b2df-8abf5a62be2a",
@@ -241,7 +250,9 @@
       "startedAt": "2026-08-23T11:48:12.734Z",
       "completedAt": "2026-08-23T11:48:39.885Z",
       "createdAt": "2026-08-23T11:48:05.442Z",
-      "updatedAt": "2026-08-23T11:48:39.885Z"
+      "updatedAt": "2026-08-23T11:48:39.885Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "6863da25-76dc-434c-967b-0a374f7ba097",
@@ -283,7 +294,9 @@
       "startedAt": "2026-08-23T13:01:18.710Z",
       "completedAt": "2026-08-23T13:02:53.033Z",
       "createdAt": "2026-08-23T13:00:56.555Z",
-      "updatedAt": "2026-08-23T13:02:53.033Z"
+      "updatedAt": "2026-08-23T13:02:53.033Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "b23c07cb-7597-45c2-a185-304c2a8d64c9",
@@ -325,7 +338,9 @@
       "startedAt": "2026-08-23T13:26:13.813Z",
       "completedAt": "2026-08-23T13:29:09.277Z",
       "createdAt": "2026-08-23T13:26:08.979Z",
-      "updatedAt": "2026-08-23T13:29:09.277Z"
+      "updatedAt": "2026-08-23T13:29:09.277Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "da95b2c5-5ddb-4b8a-926b-34f45afc7e57",
@@ -367,13 +382,65 @@
       "startedAt": "2026-08-23T16:14:49.597Z",
       "completedAt": "2026-08-23T16:16:17.000Z",
       "createdAt": "2026-08-23T16:12:36.113Z",
-      "updatedAt": "2026-08-23T16:16:17.000Z"
+      "updatedAt": "2026-08-23T16:16:17.000Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "a878e02d-9bb2-4839-826c-602630731963",
+      "phaseId": "2cf62c0b-5c5b-487a-9703-7b2a66e4fec2",
+      "number": 399,
+      "shortId": "JB7TS",
+      "priority": 45,
+      "shortName": "fix-free-text-task-ref",
+      "title": "Fix Work Tree free-text task reference matching",
+      "status": "done",
+      "description": "In packages/plan-web-ui/src/lib/task-search.ts, bare references such as T003 currently enter broad full-text matching over task, phase, and feature metadata, which can display unrelated tasks when the reference appears in a parent description. Update parsing/matching so case-insensitive bare T###, P###, and F### tokens resolve to the corresponding structured task/phase/feature number filters while preserving ordinary free-text search. Add regression coverage in packages/plan-web-ui/test/task-search.test.mjs proving t003 matches only task number 3 and does not match other tasks or parent metadata; preserve existing field syntax, title search, accessibility, and Work Tree rendering behavior.\n\n---\n**Completion summary:**\nFixed Work Tree search reference handling. Bare case-insensitive T###, P###, and F### tokens now become structured task/phase/feature number filters instead of broad full-text matches over parent metadata; ordinary free-text and explicit field queries remain unchanged. Added regressions proving t003 matches only task 3 even when a parent description contains T003, plus P003/F003 parsing coverage. Verification: task-search tests 17/17, Web UI TypeScript check, production Web UI build, and git diff --check passed.",
+      "descriptionUpdatedAt": "2026-09-10T16:29:09.414Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a878e02d-9bb2-4839-826c-602630731963-check-001-planned-in-progress",
+          "date": "2026-09-10T16:27:44.353Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a878e02d-9bb2-4839-826c-602630731963-check-002-in-progress-done",
+          "date": "2026-09-10T16:29:09.412Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Fixed Work Tree search reference handling. Bare case-insensitive T###, P###, and F### tokens now become structured task/phase/feature number filters instead of broad full-text matches over parent metadata; ordinary free-text and explicit field queries remain unchanged. Added regressions proving t003 matches only task 3 even when a parent description contains T003, plus P003/F003 parsing coverage. Verification: task-search tests 17/17, Web UI TypeScript check, production Web UI build, and git diff --check passed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-10T16:27:44.353Z",
+      "completedAt": "2026-09-10T16:29:09.412Z",
+      "createdAt": "2026-09-10T16:27:29.576Z",
+      "updatedAt": "2026-09-10T16:29:09.412Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-10T16:27:44.247Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-08-23T11:26:36.630Z",
-  "updatedAt": "2026-08-23T16:16:17.000Z",
+  "updatedAt": "2026-09-10T16:29:09.412Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-08-23T11:33:39.783Z",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [
     {
@@ -470,6 +537,28 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "11d838ca-107e-4ea9-93ea-0dd24b4f23e9",
+      "date": "2026-09-10T16:27:44.383Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "123ccfc8-b2e9-4b12-8772-c4ee31e982bb",
+      "date": "2026-09-10T16:29:09.441Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-10T16:27:44.247Z"
     }
   ]
 }

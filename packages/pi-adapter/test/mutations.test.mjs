@@ -536,6 +536,8 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(task.notes, "Implementation context retained.");
       assert.deepEqual(task.decisions, ["Keep lifecycle tools authoritative"]);
       assert.deepEqual(task.checklist.map((item) => item.title), ["Review", "Execute"]);
+      const phaseOnDisk = JSON.parse(await readFile(join(host.planRoot, "phases", `${phase.id}.json`), "utf8"));
+      assert.deepEqual(phaseOnDisk.tasks[0].checklist.map((item) => item.title), ["Review", "Execute"], "task_update persists checklist to the owning phase file");
 
       for (const [tool, arguments_] of [
         ["feature_update", { featureId: "F001", acceptedDecisions: [] }],
@@ -611,7 +613,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     }
   });
 
-  test("handoffs: proposal, explicit confirmation, list/show/clear with archive, terminal-phase rejection", async () => {
+  test("handoffs: compact proposal, explicit confirmation, list/show/clear with archive, terminal-phase rejection", async () => {
     const host = await createPiHost({ name: "t242-handoff", seed: "minimal" });
     try {
       const phase = async () => (await host.store.loadAllPhases())[0];
@@ -619,10 +621,12 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.match(toolText(prepared), /Use this exact scaffold before drafting/);
       assert.match(toolText(prepared), /Required human inputs before drafting/);
       assert.match(toolText(prepared), /Planner-generated metadata \(do not add these to Markdown\)/);
-      assert.match(toolText(prepared), /Required cold-start source review v1/);
+      assert.match(toolText(prepared), /Completeness audit and cold-start evidence are planner-owned metadata/);
       assert.match(toolDetails(prepared).draftTemplate, /## Current and partial state/);
       assert.match(toolDetails(prepared).draftTemplate, /## Supporting documents/);
-      assert.equal(toolDetails(prepared).coldStartInventoryCategories.length, 14);
+      assert.equal(Object.hasOwn(toolDetails(prepared), "coldStartSourceReviews"), false);
+      assert.equal(Object.hasOwn(toolDetails(prepared), "coldStartInventoryCategories"), false);
+      assert.match(toolDetails(prepared).evidenceContract, /derived from persisted state/);
       assert.equal(toolDetails(prepared).phaseWorkMap.total, 1);
       assert.match(toolDetails(prepared).phaseWorkMap.content, /P001\(F001\)\/T001/);
 
@@ -644,35 +648,21 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(toolDetails(missingReason).errorCode, "HANDOFF_REASON_REQUIRED");
       assert.equal((await phase()).handoff, "", "missing reason must not write");
 
-      // Confirmed writes require a complete versioned audit and fail atomically with typed diagnostics.
-      const missingAuditArgs = await preparedHandoffArgs(host);
-      delete missingAuditArgs.completenessAudit;
-      const missingAudit = await host.runTool("handoff_write", {
+      // Compact confirmed writes omit duplicate audit and cold-start inventory prose.
+      const compactArgs = await preparedHandoffArgs(host);
+      delete compactArgs.completenessAudit;
+      delete compactArgs.coldStartInventory;
+      const compact = await host.runTool("handoff_write", {
         phaseRef: "P001",
-        title: "P001 — missing completeness audit",
-        reason: "Fixture requires completeness-audit validation.",
-        content: canonicalHandoff("P001 — missing completeness audit", "The audit payload is intentionally absent."),
+        title: "P001 — compact handoff",
+        reason: "Fixture verifies compact resume context.",
+        content: canonicalHandoff("P001 — compact handoff", "The compact body contains the resume-critical state and next action."),
         confirmed: true,
-        ...missingAuditArgs,
+        ...compactArgs,
       });
-      assert.equal(missingAudit.isError, true);
-      assert.equal(toolDetails(missingAudit).errorCode, "HANDOFF_COMPLETENESS_AUDIT_REQUIRED");
-      assert.ok(toolDetails(missingAudit).missingCategories.includes("branch-worktree"));
-      assert.equal((await phase()).handoff, "", "failed completeness audit must not write");
-
-      const missingInventoryArgs = await preparedHandoffArgs(host);
-      delete missingInventoryArgs.coldStartInventory;
-      const missingInventory = await host.runTool("handoff_write", {
-        phaseRef: "P001",
-        title: "P001 — missing cold-start inventory",
-        reason: "Fixture requires cold-start inventory validation.",
-        content: canonicalHandoff("P001 — missing cold-start inventory", "The inventory payload is intentionally absent."),
-        confirmed: true,
-        ...missingInventoryArgs,
-      });
-      assert.equal(missingInventory.isError, true);
-      assert.equal(toolDetails(missingInventory).errorCode, "HANDOFF_COLD_START_INVENTORY_REQUIRED");
-      assert.equal((await phase()).handoff, "", "failed cold-start inventory must not write");
+      assert.equal(compact.isError, undefined);
+      assert.equal(toolDetails(compact).persisted, true);
+      assert.notEqual((await phase()).handoff, "");
 
       // Confirmed write with a meaningful title.
       const written = await host.runTool("handoff_write", {

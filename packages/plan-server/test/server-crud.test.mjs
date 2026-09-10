@@ -20,7 +20,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import {
@@ -213,6 +213,8 @@ test("feature, phase, and task update routes persist canonical context and rejec
   assert.equal(updatedTask.body.notes, "Implementation evidence");
   assert.deepEqual(updatedTask.body.decisions, ["Keep transport parity"]);
   assert.deepEqual(updatedTask.body.checklist, checklist);
+  const phaseOnDisk = JSON.parse(await readFile(join(fx.planRoot, "phases", `${phase.id}.json`), "utf8"));
+  assert.deepEqual(phaseOnDisk.tasks.find((entry) => entry.id === task.id).checklist, checklist, "HTTP task update persists checklist to the owning phase file");
 
   const phaseStatusRejected = await request(fx, `/phases/${phase.id}`, {
     ...put({ title: "Must not persist", status: "done" }),

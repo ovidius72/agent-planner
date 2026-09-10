@@ -199,11 +199,12 @@ describe("entity references and timestamps", () => {
     renderRoute([
       {
         path: "/",
-        element: <TopNav projectName="Agent Plan" projectRoot="/tmp/example" planRoot="/tmp/example/.planner" liveStatus="live" />,
+        element: <TopNav projectName="Agent Plan" projectRoot="/tmp/example" planRoot="/tmp/example/.planner" agentPlanVersion="0.2.27" liveStatus="live" />,
       },
     ]);
 
     expect(screen.getByRole("link", { name: "Features" })).toBeInTheDocument();
+    expect(screen.getByTestId("agent-plan-version")).toHaveTextContent("Agent Plan v0.2.27");
     expect(screen.getByRole("link", { name: "Requirements" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Handoff" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open menu" })).toBeInTheDocument();

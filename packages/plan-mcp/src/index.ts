@@ -1720,9 +1720,8 @@ server.registerTool("planner-task-update", {
   }
   let updatedTask: Task | undefined;
   const timestamp = nowISO();
-  await st.updatePhase(found.phase.id, (phase) => {
-    const task = phase.tasks.find((entry) => entry.id === found.task.id);
-    if (!task) return phase;
+  try {
+  await st.updateTask(found.phase.id, found.task.id, (task) => {
     if (title !== undefined) task.title = title.trim();
     if (priority !== undefined) task.priority = priority;
     if (description !== undefined) task.description = description.trim();
@@ -1762,10 +1761,13 @@ server.registerTool("planner-task-update", {
       applyTaskLifecycleDates(task, status, timestamp);
     }
     task.updatedAt = timestamp;
-    phase.updatedAt = timestamp;
     updatedTask = task;
-    return phase;
+    return task;
   });
+  } catch (error) {
+    const details = error instanceof PlanStoreError ? error.details : undefined;
+    return { ...text(`Task update failed: ${error instanceof Error ? error.message : "unknown error"}`, { updated: false, errorCode: details?.errorCode ?? "TASK_UPDATE_FAILED" }), isError: true };
+  }
   await st.syncTaskStatusRollup(found.phase.id);
   const features = (await st.loadFeatures()).features;
   const t = updatedTask ?? found.task;
@@ -2555,8 +2557,8 @@ server.registerTool("planner-handoff-show", {
     && phase.handoffAudit.contentLength === phase.handoff.length);
   const resumeReady = persistenceVerified && Boolean(phase.handoffAudit?.resumeReadyAt);
   const status = resumeReady
-    ? "Resume-ready: persisted read-back and source reconciliation completed."
-    : "NOT resume-ready: after reading this entire persisted body, call planner-handoff-verify with its contentHash and a fresh comparison against every required source. If any gap exists, rewrite instead of verifying.";
+    ? "Resume-ready: persisted compact capsule read-back completed."
+    : "NOT resume-ready: after reading this persisted capsule, call planner-handoff-verify with its contentHash. The planner derives legacy evidence from persisted state; rewrite only if the capsule itself omits resume-critical context.";
   return text(`Handoff for ${r.compositeRef}\n${status}\nContent hash: ${contentHash}\n\n${phaseWorkMap.content}\n\nBefore proposing new work, reread the canonical phase and relevant sibling task full view; do not duplicate an already-owned capability.\n\n${bounded.content}`, {
     phaseRef: r.compositeRef,
     phaseId: r.phase.id,
@@ -2571,22 +2573,26 @@ server.registerTool("planner-handoff-show", {
 });
 
 server.registerTool("planner-handoff-verify", {
-  description: "Finalize one persisted handoff as resume-ready only after planner-handoff-show has displayed the entire body and the agent has compared it again with conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer output. Any discovered omission blocks verification and requires prepare+rewrite.",
+  description: "Finalize one persisted handoff as resume-ready after planner-handoff-show confirms the persisted compact resume capsule. Legacy sourceReviews and omissionsFound evidence remains accepted but is optional; the planner derives omitted evidence from persisted state.",
   inputSchema: {
     phaseRef: z.string().min(1),
     expectedContentHash: z.string().regex(/^[a-f0-9]{64}$/),
     sourceReviews: z.array(z.object({
       source: z.enum(["conversation", "planner-entities", "working-tree", "verification-runtime", "peer-agent-output"]),
       detail: z.string().min(12),
-    })),
-    omissionsFound: z.array(z.string().min(1)),
+    })).optional().describe("Optional legacy evidence; omitted for compact handoffs."),
+    omissionsFound: z.array(z.string().min(1)).optional().describe("Optional read-back gaps; omit when the persisted capsule is complete."),
   },
 }, async ({ phaseRef, expectedContentHash, sourceReviews, omissionsFound }) => {
   const st = await requireStore();
   const r = await resolvePhaseForHandoff(st, phaseRef);
   if (!r.ok) return text(`❌ ${r.error}`, { resumeReady: false });
   try {
-    const result = await st.verifyPhaseHandoffReadBack(r.phase.id, { expectedContentHash, sourceReviews, omissionsFound });
+    const result = await st.verifyPhaseHandoffReadBack(r.phase.id, {
+      expectedContentHash,
+      ...(sourceReviews ? { sourceReviews } : {}),
+      ...(omissionsFound ? { omissionsFound } : {}),
+    });
     await st.writeGenerated();
     return text(`✅ Handoff on ${r.compositeRef} is resume-ready after persisted read-back and source reconciliation.`, {
       phaseRef: r.compositeRef,
@@ -2857,7 +2863,7 @@ server.registerTool("planner-idea-promotion-finalize", {
 });
 
 server.registerTool("planner-handoff-write", {
-  description: "Persist a reconciled handoff candidate with durable context synchronization and mandatory audits. The result always has resumeReady=false until a separate planner-handoff-show read-back and planner-handoff-verify source reconciliation succeeds. Run planner-handoff-prepare first; link extended detail from committed .planner/docs/ Markdown.",
+  description: "Persist a compact reconciled handoff candidate with durable context synchronization. The result always has resumeReady=false until a separate planner-handoff-show read-back and planner-handoff-verify succeeds. Run planner-handoff-prepare first; provide only resume-critical context and link optional extended detail from .planner/docs/ Markdown.",
   inputSchema: {
     phaseRef: z.string().min(1).describe("Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title."),
     title: z.string().min(3).optional().describe("Meaningful handoff title summarizing the work."),
@@ -2873,7 +2879,7 @@ server.registerTool("planner-handoff-write", {
         status: z.enum(["captured", "not-applicable"]),
         detail: z.string().min(1),
       })),
-    }).optional().describe("Mandatory for confirmed writes; every category from planner-handoff-prepare must be present."),
+    }).optional().describe("Optional legacy completeness evidence. Compact handoffs omit this duplicate prose."),
     coldStartInventory: z.object({
       version: z.literal(HANDOFF_COLD_START_INVENTORY_VERSION),
       sourceReviews: z.array(z.object({ source: z.string().min(1), detail: z.string().min(1) })),
@@ -2882,7 +2888,7 @@ server.registerTool("planner-handoff-write", {
         items: z.array(z.string().min(1)),
         notApplicableReason: z.string().min(1).optional().describe("Optional explanation only; every category still requires a concrete item, using an explicit verified-negative statement when nothing exists."),
       })),
-    }).optional().describe("Mandatory for confirmed writes. Every concrete item must appear verbatim in the handoff or a validated supporting document."),
+    }).optional().describe("Optional legacy cold-start evidence. Compact handoffs omit this duplicate prose."),
     supportingDocuments: z.array(z.object({
       path: z.string().min(1).describe("Committed Markdown path under .planner/docs/."),
       description: z.string().min(1).describe("What the document contains and why the next agent needs it."),
@@ -2963,7 +2969,7 @@ server.registerTool("planner-handoff-write", {
       },
     });
     await st.writeGenerated();
-    return text(`⚠️ Handoff candidate persisted on ${r.compositeRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${r.compositeRef}, read the entire persisted body, compare it again with every required source, then call planner-handoff-verify with the returned contentHash. If that review finds any gap, run prepare+write again instead of verifying.`, {
+    return text(`⚠️ Handoff candidate persisted on ${r.compositeRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${r.compositeRef}, read the persisted compact capsule, then call planner-handoff-verify with the returned contentHash. Rewrite only if resume-critical context is missing.`, {
       phaseRef: r.compositeRef,
       phaseId: r.phase.id,
       updatedTaskIds: result.updatedTaskIds,
@@ -2974,8 +2980,7 @@ server.registerTool("planner-handoff-write", {
       verificationRequired: true,
       nextActions: [
         `Call planner-handoff-show ${r.compositeRef} and read the entire persisted body.`,
-        "Compare the persisted body against conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer-agent output.",
-        "If any omission exists, run planner-handoff-prepare and planner-handoff-write again; otherwise call planner-handoff-verify with the shown contentHash.",
+        "Call planner-handoff-verify with the shown contentHash; legacy sourceReviews and omissionsFound are optional because the planner derives omitted evidence from persisted state.",
       ],
     });
   } catch (error) {
@@ -2986,7 +2991,7 @@ server.registerTool("planner-handoff-write", {
 });
 
 server.registerTool("planner-handoff-prepare", {
-  description: "Identify or audit the exact handoff target. With a confirmed phaseRef, returns the canonical scaffold, a bounded priority-ordered phase work map with sibling goals/dependencies/capability ownership, the current token, missing task evidence, mandatory audits, and the 24,000-character inline budget. Reread the canonical phase and relevant sibling tasks before proposing work.",
+  description: "Identify or prepare the exact handoff target. With a confirmed phaseRef, returns a compact resume scaffold, bounded priority-ordered phase work map, current token, missing task evidence, and inline budget. Reread the canonical phase and relevant sibling tasks before proposing work.",
   inputSchema: { phaseRef: z.string().min(1).optional() },
 }, async ({ phaseRef }) => {
   if (!phaseRef) return text([
@@ -2999,9 +3004,15 @@ server.registerTool("planner-handoff-prepare", {
   if (!r.ok) return text(`❌ ${r.error}`);
   try {
     const audit = await st.preparePhaseHandoff(r.phase.id);
+    const {
+      completenessCategories: _completenessCategories,
+      coldStartSourceReviews: _coldStartSourceReviews,
+      coldStartInventoryCategories: _coldStartInventoryCategories,
+      ...compactAudit
+    } = audit;
     const missing = audit.missingCompletionTasks.map((task) => `- T${String(task.number).padStart(3, "0")} — ${task.title}`).join("\n") || "- None";
     return text([
-      `Handoff preparation audit for ${r.compositeRef}`,
+      `Handoff preparation for ${r.compositeRef}`,
       `Base handoffUpdatedAt: ${audit.handoffUpdatedAt || "(empty)"}`,
       "Required human inputs before drafting:",
       ...audit.requiredHumanInputs.map((input) => `- ${input.id} — ${input.description}`),
@@ -3012,18 +3023,18 @@ server.registerTool("planner-handoff-prepare", {
       "Done tasks missing durable completion/verification evidence:",
       missing,
       "",
-      `Required completeness audit v${audit.completenessVersion} — every category must be captured or marked not-applicable with a substantive reason:`,
-      ...audit.completenessCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
-      "",
-      `Required cold-start source review v${audit.coldStartInventoryVersion} — inspect and substantively summarize every source before drafting:`,
-      ...audit.coldStartSourceReviews.map((entry) => `- ${entry.id} — ${entry.label}`),
-      "Required cold-start inventory — every category needs a concrete item (use an explicit verified-negative statement when nothing exists), and every item must appear verbatim in the handoff or a validated supporting document:",
-      ...audit.coldStartInventoryCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
-      `Maximum canonical inline content: ${audit.maxContentChars} characters. Link extended material from .planner/docs/.`,
+      "Compact handoff contract: include only the exact focus/resume point, current or partial state, constraints, blockers, decisions, verification, and ordered next actions needed by the next agent.",
+      "No Markdown heading is mandatory: concise free-form resume prose is accepted. Use headings only when they make the capsule clearer.",
+      "Completeness audit and cold-start evidence are planner-owned metadata; do not copy their categories or source reviews into Markdown.",
+      `Inline target: ${audit.targetContentChars} characters; absolute compatibility ceiling: ${audit.maxContentChars}. Extended detail is externalized automatically when needed.`,
       "",
       "Existing active handoff (reconcile all still-relevant content):",
       audit.handoff.trim() || "(none)",
-    ].join("\n"), { phaseRef: r.compositeRef, ...audit });
+    ].join("\n"), {
+      phaseRef: r.compositeRef,
+      ...compactAudit,
+      evidenceContract: "Planner-owned completeness and cold-start evidence is derived from persisted state; no category inventory is required from the agent.",
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return text(`❌ Handoff preparation failed: ${message}`, { error: message });

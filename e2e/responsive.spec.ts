@@ -27,6 +27,7 @@ test("desktop and mobile layouts keep core navigation, work tree controls, IDs, 
   const viewport = page.viewportSize();
   expect(viewport).not.toBeNull();
   await page.goto(planner.url);
+  await expect(page.getByTestId("agent-plan-version")).toHaveText(/Agent Plan v\d+\.\d+\.\d+/);
 
   if (compact) {
     await page.getByRole("button", { name: "Open menu" }).click();

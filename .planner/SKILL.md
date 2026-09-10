@@ -1,4 +1,4 @@
-<!-- agent-plan-managed-skill sha256:8a5e13c98b06fc7f1e67ea983e8de1e6356c1483d0f1fc740dfbe21b9bf028a7 -->
+<!-- agent-plan-managed-skill sha256:933f2313165a66bf46d31e8fba9132af03ed7dc1b583797ee7e8f7f3fb632a66 -->
 ---
 name: agent-plan
 summary: Cross-harness operating guide for Agent Plan projects.
@@ -31,9 +31,10 @@ Discover before mutating:
 
 1. List features, phases, or tasks using compact list tools.
 2. Follow the lowest visible ready priority unless the automatic recommendation or an approved deviation says otherwise.
-3. Use `task_recommend` / `planner-task-recommend` when choosing the next task.
+3. Use `task_recommend` / `planner-task-recommend` when choosing the next task. Treat its `claims` as bounded evidence: priority is a policy signal, a handoff is actionable only when persisted `resumeReady=true`, and Markdown prose or terminal archives never create an action claim.
 4. Read the exact entity with its full-detail show/get surface when full context is needed.
 5. Never infer an ambiguous bare reference. Ask for the exact composite reference.
+6. Never claim that no task is active from counts, feature summaries, or omitted task detail. Use an explicit `activeTaskState`/`activeTasks` result from `plan_get`, `planner-show`, or the lifecycle recommendation. Only `activeTaskState: none` (verified from all persisted task statuses) proves absence; `conflict` means multiple active tasks must be reconciled.
 
 Feature and phase statuses are derived from their children. Do not write their status directly; update the relevant child tasks. A `DERIVED_STATUS_READ_ONLY` result is a non-success result.
 
@@ -46,8 +47,9 @@ When denied:
 1. Confirm `started` is `false` and read `errorCode` plus `nextActions`.
 2. Perform only the missing or stale reads listed in `nextActions`. Reads may be completed in any order within the current session.
 3. If Project Guidelines are listed, call `project_guidelines_show` or `planner-project-guidelines-show` and retain the content while working.
-4. Read each task on every start or resume. Fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session.
-5. Retry the lifecycle operation. Only `started: true` proves work is active.
+4. Read each task on every start or resume. Fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session. When linked requirements are requested, call `requirement_list` or `planner-requirement-list` with the exact `phaseRef` from `nextActions`; a broad unscoped inventory does not attest that every requirement was read. A full feature/phase/task read is complete only when it delivers all canonical Accepted Decision fields (`id`, `title`, `decision`, `rationale`, `implementationNotes`, `acceptedAt`); title-only summaries never satisfy the read gate.
+5. Use the returned priority-ordered phase work map to review sibling task refs, goals, dependencies, statuses, and remaining capability ownership. Before proposing or creating work, reread the canonical phase and the relevant sibling task full view; never duplicate a capability already owned by another task.
+6. Retry the lifecycle operation. Only `started: true` proves work is active.
 
 Do not convert a denial into a planner status change merely to bypass the gate. Common typed denials include `PROJECT_GUIDELINES_READ_REQUIRED`, `CONTEXT_READ_REQUIRED`, `REQUIREMENTS_READ_REQUIRED`, `START_NOT_ALLOWED`, `ACTIVE_TASK_CONFLICT`, `TASK_DONE`, and persistence verification failures.
 
@@ -55,7 +57,9 @@ Do not convert a denial into a planner status change merely to bypass the gate. 
 
 `Project Guidelines` is the canonical project section for coding standards, formatting, styling, verification conventions, and other implementation rules.
 
-- Read it on planner load when present and whenever lifecycle `nextActions` says it is missing or stale.
+`Requirements` are separate declarative product outcomes: user, business, or system capabilities that phases deliver. They have no lifecycle status. Never store coding standards, best practices, formatting rules, verification process, or agent behavior in Requirements; store those only in Project Guidelines. Nested Requirement macro-tasks retain their own implementation status.
+
+- Read Project Guidelines on planner load when present and whenever lifecycle `nextActions` says it is missing or stale.
 - Update it only through `project_guidelines_update`, `planner-project-guidelines-update`, or Pi `/planner project guidelines`.
 - Explicit planner load automatically and atomically deduplicates legacy `globalRules`, textual `workflowRules`, and project `decisions` into canonical Project Guidelines and Accepted Decisions before recap/context delivery. Ordinary entity reads remain non-mutating. `project_context_migrate` and `planner-project-context-migrate` remain manual preview/recovery diagnostics; repeated applications are idempotent.
 - The Web UI may display the section for the human supervisor, but guideline-read enforcement applies to agents.
@@ -83,20 +87,30 @@ Every mutation is success-sensitive:
 
 ## Handoff protocol
 
-Handoffs are phase-scoped resume documents, not locks. They must be operationally exhaustive, not merely structurally valid.
+Handoffs are phase-scoped resume documents, not locks. They must be operationally exhaustive, not merely structurally valid. Every canonical terminal phase outcome archives its active handoff automatically; terminal phases cannot receive a new handoff.
 
 Before writing:
 
 1. Resolve one exact phase reference and obtain user confirmation when required.
-2. Run `handoff_prepare` / `planner-handoff-prepare` for that exact phase.
-3. Reconcile every still-relevant detail from an existing handoff; do not append a competing handoff.
-4. Build the versioned `completenessAudit` returned by prepare. Every required category must appear exactly once as `captured` or `not-applicable`, with concrete detail or a substantive reason. Generic values such as `N/A`, `none`, `unknown`, or `see above` are rejected with `HANDOFF_COMPLETENESS_AUDIT_REQUIRED`.
+2. Run `handoff_prepare` / `planner-handoff-prepare` for that exact phase. Review its bounded, priority-ordered `phaseWorkMap`, then reread the canonical phase and every relevant sibling task full view before describing remaining work; preserve existing capability ownership rather than proposing duplicates.
+3. **Before generating prose**, read the returned `requiredHumanInputs` and supply them structurally (including `reason`). Copy the exact returned `draftTemplate`, replacing every `{{REQUIRED: ...}}` placeholder and retaining its headings. Never write `Created at`, `Updated at`, or `Reason` into Markdown: the planner generates those fields before validation and persistence.
+4. Reconcile every still-relevant detail from an existing handoff; do not append a competing handoff.
+5. Build the versioned `completenessAudit` returned by prepare. Every required category must appear exactly once as `captured` or `not-applicable`, with concrete detail or a substantive reason. Generic values such as `N/A`, `none`, `unknown`, or `see above` are rejected with `HANDOFF_COMPLETENESS_AUDIT_REQUIRED`.
+6. Build the returned versioned `coldStartInventory` before the final handoff body. First complete every `sourceReviews` entry by checking the conversation and user approvals, planner entities and sibling tasks, current diff and implementation, verification/runtime evidence, and all peer-agent or network messages (or explicitly confirm that no peer output exists). Then inventory exact files; symbols/identifiers; working-tree ownership and whether work is finished or in flight; commit/discard authorization; work and deletion not yet started; commands and tool paths; runtime call sites/data flow; preservation constraints; proof for live/dead/inert claims; related planned work; user-visible behavior; operator actions; blockers/risks; remaining work; and ordered resume steps. Every category needs at least one concrete item. If nothing exists, record the verified negative state as the item (for example, `No deletion has started; all original files remain intact`) instead of using a generic not-applicable marker. Every item must then appear verbatim in the canonical handoff or a validated supporting document. Generic behavioral summaries do not satisfy concrete wiring coverage.
 
-The mandatory categories are: exact focus and resume point; first resume action; completed work; partial work; remaining work; decisions and rationale; rejected alternatives; files and symbols; branch and worktree; commands and tools; completed verification; pending verification; runtime limitations and workarounds; blockers and risks; user-visible behavior; operator actions; project-specific operating notes; and conversation-only facts.
+The mandatory completeness categories are: exact focus and resume point; first resume action; completed work; partial work; remaining work; decisions and rationale; rejected alternatives; files and symbols; branch and worktree; commands and tools; completed verification; pending verification; runtime limitations and workarounds; blockers and risks; user-visible behavior; operator actions; project-specific operating notes; and conversation-only facts.
 
-Keep the canonical handoff within the tool-reported budget (currently 24,000 characters). Essential focus, resume point, first action, risks, and verification status must remain inline. Put extended logs, large mappings, command transcripts, and deep design detail in committed Markdown files under `.planner/docs/`; pass each through `supportingDocuments` with a substantive description of what it contains and why the next agent needs it. Links supplement rather than replace the inline resume contract.
+Write the canonical handoff as a compact resume capsule targeting at most 8,000 inline characters (24,000 remains only as an absolute compatibility ceiling). Keep inline only the exact focus, first resume action, current/partial state, preservation constraints, ordered supporting-document links, blockers/risks, and resume steps. Keep the verbose completeness audit and cold-start inventory once as structured metadata; never embed them in Markdown. Put extended detail in committed Markdown files under `.planner/docs/`; pass each through `supportingDocuments` with a substantive description of what it contains and why the next agent needs it. Links supplement rather than replace the inline resume contract.
 
-Then call `handoff_write` / `planner-handoff-write` with the preparation token, completeness audit, optional supporting-document manifest, and reconciled task/phase/feature context. Missing categories, oversized bodies, invalid documents, or failed persistence read-back are typed failures and must never be reported as success. Read the persisted handoff back with the exact phase reference and verify its body, content hash, audit metadata, branch, file, command, expected behavior, and next action before stopping. `handoff_list` is a compact paginated summary-only index; use `handoff_show` for one bounded body and its metadata. Clear/archive only after explicit intent or when phase completion makes it obsolete.
+Then call `handoff_write` / `planner-handoff-write` once with the preparation token, structured `reason`, completed scaffold, completeness audit, cold-start inventory, optional supporting-document manifest, and reconciled task/phase/feature context. Missing preflight/reason, headings/placeholders, inventory categories, uncovered concrete items, oversized bodies, invalid documents, or failed persistence read-back are typed failures and must never be reported as success.
+
+A successful write persists only a **handoff candidate** and returns `resumeReady: false`; it is never sufficient to claim that the handoff is detailed or complete. Immediately call `handoff_show` / `planner-handoff-show` with the exact phase reference and read the entire persisted body. Compare it again—not from memory—against conversation corrections and approvals, planner entities and sibling tasks, the current working tree/diff, verification and runtime evidence, and peer-agent output. If this second pass finds any omission, pass those gaps through a new prepare+write cycle. If it finds none, call `handoff_verify` / `planner-handoff-verify` with the content hash returned by show, fresh substantive findings for all five source reviews, and an empty `omissionsFound` list. Only a successful verification result with `resumeReady: true` authorizes telling the user that the handoff is resume-ready. Never answer “yes” from the earlier write result or from the submitted inventory alone.
+
+`handoff_list` is a compact paginated index of active handoffs and exposes whether each is resume-ready. Use `handoff_show` for one bounded active body and its metadata; after phase completion/rejection/cancellation, the same exact phase-scoped show call returns the latest terminal archive so its closeout and `.planner/docs/` references remain discoverable. Clear/archive only after explicit intent or when phase completion makes the handoff non-operational.
+
+## Hierarchical description freshness
+
+Task description or descriptionRef changes can make the owning phase and feature prose stale; phase description changes can make the owning feature stale. Use `description_freshness` / `planner-description-freshness` to read the deterministic, non-mutating leaf-to-root reconciliation preview. Read the cited child and parent full views, then explicitly update only parent prose that is actually obsolete. Never silently copy child text into a parent or claim the hierarchy is fresh from a generic entity timestamp alone; the preview uses description-specific revisions and returns exact stale parent refs.
 
 ## Ideas Inbox and promotion
 
@@ -163,6 +177,8 @@ Supported interactive command paths:
 - `/planner handoff write <P00x(F00x)>`
 - `/planner handoff clear <P00x(F00x)>`
 
+`handoff_verify` is an agent tool rather than an interactive command; call it only after `handoff_show` completes the separate persisted read-back.
+
 Pause, switch, deviation, recommendation, requirement, and decision operations are available through the registered Pi tools below rather than every interactive `/planner` path.
 
 ### Dashboard, export, and guard
@@ -179,25 +195,25 @@ Pause, switch, deviation, recommendation, requirement, and decision operations a
 
 The MCP adapter publishes these tools:
 
-- Core: `planner-version`, `planner-init`, `planner-show`, `planner-repair`, `planner-cleanup-orphan-phases`, `planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`, `planner-load`, `planner-disable`, `planner-web`.
+- Core: `planner-version`, `planner-init`, `planner-show`, `planner-description-freshness`, `planner-repair`, `planner-cleanup-orphan-phases`, `planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`, `planner-load`, `planner-disable`, `planner-web`.
 - Ideas: `planner-idea-list`, `planner-idea-show`, `planner-idea-create`, `planner-idea-update`, `planner-idea-delete`, `planner-idea-promotion-begin`, `planner-idea-promotion-finalize`.
-- Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-requirement-list`, `planner-requirement-create`, `planner-requirement-update`, `planner-requirement-delete`.
+- Project: `planner-project-language`, `planner-project-discuss`, `planner-project-guidelines-show`, `planner-project-guidelines-update`, `planner-project-context-migrate`, `planner-accepted-decision-create`, `planner-accepted-decision-update`, `planner-accepted-decision-delete`, `planner-requirement-list`, `planner-requirement-create`, `planner-requirement-update`, `planner-requirement-delete`.
 - Features: `planner-feature-list`, `planner-feature-add`, `planner-feature-show`, `planner-feature-discuss`, `planner-feature-update`, `planner-feature-delete`.
 - Phases: `planner-phase-list`, `planner-phase-add`, `planner-phase-show`, `planner-phase-discuss`, `planner-phase-update`, `planner-phase-delete`.
-- Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
-- Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-clear`.
+- Tasks: `planner-task-list`, `planner-task-add`, `planner-task-show`, `planner-task-discuss`, `planner-task-update`, `planner-task-dependency-add`, `planner-task-dependency-delete`, `planner-task-delete`, `planner-task-recommend`, `planner-task-deviation`, `planner-task-pause`, `planner-task-switch`, `planner-task-start`, `planner-task-reopen`, `planner-task-complete`, `planner-task-checklist-toggle`, `planner-task-checklist-add`, `planner-task-checklist-remove`.
+- Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
 
 ## Pi tool inventory
 
 The Pi adapter registers these tools:
 
 - Ideas: `idea_list`, `idea_show`, `idea_create`, `idea_update`, `idea_delete`, `idea_promotion_begin`, `idea_promotion_finalize`.
-- Project and requirements: `project_set_language_preferences`, `project_update`, `project_guidelines_show`, `project_guidelines_update`, `project_context_migrate`, `requirement_list`, `requirement_create`, `requirement_update`, `requirement_delete`.
-- Plan: `plan_init`, `plan_get`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
+- Project and requirements: `project_set_language_preferences`, `project_update`, `project_guidelines_show`, `project_guidelines_update`, `project_context_migrate`, `accepted_decision_create`, `accepted_decision_update`, `accepted_decision_delete`, `requirement_list`, `requirement_create`, `requirement_update`, `requirement_delete`.
+- Plan: `plan_init`, `plan_get`, `description_freshness`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
 - Features: `feature_list`, `feature_get`, `feature_create`, `feature_discuss`, `feature_update`, `feature_delete`.
-- Phases and decisions: `phase_list`, `phase_get`, `phase_create`, `phase_update`, `phase_delete`, `decision_record`.
-- Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
-- Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_clear`.
+- Phases and decisions: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record`.
+- Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_dependency_add`, `task_dependency_delete`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_reopen`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
+- Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_verify`, `handoff_clear`.
 - Dashboard and lifecycle: `planner-web`, `planner-load`, `planner-stop`.
 - Deprecated compatibility aliases: `plan_get_handoff`, `plan_write_handoff`, `plan_delete_handoff`. Prefer the entity-scoped handoff tools.
 

@@ -26,11 +26,13 @@ export function TopNav({
   projectName,
   projectRoot,
   planRoot,
+  agentPlanVersion,
   liveStatus,
 }: {
   projectName: string | undefined;
   projectRoot: string | undefined;
   planRoot: string | undefined;
+  agentPlanVersion?: string;
   liveStatus: LiveStatus;
 }) {
   const { theme, toggleTheme } = useTheme();
@@ -77,7 +79,12 @@ export function TopNav({
           <div className="surface-card flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--accent)] sm:h-9 sm:w-9">
             <Layers className="h-4 w-4" />
           </div>
-          <span className="truncate text-sm font-black tracking-tight sm:text-base">{projectName ?? "Agent Plan"}</span>
+          <span className="min-w-0 truncate">
+            <span className="block truncate text-sm font-black tracking-tight sm:text-base">{projectName ?? "Agent Plan"}</span>
+            <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)] sm:text-[11px]" data-testid="agent-plan-version">
+              {agentPlanVersion ? `Agent Plan v${agentPlanVersion}` : "Agent Plan version unavailable"}
+            </span>
+          </span>
         </Link>
 
         <nav className="ml-1 hidden items-center gap-1 md:flex">

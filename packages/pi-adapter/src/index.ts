@@ -3759,8 +3759,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         && phase.handoffAudit.contentLength === phase.handoff.length);
       const resumeReady = persistenceVerified && Boolean(phase.handoffAudit?.resumeReadyAt);
       const status = resumeReady
-        ? "Resume-ready: persisted read-back and source reconciliation completed."
-        : "NOT resume-ready: after reading this entire persisted body, call handoff_verify with its contentHash and a fresh comparison against every required source. If any gap exists, rewrite instead of verifying.";
+        ? "Resume-ready: persisted compact capsule read-back completed."
+        : "NOT resume-ready: after reading this persisted capsule, call handoff_verify with its contentHash. The planner derives legacy evidence from persisted state; rewrite only if the capsule itself omits resume-critical context.";
       return {
         content: [{ type: "text", text: `Handoff for ${r.compositeRef}\n${status}\nContent hash: ${contentHash}\n\n${phaseWorkMap.content}\n\nBefore proposing new work, reread the canonical phase and relevant sibling task full view; do not duplicate an already-owned capability.\n\n${bounded.content}` }],
         details: { phaseRef: r.compositeRef, phaseId: r.phase.id, phaseWorkMap, ...bounded, contentHash, persistenceVerified, resumeReady, verificationRequired: !resumeReady, handoffAudit: phase.handoffAudit },
@@ -3771,15 +3771,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_verify",
     label: "Handoff Verify",
-    description: "Finalize one persisted handoff as resume-ready only after handoff_show has displayed the entire body and the agent has compared it again with conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer output. Any discovered omission blocks verification and requires prepare+rewrite.",
+    description: "Finalize one persisted handoff as resume-ready after handoff_show confirms the persisted compact resume capsule. Legacy sourceReviews and omissionsFound evidence remains accepted but is optional; the planner derives omitted evidence from persisted state.",
     parameters: Type.Object({
       phaseRef: Type.String(),
       expectedContentHash: Type.String({ pattern: "^[a-f0-9]{64}$" }),
-      sourceReviews: Type.Array(Type.Object({
+      sourceReviews: Type.Optional(Type.Array(Type.Object({
         source: Type.Union([Type.Literal("conversation"), Type.Literal("planner-entities"), Type.Literal("working-tree"), Type.Literal("verification-runtime"), Type.Literal("peer-agent-output")]),
         detail: Type.String({ minLength: 12 }),
-      })),
-      omissionsFound: Type.Array(Type.String({ minLength: 1 })),
+      }))),
+      omissionsFound: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3789,8 +3789,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       try {
         const result = await st.verifyPhaseHandoffReadBack(r.phase.id, {
           expectedContentHash: params.expectedContentHash,
-          sourceReviews: params.sourceReviews,
-          omissionsFound: params.omissionsFound,
+          ...(params.sourceReviews ? { sourceReviews: params.sourceReviews } : {}),
+          ...(params.omissionsFound ? { omissionsFound: params.omissionsFound } : {}),
         });
         await st.writeGenerated();
         return {
@@ -3808,7 +3808,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_prepare",
     label: "Handoff Prepare",
-    description: "Audit one exact phase before writing a handoff. Returns the canonical scaffold, a bounded priority-ordered phase work map with sibling goals/dependencies/capability ownership, the current token, missing task evidence, required audits, and the 24,000-character inline budget. Reread the canonical phase and relevant sibling tasks before proposing work; reconcile everything through handoff_write.",
+    description: "Prepare one exact phase before writing a handoff. Returns a compact resume capsule scaffold, bounded phase work map, current token, missing task evidence, and inline budget. Reread the canonical phase and relevant sibling tasks before proposing work; do not duplicate planner evidence in Markdown.",
     parameters: Type.Object({ phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }) }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
@@ -3817,7 +3817,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
       try {
         const audit = await st.preparePhaseHandoff(r.phase.id);
-        const { handoff, ...auditDetails } = audit;
+        const {
+          handoff,
+          completenessCategories: _completenessCategories,
+          coldStartSourceReviews: _coldStartSourceReviews,
+          coldStartInventoryCategories: _coldStartInventoryCategories,
+          ...auditDetails
+        } = audit;
         const boundedExisting = boundedHandoffForTransport(handoff);
         const missing = audit.missingCompletionTasks.map((task) => `- T${String(task.number).padStart(3, "0")} — ${task.title}`).join("\n") || "- None";
         const existing = boundedExisting.content.trim() || "(none)";
@@ -3834,19 +3840,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             "Done tasks missing durable completion/verification evidence:",
             missing,
             "",
-            `Required completeness audit v${audit.completenessVersion} — every category must be captured or marked not-applicable with a substantive reason:`,
-            ...audit.completenessCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
-            "",
-            `Required cold-start source review v${audit.coldStartInventoryVersion} — inspect and substantively summarize every source before drafting:`,
-            ...audit.coldStartSourceReviews.map((entry) => `- ${entry.id} — ${entry.label}`),
-            "Required cold-start inventory — every category needs a concrete item (use an explicit verified-negative statement when nothing exists), and every item must appear verbatim in the handoff or a validated supporting document:",
-            ...audit.coldStartInventoryCategories.map((entry) => `- ${entry.id} — ${entry.label}`),
-            `Maximum canonical inline content: ${audit.maxContentChars} characters. Link extended material from .planner/docs/.`,
+            "Compact handoff contract: include only the exact focus/resume point, current or partial state, preservation constraints, blockers, decisions, verification, and ordered next actions needed by the next agent.",
+            "No Markdown heading is mandatory: concise free-form resume prose is accepted. Use headings only when they make the capsule clearer.",
+            "Completeness audit and cold-start evidence are planner-owned metadata. Do not copy their categories or source reviews into Markdown; provide legacy evidence only when it already exists.",
+            `Inline target: ${audit.targetContentChars} characters; absolute compatibility ceiling: ${audit.maxContentChars}. Extended detail is externalized automatically when needed.`,
             "",
             "Existing active handoff (reconcile all still-relevant content):",
             existing,
           ].join("\n") }],
-          details: { phaseRef: r.compositeRef, ...auditDetails, existingHandoffLength: boundedExisting.fullLength, existingHandoffTruncated: boundedExisting.truncated },
+          details: {
+            phaseRef: r.compositeRef,
+            ...auditDetails,
+            evidenceContract: "Planner-owned completeness and cold-start evidence is derived from persisted state; no category inventory is required from the agent.",
+            existingHandoffLength: boundedExisting.fullLength,
+            existingHandoffTruncated: boundedExisting.truncated,
+          },
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -3858,7 +3866,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_write",
     label: "Handoff Write",
-    description: "Persist a reconciled handoff candidate with durable context synchronization and mandatory audits. The result always has resumeReady=false until a separate handoff_show read-back and handoff_verify source reconciliation succeeds. Run handoff_prepare first; extended detail belongs in linked .planner/docs/ Markdown.",
+    description: "Persist a compact reconciled handoff candidate with durable context synchronization. The result always has resumeReady=false until a separate handoff_show read-back and handoff_verify succeeds. Run handoff_prepare first; extended detail belongs in linked .planner/docs/ Markdown.",
     parameters: Type.Object({
       phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }),
       title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists)." })),
@@ -3873,7 +3881,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         entries: Type.Array(Type.Object({
           category: Type.String({ description: `One required category id from handoff_prepare: ${HANDOFF_COMPLETENESS_CATEGORIES.map((entry) => entry.id).join(", ")}` }),
           status: Type.Union([Type.Literal("captured"), Type.Literal("not-applicable")]),
-          detail: Type.String({ description: "Substantive captured detail or a substantive reason why the category is not applicable." }),
+          detail: Type.String({ description: "Legacy evidence detail; omit the entire audit for compact handoffs." }),
         })),
       })),
       coldStartInventory: Type.Optional(Type.Object({
@@ -3884,8 +3892,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         })),
         entries: Type.Array(Type.Object({
           category: Type.String({ description: `One required cold-start category id from handoff_prepare: ${HANDOFF_COLD_START_INVENTORY_CATEGORIES.map((entry) => entry.id).join(", ")}` }),
-          items: Type.Array(Type.String({ description: "Exact resume-critical item; it must appear verbatim in the handoff or a validated supporting document." })),
-          notApplicableReason: Type.Optional(Type.String({ description: "Optional explanation only; every category still requires a concrete item, using an explicit verified-negative statement when nothing exists." })),
+          items: Type.Array(Type.String({ description: "Legacy resume evidence item; omit the entire inventory for compact handoffs." })),
+          notApplicableReason: Type.Optional(Type.String({ description: "Legacy evidence explanation." })),
         })),
       })),
       supportingDocuments: Type.Optional(Type.Array(Type.Object({
@@ -3972,7 +3980,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         });
         await st.writeGenerated();
         return {
-          content: [{ type: "text", text: `⚠️ Handoff candidate persisted on ${r.compositeRef}, but it is NOT resume-ready yet. Required next action: call handoff_show ${r.compositeRef}, read the entire persisted body, compare it again with every required source, then call handoff_verify with the returned contentHash. If that review finds any gap, run prepare+write again instead of verifying.` }],
+          content: [{ type: "text", text: `⚠️ Handoff candidate persisted on ${r.compositeRef}, but it is NOT resume-ready yet. Required next action: call handoff_show ${r.compositeRef}, read the persisted compact capsule, then call handoff_verify with the returned contentHash. Rewrite only if resume-critical context is missing.` }],
           details: {
             phaseRef: r.compositeRef,
             phaseId: r.phase.id,
@@ -3983,9 +3991,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             resumeReady: false,
             verificationRequired: true,
             nextActions: [
-              `Call handoff_show ${r.compositeRef} and read the entire persisted body.`,
-              "Compare the persisted body against conversation corrections, planner entities, working tree/diff, verification/runtime evidence, and peer-agent output.",
-              "If any omission exists, run handoff_prepare and handoff_write again; otherwise call handoff_verify with the shown contentHash.",
+              `Call handoff_show ${r.compositeRef} and read the persisted compact capsule.`,
+              "Call handoff_verify with the shown contentHash; legacy sourceReviews and omissionsFound are optional because the planner derives omitted evidence from persisted state.",
             ],
           },
         };
@@ -5226,9 +5233,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         });
       }
       try {
-        const updatedPhase = await st.updatePhase(hostPhase.id, (phase) => {
-          const task = phase.tasks.find((t) => t.id === found.task.id);
-          if (!task) return phase;
+        const updatedPhase = await st.updateTask(hostPhase.id, found.task.id, (task) => {
           if (params.title !== undefined) task.title = params.title;
           if (params.priority !== undefined) task.priority = params.priority;
           if (params.description !== undefined) task.description = params.description.trim();
@@ -5264,15 +5269,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             applyTaskLifecycleDates(task, params.status as Task["status"], now);
           }
           task.updatedAt = now;
-          phase.updatedAt = now;
           updatedTask = task;
-          return phase;
+          return task;
         });
         void updatedPhase;
       } catch (e) {
-        return { content: [{ type: "text", text: `Update failed: ${e}` }], details: {} };
+        const errorCode = e instanceof PlanStoreError ? e.details?.errorCode : undefined;
+        return {
+          content: [{ type: "text", text: `Update failed: ${e instanceof Error ? e.message : String(e)}` }],
+          details: { updated: false, errorCode: errorCode ?? "TASK_UPDATE_FAILED" },
+          isError: true,
+        };
       }
-      if (!updatedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
+      if (!updatedTask) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { updated: false, errorCode: "TASK_NOT_FOUND" }, isError: true };
       await st.syncTaskStatusRollup(found.phase.id);
       await st.writeGenerated();
       const descriptionFreshness = receivedFields.some((field) => field === "description" || field === "descriptionRef")

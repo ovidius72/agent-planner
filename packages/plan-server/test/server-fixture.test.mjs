@@ -36,6 +36,7 @@ test("health, project, features and phases serve real fixture data over HTTP", a
   const project = await request(fx, "/project");
   assert.equal(project.status, 200);
   assert.equal(project.body.planRoot, fx.planRoot);
+  assert.match(project.body.agentPlanVersion, /^\d+\.\d+\.\d+/);
 
   const features = await request(fx, "/features");
   assert.equal(features.status, 200);

@@ -81,6 +81,19 @@ function addShortIds(set: Set<string> | null, raw: string): Set<string> {
   return next;
 }
 
+/** Recognize compact entity references typed as bare text (for example T003). */
+function addBareEntityReference(filters: SearchFilters, token: string): boolean {
+  const match = token.match(/^([fpt])(\d+)$/i);
+  if (!match) return false;
+  const number = Number(match[2]);
+  if (!Number.isFinite(number) || number <= 0) return false;
+  const kind = match[1]!.toLowerCase();
+  if (kind === "f") filters.featureNumbers = addNumbers(filters.featureNumbers, String(number));
+  else if (kind === "p") filters.phaseNumbers = addNumbers(filters.phaseNumbers, String(number));
+  else filters.taskNumbers = addNumbers(filters.taskNumbers, String(number));
+  return true;
+}
+
 /** Parse a structured search query into typed filters. Tolerant: unknown
  *  keys are treated as bare text. Returns EMPTY_FILTERS for blank input. */
 export function parseSearchQuery(query: string): SearchFilters {
@@ -151,7 +164,7 @@ export function parseSearchQuery(query: string): SearchFilters {
       } else if (key === "title") {
         if (value.trim()) filters.text = value.toLowerCase();
       }
-    } else {
+    } else if (!addBareEntityReference(filters, token)) {
       bareText.push(token.toLowerCase());
     }
     idx += 1;

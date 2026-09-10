@@ -8,7 +8,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, type MacroTaskMutationInput } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, type MacroTaskMutationInput } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -16,6 +16,8 @@ import { WsHub } from "./ws-hub.js";
 
 let watcherAbort: AbortController | null = null;
 let watcherHubRef: { current: WsHub | null } = { current: null };
+
+const SERVER_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/server");
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -299,6 +301,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
       ...project,
       planRoot: store.root,
       projectRoot: dirname(store.root),
+      agentPlanVersion: SERVER_PACKAGE.version,
     });
   });
 

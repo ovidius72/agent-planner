@@ -64,6 +64,13 @@ describe("parseSearchQuery — full-text when no scope", () => {
     assert.equal(f.featureNumbers, null);
     assert.equal(f.status, null);
   });
+  test("bare T003/P003/F003 references become scoped number filters", () => {
+    const task = parseSearchQuery("t003");
+    assert.deepEqual([...task.taskNumbers], [3]);
+    assert.equal(task.text, null);
+    assert.deepEqual([...parseSearchQuery("P003").phaseNumbers], [3]);
+    assert.deepEqual([...parseSearchQuery("f003").featureNumbers], [3]);
+  });
   test("bare phrase 'auth login' → text joined", () => {
     const f = parseSearchQuery("auth login");
     assert.equal(f.text, "auth login");
@@ -95,5 +102,12 @@ describe("matchTask — union + intersection behavior", () => {
     const f = parseSearchQuery("auth");
     assert.ok(matchTask(f, { feature: mkFeature(1), phase: mkPhase(1), task: mkTask(1, "planned", undefined, "user auth flow") }));
     assert.ok(!matchTask(f, { feature: mkFeature(1), phase: mkPhase(1), task: mkTask(1, "planned", undefined, "billing") }));
+  });
+  test("bare t003 matches only task 3, not another task with T003 in parent metadata", () => {
+    const f = parseSearchQuery("t003");
+    const feature = mkFeature(1);
+    const phase = { ...mkPhase(1), description: "Parent context mentions T003" };
+    assert.ok(matchTask(f, { feature, phase, task: mkTask(3) }));
+    assert.ok(!matchTask(f, { feature, phase, task: mkTask(4) }));
   });
 });
