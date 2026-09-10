@@ -133,7 +133,7 @@ export function AppShell({ project, taskFocus, serverInfo }: { project: Project;
   return (
     <div className="page-shell">
       <header className="sticky top-0 z-30 overflow-visible">
-        <TopNav projectName={project?.name} projectRoot={project?.projectRoot} planRoot={project?.planRoot} liveStatus={liveStatus} />
+        <TopNav projectName={project?.name} projectRoot={project?.projectRoot} planRoot={project?.planRoot} agentPlanVersion={project?.agentPlanVersion ?? ""} liveStatus={liveStatus} />
         <TaskFocusHeader taskFocus={taskFocus} />
       </header>
       <div className="page-container py-8">

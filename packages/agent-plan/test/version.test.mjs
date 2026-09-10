@@ -102,8 +102,8 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   assert.match(plannerCommand, /## Project Guidelines/);
   assert.match(plannerCommand, /`planner-project-guidelines-show`/);
   assert.match(plannerCommand, /## Handoff protocol/);
-  assert.match(plannerCommand, /branch and worktree; commands and tools/);
-  assert.match(plannerCommand, /HANDOFF_COMPLETENESS_AUDIT_REQUIRED/);
+  assert.match(plannerCommand, /exact focus and resume point; current\/partial state/);
+  assert.match(plannerCommand, /planner records derived evidence as structured metadata/);
   assert.match(plannerCommand, /compact paginated index of active handoffs/);
   assert.match(plannerCommand, /latest terminal archive/);
   assert.doesNotMatch(plannerCommand, /read the exact lineage in this order/);

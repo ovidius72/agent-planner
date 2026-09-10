@@ -19,7 +19,7 @@
 
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { createPhaseId } from "../../plan-core/dist/index.js";
@@ -373,6 +373,9 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.equal(parityTask.notes, "Provider behavior verified.");
     assert.deepEqual(parityTask.decisions, ["Retry idempotently"]);
     assert.deepEqual(parityTask.checklist.map((item) => item.title), ["Review", "Execute"]);
+    const phaseOnDisk = JSON.parse(await readFile(join(session.planRoot, "phases", `${task.phaseId}.json`), "utf8"));
+    const taskOnDisk = phaseOnDisk.tasks.find((entry) => entry.id === id);
+    assert.deepEqual(taskOnDisk.checklist.map((item) => item.title), ["Review", "Execute"], "planner-task-update persists checklist to the owning phase file");
     assert.deepEqual(parityTask.subtasks.map((item) => item.title), ["Validate provider", "Execute refund"]);
     assert.ok(parityTask.subtasks.every((item) => item.id && item.id !== "forged-subtask"), "subtask IDs are planner-owned and non-empty");
 

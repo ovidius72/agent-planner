@@ -1,0 +1,340 @@
+{
+  "id": "80362403-9ebe-4abb-9acd-cf968e3b20c3",
+  "featureId": "39d5b62f-6c16-4bed-9fc2-749d4b189f82",
+  "number": 100,
+  "shortId": "CY9E8",
+  "priority": 32,
+  "slug": "compact-handoff-recovery-and-published-version-visibility",
+  "title": "Compact handoff recovery and published version visibility",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Replace verbose handoff authoring with a compact resume capsule and expose the published version below the Web UI project name.",
+  "description": "Fix the incomplete handoff contract centered in packages/plan-core/src/handoff-context.ts and packages/plan-core/src/plan-store.ts, where handoff_prepare and handoff_write still require a verbose canonical scaffold, completeness audit, and cold-start inventory to be repeated in Markdown even after overflow externalization. Preserve enough durable context for a cold agent to resume: current objective, completed and partial work, exact file/symbol resume point, decisions and constraints, verification, blockers, and ordered next actions. Move evidence into planner-owned structured metadata or generated supporting documents without requiring prose duplication, enforce the compact inline budget before persistence, and add core/MCP/Pi/server/Web UI regressions. In parallel, update packages/plan-web-ui/src/components/layout/top-nav.tsx and its data loader/API contract so the current published Agent Plan version is visible directly below the project name in the header, with a stable fallback and responsive accessible markup. Preserve existing header navigation, project naming, styling, and runtime behavior; verify installed-version provenance and browser rendering.",
+  "descriptionUpdatedAt": "2026-09-10T15:05:50.070Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "c6ae6a07-5bfa-4bda-8084-004d64522af0",
+    "c2353acd-f5e4-4c61-a665-44869220e96e",
+    "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7"
+  ],
+  "tasks": [
+    {
+      "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0",
+      "phaseId": "80362403-9ebe-4abb-9acd-cf968e3b20c3",
+      "number": 396,
+      "shortId": "ZNMPR",
+      "priority": 1,
+      "shortName": "compact-handoff",
+      "title": "Replace verbose handoff authoring with compact resume capsules",
+      "status": "done",
+      "description": "Refactor packages/plan-core/src/handoff-context.ts and packages/plan-core/src/plan-store.ts so handoff_prepare/handoff_write require only compact resume-critical context instead of repeating the full completeness audit and cold-start inventory in Markdown. Persist audit/evidence as planner-owned structured metadata or generated supporting documents, preserve resume-readiness and read-back integrity, enforce the inline budget before persistence, and update MCP, Pi, server, Web UI, skills, and regressions for concise cold-agent recovery without losing exact resume location, decisions, verification, blockers, or next actions.\n\n---\n**Completion summary:**\nReplaced verbose handoff authoring with compact resume capsules. Core now accepts omitted legacy completenessAudit, coldStartInventory, sourceReviews, and omissionsFound, derives planner-owned evidence from persisted state, and preserves legacy explicit evidence compatibility and resume-readiness hashing. MCP and Pi no longer expose the full audit/inventory arrays in operational prepare output or require duplicate prose; planner skill guidance and generated plugin copies now require only resume-critical focus/state/constraints/verification/blockers/ordered next actions. Added compact handoff regressions and updated legacy expectations. Files touched include packages/plan-core/src/handoff-context.ts, packages/plan-core/src/plan-store.ts, packages/plan-core/planner-skill.md, packages/plan-mcp/src/index.ts, packages/pi-adapter/src/index.ts, generated plugin skill files, and focused tests. Verification: core/MCP/Pi/server builds passed; 85/85 focused handoff/core/MCP/Pi tests passed; pnpm verify:final passed fingerprint b25f7498821d across build, typecheck, 601-test coverage, plugin synchronization, capability audit, browser E2E, and packed-install smoke. Remaining: T397 published version header and T398 checklist persistence are separate planned tasks; no commit or push performed.\n\n---\n**Completion summary:**\nFixed the actual late handoff failure: concise capsules are now accepted without reproducing scaffold or legacy headings; only empty content and unresolved {{REQUIRED:...}} placeholders are rejected. Removed the legacy fallback that emitted obsolete required-section lists, updated MCP/Pi prepare guidance and canonical planner skill to state that headings are optional, and added regressions for free-form concise capsules and placeholder rejection with no persistence. Verification: core/MCP/Pi/server builds, focused handoff suites (18 core, 47 MCP, 17 Pi, 10 server) and git diff --check passed; canonical pnpm verify:final passed 6734f898b934 (build, typecheck, coverage, plugin sync, capability audit, browser E2E, packed-install smoke). T398 checklist persistence remains paused and must be resumed next; no commit or push.",
+      "descriptionUpdatedAt": "2026-09-10T15:40:48.206Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-001-planned-in-progress",
+          "date": "2026-09-10T15:06:19.689Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-002-in-progress-done",
+          "date": "2026-09-10T15:23:38.789Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Replaced verbose handoff authoring with compact resume capsules. Core now accepts omitted legacy completenessAudit, coldStartInventory, sourceReviews, and omissionsFound, derives planner-owned evidence from persisted state, and preserves legacy explicit evidence compatibility and resume-readiness hashing. MCP and Pi no longer expose the full audit/inventory arrays in operational prepare output or require duplicate prose; planner skill guidance and generated plugin copies now require only resume-critical focus/state/constraints/verification/blockers/ordered next actions. Added compact handoff regressions and updated legacy expectations. Files touched include packages/plan-core/src/handoff-context.ts, packages/plan-core/src/plan-store.ts, packages/plan-core/planner-skill.md, packages/plan-mcp/src/index.ts, packages/pi-adapter/src/index.ts, generated plugin skill files, and focused tests. Verification: core/MCP/Pi/server builds passed; 85/85 focused handoff/core/MCP/Pi tests passed; pnpm verify:final passed fingerprint b25f7498821d across build, typecheck, 601-test coverage, plugin synchronization, capability audit, browser E2E, and packed-install smoke. Remaining: T397 published version header and T398 checklist persistence are separate planned tasks; no commit or push performed."
+        },
+        {
+          "id": "1eebe313-2b86-4b50-86bc-0cd7d5a29acb",
+          "date": "2026-09-10T15:33:15.201Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "done → in-progress (reopened)",
+          "description": "Reopened through the confirmed lifecycle operation; prior completion evidence is retained."
+        },
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-004-in-progress-done",
+          "date": "2026-09-10T15:40:48.204Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Fixed the actual late handoff failure: concise capsules are now accepted without reproducing scaffold or legacy headings; only empty content and unresolved {{REQUIRED:...}} placeholders are rejected. Removed the legacy fallback that emitted obsolete required-section lists, updated MCP/Pi prepare guidance and canonical planner skill to state that headings are optional, and added regressions for free-form concise capsules and placeholder rejection with no persistence. Verification: core/MCP/Pi/server builds, focused handoff suites (18 core, 47 MCP, 17 Pi, 10 server) and git diff --check passed; canonical pnpm verify:final passed 6734f898b934 (build, typecheck, coverage, plugin sync, capability audit, browser E2E, packed-install smoke). T398 checklist persistence remains paused and must be resumed next; no commit or push."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-001-define-the-compact-handoff-input-output-contract-and-remove-prose-duplication-requirements",
+          "number": 1,
+          "title": "Define the compact handoff input/output contract and remove prose duplication requirements",
+          "checked": true
+        },
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-002-implement-core-persistence-evidence-derivation-and-bounded-externalization",
+          "number": 2,
+          "title": "Implement core persistence, evidence derivation, and bounded externalization",
+          "checked": true
+        },
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-003-update-mcp-pi-server-web-ui-and-planner-guidance-surfaces",
+          "number": 3,
+          "title": "Update MCP, Pi, server, Web UI, and planner guidance surfaces",
+          "checked": true
+        },
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-004-add-focused-regressions-for-concise-handoffs-resume-readiness-and-legacy-compatibility",
+          "number": 4,
+          "title": "Add focused regressions for concise handoffs, resume-readiness, and legacy compatibility",
+          "checked": true
+        },
+        {
+          "id": "c6ae6a07-5bfa-4bda-8084-004d64522af0-check-005-run-the-canonical-final-verification-and-record-completion-evidence",
+          "number": 5,
+          "title": "Run the canonical final verification and record completion evidence",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-10T15:06:19.689Z",
+      "completedAt": "2026-09-10T15:40:48.204Z",
+      "createdAt": "2026-09-10T15:06:01.446Z",
+      "updatedAt": "2026-09-10T15:40:48.204Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-10T15:33:23.567Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "c2353acd-f5e4-4c61-a665-44869220e96e",
+      "phaseId": "80362403-9ebe-4abb-9acd-cf968e3b20c3",
+      "number": 397,
+      "shortId": "SR6D5",
+      "priority": 2,
+      "shortName": "header-version",
+      "title": "Show published Agent Plan version beneath Web UI project name",
+      "status": "done",
+      "description": "Update packages/plan-web-ui/src/components/layout/top-nav.tsx and the project data/API contract to render the current published Agent Plan version directly below the project name in the global header. Use the installed package provenance already exposed by the server, provide a stable fallback when unavailable, preserve existing navigation, truncation, accessibility, responsive layout, and project title behavior, and add unit plus browser regressions proving the version is visible under the project name.\n\n---\n**Completion summary:**\nAdded the published Agent Plan version to the existing GET /api/project response using the loaded @agent-plan/server package manifest, carried it through the typed Web UI Project model and normalization, and rendered `Agent Plan vX.Y.Z` directly beneath the project name in TopNav with an accessible stable unavailable fallback. Existing navigation, project title, truncation, responsive layout, and live status behavior remain unchanged. Added server API, Web UI unit, and responsive browser assertions. Verification: server build, Web UI build, focused server fixture tests 5/5, focused Web UI unit test passed, and responsive Playwright passed 8/8. Canonical final gate is intentionally deferred to P100 phase close per repository verification policy; no commit or push performed.",
+      "descriptionUpdatedAt": "2026-09-10T15:29:33.223Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "c2353acd-f5e4-4c61-a665-44869220e96e-check-001-planned-in-progress",
+          "date": "2026-09-10T15:23:53.080Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "c2353acd-f5e4-4c61-a665-44869220e96e-check-002-in-progress-done",
+          "date": "2026-09-10T15:29:33.215Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added the published Agent Plan version to the existing GET /api/project response using the loaded @agent-plan/server package manifest, carried it through the typed Web UI Project model and normalization, and rendered `Agent Plan vX.Y.Z` directly beneath the project name in TopNav with an accessible stable unavailable fallback. Existing navigation, project title, truncation, responsive layout, and live status behavior remain unchanged. Added server API, Web UI unit, and responsive browser assertions. Verification: server build, Web UI build, focused server fixture tests 5/5, focused Web UI unit test passed, and responsive Playwright passed 8/8. Canonical final gate is intentionally deferred to P100 phase close per repository verification policy; no commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c2353acd-f5e4-4c61-a665-44869220e96e-check-001-expose-a-typed-published-version-field-from-the-existing-project-bootstrap-response",
+          "number": 1,
+          "title": "Expose a typed published-version field from the existing project/bootstrap response",
+          "checked": true
+        },
+        {
+          "id": "c2353acd-f5e4-4c61-a665-44869220e96e-check-002-render-the-version-beneath-the-project-name-without-changing-header-navigation-behavior",
+          "number": 2,
+          "title": "Render the version beneath the project name without changing header navigation behavior",
+          "checked": true
+        },
+        {
+          "id": "c2353acd-f5e4-4c61-a665-44869220e96e-check-003-add-unit-and-responsive-browser-coverage-including-the-fallback",
+          "number": 3,
+          "title": "Add unit and responsive browser coverage including the fallback",
+          "checked": true
+        },
+        {
+          "id": "c2353acd-f5e4-4c61-a665-44869220e96e-check-004-run-focused-build-tests-defer-the-canonical-final-gate-to-phase-close",
+          "number": 4,
+          "title": "Run focused build/tests; defer the canonical final gate to phase close",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-10T15:23:53.080Z",
+      "completedAt": "2026-09-10T15:29:33.215Z",
+      "createdAt": "2026-09-10T15:06:01.519Z",
+      "updatedAt": "2026-09-10T15:29:33.215Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-10T15:23:52.959Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7",
+      "phaseId": "80362403-9ebe-4abb-9acd-cf968e3b20c3",
+      "number": 398,
+      "shortId": "548X9",
+      "priority": 3,
+      "shortName": "checklist-persistence",
+      "title": "Persist task checklist writes and reject false success",
+      "status": "done",
+      "description": "Audit the planner-task-update checklist path across packages/plan-core/src/plan-store.ts, packages/plan-mcp/src/index.ts, packages/pi-adapter/src/index.ts, packages/plan-server/src/serve.ts, and task update regressions. When a checklist payload is accepted, persist the normalized checklist to the owning phase file, read it back before returning success, and return updated:false with a typed error or no-op reason when persistence does not occur. Add a regression that reads the phase JSON directly and verifies checklist items survive the mutation, preserving planner-owned checklist identity and existing task update semantics.\n\n---\n**Completion summary:**\nHardened checklist persistence end to end. PlanStore.updateTask now reads the owning phase back from disk and throws typed TASK_CHECKLIST_PERSISTENCE_FAILED instead of allowing false success when the normalized checklist is absent or differs. MCP and Pi planner-task-update/task_update use the semantic core path and return updated:false, isError, and typed errorCode on persistence failure. Added direct phase-file regressions for core, MCP, Pi, and plan-server, plus a simulated core read-back mismatch regression. Verification: affected builds and 75 focused core/MCP/Pi/server tests passed; canonical pnpm verify:final passed 187da4227dc7 (build, typecheck, coverage, plugin sync, capability audit, browser E2E, packed-install smoke); git diff --check clean. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-09-10T15:49:12.050Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7-check-001-planned-in-progress",
+          "date": "2026-09-10T15:29:47.111Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a8821a99-f10b-49aa-8c26-62a0a51147d0",
+          "date": "2026-09-10T15:33:38.780Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: User reported a handoff regression that must be corrected before returning to checklist persistence.\nWhat was being done: Inspected plan-core, MCP, Pi, and server task-update checklist paths. No T398 source changes were made in this turn; existing worktree changes are preserved.\nResume location: packages/plan-mcp/src/index.ts planner-task-update around lines 1660-1800; packages/plan-server/src/serve.ts PUT /tasks/:id around lines 1263-1340; packages/pi-adapter/src/index.ts task_update around lines 5168-5290; packages/plan-core/src/plan-store.ts updateTask around lines 3055-3075.\nHow to resume: Reproduce a checklist update in a mkdtemp fixture, read the owning phases/<id>.json directly, then add persisted read-back and typed false-success handling before running focused tests."
+        },
+        {
+          "id": "46f040d2-2aad-4815-aab1-2f1e9a624c95",
+          "date": "2026-09-10T15:41:20.441Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from packages/plan-mcp/src/index.ts planner-task-update around lines 1660-1800; packages/plan-server/src/serve.ts PUT /tasks/:id around lines 1263-1340; packages/pi-adapter/src/index.ts task_update around lines 5168-5290; packages/plan-core/src/plan-store.ts updateTask around lines 3055-3075.. Reproduce a checklist update in a mkdtemp fixture, read the owning phases/<id>.json directly, then add persisted read-back and typed false-success handling before running focused tests."
+        },
+        {
+          "id": "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7-check-004-in-progress-done",
+          "date": "2026-09-10T15:49:12.047Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Hardened checklist persistence end to end. PlanStore.updateTask now reads the owning phase back from disk and throws typed TASK_CHECKLIST_PERSISTENCE_FAILED instead of allowing false success when the normalized checklist is absent or differs. MCP and Pi planner-task-update/task_update use the semantic core path and return updated:false, isError, and typed errorCode on persistence failure. Added direct phase-file regressions for core, MCP, Pi, and plan-server, plus a simulated core read-back mismatch regression. Verification: affected builds and 75 focused core/MCP/Pi/server tests passed; canonical pnpm verify:final passed 187da4227dc7 (build, typecheck, coverage, plugin sync, capability audit, browser E2E, packed-install smoke); git diff --check clean. No commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7-check-001-trace-checklist-payload-normalization-phase-persistence-and-updatedfields-reporting-across-all-mutation-surfaces",
+          "number": 1,
+          "title": "Trace checklist payload normalization, phase persistence, and updatedFields reporting across all mutation surfaces",
+          "checked": true
+        },
+        {
+          "id": "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7-check-002-fix-the-core-persistence-read-back-path-and-typed-false-success-outcome",
+          "number": 2,
+          "title": "Fix the core persistence/read-back path and typed false-success outcome",
+          "checked": true
+        },
+        {
+          "id": "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7-check-003-add-mcp-pi-server-and-direct-phase-file-regression-coverage",
+          "number": 3,
+          "title": "Add MCP, Pi, server, and direct phase-file regression coverage",
+          "checked": true
+        },
+        {
+          "id": "d4ad74bb-7d78-4ea6-8ff6-e23d23e038f7-check-004-run-focused-verification-and-the-canonical-final-gate",
+          "number": 4,
+          "title": "Run focused verification and the canonical final gate",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "a1b1bd62-53f3-49db-82f9-9ac7900ee155",
+          "reason": "User reported a handoff regression that must be corrected before returning to checklist persistence.",
+          "whatWasBeingDone": "Inspected plan-core, MCP, Pi, and server task-update checklist paths. No T398 source changes were made in this turn; existing worktree changes are preserved.",
+          "resumeLocation": "packages/plan-mcp/src/index.ts planner-task-update around lines 1660-1800; packages/plan-server/src/serve.ts PUT /tasks/:id around lines 1263-1340; packages/pi-adapter/src/index.ts task_update around lines 5168-5290; packages/plan-core/src/plan-store.ts updateTask around lines 3055-3075.",
+          "howToResume": "Reproduce a checklist update in a mkdtemp fixture, read the owning phases/<id>.json directly, then add persisted read-back and typed false-success handling before running focused tests.",
+          "relatedTaskId": "",
+          "pausedAt": "2026-09-10T15:33:38.780Z",
+          "pausedBy": "pi"
+        }
+      ],
+      "startedAt": "2026-09-10T15:29:47.111Z",
+      "completedAt": "2026-09-10T15:49:12.047Z",
+      "createdAt": "2026-09-10T15:08:38.661Z",
+      "updatedAt": "2026-09-10T15:49:12.047Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-10T15:41:20.348Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-10T15:05:50.069Z",
+  "updatedAt": "2026-09-10T15:49:12.047Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-10T15:30:02.696Z",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/80362403-9ebe-4abb-9acd-cf968e3b20c3-2026-09-10T15-49-12-070Z.md",
+      "clearedAt": "2026-09-10T15:49:12.070Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "1dd1d709-1c84-4a3f-b6b2-e23d63ae50f4",
+      "date": "2026-09-10T15:06:19.711Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "779b81cc-2d66-4dba-96e1-702013c08fb4",
+      "date": "2026-09-10T15:49:12.121Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-10T15:41:20.348Z"
+    }
+  ]
+}

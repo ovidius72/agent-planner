@@ -268,6 +268,35 @@ test("checklist: persisted via savePhase and reloaded identically", async () => 
   const checklist = (await reopened2.loadAllPhases())[0].tasks[0].checklist;
   assert.equal(checklist[0].checked, true, "resolution survives reload");
   assert.equal(checklist[1].checked, false);
+
+  const updated = await reopened2.updateTask(phaseId, taskId, (current) => ({
+    ...current,
+    checklist: [
+      { ...current.checklist[0], title: "Persisted step" },
+      { ...current.checklist[1], title: "Persisted follow-up" },
+    ],
+    updatedAt: new Date().toISOString(),
+  }));
+  const phaseOnDisk = JSON.parse(await readFile(join(planRoot, "phases", `${phaseId}.json`), "utf8"));
+  assert.deepEqual(phaseOnDisk.tasks.find((entry) => entry.id === taskId).checklist.map((item) => item.title), ["Persisted step", "Persisted follow-up"]);
+  assert.deepEqual(updated.task.checklist.map((item) => item.title), ["Persisted step", "Persisted follow-up"]);
+
+  const originalLoadPhase = reopened2.loadPhase.bind(reopened2);
+  reopened2.loadPhase = async (requestedPhaseId) => {
+    const persistedPhase = await originalLoadPhase(requestedPhaseId);
+    return {
+      ...persistedPhase,
+      tasks: persistedPhase.tasks.map((entry) => entry.id === taskId ? { ...entry, checklist: [] } : entry),
+    };
+  };
+  await assert.rejects(
+    reopened2.updateTask(phaseId, taskId, (current) => ({
+      ...current,
+      checklist: [{ ...current.checklist[0], title: "Unverified write" }, { ...current.checklist[1], title: "Unverified follow-up" }],
+      updatedAt: new Date().toISOString(),
+    })),
+    (error) => error?.details?.errorCode === "TASK_CHECKLIST_PERSISTENCE_FAILED",
+  );
 });
 
 test("checklist: nesting is expressed via task.subtasks (schema has no checklist parent)", async () => {

@@ -19,7 +19,8 @@
     "d64adbf0-4227-40ff-80bc-dd13e699229a",
     "17a33d52-70c4-4b20-8bb2-045961a1866a",
     "71bae839-e639-46e3-8fa4-aef5e195f94f",
-    "559b76d0-4ec4-49d3-a83a-86534760c770"
+    "559b76d0-4ec4-49d3-a83a-86534760c770",
+    "80362403-9ebe-4abb-9acd-cf968e3b20c3"
   ],
   "dependsOn": [
     "Stable v0.2.26 baseline on develop",
@@ -42,6 +43,22 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "1d4787b1-3b9b-4af1-80f6-4e389182a8f4",
+      "date": "2026-09-10T15:06:19.779Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "9d6d8636-4b4c-4629-9f27-24a46a8012c4",
+      "date": "2026-09-10T15:49:12.184Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-09-01T10:13:26.005Z",
@@ -49,7 +66,7 @@
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-09T10:16:57.039Z"
+      "createdAt": "2026-09-10T15:41:20.348Z"
     },
     {
       "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",

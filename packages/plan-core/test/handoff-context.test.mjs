@@ -292,20 +292,21 @@ describe("durable handoff context refresh", () => {
     assert.deepEqual(await store.loadFeatures(), beforeFeatures);
   });
 
-  test("rejects missing or non-substantive completeness audits without mutation", async () => {
+  test("accepts compact handoffs without duplicate audit or inventory prose", async () => {
     const { store, phaseId, doneTaskId } = await setup();
     const audit = await store.preparePhaseHandoff(phaseId);
     const before = await store.loadPhase(phaseId);
     const input = refreshInput(audit, doneTaskId);
 
-    await assert.rejects(
-      store.refreshPhaseHandoff(phaseId, { ...input, completenessAudit: undefined }),
-      (error) => {
-        assert.equal(error.code, "HANDOFF_COMPLETENESS_AUDIT_REQUIRED");
-        assert.equal(error.details.missingCategories.length, HANDOFF_COMPLETENESS_CATEGORIES.length);
-        return true;
-      },
-    );
+    await store.refreshPhaseHandoff(phaseId, {
+      ...input,
+      completenessAudit: undefined,
+      coldStartInventory: undefined,
+    });
+    const compactPersisted = await store.loadPhase(phaseId);
+    assert.notEqual(compactPersisted.handoff, before.handoff);
+    assert.equal(compactPersisted.handoffAudit?.coldStartInventory?.entries.length, HANDOFF_COLD_START_INVENTORY_CATEGORIES.length);
+    const beforeInvalid = compactPersisted;
 
     const invalid = completeAudit();
     invalid.entries[0] = { category: invalid.entries[0].category, status: "not-applicable", detail: "N/A" };
@@ -314,14 +315,6 @@ describe("durable handoff context refresh", () => {
       (error) => {
         assert.equal(error.code, "HANDOFF_COMPLETENESS_AUDIT_REQUIRED");
         assert.ok(error.details.invalidCategories.includes(invalid.entries[0].category));
-        return true;
-      },
-    );
-    await assert.rejects(
-      store.refreshPhaseHandoff(phaseId, { ...input, coldStartInventory: undefined }),
-      (error) => {
-        assert.equal(error.code, "HANDOFF_COLD_START_INVENTORY_REQUIRED");
-        assert.equal(error.details.missingCategories.length, HANDOFF_COLD_START_INVENTORY_CATEGORIES.length);
         return true;
       },
     );
@@ -336,11 +329,47 @@ describe("durable handoff context refresh", () => {
       },
     );
     await assert.rejects(
-      store.refreshPhaseHandoff(phaseId, { ...input, content: "# Expensive draft without the prepared scaffold" }),
+      store.refreshPhaseHandoff(phaseId, { ...input, content: "# Draft with {{REQUIRED:resume-point}}" }),
       (error) => {
         assert.equal(error.code, "HANDOFF_CANONICAL_SECTIONS_REQUIRED");
-        assert.ok(error.details.missingSections.includes("Current focus"));
-        assert.ok(error.details.missingSections.includes("How to resume"));
+        assert.deepEqual(error.details.missingSections, []);
+        assert.deepEqual(error.details.unresolvedPlaceholders, ["{{REQUIRED:resume-point}}"]);
+        return true;
+      },
+    );
+    assert.deepEqual(await store.loadPhase(phaseId), beforeInvalid);
+  });
+
+  test("accepts concise free-form resume capsules without scaffold headings", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const prepared = await store.preparePhaseHandoff(phaseId);
+    const input = refreshInput(prepared, doneTaskId, {
+      content: "Resume T001 at packages/plan-core/src/handoff-context.ts:648; preserve the current compact contract. Focused tests pass. Next: rerun the handoff suite.",
+      completenessAudit: undefined,
+      coldStartInventory: undefined,
+    });
+
+    const result = await store.refreshPhaseHandoff(phaseId, input);
+    assert.match(result.phase.handoff, /Resume T001 at packages\/plan-core\/src\/handoff-context\.ts:648/);
+    assert.doesNotMatch(result.phase.handoff, /What was being done|Files touched|Recent decisions/);
+  });
+
+  test("rejects unresolved handoff placeholders before persistence", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const prepared = await store.preparePhaseHandoff(phaseId);
+    const before = await store.loadPhase(phaseId);
+    const input = refreshInput(prepared, doneTaskId, {
+      content: "Resume from {{REQUIRED:exact-focus-resume-point}}.",
+      completenessAudit: undefined,
+      coldStartInventory: undefined,
+    });
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, input),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_CANONICAL_SECTIONS_REQUIRED");
+        assert.deepEqual(error.details.missingSections, []);
+        assert.deepEqual(error.details.unresolvedPlaceholders, ["{{REQUIRED:exact-focus-resume-point}}"]);
         return true;
       },
     );

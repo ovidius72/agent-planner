@@ -3074,7 +3074,16 @@ export class PlanStore {
       persisted = next;
       return currentPhase;
     });
-    return { phase, task: persisted! };
+    const persistedPhase = await this.loadPhase(phaseId);
+    const persistedTask = persistedPhase.tasks.find((task) => task.id === taskId);
+    if (!persistedTask || JSON.stringify(persistedTask.checklist) !== JSON.stringify(persisted!.checklist)) {
+      throw new PlanStoreError(
+        `Task checklist persistence verification failed for ${taskId}.`,
+        undefined,
+        { errorCode: "TASK_CHECKLIST_PERSISTENCE_FAILED", phaseId, taskId },
+      );
+    }
+    return { phase: persistedPhase, task: persistedTask };
   }
 
   async createAcceptedDecision(
@@ -3532,8 +3541,8 @@ export class PlanStore {
     });
   }
 
-  /** Mark a persisted handoff resume-ready only after a separate full read-back
-   * has reconciled every required source and found no omissions. */
+  /** Mark a persisted handoff resume-ready after a separate persisted read-back.
+   * Legacy source evidence is optional; compact handoffs derive it from state. */
   async verifyPhaseHandoffReadBack(
     phaseId: string,
     input: VerifyPhaseHandoffReadBackInput,

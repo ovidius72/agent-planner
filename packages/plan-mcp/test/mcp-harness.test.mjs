@@ -143,13 +143,14 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.ok(handoffWrite.required.includes("confirmed"), "handoff-write requires confirmed");
     assert.ok(handoffWrite.required.includes("phaseRef"), "handoff-write requires phaseRef");
     assert.ok(handoffWrite.required.includes("content"), "handoff-write requires content");
-    assert.ok(handoffWrite.properties.completenessAudit, "handoff-write publishes the mandatory confirmed-write completeness audit contract");
-    assert.ok(handoffWrite.properties.coldStartInventory, "handoff-write publishes the mandatory cold-start inventory contract");
-    assert.ok(handoffWrite.properties.coldStartInventory.properties.sourceReviews, "cold-start inventory publishes the pre-draft source-review contract");
+    assert.ok(handoffWrite.properties.completenessAudit, "handoff-write retains the legacy completeness audit contract");
+    assert.ok(handoffWrite.properties.coldStartInventory, "handoff-write retains the legacy cold-start inventory contract");
+    assert.ok(handoffWrite.properties.coldStartInventory.properties.sourceReviews, "legacy cold-start inventory retains the source-review contract");
     assert.equal(handoffWrite.properties.confirmed.type, "boolean", "confirmed is a boolean");
     const handoffVerify = schema("planner-handoff-verify");
     assert.ok(handoffVerify.required.includes("expectedContentHash"), "handoff-verify requires the shown persisted content hash");
-    assert.ok(handoffVerify.required.includes("sourceReviews") && handoffVerify.required.includes("omissionsFound"), "handoff-verify requires a separate source reconciliation result");
+    assert.equal(handoffVerify.required.includes("sourceReviews"), false, "handoff-verify derives legacy source evidence when omitted");
+    assert.equal(handoffVerify.required.includes("omissionsFound"), false, "handoff-verify derives omitted gaps from persisted state");
 
     // task-checklist-toggle requires task + item
     const toggle = schema("planner-task-checklist-toggle");

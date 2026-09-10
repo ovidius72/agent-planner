@@ -97,7 +97,7 @@ test("planner-handoff-prepare returns a generic proposal", async () => {
   }
 });
 
-test("planner-handoff-prepare returns the complete pre-draft scaffold and inventory contract", async () => {
+test("planner-handoff-prepare returns the compact pre-draft scaffold and planner-owned evidence contract", async () => {
   const session = await startMcpFixture({ name: "t383-prepare-scaffold" });
   try {
     const result = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
@@ -105,13 +105,14 @@ test("planner-handoff-prepare returns the complete pre-draft scaffold and invent
     assert.match(toolText(result), /Use this exact scaffold before drafting/);
     assert.match(toolText(result), /Required human inputs before drafting/);
     assert.match(toolText(result), /Planner-generated metadata \(do not add these to Markdown\)/);
-    assert.match(toolText(result), /Required cold-start source review v1/);
+    assert.match(toolText(result), /Completeness audit and cold-start evidence are planner-owned metadata/);
     assert.match(prepared.draftTemplate, /## Current and partial state/);
     assert.match(prepared.draftTemplate, /## How to resume/);
     assert.deepEqual(prepared.requiredHumanInputs.map((input) => input.id), ["title", "reason"]);
     assert.equal(prepared.canonicalSections.length, 6);
-    assert.equal(prepared.coldStartSourceReviews.length, 5);
-    assert.equal(prepared.coldStartInventoryCategories.length, 14);
+    assert.equal(Object.hasOwn(prepared, "coldStartSourceReviews"), false);
+    assert.equal(Object.hasOwn(prepared, "coldStartInventoryCategories"), false);
+    assert.match(prepared.evidenceContract, /derived from persisted state/);
     assert.equal(prepared.phaseWorkMap.total, 1);
     assert.match(prepared.phaseWorkMap.content, /P001\(F001\)\/T001/);
   } finally {
@@ -223,7 +224,7 @@ test("planner-handoff-write persists a candidate that requires separate read-bac
   }
 });
 
-test("planner-handoff-write returns typed completeness diagnostics before mutation", async () => {
+test("planner-handoff-write accepts compact content without duplicate completeness prose", async () => {
   const session = await startMcpFixture({ name: "t352-completeness-required" });
   try {
     const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
@@ -240,16 +241,15 @@ test("planner-handoff-write returns typed completeness diagnostics before mutati
       phaseNoUpdateReason: "Fixture does not change durable phase context.",
       featureNoUpdateReason: "Fixture does not change durable feature context.",
     });
-    assert.equal(result.isError, true);
-    assert.equal(result.structuredContent.errorCode, "HANDOFF_COMPLETENESS_AUDIT_REQUIRED");
-    assert.ok(result.structuredContent.missingCategories.includes("branch-worktree"));
-    assert.equal((await session.store.loadAllPhases())[0].handoff, "");
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.persisted, true);
+    assert.notEqual((await session.store.loadAllPhases())[0].handoff, "");
   } finally {
     await closeMcpFixture(session);
   }
 });
 
-test("planner-handoff-write returns typed cold-start inventory diagnostics before mutation", async () => {
+test("planner-handoff-write accepts compact content without duplicate cold-start inventory", async () => {
   const session = await startMcpFixture({ name: "t383-cold-start-required" });
   try {
     const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
@@ -267,9 +267,9 @@ test("planner-handoff-write returns typed cold-start inventory diagnostics befor
       phaseNoUpdateReason: "Fixture does not change durable phase context.",
       featureNoUpdateReason: "Fixture does not change durable feature context.",
     });
-    assert.equal(result.isError, true);
-    assert.equal(result.structuredContent.errorCode, "HANDOFF_COLD_START_INVENTORY_REQUIRED");
-    assert.equal((await session.store.loadAllPhases())[0].handoff, "");
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.persisted, true);
+    assert.notEqual((await session.store.loadAllPhases())[0].handoff, "");
   } finally {
     await closeMcpFixture(session);
   }

@@ -90,6 +90,7 @@ function normalizeProject(project: Project): Project {
     workDeviations: project.workDeviations ?? [],
     planRoot: project.planRoot ?? "",
     projectRoot: project.projectRoot ?? "",
+    agentPlanVersion: project.agentPlanVersion ?? "",
     workflowRules: {
       beforePhaseStart: project.workflowRules?.beforePhaseStart ?? [],
       beforeTaskStart: project.workflowRules?.beforeTaskStart ?? [],

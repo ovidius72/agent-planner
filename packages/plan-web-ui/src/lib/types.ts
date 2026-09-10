@@ -295,4 +295,5 @@ export interface Project {
   };
   planRoot?: string;
   projectRoot?: string;
+  agentPlanVersion?: string;
 }
