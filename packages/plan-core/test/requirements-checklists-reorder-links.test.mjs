@@ -76,7 +76,7 @@ function reopen(planRoot) {
 // Requirements CRUD + phase links
 // ────────────────────────────────────────────────────────────────────────────
 
-test("requirements: create/update/delete persist through a fresh PlanStore", async () => {
+test("requirements: legacy status parses but is not exposed or persisted", async () => {
   const { planRoot, store } = await createPlannerFixture({ name: "req-crud", seed: "minimal" });
   const phase = (await store.loadAllPhases())[0];
   const req = await store.updateRequirements((doc) => {
@@ -94,6 +94,7 @@ test("requirements: create/update/delete persist through a fresh PlanStore", asy
   });
   const added = req.requirements.find((r) => r.title === "Handle duplicates");
   assert.ok(added, "requirement must be persisted");
+  assert.equal(Object.hasOwn(added, "status"), false, "legacy top-level status is stripped");
   assert.deepEqual(added.linkedPhaseIds, [phase.id]);
 
   // update
@@ -117,7 +118,7 @@ test("requirements: create/update/delete persist through a fresh PlanStore", asy
   const all = (await reopened.loadRequirements()).requirements;
   assert.equal(all.length, 1);
   assert.equal(all[0].title, "Handle duplicates (updated)");
-  assert.equal(all[0].status, "in-progress");
+  assert.equal(Object.hasOwn(all[0], "status"), false, "top-level status is never persisted");
   assert.deepEqual(all[0].linkedPhaseIds, []);
 });
 

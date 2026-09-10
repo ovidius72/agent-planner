@@ -71,6 +71,33 @@ test("desktop and mobile layouts keep core navigation, work tree controls, IDs, 
   if (compact) expect(modalSize.scrollableModal).toBe(true);
 });
 
+test("entity detail disclosures start closed on desktop and mobile navigation", async ({ page, planner }) => {
+  await planner.seed("full");
+  const features = (await planner.request("/features")).body as Array<{ id: string }>;
+  const feature = features[0]!;
+  const phases = (await planner.request(`/phases?featureId=${feature.id}`)).body as Array<{ id: string; tasks: Array<{ id: string }> }>;
+  const phase = phases.find((entry) => entry.tasks.length > 0)!;
+  const task = phase.tasks[0]!;
+
+  const expectDetailClosed = async (summary: string) => {
+    const details = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: summary }) }).first();
+    await expect(details).toBeVisible();
+    await expect.poll(async () => details.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
+  };
+
+  await page.goto(`${planner.url}/features/${feature.id}`);
+  await expectDetailClosed("Description");
+  await expectDetailClosed("Status history");
+
+  await page.goto(`${planner.url}/features/${feature.id}/phases/${phase.id}`);
+  await expectDetailClosed("Description");
+  await expectDetailClosed("Status history");
+
+  await page.goto(`${planner.url}/features/${feature.id}/phases/${phase.id}/tasks/${task.id}`);
+  await expectDetailClosed("Description");
+  await expectDetailClosed("Status history");
+});
+
 test("handoff archive stays navigable and horizontally contained", async ({ page, planner }) => {
   await planner.seed("full");
   await page.goto(`${planner.url}/handoff/archive`);
@@ -78,7 +105,25 @@ test("handoff archive stays navigable and horizontally contained", async ({ page
   await expect(page.getByRole("heading", { name: "Archived handoffs" })).toBeVisible();
   await expect(page.getByRole("link", { name: "← Pending handoffs" })).toBeVisible();
   await expect(page.locator("summary").filter({ hasText: "Payments implement handoff" })).toBeVisible();
+  await expect.poll(async () => page.locator("details").filter({ has: page.locator("summary").filter({ hasText: "Payments implement handoff" }) }).first().evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
 
+  const size = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(size.scrollWidth).toBeLessThanOrEqual(size.clientWidth + 1);
+});
+
+test("planner document references open the viewer in a new tab", async ({ page, planner }) => {
+  await planner.seed("minimal");
+  await planner.request("/docs/save", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: ".planner/docs/responsive-note.md", content: "# Responsive note\n\nSafe viewer content.\n", confirmed: true }),
+    expectStatus: 200,
+  });
+  await page.goto(`${planner.url}/docs/view?path=${encodeURIComponent(".planner/docs/responsive-note.md")}`);
+  await expect(page.getByRole("heading", { name: "Planner document" })).toBeVisible();
+  await expect(page.getByText("Safe viewer content.")).toBeVisible();
   const size = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,

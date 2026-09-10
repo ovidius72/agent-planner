@@ -12,6 +12,7 @@ import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { DetailFilters } from "../../components/ui/detail-filters";
+import { DescriptionFreshnessNotice } from "../../components/ui/description-freshness-notice";
 import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
@@ -22,7 +23,7 @@ import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
 import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
 import { compareEntities, type WorkTreeSortConfig } from "../../lib/dashboard-tree";
-import type { Feature, Phase } from "../../lib/types";
+import type { Feature, HierarchicalDescriptionFreshness, Phase } from "../../lib/types";
 
 function countTasks(phases: Phase[]) {
   return phases.reduce((total, phase) => total + phase.tasks.length, 0);
@@ -51,7 +52,7 @@ function findCurrentPhase(phases: Phase[]) {
 }
 
 export function FeatureDetailRoute() {
-  const { feature, phases } = useLoaderData() as { feature: Feature; phases: Phase[] };
+  const { feature, phases, descriptionFreshness } = useLoaderData() as { feature: Feature; phases: Phase[]; descriptionFreshness: HierarchicalDescriptionFreshness };
   const acceptedDecisions = feature.acceptedDecisions ?? [];
   const taskCount = countTasks(phases);
   const taskSummary = countTasksByStatus(phases);
@@ -143,6 +144,8 @@ export function FeatureDetailRoute() {
         </div>
       </div>
 
+      <DescriptionFreshnessNotice freshness={descriptionFreshness} ownerIds={[feature.id]} />
+
       <Card className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
@@ -174,7 +177,7 @@ export function FeatureDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        {acceptedDecisions.length > 0 ? <AcceptedDecisionsList decisions={acceptedDecisions} /> : null}
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="feature" targetRef={feature.id} />
         <StatusHistoryAccordion statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
       </Card>
 

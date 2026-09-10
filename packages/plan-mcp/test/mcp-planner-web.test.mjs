@@ -24,7 +24,7 @@ import {
 } from "../../../test/helpers/mcp-fixture.mjs";
 import { createTempRoot, cleanupFixtures } from "../../../test/helpers/fixtures.mjs";
 import { createPhaseId, createTaskId } from "../../../packages/plan-core/dist/index.js";
-import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupMcpFixtures();
@@ -43,11 +43,13 @@ async function writePreparedHandoff(session, phaseRef, title, content) {
   return callTool(session, "planner-handoff-write", {
     phaseRef,
     title,
+    reason: "Planner web fixture session boundary requires a cold-resume handoff.",
     content: canonicalHandoff(title, content),
     confirmed: true,
     expectedHandoffUpdatedAt: audit.handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
     completenessAudit: completeHandoffAudit(),
+    coldStartInventory: completeHandoffColdStartInventory({ file: "mcp-planner-web.test.mjs" }),
     taskUpdates: [],
     phaseNoUpdateReason: "Fixture does not change durable phase context.",
     featureNoUpdateReason: "Fixture does not change durable feature context.",
@@ -71,6 +73,10 @@ test("planner-web start/status/stop lifecycle", async () => {
     const startText = toolText(startResult);
     assert.match(startText, /planner-web started:/);
     assert.match(startText, /\(mode: .+\)/);
+    assert.equal(toolStructured(startResult).running, true);
+    assert.match(toolStructured(startResult).localUrl, /^http:\/\/(localhost|127\.0\.0\.1):[0-9]+$/);
+    assert.ok(toolStructured(startResult).port > 0);
+    assert.ok(String(toolStructured(startResult).host).length > 0);
 
     // Wait a bit for server to fully start
     await waitForServer(200);
@@ -81,6 +87,8 @@ test("planner-web start/status/stop lifecycle", async () => {
     assert.match(statusText, /planner-web running:/);
     assert.match(statusText, /\(mode: .+\)/);
     assert.match(statusText, /bindHost: 0\.0\.0\.0/); // Should be bound to LAN
+    assert.equal(toolStructured(status).running, true);
+    assert.ok(toolStructured(status).port > 0);
 
     // Test idempotent start (should say already running)
     const startAgain = await callTool(session, "planner-web", { action: "start" });
@@ -227,7 +235,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-task-show", { task: "T001", full: true });
     await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     await callTool(session, "planner-task-start", { task: "T001" });
     await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified before rollup coverage." });
 
@@ -267,7 +275,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-task-show", { task: "T002", full: true });
     await callTool(session, "planner-phase-show", { phase: "P002", full: true });
     await callTool(session, "planner-feature-show", { feature: "F002", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P002" });
     await callTool(session, "planner-task-start", { task: "T002" });
     await callTool(session, "planner-task-complete", { task: "T002", force: true, description_update: "First rollup task completed and verified." });
     const pageShowAfter = await callTool(session, "planner-phase-show", { phase: "P002" });
@@ -277,7 +285,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-task-show", { task: "T003", full: true });
     await callTool(session, "planner-phase-show", { phase: "P002", full: true });
     await callTool(session, "planner-feature-show", { feature: "F002", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P002" });
     await callTool(session, "planner-task-start", { task: "T003" });
     const recap = await callTool(session, "planner-load", {});
     const recapText = toolText(recap);
@@ -318,6 +326,13 @@ test("recap context and generated/export operations", async () => {
     // its last non-empty line, which Codex can present verbatim.
     const loadResult = await callTool(session, "planner-load", {});
     const loadText = toolText(loadResult);
+    assert.equal(loadResult.structuredContent.loaded, true);
+    assert.equal(loadResult.structuredContent.recap.text, loadText, "structured MCP clients receive the same consolidated recap");
+    assert.equal(loadResult.structuredContent.webUi.running, true);
+    assert.match(loadResult.structuredContent.webUi.address, /^http:\/\//);
+    assert.equal(typeof loadResult.structuredContent.webUi.host, "string");
+    assert.equal(typeof loadResult.structuredContent.webUi.port, "number");
+    assert.ok(loadResult.structuredContent.webUi.port > 0);
     assert.equal(loadResult.structuredContent.preparation.migrated, true);
     assert.match(loadText, /Migrated legacy project context: 1 guideline, 1 accepted decision/);
     assert.match(loadText, /## Project Guidelines/);
@@ -350,7 +365,7 @@ test("recap context and generated/export operations", async () => {
     await callTool(session, "planner-task-show", { task: "T001", full: true });
     await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     const startAfterLoad = await callTool(session, "planner-task-start", { task: "T001" });
     assert.equal(startAfterLoad.structuredContent.started, true, "planner-load records the project-guidelines read attestation");
 
@@ -481,7 +496,7 @@ test("consistent status/handoff results after reopening MCP server", async () =>
     
     // Set a handoff
     const handoffWrite = await writePreparedHandoff(session, "P002", "Consistency Handoff", "# Consistency Handoff\nTesting consistency.");
-    assert.match(toolText(handoffWrite), /Reconciled handoff and durable context/);
+    assert.match(toolText(handoffWrite), /Handoff candidate persisted.*NOT resume-ready/);
     
     // Show handoff - should show our content
     handoffShow = await callTool(session, "planner-handoff-show", { phaseRef: "P002" });

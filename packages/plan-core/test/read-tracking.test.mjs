@@ -24,10 +24,12 @@ import {
   markRequirementRead,
   markRequirementReadForSessionId,
   markTaskRead,
+  markCanonicalFullReadForSessionId,
   markFeatureReadForSessionId,
   markPhaseReadForSessionId,
   markTaskReadForSessionId,
   projectGuidelinesReadStateForSession,
+  requirementReadEligibilityForSession,
   readTrackingSnapshot,
   requirementReadAdvisory,
   startReadSession,
@@ -239,6 +241,8 @@ test("agent rules demand lifecycle-first reads instead of unconditional rereads"
   const rules = PLANNER_EXTENSION_RULES.join("\n");
   assert.match(rules, /call the lifecycle tool first/);
   assert.match(rules, /only the missing or stale full reads listed in nextActions/);
+  assert.match(rules, /Requirements are separate declarative user, business, or system outcomes with no lifecycle status/);
+  assert.match(rules, /never store guidelines or agent behavior in Requirements/);
   assert.doesNotMatch(rules, /Before starting, resuming, or switching to a task, read task_get/);
 });
 
@@ -247,8 +251,9 @@ test("legacy canonical rules are upgraded in memory without rewriting project ov
   const rulesPath = join(plannerRoot, "rules.json");
   const legacyDetail = "Write relevant points (decisions, constraints, current state, file:line refs, edge cases) into the task/phase/feature description or notes as soon as they emerge. Before starting, resuming, or switching to a task, read task_get(full=true), then its parent phase_get(full=true), then its parent feature_get(full=true), in that exact order; read linked requirements explicitly when present. Cite entities with composite IDs, not bare UUIDs.";
   const legacyExpected = "When you begin work, task_start and task_switch enforce the required ordered full reads. Read any relevant phase handoff as additional context, then update the planner before and after significant changes. If you change an architectural decision, document it explicitly.";
+  const legacyGuidelines = "When a project defines the canonical Project Guidelines section, read it on planner load and before starting or switching task work whenever the current-session attestation is missing or stale. Keep coding standards, formatting, styling, and other project-specific rules from that section in working memory while executing the task.";
   const customRule = "Keep this project-specific override unchanged.";
-  const original = `${JSON.stringify({ extensionRules: [legacyDetail, customRule, legacyExpected] }, null, 2)}\n`;
+  const original = `${JSON.stringify({ extensionRules: [legacyDetail, customRule, legacyExpected, legacyGuidelines] }, null, 2)}\n`;
 
   try {
     await writeFile(rulesPath, original, "utf8");
@@ -256,6 +261,7 @@ test("legacy canonical rules are upgraded in memory without rewriting project ov
     assert.match(effective[0], /call the lifecycle tool first/);
     assert.equal(effective[1], customRule);
     assert.match(effective[2], /session-scoped context reads/);
+    assert.match(effective[3], /Requirements are separate declarative user, business, or system outcomes with no lifecycle status/);
     assert.doesNotMatch(effective.join("\n"), /read task_get\(full=true\), then its parent phase_get/);
     assert.equal(await readFile(rulesPath, "utf8"), original, "runtime normalization must not mutate the static project file");
   } finally {
@@ -263,7 +269,34 @@ test("legacy canonical rules are upgraded in memory without rewriting project ov
   }
 });
 
-test("requirement attestations are reused and invalidated independently", () => {
+test("canonical full-read attestation rejects omitted Accepted Decision fields", () => {
+  invalidateReads();
+  const feature = {
+    id: "F1",
+    acceptedDecisions: [{
+      id: "decision-1",
+      title: "Keep full context",
+      decision: "Deliver the decision.",
+      rationale: "Titles are insufficient.",
+      implementationNotes: "Render every field.",
+      acceptedAt: "2026-01-02T03:04:05.000Z",
+    }],
+  };
+  assert.throws(
+    () => markCanonicalFullReadForSessionId("session-a", "feature", feature, "decision-1 Keep full context"),
+    /omitted Accepted Decision fields/,
+  );
+  assert.deepEqual(readTrackingSnapshot("session-a").features, []);
+  markCanonicalFullReadForSessionId(
+    "session-a",
+    "feature",
+    feature,
+    "Accepted Decisions (1): decision-1 Keep full context Deliver the decision. Titles are insufficient. Render every field. 2026-01-02T03:04:05.000Z",
+  );
+  assert.deepEqual(readTrackingSnapshot("session-a").features, ["F1"]);
+});
+
+test("requirement attestations are reused and invalidated independently with precise diagnostics", () => {
   invalidateReads();
   const requirement = {
     id: "R1",
@@ -271,7 +304,12 @@ test("requirement attestations are reused and invalidated independently", () => 
     sessionInfo: [{ sessionId: "session-a", createdAt: "2026-01-02T00:00:00.000Z" }],
   };
   assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [requirement]), true);
-  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [{ ...requirement, updatedAt: "2026-01-03T00:00:00.000Z" }]), false);
+  const staleRequirement = { ...requirement, updatedAt: "2026-01-03T00:00:00.000Z" };
+  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [staleRequirement]), false);
+  assert.deepEqual(requirementReadEligibilityForSession("session-a", ["R1", "R2"], [staleRequirement]).requiredReads, [
+    { kind: "requirement", id: "R1", state: "stale" },
+    { kind: "requirement", id: "R2", state: "missing" },
+  ]);
   markRequirementReadForSessionId("session-a", "R1");
-  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [{ ...requirement, updatedAt: "2026-01-03T00:00:00.000Z" }]), true);
+  assert.equal(hasReadRequirementsForSession("session-a", ["R1"], [staleRequirement]), true);
 });

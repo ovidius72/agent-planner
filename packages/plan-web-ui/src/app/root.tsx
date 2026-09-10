@@ -49,15 +49,36 @@ export function RootRoute() {
   );
 }
 
+export function responseErrorMessage(data: unknown, fallback: string): string {
+  if (typeof data === "object" && data !== null && "message" in data && typeof data.message === "string") {
+    return data.message;
+  }
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data) as { message?: unknown };
+      if (typeof parsed.message === "string") return parsed.message;
+    } catch {
+      return data;
+    }
+    return data;
+  }
+  return fallback;
+}
+
 export function RootErrorBoundary() {
   const error = useRouteError();
   const isResponse = isRouteErrorResponse(error);
   const isDisconnected = isResponse && error.status === 503;
+  const isWriterBusy = isResponse && error.status === 423;
   const title = isResponse
-    ? (isDisconnected ? "Planner web UI disconnected" : `Request failed (${error.status})`)
+    ? isDisconnected
+      ? "Planner web UI disconnected"
+      : isWriterBusy
+        ? "Planner write already in progress"
+        : `Request failed (${error.status})`
     : "Planner web UI unavailable";
   const message = isResponse
-    ? error.data || error.statusText
+    ? responseErrorMessage(error.data, error.statusText)
     : error instanceof Error
       ? error.message
       : "The planner web UI could not reach its local server.";
@@ -83,6 +104,11 @@ export function RootErrorBoundary() {
                   <li className="list-disc">reopen this planner UI from the new session if needed</li>
                   <li className="list-disc">then reload this page</li>
                 </ul>
+              </>
+            ) : isWriterBusy ? (
+              <>
+                <p>Another Pi, MCP, CLI, development, or planner-server process is currently mutating this planner root.</p>
+                <p>Read-only pages remain available. Wait for that write to finish, then retry without starting another planner server.</p>
               </>
             ) : (
               <>

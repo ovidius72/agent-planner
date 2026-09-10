@@ -35,12 +35,17 @@ import { action as taskEditAction } from "../routes/task-edit.action";
 import { action as taskDeleteAction } from "../routes/task-delete.action";
 import { action as taskStatusAction } from "../routes/task-status.action";
 import { action as taskStartAction } from "../routes/task-start.action";
+import { action as taskReopenAction } from "../routes/task-reopen.action";
+import { action as taskSubtaskCreateAction } from "../routes/task-subtask-create.action";
+import { action as taskDependencyAddAction } from "../routes/task-dependency-add.action";
 import { action as projectEditAction } from "../routes/project-edit.action";
 import { action as requirementCreateAction } from "../routes/requirement-create.action";
 import { action as requirementEditAction } from "../routes/requirement-edit.action";
 import { action as requirementDeleteAction } from "../routes/requirement-delete.action";
+import { action as acceptedDecisionAction } from "../routes/accepted-decision.action";
 import { HandoffRoute, loader as handoffLoader } from "../routes/handoff.route";
 import { HandoffArchiveRoute, loader as handoffArchiveLoader } from "../routes/handoff-archive.route";
+import { DocViewerRoute, action as docViewerAction, loader as docViewerLoader } from "../routes/doc-viewer.route";
 import { action as taskChecklistToggleAction } from "../routes/task-checklist-toggle.action";
 
 export const router = createBrowserRouter([
@@ -83,8 +88,10 @@ export const router = createBrowserRouter([
       },
       { path: "ideas", id: "ideas", loader: ideasLoader, action: ideasAction, element: <IdeasRoute /> },
       { path: "project/edit", element: <ProjectEditRoute />, action: projectEditAction },
+      { path: "accepted-decisions", action: acceptedDecisionAction },
       { path: "handoff", loader: handoffLoader, element: <HandoffRoute /> },
       { path: "handoff/archive", loader: handoffArchiveLoader, element: <HandoffArchiveRoute /> },
+      { path: "docs/view", loader: docViewerLoader, action: docViewerAction, element: <DocViewerRoute /> },
       { path: "features/:featureId/delete", action: featureDeleteAction },
       { path: "requirements/:requirementId/delete", action: requirementDeleteAction },
       { path: "features/:featureId/status", action: featureStatusAction },
@@ -107,10 +114,13 @@ export const router = createBrowserRouter([
         element: <TaskDetailRoute />,
         children: [
           { path: "edit", element: <TaskEditModalRoute />, action: taskEditAction },
+          { path: "subtasks/new", action: taskSubtaskCreateAction },
+          { path: "dependencies/add", action: taskDependencyAddAction },
         ],
       },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/delete", action: taskDeleteAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/start", action: taskStartAction },
+      { path: "features/:featureId/phases/:phaseId/tasks/:taskId/reopen", action: taskReopenAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/status", action: taskStatusAction },
       { path: "features/:featureId/phases/:phaseId/tasks/:taskId/checklist/:itemId/toggle", action: taskChecklistToggleAction },
     ],

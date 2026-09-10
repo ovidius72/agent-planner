@@ -63,6 +63,16 @@ test("empty states: no handoffs, no archive, phase without handoff", async () =>
   assert.equal(h.body.updatedAt, "");
 });
 
+test("handoff preflight exposes every human input before drafting and generated metadata", async () => {
+  const fx = await startServerFixture({ name: "t394-preflight" });
+  const phase = (await request(fx, "/phases")).body[0];
+  const preflight = await request(fx, `/phases/${phase.id}/handoff/preflight`);
+  assert.deepEqual(preflight.body.requiredHumanInputs.map((input) => input.id), ["title", "reason"]);
+  assert.deepEqual(preflight.body.generatedMetadata, ["Created at", "Updated at", "Reason"]);
+  assert.equal(preflight.body.canonicalSections.includes("Created at"), false);
+  assert.match(preflight.body.draftTemplate, /Planner-generated: Created at, Updated at, and structured Reason/);
+});
+
 // ── Write / read round trip + active list + composite refs ────────────────
 
 test("handoff write → read round trip; active /handoffs lists pending with composite refs", async () => {
@@ -155,13 +165,12 @@ test("DELETE clears and archives with reason manual; empty PUT behaves as clear"
   assert.equal(archived[0].reason, "manual");
 });
 
-// ── Terminal-phase rejection + stale completed-phase cleanup ───────────────
-// NOTE: phase status is DERIVED from tasks (not persisted). The only terminal
-// state reachable via real HTTP+files is derived "done" (ALL tasks done).
-// "canceled" is never emitted by derivePhaseStatus, so the canceled branch of
-// the handoff guard is unreachable through this contract (see report).
+// ── Terminal-phase rejection + stale terminal-phase cleanup ───────────────
+// Phase status is derived from tasks, so real HTTP mutations cover both done
+// and rejected terminal outcomes. Legacy canceled remains accepted by the core
+// terminal guard even though current derivation maps all-canceled to rejected.
 
-test("derived-done phases reject new handoffs; stale pending handoffs auto-archive as phase-done", async () => {
+test("done and rejected phases reject new handoffs and archive terminal handoffs", async () => {
   const fx = await startServerFixture({ name: "t234-terminal" });
   const feature = (await request(fx, "/features")).body[0];
 
@@ -185,32 +194,44 @@ test("derived-done phases reject new handoffs; stale pending handoffs auto-archi
   await request(fx, `/phases/${p2.body.id}/handoff`, handoffPut("second stale handoff"));
   await request(fx, `/tasks/${t2.body.id}`, put({ phaseId: p2.body.id, status: "done" }));
 
-  // Stale cleanup: GET /handoffs auto-archives stale pending handoffs (phase-done)
+  // Phase 3: rejecting its only task derives a rejected terminal phase.
+  const p3 = await request(fx, "/phases", { ...json({ title: "Rejected", featureId: feature.id }), expectStatus: 201 });
+  const t3 = await request(fx, `/phases/${p3.body.id}/tasks`, { ...json({ title: "t3" }), expectStatus: 201 });
+  await request(fx, `/phases/${p3.body.id}/handoff`, handoffPut("rejected stale handoff"));
+  await request(fx, `/tasks/${t3.body.id}`, put({ phaseId: p3.body.id, status: "rejected", motivation: "The planned capability is no longer applicable." }));
+  assert.equal((await request(fx, `/phases/${p3.body.id}`)).body.status, "rejected");
+  const errRejected = await expectError(fx, `/phases/${p3.body.id}/handoff`, handoffPut("late rejected"), { status: 404 });
+  assert.match(errRejected.message, /Cannot write a handoff on rejected phase/);
+
+  // Stale cleanup: GET /handoffs archives every terminal pending handoff.
   const active = (await request(fx, "/handoffs")).body.handoffs;
   assert.deepEqual(active, [], "completed phases never appear in active handoffs");
   const archived = (await request(fx, "/handoffs/archive")).body.archived;
   const reasons = archived.map((a) => a.reason);
-  assert.equal(reasons.filter((r) => r === "phase-done").length, 2, "both stale handoffs archived as phase-done");
+  assert.equal(reasons.filter((r) => r === "phase-done").length, 2, "both done handoffs archived as phase-done");
+  assert.equal(reasons.filter((r) => r === "phase-rejected").length, 1, "rejected handoff archived as phase-rejected");
   const contents = archived.map((a) => a.content);
   assert.ok(contents.includes("stale pending handoff"));
   assert.ok(contents.includes("second stale handoff"));
+  assert.ok(contents.includes("rejected stale handoff"));
 });
 
 // ── Phase-status writes are NOT persisted (derived status is the truth) ────
-// Pins the public contract: PUT /phases/:id echoing status returns 200 but the
-// stored status is derived from tasks, so a taskless phase stays "draft" and
-// can still receive a handoff. Reported to review as a design observation.
+// PUT /phases/:id returns persisted read-back rather than echoing a discarded
+// client field, so a taskless phase stays "draft" and can receive a handoff.
 
-test("taskless phase PUT status canceled is echoed but not persisted (derived draft); handoff write still allowed", async () => {
+test("taskless phase rejects direct canceled status and remains eligible for a handoff", async () => {
   const fx = await startServerFixture({ name: "t234-noterm-canceled" });
   const feature = (await request(fx, "/features")).body[0];
   const p = await request(fx, "/phases", { ...json({ title: "No tasks", featureId: feature.id }), expectStatus: 201 });
 
-  const echoed = await request(fx, `/phases/${p.body.id}`, put({ ...p.body, status: "canceled" }));
-  assert.equal(echoed.status, 200);
-  assert.equal(echoed.body.status, "canceled", "PUT echoes the requested status");
+  const rejected = await request(fx, `/phases/${p.body.id}`, {
+    ...put({ ...p.body, status: "canceled" }),
+    expectStatus: 400,
+  });
+  assert.equal(rejected.body.updated, false);
+  assert.equal(rejected.body.errorCode, "DERIVED_STATUS_READ_ONLY");
   const derived = await request(fx, `/phases/${p.body.id}`);
-  assert.notEqual(derived.body.status, "canceled", "status is derived, not persisted");
   assert.equal(derived.body.status, "draft");
 
   // not terminal → handoff write is allowed

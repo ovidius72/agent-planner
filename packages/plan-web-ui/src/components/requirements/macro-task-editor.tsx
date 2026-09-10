@@ -3,7 +3,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { Textarea } from "../ui/textarea";
-import { requirementStatuses } from "../../lib/statuses";
+import { macroTaskStatuses } from "../../lib/statuses";
 import type { MacroTaskInput } from "../../lib/api";
 
 type MacroTaskDraft = MacroTaskInput & { key: string };
@@ -71,7 +71,7 @@ export function MacroTaskEditor({ initialTasks }: { initialTasks: MacroTaskInput
             <label className="grid gap-2 text-sm font-semibold text-[var(--text-muted)]">
               <span>Status</span>
               <Select aria-label={`Macro task ${index + 1} status`} value={task.status} onChange={(event) => update(index, { status: event.target.value as MacroTaskInput["status"] })}>
-                {requirementStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                {macroTaskStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </Select>
             </label>
             <div className="flex flex-wrap justify-end gap-2">

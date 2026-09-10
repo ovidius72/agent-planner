@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule } from "@agent-plan/core";
+import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
 import { basename, dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -24,6 +24,7 @@ function usage(): string {
     "",
     "Usage:",
     "  agent-plan --version | -v",
+    "  agent-plan version",
     "  agent-plan mcp",
     "  agent-plan init [project name] [--yes]",
     "  agent-plan setup claude-code [--user|--project] [--force] [--local]",
@@ -31,6 +32,7 @@ function usage(): string {
     "  agent-plan export [--full]",
     "",
     "Commands:",
+    "  version                     Print loaded package provenance and compatibility capabilities.",
     "  mcp                         Start the stdio MCP server.",
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
@@ -44,6 +46,23 @@ function usage(): string {
     "  --local                     Write config pointing to this built local CLI instead of npx agent-plan.",
     "  --user                      Install MCP and /planner command at Claude Code or Codex user scope.",
     "  --project                   Install MCP and /planner command in the current project (default).",
+  ].join("\n");
+}
+
+function cliRuntimeDiagnosticsText(): string {
+  const cliPackage = packageVersionFromModule(import.meta.url, "agent-plan");
+  const corePackage = resolvedPackageVersion("@agent-plan/core", import.meta.url);
+  const mcpPackage = resolvedPackageVersion("@agent-plan/mcp", import.meta.url);
+  const packages = runtimePackagesDiagnostic([cliPackage, corePackage, mcpPackage]);
+  const capabilities = runtimeCapabilities();
+  return [
+    "Agent Plan runtime diagnostics",
+    "Runtime packages (loaded package manifests):",
+    `- ${cliPackage.name}: loaded ${packages[cliPackage.name]?.loadedVersion ?? cliPackage.version}`,
+    `- ${corePackage.name}: loaded ${packages[corePackage.name]?.loadedVersion ?? corePackage.version}`,
+    `- ${mcpPackage.name}: loaded ${packages[mcpPackage.name]?.loadedVersion ?? mcpPackage.version}`,
+    `Plan schema: manifest schemaVersion ${capabilities.planSchema.manifestSchemaVersion}`,
+    `Allocation registry: v${capabilities.allocationRegistry.version}; supported kinds: ${capabilities.allocationRegistry.supportedKinds.join(", ")}`,
   ].join("\n");
 }
 
@@ -368,6 +387,11 @@ async function main(): Promise<void> {
 
   if (!command || command === "help" || command === "--help" || command === "-h") {
     console.log(usage());
+    return;
+  }
+
+  if (command === "version") {
+    console.log(cliRuntimeDiagnosticsText());
     return;
   }
 

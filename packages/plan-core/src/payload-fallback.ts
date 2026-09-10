@@ -1,4 +1,4 @@
-export type PlannerPayloadEntity = "project" | "feature" | "phase" | "task";
+export type PlannerPayloadEntity = "project" | "feature" | "phase" | "task" | "requirement" | "idea" | "acceptedDecision";
 export type PlannerPayloadOperation = "update" | "discuss";
 export type PlannerPayloadFailureCode = "NO_MUTABLE_FIELDS_RECEIVED" | "DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED";
 
@@ -59,6 +59,12 @@ export function suggestedDescriptionRefPath(entity: PlannerPayloadEntity, entity
       return `.planner/docs/phases/${entityId ?? "phase"}.md`;
     case "task":
       return `.planner/docs/tasks/${entityId ?? "task"}.md`;
+    case "requirement":
+      return `.planner/docs/requirements/${entityId ?? "requirement"}.md`;
+    case "idea":
+      return `.planner/docs/ideas/${entityId ?? "idea"}.md`;
+    case "acceptedDecision":
+      return `.planner/docs/accepted-decisions/${entityId ?? "accepted-decision"}.md`;
   }
 }
 

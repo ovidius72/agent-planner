@@ -38,64 +38,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build (core, mcp, server, agent-plan, web-ui)
-        run: pnpm build
-
-      - name: Build pi-adapter (web-ui-dist + adapter)
-        run: pnpm build:pi-adapter
-
-      - name: Typecheck
-        run: pnpm check
-
-      - name: Test (unit + integration, coverage gate)
-        run: pnpm test:coverage
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: |
-            reports/**/coverage.lcov
-            reports/**/report.html
-            reports/**/results.json
-          if-no-files-found: ignore
-
-  e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10
-
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: '25'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Build (core, mcp, server, agent-plan, web-ui)
-        run: pnpm build
+      - name: Canonical final verification
+        env:
+          CI: 'true'
+          VERIFY_LOG_DIR: reports/verification
+        run: pnpm verify:final -- --ci
 
-      - name: E2E (real plan-server, dynamic port, isolated temp root)
-        run: pnpm exec playwright test
-
-      - name: Upload e2e report on failure
-        if: failure()
+      - name: Upload verification evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: verification-evidence
           path: |
+            reports/**
             playwright-report/
             test-results/
           if-no-files-found: ignore

@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z, ZodError } from "zod";
@@ -27,14 +27,19 @@ import {
   PhaseSchema,
   type Phase,
   type Task,
+  type Subtask,
+  TaskSchema,
   type TaskPauseSnapshot,
   TaskPauseSnapshotSchema,
   type PlanWorkspace,
   PlanWorkspaceSchema,
   type Project,
   ProjectSchema,
+  type AcceptedDecision,
+  AcceptedDecisionSchema,
   type RequirementsDocument,
   type Requirement,
+  RequirementSchema,
   RequirementsDocumentSchema,
   type Idea,
   type IdeasDocument,
@@ -54,6 +59,7 @@ import {
 } from "./schema.js";
 import { createFeatureId, createIdeaId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatFeatureRef, formatIdeaRef, formatPhaseRef, formatThreeDigitNumber, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
+import { buildHierarchicalDescriptionFreshness, type HierarchicalDescriptionFreshness } from "./description-freshness.js";
 import { loadExtensionRules, PLANNER_EXTENSION_RULES } from "./planner-rules.js";
 import { loadProjectGrillMeSkill, syncProjectGrillMeSkill, syncProjectPlannerSkill, type PlannerSkillSyncResult } from "./planner-skill.js";
 import {
@@ -67,13 +73,28 @@ import {
 import {
   applyHandoffContextSync,
   auditPhaseHandoff,
+  externalizeOversizedHandoffContent,
   handoffContentHash,
+  materializeHandoffMetadata,
   HandoffContractError,
+  TARGET_HANDOFF_CONTENT_CHARS,
+  validateHandoffReadBackVerification,
   type HandoffSupportingDocumentInput,
   type PhaseHandoffAudit,
   type RefreshPhaseHandoffInput,
   type RefreshPhaseHandoffResult,
+  type VerifyPhaseHandoffReadBackInput,
+  type VerifyPhaseHandoffReadBackResult,
 } from "./handoff-context.js";
+import { withPlanRootWriteLock } from "./write-coordination.js";
+import {
+  ALLOCATION_REGISTRY_VERSION,
+  PLAN_SCHEMA_VERSION,
+  SUPPORTED_ALLOCATION_KINDS,
+  type AllocationKind,
+  isSupportedAllocationKind,
+  unsupportedAllocationKindDetails,
+} from "./runtime-diagnostics.js";
 
 function nowISO(): string {
   return new Date().toISOString();
@@ -113,6 +134,99 @@ export interface IdeaPromotionTargetInput {
   promotedAt?: string;
 }
 
+export type AcceptedDecisionOwner =
+  | { kind: "project" }
+  | { kind: "feature"; featureId: string }
+  | { kind: "phase"; phaseId: string }
+  | { kind: "task"; phaseId: string; taskId: string };
+
+export interface AcceptedDecisionCreateInput {
+  title: string;
+  decision?: string;
+  rationale?: string;
+  implementationNotes?: string;
+}
+
+export interface AcceptedDecisionUpdateInput {
+  title?: string;
+  decision?: string;
+  rationale?: string;
+  implementationNotes?: string;
+}
+
+function normalizeAcceptedDecisionCreate(input: AcceptedDecisionCreateInput, acceptedAt: string): AcceptedDecision {
+  const title = input.title.trim();
+  if (!title) {
+    throw new PlanStoreError("Accepted decision title is required.", undefined, {
+      errorCode: "ACCEPTED_DECISION_TITLE_REQUIRED",
+      entity: "acceptedDecision",
+      operation: "create",
+    });
+  }
+  return AcceptedDecisionSchema.parse({
+    id: randomUUID(),
+    title,
+    decision: input.decision?.trim() ?? "",
+    rationale: input.rationale?.trim() ?? "",
+    implementationNotes: input.implementationNotes?.trim() ?? "",
+    acceptedAt,
+  });
+}
+
+function updateAcceptedDecisionList(
+  decisions: AcceptedDecision[],
+  decisionId: string,
+  input: AcceptedDecisionUpdateInput,
+): { decisions: AcceptedDecision[]; decision: AcceptedDecision } {
+  const mutableFields = ["title", "decision", "rationale", "implementationNotes"] as const;
+  const receivedFields = mutableFields.filter((field) => input[field] !== undefined);
+  if (receivedFields.length === 0) {
+    throw new PlanStoreError("No mutable accepted decision fields were received.", undefined, {
+      errorCode: "NO_MUTABLE_FIELDS_RECEIVED",
+      entity: "acceptedDecision",
+      operation: "update",
+      mutableFields,
+    });
+  }
+  const index = decisions.findIndex((decision) => decision.id === decisionId);
+  if (index < 0) {
+    throw new PlanStoreError(`Accepted decision ${decisionId} not found.`, undefined, {
+      errorCode: "ACCEPTED_DECISION_NOT_FOUND",
+      entity: "acceptedDecision",
+      operation: "update",
+      decisionId,
+    });
+  }
+  const current = decisions[index]!;
+  const next = AcceptedDecisionSchema.parse({
+    ...current,
+    ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+    ...(input.decision !== undefined ? { decision: input.decision.trim() } : {}),
+    ...(input.rationale !== undefined ? { rationale: input.rationale.trim() } : {}),
+    ...(input.implementationNotes !== undefined ? { implementationNotes: input.implementationNotes.trim() } : {}),
+  });
+  return {
+    decisions: decisions.map((decision) => decision.id === decisionId ? next : decision),
+    decision: next,
+  };
+}
+
+function deleteAcceptedDecisionFromList(
+  decisions: AcceptedDecision[],
+  decisionId: string,
+): { decisions: AcceptedDecision[]; decision: AcceptedDecision } {
+  const decision = decisions.find((entry) => entry.id === decisionId);
+  if (!decision) {
+    throw new PlanStoreError(`Accepted decision ${decisionId} not found.`, undefined, {
+      errorCode: "ACCEPTED_DECISION_NOT_FOUND",
+      entity: "acceptedDecision",
+      operation: "delete",
+      decisionId,
+    });
+  }
+  return { decisions: decisions.filter((entry) => entry.id !== decisionId), decision };
+}
+
 function upsertSessionInfo<T extends { sessionInfo: Array<{ sessionId: string; createdAt: string }> }>(
   entity: T,
   sessionId: string,
@@ -127,6 +241,38 @@ function upsertSessionInfo<T extends { sessionInfo: Array<{ sessionId: string; c
   const changed = nextInfo.length !== entity.sessionInfo.length
     || nextInfo.some((entry, index) => entry.sessionId !== entity.sessionInfo[index]?.sessionId || entry.createdAt !== entity.sessionInfo[index]?.createdAt);
   return changed ? { entity: { ...entity, sessionInfo: nextInfo }, changed: true } : { entity, changed: false };
+}
+
+function mergeSessionInfo(
+  current: Array<{ sessionId: string; createdAt: string }> | undefined,
+  incoming: Array<{ sessionId: string; createdAt: string }> | undefined,
+): Array<{ sessionId: string; createdAt: string }> {
+  const newestBySession = new Map<string, string>();
+  for (const entry of [...(current ?? []), ...(incoming ?? [])]) {
+    const prior = newestBySession.get(entry.sessionId);
+    if (!prior || entry.createdAt > prior) newestBySession.set(entry.sessionId, entry.createdAt);
+  }
+  return [...newestBySession.entries()]
+    .map(([sessionId, createdAt]) => ({ sessionId, createdAt }))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, MAX_SESSION_INFO_ENTRIES);
+}
+
+function assertSnapshotNotOlder(
+  entity: PlanStaleWriteDetails["entity"],
+  entityId: string,
+  incomingUpdatedAt: string,
+  currentUpdatedAt: string,
+): void {
+  if (incomingUpdatedAt < currentUpdatedAt) {
+    throw new PlanStaleWriteError({
+      errorCode: "PLAN_STALE_WRITE",
+      entity,
+      entityId,
+      expectedUpdatedAt: incomingUpdatedAt,
+      actualUpdatedAt: currentUpdatedAt,
+    });
+  }
 }
 
 function resolveStoredFeatureId(
@@ -176,6 +322,60 @@ export class PlanStoreError extends Error {
   }
 }
 
+export interface PlanStaleWriteDetails extends PlanStoreErrorDetails {
+  errorCode: "PLAN_STALE_WRITE";
+  entity: "project" | "feature" | "phase" | "task" | "requirement" | "idea";
+  entityId: string;
+  expectedUpdatedAt: string;
+  actualUpdatedAt: string;
+}
+
+/** Optimistic-concurrency failure for a mutation based on an obsolete entity
+ * snapshot. Callers must reload, reapply only the intended fields, and retry. */
+export class PlanStaleWriteError extends PlanStoreError {
+  readonly code = "PLAN_STALE_WRITE";
+
+  constructor(public readonly details: PlanStaleWriteDetails) {
+    super(
+      `PLAN_STALE_WRITE: ${details.entity} ${details.entityId} changed after it was read (expected ${details.expectedUpdatedAt || "an unversioned snapshot"}, found ${details.actualUpdatedAt || "an unversioned current value"}). Reload the entity, reapply only the intended fields, and retry.`,
+      undefined,
+      details,
+    );
+    this.name = "PlanStaleWriteError";
+  }
+}
+
+export function assertPlannerRevision(
+  entity: PlanStaleWriteDetails["entity"],
+  entityId: string,
+  expectedUpdatedAt: string | undefined,
+  actualUpdatedAt: string,
+): void {
+  if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== actualUpdatedAt) {
+    throw new PlanStaleWriteError({
+      errorCode: "PLAN_STALE_WRITE",
+      entity,
+      entityId,
+      expectedUpdatedAt,
+      actualUpdatedAt,
+    });
+  }
+}
+
+export class PlanUnsupportedAllocationKindError extends PlanStoreError {
+  readonly code = "PLAN_UNSUPPORTED_ALLOCATION_KIND";
+
+  constructor(kind: string) {
+    const details = unsupportedAllocationKindDetails(kind);
+    super(
+      `PLAN_UNSUPPORTED_ALLOCATION_KIND: allocation kind "${kind}" is not supported by the loaded Agent Plan runtime. Supported kinds: ${details.supportedKinds.join(", ")}. ${details.action}`,
+      undefined,
+      details,
+    );
+    this.name = "PlanUnsupportedAllocationKindError";
+  }
+}
+
 // ── Atomic file helpers ────────────────────────────────────────────────
 
 // Per-path write mutex: serializes concurrent writes to the SAME file so that
@@ -206,9 +406,9 @@ const CROSS_PROCESS_LOCK_RETRY_MS = 10;
 /** Allocation registry is deliberately outside the versioned plan. Git worktrees
  * share their common git dir, so reservations are serialized across branches
  * without rewriting project.json or unrelated planner entities. */
-const AllocationKindSchema = z.enum(["feature", "phase", "task", "idea"]);
+const AllocationKindSchema = z.enum(SUPPORTED_ALLOCATION_KINDS);
 const AllocationRegistrySchema = z.object({
-  version: z.literal(1),
+  version: z.literal(ALLOCATION_REGISTRY_VERSION),
   projectId: z.string().min(1),
   allocations: z.array(z.object({
     kind: AllocationKindSchema,
@@ -217,7 +417,6 @@ const AllocationRegistrySchema = z.object({
     shortId: z.string().regex(/^[A-Z2-9]{5}$/),
   })).default([]),
 });
-type AllocationKind = z.infer<typeof AllocationKindSchema>;
 type Allocation = z.infer<typeof AllocationRegistrySchema>["allocations"][number];
 
 async function gitCommonDirFor(planRoot: string): Promise<string | undefined> {
@@ -239,6 +438,40 @@ async function gitCommonDirFor(planRoot: string): Promise<string | undefined> {
       current = parent;
     }
   }
+}
+
+async function readAllocationRegistry(path: string, projectId: string): Promise<z.infer<typeof AllocationRegistrySchema>> {
+  const fallback = { version: ALLOCATION_REGISTRY_VERSION, projectId, allocations: [] };
+  const raw = await readFile(path, "utf8")
+    .then((content) => JSON.parse(content) as unknown)
+    .catch(() => fallback);
+
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const allocations = (raw as { allocations?: unknown }).allocations;
+    if (Array.isArray(allocations)) {
+      const unsupported = allocations
+        .map((entry) => entry && typeof entry === "object" && !Array.isArray(entry) ? String((entry as { kind?: unknown }).kind ?? "") : "")
+        .filter((kind) => kind && !isSupportedAllocationKind(kind));
+      if (unsupported.length > 0) throw new PlanUnsupportedAllocationKindError(unsupported[0]!);
+    }
+  }
+
+  const parsed = AllocationRegistrySchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new PlanStoreError(
+      `PLAN_RUNTIME_SCHEMA_INCOMPATIBLE: allocation registry ${path} is not compatible with the loaded Agent Plan runtime. Upgrade all Agent Plan packages and reload the harness before retrying the mutation.`,
+      undefined,
+      {
+        errorCode: "PLAN_RUNTIME_SCHEMA_INCOMPATIBLE",
+        schema: "allocationRegistry",
+        expectedVersion: ALLOCATION_REGISTRY_VERSION,
+        supportedKinds: SUPPORTED_ALLOCATION_KINDS,
+        path,
+        validationErrors: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+      },
+    );
+  }
+  return parsed.data;
 }
 
 async function writeRegistry(path: string, registry: z.infer<typeof AllocationRegistrySchema>): Promise<void> {
@@ -309,7 +542,7 @@ export function withFeatureLock<T>(featureId: string, fn: () => Promise<T>): Pro
 }
 
 async function atomicWriteText(path: string, raw: string, root?: string): Promise<void> {
-  return withWriteLock(path, async () => {
+  const write = () => withWriteLock(path, async () => {
     writeBusyHook?.(true);
     const localRoot = root ? join(root, ".local") : undefined;
     const tmpDir = localRoot ? join(localRoot, "tmp") : dirname(path);
@@ -339,6 +572,7 @@ async function atomicWriteText(path: string, raw: string, root?: string): Promis
       writeBusyHook?.(false);
     }
   });
+  return root ? withPlanRootWriteLock(root, write) : write();
 }
 
 async function atomicWriteJson(path: string, data: unknown, root?: string): Promise<void> {
@@ -349,7 +583,7 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
   // NOTE: write the file INLINE here, do NOT call atomicWriteJson/atomicWriteText,
   // because those re-acquire withWriteLock(path) — and we already hold it (below).
   // Re-entrant locking is not supported, so calling them would deadlock.
-  return withWriteLock(path, async () => {
+  const write = () => withWriteLock(path, async () => {
     const current = await readJson(path, schema);
     const updated = updater(current);
     const parsed = schema.parse(updated);
@@ -382,6 +616,7 @@ async function atomicUpdateJson<T>(path: string, schema: { parse(v: unknown): T 
     }
     return parsed;
   });
+  return root ? withPlanRootWriteLock(root, write) : write();
 }
 
 /** Summary of a phase that has a non-empty pending handoff, for the
@@ -402,7 +637,11 @@ export interface PhaseHandoffSummary {
   auditVersion: number | null;
   contentLength: number;
   contentHash: string;
+  /** Structural write-time validation timestamp. */
   verifiedAt: string;
+  /** True only after separate persisted read-back/source reconciliation. */
+  resumeReady: boolean;
+  resumeReadyAt: string;
 }
 
 /** Summary of an archived handoff. The content remains recoverable under
@@ -736,13 +975,15 @@ export class PlanStore {
    *  planners). The caller is responsible for triggering any needed final
    *  sync explicitly. */
   private async runAsBatch<T>(fn: () => Promise<T>): Promise<T> {
-    const prev = this.batchInProgress;
-    this.batchInProgress = true;
-    try {
-      return await fn();
-    } finally {
-      this.batchInProgress = prev;
-    }
+    return withPlanRootWriteLock(this.root, async () => {
+      const prev = this.batchInProgress;
+      this.batchInProgress = true;
+      try {
+        return await fn();
+      } finally {
+        this.batchInProgress = prev;
+      }
+    });
   }
 
   /** Public batch wrapper used by the module-level migrateToUuids helper. */
@@ -750,9 +991,9 @@ export class PlanStore {
     return this.runAsBatch(fn);
   }
 
-  /** Public batch wrapper: suspend autoSync (status rollup) for a sequence of
-   *  writes. Use for priority-only reorders so they don't recompute phase/feature
-   *  status (a reorder must not flip a partially-done feature to in-progress). */
+  /** Public root-scoped write transaction. It serializes the whole sequence
+   *  across processes and suspends autoSync for nested writes. Use for composite
+   *  mutations and priority reorders that must not be interleaved. */
   async runBatch<T>(fn: () => Promise<T>): Promise<T> {
     return this.runAsBatch(fn);
   }
@@ -776,13 +1017,15 @@ export class PlanStore {
         fromStatus: (entry.fromStatus as string) === "paused" ? "planned" : entry.fromStatus,
         toStatus: (entry.toStatus as string) === "paused" ? "planned" : entry.toStatus,
       }));
+      const activeOwnerSession = normalizedStatus === "in-progress" ? task.activeOwnerSession?.trim() ?? "" : "";
       if (
         descriptionUpdatedAt !== task.descriptionUpdatedAt
         || normalizedStatus !== task.status
         || pauseSnapshot !== task.pauseSnapshot
+        || activeOwnerSession !== task.activeOwnerSession
         || statusLog.some((entry, index) => entry !== task.statusLog[index])
       ) {
-        return { ...task, descriptionUpdatedAt, status: normalizedStatus, pauseSnapshot, statusLog };
+        return { ...task, descriptionUpdatedAt, status: normalizedStatus, pauseSnapshot, statusLog, activeOwnerSession };
       }
       return task;
     });
@@ -1035,10 +1278,11 @@ export class PlanStore {
     return join(this.featuresDir(), `${featureId}.json`);
   }
   private withFeaturesLock<T>(fn: () => Promise<T>): Promise<T> {
-    // Sentinel-keyed mutex (the features dir path) serializing all feature
-    // mutations so read-modify-write via updateFeatures is race-free and the
-    // one-time legacy→per-file migration never interleaves with a writer.
-    return withWriteLock(this.featuresDir(), fn);
+    // Root-scoped coordination prevents another process from interleaving a
+    // feature collection transaction. The sentinel lock retains per-collection
+    // serialization within this process; nested file writes are re-entrant at
+    // the planner-root layer.
+    return withPlanRootWriteLock(this.root, () => withWriteLock(this.featuresDir(), fn));
   }
   /** Idempotent one-time migration: if a legacy features.json exists, split it
    *  into features/<id>.json (one per feature) and remove the legacy file.
@@ -1340,7 +1584,24 @@ export class PlanStore {
   /** Read-only manifest load. Upgrading legacy `.local` state is explicit
    * maintenance (`repair`), never an incidental side effect of opening a plan. */
   async loadManifest(): Promise<Manifest> {
-    const manifest = await readJson(this.manifestPath(), ManifestSchema);
+    let manifest: Manifest;
+    try {
+      manifest = await readJson(this.manifestPath(), ManifestSchema);
+    } catch (error) {
+      if (error instanceof PlanStoreError && error.details?.validationErrors) {
+        throw new PlanStoreError(
+          `PLAN_RUNTIME_SCHEMA_INCOMPATIBLE: manifest ${this.manifestPath()} is not compatible with the loaded Agent Plan runtime. Expected manifest schemaVersion ${PLAN_SCHEMA_VERSION}. Upgrade all Agent Plan packages and reload the harness before retrying the operation.`,
+          error,
+          {
+            ...error.details,
+            errorCode: "PLAN_RUNTIME_SCHEMA_INCOMPATIBLE",
+            schema: "manifest",
+            expectedVersion: PLAN_SCHEMA_VERSION,
+          },
+        );
+      }
+      throw error;
+    }
     const timestamp = await readJson(this.timestampPath(), z.object({ updatedAt: TimestampSchema })).catch(() => undefined);
     return timestamp ? { ...manifest, updatedAt: timestamp.updatedAt } : manifest;
   }
@@ -1370,6 +1631,8 @@ export class PlanStore {
    * rewritten; cross-clone coordination requires a shared allocator service.
    */
   async allocateEntityIdentity(kind: AllocationKind, entityId: string): Promise<{ number: number; shortId: string }> {
+    if (!isSupportedAllocationKind(String(kind))) throw new PlanUnsupportedAllocationKindError(String(kind));
+    const supportedKind = kind as AllocationKind;
     const project = await this.loadProject();
     const manifest = await this.loadManifest();
     const commonGitDir = await gitCommonDirFor(this.root);
@@ -1378,30 +1641,28 @@ export class PlanStore {
       : join(this.localRoot(), "allocations", `${manifest.projectId}.json`);
 
     return withWriteLock(registryPath, async () => {
-      const registry = AllocationRegistrySchema.parse(await readFile(registryPath, "utf8")
-        .then(JSON.parse)
-        .catch(() => ({ version: 1, projectId: manifest.projectId, allocations: [] })));
+      const registry = await readAllocationRegistry(registryPath, manifest.projectId);
       if (registry.projectId !== manifest.projectId) throw new PlanStoreError(`allocation registry project mismatch: ${registryPath}`);
-      const prior = registry.allocations.find((entry) => entry.kind === kind && entry.entityId === entityId);
+      const prior = registry.allocations.find((entry) => entry.kind === supportedKind && entry.entityId === entityId);
       if (prior) return { number: prior.number, shortId: prior.shortId };
 
       const phases = await this.loadAllPhases();
       const features = (await this.loadFeatures()).features;
       const ideasDocument = await this.loadIdeas();
       const ideas = ideasDocument.ideas;
-      const canonical = kind === "feature"
+      const canonical = supportedKind === "feature"
         ? features.map((feature) => ({ number: feature.number, shortId: feature.shortId }))
-        : kind === "phase"
+        : supportedKind === "phase"
           ? phases.map((phase) => ({ number: phase.number, shortId: phase.shortId }))
-          : kind === "task"
+          : supportedKind === "task"
             ? phases.flatMap((phase) => phase.tasks.map((task) => ({ number: task.number, shortId: task.shortId })))
             : ideas.map((idea) => ({ number: idea.number, shortId: idea.shortId }));
-      const usedNumbers = new Set([...canonical.map((entry) => entry.number), ...registry.allocations.filter((entry) => entry.kind === kind).map((entry) => entry.number)]);
-      const counter = kind === "feature"
+      const usedNumbers = new Set([...canonical.map((entry) => entry.number), ...registry.allocations.filter((entry) => entry.kind === supportedKind).map((entry) => entry.number)]);
+      const counter = supportedKind === "feature"
         ? project.nextFeatureNumber
-        : kind === "phase"
+        : supportedKind === "phase"
           ? project.nextPhaseNumber
-          : kind === "task"
+          : supportedKind === "task"
             ? project.nextTaskNumber
             : ideasDocument.nextIdeaNumber;
       let number = Math.max(1, counter);
@@ -1413,7 +1674,7 @@ export class PlanStore {
         ...ideas.map((idea) => idea.shortId),
         ...registry.allocations.map((entry) => entry.shortId),
       ].filter(Boolean));
-      const allocation: Allocation = { kind, entityId, number, shortId: createShortId(allShortIds, `${kind}:${entityId}`) };
+      const allocation: Allocation = { kind: supportedKind, entityId, number, shortId: createShortId(allShortIds, `${supportedKind}:${entityId}`) };
       registry.allocations.push(allocation);
       await writeRegistry(registryPath, registry);
       return { number: allocation.number, shortId: allocation.shortId };
@@ -1725,6 +1986,15 @@ export class PlanStore {
     const features: Feature[] = rawFeatures.map((f) => ({ ...f, status: this.deriveFeatureStatus(f.id, phases) }));
     const normalized = this.normalizeStructureSnapshot({ features }, phases);
     return { manifest, project, requirements, ideas, phases: normalized.phases, features: normalized.features };
+  }
+
+  /**
+   * Preview child-to-parent description drift without rewriting user-authored
+   * feature or phase prose. Callers decide whether to reconcile each parent.
+   */
+  async previewDescriptionReconciliation(): Promise<HierarchicalDescriptionFreshness> {
+    const workspace = await this.loadAll();
+    return buildHierarchicalDescriptionFreshness(workspace.features.features, workspace.phases);
   }
 
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
@@ -2048,11 +2318,14 @@ export class PlanStore {
     return { duplicatePhaseIds, danglingPhaseIds, duplicateShortIds };
   }
 
-  /** A handoff remains active while any task needs work. Its automatic end-of-
-   * phase lifecycle is deliberately narrower than canonical display status:
-   * every task must be done or canceled (not merely derived "rejected"). */
-  private hasCompletedHandoffLifecycle(tasks: Task[]): boolean {
-    return tasks.length > 0 && tasks.every((task) => task.status === "done" || task.status === "canceled");
+  /** Return the archive reason for a canonical terminal phase outcome. Handoff
+   * lifecycle follows the derived phase status, so rejected tasks cannot leave
+   * an operational handoff active or merely hidden from the active list. */
+  private terminalHandoffReason(phase: Phase): "phase-done" | "phase-rejected" | "phase-canceled" | null {
+    if (phase.status === "done") return "phase-done";
+    if (phase.status === "rejected") return "phase-rejected";
+    if (phase.status === "canceled") return "phase-canceled";
+    return null;
   }
 
   private derivePhaseStatus(tasks: Task[]): Phase["status"] {
@@ -2117,14 +2390,14 @@ export class PlanStore {
     return [];
   }
 
-  /** Auto-clear a phase's handoff only when every task is terminal as done or
-   *  canceled. This covers an all-canceled phase too, whose legacy canonical
-   *  derived status is "rejected". Returns the composite ref when cleared. */
+  /** Auto-clear a phase's handoff for every canonical terminal derived status.
+   * Returns the composite ref when an active handoff was archived. */
   async syncTaskStatusRollup(phaseId: string): Promise<string | null> {
     const phase = await this.loadPhase(phaseId);
     let cleared: string | null = null;
-    if (this.hasCompletedHandoffLifecycle(phase.tasks) && phase.handoff !== "") {
-      await this.clearPhaseHandoff(phaseId, "phase-done");
+    const terminalReason = this.terminalHandoffReason(phase);
+    if (terminalReason && phase.handoff !== "") {
+      await this.clearPhaseHandoff(phaseId, terminalReason);
       const features = await this.loadFeatures();
       const feature = features.features.find((f) => f.id === phase.featureId);
       cleared = formatPhaseRef(phase.number, feature?.number);
@@ -2188,9 +2461,18 @@ export class PlanStore {
 
   // ── Savers ───────────────────────────────────────────────────────────
 
-  async updateProject(updater: (p: Project) => Project): Promise<Project> {
+  async updateProject(
+    updater: (p: Project) => Project,
+    options: { expectedGuidelinesUpdatedAt?: string } = {},
+  ): Promise<Project> {
     const timestamp = nowISO();
     const updated = await atomicUpdateJson(this.projectPath(), ProjectSchema, (current) => {
+      assertPlannerRevision(
+        "project",
+        "project-guidelines",
+        options.expectedGuidelinesUpdatedAt,
+        current.projectGuidelines.updatedAt,
+      );
       const previousGuidelines = current.projectGuidelines.content;
       const candidate = updater(current);
       return this.stampProjectGuidelinesUpdatedAt(candidate, previousGuidelines, timestamp);
@@ -2284,10 +2566,52 @@ export class PlanStore {
     return updated;
   }
 
+  /** Field-scoped feature mutation against the lock-reloaded canonical document. */
+  async updateFeature(
+    featureId: string,
+    updater: (feature: Feature) => Feature,
+    options: { expectedUpdatedAt?: string } = {},
+  ): Promise<Feature> {
+    let persisted: Feature | undefined;
+    await this.updateFeatures((document) => {
+      const index = document.features.findIndex((feature) => feature.id === featureId);
+      if (index < 0) throw new PlanStoreError(`Feature ${featureId} not found.`);
+      const current = document.features[index]!;
+      assertPlannerRevision("feature", featureId, options.expectedUpdatedAt, current.updatedAt);
+      const next = updater(structuredClone(current));
+      if (next.id !== current.id) throw new PlanStoreError("Feature identity cannot be changed by updateFeature.");
+      document.features[index] = next;
+      persisted = next;
+      return document;
+    });
+    return persisted!;
+  }
+
   async updateRequirements(updater: (r: RequirementsDocument) => RequirementsDocument): Promise<RequirementsDocument> {
     const updated = await atomicUpdateJson(this.requirementsPath(), RequirementsDocumentSchema, updater, this.root);
     await this.maybeAutoSync();
     return updated;
+  }
+
+  /** Field-scoped requirement mutation against the lock-reloaded canonical document. */
+  async updateRequirement(
+    requirementId: string,
+    updater: (requirement: Requirement) => Requirement,
+    options: { expectedUpdatedAt?: string } = {},
+  ): Promise<Requirement> {
+    let persisted: Requirement | undefined;
+    await this.updateRequirements((document) => {
+      const index = document.requirements.findIndex((requirement) => requirement.id === requirementId);
+      if (index < 0) throw new PlanStoreError(`Requirement ${requirementId} not found.`);
+      const current = document.requirements[index]!;
+      assertPlannerRevision("requirement", requirementId, options.expectedUpdatedAt, current.updatedAt);
+      const next = RequirementSchema.parse(updater(structuredClone(current)));
+      if (next.id !== current.id) throw new PlanStoreError("Requirement identity cannot be changed by updateRequirement.");
+      document.requirements[index] = next;
+      persisted = next;
+      return document;
+    });
+    return persisted!;
   }
 
   private async ensureIdeasFileForWrite(): Promise<void> {
@@ -2487,9 +2811,18 @@ export class PlanStore {
         if (requirementsChanged) await this.saveRequirements(nextRequirements);
       } catch (error) {
         const rollbackErrors: unknown[] = [];
-        if (featureChanged && nextFeature) await this.saveFeature(originalFeatures.features[featureIndex]!).catch((rollbackError) => rollbackErrors.push(rollbackError));
-        if (phaseChanged) await this.savePhase(originalPhase).catch((rollbackError) => rollbackErrors.push(rollbackError));
-        if (requirementsChanged) await this.saveRequirements(originalRequirements).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        if (featureChanged && nextFeature) {
+          await atomicWriteJson(this.featurePath(nextFeature.id), originalFeatures.features[featureIndex]!, this.root)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
+        if (phaseChanged) {
+          await atomicWriteJson(this.phasePath(originalPhase.id), PhaseSchema.parse(originalPhase), this.root)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
+        if (requirementsChanged) {
+          await atomicWriteJson(this.requirementsPath(), originalRequirements, this.root)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
         if (rollbackErrors.length > 0) throw new AggregateError([error, ...rollbackErrors], "Context-read attestation failed and rollback was incomplete.");
         throw error;
       }
@@ -2517,10 +2850,21 @@ export class PlanStore {
   async saveProject(project: Project): Promise<void> {
     // Runtime workDeviations live in .local/deviations.json (T299); never
     // persist them here so shared project.json stays stable across worktrees.
-    const previous = await readJson(this.projectPath(), ProjectSchema).catch(() => null);
-    const stamped = this.stampProjectGuidelinesUpdatedAt(project, previous?.projectGuidelines.content, nowISO());
-    const parsed = ProjectSchema.parse({ ...stamped, workDeviations: [] });
-    await atomicWriteJson(this.projectPath(), parsed, this.root);
+    await withPlanRootWriteLock(this.root, async () => {
+      const previous = await readJson(this.projectPath(), ProjectSchema).catch(() => null);
+      const withMergedGuidelineReads = previous
+        ? {
+            ...project,
+            projectGuidelines: {
+              ...project.projectGuidelines,
+              sessionInfo: mergeSessionInfo(previous.projectGuidelines.sessionInfo, project.projectGuidelines.sessionInfo),
+            },
+          }
+        : project;
+      const stamped = this.stampProjectGuidelinesUpdatedAt(withMergedGuidelineReads, previous?.projectGuidelines.content, nowISO());
+      const parsed = ProjectSchema.parse({ ...stamped, workDeviations: [] });
+      await atomicWriteJson(this.projectPath(), parsed, this.root);
+    });
     await this.touchTimestamp();
     await this.maybeAutoSync();
   }
@@ -2528,11 +2872,18 @@ export class PlanStore {
   async saveFeatures(features: FeaturesDocument): Promise<void> {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
-      const previousDescriptions = new Map((await this.loadRawFeatures()).map((feature) => [feature.id, feature.description]));
-      const previousDescriptionRefs = new Map((await this.loadRawFeatures()).map((feature) => [feature.id, feature.descriptionRef]));
+      const currentFeatures = await this.loadRawFeatures();
+      const currentById = new Map(currentFeatures.map((feature) => [feature.id, feature]));
       const timestamp = nowISO();
       await this.saveFeaturesRaw({
-        features: features.features.map((feature) => this.stampDescriptionUpdatedAt(feature, previousDescriptions.get(feature.id), previousDescriptionRefs.get(feature.id), timestamp)),
+        features: features.features.map((feature) => {
+          const current = currentById.get(feature.id);
+          if (current) assertSnapshotNotOlder("feature", feature.id, feature.updatedAt, current.updatedAt);
+          const merged = current
+            ? { ...feature, sessionInfo: mergeSessionInfo(current.sessionInfo, feature.sessionInfo) }
+            : feature;
+          return this.stampDescriptionUpdatedAt(merged, current?.description, current?.descriptionRef, timestamp);
+        }),
       });
     });
     await this.touchTimestamp();
@@ -2567,8 +2918,12 @@ export class PlanStore {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
       const previous = await readJson(this.featurePath(feature.id), FeatureSchema).catch(() => null);
+      if (previous) assertSnapshotNotOlder("feature", feature.id, feature.updatedAt, previous.updatedAt);
       await mkdir(this.featuresDir(), { recursive: true });
-      const parsed = FeatureSchema.parse(this.stampDescriptionUpdatedAt(feature, previous?.description, previous?.descriptionRef, nowISO()));
+      const merged = previous
+        ? { ...feature, sessionInfo: mergeSessionInfo(previous.sessionInfo, feature.sessionInfo) }
+        : feature;
+      const parsed = FeatureSchema.parse(this.stampDescriptionUpdatedAt(merged, previous?.description, previous?.descriptionRef, nowISO()));
       await atomicWriteJson(this.featurePath(parsed.id), parsed, this.root);
     });
     await this.touchTimestamp();
@@ -2576,49 +2931,81 @@ export class PlanStore {
   }
 
   async saveRequirements(reqs: RequirementsDocument): Promise<void> {
-    const parsed = RequirementsDocumentSchema.parse(reqs);
-    await atomicWriteJson(this.requirementsPath(), parsed, this.root);
+    await withPlanRootWriteLock(this.root, async () => {
+      const current = await readJson(this.requirementsPath(), RequirementsDocumentSchema).catch(() => null);
+      const currentById = new Map((current?.requirements ?? []).map((requirement) => [requirement.id, requirement]));
+      const parsed = RequirementsDocumentSchema.parse({
+        requirements: reqs.requirements.map((requirement) => {
+          const previous = currentById.get(requirement.id);
+          if (previous) assertSnapshotNotOlder("requirement", requirement.id, requirement.updatedAt, previous.updatedAt);
+          return previous
+            ? { ...requirement, sessionInfo: mergeSessionInfo(previous.sessionInfo, requirement.sessionInfo) }
+            : requirement;
+        }),
+      });
+      await atomicWriteJson(this.requirementsPath(), parsed, this.root);
+    });
     await this.touchTimestamp();
   }
 
   async saveIdeas(ideas: IdeasDocument): Promise<void> {
-    const parsed = IdeasDocumentSchema.parse(ideas);
-    const maxNumber = parsed.ideas.reduce((max, idea) => Math.max(max, idea.number), 0);
-    await atomicWriteJson(this.ideasPath(), {
-      ...parsed,
-      nextIdeaNumber: Math.max(parsed.nextIdeaNumber, maxNumber + 1),
-      ideas: [...parsed.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
-    }, this.root);
+    await withPlanRootWriteLock(this.root, async () => {
+      const parsed = IdeasDocumentSchema.parse(ideas);
+      const maxNumber = parsed.ideas.reduce((max, idea) => Math.max(max, idea.number), 0);
+      await atomicWriteJson(this.ideasPath(), {
+        ...parsed,
+        nextIdeaNumber: Math.max(parsed.nextIdeaNumber, maxNumber + 1),
+        ideas: [...parsed.ideas].sort((left, right) => left.number - right.number || left.createdAt.localeCompare(right.createdAt)),
+      }, this.root);
+    });
     await this.touchTimestamp();
   }
 
-  async savePhase(phase: Phase): Promise<void> {
-    const previous = await this.loadPhase(phase.id).catch(() => null);
-    const timestamp = nowISO();
-    const features = await this.loadRawFeatures();
-    const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
-    // Referential integrity: if a featureId is present but cannot be resolved
-    // to a known feature, REJECT — never persist an orphan featureId.
-    // NOTE: a missing/empty featureId is intentionally ALLOWED here so that
-    // legacy migrations, repair, and feature-delete (unlink) can persist phases
-    // without a feature yet. The hard "featureId required" gate lives at the
-    // adapter boundary (Pi phase_create/task_create and MCP planner-phase-add/
-    // planner-task-add), which is where user-facing creation happens.
-    if (phase.featureId && phase.featureId.trim() && !resolvedFeatureId) {
-      throw new PlanStoreError(
-        `Cannot save phase "${phase.title}": featureId "${phase.featureId}" does not match any existing feature. Use a valid feature UUID, F00x ref, or shortId.`,
-      );
-    }
-    const normalizedInput = resolvedFeatureId && resolvedFeatureId !== phase.featureId
-      ? { ...phase, featureId: resolvedFeatureId }
-      : phase;
-    const previousTaskDescriptions = new Map((previous?.tasks ?? []).map((task) => [task.id, task.description]));
-    const previousTaskDescriptionRefs = new Map((previous?.tasks ?? []).map((task) => [task.id, task.descriptionRef]));
-    const timestamped = this.stampDescriptionUpdatedAt(normalizedInput, previous?.description, previous?.descriptionRef, timestamp);
-    timestamped.tasks = timestamped.tasks.map((task) => this.stampDescriptionUpdatedAt(task, previousTaskDescriptions.get(task.id), previousTaskDescriptionRefs.get(task.id), timestamp));
-    const parsed = PhaseSchema.parse(this.normalizePhaseDocument(timestamped).phase);
-    await mkdir(this.phasesDir(), { recursive: true });
-    await atomicWriteJson(this.phasePath(parsed.id), parsed, this.root);
+  async savePhase(phase: Phase, options: { expectedUpdatedAt?: string } = {}): Promise<void> {
+    await withPlanRootWriteLock(this.root, async () => {
+      const previous = await this.loadPhase(phase.id).catch(() => null);
+      if (previous) {
+        assertPlannerRevision("phase", phase.id, options.expectedUpdatedAt, previous.updatedAt);
+        if (options.expectedUpdatedAt === undefined) {
+          assertSnapshotNotOlder("phase", phase.id, phase.updatedAt, previous.updatedAt);
+        }
+      }
+      const timestamp = nowISO();
+      const features = await this.loadRawFeatures();
+      const resolvedFeatureId = resolveStoredFeatureId(features, phase.featureId);
+      // Referential integrity: if a featureId is present but cannot be resolved
+      // to a known feature, REJECT — never persist an orphan featureId.
+      // NOTE: a missing/empty featureId is intentionally ALLOWED here so that
+      // legacy migrations, repair, and feature-delete (unlink) can persist phases
+      // without a feature yet. The hard "featureId required" gate lives at the
+      // adapter boundary (Pi phase_create/task_create and MCP planner-phase-add/
+      // planner-task-add), which is where user-facing creation happens.
+      if (phase.featureId && phase.featureId.trim() && !resolvedFeatureId) {
+        throw new PlanStoreError(
+          `Cannot save phase "${phase.title}": featureId "${phase.featureId}" does not match any existing feature. Use a valid feature UUID, F00x ref, or shortId.`,
+        );
+      }
+      const normalizedInput = resolvedFeatureId && resolvedFeatureId !== phase.featureId
+        ? { ...phase, featureId: resolvedFeatureId }
+        : phase;
+      const previousTaskDescriptions = new Map((previous?.tasks ?? []).map((task) => [task.id, task.description]));
+      const previousTaskDescriptionRefs = new Map((previous?.tasks ?? []).map((task) => [task.id, task.descriptionRef]));
+      const mergedPhase = previous
+        ? { ...normalizedInput, sessionInfo: mergeSessionInfo(previous.sessionInfo, normalizedInput.sessionInfo) }
+        : normalizedInput;
+      const previousTasksById = new Map((previous?.tasks ?? []).map((task) => [task.id, task]));
+      const timestamped = this.stampDescriptionUpdatedAt(mergedPhase, previous?.description, previous?.descriptionRef, timestamp);
+      timestamped.tasks = timestamped.tasks.map((task) => {
+        const previousTask = previousTasksById.get(task.id);
+        const mergedTask = previousTask
+          ? { ...task, sessionInfo: mergeSessionInfo(previousTask.sessionInfo, task.sessionInfo) }
+          : task;
+        return this.stampDescriptionUpdatedAt(mergedTask, previousTaskDescriptions.get(task.id), previousTaskDescriptionRefs.get(task.id), timestamp);
+      });
+      const parsed = PhaseSchema.parse(this.normalizePhaseDocument(timestamped).phase);
+      await mkdir(this.phasesDir(), { recursive: true });
+      await atomicWriteJson(this.phasePath(parsed.id), parsed, this.root);
+    });
     await this.touchTimestamp();
     await this.maybeAutoSync();
   }
@@ -2626,13 +3013,18 @@ export class PlanStore {
   /** Atomic read-modify-write on a single phase file. Serializes concurrent
    *  task_create / phase_update calls on the SAME phaseId so batch operations
    *  don't lose tasks (last-write-wins race condition). */
-  async updatePhase(phaseId: string, updater: (phase: Phase) => Phase): Promise<Phase> {
+  async updatePhase(
+    phaseId: string,
+    updater: (phase: Phase) => Phase,
+    options: { expectedUpdatedAt?: string } = {},
+  ): Promise<Phase> {
     const features = await this.loadRawFeatures();
     // Augment the raw (on-disk) phase with its DERIVED status before handing it
     // to the updater, so updaters that read 'phase.status' see the truth. The
     // returned object's 'status' is stripped by PhaseSchema.parse (status is
     // not persisted); the return value is re-derived for the caller.
     const raw = await atomicUpdateJson(this.phasePath(phaseId), PhaseSchema, (rawPhase) => {
+      assertPlannerRevision("phase", phaseId, options.expectedUpdatedAt, rawPhase.updatedAt);
       const current: Phase = { ...rawPhase, status: this.derivePhaseStatus(rawPhase.tasks) };
       // The updater may mutate `current`, therefore snapshot descriptions first.
       const previousDescription = current.description;
@@ -2660,6 +3052,125 @@ export class PlanStore {
     return { ...raw, status: this.derivePhaseStatus(raw.tasks) };
   }
 
+  /** Field-scoped task mutation against the lock-reloaded canonical phase. */
+  async updateTask(
+    phaseId: string,
+    taskId: string,
+    updater: (task: Task) => Task,
+    options: { expectedUpdatedAt?: string } = {},
+  ): Promise<{ phase: Phase; task: Task }> {
+    let persisted: Task | undefined;
+    const phase = await this.updatePhase(phaseId, (currentPhase) => {
+      const index = currentPhase.tasks.findIndex((task) => task.id === taskId);
+      if (index < 0) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`);
+      const current = currentPhase.tasks[index]!;
+      assertPlannerRevision("task", taskId, options.expectedUpdatedAt, current.updatedAt);
+      const next = TaskSchema.parse(updater(structuredClone(current)));
+      if (next.id !== current.id || next.phaseId !== current.phaseId) {
+        throw new PlanStoreError("Task identity and parent phase cannot be changed by updateTask.");
+      }
+      currentPhase.tasks[index] = next;
+      currentPhase.updatedAt = next.updatedAt;
+      persisted = next;
+      return currentPhase;
+    });
+    return { phase, task: persisted! };
+  }
+
+  async createAcceptedDecision(
+    owner: AcceptedDecisionOwner,
+    input: AcceptedDecisionCreateInput,
+    acceptedAt = nowISO(),
+  ): Promise<AcceptedDecision> {
+    const decision = normalizeAcceptedDecisionCreate(input, acceptedAt);
+    if (owner.kind === "project") {
+      await this.updateProject((project) => ({ ...project, acceptedDecisions: [...project.acceptedDecisions, decision] }));
+      return decision;
+    }
+    if (owner.kind === "feature") {
+      await this.updateFeature(owner.featureId, (feature) => ({ ...feature, acceptedDecisions: [...feature.acceptedDecisions, decision], updatedAt: acceptedAt }));
+      return decision;
+    }
+    if (owner.kind === "phase") {
+      await this.updatePhase(owner.phaseId, (phase) => ({ ...phase, acceptedDecisions: [...phase.acceptedDecisions, decision], updatedAt: acceptedAt }));
+      return decision;
+    }
+    await this.updateTask(owner.phaseId, owner.taskId, (task) => ({ ...task, acceptedDecisions: [...task.acceptedDecisions, decision], updatedAt: acceptedAt }));
+    return decision;
+  }
+
+  async updateAcceptedDecision(
+    owner: AcceptedDecisionOwner,
+    decisionId: string,
+    input: AcceptedDecisionUpdateInput,
+  ): Promise<AcceptedDecision> {
+    let updated: AcceptedDecision | undefined;
+    if (owner.kind === "project") {
+      await this.updateProject((project) => {
+        const result = updateAcceptedDecisionList(project.acceptedDecisions, decisionId, input);
+        updated = result.decision;
+        return { ...project, acceptedDecisions: result.decisions };
+      });
+      return updated!;
+    }
+    if (owner.kind === "feature") {
+      await this.updateFeature(owner.featureId, (feature) => {
+        const result = updateAcceptedDecisionList(feature.acceptedDecisions, decisionId, input);
+        updated = result.decision;
+        return { ...feature, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return updated!;
+    }
+    if (owner.kind === "phase") {
+      await this.updatePhase(owner.phaseId, (phase) => {
+        const result = updateAcceptedDecisionList(phase.acceptedDecisions, decisionId, input);
+        updated = result.decision;
+        return { ...phase, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return updated!;
+    }
+    await this.updateTask(owner.phaseId, owner.taskId, (task) => {
+      const result = updateAcceptedDecisionList(task.acceptedDecisions, decisionId, input);
+      updated = result.decision;
+      return { ...task, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+    });
+    return updated!;
+  }
+
+  async deleteAcceptedDecision(owner: AcceptedDecisionOwner, decisionId: string): Promise<AcceptedDecision> {
+    let deleted: AcceptedDecision | undefined;
+    if (owner.kind === "project") {
+      await this.updateProject((project) => {
+        const result = deleteAcceptedDecisionFromList(project.acceptedDecisions, decisionId);
+        deleted = result.decision;
+        return { ...project, acceptedDecisions: result.decisions };
+      });
+      return deleted!;
+    }
+    if (owner.kind === "feature") {
+      await this.updateFeature(owner.featureId, (feature) => {
+        const result = deleteAcceptedDecisionFromList(feature.acceptedDecisions, decisionId);
+        deleted = result.decision;
+        return { ...feature, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return deleted!;
+    }
+    if (owner.kind === "phase") {
+      await this.updatePhase(owner.phaseId, (phase) => {
+        const result = deleteAcceptedDecisionFromList(phase.acceptedDecisions, decisionId);
+        deleted = result.decision;
+        return { ...phase, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+      });
+      return deleted!;
+    }
+    await this.updateTask(owner.phaseId, owner.taskId, (task) => {
+      const result = deleteAcceptedDecisionFromList(task.acceptedDecisions, decisionId);
+      deleted = result.decision;
+      return { ...task, acceptedDecisions: result.decisions, updatedAt: nowISO() };
+    });
+    return deleted!;
+  }
+
   /** Save a durable resume checkpoint without introducing a separate canonical task status. */
   async pauseTask(phaseId: string, taskId: string, input: TaskPauseSnapshot): Promise<Task> {
     const snapshot = TaskPauseSnapshotSchema.parse(input);
@@ -2681,6 +3192,7 @@ export class PlanStore {
         status: "planned",
         pauseSnapshot: snapshot,
         pauseHistory: [...task.pauseHistory, snapshot],
+        activeOwnerSession: "",
         statusLog: [...task.statusLog, {
           id: createStatusLogEntryId(),
           date: snapshot.pausedAt,
@@ -2698,7 +3210,7 @@ export class PlanStore {
   }
 
   /** Resume a checkpointed task without resetting its original startedAt. */
-  async resumeTask(phaseId: string, taskId: string, timestamp = nowISO()): Promise<Task> {
+  async resumeTask(phaseId: string, taskId: string, timestamp = nowISO(), ownerSessionId = ""): Promise<Task> {
     let resumed: Task | undefined;
     await this.updatePhase(phaseId, (phase) => {
       const task = phase.tasks.find((candidate) => candidate.id === taskId);
@@ -2714,6 +3226,7 @@ export class PlanStore {
         ...task,
         status: "in-progress",
         pauseSnapshot: null,
+        activeOwnerSession: ownerSessionId.trim() || task.activeOwnerSession,
         startedAt: task.startedAt || timestamp,
         statusLog: [...task.statusLog, {
           id: createStatusLogEntryId(),
@@ -2731,6 +3244,116 @@ export class PlanStore {
     return resumed!;
   }
 
+  /** Reopen a completed task atomically without changing any other task.
+   * Completion evidence remains in the description and status log; completedAt is
+   * cleared because the task is once again active work. */
+  async reopenTask(phaseId: string, taskId: string, options: { confirmed: boolean; ownerSessionId?: string; timestamp?: string }): Promise<Task> {
+    if (!options.confirmed) {
+      throw new PlanStoreError("Task reopening requires explicit confirmation.", undefined, { errorCode: "TASK_REOPEN_CONFIRMATION_REQUIRED", taskId });
+    }
+    const timestamp = options.timestamp ?? nowISO();
+    let reopened: Task | undefined;
+    await this.updatePhase(phaseId, (phase) => {
+      const task = phase.tasks.find((candidate) => candidate.id === taskId);
+      if (!task) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`, undefined, { errorCode: "TASK_NOT_FOUND", taskId });
+      if (task.status !== "done") throw new PlanStoreError(`Task ${taskId} is not completed.`, undefined, { errorCode: "TASK_REOPEN_NOT_DONE", taskId });
+      reopened = {
+        ...task,
+        status: "in-progress",
+        completedAt: "",
+        pauseSnapshot: null,
+        activeOwnerSession: options.ownerSessionId?.trim() ?? "",
+        statusLog: [...task.statusLog, {
+          id: createStatusLogEntryId(),
+          date: timestamp,
+          fromStatus: "done",
+          toStatus: "in-progress",
+          title: "done → in-progress (reopened)",
+          description: "Reopened through the confirmed lifecycle operation; prior completion evidence is retained.",
+        }],
+        updatedAt: timestamp,
+      };
+      phase.tasks = phase.tasks.map((candidate) => candidate.id === taskId ? reopened! : candidate);
+      return phase;
+    });
+    return reopened!;
+  }
+
+  /** Add a validated dependency edge from one task to another. */
+  async addTaskDependency(phaseId: string, taskId: string, dependencyId: string, timestamp = nowISO()): Promise<Task> {
+    const phases = await this.loadAllPhases();
+    const tasks = phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
+    const source = tasks.find((entry) => entry.phase.id === phaseId && entry.task.id === taskId);
+    const dependency = tasks.find((entry) => entry.task.id === dependencyId);
+    if (!source) throw new PlanStoreError("Task not found.", undefined, { errorCode: "TASK_NOT_FOUND" });
+    if (!dependency) throw new PlanStoreError("Dependency task not found.", undefined, { errorCode: "DEPENDENCY_TASK_NOT_FOUND" });
+    if (taskId === dependencyId) throw new PlanStoreError("A task cannot depend on itself.", undefined, { errorCode: "DEPENDENCY_SELF" });
+    if (source.task.dependsOn.includes(dependencyId)) return source.task;
+    const graph = new Map(tasks.map(({ task }) => [task.id, [...task.dependsOn]]));
+    graph.set(taskId, [...(graph.get(taskId) ?? []), dependencyId]);
+    const visit = (id: string, path = new Set<string>()): boolean => { if (path.has(id)) return true; const next = new Set(path); next.add(id); return (graph.get(id) ?? []).some((child) => visit(child, next)); };
+    if (visit(taskId)) throw new PlanStoreError("Dependency would create a cycle.", undefined, { errorCode: "DEPENDENCY_CYCLE" });
+    return (await this.updateTask(phaseId, taskId, (task) => ({ ...task, dependsOn: [...task.dependsOn, dependencyId], updatedAt: timestamp }))).task;
+  }
+
+  /** Remove a dependency edge without affecting either task. */
+  async deleteTaskDependency(phaseId: string, taskId: string, dependencyId: string): Promise<Task> {
+    return (await this.updateTask(phaseId, taskId, (task) => {
+      if (!task.dependsOn.includes(dependencyId)) throw new PlanStoreError("Dependency not found.", undefined, { errorCode: "DEPENDENCY_NOT_FOUND" });
+      return { ...task, dependsOn: task.dependsOn.filter((id) => id !== dependencyId), updatedAt: nowISO() };
+    })).task;
+  }
+
+  /** Create a planner-owned subtask with a stable ID under a task. */
+  async createSubtask(phaseId: string, taskId: string, input: { title: string; description?: string; status?: Subtask["status"] }, timestamp = nowISO()): Promise<Subtask> {
+    const title = input.title.trim();
+    if (!title) throw new PlanStoreError("Subtask title is required.", undefined, { errorCode: "SUBTASK_TITLE_REQUIRED" });
+    let created: Subtask | undefined;
+    await this.updateTask(phaseId, taskId, (task) => {
+      created = { id: randomUUID(), title, status: input.status ?? "planned", description: input.description?.trim() ?? "", createdAt: timestamp, updatedAt: timestamp };
+      task.subtasks = [...(task.subtasks ?? []), created];
+      return task;
+    });
+    return created!;
+  }
+
+  /** Update a subtask by its parent task and planner-owned ID. */
+  async updateSubtask(phaseId: string, taskId: string, subtaskId: string, input: Partial<Pick<Subtask, "title" | "description" | "status">>, timestamp = nowISO()): Promise<Subtask> {
+    let updated: Subtask | undefined;
+    await this.updateTask(phaseId, taskId, (task) => {
+      const index = (task.subtasks ?? []).findIndex((subtask) => subtask.id === subtaskId);
+      if (index < 0) throw new PlanStoreError(`Subtask ${subtaskId} was not found.`, undefined, { errorCode: "SUBTASK_NOT_FOUND" });
+      const current = task.subtasks[index]!;
+      if (input.title !== undefined && !input.title.trim()) throw new PlanStoreError("Subtask title is required.", undefined, { errorCode: "SUBTASK_TITLE_REQUIRED" });
+      updated = { ...current, ...(input.title !== undefined ? { title: input.title.trim() } : {}), ...(input.description !== undefined ? { description: input.description.trim() } : {}), ...(input.status !== undefined ? { status: input.status } : {}), updatedAt: timestamp };
+      task.subtasks = task.subtasks.map((candidate, candidateIndex) => candidateIndex === index ? updated! : candidate);
+      return task;
+    });
+    return updated!;
+  }
+
+  /** Delete a subtask by its planner-owned ID. */
+  async deleteSubtask(phaseId: string, taskId: string, subtaskId: string): Promise<void> {
+    await this.updateTask(phaseId, taskId, (task) => {
+      if (!(task.subtasks ?? []).some((subtask) => subtask.id === subtaskId)) throw new PlanStoreError(`Subtask ${subtaskId} was not found.`, undefined, { errorCode: "SUBTASK_NOT_FOUND" });
+      task.subtasks = task.subtasks.filter((subtask) => subtask.id !== subtaskId);
+      return task;
+    });
+  }
+
+  /** Reorder subtasks without changing their stable identities. */
+  async reorderSubtasks(phaseId: string, taskId: string, orderedIds: string[]): Promise<Subtask[]> {
+    let ordered: Subtask[] = [];
+    await this.updateTask(phaseId, taskId, (task) => {
+      const current = task.subtasks ?? [];
+      if (orderedIds.length !== current.length || new Set(orderedIds).size !== current.length || orderedIds.some((id) => !current.some((subtask) => subtask.id === id))) throw new PlanStoreError("Subtask order must contain every existing subtask exactly once.", undefined, { errorCode: "SUBTASK_ORDER_INVALID" });
+      ordered = orderedIds.map((id) => current.find((subtask) => subtask.id === id)!);
+      task.subtasks = ordered;
+      return task;
+    });
+    return ordered;
+  }
+
   // ── Phase-scoped handoff (entity field, harness-agnostic) ────────────
 
   /** Get the handoff text for a phase ("" if none). Throws if phase missing. */
@@ -2740,9 +3363,10 @@ export class PlanStore {
 
   private async validateHandoffSupportingDocuments(
     documents: HandoffSupportingDocumentInput[],
-  ): Promise<HandoffSupportingDocument[]> {
+  ): Promise<{ metadata: HandoffSupportingDocument[]; contents: string[] }> {
     const docsRoot = resolve(this.root, "docs");
-    const verified: HandoffSupportingDocument[] = [];
+    const metadata: HandoffSupportingDocument[] = [];
+    const contents: string[] = [];
     const seen = new Set<string>();
     for (const document of documents) {
       const normalizedPath = document.path.trim().replace(/\\/g, "/");
@@ -2769,6 +3393,14 @@ export class PlanStore {
           { path: normalizedPath },
         );
       }
+      const fileStat = await lstat(target).catch(() => null);
+      if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) {
+        throw new HandoffContractError(
+          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+          `Supporting document must be a regular file under .planner/docs/ (symlinks rejected): ${normalizedPath}`,
+          { path: normalizedPath },
+        );
+      }
       const content = await readFile(target, "utf8").catch(() => null);
       if (content === null || !content.trim()) {
         throw new HandoffContractError(
@@ -2777,14 +3409,15 @@ export class PlanStore {
           { path: normalizedPath },
         );
       }
-      verified.push({
+      metadata.push({
         path: normalizedPath,
         description: document.description.trim(),
         contentHash: handoffContentHash(content),
         contentLength: content.length,
       });
+      contents.push(content);
     }
-    return verified;
+    return { metadata, contents };
   }
 
   /** Audit one exact phase before preparing a handoff refresh. */
@@ -2806,13 +3439,52 @@ export class PlanStore {
   ): Promise<RefreshPhaseHandoffResult> {
     return this.runAsBatch(async () => {
       const originalPhase = await this.loadPhase(phaseId);
+      if (this.terminalHandoffReason(originalPhase)) {
+        throw new PlanStoreError(`Cannot write a handoff on ${originalPhase.status} phase ${phaseId}; terminal phases have no pending handoff.`);
+      }
       if (!originalPhase.featureId) throw new PlanStoreError(`Phase ${phaseId} has no parent feature; durable handoff context cannot be synchronized.`);
       const originalFeatures = await this.loadFeatures();
       const featureIndex = originalFeatures.features.findIndex((candidate) => candidate.id === originalPhase.featureId);
       if (featureIndex < 0) throw new PlanStoreError(`Parent feature ${originalPhase.featureId} not found for phase ${phaseId}.`);
       const timestamp = nowISO();
-      const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(input.supportingDocuments ?? []);
-      const verifiedInput: RefreshPhaseHandoffInput = { ...input, verifiedSupportingDocuments };
+      const existingCreatedAt = originalPhase.handoff.match(/^Created at:\s*(\S+)\s*$/im)?.[1] ?? timestamp;
+      const materializedContent = materializeHandoffMetadata(
+        input.content,
+        input.reason,
+        existingCreatedAt,
+        timestamp,
+      );
+      let effectiveInput: RefreshPhaseHandoffInput = { ...input, content: materializedContent };
+      if (materializedContent.length > TARGET_HANDOFF_CONTENT_CHARS) {
+        const stamp = timestamp.replace(/[:.]/g, "-");
+        const autoPath = `.planner/docs/handoff-p${String(originalPhase.number).padStart(3, "0")}-${stamp}.md`;
+        const externalized = externalizeOversizedHandoffContent(materializedContent, autoPath);
+        if (externalized.externalized) {
+          const docsDir = resolve(this.root, "docs");
+          await mkdir(docsDir, { recursive: true });
+          const target = resolve(this.root, autoPath.slice(".planner/".length));
+          if (!target.startsWith(`${docsDir}${sep}`)) {
+            throw new HandoffContractError(
+              "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+              `Auto-externalized supporting document escapes .planner/docs/: ${autoPath}`,
+              { path: autoPath },
+            );
+          }
+          await writeFile(target, externalized.extendedContent, "utf8");
+          const autoDoc = externalized.supportingDocument!;
+          effectiveInput = {
+            ...input,
+            content: externalized.content,
+            supportingDocuments: [...(input.supportingDocuments ?? []), autoDoc],
+          };
+        }
+      }
+      const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(effectiveInput.supportingDocuments ?? []);
+      const verifiedInput: RefreshPhaseHandoffInput = {
+        ...effectiveInput,
+        verifiedSupportingDocuments: verifiedSupportingDocuments.metadata,
+        verifiedSupportingDocumentContents: verifiedSupportingDocuments.contents,
+      };
       const originalFeature = originalFeatures.features[featureIndex]!;
       const applied = applyHandoffContextSync(originalPhase, originalFeature, verifiedInput, timestamp);
 
@@ -2860,14 +3532,42 @@ export class PlanStore {
     });
   }
 
-  /** Set the handoff text for a phase + stamp handoffUpdatedAt. A completed or
-   * canceled phase cannot receive a new operational handoff. Replacing an
-   * existing handoff archives the previous content as `superseded` first. */
+  /** Mark a persisted handoff resume-ready only after a separate full read-back
+   * has reconciled every required source and found no omissions. */
+  async verifyPhaseHandoffReadBack(
+    phaseId: string,
+    input: VerifyPhaseHandoffReadBackInput,
+  ): Promise<VerifyPhaseHandoffReadBackResult> {
+    const timestamp = nowISO();
+    const phase = await this.updatePhase(phaseId, (current) => {
+      const sourceReviews = validateHandoffReadBackVerification(current, input);
+      return {
+        ...current,
+        handoffReadAt: timestamp,
+        handoffAudit: {
+          ...current.handoffAudit!,
+          resumeReadyAt: timestamp,
+          readBackSourceReviews: sourceReviews,
+        },
+      };
+    });
+    return {
+      phaseId: phase.id,
+      handoffUpdatedAt: phase.handoffUpdatedAt,
+      contentHash: phase.handoffAudit!.contentHash,
+      resumeReadyAt: phase.handoffAudit!.resumeReadyAt,
+      sourceReviews: phase.handoffAudit!.readBackSourceReviews,
+    };
+  }
+
+  /** Set the handoff text for a phase + stamp handoffUpdatedAt. A terminal
+   * phase cannot receive a new operational handoff. Replacing an existing
+   * handoff archives the previous content as `superseded` first. */
   async setPhaseHandoff(phaseId: string, text: string): Promise<void> {
     const phase = await this.loadPhase(phaseId);
     const normalized = text.trim();
-    if (phase.status === "done" || phase.status === "canceled") {
-      throw new PlanStoreError(`Cannot write a handoff on ${phase.status} phase ${phaseId}; completed phases have no pending handoff.`);
+    if (this.terminalHandoffReason(phase)) {
+      throw new PlanStoreError(`Cannot write a handoff on ${phase.status} phase ${phaseId}; terminal phases have no pending handoff.`);
     }
     if (phase.handoff && normalized && phase.handoff !== normalized) {
       await this.clearPhaseHandoff(phaseId, "superseded");
@@ -2900,7 +3600,7 @@ export class PlanStore {
     }
     const phases = await this.loadAllPhases();
     const target = phases.find((p) => p.status === "in-progress")
-      ?? phases.find((p) => p.status !== "done" && p.status !== "canceled")
+      ?? phases.find((p) => !this.terminalHandoffReason(p))
       ?? null;
     if (!target) return { imported: false }; // no non-completed phase — leave file for a later run
     if ((target.handoff ?? "") === "") {
@@ -2922,7 +3622,8 @@ export class PlanStore {
    *  metadata entry { file, clearedAt, reason } is prepended to handoffHistory
    *  (capped at 5; oldest file is deleted when trimmed). handoffUpdatedAt is
    *  left unchanged as an audit trail. If the handoff is empty, this is a no-op.
-   *  reason: "phase-done" | "manual" | "superseded" | "imported". */
+   *  reason: "phase-done" | "phase-rejected" | "phase-canceled" |
+   *  "manual" | "superseded" | "imported". */
   async clearPhaseHandoff(phaseId: string, reason = "manual"): Promise<void> {
     await this.migrateLegacyHandoffArchive();
     const phase = await this.loadPhase(phaseId).catch(() => null);
@@ -2947,14 +3648,15 @@ export class PlanStore {
     await this.updatePhase(phaseId, (p) => ({ ...p, handoff: "", handoffHistory: trimmed }));
   }
 
-  /** Archive stale handoffs only after every task in their phase is done or
-   * canceled. Idempotent: only non-empty phase.handoff values are moved. */
+  /** Archive stale handoffs for every canonical terminal phase outcome.
+   * Idempotent: only non-empty phase.handoff values are moved. */
   private async archiveStaleHandoffs(): Promise<number> {
     const phases = await this.loadAllPhases();
     let archived = 0;
     for (const phase of phases) {
-      if (this.hasCompletedHandoffLifecycle(phase.tasks) && phase.handoff) {
-        await this.clearPhaseHandoff(phase.id, "phase-done");
+      const reason = this.terminalHandoffReason(phase);
+      if (reason && phase.handoff) {
+        await this.clearPhaseHandoff(phase.id, reason);
         archived += 1;
       }
     }
@@ -2967,7 +3669,7 @@ export class PlanStore {
   }
 
   /** List only active/pending phase handoffs, newest first. Handoffs from
-   * phases where every task is done/canceled are archived before returning. */
+   * canonically terminal phases are archived before returning. */
   async listHandoffs(options: { includeContent?: boolean } = {}): Promise<PhaseHandoffSummary[]> {
     await this.archiveStaleHandoffs();
     const phases = await this.loadAllPhases();
@@ -2977,7 +3679,7 @@ export class PlanStore {
     for (const f of features.features) featureNumber.set(f.id, f.number);
     const out: PhaseHandoffSummary[] = [];
     for (const p of phases) {
-      if (!p.handoff || p.status === "done" || p.status === "canceled") continue;
+      if (!p.handoff || this.terminalHandoffReason(p)) continue;
       if (p.featureId && !featureIds.has(p.featureId)) continue;
       const fnum = p.featureId ? featureNumber.get(p.featureId) : undefined;
       out.push({
@@ -2991,6 +3693,8 @@ export class PlanStore {
         contentLength: p.handoff.length,
         contentHash: p.handoffAudit?.contentHash ?? handoffContentHash(p.handoff),
         verifiedAt: p.handoffAudit?.verifiedAt ?? "",
+        resumeReady: Boolean(p.handoffAudit?.resumeReadyAt),
+        resumeReadyAt: p.handoffAudit?.resumeReadyAt ?? "",
       });
     }
     out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

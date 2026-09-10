@@ -33,7 +33,7 @@ import { spawn } from "node:child_process";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 import { PlanStore } from "../../plan-core/dist/index.js";
 import { seedFixture, createTempRoot } from "../../../test/helpers/fixtures.mjs";
-import { canonicalAuditedHandoff, completeHandoffAudit } from "../../../test/helpers/handoff-audit.mjs";
+import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
   await cleanupPiHosts();
@@ -46,9 +46,11 @@ function canonicalHandoff(title, detail) {
 async function preparedHandoffArgs(host, phaseRef = "P001") {
   const prepared = await host.runTool("handoff_prepare", { phaseRef });
   return {
+    reason: "Resume fixture session boundary requires a cold-resume handoff.",
     expectedHandoffUpdatedAt: toolDetails(prepared).handoffUpdatedAt ?? "",
     reconciledExistingHandoff: true,
     completenessAudit: completeHandoffAudit(),
+    coldStartInventory: completeHandoffColdStartInventory({ file: "resume.test.mjs" }),
     taskUpdates: [],
     phaseNoUpdateReason: "Resume fixture does not change durable phase context.",
     featureNoUpdateReason: "Resume fixture does not change durable feature context.",
@@ -83,7 +85,7 @@ async function readTaskContext(host, taskId = "T001") {
   await host.runTool("task_get", { taskId, full: true });
   await host.runTool("phase_get", { phaseId: "P001", full: true });
   await host.runTool("feature_get", { featureId: "F001", full: true });
-  await host.runTool("requirement_list", {});
+  await host.runTool("requirement_list", { phaseRef: "P001" });
 }
 
 describe("pi-adapter resume flow and CLI smoke", () => {
@@ -226,6 +228,7 @@ describe("pi-adapter resume flow and CLI smoke", () => {
   test("/planner task start also retains a pending handoff", async () => {
     const host = await createPiHost({ name: "t243-command-handoff-retention", seed: "minimal" });
     try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
       await host.runTool("handoff_write", {
         phaseRef: "P001",
         title: "P001 — command retention handoff",

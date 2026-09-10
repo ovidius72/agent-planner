@@ -50,6 +50,17 @@ describe("handoff lifecycle hardening", () => {
     assert.equal(archived[0].firstLine, "stale done handoff");
   });
 
+  test("repair retroactively archives rejected-phase handoffs", async () => {
+    const { store, phase, now } = await setup();
+    const task = TaskSchema.parse({ id: createTaskId(), phaseId: phase.id, number: 1, shortName: "rejected", title: "Rejected task", status: "rejected", createdAt: now, updatedAt: now });
+    await store.updatePhase(phase.id, (current) => ({ ...current, tasks: [task], taskIds: [task.id], handoff: "# stale rejected handoff", handoffUpdatedAt: now }));
+
+    const report = await store.repair();
+    assert.equal(report.handoffs.archived, 1);
+    assert.equal((await store.loadPhase(phase.id)).handoff, "");
+    assert.equal((await store.listArchivedHandoffs())[0].reason, "phase-rejected");
+  });
+
   test("active listing retroactively archives stale completed-phase handoffs", async () => {
     const { store, phase, now } = await setup();
     const task = TaskSchema.parse({ id: createTaskId(), phaseId: phase.id, number: 1, shortName: "closed", title: "Closed task", status: "done", createdAt: now, updatedAt: now });
@@ -58,10 +69,75 @@ describe("handoff lifecycle hardening", () => {
     assert.equal((await store.listArchivedHandoffs()).length, 1);
   });
 
-  test("new handoffs on completed phases are rejected", async () => {
+  test("every canonical terminal phase outcome archives with its exact reason", async () => {
+    const cases = [
+      { name: "all rejected", statuses: ["rejected", "rejected"], derived: "rejected", reason: "phase-rejected" },
+      { name: "done plus rejected", statuses: ["done", "rejected"], derived: "done", reason: "phase-done" },
+      { name: "done plus canceled", statuses: ["done", "canceled"], derived: "done", reason: "phase-done" },
+      { name: "all canceled", statuses: ["canceled", "canceled"], derived: "rejected", reason: "phase-rejected" },
+    ];
+
+    for (const scenario of cases) {
+      const { store, phase, now } = await setup();
+      const tasks = scenario.statuses.map((status, index) => TaskSchema.parse({
+        id: createTaskId(),
+        phaseId: phase.id,
+        number: index + 1,
+        shortName: `${scenario.name.replaceAll(" ", "-")}-${index + 1}`,
+        title: `${scenario.name} task ${index + 1}`,
+        status,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      await store.updatePhase(phase.id, (current) => ({
+        ...current,
+        tasks,
+        taskIds: tasks.map((task) => task.id),
+        handoff: `# ${scenario.name} handoff`,
+        handoffUpdatedAt: now,
+      }));
+
+      assert.equal((await store.loadPhase(phase.id)).status, scenario.derived, scenario.name);
+      assert.ok(await store.syncTaskStatusRollup(phase.id), `${scenario.name} archives immediately`);
+      assert.equal((await store.loadPhase(phase.id)).handoff, "", scenario.name);
+      const archived = await store.listArchivedHandoffs();
+      assert.equal(archived[0].reason, scenario.reason, scenario.name);
+    }
+  });
+
+  test("nonterminal planned, waiting, blocked, and deferred phases keep active handoffs", async () => {
+    for (const status of ["planned", "waiting", "blocked", "deferred"]) {
+      const { store, phase, now } = await setup();
+      const task = TaskSchema.parse({ id: createTaskId(), phaseId: phase.id, number: 1, shortName: status, title: `${status} task`, status, createdAt: now, updatedAt: now });
+      await store.updatePhase(phase.id, (current) => ({ ...current, tasks: [task], taskIds: [task.id], handoff: `# ${status} handoff`, handoffUpdatedAt: now }));
+
+      assert.equal(await store.syncTaskStatusRollup(phase.id), null, status);
+      assert.equal((await store.listHandoffs()).length, 1, status);
+      assert.equal((await store.listArchivedHandoffs()).length, 0, status);
+    }
+  });
+
+  test("active listing retroactively archives rejected handoffs instead of hiding or retaining them", async () => {
     const { store, phase, now } = await setup();
-    const task = TaskSchema.parse({ id: createTaskId(), phaseId: phase.id, number: 1, shortName: "closed", title: "Closed task", status: "done", createdAt: now, updatedAt: now });
-    await store.updatePhase(phase.id, (p) => ({ ...p, tasks: [task], taskIds: [task.id] }));
-    await assert.rejects(() => store.setPhaseHandoff(phase.id, "# should fail"), /completed phases have no pending handoff/);
+    const task = TaskSchema.parse({ id: createTaskId(), phaseId: phase.id, number: 1, shortName: "rejected", title: "Rejected task", status: "rejected", createdAt: now, updatedAt: now });
+    await store.updatePhase(phase.id, (current) => ({ ...current, tasks: [task], taskIds: [task.id], handoff: "# rejected stale handoff", handoffUpdatedAt: now }));
+
+    assert.deepEqual(await store.listHandoffs(), []);
+    const archived = await store.listArchivedHandoffs();
+    assert.equal(archived.length, 1);
+    assert.equal(archived[0].reason, "phase-rejected");
+    assert.equal(archived[0].firstLine, "rejected stale handoff");
+  });
+
+  test("new handoffs on done and rejected phases are rejected", async () => {
+    for (const status of ["done", "rejected"]) {
+      const { store, phase, now } = await setup();
+      const task = TaskSchema.parse({ id: createTaskId(), phaseId: phase.id, number: 1, shortName: status, title: `${status} task`, status, createdAt: now, updatedAt: now });
+      await store.updatePhase(phase.id, (current) => ({ ...current, tasks: [task], taskIds: [task.id] }));
+      await assert.rejects(
+        () => store.setPhaseHandoff(phase.id, "# should fail"),
+        new RegExp(`Cannot write a handoff on ${status} phase.*terminal phases have no pending handoff`),
+      );
+    }
   });
 });

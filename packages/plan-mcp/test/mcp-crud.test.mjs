@@ -19,7 +19,8 @@
 
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { createPhaseId } from "../../plan-core/dist/index.js";
 import {
@@ -45,10 +46,110 @@ async function readTaskContext(session, task = "T001", phase = "P001", feature =
   await callTool(session, "planner-task-show", { task, full: true });
   await callTool(session, "planner-phase-show", { phase, full: true });
   await callTool(session, "planner-feature-show", { feature, full: true });
-  await callTool(session, "planner-requirement-list", {});
+  await callTool(session, "planner-requirement-list", { phaseRef: phase });
 }
 
+test("writer contention stays readable and surfaces PLAN_WRITER_BUSY through MCP", async () => {
+  const session = await startMcpFixture({
+    name: "writer-busy",
+    seed: "empty",
+    env: {
+      AGENT_PLAN_WRITE_LOCK_TIMEOUT_MS: "60",
+      AGENT_PLAN_WRITE_LOCK_RETRY_MS: "10",
+    },
+  });
+  const lockPath = join(session.planRoot, ".local", "locks", "writer.lock");
+  try {
+    await mkdir(lockPath, { recursive: true });
+    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
+      token: "external-writer",
+      pid: process.pid,
+      hostname: hostname(),
+      cwd: session.root,
+      acquiredAt: new Date().toISOString(),
+    }), "utf8");
+
+    assert.match(toolText(await callTool(session, "planner-feature-list", {})), /No features/);
+    const blocked = await callTool(session, "planner-feature-add", {
+      name: "Blocked writer",
+      description: LONG,
+    }, { expectError: true });
+    assert.match(toolText(blocked), /PLAN_WRITER_BUSY.*Read-only operations remain available/s);
+    assert.equal((await session.store.loadFeatures()).features.length, 0);
+  } finally {
+    await rm(lockPath, { recursive: true, force: true });
+    await closeMcpFixture(session);
+  }
+});
+
 // ── Feature CRUD ───────────────────────────────────────────────────────────
+
+test("concurrent MCP processes create linked phases without duplicate priority or lost feature links", async () => {
+  const first = await startMcpFixture({ name: "concurrent-phase-create" });
+  const second = await startMcpClient({ planRoot: first.planRoot, name: "concurrent-phase-create-second" });
+  try {
+    await Promise.all([
+      callTool(first, "planner-phase-add", { title: "Concurrent phase A", feature: "F001", description: LONG }),
+      callTool(second, "planner-phase-add", { title: "Concurrent phase B", feature: "F001", description: LONG }),
+    ]);
+    const allPhases = await first.store.loadAllPhases();
+    const created = allPhases.filter((phase) => phase.title.startsWith("Concurrent phase"));
+    assert.equal(created.length, 2);
+    assert.equal(new Set(created.map((phase) => phase.priority)).size, 2, "root transactions serialize nextPriority allocation");
+    const feature = (await first.store.loadFeatures()).features.find((entry) => entry.number === 1);
+    assert.ok(feature);
+    assert.ok(created.every((phase) => feature.phaseIds.includes(phase.id)), "both phase links persist on the feature");
+  } finally {
+    await closeMcpFixture(second);
+    await closeMcpFixture(first);
+  }
+});
+
+test("concurrent MCP task starts preserve per-session active ownership", async () => {
+  const first = await startMcpFixture({ name: "concurrent-task-start" });
+  const second = await startMcpClient({ planRoot: first.planRoot, name: "concurrent-task-start-second" });
+  try {
+    const created = await callTool(first, "planner-task-add", { feature: "F001", phase: "P001", title: "Concurrent sibling", description: LONG });
+    assert.match(toolText(created), /Task created/);
+    const tasks = (await first.store.loadAllPhases())[0].tasks;
+    const seedRef = `T${String(tasks.find((task) => task.title !== "Concurrent sibling").number).padStart(3, "0")}`;
+    const siblingRef = `T${String(tasks.find((task) => task.title === "Concurrent sibling").number).padStart(3, "0")}`;
+    await readTaskContext(first, seedRef);
+    await readTaskContext(second, siblingRef);
+
+    const starts = await Promise.all([
+      callTool(first, "planner-task-start", { task: seedRef }),
+      callTool(second, "planner-task-start", { task: siblingRef }),
+    ]);
+    assert.equal(starts.filter((result) => toolStructured(result)?.started === true).length, 2);
+    const activeOwnership = starts.map((result) => toolStructured(result).task.activeOwnerSession);
+    assert.equal(new Set(activeOwnership).size, 2, "each active task should record a distinct owning session");
+    const active = (await first.store.loadAllPhases()).flatMap((phase) => phase.tasks).filter((task) => task.status === "in-progress");
+    assert.equal(active.length, 2);
+    assert.deepEqual(active.map((task) => task.activeOwnerSession).filter(Boolean).length, 2);
+  } finally {
+    await closeMcpFixture(second);
+    await closeMcpFixture(first);
+  }
+});
+
+test("an MCP lifecycle write preserves metadata committed by another process after its earlier read", async () => {
+  const first = await startMcpFixture({ name: "cross-process-stale-lifecycle" });
+  const second = await startMcpClient({ planRoot: first.planRoot, name: "cross-process-stale-lifecycle-second" });
+  try {
+    await readTaskContext(first, "T001");
+    const workDone = "Metadata committed by the second MCP process after the first process read context.";
+    await callTool(second, "planner-feature-update", { feature: "F001", workDone });
+
+    const started = await callTool(first, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(started).started, true);
+    const persisted = (await first.store.loadFeatures()).features[0];
+    assert.equal(persisted.workDone, workDone);
+  } finally {
+    await closeMcpFixture(second);
+    await closeMcpFixture(first);
+  }
+});
 
 test("feature CRUD: human refs, ambiguity, no UUID leak, follow-up reads", async () => {
   const session = await startMcpFixture({ name: "t237-feature" });
@@ -157,19 +258,59 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
     assert.equal(toolStructured(rejectedStatus).effectiveStatus, "draft");
     const storedAfterRejection = await session.store.loadPhase(id);
     assert.equal(storedAfterRejection.title, "Payouts", "mixed status update is rejected atomically");
-    const updated = await callTool(session, "planner-phase-update", { phase: shortId, title: "Payouts v2" });
-    assert.match(toolText(updated), /P002\(F001\)/);
-    const stored = await session.store.loadPhase(id);
+    await callTool(session, "planner-feature-add", { name: "Parity owner", description: LONG });
+    const updated = await callTool(session, "planner-phase-update", {
+      phase: shortId,
+      title: "Payouts v2",
+      featureId: "F002",
+      descriptionRef: ".planner/docs/phases/payouts.md",
+      goals: ["Ship payouts"],
+      nonGoals: ["Redesign billing"],
+      dependencies: ["Provider contract"],
+      risks: ["Provider outage"],
+      openQuestions: ["Which region first?"],
+      decisions: ["Use provider tokens"],
+      completionCriteria: ["Payout succeeds"],
+    });
+    assert.match(toolText(updated), /P002\(F002\)/);
+    let stored = await session.store.loadPhase(id);
     assert.equal(stored.title, "Payouts v2");
+    assert.equal(stored.featureId, (await session.store.loadFeatures()).features.find((entry) => entry.number === 2).id);
+    assert.equal(stored.descriptionRef, ".planner/docs/phases/payouts.md");
+    assert.deepEqual(stored.goals, ["Ship payouts"]);
+    assert.deepEqual(stored.nonGoals, ["Redesign billing"]);
+    assert.deepEqual(stored.dependencies, ["Provider contract"]);
+    assert.deepEqual(stored.risks, ["Provider outage"]);
+    assert.deepEqual(stored.openQuestions, ["Which region first?"]);
+    assert.deepEqual(stored.decisions, ["Use provider tokens"]);
+    assert.deepEqual(stored.completionCriteria, ["Payout succeeds"]);
+    const featureOwners = (await session.store.loadFeatures()).features;
+    assert.equal(featureOwners.find((entry) => entry.number === 1).phaseIds.includes(id), false);
+    assert.equal(featureOwners.find((entry) => entry.number === 2).phaseIds.includes(id), true);
+
+    const discussed = await callTool(session, "planner-phase-discuss", {
+      phase: "P002",
+      goals: ["Keep derived status"],
+      summary: "Governance context captured",
+      openQuestions: ["Who signs off?"],
+    });
+    assert.equal(toolStructured(discussed).contextReady, true);
+    stored = await session.store.loadPhase(id);
+    assert.equal(stored.status, "draft", "phase discuss does not override derived status");
+    assert.equal(stored.contextReady, true);
+    assert.deepEqual(stored.goals, ["Keep derived status"]);
+    assert.deepEqual(stored.openQuestions, ["Who signs off?"]);
+
     const readBack = await callTool(session, "planner-phase-show", { phase: "P002" });
     assert.match(toolText(readBack), /Payouts v2/, "renamed phase reads back through MCP");
+    assert.match(toolText(readBack), /P002\(F002\)/, "relinked phase reads back with its new owner");
     assert.match(toolText(readBack), /\(draft; 0 tasks\)/, "status stays derived (draft) with no tasks");
 
     // delete → gone from store, feature phaseIds cleaned
     const deleted = await callTool(session, "planner-phase-delete", { phase: "P002" });
-    assert.match(toolText(deleted), /Phase deleted: P002\(F001\)/);
+    assert.match(toolText(deleted), /Phase deleted: P002\(F002\)/);
     assert.equal((await session.store.loadAllPhases()).some((entry) => entry.id === id), false);
-    const feature = (await session.store.loadFeatures()).features.find((entry) => entry.name === "Auth API");
+    const feature = (await session.store.loadFeatures()).features.find((entry) => entry.name === "Parity owner");
     assert.equal(feature.phaseIds.includes(id), false, "feature.phaseIds cleaned on phase delete");
 
     // invalid phase ref on show/delete → error, no mutation
@@ -217,6 +358,28 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
       assert.match(toolText(shown), /P001\(F001\)\/T002/, `task-show resolves ref ${ref}`);
     }
 
+    const parityUpdate = await callTool(session, "planner-task-update", {
+      task: "T002",
+      descriptionRef: ".planner/docs/tasks/refund-flow.md",
+      notes: "Provider behavior verified.",
+      decisions: ["Retry idempotently"],
+      checklist: ["Review", "Execute"],
+      subtasks: [{ title: "Validate provider", description: "Check contract" }, { title: "Execute refund" }],
+    });
+    assert.equal(toolStructured(parityUpdate).updated, true);
+    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes", "subtasks"]);
+    const parityTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
+    assert.equal(parityTask.descriptionRef, ".planner/docs/tasks/refund-flow.md");
+    assert.equal(parityTask.notes, "Provider behavior verified.");
+    assert.deepEqual(parityTask.decisions, ["Retry idempotently"]);
+    assert.deepEqual(parityTask.checklist.map((item) => item.title), ["Review", "Execute"]);
+    assert.deepEqual(parityTask.subtasks.map((item) => item.title), ["Validate provider", "Execute refund"]);
+    assert.ok(parityTask.subtasks.every((item) => item.id && item.id !== "forged-subtask"), "subtask IDs are planner-owned and non-empty");
+
+    const forgedSubtask = await callTool(session, "planner-task-update", { task: "T002", subtasks: [{ id: "forged-subtask", title: "Invalid" }] });
+    assert.equal(forgedSubtask.isError, true);
+    assert.equal(toolStructured(forgedSubtask).errorCode, "SUBTASK_ID_INVALID");
+
     // status gate: blocked without motivation → error, no mutation
     const noMotivation = await callTool(session, "planner-task-update", { task: "T002", status: "blocked" });
     expectToolError(noMotivation, /requires a motivation/);
@@ -240,11 +403,12 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     await callTool(session, "planner-task-checklist-toggle", { task: "T002", item: "C1" });
     await callTool(session, "planner-task-checklist-remove", { task: "T002", item: "C2" });
     const checklist = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).checklist;
-    assert.deepEqual(checklist.map((item) => item.title), ["Validate", "Ship"], "checklist add/toggle/remove renumbers cleanly");
+    assert.deepEqual(checklist.map((item) => item.title), ["Review", "Ship"], "checklist add/toggle/remove renumbers cleanly");
     assert.equal(checklist[0].checked, true, "toggle marks C1 done");
 
     // make T002 the highest-priority ready task (seed T001 has priority 10)
-    await callTool(session, "planner-task-update", { task: "T002", priority: 5 });
+    await callTool(session, "planner-task-update", { task: "T002", priority: 0 });
+    assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).priority, 0);
 
     // blocked is not startable → reopen to planned (motivation required) first
     await callTool(session, "planner-task-update", { task: "T002", status: "planned", motivation: "Provider contract signed; resume work." });
@@ -254,7 +418,11 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.match(toolText(directDone), /completion transitions require planner-task-complete/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
 
-    // Lifecycle work is rejected without the ordered full-read sequence.
+    const preservedFeatureDescription = "Updated through MCP before task lifecycle synchronization.";
+    await callTool(session, "planner-feature-update", { feature: "F001", description: preservedFeatureDescription, descriptionRef: ".planner/docs/features/auth-api.md" });
+    assert.equal((await session.store.loadFeatures()).features.find((entry) => entry.number === 1).descriptionRef, ".planner/docs/features/auth-api.md");
+
+    // Lifecycle work is rejected without the required full context reads.
     const deniedWithoutReads = await callTool(session, "planner-task-start", { task: "T002" });
     assert.equal(deniedWithoutReads.isError, true);
     assert.equal(toolStructured(deniedWithoutReads).started, false);
@@ -268,11 +436,20 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const deniedWithoutRequirements = await callTool(session, "planner-task-start", { task: "T002" });
     assert.equal(deniedWithoutRequirements.isError, true);
     assert.equal(toolStructured(deniedWithoutRequirements).errorCode, "REQUIREMENTS_READ_REQUIRED");
-    assert.deepEqual(toolStructured(deniedWithoutRequirements).nextActions, ["planner-requirement-list", "Retry planner-task-start P001(F001)/T002"]);
+    assert.deepEqual(toolStructured(deniedWithoutRequirements).nextActions, ["planner-requirement-list with phaseRef=P001(F001)", "Retry planner-task-start P001(F001)/T002"]);
+    assert.deepEqual(toolStructured(deniedWithoutRequirements).requirementEligibility.requiredReads.map(({ kind, state }) => ({ kind, state })), [{ kind: "requirement", state: "missing" }]);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "planned");
 
-    // lifecycle: requirement read + retry succeeds with a verified postcondition.
-    await callTool(session, "planner-requirement-list", {});
+    // A broad inventory is informative but does not claim every requirement was read.
+    const inventory = await callTool(session, "planner-requirement-list", {});
+    assert.equal(toolStructured(inventory).readScope, "inventory");
+    assert.deepEqual(toolStructured(inventory).attestedRequirementIds, []);
+    assert.equal(toolStructured(await callTool(session, "planner-task-start", { task: "T002" })).errorCode, "REQUIREMENTS_READ_REQUIRED");
+
+    // Target-scoped requirement delivery + retry succeeds with a verified postcondition.
+    const scopedRequirements = await callTool(session, "planner-requirement-list", { phaseRef: "P001(F001)" });
+    assert.equal(toolStructured(scopedRequirements).readScope, "target");
+    assert.deepEqual(toolStructured(scopedRequirements).attestedRequirementIds, toolStructured(deniedWithoutRequirements).requirementIds);
     const started = await callTool(session, "planner-task-start", { task: "T002" });
     assert.match(toolText(started), /Task started: P001\(F001\)\/T002/);
     assert.equal(started.isError, undefined);
@@ -303,7 +480,9 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.match(toolText(done), /\(done\)/);
     const doneTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(doneTask.status, "done");
+    assert.equal(doneTask.priority, 0);
     assert.ok(doneTask.completedAt);
+    assert.equal((await session.store.loadFeatures()).features[0].description, preservedFeatureDescription, "MCP lifecycle writes preserve newer feature metadata");
 
     const reopenNoMotivation = await callTool(session, "planner-task-update", { task: "T002", status: "planned" });
     expectToolError(reopenNoMotivation, /requires a motivation/);
@@ -343,7 +522,7 @@ test("distinct MCP server processes cannot reuse each other's context attestatio
       "planner-task-show P001(F001)/T001 with full=true",
       "planner-phase-show P001(F001) with full=true",
       "planner-feature-show F001 with full=true",
-      "planner-requirement-list",
+      "planner-requirement-list with phaseRef=P001(F001)",
       "Retry planner-task-start P001(F001)/T001",
     ]);
   } finally {
@@ -387,7 +566,7 @@ test("context reads in any order satisfy task_start (no out-of-order gate)", asy
   try {
     // Read in reversed order: requirements, feature, phase, task — the opposite
     // of the old task→phase→feature ordering requirement.
-    await callTool(session, "planner-requirement-list", {});
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
     await callTool(session, "planner-phase-show", { phase: "P001", full: true });
     await callTool(session, "planner-task-show", { task: "T001", full: true });
@@ -472,7 +651,8 @@ test("planner-phase-show gives structured-content clients the full phase read mo
       taskCount: storedPhase.tasks.length,
       description: storedPhase.description,
       descriptionRef: storedPhase.descriptionRef || "",
-    }, "Claude-style structured-content consumers receive the phase title and detailed description");
+      acceptedDecisions: storedPhase.acceptedDecisions,
+    }, "Claude-style structured-content consumers receive the phase title, detailed description, and canonical Accepted Decisions");
     assert.ok(Array.isArray(structured.linkedRequirements), "phase-show exposes linkedRequirements");
     assert.equal(structured.linkedRequirements.length, 1);
     assert.equal(structured.linkedRequirements[0].title, "Users can authenticate");

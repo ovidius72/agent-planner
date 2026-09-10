@@ -26,12 +26,13 @@ export function FeatureEditModalRoute() {
       <Form ref={formRef} method="post" className="grid gap-4">
         <Field label="Name"><Input name="name" defaultValue={feature.name} required /></Field>
         <Field label="Description"><Textarea name="description" defaultValue={feature.description} /></Field>
+        <Field label="Description reference"><Input name="descriptionRef" defaultValue={feature.descriptionRef ?? ""} placeholder=".planner/docs/features/feature-details.md" /></Field>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Start date"><Input type="date" name="startDate" defaultValue={feature.startDate} /></Field>
           <Field label="End date"><Input type="date" name="endDate" defaultValue={feature.endDate} /></Field>
         </div>
         <Field label="Status">
-          <Select name="status" defaultValue={feature.status}>
+          <Select name="status" defaultValue={feature.status} disabled title="Feature status is derived from child phases and tasks.">
             {featureStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </Select>
         </Field>

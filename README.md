@@ -289,6 +289,7 @@ Current Phase 1 tools include:
 
 - `planner-init`
 - `planner-show`
+- `planner-description-freshness` — non-mutating child-to-parent drift preview with exact stale refs
 - `planner-repair`
 - `planner-load`
 - `planner-disable`
@@ -336,7 +337,10 @@ Current Phase 1 tools include:
 - `planner-handoff-prepare`
 - `planner-handoff-show`
 - `planner-handoff-write`
+- `planner-handoff-verify`
 - `planner-handoff-clear`
+
+`planner-handoff-list` indexes active handoffs. `planner-handoff-show <phaseRef>` also recovers the latest terminal archive after a phase becomes done, rejected, or canceled, preserving discoverability of closeout content and linked `.planner/docs/` references.
 
 ### Export
 
@@ -641,7 +645,7 @@ The web UI visualizes:
 - accepted decisions;
 - handoff state.
 
-The `planner-web` MCP tool fully manages the web lifecycle (start / status / stop) in-process, binding LAN (`0.0.0.0`) with a dynamic OS-assigned port. The same lifecycle is exposed in the Pi adapter as agent tools (`planner-web`, `planner-load`, `planner-stop`) and as `/planner web` / `/planner load` / `/planner stop` slash commands.
+The `planner-web` MCP tool fully manages the web lifecycle (start / status / stop) in-process, binding LAN (`0.0.0.0`) with a dynamic OS-assigned port. Every start/status response returns the reachable address plus typed `running`/`address`/`localUrl`/`lanUrl`/`host`/`port`/`mode` metadata (Pi parity). The same lifecycle is exposed in the Pi adapter as agent tools (`planner-web`, `planner-load`, `planner-stop`) and as `/planner web` / `/planner load` / `/planner stop` slash commands.
 
 ### Planner housekeeping
 
@@ -676,10 +680,10 @@ are archived under `.planner/handoff-archive/` for recovery.
 Slash commands (`/planner handoff ...`):
 
 - `/planner handoff list` — list phases with a non-empty `phase.handoff`
-- `/planner handoff show <P00x>` — read a phase handoff (omit ref → current in-progress phase)
-- `/planner handoff write` — write/refresh the phase handoff (capture design context)
-- `/planner handoff prepare` — tell the agent to create/update the handoff
-- `/planner handoff clear <P00x>` — delete a phase handoff
+- `/planner handoff show <P00x(F00x)>` — read one exact phase handoff and its resume-readiness status
+- `/planner handoff write <P00x(F00x)>` — route agents through prepare/write; direct unsynchronized writes are disabled
+- `/planner handoff prepare` — tell the agent to prepare a candidate for one explicitly confirmed phase
+- `/planner handoff clear <P00x(F00x)>` — archive and clear a phase handoff
 
 MCP tools:
 
@@ -687,14 +691,12 @@ MCP tools:
 - `planner-handoff-show`
 - `planner-handoff-write`
 - `planner-handoff-prepare`
+- `planner-handoff-verify`
 - `planner-handoff-clear`
 
-Lifecycle: a handoff is auto-cleared when its phase transitions to `done`;
-on resume it is a previous-session hint to validate against the current plan
-state, not a lock — `task_start` is never blocked by a pending handoff.
+Lifecycle: a handoff is archived when its phase reaches any terminal outcome. A confirmed write persists a candidate with `resumeReady: false`; the agent must show and read the complete persisted body, compare it again with all required sources, then call the verify tool with the shown content hash. Only `resumeReady: true` permits a completeness claim. On resume it remains context to validate against current plan state, not a lock—`task_start` is never blocked by a pending handoff.
 
-The handoff should describe current focus, work in progress, resume steps,
-files touched, blockers, next steps, and recent decisions.
+New handoffs are compact resume capsules targeting at most 8,000 inline characters (24,000 remains only as an absolute compatibility ceiling). Inline sections are: Current focus, Current and partial state, Preservation constraints, Supporting documents, Blockers and risks, and How to resume. The verbose completeness audit and cold-start inventory are retained once as structured metadata and never embedded in Markdown. Oversized writes auto-externalize the full body to one planner-owned `.planner/docs/handoff-*.md` document and complete the write; there is no dead-end size error. Supporting `.planner/docs/*.md` references render as new-tab links in shared formatted content and open the path-safe viewer at `/docs/view` (traversal/symlink rejected); the viewer includes a dependency-free textarea editor with live preview and an explicitly confirmed save (`confirmed=true`). Editor decision: `@uiw/react-md-editor` and CodeMirror 6 were evaluated and rejected to avoid bundle/maintenance cost; the baseline textarea plus existing preview is the shipped editor.
 
 ---
 
@@ -1015,6 +1017,18 @@ Publishing is automated by GitHub Actions. The workflow `.github/workflows/publi
 
 Do **not** run `npm publish` manually per package: it would publish stale `workspace:*` ranges that npm cannot install.
 
+### Bounded verification
+
+Use the canonical runner instead of repeatedly chaining broad commands:
+
+```bash
+pnpm verify:focused -- --package plan-mcp
+pnpm verify:focused -- --test packages/plan-mcp/test/mcp-harness.test.mjs
+pnpm verify:final
+```
+
+Focused mode runs one package or test file. Final mode captures complete logs under `.planner/.local/verification/`, prints only concise summaries or bounded failure excerpts, and reuses a successful result while the repository content fingerprint is unchanged. The final gate covers build, typecheck, coverage, plugin synchronization, browser E2E, and a clean `mkdtemp` installation from freshly packed public packages.
+
 ### Versioning & release
 
 All public packages share a **single unified version** per release. Releases are driven by the `release` script (`scripts/release.cjs`).
@@ -1034,7 +1048,7 @@ The script does everything:
 1. **Pre-flight** — clean working tree, on `develop`, up to date with `origin/develop`.
 2. **Compute the unified target version** — fetch canonical `vX.Y.Z` tags and bump the latest stable tag. While tag history is being bootstrapped, fall back to the unified stable version on `origin/main`. Develop prerelease suffixes such as `-next.N` never affect the stable base; explicit versions retain a downgrade guard.
 3. **Create `release/v<version>`** from `develop` and bump all 5 packages to that version.
-4. **Verify** — `pnpm install` + `pnpm -r build` + `pnpm check` (rolls back the branch on failure).
+4. **Verify** — `pnpm install` + the canonical `pnpm verify:final` gate (bounded logs, build, typecheck, coverage, plugin sync, Playwright, and freshly packed/installed artifact smoke); rolls back the branch on failure.
 5. **Commit, push, and open a PR → `main`**.
 
 Merge the release PR into `main` to trigger `publish.yml` (npm publish + stable `vX.Y.Z` tag). Then sync `develop`:

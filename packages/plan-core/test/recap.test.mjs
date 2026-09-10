@@ -83,7 +83,7 @@ describe("buildRecap — not complete, no active task", () => {
   test("begin-work hint + nextSteps shown (pi)", async () => {
     const { store } = await makePlan({ tasks: [{ status: "planned" }, { status: "planned" }], nextSteps: ["Pick the next task"] });
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
-    assert.ok(r.includes("no active task — review the plan"), "no-active focus");
+    assert.ok(r.includes("no active task (verified from all persisted task statuses) — review the plan"), "verified no-active focus");
     assert.ok(r.includes("Next step: Pick the next task"), "nextStep shown (not suppressed)");
     assert.ok(r.includes("Use /planner task add / /planner task start to begin work"), "pi begin-work hint");
   });
@@ -101,6 +101,9 @@ describe("buildRecap — active task", () => {
     assert.ok(r.includes("Current focus: F01 — Feat One / P001(F001) — Phase 1 / T01 — task 1 (in-progress)"), "focus line with composite IDs");
     assert.ok(r.includes("Continue with /planner task start T01."), "Pi recap invokes lifecycle validation first");
     assert.ok(r.includes("follow only the missing or stale reads in its nextActions"), "Pi recap keeps reads demand-driven");
+    assert.match(r, /Phase work map — canonical sibling capability ownership/);
+    assert.match(r, /P001\(F001\)\/T002 owns this remaining capability; do not duplicate it/);
+    assert.match(r, /reread the canonical phase and the relevant sibling task/);
     assert.doesNotMatch(r, /re-read the full context|\/planner task show T01/);
   });
 
@@ -110,6 +113,18 @@ describe("buildRecap — active task", () => {
     assert.ok(r.includes("Continue with planner-task-start T01."), "MCP recap invokes lifecycle validation first");
     assert.ok(r.includes("follow only the missing or stale reads in its nextActions"), "MCP recap keeps reads demand-driven");
     assert.doesNotMatch(r, /re-read the full context|planner-task-show T01/);
+  });
+});
+
+describe("buildRecap — conflicting active tasks", () => {
+  test("reports every persisted active ref instead of silently selecting the first", async () => {
+    const { store } = await makePlan({ featStatus: "in-progress", phaseStatus: "in-progress", tasks: [{ status: "in-progress" }, { status: "in-progress" }] });
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.match(r, /ACTIVE TASK CONFLICT — 2 tasks are in progress/);
+    assert.match(r, /P001\(F001\)\/T01 — task 1/);
+    assert.match(r, /P001\(F001\)\/T02 — task 2/);
+    assert.match(r, /planner-task-recommend/);
+    assert.doesNotMatch(r, /Continue with planner-task-start/);
   });
 });
 

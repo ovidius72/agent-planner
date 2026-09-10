@@ -6,6 +6,10 @@ export async function action({ request, params }: { request: Request; params: Re
   const featureId = requiredParam(params, "featureId");
   const current = await getFeature(featureId);
   const formData = await request.formData();
-  await updateFeature({ ...current, status: requiredString(formData, "status") as FeatureStatus });
+  await updateFeature({
+    id: current.id,
+    updatedAt: current.updatedAt,
+    status: requiredString(formData, "status") as FeatureStatus,
+  });
   return null;
 }

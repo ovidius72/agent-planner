@@ -1,5 +1,5 @@
 import type { ShortcutSpec } from "./shortcuts";
-import type { ArchivedHandoffSummary, Feature, HandoffSummary, Idea, MacroTask, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
+import type { AcceptedDecision, ArchivedHandoffSummary, Feature, HandoffSummary, HierarchicalDescriptionFreshness, Idea, MacroTask, Phase, PhaseHandoff, Project, Requirement, Task } from "./types";
 
 const API_BASE = "/api";
 const BUSY_RETRY_MS = 120;
@@ -9,6 +9,7 @@ function normalizeTask(task: Task): Task {
   return {
     ...task,
     number: task.number ?? 0,
+    descriptionRef: task.descriptionRef ?? "",
     decisions: task.decisions ?? [],
     acceptedDecisions: task.acceptedDecisions ?? [],
     checklist: task.checklist ?? [],
@@ -21,12 +22,23 @@ function normalizeTask(task: Task): Task {
   };
 }
 
+function normalizeFocusTask(task: FocusTaskSummary | null | undefined): FocusTaskSummary | null {
+  if (!task) return null;
+  return {
+    ...task,
+    pauseSnapshot: task.pauseSnapshot ?? null,
+    pendingResume: Boolean(task.pendingResume),
+    deviationId: task.deviationId ?? "",
+  };
+}
+
 function normalizePhase(phase: Phase): Phase {
   return {
     ...phase,
     discussedAt: phase.discussedAt ?? "",
     contextReady: phase.contextReady ?? false,
     contextReadyReason: phase.contextReadyReason ?? "",
+    descriptionRef: phase.descriptionRef ?? "",
     notes: phase.notes ?? "",
     goals: phase.goals ?? [],
     nonGoals: phase.nonGoals ?? [],
@@ -52,6 +64,7 @@ function normalizeFeature(feature: Feature): Feature {
     discussedAt: feature.discussedAt ?? "",
     contextReady: feature.contextReady ?? false,
     contextReadyReason: feature.contextReadyReason ?? "",
+    descriptionRef: feature.descriptionRef ?? "",
     acceptedDecisions: feature.acceptedDecisions ?? [],
     phaseIds: feature.phaseIds ?? [],
     descriptionUpdatedAt: feature.descriptionUpdatedAt ?? "",
@@ -166,6 +179,8 @@ export interface FocusTaskSummary extends ActiveTaskSummary {
 export interface TaskFocusSummary {
   active: FocusTaskSummary[];
   pendingResume: FocusTaskSummary[];
+  nextWork: FocusTaskSummary | null;
+  nextWorkReason: string;
 }
 
 export async function getProject(): Promise<Project> {
@@ -192,15 +207,20 @@ export interface LegacyProjectContextMigrationResult {
   project: Project;
 }
 
-export async function updateProject(project: Project): Promise<Project> {
-  // Runtime workDeviations live in .local/deviations.json (T299); the project
-  // editor must never round-trip them into shared project.json. Empty optional
-  // description references are UI defaults, not valid persisted references.
-  const { descriptionRef, workDeviations: _workDeviations, ...rest } = project;
+export interface ProjectUpdateInput {
+  name?: string;
+  goal?: string;
+  description?: string;
+  descriptionRef?: string;
+  projectGuidelines?: { content: string };
+  expectedGuidelinesUpdatedAt?: string;
+}
+
+export async function updateProject(project: ProjectUpdateInput): Promise<Project> {
+  const { descriptionRef, ...rest } = project;
   const payload = {
     ...rest,
     ...(descriptionRef ? { descriptionRef } : {}),
-    workDeviations: [],
   };
   return normalizeProject(await request("/project", { method: "PUT", body: JSON.stringify(payload) }));
 }
@@ -217,8 +237,47 @@ export async function applyProjectContextMigration(): Promise<LegacyProjectConte
   return { ...result, project: normalizeProject(result.project) };
 }
 
+export type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
+
+export interface AcceptedDecisionTargetInput {
+  targetType: AcceptedDecisionTargetType;
+  targetRef?: string;
+}
+
+export async function createAcceptedDecision(input: AcceptedDecisionTargetInput & Pick<AcceptedDecision, "title" | "decision" | "rationale" | "implementationNotes">): Promise<AcceptedDecision> {
+  const result = await request<{ acceptedDecision: AcceptedDecision }>("/accepted-decisions", { method: "POST", body: JSON.stringify(input) });
+  return result.acceptedDecision;
+}
+
+export async function updateAcceptedDecision(input: AcceptedDecisionTargetInput & Pick<AcceptedDecision, "id"> & Partial<Pick<AcceptedDecision, "title" | "decision" | "rationale" | "implementationNotes">>): Promise<AcceptedDecision> {
+  const { id, ...payload } = input;
+  const result = await request<{ acceptedDecision: AcceptedDecision }>(`/accepted-decisions/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  return result.acceptedDecision;
+}
+
+export async function deleteAcceptedDecision(input: AcceptedDecisionTargetInput & Pick<AcceptedDecision, "id">): Promise<{ deleted: true; decisionId: string }> {
+  return request(`/accepted-decisions/${input.id}`, { method: "DELETE", body: JSON.stringify({ targetType: input.targetType, targetRef: input.targetRef, confirmed: true }) });
+}
+
 export async function getUiConfig(): Promise<UiConfig> {
   return request("/ui-config");
+}
+
+export interface PlannerDocument {
+  path: string;
+  content: string;
+}
+
+export async function getPlannerDocument(path: string): Promise<PlannerDocument> {
+  return request<PlannerDocument>(`/docs/view?path=${encodeURIComponent(path)}`);
+}
+
+export async function savePlannerDocument(path: string, content: string): Promise<{ path: string; saved: boolean }> {
+  return request(`/docs/save`, { method: "PUT", body: JSON.stringify({ path, content, confirmed: true }) });
+}
+
+export async function getDescriptionFreshness(): Promise<HierarchicalDescriptionFreshness> {
+  return request<HierarchicalDescriptionFreshness>("/description-freshness");
 }
 
 export async function getFeatures(): Promise<Feature[]> {
@@ -233,8 +292,16 @@ export async function createFeature(payload: { name: string; description?: strin
   return normalizeFeature(await request("/features", { method: "POST", body: JSON.stringify(payload) }));
 }
 
-export async function updateFeature(feature: Feature): Promise<Feature> {
-  return normalizeFeature(await request(`/features/${feature.id}`, { method: "PUT", body: JSON.stringify(feature) }));
+export type FeatureUpdateInput = Pick<Feature, "id" | "updatedAt"> & Partial<Pick<Feature,
+  "name" | "description" | "descriptionRef" | "status" | "startDate" | "endDate" | "priority" | "workDone" | "workRemaining"
+>>;
+
+export async function updateFeature(feature: FeatureUpdateInput): Promise<Feature> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = feature;
+  return normalizeFeature(await request(`/features/${feature.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
+  }));
 }
 
 export async function deleteFeature(featureId: string): Promise<{ deleted: string }> {
@@ -263,22 +330,22 @@ export async function getRequirements(): Promise<Requirement[]> {
 
 export type MacroTaskInput = Pick<MacroTask, "title" | "description" | "status"> & { id?: string };
 
-export async function createRequirement(requirement: Pick<Requirement, "title" | "description" | "status" | "linkedPhaseIds"> & { macroTasks: MacroTaskInput[] }): Promise<Requirement> {
+export async function createRequirement(requirement: Pick<Requirement, "title" | "description" | "linkedPhaseIds"> & { macroTasks: MacroTaskInput[] }): Promise<Requirement> {
   return normalizeRequirement(await request("/requirements", {
     method: "POST",
     body: JSON.stringify(requirement),
   }));
 }
 
-export type RequirementUpdateInput = Omit<Requirement, "macroTasks"> & { macroTasks: MacroTaskInput[] };
+export type RequirementUpdateInput = Pick<Requirement, "id" | "updatedAt"> & Partial<Pick<Requirement,
+  "title" | "description" | "linkedPhaseIds"
+>> & { macroTasks?: MacroTaskInput[] };
 
 export async function updateRequirement(requirement: RequirementUpdateInput): Promise<Requirement> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = requirement;
   return normalizeRequirement(await request(`/requirements/${requirement.id}`, {
     method: "PUT",
-    body: JSON.stringify({
-      ...requirement,
-      updatedAt: new Date().toISOString(),
-    }),
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
   }));
 }
 
@@ -299,8 +366,16 @@ export async function createPhase(payload: { title: string; featureId: string; s
   return normalizePhase(await request("/phases", { method: "POST", body: JSON.stringify(payload) }));
 }
 
-export async function updatePhase(phase: Phase): Promise<Phase> {
-  return normalizePhase(await request(`/phases/${phase.id}`, { method: "PUT", body: JSON.stringify(phase) }));
+export type PhaseUpdateInput = Pick<Phase, "id" | "updatedAt"> & Partial<Pick<Phase,
+  "title" | "status" | "priority" | "summary" | "description" | "descriptionRef" | "featureId" | "goals" | "nonGoals" | "dependencies" | "risks" | "openQuestions" | "decisions" | "completionCriteria"
+>>;
+
+export async function updatePhase(phase: PhaseUpdateInput): Promise<Phase> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = phase;
+  return normalizePhase(await request(`/phases/${phase.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
+  }));
 }
 
 export async function deletePhase(phaseId: string): Promise<{ deleted: string }> {
@@ -315,13 +390,42 @@ export async function getTask(taskId: string): Promise<Task> {
   return normalizeTask(await request(`/tasks/${taskId}`));
 }
 
-export async function updateTask(task: Task): Promise<Task> {
-  return normalizeTask(await request(`/tasks/${task.id}`, { method: "PUT", body: JSON.stringify(task) }));
+export type TaskUpdateInput = Pick<Task, "id" | "phaseId" | "updatedAt"> & Partial<Pick<Task,
+  "title" | "status" | "priority" | "description" | "descriptionRef" | "notes" | "decisions" | "checklist"
+>> & { motivation?: string };
+
+export async function updateTask(task: TaskUpdateInput): Promise<Task> {
+  const { updatedAt: expectedUpdatedAt, ...fields } = task;
+  return normalizeTask(await request(`/tasks/${task.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...fields, expectedUpdatedAt }),
+  }));
 }
 
 /** Start planned work or resume a checkpoint through the canonical lifecycle. */
 export async function startTask(taskId: string): Promise<Task> {
   return normalizeTask(await request(`/tasks/${taskId}/start`, { method: "POST" }));
+}
+
+/** Reopen completed work through the confirmation-gated lifecycle endpoint. */
+export async function reopenTask(taskId: string): Promise<Task> {
+  const result = await request<{ reopened: true; task: Task }>(`/tasks/${taskId}/reopen`, { method: "POST", body: JSON.stringify({ confirmed: true }) });
+  return normalizeTask(result.task);
+}
+
+export async function createSubtask(taskId: string, phaseId: string, payload: { title: string; description?: string }): Promise<Task> {
+  const result = await request<{ task: Task }>(`/tasks/${taskId}/subtasks`, { method: "POST", body: JSON.stringify({ phaseId, ...payload }) });
+  return normalizeTask(result.task);
+}
+
+export async function addTaskDependency(taskId: string, phaseId: string, dependsOnId: string): Promise<Task> {
+  const result = await request<{ task: Task }>(`/tasks/${taskId}/dependencies`, { method: "POST", body: JSON.stringify({ phaseId, dependsOnId }) });
+  return normalizeTask(result.task);
+}
+
+export async function deleteTaskDependency(taskId: string, phaseId: string, dependencyId: string): Promise<Task> {
+  const result = await request<{ task: Task }>(`/tasks/${taskId}/dependencies/${dependencyId}`, { method: "DELETE", body: JSON.stringify({ phaseId, confirmed: true }) });
+  return normalizeTask(result.task);
 }
 
 export async function deleteTask(taskId: string): Promise<{ deleted: string }> {
@@ -334,7 +438,12 @@ export async function getActiveTasks(): Promise<ActiveTaskSummary[]> {
 
 export async function getTaskFocus(): Promise<TaskFocusSummary> {
   const result = await request<TaskFocusSummary>("/tasks/focus");
-  return { active: result.active ?? [], pendingResume: result.pendingResume ?? [] };
+  return {
+    active: (result.active ?? []).map((task) => normalizeFocusTask(task)!),
+    pendingResume: (result.pendingResume ?? []).map((task) => normalizeFocusTask(task)!),
+    nextWork: normalizeFocusTask(result.nextWork),
+    nextWorkReason: result.nextWorkReason ?? "",
+  };
 }
 
 export async function listHandoffs(): Promise<HandoffSummary[]> {

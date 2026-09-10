@@ -1,7 +1,7 @@
 export type FeatureStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 export type PhaseStatus = "draft" | "discovery" | "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 export type TaskStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
-export type RequirementStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
+export type MacroTaskStatus = "planned" | "in-progress" | "done" | "blocked" | "canceled" | "rejected" | "deferred" | "waiting";
 
 export interface AcceptedDecision {
   id: string;
@@ -12,6 +12,35 @@ export interface AcceptedDecision {
   acceptedAt: string;
 }
 
+export interface DescriptionFreshnessDiagnostic {
+  ownerKind: "feature" | "phase";
+  ownerId: string;
+  ownerRef: string;
+  state: "fresh" | "stale";
+  ownerDescriptionUpdatedAt: string;
+  newestChildKind: "phase" | "task" | null;
+  newestChildId: string;
+  newestChildRef: string;
+  newestChildDescriptionUpdatedAt: string;
+  reason: string;
+}
+
+export interface DescriptionReconciliationStep {
+  ownerKind: "feature" | "phase";
+  ownerId: string;
+  ownerRef: string;
+  causedByRef: string;
+  reason: string;
+  action: string;
+}
+
+export interface HierarchicalDescriptionFreshness {
+  diagnostics: DescriptionFreshnessDiagnostic[];
+  staleParentRefs: string[];
+  reconciliationRequired: boolean;
+  reconciliationPreview: DescriptionReconciliationStep[];
+}
+
 export interface Feature {
   id: string;
   number: number;
@@ -19,6 +48,7 @@ export interface Feature {
   priority: number;
   name: string;
   description: string;
+  descriptionRef?: string;
   descriptionUpdatedAt: string;
   status: FeatureStatus;
   discussedAt: string;
@@ -109,6 +139,7 @@ export interface Task {
   title: string;
   status: TaskStatus;
   description: string;
+  descriptionRef?: string;
   descriptionUpdatedAt: string;
   notes: string;
   statusLog: StatusLogEntry[];
@@ -129,7 +160,7 @@ export interface MacroTask {
   id: string;
   title: string;
   description: string;
-  status: RequirementStatus;
+  status: MacroTaskStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -157,7 +188,6 @@ export interface Requirement {
   id: string;
   title: string;
   description: string;
-  status: RequirementStatus;
   macroTasks: MacroTask[];
   linkedPhaseIds: string[];
   createdAt: string;
@@ -184,6 +214,7 @@ export interface Phase {
   contextReadyReason: string;
   summary: string;
   description: string;
+  descriptionRef?: string;
   descriptionUpdatedAt: string;
   notes: string;
   goals: string[];
@@ -214,6 +245,10 @@ export interface HandoffSummary {
   updatedAt: string;
   firstLine: string;
   content: string;
+  contentHash?: string;
+  verifiedAt?: string;
+  resumeReady?: boolean;
+  resumeReadyAt?: string;
 }
 
 export interface ArchivedHandoffSummary {

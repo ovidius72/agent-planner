@@ -61,7 +61,7 @@ Regole operative:
 - **Pubblicazione automatica**: il workflow `.github/workflows/publish.yml` pubblica su npm **solo** al merge di una PR su `main` (trigger `push: branches:[main, next]`). Il merge su `develop` **non** pubblica (è staging).
 - **Versioning unificato per core**: i package core (`@agent-plan/core`, `@agent-plan/mcp`, `@agent-plan/server`, `agent-plan`) condividono **una sola versione** per release, gestita dallo script `pnpm release`.
 - **Versioning indipendente per pi-adapter**: `@agent-plan/pi-adapter` può essere bumpato indipendentemente tramite `pnpm release:bump:adapter`.
-- **Script `release`**: `pnpm release [-- patch|minor|major|X.Y.Z]` (default `patch`) fa tutto — verifica pre-flight (clean tree, su `develop` aggiornato), legge l'ultima stable dal tag canonico `vX.Y.Z` (fallback temporaneo alla versione stable unificata su `origin/main` quando non esistono ancora tag), calcola il bump con guardia anti-downgrade ignorando i suffissi `-next.N` presenti su `develop`, crea branch `release/v<versione>` da `develop`, bumpa i package core, `pnpm install` + build + check (con rollback su fallimento), commit, push, apre PR **verso `main`**. Anteprima con `pnpm release -- --dry-run`.
+- **Script `release`**: `pnpm release [-- patch|minor|major|X.Y.Z]` (default `patch`) fa tutto — verifica pre-flight (clean tree, su `develop` aggiornato), legge l'ultima stable dal tag canonico `vX.Y.Z` (fallback temporaneo alla versione stable unificata su `origin/main` quando non esistono ancora tag), calcola il bump con guardia anti-downgrade ignorando i suffissi `-next.N` presenti su `develop`, crea branch `release/v<versione>` da `develop`, bumpa i package core, `pnpm install` + gate canonico `pnpm verify:final` con log bounded e smoke test degli artifact installati (con rollback su fallimento), commit, push, apre PR **verso `main`**. Anteprima con `pnpm release -- --dry-run`.
 - **Script `release:bump:adapter`**: `pnpm release:bump:adapter [-- patch|minor|major|X.Y.Z]` bumpa `@agent-plan/pi-adapter` in modo indipendente con guardia anti-downgrade.
 - **Pre-flight obbligatorio per release e versioning**: prima di proporre, eseguire o modificare qualsiasi flusso di release/versioning, leggere integralmente la sezione `Versioning & release` e `Prerelease (next) channel` di `README.md`, oltre a questa sezione. La documentazione e gli script esistenti sono la fonte canonica: è vietato dedurre il flusso da un'ispezione parziale o proporre modifiche speculative a script/processi.
 - **Canali di release**: `pnpm release:next` pubblica esclusivamente prerelease sperimentali dal branch `next`; `pnpm release` si esegue esclusivamente da `develop` pulito e aggiornato, crea `release/v<versione>` e apre una PR verso `main`. Non aprire né proporre una PR `next` → `develop` finché il lavoro sperimentale e tutte le relative validazioni non sono esplicitamente confermati dall'utente.
@@ -94,6 +94,21 @@ Regole:
 ### 16. Source code language
 
 All text written in source code must be in English. This includes identifiers, comments, documentation strings, test names, assertion messages, errors, logs, technical UI copy, configuration text, and generated developer-facing text. Never add Italian phrases to source code.
+
+### 17. Verification cost and release reality
+
+Verification must be both trustworthy and bounded. Passing workspace tests is not sufficient evidence that an installed release works.
+
+Non-negotiable operating rules:
+
+- During implementation, run only the smallest affected build and test targets. Do not run the full repository gate repeatedly.
+- Run the canonical full gate once when closing a phase or preparing a release. If it fails, diagnose and verify fixes with focused tests, then run the canonical full gate one final time.
+- Never stream verbose build, coverage, or browser output into agent context. The canonical verification runner must capture complete logs and print only concise step summaries or bounded failure excerpts.
+- Reuse a successful final-gate result when the repository content fingerprint is unchanged. Do not rerun it merely for confidence.
+- Do not bypass the canonical verification runner with ad-hoc chains of `build`, `check`, coverage, plugin, or Playwright commands when the runner supports the required scope.
+- Release readiness requires a clean temporary installation from freshly packed artifacts, not imports from workspace `dist`. Smoke tests must exercise fresh Pi/MCP startup and critical user-visible contracts.
+- Temporary installs and planner fixtures must use `mkdtemp`; never run verification against another real project or its `.planner/` directory.
+- Excessive verification runtime, repeated broad audits, and unbounded command output are quality defects, not harmless overhead.
 
 ## Comportamento atteso dagli agenti
 

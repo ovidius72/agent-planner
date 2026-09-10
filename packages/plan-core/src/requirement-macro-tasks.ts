@@ -1,6 +1,6 @@
-import type { MacroTask, RequirementStatus } from "./schema.js";
+import type { MacroTask, MacroTaskStatus } from "./schema.js";
 
-const REQUIREMENT_STATUSES = new Set<RequirementStatus>([
+const MACRO_TASK_STATUSES = new Set<MacroTaskStatus>([
   "planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting",
 ]);
 
@@ -9,7 +9,7 @@ export interface MacroTaskMutationInput {
   id?: string;
   title: string;
   description?: string;
-  status: RequirementStatus;
+  status: MacroTaskStatus;
 }
 
 export class RequirementMacroTaskError extends Error {
@@ -44,7 +44,7 @@ export function reconcileRequirementMacroTasks(
   return inputs.map((input, index) => {
     const title = input.title.trim();
     if (!title) throw new RequirementMacroTaskError(`Macro task ${index + 1} requires a title.`);
-    if (!REQUIREMENT_STATUSES.has(input.status)) {
+    if (!MACRO_TASK_STATUSES.has(input.status)) {
       throw new RequirementMacroTaskError(`Macro task ${index + 1} has an invalid status: ${input.status}.`);
     }
     const requestedId = input.id?.trim();

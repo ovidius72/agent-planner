@@ -16,7 +16,7 @@
 const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const root = "/Users/antonio/projects/agent-plan";
+const root = path.resolve(__dirname, "..");
 const PACKAGES = [
   { dir: "plan-core", name: "@agent-plan/core" },
   { dir: "plan-mcp", name: "@agent-plan/mcp" },
@@ -79,13 +79,13 @@ console.log(`\n› Prerelease bump: ${cur} → ${target}  (${dryRun ? "DRY-RUN" 
 for (const p of PACKAGES) console.log(`    ${p.name.padEnd(26)} ${readVer(p.dir)} → ${target}`);
 console.log(`    ${"plugin (claude-code)".padEnd(26)} ${pluginCur} → ${pluginTarget}`);
 
-if (dryRun) { console.log(`\n[dry-run] Would: bump all to ${target}, plugin to ${pluginTarget}, commit, push (triggers publish.yml → @next).`); process.exit(0); }
+if (dryRun) { console.log(`\n[dry-run] Would: bump all to ${target}, plugin to ${pluginTarget}, run the canonical final verification gate, commit, push (triggers publish.yml → @next).`); process.exit(0); }
 
 // Bump
 for (const p of PACKAGES) writeVer(p.dir, target);
 writePluginVersion(pluginTarget);
 run("pnpm install");
-try { run("pnpm -r build"); run("pnpm check"); } catch { console.error("✗ build/check failed. Restoring versions."); for (const p of PACKAGES) writeVer(p.dir, cur); process.exit(1); }
+try { run("pnpm verify:final -- --force"); } catch { console.error("✗ final verification failed. Restoring versions."); for (const p of PACKAGES) writeVer(p.dir, cur); process.exit(1); }
 
 // Commit + push
 run('git add -A');

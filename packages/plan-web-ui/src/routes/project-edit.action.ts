@@ -7,14 +7,11 @@ export async function action({ request }: { request: Request }) {
   const formData = await request.formData();
 
   await updateProject({
-    ...current,
     name: optionalString(formData, "name") || current.name,
     description: optionalString(formData, "description"),
     goal: optionalString(formData, "goal"),
-    projectGuidelines: {
-      ...current.projectGuidelines,
-      content: optionalString(formData, "projectGuidelines"),
-    },
+    projectGuidelines: { content: optionalString(formData, "projectGuidelines") },
+    expectedGuidelinesUpdatedAt: current.projectGuidelines.updatedAt,
   });
 
   return redirect("/");

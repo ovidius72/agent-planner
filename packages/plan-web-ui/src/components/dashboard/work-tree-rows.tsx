@@ -16,7 +16,6 @@ import { StatusItem } from "../ui/status-item";
 import { LastUpdated } from "../ui/last-updated";
 import { DragHandle, SortableItem } from "./sortable";
 import { PhaseRequirementLink } from "../requirements/phase-requirement-link";
-import { PriorityBadge } from "../ui/detail-metadata";
 import {
   statusBorderColor,
   type DisplayStatus,
@@ -54,6 +53,20 @@ function UpdatedTag() {
   return (
     <span className="rounded-full bg-[color:color-mix(in_srgb,var(--accent)_16%,transparent)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]">
       Updated
+    </span>
+  );
+}
+
+function WorkTreePriorityBadge({ priority }: { priority: number | null | undefined }) {
+  if (priority == null) return null;
+  const label = `P${priority}`;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]"
+      aria-label={`Priority ${priority}`}
+      title={`Priority ${priority}`}
+    >
+      {label}
     </span>
   );
 }
@@ -157,6 +170,7 @@ export function FeatureTreeRow({
               {feature.shortId ? (
                 <ShortIdBadge shortId={feature.shortId} />
               ) : null}
+              <WorkTreePriorityBadge priority={feature.priority} />
               {hasActiveTask ? (
                 <span aria-hidden="true" className="ap-progress-dot" />
               ) : null}
@@ -287,6 +301,7 @@ export function PhaseTreeRow({
                 <span className="sr-only">Copy phase path</span>
               </CopyableBadge>
               {phase.shortId ? <ShortIdBadge shortId={phase.shortId} /> : null}
+              <WorkTreePriorityBadge priority={phase.priority} />
               {phase.handoff ? (
                 <HandoffBadge
                   phaseId={phase.id}
@@ -410,7 +425,7 @@ export function TaskTreeRow({
             <span className="sr-only">Copy task path</span>
           </CopyableBadge>
           {task.shortId ? <ShortIdBadge shortId={task.shortId} /> : null}
-          <PriorityBadge priority={task.priority} />
+          <WorkTreePriorityBadge priority={task.priority} />
           {task.status === "in-progress" ? (
             <span aria-hidden="true" className="ap-progress-dot" />
           ) : null}
