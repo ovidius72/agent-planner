@@ -592,7 +592,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
       const taskUpdate = await host.runTool("task_update", { taskId: "T001", description: "Changed task context that invalidates only its owning parents." });
       assert.deepEqual(toolDetails(taskUpdate).staleParentRefs, ["P001(F001)", "F001"]);
-      assert.match(toolText(taskUpdate), /Parent description review required: P001\(F001\), F001/);
+      assert.doesNotMatch(toolText(taskUpdate), /Parent description review required/);
 
       const preview = await host.runTool("description_freshness", {});
       assert.deepEqual(toolDetails(preview).staleParentRefs, ["P001(F001)", "F001"]);

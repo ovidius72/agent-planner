@@ -4711,10 +4711,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const staleParentRefs = descriptionFreshness?.diagnostics
         .filter((entry) => entry.state === "stale" && entry.ownerId === phase.featureId)
         .map((entry) => entry.ownerRef) ?? [];
-      const freshnessNotice = staleParentRefs.length > 0
-        ? `\n⚠️ Parent description review required: ${staleParentRefs.join(", ")}. Run description_freshness for the non-mutating reconciliation preview.`
-        : "";
-      return { content: [{ type: "text", text: `✅ Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseUpdateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${freshnessNotice}` }], details: { ...phase, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) } };
+      return { content: [{ type: "text", text: `✅ Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseUpdateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...phase, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) } };
     },
   });
 
@@ -5291,10 +5288,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const staleParentRefs = descriptionFreshness?.diagnostics
         .filter((entry) => entry.state === "stale" && ownerIds.has(entry.ownerId))
         .map((entry) => entry.ownerRef) ?? [];
-      const freshnessNotice = staleParentRefs.length > 0
-        ? `\n⚠️ Parent description review required: ${staleParentRefs.join(", ")}. Run description_freshness for the non-mutating reconciliation preview.`
-        : "";
-      return { content: [{ type: "text", text: `Task updated: ${updatedTask.id} (${updatedTask.status}). Fields saved: ${receivedFields.join(", ")}.${freshnessNotice}` }], details: { ...updatedTask, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) } };
+      return { content: [{ type: "text", text: `Task updated: ${updatedTask.id} (${updatedTask.status}). Fields saved: ${receivedFields.join(", ")}.` }], details: { ...updatedTask, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) } };
     },
   });
 

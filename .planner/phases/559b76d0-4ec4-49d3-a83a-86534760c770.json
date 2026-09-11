@@ -35,7 +35,8 @@
     "a8ebbef7-c933-421a-bf05-c3d05778fe80",
     "1fecacf8-8f21-4c05-952c-f0f90319c6e6",
     "93ded1ba-f386-4f12-9c47-0ea531754884",
-    "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d"
+    "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d",
+    "d68ce619-d94d-45fd-8b92-f10a984b27ac"
   ],
   "tasks": [
     {
@@ -142,7 +143,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-07T20:14:47.970Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "094c66e1-fca2-4ac1-a211-7c0883adf4f5",
@@ -221,7 +223,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T07:46:25.613Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "68b9c7f0-fa9b-47b5-8b1b-7d9588af2c38",
@@ -300,7 +303,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-04T07:35:23.058Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "a833a6a7-2992-4b21-bbe2-e48f3ba68d51",
@@ -397,7 +401,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T08:17:38.068Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "c2e4ccc1-9439-4a7c-a6c1-419a8a6b42d1",
@@ -476,7 +481,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T12:42:25.687Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "a2fed338-41b4-4ec4-a9f6-82f80e24cef9",
@@ -555,7 +561,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-07T13:33:46.739Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "ae6ca930-cae6-419e-9ce6-7c7066911744",
@@ -634,7 +641,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-07T18:49:52.952Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "d5e405f2-d568-411f-bf36-059829c6e5fb",
@@ -756,7 +764,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T19:50:32.675Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "7cc2e404-981f-427d-9960-52ee9fc4778d",
@@ -831,7 +840,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T20:01:52.438Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "a8ebbef7-c933-421a-bf05-c3d05778fe80",
@@ -879,7 +889,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T15:02:37.295Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "1fecacf8-8f21-4c05-952c-f0f90319c6e6",
@@ -927,7 +938,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T15:08:28.616Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "93ded1ba-f386-4f12-9c47-0ea531754884",
@@ -975,7 +987,8 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-09T06:05:57.991Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
     },
     {
       "id": "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d",
@@ -1023,11 +1036,61 @@
           "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
           "createdAt": "2026-09-08T19:37:31.150Z"
         }
-      ]
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "d68ce619-d94d-45fd-8b92-f10a984b27ac",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 400,
+      "shortId": "W5YWU",
+      "priority": 14,
+      "shortName": "keep-freshness-metadata-separa",
+      "title": "Keep freshness diagnostics out of authored descriptions",
+      "status": "done",
+      "description": "The hierarchical freshness diagnostic in packages/plan-core/src/description-freshness.ts and packages/plan-web-ui/src/components/ui/description-freshness-notice.tsx must never replace, append to, or masquerade as a task, phase, or feature description. Preserve the authored textual description exactly in entity reads and render it from the description field; keep parent/child references only in the structured descriptionFreshness response metadata, resolved dynamically from IDs. Remove or redesign the detail-page prose notice so it cannot be mistaken for the entity description, while preserving an explicit structured field for agents that need the diagnostic. Add regressions proving task/phase/feature descriptions remain unchanged and freshness references are not persisted into description content.\n\n---\n**Completion summary:**\nCorrected freshness diagnostics so authored task, phase, and feature descriptions remain textual and unchanged. Pi/MCP mutation results no longer append parent-reference prose to success text; structured descriptionFreshness and staleParentRefs remain available as dedicated metadata. Web UI freshness is now a closed Description freshness accordion rather than a prominent notice that can be mistaken for entity description. Read-only inspection of /Users/antonio/projects/heca found the real P082 phase/task descriptions intact and no persisted diagnostic phrase in .planner JSON. Updated UI, MCP, Pi, and responsive regressions. Verification: focused MCP/Pi/Web UI tests passed (29 MCP, 18 Pi, 13 Web UI assertions plus search coverage); canonical pnpm verify:final passed 98e681a6832d after updating the obsolete version assertion; no files in heca were modified.",
+      "descriptionUpdatedAt": "2026-09-11T08:38:27.954Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "d68ce619-d94d-45fd-8b92-f10a984b27ac-check-001-planned-in-progress",
+          "date": "2026-09-11T08:29:46.109Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "d68ce619-d94d-45fd-8b92-f10a984b27ac-check-002-in-progress-done",
+          "date": "2026-09-11T08:38:27.951Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Corrected freshness diagnostics so authored task, phase, and feature descriptions remain textual and unchanged. Pi/MCP mutation results no longer append parent-reference prose to success text; structured descriptionFreshness and staleParentRefs remain available as dedicated metadata. Web UI freshness is now a closed Description freshness accordion rather than a prominent notice that can be mistaken for entity description. Read-only inspection of /Users/antonio/projects/heca found the real P082 phase/task descriptions intact and no persisted diagnostic phrase in .planner JSON. Updated UI, MCP, Pi, and responsive regressions. Verification: focused MCP/Pi/Web UI tests passed (29 MCP, 18 Pi, 13 Web UI assertions plus search coverage); canonical pnpm verify:final passed 98e681a6832d after updating the obsolete version assertion; no files in heca were modified."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-11T08:29:46.109Z",
+      "completedAt": "2026-09-11T08:38:27.951Z",
+      "createdAt": "2026-09-11T08:29:29.354Z",
+      "updatedAt": "2026-09-11T08:38:27.951Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-11T08:29:46.010Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-01T15:00:40.024Z",
-  "updatedAt": "2026-09-09T07:11:15.874Z",
+  "updatedAt": "2026-09-11T08:38:27.951Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-09-09T07:01:15.992Z",
   "handoffAudit": null,
@@ -1075,12 +1138,28 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "84243751-438f-43aa-bba0-0f0359318b97",
+      "date": "2026-09-11T08:29:46.144Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "bd34467e-0d21-4393-bf80-ea19541f4308",
+      "date": "2026-09-11T08:38:27.987Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-09T06:05:57.991Z"
+      "createdAt": "2026-09-11T08:29:46.010Z"
     }
   ]
 }
