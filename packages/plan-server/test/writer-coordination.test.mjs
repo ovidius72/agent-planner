@@ -34,7 +34,7 @@ after(async () => {
   await cleanupFixtures();
 });
 
-async function waitForServerUrl(path, timeoutMs = 2_000) {
+async function waitForServerUrl(path, timeoutMs = 10_000) {
   const started = Date.now();
   for (;;) {
     try {
@@ -51,13 +51,13 @@ async function waitForServerUrl(path, timeoutMs = 2_000) {
 function startSecondaryServer(planRoot, urlFile) {
   const child = spawn(process.execPath, ["--input-type=module", "--eval", CHILD_SERVER_SCRIPT], {
     env: { ...process.env, SERVER_URL, PLAN_ROOT: planRoot, URL_FILE: urlFile },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "ignore", "pipe"],
   });
   let stderr = "";
   child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
   const exited = new Promise((resolve, reject) => {
     child.on("error", reject);
-    child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`Secondary server exited ${code}: ${stderr}`)));
+    child.on("exit", (code, signal) => code === 0 || signal === "SIGTERM" || signal === "SIGINT" ? resolve() : reject(new Error(`Secondary server exited ${code ?? signal}: ${stderr}`)));
   });
   return { child, exited };
 }

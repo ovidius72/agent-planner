@@ -213,7 +213,7 @@ test("end-to-end: test-all.mjs unit --no-build emits all four report artifacts",
       env,
       maxBuffer: 64 * 1024 * 1024,
     });
-    assert.equal(res.status, 0, `test-all must exit 0 (unit baseline green)\n${res.stderr}`);
+    assert.equal(res.status, 0, `test-all must exit 0 (unit baseline green)\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`);
     // regression guard: the reporter wiring must not trip node's
     // MaxListenersExceededWarning (a 3rd reporter added ~4 'end' listeners
     // to the TestsStream per reporter → 11 > 10). The lcov output is now
