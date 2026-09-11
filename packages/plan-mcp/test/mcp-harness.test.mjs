@@ -336,7 +336,7 @@ test("description freshness reports exact stale parents and explicit leaf-to-roo
     await new Promise((resolve) => setTimeout(resolve, 5));
     const taskUpdate = await callTool(session, "planner-task-update", { task: "T001", description: "Changed task context that invalidates only its owning parents." });
     assert.deepEqual(toolStructured(taskUpdate).staleParentRefs, ["P001(F001)", "F001"]);
-    assert.match(toolText(taskUpdate), /Parent description review required: P001\(F001\), F001/);
+    assert.doesNotMatch(toolText(taskUpdate), /Parent description review required/);
 
     const preview = await callTool(session, "planner-description-freshness", {});
     assert.deepEqual(toolStructured(preview).staleParentRefs, ["P001(F001)", "F001"]);

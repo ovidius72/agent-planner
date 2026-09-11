@@ -30,8 +30,9 @@ const freshness: HierarchicalDescriptionFreshness = {
 describe("DescriptionFreshnessNotice", () => {
   it("shows only relevant parent reconciliation steps and promises no silent overwrite", () => {
     render(<DescriptionFreshnessNotice freshness={freshness} ownerIds={["phase-1"]} />);
+    expect(screen.getByText("Description freshness")).toBeInTheDocument();
     expect(screen.getByText("Parent description review required")).toBeInTheDocument();
-    expect(screen.getByText(/Agent Plan will not overwrite user-authored descriptions/)).toBeInTheDocument();
+    expect(screen.getByText(/authored descriptions remain unchanged/)).toBeInTheDocument();
     expect(screen.getByText("P001(F001)")).toBeInTheDocument();
     expect(screen.queryByText("F001")).not.toBeInTheDocument();
   });

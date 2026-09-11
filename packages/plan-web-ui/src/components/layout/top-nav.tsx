@@ -81,8 +81,8 @@ export function TopNav({
           </div>
           <span className="min-w-0 truncate">
             <span className="block truncate text-sm font-black tracking-tight sm:text-base">{projectName ?? "Agent Plan"}</span>
-            <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)] sm:text-[11px]" data-testid="agent-plan-version">
-              {agentPlanVersion ? `Agent Plan v${agentPlanVersion}` : "Agent Plan version unavailable"}
+            <span className="block truncate text-[9px] font-medium tracking-wide text-[var(--text-subtle)] sm:text-[10px]" data-testid="agent-plan-version">
+              {agentPlanVersion ? `v${agentPlanVersion}` : "Version unavailable"}
             </span>
           </span>
         </Link>

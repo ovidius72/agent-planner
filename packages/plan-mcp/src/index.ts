@@ -1441,10 +1441,7 @@ server.registerTool("planner-phase-update", {
   const staleParentRefs = descriptionFreshness?.diagnostics
     .filter((entry) => entry.state === "stale" && entry.ownerId === persisted.featureId)
     .map((entry) => entry.ownerRef) ?? [];
-  const freshnessNotice = staleParentRefs.length > 0
-    ? `\n⚠️ Parent description review required: ${staleParentRefs.join(", ")}. Run planner-description-freshness for the non-mutating reconciliation preview.`
-    : "";
-  return text(`✅ Phase updated: ${formatPhaseRef(persisted.number, featureNumberOfPhase(persisted, refreshedFeatures))} — ${persisted.title}${persisted.shortId ? ` · ${persisted.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${freshnessNotice}`, { phase: persisted, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) });
+  return text(`✅ Phase updated: ${formatPhaseRef(persisted.number, featureNumberOfPhase(persisted, refreshedFeatures))} — ${persisted.title}${persisted.shortId ? ` · ${persisted.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { phase: persisted, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) });
 });
 
 server.registerTool("planner-phase-delete", {
@@ -1793,13 +1790,10 @@ server.registerTool("planner-task-update", {
   const staleParentRefs = descriptionFreshness?.diagnostics
     .filter((entry) => entry.state === "stale" && ownerIds.has(entry.ownerId))
     .map((entry) => entry.ownerRef) ?? [];
-  const freshnessNotice = staleParentRefs.length > 0
-    ? `\n⚠️ Parent description review required: ${staleParentRefs.join(", ")}. Run planner-description-freshness for the non-mutating reconciliation preview.`
-    : "";
   const details = resumeRequired
     ? { task: t, updated: true, updatedFields: receivedFields, resumeRequired, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) }
     : { task: t, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) };
-  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${freshnessNotice}${resumeNotice}`, details);
+  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${resumeNotice}`, details);
 });
 
 server.registerTool("planner-task-checklist-toggle", {
