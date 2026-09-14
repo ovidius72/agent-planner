@@ -1,0 +1,294 @@
+{
+  "id": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 102,
+  "shortId": "VJ9UA",
+  "priority": 34,
+  "slug": "lossless-project-context-loading-and-decision-ownership",
+  "title": "Lossless project context loading and decision ownership",
+  "discussedAt": "2026-09-14T07:40:57.973Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through phase_discuss tool.",
+  "summary": "Make project context complete and verifiable at planner load and enforce single-owner Accepted Decisions.",
+  "description": "Plan-core project-context modeling and completeness evidence; Pi and MCP planner-load and project-read surfaces; any necessary plan-server support; read-attestation semantics; Accepted Decisions ownership guidance and semantic operations; synchronized skills, capability inventory, and cross-harness regressions.",
+  "descriptionUpdatedAt": "2026-09-14T07:40:57.973Z",
+  "notes": "",
+  "goals": [
+    "Deliver every canonical project-level context field, all Requirements, and all project Accepted Decisions during planner load without silently treating truncated content as complete.",
+    "Make Pi and MCP expose equivalent, truthful project-context read contracts with explicit completeness evidence and safe continuation only when payload limits require it.",
+    "Keep task-start context scoped to feature, phase, and task work while preserving freshness-aware handling for context changed after project load.",
+    "Route each new durable decision to exactly one authoritative project, feature, phase, or task Accepted Decisions owner."
+  ],
+  "nonGoals": [
+    "Redesign the Web UI Project Context presentation unless a minimal compatibility change is required by the new API contract.",
+    "Remove historical or legacy persisted decision data automatically.",
+    "Eliminate payload safeguards or place unbounded content into human-facing recaps.",
+    "Move project-global context into task-start context."
+  ],
+  "dependencies": [
+    "Existing semantic accepted_decision_create/update/delete operations and AcceptedDecision schema.",
+    "Existing planner-load preparation, Project Guidelines read state, Requirement freshness tracking, and task-start context gates.",
+    "Existing Pi plan_get, MCP planner-show/planner-load, and bounded context helpers."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Large Requirements or Accepted Decisions collections can exceed practical model or transport limits; partial delivery must remain explicit and non-attesting.",
+    "Changing decision_record may affect callers relying on its dual-write behavior, so compatibility must fail clearly or migrate to scope-aware semantic operations.",
+    "Removing redundant project context from task start before planner-load attestation is durable could create a context gap.",
+    "Pi and MCP expose different result channels, so tests must prove what is actually agent-visible rather than only inspecting UI-only details."
+  ],
+  "openQuestions": [
+    "Determine the safest compatibility treatment for decision_record: deprecate with a typed redirect, or replace it with an explicitly scoped target contract.",
+    "Determine whether exceptional oversized project context should be automatically drained by the adapter or exposed through mandatory continuation tokens while keeping planner load incomplete until all chunks are read."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Planner load proves lossless delivery of all canonical project fields, all Requirements, and all project Accepted Decisions, or returns an explicit incomplete state that cannot attest a successful read.",
+    "Pi and MCP project-read surfaces no longer promise a full read when agent-visible content is incomplete.",
+    "Task start does not duplicate stable project-global context and still detects context made stale after load.",
+    "Decision guidance and semantic operations select one authoritative owner and no longer instruct automatic feature-plus-phase duplication.",
+    "Focused core, Pi, MCP, server, skill/capability, and compatibility regressions pass, followed by the canonical bounded final gate at phase close."
+  ],
+  "taskIds": [
+    "1d63653f-5163-4b50-ad04-04618b37646a",
+    "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20",
+    "eebc1156-33c5-4023-90af-ab587f995edc"
+  ],
+  "tasks": [
+    {
+      "id": "1d63653f-5163-4b50-ad04-04618b37646a",
+      "phaseId": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+      "number": 403,
+      "shortId": "KHW9Y",
+      "priority": 1,
+      "shortName": "project-context-contract",
+      "title": "Define lossless project-context delivery and completeness semantics",
+      "status": "done",
+      "description": "Define the canonical harness-agnostic project-context read contract in packages/plan-core/src/recap.ts, packages/plan-core/src/plan-store.ts, packages/plan-core/src/schema.ts, and focused plan-core tests. Current planner-load recap construction exposes the project name, goal, and Project Guidelines but does not provide one complete typed payload containing project.description, descriptionRef, scope, outOfScope, technologies, tools, contentLanguage, chatLanguage, every declarative Requirement, and every project-owned AcceptedDecision. Existing buildBoundedAcceptedDecisionContext imposes an 8,000-character aggregate limit, so a truncated result can be presented even though downstream descriptions imply complete context. Introduce a single canonical project-context representation with explicit delivery evidence such as complete/truncated status, delivered and total counts, stable ordering, and safe continuation metadata only when payload limits genuinely require chunking. A partial page or chunk must never count as a successful complete read or satisfy project-load attestation. Preserve exact Requirement IDs, linkage, descriptions, macro-task states, timestamps, AcceptedDecision IDs and acceptedAt values, Project Guidelines separation, legacy data parsing, and transport-safe bounded human recaps. Add regressions for empty, normal, oversized, continued, stale, and legacy project context; prove that all chunks reconstruct the exact canonical data without loss or duplication and that incomplete delivery cannot be attested.\n\n---\n**Completion summary:**\nImplemented the harness-agnostic lossless project-context contract in packages/plan-core/src/project-context.ts and exported it from packages/plan-core/src/index.ts. The canonical snapshot includes project description/descriptionRef, goal, scope/outOfScope, technologies/tools, languages, Project Guidelines, every project Requirement with macro-task lifecycle and timestamps, and every project Accepted Decision. Delivery uses validated bounded chunks with explicit partial/complete, truncation, counts, fingerprint, and continuation evidence; only an exact ordered reconstruction can produce complete evidence. PlanStore now reads project.json plus requirements.json under one coherent root lock, persists complete-read attestations worktree-locally only after current-fingerprint verification, stamps existing Guidelines/Requirement read evidence, and rolls back partial writes. Added packages/plan-core/test/project-context.test.mjs covering empty, normal, oversized/continued, missing/duplicate/reordered/tampered, stale project and Requirement changes, and legacy state. Verification: @agent-plan/core build passed; full @agent-plan/core package tests passed 320/320; whitespace/diff checks passed. No full repository gate was run because this is not phase close. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-09-14T12:40:09.032Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-001-planned-in-progress",
+          "date": "2026-09-14T07:53:26.464Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-002-in-progress-done",
+          "date": "2026-09-14T12:40:09.026Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented the harness-agnostic lossless project-context contract in packages/plan-core/src/project-context.ts and exported it from packages/plan-core/src/index.ts. The canonical snapshot includes project description/descriptionRef, goal, scope/outOfScope, technologies/tools, languages, Project Guidelines, every project Requirement with macro-task lifecycle and timestamps, and every project Accepted Decision. Delivery uses validated bounded chunks with explicit partial/complete, truncation, counts, fingerprint, and continuation evidence; only an exact ordered reconstruction can produce complete evidence. PlanStore now reads project.json plus requirements.json under one coherent root lock, persists complete-read attestations worktree-locally only after current-fingerprint verification, stamps existing Guidelines/Requirement read evidence, and rolls back partial writes. Added packages/plan-core/test/project-context.test.mjs covering empty, normal, oversized/continued, missing/duplicate/reordered/tampered, stale project and Requirement changes, and legacy state. Verification: @agent-plan/core build passed; full @agent-plan/core package tests passed 320/320; whitespace/diff checks passed. No full repository gate was run because this is not phase close. No commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-001-inventory-every-canonical-project-field-and-current-planner-load-read-delivery-path",
+          "number": 1,
+          "title": "Inventory every canonical project field and current planner-load/read delivery path.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-002-define-the-typed-lossless-project-context-payload-and-completeness-continuation-evidence",
+          "number": 2,
+          "title": "Define the typed lossless project-context payload and completeness/continuation evidence.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-003-implement-deterministic-stable-ordering-and-exact-reconstruction-across-exceptional-oversized-payloads",
+          "number": 3,
+          "title": "Implement deterministic stable ordering and exact reconstruction across exceptional oversized payloads.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-004-ensure-only-complete-delivery-can-produce-a-project-context-read-attestation",
+          "number": 4,
+          "title": "Ensure only complete delivery can produce a project-context read attestation.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-005-add-focused-core-regressions-for-complete-oversized-continued-stale-and-legacy-contexts",
+          "number": 5,
+          "title": "Add focused core regressions for complete, oversized, continued, stale, and legacy contexts.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-14T07:53:26.464Z",
+      "completedAt": "2026-09-14T12:40:09.026Z",
+      "createdAt": "2026-09-14T07:41:15.863Z",
+      "updatedAt": "2026-09-14T12:40:09.026Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-14T07:53:26.160Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20",
+      "phaseId": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+      "number": 404,
+      "shortId": "3QJM8",
+      "priority": 2,
+      "shortName": "planner-load-context",
+      "title": "Deliver complete project context through Pi and MCP planner load",
+      "status": "planned",
+      "description": "Apply the canonical project-context contract to packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, any required packages/plan-server/src/serve.ts support, synchronized planner skill sources, and representative integration tests. Current Pi plan_get advertises a full-plan read but its agent-visible content only includes project name, entity counts, active-task evidence, and a bounded project Accepted Decisions block; project description, goal, Guidelines, scope, technologies/tools, languages, and Requirement bodies are absent. Pi planner load exposes some fields only through a later ambient system prompt, while MCP planner-load structured agentContext contains the planner skill and bounded cross-scope decisions but omits most project context. Make explicit planner load deliver the complete project-level context to the agent in both harnesses, including the short description and descriptionRef, goal, scope and out-of-scope, technologies and tools, language preferences, Project Guidelines, every Requirement with canonical details, and every project Accepted Decision. Ensure human recap and structured agent payloads are truthful and consistent, automatically complete any necessary internal chunks or return loaded/contextComplete false with mandatory continuation actions, and never claim a full read from counts, UI-only details, or a truncated first chunk. Correct plan_get and MCP project-read descriptions/results so their declared completeness matches agent-visible content. Once durable load attestation exists, keep task-start delivery scoped to feature, phase, and task context; retain a targeted stale-context refresh when project content changes after load. Preserve explicit planner lifecycle, Guidelines read gates, Requirement freshness behavior, structuredContent-only host compatibility, Web UI startup metadata, bounded human-facing output, and existing active-task evidence. Add Pi/MCP/server regressions proving full visible delivery, incomplete-state behavior, continuation completion, post-load staleness, and parity across result channels.",
+      "descriptionUpdatedAt": "2026-09-14T07:41:34.609Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-001-wire-canonical-project-context-delivery-into-pi-planner-load-and-agent-visible-read-surfaces",
+          "number": 1,
+          "title": "Wire canonical project-context delivery into Pi planner load and agent-visible read surfaces.",
+          "checked": false
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-002-wire-equivalent-complete-context-and-evidence-into-mcp-planner-load-structuredcontent-and-read-surfaces",
+          "number": 2,
+          "title": "Wire equivalent complete context and evidence into MCP planner-load structuredContent and read surfaces.",
+          "checked": false
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-003-correct-misleading-full-plan-full-project-descriptions-and-partial-success-outcomes",
+          "number": 3,
+          "title": "Correct misleading full-plan/full-project descriptions and partial-success outcomes.",
+          "checked": false
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-004-separate-stable-project-load-context-from-task-start-context-while-preserving-targeted-stale-refresh",
+          "number": 4,
+          "title": "Separate stable project-load context from task-start context while preserving targeted stale refresh.",
+          "checked": false
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-005-add-cross-harness-regressions-for-full-delivery-structured-only-clients-oversized-continuation-and-changed-after-load-context",
+          "number": 5,
+          "title": "Add cross-harness regressions for full delivery, structured-only clients, oversized continuation, and changed-after-load context.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "1d63653f-5163-4b50-ad04-04618b37646a"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-14T07:41:34.607Z",
+      "updatedAt": "2026-09-14T07:42:01.962Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "eebc1156-33c5-4023-90af-ab587f995edc",
+      "phaseId": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+      "number": 405,
+      "shortId": "4PFPJ",
+      "priority": 3,
+      "shortName": "decision-ownership",
+      "title": "Enforce single-owner Accepted Decision routing",
+      "status": "planned",
+      "description": "Correct Accepted Decisions ownership semantics across packages/plan-core/src/plan-store.ts and schema-facing helpers, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, any affected packages/plan-server/src/serve.ts routes, synchronized planner skill sources, capability inventories, and focused compatibility tests. Current Pi ambient guidance says to record every new decision or user-agreed modification in both the relevant feature and phase, and the decision_record tool implements that policy by appending duplicate AcceptedDecision records to both owners. This conflicts with the semantic accepted_decision_create/update/delete operations, which already support project, feature, phase, and task targets, and it mishandles project-wide decisions discovered during task development. Establish an explicit ownership rule: project-wide decisions belong only to project.acceptedDecisions; feature-wide decisions only to that feature; phase-specific decisions only to that phase; genuinely task-local durable decisions only to that task. Do not duplicate decisions across scopes by default. Replace the incorrect guidance and make decision_record compatibility safe by either returning a typed redirect to the scoped semantic operation or evolving it to require an explicit owner without silently dual-writing. New durable decisions must not be stored only in legacy free-form decisions arrays, descriptions, notes, status logs, or completion summaries; those surfaces may reference canonical decision IDs but are not decision authority. Preserve existing AcceptedDecision IDs, acceptedAt timestamps, rationale and implementationNotes, explicit delete confirmation, read-context visibility, legacy persisted data, and atomic no-op behavior on invalid targets. Add core, Pi, MCP, server, skill, and capability regressions for each ownership scope, project decisions created during task work, prevention of duplicate cross-scope writes, compatibility behavior for decision_record, and correct context delivery after an owner is completed or archived.",
+      "descriptionUpdatedAt": "2026-09-14T07:41:57.565Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-001-document-and-encode-the-authoritative-project-feature-phase-task-decision-ownership-rules",
+          "number": 1,
+          "title": "Document and encode the authoritative project/feature/phase/task decision ownership rules.",
+          "checked": false
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-002-remove-the-generic-feature-plus-phase-instruction-from-all-agent-guidance-and-synchronized-skill-artifacts",
+          "number": 2,
+          "title": "Remove the generic feature-plus-phase instruction from all agent guidance and synchronized skill artifacts.",
+          "checked": false
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-003-make-decision-record-compatibility-safe-without-silent-dual-writes",
+          "number": 3,
+          "title": "Make decision_record compatibility safe without silent dual writes.",
+          "checked": false
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-004-prevent-new-durable-decisions-from-relying-on-legacy-free-form-prose-or-decisions-arrays-as-authority",
+          "number": 4,
+          "title": "Prevent new durable decisions from relying on legacy free-form prose or decisions arrays as authority.",
+          "checked": false
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-005-add-cross-surface-regressions-for-all-scopes-duplicate-prevention-invalid-targets-and-post-completion-visibility",
+          "number": 5,
+          "title": "Add cross-surface regressions for all scopes, duplicate prevention, invalid targets, and post-completion visibility.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-14T07:41:57.563Z",
+      "updatedAt": "2026-09-14T07:42:05.465Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-14T07:40:33.167Z",
+  "updatedAt": "2026-09-14T12:40:09.026Z",
+  "handoff": "# Handoff — before compact\n\nCreated at: 2026-09-14T12:26:52.135Z\nUpdated at: 2026-09-14T12:26:52.135Z\nReason: before compact\n\n## Progress snapshot\n- Features: 20/21 done, 1 active\n- Phases: 100/101 done, 1 active/discovery\n- Tasks: 401/404 done, 1 active\n\n## Current focus\n- Feature: `5bb28fc7-8002-46f9-970d-4151d6cb4884` — Improvements (in-progress)\n- Phase: `6c6fae66-e267-4b15-9d2c-ee293147dfe3` — Lossless project context loading and decision ownership (in-progress)\n- Task: `1d63653f-5163-4b50-ad04-04618b37646a` — Define lossless project-context delivery and completeness semantics (in-progress)\n\n## What was being done\nNo additional execution notes were captured.\n\n## Current Task Statuses (phase 6c6fae66-e267-4b15-9d2c-ee293147dfe3)\n- 🚧 `1d63653f-5163-4b50-ad04-04618b37646a` — Define lossless project-context delivery and completeness semantics (in-progress)\n- 📋 `ec3a15f0-cd37-49fd-b9a4-e23a95c70f20` — Deliver complete project context through Pi and MCP planner load (planned)\n- 📋 `eebc1156-33c5-4023-90af-ab587f995edc` — Enforce single-owner Accepted Decision routing (planned)\n\n## How to resume\n1. Open task 1d63653f-5163-4b50-ad04-04618b37646a (Define lossless project-context delivery and completeness semantics).\n2. Run handoff show <ref> (or /planner handoff show <ref>) to read the phase handoff and compare it with the latest planner data.\n3. Confirm whether the current task is already in-progress before doing implementation work.\n4. Continue with the next activity: Resume task 1d63653f-5163-4b50-ad04-04618b37646a — Define lossless project-context delivery and completeness semantics.\n\n## Files to inspect first\n- .planner/project.json\n- .planner/features/\n- .planner/phases/6c6fae66-e267-4b15-9d2c-ee293147dfe3.json\n- .planner/.local/resume.json\n- .planner/.local/generated/PLAN.md\n\n## Blockers\n- None recorded\n\n## Next steps\n- Resume task 1d63653f-5163-4b50-ad04-04618b37646a — Define lossless project-context delivery and completeness semantics.\n- Review the task details and continue implementation in phase 6c6fae66-e267-4b15-9d2c-ee293147dfe3.\n- When the work is complete, call task_complete so the derived phase/feature statuses stay correct.\n\n## Recent activity\n- 2026-08-24T07:32:57.613Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → done\n- 2026-08-24T07:32:51.157Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T11:16:32.031Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → planned\n- 2026-08-23T10:40:00.902Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → planned\n- 2026-08-23T10:39:41.864Z [task_status] 198679e2-262d-4dfd-a601-995e3c94a729: Task 198679e2-262d-4dfd-a601-995e3c94a729 → in-progress\n- 2026-08-23T09:59:14.334Z [task_status] a8116a83-1ebc-457f-a139-159be58c19ef: Task a8116a83-1ebc-457f-a139-159be58c19ef → in-progress\n- 2026-08-23T09:59:09.804Z [task_updated] a8116a83-1ebc-457f-a139-159be58c19ef: Task updated: Document scenario authoring, adapters, fixtures, and troubleshooting\n- 2026-08-19T14:09:40.615Z [task_deleted] b7a90588-4293-42ed-9b9b-aab9241facaa: Task deleted: b7a90588-4293-42ed-9b9b-aab9241facaa\n\n## Reminder\n- This handoff remains active until every task in this phase is done/canceled, a newer handoff replaces it, or the user explicitly clears it. Reading or starting a task never clears it.",
+  "handoffUpdatedAt": "2026-09-14T12:26:52.161Z",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/6c6fae66-e267-4b15-9d2c-ee293147dfe3-2026-09-14T12-26-52-136Z.md",
+      "clearedAt": "2026-09-14T12:26:52.136Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/6c6fae66-e267-4b15-9d2c-ee293147dfe3-2026-09-14T07-56-29-934Z.md",
+      "clearedAt": "2026-09-14T07:56:29.934Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "f8279073-e29d-4666-8033-a6f18356bdf1",
+      "date": "2026-09-14T07:53:26.513Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-14T07:53:26.160Z"
+    }
+  ]
+}

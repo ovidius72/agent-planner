@@ -7,8 +7,12 @@
     "updatedAt": "2026-08-31T07:38:25.009Z",
     "sessionInfo": [
       {
+        "sessionId": "mcp-process:e74c7cb7-de9f-4364-a7ba-ce80220ba21c",
+        "createdAt": "2026-09-14T12:46:28.644Z"
+      },
+      {
         "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-        "createdAt": "2026-09-08T15:01:11.041Z"
+        "createdAt": "2026-09-14T12:28:57.352Z"
       },
       {
         "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",
