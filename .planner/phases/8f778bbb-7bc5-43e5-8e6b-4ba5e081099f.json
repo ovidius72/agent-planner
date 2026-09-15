@@ -27,7 +27,8 @@
     "b0024226-03c7-4008-8450-0e0838305e0d",
     "13227429-2c60-45d9-963e-79a7990feb49",
     "7bda878a-33ac-4b9d-a55d-0ab794dd47af",
-    "af8bd80c-eaf9-4183-85a7-8f736ef9ca08"
+    "af8bd80c-eaf9-4183-85a7-8f736ef9ca08",
+    "f0aad358-9069-4e01-981e-cdb58af8ff06"
   ],
   "tasks": [
     {
@@ -164,10 +165,37 @@
       "updatedAt": "2026-09-15T08:58:46.898Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "f0aad358-9069-4e01-981e-cdb58af8ff06",
+      "phaseId": "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+      "number": 418,
+      "shortId": "5ZUQX",
+      "priority": 6,
+      "shortName": "stop-the-locate-effect-wiping",
+      "title": "Stop the locate effect wiping the work-tree search box on every keystroke",
+      "status": "planned",
+      "description": "Reported by the user on 2026-09-15: after using the locate link in the active-tasks header, the Work Tree search box stops working — typed text will not delete, and even text that appears to be accepted never filters anything. Cause traced and confirmed in the code.\n\nCurrent state:\n\nThe locate icon in the active-tasks header navigates to `/?locate=T00x` (`packages/plan-web-ui/src/components/layout/app-shell.tsx:51`). The Work Tree effect at `packages/plan-web-ui/src/components/dashboard/work-tree.tsx:247-306` then finds the task, clears the filters that could hide it, expands its feature and phase, scrolls the row into view, and calls `clearLocateParam()`.\n\n`clearLocateParam` (`work-tree.tsx:26-30`) strips the param with `window.history.replaceState`. That is deliberate — the comment explains it avoids a router navigation so React Router's `<ScrollRestoration />` does not reset the page scroll after the row has been scrolled into view. But `replaceState` bypasses the router, so the `useSearchParams()` hook at `:243` never observes the param disappearing. `locateParam` and `locateNum` therefore stay set for as long as the component is mounted.\n\nThe effect's dependency array (`:297-306`) includes `tree.searchQuery`, `tree.hideDone` and `tree.onlyActiveBranches`, and the effect body clears all three at `:262-264`:\n\n    if (tree.onlyActiveBranches) tree.setOnlyActiveBranches(false);\n    if (tree.hideDone) tree.setHideDone(false);\n    if (tree.searchQuery) tree.setSearchQuery(\"\");\n\nSo every keystroke changes `tree.searchQuery`, which re-runs the effect, which clears it again. The search box is reset under the user on every change, for the rest of the visit. The same applies to the Hide Done and Only-active toggles. Nothing else sets `?locate=`, which is why the fault appears only after using that icon.\n\nThose dependencies are not accidental: the effect is a deliberate retry loop that re-runs after expansion and filter renders until `document.getElementById('task-row-' + locateNum)` exists. The fix must keep that retry and stop the effect acting again once it has finished.\n\nDesired state: one locate request performs its clear-expand-scroll-pulse once, and further renders leave the user's filters alone.\n\nImplementation steps:\n- Record the `locateNum` that has already been completed — a ref is enough, since it must not itself trigger a render — and return early when the current `locateNum` matches it. Set it at the point the row was found and scrolled (`:280-294`), alongside `clearLocateParam()`.\n- Reset that record if `locateNum` changes, so locating a second task in the same visit still works.\n- Leave `clearLocateParam`'s use of `replaceState` as it is; the scroll-restoration reason for it is sound. The defect is the effect trusting a param it knows the router will not see cleared, not the URL rewrite.\n\nBehaviors to preserve: the retry-until-the-row-is-in-the-DOM loop, including the `phases.length === 0` early return at `:257` that keeps the param alive until data arrives; the smart tree-open mode switch; the manual scroll offset accounting for the sticky header and `.ap-search-sticky` bar; the 2500ms pulse and its cleanup; stripping the param without a router navigation.\n\nEdge cases: locating a second task without leaving the page; a locate for a task that does not exist (the `!found` branch); a locate arriving before `phases` has loaded, which is the reason the retry exists; a user typing in the search box while the row is still being located.\n\nVerification: focused Web UI tests in `packages/plan-web-ui`. Add a regression proving that after a completed locate the search query survives a change — the current code fails that. Per AGENTS.md rule 17, no full repository gate; project guidelines require a unit test for the component touched.",
+      "descriptionUpdatedAt": "2026-09-15T13:34:51.097Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-15T13:34:51.047Z",
+      "updatedAt": "2026-09-15T13:34:51.047Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-15T08:58:46.898Z",
+  "updatedAt": "2026-09-15T13:34:51.047Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
