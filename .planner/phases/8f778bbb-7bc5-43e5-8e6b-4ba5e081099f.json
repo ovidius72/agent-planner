@@ -28,7 +28,8 @@
     "13227429-2c60-45d9-963e-79a7990feb49",
     "7bda878a-33ac-4b9d-a55d-0ab794dd47af",
     "af8bd80c-eaf9-4183-85a7-8f736ef9ca08",
-    "f0aad358-9069-4e01-981e-cdb58af8ff06"
+    "f0aad358-9069-4e01-981e-cdb58af8ff06",
+    "3aae7427-d661-44fc-b2f5-ad40f88a246f"
   ],
   "tasks": [
     {
@@ -192,10 +193,37 @@
       "updatedAt": "2026-09-15T13:34:51.047Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "3aae7427-d661-44fc-b2f5-ad40f88a246f",
+      "phaseId": "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+      "number": 419,
+      "shortId": "YDN2G",
+      "priority": 7,
+      "shortName": "bound-the-next-work-recommenda",
+      "title": "Bound the next-work recommendation and give it a command",
+      "status": "planned",
+      "description": "Asking the planner what to work on next costs about 49,000 characters to receive one task reference, and a human cannot ask at all.\n\nMeasured on this repository's own planner on 2026-09-15, via `recommendNextWork` with the exact inputs `planner-task-recommend` uses:\n\n    current structured payload        48,869 chars\n    the same answer minus `selection`  1,514 chars\n    `selection` alone                 47,342 chars\n      of which candidate.phase        40,765 chars\n      candidate.task                   4,145 chars\n      candidate.feature                2,296 chars\n\n97% of the result is one field. `packages/plan-mcp/src/index.ts:1925-1937` builds a compact answer — `kind`, `taskId`, `phaseId`, `featureId`, `deviation`, `activeTask`, `nextFeature`, `nextPhase`, `nextTask`, `claims` — and then appends `selection`, whose `candidate.phase` is the entire phase object: every task's full description and completion summary, every checklist, every statusLog entry, and the whole persisted handoff body. `candidate.feature` carries the feature's complete `phaseIds` array. The no-candidate branch at `:1912-1922` does the same.\n\n`packages/pi-adapter/src/index.ts:5278` registers the `task_recommend` twin and has the same shape.\n\nNothing reads the fat. The compact fields already carry the answer, and `planner-task-recommend`'s own description says it returns \"bounded typed claims\" — the bound was never applied to `selection`.\n\nSecond, related gap: there is no interactive command for this. The Pi `/planner` subcommand list at `packages/pi-adapter/src/index.ts:255-290` covers task add/show/discuss/update/delete/start/complete and the three checklist paths, but has no `recommend`. `.planner/SKILL.md` states the omission deliberately — \"Pause, switch, deviation, recommendation, requirement, and decision operations are available through the registered Pi tools below rather than every interactive `/planner` path\" — so an agent can ask what is next and a person at the command line cannot. Pause, switch and deviation are arguably agent-only; \"what should I work on next\" is a supervisor question and is the odd one out.\n\nWork:\n- Stop sending `selection` whole. Keep `selection.kind`, `selection.reason` and `selection.deviation`, and replace `selection.candidate` with the composite refs and titles already computed for the text channel. Apply it to the candidate branch and the no-candidate branch.\n- Do the same in the Pi twin. Shape the result in plan-core so both adapters inherit it, following `packages/plan-core/src/handoff-reply.ts` — do not fix one adapter and leave the other.\n- Add `/planner task recommend` to the Pi subcommand list and to the documented command paths in `packages/plan-core/planner-skill.md`, then regenerate the plugin copies with `pnpm plugins:sync` and verify with `pnpm plugins:check`. Its human output should be a few lines — the ref, the title, and the reason — not the structured payload.\n- While in the same code: `planner-show` returns all ten project Accepted Decisions in full, with rationale and implementation notes, to list feature names. Check whether its callers need them; if not, bound it the same way.\n\nBehaviors to preserve: `kind`, `taskId`, `phaseId`, `featureId`, `activeTask`, `nextFeature`, `nextPhase`, `nextTask` and `claims` exactly as they are — the lifecycle protocol and the recommendation claims contract depend on them; the typed claim kinds including the `insufficient` handoff claim; the no-candidate branch's `activeTaskIds`; the rule that only a persisted resume-ready handoff is an actionable claim.\n\nEdge cases: an active task present, so the recommendation is the active one; a recommendation with an approved deviation and a preserved resume target; the no-candidate branch; a phase whose handoff is large, which is what makes the current payload worst.\n\nRelated: P104(F005)/T417 covers oversized results for the mutation tools. This task covers the read/recommendation side and the missing command; keep the two from duplicating each other's work.\n\nVerification: focused core, MCP and Pi suites. Add a regression asserting the recommendation's structured payload stays under a stated ceiling for a phase with a large handoff and long task descriptions, and that every field the lifecycle depends on is still present. Re-measure against the 48,869-character baseline above and record the new figure. Per AGENTS.md rule 17, no full repository gate.",
+      "descriptionUpdatedAt": "2026-09-15T13:49:30.225Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-15T13:49:30.173Z",
+      "updatedAt": "2026-09-15T13:49:30.173Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-15T13:34:51.047Z",
+  "updatedAt": "2026-09-15T13:49:30.173Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
