@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, MAX_HANDOFF_CONTENT_CHARS, handoffContentHash, HandoffContractError } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -135,21 +135,12 @@ function legacyContextMigrationSummary(preview: Awaited<ReturnType<PlanStore["pr
   ].join("\n");
 }
 
-function handoffContractFailure(error: HandoffContractError) {
+function handoffContractFailure(error: HandoffContractError, action: "refresh" | "preparation" = "refresh") {
+  const recovery = typeof error.details.recovery === "string" ? ` Recovery: ${error.details.recovery}` : "";
   return {
     isError: true,
-    content: [{ type: "text" as const, text: `❌ Handoff refresh denied [${error.code}]: ${error.message}` }],
+    content: [{ type: "text" as const, text: `❌ Handoff ${action} denied [${error.code}]: ${error.message}${recovery}` }],
     details: { errorCode: error.code, ...error.details },
-  };
-}
-
-function boundedHandoffForTransport(content: string): { content: string; fullLength: number; truncated: boolean } {
-  if (content.length <= MAX_HANDOFF_CONTENT_CHARS) return { content, fullLength: content.length, truncated: false };
-  const suffix = "\n\n[Legacy handoff truncated for transport safety. Move extended detail to a linked file under .planner/docs/ and refresh the handoff.]";
-  return {
-    content: `${content.slice(0, MAX_HANDOFF_CONTENT_CHARS - suffix.length)}${suffix}`,
-    fullLength: content.length,
-    truncated: true,
   };
 }
 
@@ -3718,53 +3709,27 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
       const phase = await st.loadPhase(r.phase.id);
-      const bounded = boundedHandoffForTransport(phase.handoff);
-      if (!bounded.content.trim()) {
+      if (!phase.handoff.trim()) {
         const archived = (await st.listArchivedHandoffs()).find((entry) => entry.phaseId === phase.id
           && new Set(["phase-done", "phase-rejected", "phase-canceled"]).has(entry.reason));
-        if (archived) {
-          const archivedContent = boundedHandoffForTransport(archived.content);
-          const supportingDocuments = phase.handoffAudit?.supportingDocuments ?? [];
-          const documentLines = supportingDocuments.map((document) => `- ${document.path} — ${document.description}`);
-          return {
-            content: [{ type: "text", text: [
-              `Archived terminal-phase handoff for ${r.compositeRef} (${archived.reason}; archived ${archived.archivedAt})`,
-              ...(documentLines.length ? ["Supporting documents:", ...documentLines] : []),
-              "",
-              archivedContent.content,
-            ].join("\n") }],
-            details: {
-              phaseRef: r.compositeRef,
-              phaseId: phase.id,
-              active: false,
-              archived: true,
-              archiveReason: archived.reason,
-              archivedAt: archived.archivedAt,
-              archiveFile: archived.file,
-              ...archivedContent,
-              supportingDocuments,
-              empty: false,
-              resumeReady: false,
-              handoffAudit: phase.handoffAudit,
-            },
-          };
-        }
-        return { content: [{ type: "text", text: `No handoff set on ${r.compositeRef}.` }], details: { phaseRef: r.compositeRef, phaseId: r.phase.id, content: "", empty: true, resumeReady: false, handoffAudit: phase.handoffAudit } };
+        const reply = archived
+          ? buildHandoffShowReply({
+            kind: "archived",
+            phaseRef: r.compositeRef,
+            phaseId: phase.id,
+            content: archived.content,
+            archiveReason: archived.reason,
+            archivedAt: archived.archivedAt,
+            archiveFile: archived.file,
+            handoffAudit: phase.handoffAudit,
+          })
+          : buildHandoffShowReply({ kind: "empty", phaseRef: r.compositeRef, phaseId: r.phase.id, handoffAudit: phase.handoffAudit });
+        return { content: [{ type: "text", text: reply.text }], details: reply.structured };
       }
       const feature = (await st.loadFeatures()).features.find((entry) => entry.id === phase.featureId);
       const phaseWorkMap = buildPhaseWorkMap(phase, feature?.number);
-      const contentHash = handoffContentHash(phase.handoff);
-      const persistenceVerified = Boolean(phase.handoffAudit
-        && phase.handoffAudit.contentHash === contentHash
-        && phase.handoffAudit.contentLength === phase.handoff.length);
-      const resumeReady = persistenceVerified && Boolean(phase.handoffAudit?.resumeReadyAt);
-      const status = resumeReady
-        ? "Resume-ready: persisted compact capsule read-back completed."
-        : "NOT resume-ready: after reading this persisted capsule, call handoff_verify with its contentHash. The planner derives legacy evidence from persisted state; rewrite only if the capsule itself omits resume-critical context.";
-      return {
-        content: [{ type: "text", text: `Handoff for ${r.compositeRef}\n${status}\nContent hash: ${contentHash}\n\n${phaseWorkMap.content}\n\nBefore proposing new work, reread the canonical phase and relevant sibling task full view; do not duplicate an already-owned capability.\n\n${bounded.content}` }],
-        details: { phaseRef: r.compositeRef, phaseId: r.phase.id, phaseWorkMap, ...bounded, contentHash, persistenceVerified, resumeReady, verificationRequired: !resumeReady, handoffAudit: phase.handoffAudit },
-      };
+      const reply = buildHandoffShowReply({ kind: "active", phaseRef: r.compositeRef, phase, phaseWorkMap });
+      return { content: [{ type: "text", text: reply.text }], details: reply.structured };
     },
   });
 
@@ -3809,54 +3774,24 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     name: "handoff_prepare",
     label: "Handoff Prepare",
     description: "Prepare one exact phase before writing a handoff. Returns a compact resume capsule scaffold, bounded phase work map, current token, missing task evidence, and inline budget. Reread the canonical phase and relevant sibling tasks before proposing work; do not duplicate planner evidence in Markdown.",
-    parameters: Type.Object({ phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }) }),
+    parameters: Type.Object({
+      phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }),
+      supportingDocuments: Type.Optional(Type.Array(Type.Object({
+        path: Type.String({ description: "Committed Markdown path under .planner/docs/." }),
+        description: Type.String({ description: "What the document contains and why the next agent needs it." }),
+      }), { description: "Optional: validate an already-known manifest now, before drafting. Usually unnecessary — most handoffs need none; oversized content is externalized automatically." })),
+    }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
       try {
-        const audit = await st.preparePhaseHandoff(r.phase.id);
-        const {
-          handoff,
-          completenessCategories: _completenessCategories,
-          coldStartSourceReviews: _coldStartSourceReviews,
-          coldStartInventoryCategories: _coldStartInventoryCategories,
-          ...auditDetails
-        } = audit;
-        const boundedExisting = boundedHandoffForTransport(handoff);
-        const missing = audit.missingCompletionTasks.map((task) => `- T${String(task.number).padStart(3, "0")} — ${task.title}`).join("\n") || "- None";
-        const existing = boundedExisting.content.trim() || "(none)";
-        return {
-          content: [{ type: "text", text: [
-            `Handoff preparation audit for ${r.compositeRef}`,
-            `Base handoffUpdatedAt: ${audit.handoffUpdatedAt || "(empty)"}`,
-            "Required human inputs before drafting:",
-            ...audit.requiredHumanInputs.map((input) => `- ${input.id} — ${input.description}`),
-            "Planner-generated metadata (do not add these to Markdown): Created at, Updated at, Reason.",
-      "Use this exact scaffold before drafting; replace every angle-bracket placeholder and retain every heading:",
-            audit.draftTemplate,
-            "",
-            "Done tasks missing durable completion/verification evidence:",
-            missing,
-            "",
-            "Compact handoff contract: include only the exact focus/resume point, current or partial state, preservation constraints, blockers, decisions, verification, and ordered next actions needed by the next agent.",
-            "No Markdown heading is mandatory: concise free-form resume prose is accepted. Use headings only when they make the capsule clearer.",
-            "Completeness audit and cold-start evidence are planner-owned metadata. Do not copy their categories or source reviews into Markdown; provide legacy evidence only when it already exists.",
-            `Inline target: ${audit.targetContentChars} characters; absolute compatibility ceiling: ${audit.maxContentChars}. Extended detail is externalized automatically when needed.`,
-            "",
-            "Existing active handoff (reconcile all still-relevant content):",
-            existing,
-          ].join("\n") }],
-          details: {
-            phaseRef: r.compositeRef,
-            ...auditDetails,
-            evidenceContract: "Planner-owned completeness and cold-start evidence is derived from persisted state; no category inventory is required from the agent.",
-            existingHandoffLength: boundedExisting.fullLength,
-            existingHandoffTruncated: boundedExisting.truncated,
-          },
-        };
+        const audit = await st.preparePhaseHandoff(r.phase.id, params.supportingDocuments);
+        const reply = buildHandoffPrepareReply({ phaseRef: r.compositeRef, audit });
+        return { content: [{ type: "text", text: reply.text }], details: reply.structured };
       } catch (error) {
+        if (error instanceof HandoffContractError) return handoffContractFailure(error, "preparation");
         const message = error instanceof Error ? error.message : String(error);
         return { content: [{ type: "text", text: `❌ Handoff preparation failed: ${message}` }], details: { error: message } };
       }
@@ -3866,14 +3801,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "handoff_write",
     label: "Handoff Write",
-    description: "Persist a compact reconciled handoff candidate with durable context synchronization. The result always has resumeReady=false until a separate handoff_show read-back and handoff_verify succeeds. Run handoff_prepare first; extended detail belongs in linked .planner/docs/ Markdown.",
+    description: "Persist a compact reconciled handoff candidate with durable context synchronization. The result always has resumeReady=false until a separate handoff_show read-back and handoff_verify succeeds. Run handoff_prepare first; extended detail belongs in linked .planner/docs/ Markdown. On failure the submitted content is retained against phaseRef + expectedHandoffUpdatedAt: a retry against the exact same token may omit content and markdown_content to reuse it instead of resending the whole body.",
     parameters: Type.Object({
       phaseRef: Type.String({ description: "Exact confirmed phase ref: P00x | P00x(F00x) | UUID | title." }),
-      title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists)." })),
+      title: Type.Optional(Type.String({ description: "Meaningful handoff title summarizing the work (becomes the H1 / first line in lists). Ignored when content and markdown_content are both omitted (the retained title is reused)." })),
       reason: Type.Optional(Type.String({ description: "Why work is stopping and why a cold agent needs this handoff. Required for confirmed writes; rendered by the planner, not in Markdown." })),
       confirmed: Type.Boolean({ description: "Set true only after the user explicitly confirms the proposed feature+phase target." }),
-      content: Type.Optional(Type.String({ description: "Handoff text (plain)." })),
-      markdown_content: Type.Optional(Type.String({ description: "Handoff text (markdown). Preferred over content." })),
+      content: Type.Optional(Type.String({ description: "Handoff text (plain). Omit (with markdown_content) only on a retry after a failed write against the exact same expectedHandoffUpdatedAt, to reuse the body retained from that failed attempt." })),
+      markdown_content: Type.Optional(Type.String({ description: "Handoff text (markdown). Preferred over content. Omit (with content) only on a retry after a failed write against the exact same expectedHandoffUpdatedAt, to reuse the retained body." })),
       expectedHandoffUpdatedAt: Type.Optional(Type.String({ description: "Exact handoffUpdatedAt returned by handoff_prepare; use an empty string when no handoff exists." })),
       reconciledExistingHandoff: Type.Optional(Type.Boolean({ description: "Confirm that all still-relevant information from the existing handoff was retained in this single refreshed body." })),
       completenessAudit: Type.Optional(Type.Object({
@@ -3920,21 +3855,27 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      let body = (params.markdown_content ?? params.content ?? "").trim();
-      if (!body) return { content: [{ type: "text", text: "❌ Provide the handoff text (content or markdown_content)." }], details: { error: "empty text" } };
+      // content/markdown_content are optional so a retry after a failed write
+      // can omit them and reuse the body PlanStore retained against this
+      // phase + expectedHandoffUpdatedAt (see PlanStore.refreshPhaseHandoff).
+      // body stays undefined only in that case; the title/heading checks
+      // below apply only to freshly-submitted text.
+      let body: string | undefined = (params.markdown_content ?? params.content ?? "").trim() || undefined;
       const title = params.title?.trim();
-      const firstLine = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
-      const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
-      const effectiveHeadingText = title || firstHeadingText;
-      if (!effectiveHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(effectiveHeadingText)) {
-        return { content: [{ type: "text", text: "❌ Generic handoff title. Provide a meaningful title summarizing the work." }], details: { error: "generic title" } };
-      }
-      if (title) {
-        const lines = body.split(/\r?\n/);
-        const firstIdx = lines.findIndex((line) => line.trim().length > 0);
-        if (firstIdx !== -1 && /^#+\s/.test(lines[firstIdx] ?? "")) lines[firstIdx] = `# ${title}`;
-        else lines.unshift(`# ${title}`, "");
-        body = lines.join("\n");
+      if (body !== undefined) {
+        const firstLine = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
+        const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
+        const effectiveHeadingText = title || firstHeadingText;
+        if (!effectiveHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(effectiveHeadingText)) {
+          return { content: [{ type: "text", text: "❌ Generic handoff title. Provide a meaningful title summarizing the work." }], details: { error: "generic title" } };
+        }
+        if (title) {
+          const lines = body.split(/\r?\n/);
+          const firstIdx = lines.findIndex((line) => line.trim().length > 0);
+          if (firstIdx !== -1 && /^#+\s/.test(lines[firstIdx] ?? "")) lines[firstIdx] = `# ${title}`;
+          else lines.unshift(`# ${title}`, "");
+          body = lines.join("\n");
+        }
       }
       const r = await resolvePhaseForHandoff(st, params.phaseRef);
       if (!r.ok) return { content: [{ type: "text", text: `❌ ${r.error}` }], details: { error: r.error } };
@@ -3960,7 +3901,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       try {
         const result = await st.refreshPhaseHandoff(r.phase.id, {
           reason: params.reason.trim(),
-          content: body,
+          ...(body !== undefined ? { content: body } : {}),
           expectedHandoffUpdatedAt: params.expectedHandoffUpdatedAt,
           reconciledExistingHandoff: params.reconciledExistingHandoff === true,
           ...(params.completenessAudit ? { completenessAudit: params.completenessAudit as HandoffCompletenessAuditInput } : {}),
@@ -3999,7 +3940,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       } catch (error) {
         if (error instanceof HandoffContractError) return handoffContractFailure(error);
         const message = error instanceof Error ? error.message : String(error);
-        return { content: [{ type: "text", text: `❌ Handoff refresh denied: ${message}` }], details: { error: message } };
+        return { content: [{ type: "text", text: `❌ Handoff refresh denied: ${message} If you retry against the same phaseRef and expectedHandoffUpdatedAt, you may omit content/markdown_content to reuse the body just submitted.` }], details: { error: message } };
       }
     },
   });

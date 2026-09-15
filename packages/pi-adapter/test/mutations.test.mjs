@@ -220,8 +220,11 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       await assertFileUntouched("missing phase ref");
 
       // Handoff text/title validations are rejected without touching the phase.
+      // Omitting content is only for a retry against a token from a previously
+      // failed write (T409); with no expectedHandoffUpdatedAt at all this hits
+      // the ordinary preflight-token gate, not a content-specific message.
       const empty = await host.runTool("handoff_write", { phaseRef: "P001", confirmed: true, completenessAudit: completeHandoffAudit() });
-      assert.match(toolText(empty), /Provide the handoff text/);
+      assert.match(toolText(empty), /HANDOFF_PREFLIGHT_REQUIRED/);
       await assertFileUntouched("empty handoff text");
       const generic = await host.runTool("handoff_write", { phaseRef: "P001", content: "Handoff", completenessAudit: completeHandoffAudit() });
       assert.match(toolText(generic), /Generic handoff title/);
@@ -481,10 +484,11 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       });
       const phase = (await host.store.loadAllPhases())[0];
       const featureTwo = (await host.store.loadFeatures()).features.find((feature) => feature.number === 2);
+      const directDescriptionRef = ".planner/docs/p094-pane-hosts-any-app.md";
       const updated = await host.runTool("phase_update", {
         phaseId: "P001",
         featureId: "F002",
-        descriptionRef: ".planner/docs/phases/parity-phase.md",
+        descriptionRef: directDescriptionRef,
         goals: ["Close adapter parity"],
         nonGoals: ["Change status rollups"],
         dependencies: ["Canonical store"],
@@ -496,7 +500,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(toolDetails(updated).updated, true);
       let persistedPhase = await host.store.loadPhase(phase.id);
       assert.equal(persistedPhase.featureId, featureTwo.id);
-      assert.equal(persistedPhase.descriptionRef, ".planner/docs/phases/parity-phase.md");
+      assert.equal(persistedPhase.descriptionRef, directDescriptionRef);
       assert.deepEqual(persistedPhase.goals, ["Close adapter parity"]);
       assert.deepEqual(persistedPhase.nonGoals, ["Change status rollups"]);
       assert.deepEqual(persistedPhase.dependencies, ["Canonical store"]);
@@ -618,7 +622,10 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     try {
       const phase = async () => (await host.store.loadAllPhases())[0];
       const prepared = await host.runTool("handoff_prepare", { phaseRef: "P001" });
-      assert.match(toolText(prepared), /Use this exact scaffold before drafting/);
+      // The scaffold lives in the structured details; the text channel points at it
+      // instead of carrying a second copy (T408).
+      assert.match(toolText(prepared), /scaffold is provided in the structured result's draftTemplate field/);
+      assert.equal(toolText(prepared).includes(toolDetails(prepared).draftTemplate), false, "the scaffold must not travel in both channels");
       assert.match(toolText(prepared), /Required human inputs before drafting/);
       assert.match(toolText(prepared), /Planner-generated metadata \(do not add these to Markdown\)/);
       assert.match(toolText(prepared), /Completeness audit and cold-start evidence are planner-owned metadata/);
@@ -686,8 +693,11 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(toolDetails(list).page, 1);
       assert.equal(Object.hasOwn(toolDetails(list).handoffs[0], "content"), false, "compact list must not embed full bodies");
       const shown = await host.runTool("handoff_show", { phaseRef: "P001" });
+      // The capsule body is readable prose and travels in the text channel only;
+      // the structured details keep the machine-readable evidence about it (T408).
       assert.match(toolText(shown), /Body of the handoff\./);
-      assert.match(toolDetails(shown).content, /Body of the handoff\./);
+      assert.equal(Object.hasOwn(toolDetails(shown), "content"), false, "the body must not travel in both channels");
+      assert.equal(typeof toolDetails(shown).contentHash, "string");
       assert.equal(toolDetails(shown).truncated, false);
       assert.equal(toolDetails(shown).handoffAudit.version, 1);
       assert.equal(toolDetails(shown).persistenceVerified, true);
@@ -733,6 +743,94 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       });
       assert.match(toolText(late), /Cannot write a handoff on done phase/);
       assert.equal((await phase()).handoff, "");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("handoff_prepare rejects a bad supporting-document manifest before any body is drafted or sent, and handoff_write still catches a document deleted after prepare", async () => {
+    const host = await createPiHost({ name: "t407-prepare-supporting-documents", seed: "minimal" });
+    try {
+      const phase = async () => (await host.store.loadAllPhases())[0];
+
+      // Bad path fails at prepare, with no body ever sent.
+      const badManifest = await host.runTool("handoff_prepare", {
+        phaseRef: "P001",
+        supportingDocuments: [{ path: ".planner/docs/does-not-exist.md", description: "Content that was never written to disk." }],
+      });
+      assert.equal(badManifest.isError, true);
+      assert.equal(toolDetails(badManifest).errorCode, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+      assert.match(toolDetails(badManifest).recovery, /supportingDocuments/);
+      assert.match(toolDetails(badManifest).recovery, /optional/i);
+      assert.match(toolText(badManifest), /Recovery:.*supportingDocuments/);
+      assert.equal((await phase()).handoff, "", "no handoff body was sent or persisted");
+
+      // The same guidance is surfaced proactively, read before drafting.
+      const prepared = await host.runTool("handoff_prepare", { phaseRef: "P001" });
+      assert.match(toolText(prepared), /Supporting documents:.*supportingDocuments is optional/);
+      assert.match(toolDetails(prepared).supportingDocumentsGuidance, /optional/i);
+
+      // Valid at prepare time.
+      await mkdir(join(host.planRoot, "docs"), { recursive: true });
+      const docPath = join(host.planRoot, "docs", "t407-detail.md");
+      await writeFile(docPath, "# Detail\n\nSubstantive linked content that will be removed before write.\n", "utf8");
+      const supportingDocuments = [{ path: ".planner/docs/t407-detail.md", description: "Substantive linked content for resumption." }];
+      const preparedWithManifest = await host.runTool("handoff_prepare", { phaseRef: "P001", supportingDocuments });
+      assert.equal(preparedWithManifest.isError, undefined);
+
+      // Deleted between prepare and write: the write-time check is still the authority.
+      await rm(docPath);
+      const preparedArgs = await preparedHandoffArgs(host);
+      const write = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        title: "P001 — deleted supporting document",
+        reason: "Fixture verifies write-time authority after prepare-time validation.",
+        content: `${canonicalHandoff("P001 — deleted supporting document", "Body linking a supporting document removed after prepare.")}\n- .planner/docs/t407-detail.md — substantive linked content for resumption.`,
+        confirmed: true,
+        supportingDocuments,
+        ...preparedArgs,
+      });
+      assert.equal(write.isError, true);
+      assert.equal(toolDetails(write).errorCode, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+      assert.equal((await phase()).handoff, "");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("handoff_write retains content after a core-level write failure; a retry omitting content succeeds (T409)", async () => {
+    const host = await createPiHost({ name: "t409-retain-and-retry", seed: "minimal" });
+    try {
+      const phase = async () => (await host.store.loadAllPhases())[0];
+      const prepared = await preparedHandoffArgs(host);
+      const content = canonicalHandoff("P001 — retained content for retry", "Body that must survive a retry without being resent.");
+
+      // First attempt fails deep inside the write contract (missing durable
+      // phase-context evidence), not on an adapter-level preflight gate — so
+      // PlanStore.refreshPhaseHandoff actually retains the submitted content.
+      const { phaseNoUpdateReason: _drop, ...preparedWithoutPhaseReason } = prepared;
+      const failed = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        reason: "Fixture handoff reason for a cold resume.",
+        content,
+        confirmed: true,
+        ...preparedWithoutPhaseReason,
+      });
+      assert.match(toolText(failed), /phaseNoUpdateReason/);
+      assert.match(toolText(failed), /omit content\/markdown_content/);
+      assert.equal((await phase()).handoff, "", "the failed attempt must not mutate the phase");
+
+      // Retry: same phaseRef + expectedHandoffUpdatedAt, correct only the
+      // field that actually failed, and omit content/markdown_content entirely.
+      const retried = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        reason: "Fixture handoff reason for a cold resume.",
+        confirmed: true,
+        ...prepared,
+      });
+      assert.equal(retried.isError, undefined);
+      assert.equal(toolDetails(retried).persisted, true);
+      assert.match((await phase()).handoff, /Body that must survive a retry without being resent\./);
     } finally {
       await closePiHost(host);
     }

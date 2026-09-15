@@ -1,6 +1,6 @@
 import { after, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -647,6 +647,78 @@ describe("durable handoff context refresh", () => {
     assert.equal((await store.loadPhase(phaseId)).handoff, "");
   });
 
+  test("prepare rejects a bad supporting-document path before any handoff body is drafted or sent", async () => {
+    const { store, phaseId } = await setup();
+    await assert.rejects(
+      store.preparePhaseHandoff(phaseId, [{ path: "not-under-docs.md", description: "Substantive but wrongly placed content." }]),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must be a Markdown file under \.planner\/docs\//);
+        return true;
+      },
+    );
+    // Prepare never took a body; nothing was persisted or sent.
+    assert.equal((await store.loadPhase(phaseId)).handoff, "");
+  });
+
+  test("prepare error names supportingDocuments as an optional, droppable field", async () => {
+    const { store, phaseId } = await setup();
+    await assert.rejects(
+      store.preparePhaseHandoff(phaseId, [{ path: ".planner/docs/missing.md", description: "Content that does not exist on disk." }]),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must be a regular file/);
+        assert.match(error.details.recovery, /supportingDocuments/);
+        assert.match(error.details.recovery, /optional/i);
+        assert.match(error.details.recovery, /externalized automatically/i);
+        return true;
+      },
+    );
+    // The same statement is surfaced proactively in prepare output, read before drafting.
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.match(audit.supportingDocumentsGuidance, /supportingDocuments/);
+    assert.match(audit.supportingDocumentsGuidance, /optional/i);
+  });
+
+  test("prepare with no manifest behaves exactly as today: no supporting-document validation runs", async () => {
+    const { store, phaseId } = await setup();
+    // No manifest argument at all, and an explicit empty array: neither touches
+    // the filesystem for a supporting document, so both succeed identically.
+    const withoutArg = await store.preparePhaseHandoff(phaseId);
+    const withEmptyArray = await store.preparePhaseHandoff(phaseId, []);
+    assert.equal(withoutArg.handoffUpdatedAt, withEmptyArray.handoffUpdatedAt);
+    assert.equal(withoutArg.supportingDocumentsGuidance, withEmptyArray.supportingDocumentsGuidance);
+  });
+
+  test("write still refuses a supporting document that was valid at prepare and was deleted before write", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    const docPath = join(store.root, "docs", "will-be-deleted.md");
+    await writeFile(docPath, "# Detail\n\nSubstantive linked content that will be removed before write.\n", "utf8");
+    const supportingDocuments = [{ path: ".planner/docs/will-be-deleted.md", description: "Substantive linked content for resumption." }];
+
+    // Valid at prepare time: the manifest passes cleanly.
+    const audit = await store.preparePhaseHandoff(phaseId, supportingDocuments);
+    const baseInput = refreshInput(audit, doneTaskId);
+
+    // Deleted between prepare and write.
+    await rm(docPath);
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, {
+        ...baseInput,
+        content: `${baseInput.content}\n- .planner/docs/will-be-deleted.md — substantive linked content for resumption.`,
+        supportingDocuments,
+      }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must be a regular file/);
+        return true;
+      },
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, "");
+  });
+
   test("materializes required metadata from structured preflight inputs without late draft retries", async () => {
     const { store, phaseId, doneTaskId } = await setup();
     const audit = await store.preparePhaseHandoff(phaseId);
@@ -676,5 +748,207 @@ describe("durable handoff context refresh", () => {
     const phase = await store.loadPhase(phaseId);
     assert.equal(phase.handoffHistory.length, 1);
     assert.equal(phase.handoffHistory[0].reason, "superseded");
+  });
+});
+
+// T409: content is retained against phaseId + expectedHandoffUpdatedAt on any
+// failed refreshPhaseHandoff(), so a retry can omit content and reuse it
+// instead of resending a capsule up to MAX_HANDOFF_CONTENT_CHARS.
+describe("retained handoff drafts make a failed write cheap to retry", () => {
+  function draftsPath(store) {
+    return join(store.root, ".local", "handoff-drafts.json");
+  }
+
+  async function readDrafts(store) {
+    return JSON.parse(await readFile(draftsPath(store), "utf8"));
+  }
+
+  // A real, structural failure that is not the token/terminal-phase gate:
+  // "done" tasks missing durable completion evidence. Distinct from `full`
+  // only in contextSync.taskUpdates, so `content` (the expensive part) is
+  // exactly what refreshInput() built.
+  function failingAttempt(full) {
+    const { contextSync, ...rest } = full;
+    return { ...rest, contextSync: { ...contextSync, taskUpdates: [] } };
+  }
+
+  function withoutContent(full) {
+    const { content, ...rest } = full;
+    return rest;
+  }
+
+  test("a failed write retains content; a retry omitting it succeeds, then discards the entry", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, failingAttempt(full)),
+      /missing durable completion evidence/,
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, "", "the failed attempt must not mutate the phase");
+    const retained = (await readDrafts(store)).find((d) => d.phaseId === phaseId);
+    assert.ok(retained, "the exact submitted content is retained after the failure");
+    assert.equal(retained.token, audit.handoffUpdatedAt);
+
+    // Retry: omit content entirely, correct only the field that actually failed.
+    const written = await store.refreshPhaseHandoff(phaseId, withoutContent(full));
+    assert.match(written.phase.handoff, /Continue the phase\./, "the persisted body is the retained content, not a resend");
+
+    // Success discards the entry for this token.
+    assert.ok(!(await readDrafts(store)).some((d) => d.phaseId === phaseId), "a successful write discards its retained draft");
+
+    // Content is genuinely required again: the same token now has nothing
+    // retained, so omitting content is a typed failure, not a stale-token one.
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_RETAINED_CONTENT_NOT_FOUND");
+        assert.match(error.details.recovery, /omit content/);
+        return true;
+      },
+    );
+  });
+
+  test("auto-externalization runs against a retained body on retry, exactly as on a first attempt", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    // Pad the already cold-start-covered base content past the externalization
+    // target, keeping every required inventory item intact and verbatim.
+    const baseFull = refreshInput(audit, doneTaskId);
+    const padding = "Implementing the reconciled handoff contract in exhaustive detail. ".repeat(200);
+    const oversizedContent = `${baseFull.content}\n\n## Extended padding\n${padding}`;
+    assert.ok(oversizedContent.length > 8_000, "fixture content must exceed the externalization target");
+    const full = { ...baseFull, content: oversizedContent };
+
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    const retained = (await readDrafts(store)).find((d) => d.phaseId === phaseId);
+    assert.ok(retained.content.length > 8_000, "the raw oversized body is retained, not a pre-externalized copy");
+
+    // Retry omitting content: externalization must run against the retained
+    // body exactly as it would on a first attempt with that same content.
+    const written = await store.refreshPhaseHandoff(phaseId, withoutContent(full));
+    assert.ok(written.phase.handoff.length < oversizedContent.length, "the persisted capsule is compacted, not the raw oversized retry");
+    assert.match(written.phase.handoff, /externalized automatically/);
+    assert.equal(written.handoffAudit.supportingDocuments.length, 1);
+    assert.match(written.handoffAudit.supportingDocuments[0].path, /^\.planner\/docs\/handoff-p001-/);
+    const externalizedPath = join(store.root, written.handoffAudit.supportingDocuments[0].path.slice(".planner/".length));
+    const externalizedContent = await readFile(externalizedPath, "utf8");
+    assert.match(externalizedContent, /Implementing the reconciled handoff contract in exhaustive detail\./);
+  });
+
+  test("a stale-token retry still refuses even though a body is retained for it", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    assert.ok((await readDrafts(store)).some((d) => d.phaseId === phaseId), "a draft is retained for the original token");
+
+    // Someone else moves the phase's handoff forward through a different path,
+    // advancing handoffUpdatedAt away from the token the draft was retained for.
+    await store.setPhaseHandoff(phaseId, "# Someone else's handoff\n\nWritten between prepare and this retry.");
+    const advanced = await store.loadPhase(phaseId);
+    assert.notEqual(advanced.handoffUpdatedAt, audit.handoffUpdatedAt);
+
+    // Retention still finds a body for the old token, but the token itself is
+    // stale — the write must still refuse, and must not touch the new content.
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      /Handoff changed after preparation/,
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, advanced.handoff, "the stale retry must not overwrite the newer handoff");
+  });
+
+  test("a retained draft is discarded when the phase reaches a terminal status", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    assert.ok((await readDrafts(store)).some((d) => d.phaseId === phaseId), "the failed write retained a draft");
+
+    // Drive every task to done so the phase derives a terminal status.
+    await store.updatePhase(phaseId, (p) => {
+      const now = new Date().toISOString();
+      for (const t of p.tasks) { t.status = "done"; t.startedAt ||= now; t.completedAt = now; }
+      return p;
+    });
+    await store.syncTaskStatusRollup(phaseId);
+    assert.equal((await store.loadPhase(phaseId)).status, "done");
+
+    assert.ok(!(await readDrafts(store)).some((d) => d.phaseId === phaseId), "a terminal phase discards its retained draft");
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      /terminal phases have no pending handoff/,
+    );
+  });
+
+  test("handoff_clear discards a retained draft even with no active handoff to archive", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    assert.ok((await readDrafts(store)).some((d) => d.phaseId === phaseId));
+    assert.equal((await store.loadPhase(phaseId)).handoff, "", "nothing was ever successfully written for handoff_clear to archive");
+
+    await store.clearPhaseHandoff(phaseId, "manual");
+    assert.ok(!(await readDrafts(store)).some((d) => d.phaseId === phaseId), "handoff_clear discards the draft regardless of whether there was a body to archive");
+  });
+
+  test("an expired retained draft is treated as absent", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await mkdir(join(store.root, ".local"), { recursive: true });
+    const expired = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // > 24h age cap
+    await writeFile(draftsPath(store), JSON.stringify([
+      { phaseId, token: audit.handoffUpdatedAt, content: "stale unrecoverable draft", failureReason: "an earlier session", retainedAt: expired },
+    ], null, 2), "utf8");
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_RETAINED_CONTENT_NOT_FOUND");
+        return true;
+      },
+    );
+  });
+
+  test("retained drafts are capped in count, evicting the oldest first", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, ".local"), { recursive: true });
+    const seeded = Array.from({ length: 20 }, (_, i) => ({
+      phaseId: `seed-phase-${i}`,
+      token: "t",
+      content: `seed content ${i}`,
+      failureReason: "seed",
+      retainedAt: new Date(Date.now() - (20 - i) * 1000).toISOString(), // ascending; seed-phase-0 is oldest
+    }));
+    await writeFile(draftsPath(store), JSON.stringify(seeded, null, 2), "utf8");
+
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+
+    const drafts = await readDrafts(store);
+    assert.equal(drafts.length, 20, "the total stays capped at MAX_RETAINED_HANDOFF_DRAFTS");
+    assert.ok(!drafts.some((d) => d.phaseId === "seed-phase-0"), "the oldest entry was evicted to make room");
+    assert.ok(drafts.some((d) => d.phaseId === phaseId), "the newest failure is retained");
+  });
+
+  test("a retained draft survives a new PlanStore instance against the same root", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+
+    // Simulate a process restart in the same worktree: a new PlanStore
+    // instance against the same root, as if a fresh session opened it after
+    // a context compaction separated the failure from the retry.
+    const { PlanStore: FreshStore } = await import("../dist/index.js");
+    const fresh = new FreshStore(store.root);
+    const written = await fresh.refreshPhaseHandoff(phaseId, withoutContent(full));
+    assert.match(written.phase.handoff, /Continue the phase\./);
   });
 });

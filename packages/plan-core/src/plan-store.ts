@@ -71,12 +71,29 @@ import {
   type PlannerSessionPreparationResult,
 } from "./project-context-migration.js";
 import {
+  PROJECT_CONTEXT_DELIVERY_VERSION,
+  createCompleteProjectContextDelivery,
+  createProjectContextSnapshot,
+  projectContextFingerprint,
+  projectContextReadState,
+  verifyProjectContextChunks,
+  ProjectContextDeliveryError,
+  ProjectContextReadStateDocumentSchema,
+  type CompleteProjectContextDelivery,
+  type ProjectContextChunk,
+  type ProjectContextReadAttestation,
+  type ProjectContextReadState,
+  type ProjectContextReadStateDocument,
+} from "./project-context.js";
+import {
   applyHandoffContextSync,
   auditPhaseHandoff,
   externalizeOversizedHandoffContent,
   handoffContentHash,
   materializeHandoffMetadata,
   HandoffContractError,
+  retainedHandoffContentNotFoundError,
+  supportingDocumentInvalidError,
   TARGET_HANDOFF_CONTENT_CHARS,
   validateHandoffReadBackVerification,
   type HandoffSupportingDocumentInput,
@@ -102,6 +119,33 @@ function nowISO(): string {
 
 const MAX_SESSION_INFO_ENTRIES = 16;
 
+/** One handoff body retained against a phase + prepare token after a failed
+ * refreshPhaseHandoff(), so a retry can omit `content`. Worktree-local only
+ * (.local/handoff-drafts.json) — see PlanStore.retainHandoffDraft. */
+interface RetainedHandoffDraft {
+  phaseId: string;
+  token: string;
+  content: string;
+  failureReason: string;
+  retainedAt: string;
+}
+
+const RetainedHandoffDraftSchema = z.object({
+  phaseId: z.string(),
+  token: z.string(),
+  content: z.string(),
+  failureReason: z.string(),
+  retainedAt: z.string(),
+});
+
+// Bounds for retained handoff drafts, so a run of failed writes cannot grow
+// .local/ without limit: at most this many distinct phase+token entries
+// (oldest evicted first), each expiring after this age, with a defensive
+// per-entry size ceiling far above MAX_HANDOFF_CONTENT_CHARS.
+const MAX_RETAINED_HANDOFF_DRAFTS = 20;
+const RETAINED_HANDOFF_DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_RETAINED_HANDOFF_DRAFT_CONTENT_CHARS = 200_000;
+
 export interface RecordContextReadInput {
   sessionId: string;
   phaseId: string;
@@ -115,6 +159,19 @@ export interface RecordContextReadResult {
   phase: Phase;
   feature?: Feature;
   requirements: Requirement[];
+  createdAt: string;
+}
+
+export interface RecordProjectContextReadInput {
+  sessionId: string;
+  chunks: ProjectContextChunk[];
+  createdAt?: string;
+}
+
+export interface RecordProjectContextReadResult {
+  project: Project;
+  requirements: RequirementsDocument;
+  delivery: CompleteProjectContextDelivery;
   createdAt: string;
 }
 
@@ -254,6 +311,20 @@ function mergeSessionInfo(
   }
   return [...newestBySession.entries()]
     .map(([sessionId, createdAt]) => ({ sessionId, createdAt }))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, MAX_SESSION_INFO_ENTRIES);
+}
+
+function mergeProjectContextSessionInfo(
+  current: ProjectContextReadAttestation[] | undefined,
+  incoming: ProjectContextReadAttestation[] | undefined,
+): ProjectContextReadAttestation[] {
+  const newestBySession = new Map<string, ProjectContextReadAttestation>();
+  for (const entry of [...(current ?? []), ...(incoming ?? [])]) {
+    const prior = newestBySession.get(entry.sessionId);
+    if (!prior || entry.createdAt > prior.createdAt) newestBySession.set(entry.sessionId, entry);
+  }
+  return [...newestBySession.values()]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, MAX_SESSION_INFO_ENTRIES);
 }
@@ -1318,6 +1389,9 @@ export class PlanStore {
   private activityPath(): string {
     return join(this.localRoot(), "activity.json");
   }
+  private projectContextReadsPath(): string {
+    return join(this.localRoot(), "project-context-reads.json");
+  }
   private localRoot(): string {
     // Worktree-local, git-ignored runtime state. The shared-vs-local boundary
     // and the invariants every harness relies on are documented in
@@ -1353,6 +1427,9 @@ export class PlanStore {
   }
   private handoffArchiveDir(): string {
     return join(this.localRoot(), "handoff-archive");
+  }
+  private handoffDraftsPath(): string {
+    return join(this.localRoot(), "handoff-drafts.json");
   }
 
   /** One-time migration for plans created before .planner/.local/ existed.
@@ -2396,6 +2473,13 @@ export class PlanStore {
     const phase = await this.loadPhase(phaseId);
     let cleared: string | null = null;
     const terminalReason = this.terminalHandoffReason(phase);
+    if (terminalReason) {
+      // A terminal phase can never receive another handoff write, so any
+      // draft retained against a stale/failed prepare token for it is dead
+      // weight — discard it here regardless of whether there was an active
+      // handoff body to archive below.
+      await this.discardRetainedHandoffDrafts(phaseId);
+    }
     if (terminalReason && phase.handoff !== "") {
       await this.clearPhaseHandoff(phaseId, terminalReason);
       const features = await this.loadFeatures();
@@ -2832,6 +2916,123 @@ export class PlanStore {
       const requirements = (await this.loadRequirements()).requirements.filter((requirement) => requirementIds.includes(requirement.id));
       return { phase, ...(feature ? { feature } : {}), requirements, createdAt };
     });
+  }
+
+  private async loadProjectContextReadStateDocument(): Promise<ProjectContextReadStateDocument> {
+    try {
+      await access(this.projectContextReadsPath());
+    } catch {
+      return ProjectContextReadStateDocumentSchema.parse({});
+    }
+    return readJson(this.projectContextReadsPath(), ProjectContextReadStateDocumentSchema);
+  }
+
+  async loadProjectContextDelivery(maxChars?: number): Promise<CompleteProjectContextDelivery> {
+    return withPlanRootWriteLock(this.root, async () => {
+      const [project, requirements] = await Promise.all([
+        readJson(this.projectPath(), ProjectSchema),
+        readJson(this.requirementsPath(), RequirementsDocumentSchema),
+      ]);
+      return createCompleteProjectContextDelivery(project, requirements, maxChars);
+    });
+  }
+
+  async projectContextReadStateForSession(sessionId: string): Promise<ProjectContextReadState> {
+    return withPlanRootWriteLock(this.root, async () => {
+      const [project, requirements, readState] = await Promise.all([
+        readJson(this.projectPath(), ProjectSchema),
+        readJson(this.requirementsPath(), RequirementsDocumentSchema),
+        this.loadProjectContextReadStateDocument(),
+      ]);
+      return projectContextReadState(createProjectContextSnapshot(project, requirements), readState.sessionInfo, sessionId);
+    });
+  }
+
+  /**
+   * Persist a worktree-local project-context read only after receiving the exact
+   * complete chunk sequence for the current project and Requirements revisions.
+   */
+  async recordProjectContextRead(input: RecordProjectContextReadInput): Promise<RecordProjectContextReadResult> {
+    const sessionId = input.sessionId.trim();
+    if (!sessionId) throw new PlanStoreError("Project-context attestation requires a non-empty sessionId.");
+    const delivery = verifyProjectContextChunks(input.chunks);
+    const createdAt = TimestampSchema.parse(input.createdAt ?? nowISO());
+    const result = await withPlanRootWriteLock(this.root, async () => {
+      const project = await readJson(this.projectPath(), ProjectSchema);
+      const requirements = await readJson(this.requirementsPath(), RequirementsDocumentSchema);
+      const currentSnapshot = createProjectContextSnapshot(project, requirements);
+      const currentFingerprint = projectContextFingerprint(currentSnapshot);
+      if (delivery.evidence.fingerprint !== currentFingerprint) {
+        throw new ProjectContextDeliveryError(
+          "PROJECT_CONTEXT_DELIVERY_STALE",
+          "Project context changed after delivery; reload every project-context chunk before attesting the read.",
+        );
+      }
+
+      const readStatePath = this.projectContextReadsPath();
+      const previousReadStateExists = await access(readStatePath).then(() => true, () => false);
+      const previousReadState = await this.loadProjectContextReadStateDocument();
+      const nextReadState = ProjectContextReadStateDocumentSchema.parse({
+        version: PROJECT_CONTEXT_DELIVERY_VERSION,
+        sessionInfo: mergeProjectContextSessionInfo(previousReadState.sessionInfo, [{ sessionId, createdAt, fingerprint: currentFingerprint }]),
+      });
+      let nextProject = project;
+      if (project.projectGuidelines.content.trim()) {
+        nextProject = {
+          ...project,
+          projectGuidelines: upsertSessionInfo(project.projectGuidelines, sessionId, createdAt).entity,
+        };
+      }
+
+      let requirementsChanged = false;
+      const nextRequirements: RequirementsDocument = {
+        requirements: requirements.requirements.map((requirement) => {
+          const updated = upsertSessionInfo(requirement, sessionId, createdAt);
+          requirementsChanged ||= updated.changed;
+          return updated.entity;
+        }),
+      };
+      let requirementsWritten = false;
+      let projectWritten = false;
+      let readStateWriteAttempted = false;
+      try {
+        if (requirementsChanged) {
+          await atomicWriteJson(this.requirementsPath(), RequirementsDocumentSchema.parse(nextRequirements), this.root);
+          requirementsWritten = true;
+        }
+        if (nextProject !== project) {
+          await atomicWriteJson(this.projectPath(), ProjectSchema.parse(nextProject), this.root);
+          projectWritten = true;
+        }
+        // The complete-read attestation is the commit marker and is written last.
+        readStateWriteAttempted = true;
+        await atomicWriteJson(readStatePath, nextReadState, this.root);
+      } catch (error) {
+        const rollbackErrors: unknown[] = [];
+        if (readStateWriteAttempted) {
+          if (previousReadStateExists) {
+            await atomicWriteJson(readStatePath, previousReadState, this.root).catch((rollbackError) => rollbackErrors.push(rollbackError));
+          } else {
+            await unlink(readStatePath).catch((rollbackError: NodeJS.ErrnoException) => {
+              if (rollbackError.code !== "ENOENT") rollbackErrors.push(rollbackError);
+            });
+          }
+        }
+        if (projectWritten) {
+          await atomicWriteJson(this.projectPath(), project, this.root).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
+        if (requirementsWritten) {
+          await atomicWriteJson(this.requirementsPath(), requirements, this.root).catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
+        if (rollbackErrors.length > 0) {
+          throw new AggregateError([error, ...rollbackErrors], "Project-context attestation failed and rollback was incomplete.");
+        }
+        throw error;
+      }
+      return { project: nextProject, requirements: nextRequirements };
+    });
+    await this.maybeAutoSync();
+    return { ...result, delivery, createdAt };
   }
 
   async recordProjectGuidelinesRead(input: { sessionId: string; createdAt?: string }): Promise<Project> {
@@ -3370,6 +3571,74 @@ export class PlanStore {
     return (await this.loadPhase(phaseId)).handoff;
   }
 
+  private async loadRetainedHandoffDrafts(): Promise<RetainedHandoffDraft[]> {
+    try {
+      return await readJson(this.handoffDraftsPath(), RetainedHandoffDraftSchema.array());
+    } catch {
+      return [];
+    }
+  }
+
+  private async saveRetainedHandoffDrafts(drafts: RetainedHandoffDraft[]): Promise<void> {
+    await atomicWriteJson(this.handoffDraftsPath(), drafts, this.root);
+  }
+
+  private isRetainedHandoffDraftFresh(draft: RetainedHandoffDraft): boolean {
+    const retainedAtMs = Date.parse(draft.retainedAt);
+    return Number.isFinite(retainedAtMs) && Date.now() - retainedAtMs < RETAINED_HANDOFF_DRAFT_MAX_AGE_MS;
+  }
+
+  /** Persist the exact body submitted to refreshPhaseHandoff() against its
+   * phase + prepare token, so a retry can omit `content` and reuse it
+   * instead of resending a capsule up to MAX_HANDOFF_CONTENT_CHARS. Called
+   * from refreshPhaseHandoff() on any write failure except a terminal phase
+   * (nothing to retry there — see discardRetainedHandoffDrafts).
+   *
+   * Worktree-local only: .local/handoff-drafts.json, per the shared-vs-local
+   * boundary (P069(F005)/T298, see localRoot()). A retained body must never
+   * reach shared .planner/ state. It is a plain file, so it survives a
+   * process restart in the same worktree — the failure and the retry can be
+   * separated by a context compaction.
+   *
+   * Bounded so a run of failed writes cannot grow .local/ without limit:
+   * one entry per phase+token (a new failure for the same token replaces
+   * it), entries older than RETAINED_HANDOFF_DRAFT_MAX_AGE_MS are dropped,
+   * and the total is capped at MAX_RETAINED_HANDOFF_DRAFTS (oldest evicted
+   * first). A defensive per-entry size ceiling skips retention entirely for
+   * runaway input rather than writing it to disk. */
+  private async retainHandoffDraft(phaseId: string, token: string, content: string, failureReason: string): Promise<void> {
+    if (content.length > MAX_RETAINED_HANDOFF_DRAFT_CONTENT_CHARS) return;
+    const drafts = (await this.loadRetainedHandoffDrafts())
+      .filter((draft) => this.isRetainedHandoffDraftFresh(draft))
+      .filter((draft) => !(draft.phaseId === phaseId && draft.token === token));
+    drafts.push({ phaseId, token, content, failureReason, retainedAt: nowISO() });
+    drafts.sort((a, b) => Date.parse(a.retainedAt) - Date.parse(b.retainedAt));
+    while (drafts.length > MAX_RETAINED_HANDOFF_DRAFTS) drafts.shift();
+    await this.saveRetainedHandoffDrafts(drafts);
+  }
+
+  /** Look up the retained draft for one phase + expectedHandoffUpdatedAt
+   * token. An expired entry is treated as absent (and pruned on the next
+   * retainHandoffDraft/discardRetainedHandoffDrafts write). */
+  private async getRetainedHandoffDraft(phaseId: string, token: string): Promise<RetainedHandoffDraft | null> {
+    const draft = (await this.loadRetainedHandoffDrafts())
+      .find((candidate) => candidate.phaseId === phaseId && candidate.token === token);
+    if (!draft || !this.isRetainedHandoffDraftFresh(draft)) return null;
+    return draft;
+  }
+
+  /** Discard retained draft(s) for a phase. Pass `token` to discard exactly
+   * the entry a successful write consumed; omit it to discard every draft
+   * retained for the phase, regardless of token — used on handoff_clear and
+   * when the phase reaches a terminal status (a terminal phase can never
+   * receive another handoff write, so nothing retained for it is ever
+   * useful again). */
+  private async discardRetainedHandoffDrafts(phaseId: string, token?: string): Promise<void> {
+    const drafts = await this.loadRetainedHandoffDrafts();
+    const next = drafts.filter((draft) => draft.phaseId !== phaseId || (token !== undefined && draft.token !== token));
+    if (next.length !== drafts.length) await this.saveRetainedHandoffDrafts(next);
+  }
+
   private async validateHandoffSupportingDocuments(
     documents: HandoffSupportingDocumentInput[],
   ): Promise<{ metadata: HandoffSupportingDocument[]; contents: string[] }> {
@@ -3380,15 +3649,13 @@ export class PlanStore {
     for (const document of documents) {
       const normalizedPath = document.path.trim().replace(/\\/g, "/");
       if (!/^\.planner\/docs\/.+\.md$/i.test(normalizedPath) || normalizedPath.includes("/../")) {
-        throw new HandoffContractError(
-          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+        throw supportingDocumentInvalidError(
           `Supporting document path must be a Markdown file under .planner/docs/: ${document.path}`,
           { path: document.path },
         );
       }
       if (seen.has(normalizedPath)) {
-        throw new HandoffContractError(
-          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+        throw supportingDocumentInvalidError(
           `Supporting document appears more than once: ${normalizedPath}`,
           { path: normalizedPath },
         );
@@ -3396,24 +3663,21 @@ export class PlanStore {
       seen.add(normalizedPath);
       const target = resolve(this.root, normalizedPath.slice(".planner/".length));
       if (!target.startsWith(`${docsRoot}${sep}`)) {
-        throw new HandoffContractError(
-          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+        throw supportingDocumentInvalidError(
           `Supporting document escapes .planner/docs/: ${normalizedPath}`,
           { path: normalizedPath },
         );
       }
       const fileStat = await lstat(target).catch(() => null);
       if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) {
-        throw new HandoffContractError(
-          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+        throw supportingDocumentInvalidError(
           `Supporting document must be a regular file under .planner/docs/ (symlinks rejected): ${normalizedPath}`,
           { path: normalizedPath },
         );
       }
       const content = await readFile(target, "utf8").catch(() => null);
       if (content === null || !content.trim()) {
-        throw new HandoffContractError(
-          "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+        throw supportingDocumentInvalidError(
           `Supporting document is missing or empty: ${normalizedPath}`,
           { path: normalizedPath },
         );
@@ -3429,113 +3693,157 @@ export class PlanStore {
     return { metadata, contents };
   }
 
-  /** Audit one exact phase before preparing a handoff refresh. */
-  async preparePhaseHandoff(phaseId: string): Promise<PhaseHandoffAudit> {
+  /** Audit one exact phase before preparing a handoff refresh. When a
+   * supporting-document manifest is already known (it is optional — most
+   * handoffs need none), validate it here so every defect that does not
+   * depend on the drafted body (bad path, missing file, symlink, duplicate,
+   * empty file) fails before a token is issued and before any content is
+   * drafted or transmitted. The same validation runs again at write time
+   * (refreshPhaseHandoff), which stays the authority: it also catches a
+   * document that was valid here but got deleted before the write, and the
+   * one check that genuinely needs the drafted body (the content must link
+   * each document's path). */
+  async preparePhaseHandoff(phaseId: string, supportingDocuments?: HandoffSupportingDocumentInput[]): Promise<PhaseHandoffAudit> {
     const phase = await this.loadPhase(phaseId);
     if (!phase.featureId) throw new PlanStoreError(`Phase ${phaseId} has no parent feature; durable handoff context cannot be synchronized.`);
     const feature = (await this.loadFeatures()).features.find((candidate) => candidate.id === phase.featureId);
     if (!feature) throw new PlanStoreError(`Parent feature ${phase.featureId} not found for phase ${phaseId}.`);
+    if (supportingDocuments && supportingDocuments.length > 0) {
+      await this.validateHandoffSupportingDocuments(supportingDocuments);
+    }
     return auditPhaseHandoff(phase, feature);
   }
 
   /** Refresh the single active handoff and synchronize durable task/phase/feature
    * context. Unlike setPhaseHandoff(), this deliberately does not archive the
    * previous active body: callers must reconcile it using the optimistic
-   * handoffUpdatedAt token returned by preparePhaseHandoff(). */
+   * handoffUpdatedAt token returned by preparePhaseHandoff().
+   *
+   * `content` is optional. When omitted, the body submitted on the last
+   * failed write against this exact phase + expectedHandoffUpdatedAt token
+   * is reused (throws HANDOFF_RETAINED_CONTENT_NOT_FOUND when none is
+   * retained). This is what makes a retry after any late write failure —
+   * stale token, unresolved placeholders, a deleted supporting document, a
+   * persisted read-back hash mismatch, or anything else — cheap instead of
+   * resending a capsule up to MAX_HANDOFF_CONTENT_CHARS: the body is sent
+   * once, and every other field on a retry is already small. On any failure
+   * below (other than the terminal-phase check, which discards instead —
+   * a terminal phase can never accept a retry) the content actually used is
+   * retained again for the next attempt; on success the entry for this
+   * token is discarded. */
   async refreshPhaseHandoff(
     phaseId: string,
-    input: RefreshPhaseHandoffInput,
+    input: Omit<RefreshPhaseHandoffInput, "content"> & { content?: string },
   ): Promise<RefreshPhaseHandoffResult> {
     return this.runAsBatch(async () => {
       const originalPhase = await this.loadPhase(phaseId);
       if (this.terminalHandoffReason(originalPhase)) {
+        await this.discardRetainedHandoffDrafts(phaseId);
         throw new PlanStoreError(`Cannot write a handoff on ${originalPhase.status} phase ${phaseId}; terminal phases have no pending handoff.`);
       }
       if (!originalPhase.featureId) throw new PlanStoreError(`Phase ${phaseId} has no parent feature; durable handoff context cannot be synchronized.`);
-      const originalFeatures = await this.loadFeatures();
-      const featureIndex = originalFeatures.features.findIndex((candidate) => candidate.id === originalPhase.featureId);
-      if (featureIndex < 0) throw new PlanStoreError(`Parent feature ${originalPhase.featureId} not found for phase ${phaseId}.`);
-      const timestamp = nowISO();
-      const existingCreatedAt = originalPhase.handoff.match(/^Created at:\s*(\S+)\s*$/im)?.[1] ?? timestamp;
-      const materializedContent = materializeHandoffMetadata(
-        input.content,
-        input.reason,
-        existingCreatedAt,
-        timestamp,
-      );
-      let effectiveInput: RefreshPhaseHandoffInput = { ...input, content: materializedContent };
-      if (materializedContent.length > TARGET_HANDOFF_CONTENT_CHARS) {
-        const stamp = timestamp.replace(/[:.]/g, "-");
-        const autoPath = `.planner/docs/handoff-p${String(originalPhase.number).padStart(3, "0")}-${stamp}.md`;
-        const externalized = externalizeOversizedHandoffContent(materializedContent, autoPath);
-        if (externalized.externalized) {
-          const docsDir = resolve(this.root, "docs");
-          await mkdir(docsDir, { recursive: true });
-          const target = resolve(this.root, autoPath.slice(".planner/".length));
-          if (!target.startsWith(`${docsDir}${sep}`)) {
-            throw new HandoffContractError(
-              "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
-              `Auto-externalized supporting document escapes .planner/docs/: ${autoPath}`,
-              { path: autoPath },
-            );
-          }
-          await writeFile(target, externalized.extendedContent, "utf8");
-          const autoDoc = externalized.supportingDocument!;
-          effectiveInput = {
-            ...input,
-            content: externalized.content,
-            supportingDocuments: [...(input.supportingDocuments ?? []), autoDoc],
-          };
-        }
+
+      const submittedContent = input.content?.trim() ? input.content : undefined;
+      let content: string;
+      if (submittedContent !== undefined) {
+        content = submittedContent;
+      } else {
+        const retained = await this.getRetainedHandoffDraft(phaseId, input.expectedHandoffUpdatedAt);
+        if (!retained) throw retainedHandoffContentNotFoundError(phaseId, input.expectedHandoffUpdatedAt);
+        content = retained.content;
       }
-      const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(effectiveInput.supportingDocuments ?? []);
-      const verifiedInput: RefreshPhaseHandoffInput = {
-        ...effectiveInput,
-        verifiedSupportingDocuments: verifiedSupportingDocuments.metadata,
-        verifiedSupportingDocumentContents: verifiedSupportingDocuments.contents,
-      };
-      const originalFeature = originalFeatures.features[featureIndex]!;
-      const applied = applyHandoffContextSync(originalPhase, originalFeature, verifiedInput, timestamp);
 
       try {
-        // Keep the transaction granular: only the parent feature and target phase
-        // belong to this handoff refresh. Rewriting the whole feature document can
-        // disturb unrelated feature containment metadata.
-        await this.saveFeature(applied.feature);
-        await this.savePhase(applied.phase);
-        const phase = await this.loadPhase(phaseId);
-        const feature = (await this.loadFeatures()).features.find((candidate) => candidate.id === originalPhase.featureId)!;
-        const persistedHash = handoffContentHash(phase.handoff);
-        if (
-          phase.handoff !== applied.phase.handoff
-          || !phase.handoffAudit
-          || phase.handoffAudit.contentHash !== persistedHash
-          || phase.handoffAudit.contentLength !== phase.handoff.length
-        ) {
-          throw new HandoffContractError(
-            "HANDOFF_PERSISTENCE_VERIFICATION_FAILED",
-            "The persisted handoff did not match the verified content. The write was rolled back.",
-            { expectedHash: applied.phase.handoffAudit?.contentHash ?? "", actualHash: persistedHash },
-          );
+        const originalFeatures = await this.loadFeatures();
+        const featureIndex = originalFeatures.features.findIndex((candidate) => candidate.id === originalPhase.featureId);
+        if (featureIndex < 0) throw new PlanStoreError(`Parent feature ${originalPhase.featureId} not found for phase ${phaseId}.`);
+        const timestamp = nowISO();
+        const existingCreatedAt = originalPhase.handoff.match(/^Created at:\s*(\S+)\s*$/im)?.[1] ?? timestamp;
+        const materializedContent = materializeHandoffMetadata(
+          content,
+          input.reason,
+          existingCreatedAt,
+          timestamp,
+        );
+        let effectiveInput: RefreshPhaseHandoffInput = { ...input, content: materializedContent };
+        if (materializedContent.length > TARGET_HANDOFF_CONTENT_CHARS) {
+          const stamp = timestamp.replace(/[:.]/g, "-");
+          const autoPath = `.planner/docs/handoff-p${String(originalPhase.number).padStart(3, "0")}-${stamp}.md`;
+          const externalized = externalizeOversizedHandoffContent(materializedContent, autoPath);
+          if (externalized.externalized) {
+            const docsDir = resolve(this.root, "docs");
+            await mkdir(docsDir, { recursive: true });
+            const target = resolve(this.root, autoPath.slice(".planner/".length));
+            if (!target.startsWith(`${docsDir}${sep}`)) {
+              throw new HandoffContractError(
+                "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+                `Auto-externalized supporting document escapes .planner/docs/: ${autoPath}`,
+                { path: autoPath },
+              );
+            }
+            await writeFile(target, externalized.extendedContent, "utf8");
+            const autoDoc = externalized.supportingDocument!;
+            effectiveInput = {
+              ...input,
+              content: externalized.content,
+              supportingDocuments: [...(input.supportingDocuments ?? []), autoDoc],
+            };
+          }
         }
-        return {
-          phase,
-          feature,
-          updatedTaskIds: applied.updatedTaskIds,
-          handoffUpdatedAt: phase.handoffUpdatedAt,
-          handoffAudit: phase.handoffAudit,
+        const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(effectiveInput.supportingDocuments ?? []);
+        const verifiedInput: RefreshPhaseHandoffInput = {
+          ...effectiveInput,
+          verifiedSupportingDocuments: verifiedSupportingDocuments.metadata,
+          verifiedSupportingDocumentContents: verifiedSupportingDocuments.contents,
         };
-      } catch (error) {
-        const rollbackErrors: unknown[] = [];
-        // Restore the exact parsed snapshots directly. Going through saveFeature /
-        // savePhase would restamp description freshness against the failed write.
-        await atomicWriteJson(this.featurePath(originalFeature.id), FeatureSchema.parse(originalFeature), this.root)
-          .catch((rollbackError) => rollbackErrors.push(rollbackError));
-        await atomicWriteJson(this.phasePath(originalPhase.id), PhaseSchema.parse(originalPhase), this.root)
-          .catch((rollbackError) => rollbackErrors.push(rollbackError));
-        if (rollbackErrors.length > 0) {
-          throw new AggregateError([error, ...rollbackErrors], "Handoff refresh failed and rollback was incomplete.");
+        const originalFeature = originalFeatures.features[featureIndex]!;
+        const applied = applyHandoffContextSync(originalPhase, originalFeature, verifiedInput, timestamp);
+
+        try {
+          // Keep the transaction granular: only the parent feature and target phase
+          // belong to this handoff refresh. Rewriting the whole feature document can
+          // disturb unrelated feature containment metadata.
+          await this.saveFeature(applied.feature);
+          await this.savePhase(applied.phase);
+          const phase = await this.loadPhase(phaseId);
+          const feature = (await this.loadFeatures()).features.find((candidate) => candidate.id === originalPhase.featureId)!;
+          const persistedHash = handoffContentHash(phase.handoff);
+          if (
+            phase.handoff !== applied.phase.handoff
+            || !phase.handoffAudit
+            || phase.handoffAudit.contentHash !== persistedHash
+            || phase.handoffAudit.contentLength !== phase.handoff.length
+          ) {
+            throw new HandoffContractError(
+              "HANDOFF_PERSISTENCE_VERIFICATION_FAILED",
+              "The persisted handoff did not match the verified content. The write was rolled back.",
+              { expectedHash: applied.phase.handoffAudit?.contentHash ?? "", actualHash: persistedHash },
+            );
+          }
+          await this.discardRetainedHandoffDrafts(phaseId, input.expectedHandoffUpdatedAt);
+          return {
+            phase,
+            feature,
+            updatedTaskIds: applied.updatedTaskIds,
+            handoffUpdatedAt: phase.handoffUpdatedAt,
+            handoffAudit: phase.handoffAudit,
+          };
+        } catch (error) {
+          const rollbackErrors: unknown[] = [];
+          // Restore the exact parsed snapshots directly. Going through saveFeature /
+          // savePhase would restamp description freshness against the failed write.
+          await atomicWriteJson(this.featurePath(originalFeature.id), FeatureSchema.parse(originalFeature), this.root)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+          await atomicWriteJson(this.phasePath(originalPhase.id), PhaseSchema.parse(originalPhase), this.root)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+          if (rollbackErrors.length > 0) {
+            throw new AggregateError([error, ...rollbackErrors], "Handoff refresh failed and rollback was incomplete.");
+          }
+          throw error;
         }
+      } catch (error) {
+        const failureReason = error instanceof Error ? error.message : String(error);
+        await this.retainHandoffDraft(phaseId, input.expectedHandoffUpdatedAt, content, failureReason);
         throw error;
       }
     });
@@ -3635,6 +3943,9 @@ export class PlanStore {
    *  "manual" | "superseded" | "imported". */
   async clearPhaseHandoff(phaseId: string, reason = "manual"): Promise<void> {
     await this.migrateLegacyHandoffArchive();
+    // Any draft retained against a failed write for this phase is now moot,
+    // whether or not there was an active handoff body to archive below.
+    await this.discardRetainedHandoffDrafts(phaseId);
     const phase = await this.loadPhase(phaseId).catch(() => null);
     if (!phase || phase.handoff === "") return; // nothing to archive
     const clearedAt = nowISO();
@@ -3664,7 +3975,13 @@ export class PlanStore {
     let archived = 0;
     for (const phase of phases) {
       const reason = this.terminalHandoffReason(phase);
-      if (reason && phase.handoff) {
+      if (!reason) continue;
+      // clearPhaseHandoff() already discards retained drafts, but only runs
+      // below when there is a body to archive; a terminal phase that never
+      // had a successful write (failed attempts only) still needs its
+      // retained draft swept here.
+      await this.discardRetainedHandoffDrafts(phase.id);
+      if (phase.handoff) {
         await this.clearPhaseHandoff(phase.id, reason);
         archived += 1;
       }

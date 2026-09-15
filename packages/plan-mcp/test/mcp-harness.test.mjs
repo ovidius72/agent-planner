@@ -138,11 +138,13 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.equal(taskUpdate.properties.decisions.type, "array", "task-update exposes decisions");
     assert.equal(taskUpdate.properties.descriptionRef.type, "string", "task-update exposes descriptionRef");
 
-    // handoff-write requires confirmed + phaseRef + content
+    // handoff-write requires confirmed + phaseRef; content is optional (T409)
+    // so a retry after a failed write can omit it and reuse the retained body.
     const handoffWrite = schema("planner-handoff-write");
     assert.ok(handoffWrite.required.includes("confirmed"), "handoff-write requires confirmed");
     assert.ok(handoffWrite.required.includes("phaseRef"), "handoff-write requires phaseRef");
-    assert.ok(handoffWrite.required.includes("content"), "handoff-write requires content");
+    assert.ok(!handoffWrite.required.includes("content"), "handoff-write content is optional to support retention-backed retries");
+    assert.ok(handoffWrite.properties.content, "handoff-write still publishes a content schema");
     assert.ok(handoffWrite.properties.completenessAudit, "handoff-write retains the legacy completeness audit contract");
     assert.ok(handoffWrite.properties.coldStartInventory, "handoff-write retains the legacy cold-start inventory contract");
     assert.ok(handoffWrite.properties.coldStartInventory.properties.sourceReviews, "legacy cold-start inventory retains the source-review contract");

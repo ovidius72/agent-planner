@@ -30,6 +30,49 @@ test("buildPhaseWorkMap orders siblings and exposes dependency and capability ow
   assert.match(mapped.content, /owns this remaining capability; do not duplicate it/);
 });
 
+test("buildPhaseWorkMap entries mirror the admitted content blocks", () => {
+  const tasks = [];
+  for (let i = 0; i < 40; i += 1) {
+    tasks.push({
+      id: `task-${i}`,
+      number: i + 1,
+      priority: i,
+      title: `Task ${i}`,
+      description: "x".repeat(200),
+      status: "planned",
+      dependsOn: [],
+    });
+  }
+  const mapped = buildPhaseWorkMap({ ...phase, tasks }, feature.number);
+
+  const admittedBlockCount = mapped.content.split("\n- ").length - 1;
+  assert.equal(mapped.entries.length, admittedBlockCount);
+  assert.equal(mapped.total, tasks.length);
+  assert.equal(mapped.truncated, true);
+  assert.ok(mapped.entries.length < mapped.total, "budget-exceeding phase must withhold entries");
+  assert.deepEqual(mapped.entries.map((entry) => entry.priority), mapped.entries.map((_, index) => index), "admitted entries stay in priority order");
+  assert.match(mapped.content, /truncated for transport safety: \d+ lower-priority entr(y|ies) withheld/);
+});
+
+test("buildPhaseWorkMap withholds a single entry larger than maxChars", () => {
+  const mapped = buildPhaseWorkMap({
+    ...phase,
+    tasks: [{ id: "oversized", number: 1, priority: 1, title: "Oversized task", description: "x".repeat(500), status: "planned", dependsOn: [] }],
+  }, feature.number, undefined, 100);
+
+  assert.deepEqual(mapped.entries, []);
+  assert.equal(mapped.total, 1);
+  assert.equal(mapped.truncated, true);
+});
+
+test("buildPhaseWorkMap on a phase with zero tasks returns empty, untruncated output", () => {
+  const mapped = buildPhaseWorkMap({ ...phase, tasks: [] }, feature.number);
+
+  assert.deepEqual(mapped.entries, []);
+  assert.equal(mapped.total, 0);
+  assert.equal(mapped.truncated, false);
+});
+
 test("buildPhaseContextBlock includes linked requirement details", () => {
   const output = buildPhaseContextBlock(phase, feature, [
     { title: "Canonical links", description: "Store UUID phase IDs." },

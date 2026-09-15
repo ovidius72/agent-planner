@@ -75,7 +75,7 @@ export const HANDOFF_CANONICAL_SECTIONS = [
 
 export type HandoffCompletenessCategory = typeof HANDOFF_COMPLETENESS_CATEGORIES[number]["id"];
 export type HandoffColdStartInventoryCategory = typeof HANDOFF_COLD_START_INVENTORY_CATEGORIES[number]["id"];
-export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND";
+export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND" | "HANDOFF_RETAINED_CONTENT_NOT_FOUND";
 
 export class HandoffContractError extends Error {
   readonly code: HandoffContractErrorCode;
@@ -87,6 +87,55 @@ export class HandoffContractError extends Error {
     this.code = code;
     this.details = details;
   }
+}
+
+/** Single source of truth for the supportingDocuments recovery statement.
+ * Rendered in prepare output (before drafting) and attached to every
+ * agent-supplied-manifest failure of HANDOFF_SUPPORTING_DOCUMENT_INVALID
+ * (as details.recovery) so both adapters can render it without duplicating
+ * the wording. */
+export const HANDOFF_SUPPORTING_DOCUMENTS_GUIDANCE =
+  "supportingDocuments is optional and usually unnecessary: content above the target length is externalized automatically into .planner/docs/. Drop the field and retry unless you are linking a document you created yourself.";
+
+/** Build a HANDOFF_SUPPORTING_DOCUMENT_INVALID error for a defect in an
+ * agent-supplied manifest entry, always carrying the droppable-field
+ * recovery statement. Do not use this for planner-owned failures (e.g. the
+ * auto-externalized document's own path) — those are not something dropping
+ * the agent's field would fix. */
+export function supportingDocumentInvalidError(message: string, details: Record<string, unknown> = {}): HandoffContractError {
+  return new HandoffContractError("HANDOFF_SUPPORTING_DOCUMENT_INVALID", message, { ...details, recovery: HANDOFF_SUPPORTING_DOCUMENTS_GUIDANCE });
+}
+
+/** Build a HANDOFF_SUPPORTING_DOCUMENT_INVALID error for a PlanStore-internal
+ * invariant (the count of requested vs. PlanStore-verified documents must
+ * always match; PlanStore either throws for a defective entry or returns one
+ * verified entry per requested document, in lockstep). This is unreachable
+ * through the documented tool flow, so unlike supportingDocumentInvalidError
+ * it must not carry the droppable-field recovery statement: dropping the
+ * field would not be the fix for an invariant violation, and advertising it
+ * would mislead the agent. */
+function supportingDocumentInvariantError(message: string, details: Record<string, unknown> = {}): HandoffContractError {
+  return new HandoffContractError("HANDOFF_SUPPORTING_DOCUMENT_INVALID", message, details);
+}
+
+/** Build a HANDOFF_RETAINED_CONTENT_NOT_FOUND error: `content` was omitted
+ * from a handoff_write call and PlanStore has no body retained for this
+ * phase + expectedHandoffUpdatedAt token (see PlanStore.retainHandoffDraft /
+ * getRetainedHandoffDraft). Reasons: no write against this token has ever
+ * failed, the retained draft aged out, the phase went terminal and its
+ * drafts were discarded, or the token itself is wrong/stale. Content is
+ * always required on the first write attempt for a token; it becomes
+ * optional only on a retry that reuses a retained one. */
+export function retainedHandoffContentNotFoundError(phaseId: string, expectedHandoffUpdatedAt: string): HandoffContractError {
+  return new HandoffContractError(
+    "HANDOFF_RETAINED_CONTENT_NOT_FOUND",
+    "content was omitted but no retained draft was found for this phase and expectedHandoffUpdatedAt token.",
+    {
+      phaseId,
+      expectedHandoffUpdatedAt,
+      recovery: "Provide content once. After a write fails, a retry against the exact same expectedHandoffUpdatedAt may omit content to reuse the body just submitted; a fresh token (from a new handoff_prepare) or a phase that has since gone terminal has nothing retained.",
+    },
+  );
 }
 
 export interface HandoffCompletenessAuditInput {
@@ -159,6 +208,8 @@ export interface PhaseHandoffAudit {
   coldStartInventoryCategories: ReadonlyArray<{ id: HandoffColdStartInventoryCategory; label: string }>;
   existingCompletenessAudit: HandoffCompletenessAudit | null;
   phaseWorkMap: PhaseWorkMap;
+  /** Read before drafting: supportingDocuments is optional and rarely needed. */
+  supportingDocumentsGuidance: string;
 }
 
 export interface RefreshPhaseHandoffInput {
@@ -264,6 +315,7 @@ export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffA
     coldStartInventoryCategories: HANDOFF_COLD_START_INVENTORY_CATEGORIES,
     existingCompletenessAudit: phase.handoffAudit,
     phaseWorkMap: buildPhaseWorkMap(phase, feature.number),
+    supportingDocumentsGuidance: HANDOFF_SUPPORTING_DOCUMENTS_GUIDANCE,
   };
 }
 
@@ -661,16 +713,14 @@ export function validateHandoffContextSync(
   const requestedDocuments = input.supportingDocuments ?? [];
   const verifiedDocuments = input.verifiedSupportingDocuments ?? [];
   if (requestedDocuments.length !== verifiedDocuments.length) {
-    throw new HandoffContractError(
-      "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+    throw supportingDocumentInvariantError(
       "Every supporting document must be validated by PlanStore before the handoff is written.",
       { requestedCount: requestedDocuments.length, verifiedCount: verifiedDocuments.length },
     );
   }
   const verifiedContents = input.verifiedSupportingDocumentContents ?? [];
   if (verifiedContents.length !== verifiedDocuments.length) {
-    throw new HandoffContractError(
-      "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+    throw supportingDocumentInvariantError(
       "Validated supporting-document content is required for cold-start inventory coverage checks.",
       { verifiedDocumentCount: verifiedDocuments.length, verifiedContentCount: verifiedContents.length },
     );
@@ -679,15 +729,16 @@ export function validateHandoffContextSync(
     const requested = requestedDocuments[index]!;
     const verified = verifiedDocuments[index]!;
     if (requested.path !== verified.path || !isSubstantive(requested.description) || requested.description.trim() !== verified.description) {
-      throw new HandoffContractError(
-        "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+      throw supportingDocumentInvalidError(
         `Supporting document ${requested.path || `(index ${index})`} is not valid or lacks a substantive description.`,
         { index, path: requested.path },
       );
     }
+    // Body-dependent: the manifest is valid on its own, but the drafted content
+    // never linked it. This is the one check that cannot move to prepare, since
+    // prepare runs before the body exists.
     if (!input.content.includes(requested.path)) {
-      throw new HandoffContractError(
-        "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+      throw supportingDocumentInvalidError(
         `Canonical handoff content must link supporting document ${requested.path}.`,
         { index, path: requested.path },
       );

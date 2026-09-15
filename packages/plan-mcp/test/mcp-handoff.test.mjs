@@ -102,7 +102,11 @@ test("planner-handoff-prepare returns the compact pre-draft scaffold and planner
   try {
     const result = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
     const prepared = result.structuredContent;
-    assert.match(toolText(result), /Use this exact scaffold before drafting/);
+    // The scaffold itself lives in structuredContent; the text channel points at it
+    // instead of carrying a second copy (T408).
+    assert.match(toolText(result), /scaffold is provided in the structured result's draftTemplate field/);
+    assert.equal(Object.hasOwn(prepared, "draftTemplate"), true);
+    assert.equal(toolText(result).includes(prepared.draftTemplate), false, "the scaffold must not travel in both channels");
     assert.match(toolText(result), /Required human inputs before drafting/);
     assert.match(toolText(result), /Planner-generated metadata \(do not add these to Markdown\)/);
     assert.match(toolText(result), /Completeness audit and cold-start evidence are planner-owned metadata/);
@@ -115,6 +119,60 @@ test("planner-handoff-prepare returns the compact pre-draft scaffold and planner
     assert.match(prepared.evidenceContract, /derived from persisted state/);
     assert.equal(prepared.phaseWorkMap.total, 1);
     assert.match(prepared.phaseWorkMap.content, /P001\(F001\)\/T001/);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-handoff-prepare rejects a bad supporting-document manifest before any body is drafted or sent", async () => {
+  const session = await startMcpFixture({ name: "t407-prepare-bad-manifest" });
+  try {
+    const result = await callTool(session, "planner-handoff-prepare", {
+      phaseRef: "P001",
+      supportingDocuments: [{ path: ".planner/docs/does-not-exist.md", description: "Content that was never written to disk." }],
+    });
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.errorCode, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+    // Names the droppable-field recovery in both the structured payload and the human-readable text.
+    assert.match(result.structuredContent.recovery, /supportingDocuments/);
+    assert.match(result.structuredContent.recovery, /optional/i);
+    assert.match(toolText(result), /Recovery:.*supportingDocuments/);
+    assert.equal((await session.store.loadAllPhases())[0].handoff, "", "no handoff body was sent or persisted");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-handoff-prepare surfaces the supporting-document guidance before drafting, and write still refuses a document deleted after prepare", async () => {
+  const session = await startMcpFixture({ name: "t407-prepare-guidance-and-write-authority" });
+  try {
+    const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
+    assert.match(toolText(prepared), /Supporting documents:.*supportingDocuments is optional/);
+    assert.match(prepared.structuredContent.supportingDocumentsGuidance, /optional/i);
+
+    await mkdir(join(session.planRoot, "docs"), { recursive: true });
+    const docPath = join(session.planRoot, "docs", "t407-detail.md");
+    await writeFile(docPath, "# Detail\n\nSubstantive linked content that will be removed before write.\n", "utf8");
+    const supportingDocuments = [{ path: ".planner/docs/t407-detail.md", description: "Substantive linked content for resumption." }];
+
+    // Valid at prepare time.
+    const preparedWithManifest = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001", supportingDocuments });
+    assert.equal(preparedWithManifest.isError, undefined);
+
+    // Deleted between prepare and write: the write-time check is still the authority.
+    const { rm } = await import("node:fs/promises");
+    await rm(docPath);
+    const write = await callTool(session, "planner-handoff-write", {
+      phaseRef: "P001",
+      reason: "Fixture handoff reason for a cold resume.",
+      content: canonicalHandoff("P001 — deleted supporting document", "Body linking a supporting document removed after prepare.") + "\n- .planner/docs/t407-detail.md — substantive linked content for resumption.",
+      confirmed: true,
+      supportingDocuments,
+      ...(await preparedHandoffArgs(session, "P001")),
+    });
+    assert.equal(write.isError, true);
+    assert.equal(write.structuredContent.errorCode, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+    assert.equal((await session.store.loadAllPhases())[0].handoff, "");
   } finally {
     await closeMcpFixture(session);
   }
@@ -161,6 +219,44 @@ test("planner-handoff-write rejects a missing structured reason before mutating"
     assert.equal(result.isError, true);
     assert.equal(result.structuredContent.errorCode, "HANDOFF_REASON_REQUIRED");
     assert.equal((await session.store.loadAllPhases())[0].handoff, "");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-handoff-write retains content after a core-level write failure; a retry omitting content succeeds (T409)", async () => {
+  const session = await startMcpFixture({ name: "t409-retain-and-retry" });
+  try {
+    const prepared = await preparedHandoffArgs(session, "P001");
+    const content = canonicalHandoff("P001 — retained content for retry", "Body that must survive a retry without being resent.");
+
+    // First attempt fails deep inside the write contract (missing durable
+    // phase-context evidence), not on an adapter-level preflight gate — so
+    // PlanStore.refreshPhaseHandoff actually retains the submitted content.
+    const { phaseNoUpdateReason: _drop, ...preparedWithoutPhaseReason } = prepared;
+    const failed = await callTool(session, "planner-handoff-write", {
+      phaseRef: "P001",
+      reason: "Fixture handoff reason for a cold resume.",
+      content,
+      confirmed: true,
+      ...preparedWithoutPhaseReason,
+    });
+    assert.match(toolText(failed), /phaseNoUpdateReason/);
+    assert.match(toolText(failed), /omit content/);
+    assert.equal((await session.store.loadAllPhases())[0].handoff, "", "the failed attempt must not mutate the phase");
+
+    // Retry: same phaseRef + expectedHandoffUpdatedAt, correct only the field
+    // that actually failed, and omit content entirely.
+    const retried = await callTool(session, "planner-handoff-write", {
+      phaseRef: "P001",
+      reason: "Fixture handoff reason for a cold resume.",
+      confirmed: true,
+      ...prepared,
+    });
+    assert.equal(retried.isError, undefined);
+    assert.equal(retried.structuredContent.persisted, true);
+    const phase = (await session.store.loadAllPhases())[0];
+    assert.match(phase.handoff, /Body that must survive a retry without being resent\./);
   } finally {
     await closeMcpFixture(session);
   }
@@ -314,10 +410,14 @@ test("planner-handoff-show keeps oversized legacy handoffs readable but transpor
     const phase = (await session.store.loadAllPhases())[0];
     await session.store.setPhaseHandoff(phase.id, `# Legacy oversized handoff\n\n${"x".repeat(30_000)}`);
     const shown = await callTool(session, "planner-handoff-show", { phaseRef: "P001" });
+    // The capsule body is readable prose and travels in the text channel only;
+    // structuredContent keeps the machine-readable evidence about it (T408).
     assert.equal(shown.structuredContent.truncated, true);
     assert.equal(shown.structuredContent.fullLength > 24_000, true);
-    assert.equal(shown.structuredContent.content.length, 24_000);
-    assert.match(shown.structuredContent.content, /Legacy handoff truncated for transport safety/);
+    assert.equal(Object.hasOwn(shown.structuredContent, "content"), false, "the body must not travel in both channels");
+    assert.match(toolText(shown), /Legacy handoff truncated for transport safety/);
+    assert.match(toolText(shown), /# Legacy oversized handoff/);
+    assert.equal(typeof shown.structuredContent.contentHash, "string");
   } finally {
     await closeMcpFixture(session);
   }
