@@ -42,6 +42,39 @@ export interface HandoffReply {
   structured: Record<string, unknown>;
 }
 
+/**
+ * Transport shape of the phase work map. `entries` is the machine-readable
+ * twin of the rendered `content` — the same siblings spelled as JSON — and
+ * no caller reads it off a reply, so only the counts travel. Pass
+ * `includeContent` for the reply that renders the map in no other channel.
+ */
+function workMapForTransport(map: PhaseWorkMap, includeContent: boolean): Record<string, unknown> {
+  return {
+    ...(includeContent ? { content: map.content } : {}),
+    total: map.total,
+    truncated: map.truncated,
+    maxChars: map.maxChars,
+  };
+}
+
+/**
+ * Transport shape of the persisted audit. `entries`, `coldStartInventory`
+ * and `readBackSourceReviews` are planner-owned legacy evidence that agents
+ * are told not to reproduce (P100(F021)/T396) and that nothing reads back
+ * off a reply; only the verification facts travel.
+ */
+function handoffAuditForTransport(audit: HandoffCompletenessAudit | null): Record<string, unknown> | null {
+  if (!audit) return null;
+  return {
+    version: audit.version,
+    contentHash: audit.contentHash,
+    contentLength: audit.contentLength,
+    verifiedAt: audit.verifiedAt,
+    resumeReadyAt: audit.resumeReadyAt,
+    supportingDocuments: audit.supportingDocuments,
+  };
+}
+
 export type HandoffShowReplyInput =
   | {
       kind: "empty";
@@ -90,7 +123,7 @@ export function buildHandoffShowReply(input: HandoffShowReplyInput): HandoffRepl
         content: "",
         empty: true,
         resumeReady: false,
-        handoffAudit: input.handoffAudit,
+        handoffAudit: handoffAuditForTransport(input.handoffAudit),
       },
     };
   }
@@ -119,7 +152,7 @@ export function buildHandoffShowReply(input: HandoffShowReplyInput): HandoffRepl
         supportingDocuments,
         empty: false,
         resumeReady: false,
-        handoffAudit: input.handoffAudit,
+        handoffAudit: handoffAuditForTransport(input.handoffAudit),
       },
     };
   }
@@ -139,21 +172,15 @@ export function buildHandoffShowReply(input: HandoffShowReplyInput): HandoffRepl
     structured: {
       phaseRef,
       phaseId: phase.id,
-      // The rendered map is already in `text`; `structured` keeps only the
-      // machine-readable half so the same characters do not travel twice.
-      phaseWorkMap: {
-        entries: phaseWorkMap.entries,
-        total: phaseWorkMap.total,
-        truncated: phaseWorkMap.truncated,
-        maxChars: phaseWorkMap.maxChars,
-      },
+      // The rendered map is already in `text`, so only the counts travel.
+      phaseWorkMap: workMapForTransport(phaseWorkMap, false),
       fullLength: bounded.fullLength,
       truncated: bounded.truncated,
       contentHash,
       persistenceVerified,
       resumeReady,
       verificationRequired: !resumeReady,
-      handoffAudit: phase.handoffAudit,
+      handoffAudit: handoffAuditForTransport(phase.handoffAudit),
     },
   };
 }
@@ -224,6 +251,10 @@ export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): Hando
     structured: {
       phaseRef,
       ...structuredAudit,
+      // Prepare renders the map in no text channel, so it keeps `content`
+      // here — but not the JSON twin of the same siblings.
+      phaseWorkMap: workMapForTransport(structuredAudit.phaseWorkMap, true),
+      existingCompletenessAudit: handoffAuditForTransport(structuredAudit.existingCompletenessAudit),
       existingHandoffLength: existingBounded.fullLength,
       existingHandoffTruncated: existingBounded.truncated,
       evidenceContract: HANDOFF_PREPARE_EVIDENCE_CONTRACT,

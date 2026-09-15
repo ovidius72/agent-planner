@@ -27,7 +27,8 @@
     "74f4738f-6a2d-4951-836e-66c3249bfd71",
     "46cafaf5-76ba-4c1c-81a0-1bfec66b7e69",
     "697ab456-e0c1-479e-b72f-560956f0f152",
-    "224e3d6b-57e7-4268-a98c-de9d0fda160b"
+    "224e3d6b-57e7-4268-a98c-de9d0fda160b",
+    "dde47728-6bda-4707-80cc-35e18cf09ea1"
   ],
   "tasks": [
     {
@@ -274,10 +275,59 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "dde47728-6bda-4707-80cc-35e18cf09ea1",
+      "phaseId": "b2f169bf-cdf4-4d0b-a229-37ccd57e3c24",
+      "number": 411,
+      "shortId": "8KEVQ",
+      "priority": 6,
+      "shortName": "drop-the-untouched-twin-payloa",
+      "title": "Drop the untouched twin payloads from handoff replies",
+      "status": "done",
+      "description": "Follow-on to P103(F005)/T410, which measured the two remaining hot spots and found both have no consumer.\n\nCurrent state, measured on heca P082 (56 tasks) at commit a0ea1ba:\n\n1. `phaseWorkMap.entries` is the machine-readable twin of the rendered `phaseWorkMap.content`: the same siblings, spelled as JSON. It costs 8,865 characters per call after T406's bound. A grep across packages/plan-mcp/src, packages/pi-adapter/src, packages/plan-server/src and packages/plan-web-ui/src finds no reader; the only assertions on `entries` are in packages/plan-core/test/handoff-context.test.mjs against the core audit object (`audit.phaseWorkMap.entries`), not against a tool reply. `packages/plan-core/src/handoff-reply.ts:144-149` currently ships it in show, and prepare ships the whole map including both halves through `...structuredAudit` at `:226`.\n\n2. The persisted audit costs 6,732 characters per call and rides on every reply, including the empty-handoff branch. Its composition on that phase: `entries` 3,000, `coldStartInventory` 2,346, `readBackSourceReviews` 818 — 6,164 of the total is the legacy evidence that P100(F021)/T396 made planner-owned and explicitly told agents not to reproduce. The remaining fields that callers actually use are version, contentHash, contentLength, verifiedAt, resumeReadyAt and supportingDocuments, about 410 characters. The adapters compute resumeReady from `phase.handoffAudit` directly (packages/pi-adapter/src/index.ts:2722-2724), not from the reply, so the large arrays have no reader either.\n\nGoal: both replies carry the verification facts and the counts, not the twin representations. Expected saving is roughly 15,000 characters per call on a phase of this size, on top of what T406-T409 already removed.\n\nWork:\n- Add two transport helpers in packages/plan-core/src/handoff-reply.ts: one that reduces a PhaseWorkMap to its counts (optionally keeping `content` for the reply that has no other channel for it), and one that reduces a HandoffCompletenessAudit to its verification fields.\n- Apply them in buildHandoffShowReply (all three branches) and buildHandoffPrepareReply, including `existingCompletenessAudit`.\n- Do not change buildPhaseWorkMap or auditPhaseHandoff. The core domain objects keep every field; only the transport shape is reduced. This keeps the existing core tests meaningful.\n\nBehaviors to preserve:\n- Sibling capability ownership guidance must still reach the agent: show renders the map in its text channel, and prepare must keep `content` since it renders the map nowhere else.\n- `version`, `contentHash`, `contentLength`, `resumeReadyAt` and `supportingDocuments` must remain readable from the reply; packages/pi-adapter/test/mutations.test.mjs asserts `handoffAudit.version`.\n- The candidate-then-verify contract, terminal-archive discovery, and the no-field-in-both-channels invariant from T408.\n\nEdge cases:\n- The empty-handoff branch also ships the audit; reduce it there too.\n- A null audit must stay null rather than becoming an object of undefined fields.\n\nVerification: focused core, MCP, Pi and server suites; re-measure show and prepare on heca P082 read-only and record the new totals against T410's figures. Per AGENTS.md rule 17, no full repository gate.\n\n---\n**Completion summary:**\nDropped the two untouched twin payloads from the handoff tool replies.\n\nShipped, all in packages/plan-core/src/handoff-reply.ts:\n- workMapForTransport(map, includeContent) reduces a PhaseWorkMap to total/truncated/maxChars, keeping content only for the reply that renders the map in no other channel. Applied to buildHandoffShowReply's active branch with includeContent=false (show renders the map in text) and to buildHandoffPrepareReply with includeContent=true (prepare renders it nowhere else).\n- handoffAuditForTransport(audit) reduces a HandoffCompletenessAudit to version, contentHash, contentLength, verifiedAt, resumeReadyAt and supportingDocuments. Applied to all three show branches (empty, archived, active) and to prepare's existingCompletenessAudit. A null audit stays null.\n- buildPhaseWorkMap and auditPhaseHandoff were not touched. The core domain objects keep every field, so the existing core assertions on audit.phaseWorkMap.entries stay meaningful; only the transport shape is reduced.\n\nEvidence that neither field had a reader: a grep across packages/plan-mcp/src, packages/pi-adapter/src, packages/plan-server/src and packages/plan-web-ui/src found no read of phaseWorkMap.entries (the three hits are Array.prototype.entries and the activity log). handoffAudit is read in the adapters only off phase.handoffAudit for the resumeReady computation (packages/pi-adapter/src/index.ts:2722-2724), never off a reply. Of the audit's 6,732 characters, 6,164 were entries, coldStartInventory and readBackSourceReviews — the legacy evidence P100(F021)/T396 made planner-owned and told agents not to reproduce.\n\nMeasured on heca P082 (56 tasks, 5,634-character handoff), read-only, same method as T410:\n- handoff-show: 59,823 original -> 29,708 after T406-T409 -> 14,610 now (76% below original; ~14,956 -> ~3,653 tokens)\n- handoff-prepare: 64,560 -> 33,131 -> 18,033 now (72% below original; ~16,140 -> ~4,508 tokens)\n- show structured payload: 15,948 -> 850 characters\n- audit blob per call: 6,732 -> 510 characters\n\nRemaining prepare payload is dominated by phaseWorkMap at 7,969, which is the rendered map the agent needs and which prepare has no other channel for. Nothing duplicated remains in either reply.\n\nVerification: plan-core typecheck clean, 335/335; plan-mcp 78/78 across five files; pi-adapter mutations 20/20; plan-server 54/54. No test required changing, which is the useful signal: nothing depended on the removed fields. Per AGENTS.md rule 17, no full repository gate was run.\n\nNot done: the byte-count regression noted as outstanding on T408 and T410 still does not exist. Every figure above was measured by hand against heca, so these numbers can still regress silently. That remains the one gap in this phase.",
+      "descriptionUpdatedAt": "2026-09-15T08:00:25.741Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "dde47728-6bda-4707-80cc-35e18cf09ea1-check-001-planned-in-progress",
+          "date": "2026-09-15T07:57:54.237Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "dde47728-6bda-4707-80cc-35e18cf09ea1-check-002-in-progress-done",
+          "date": "2026-09-15T08:00:25.737Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Dropped the two untouched twin payloads from the handoff tool replies.\n\nShipped, all in packages/plan-core/src/handoff-reply.ts:\n- workMapForTransport(map, includeContent) reduces a PhaseWorkMap to total/truncated/maxChars, keeping content only for the reply that renders the map in no other channel. Applied to buildHandoffShowReply's active branch with includeContent=false (show renders the map in text) and to buildHandoffPrepareReply with includeContent=true (prepare renders it nowhere else).\n- handoffAuditForTransport(audit) reduces a HandoffCompletenessAudit to version, contentHash, contentLength, verifiedAt, resumeReadyAt and supportingDocuments. Applied to all three show branches (empty, archived, active) and to prepare's existingCompletenessAudit. A null audit stays null.\n- buildPhaseWorkMap and auditPhaseHandoff were not touched. The core domain objects keep every field, so the existing core assertions on audit.phaseWorkMap.entries stay meaningful; only the transport shape is reduced.\n\nEvidence that neither field had a reader: a grep across packages/plan-mcp/src, packages/pi-adapter/src, packages/plan-server/src and packages/plan-web-ui/src found no read of phaseWorkMap.entries (the three hits are Array.prototype.entries and the activity log). handoffAudit is read in the adapters only off phase.handoffAudit for the resumeReady computation (packages/pi-adapter/src/index.ts:2722-2724), never off a reply. Of the audit's 6,732 characters, 6,164 were entries, coldStartInventory and readBackSourceReviews — the legacy evidence P100(F021)/T396 made planner-owned and told agents not to reproduce.\n\nMeasured on heca P082 (56 tasks, 5,634-character handoff), read-only, same method as T410:\n- handoff-show: 59,823 original -> 29,708 after T406-T409 -> 14,610 now (76% below original; ~14,956 -> ~3,653 tokens)\n- handoff-prepare: 64,560 -> 33,131 -> 18,033 now (72% below original; ~16,140 -> ~4,508 tokens)\n- show structured payload: 15,948 -> 850 characters\n- audit blob per call: 6,732 -> 510 characters\n\nRemaining prepare payload is dominated by phaseWorkMap at 7,969, which is the rendered map the agent needs and which prepare has no other channel for. Nothing duplicated remains in either reply.\n\nVerification: plan-core typecheck clean, 335/335; plan-mcp 78/78 across five files; pi-adapter mutations 20/20; plan-server 54/54. No test required changing, which is the useful signal: nothing depended on the removed fields. Per AGENTS.md rule 17, no full repository gate was run.\n\nNot done: the byte-count regression noted as outstanding on T408 and T410 still does not exist. Every figure above was measured by hand against heca, so these numbers can still regress silently. That remains the one gap in this phase."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-15T07:57:54.237Z",
+      "completedAt": "2026-09-15T08:00:25.737Z",
+      "createdAt": "2026-09-15T07:57:49.052Z",
+      "updatedAt": "2026-09-15T08:00:25.737Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+          "createdAt": "2026-09-15T07:57:54.139Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-14T13:03:31.252Z",
-  "updatedAt": "2026-09-15T07:52:46.718Z",
+  "updatedAt": "2026-09-15T08:00:25.737Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -299,12 +349,28 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "175b7938-0f4e-48a1-a8e3-e13560a8d8c2",
+      "date": "2026-09-15T07:57:54.262Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "6a1a59b4-d0d2-424f-b96b-3ffa499ebe13",
+      "date": "2026-09-15T08:00:25.771Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
-      "createdAt": "2026-09-15T07:51:19.679Z"
+      "createdAt": "2026-09-15T07:57:54.139Z"
     },
     {
       "sessionId": "mcp-process:aaf36422-c5e1-4ba2-8e3e-75c25cd6bdb0",
