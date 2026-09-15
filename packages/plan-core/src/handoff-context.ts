@@ -221,6 +221,10 @@ export interface RefreshPhaseHandoffInput {
   completenessAudit?: HandoffCompletenessAuditInput;
   coldStartInventory?: HandoffColdStartInventoryInput;
   supportingDocuments?: HandoffSupportingDocumentInput[];
+  /** The body exactly as the agent submitted it, before auto-externalization
+   *  rewrote `content`. Set by PlanStore only when a rewrite happened, so the
+   *  agent's own document links are still judged against what the agent wrote. */
+  submittedContent?: string;
   /** Populated and verified by PlanStore before pure domain application. */
   verifiedSupportingDocuments?: HandoffSupportingDocument[];
   /** Content is kept in-memory only for cold-start coverage validation. */
@@ -737,9 +741,18 @@ export function validateHandoffContextSync(
     // Body-dependent: the manifest is valid on its own, but the drafted content
     // never linked it. This is the one check that cannot move to prepare, since
     // prepare runs before the body exists.
-    if (!input.content.includes(requested.path)) {
+    //
+    // Check the submitted body as well as the persisted one. Auto-externalization
+    // rewrites `content` after the agent submitted it, moving whole sections into
+    // a .planner/docs/ file; a path the author linked inside one of those sections
+    // is no longer in `content` through no fault of theirs. The planner's own
+    // auto-externalized document is the mirror case — its path is generated during
+    // the rewrite, so it appears only in `content`. Accepting either body covers
+    // both without letting through a path the agent never linked anywhere.
+    const linkedBodies = [input.content, ...(input.submittedContent ? [input.submittedContent] : [])];
+    if (!linkedBodies.some((body) => body.includes(requested.path))) {
       throw supportingDocumentInvalidError(
-        `Canonical handoff content must link supporting document ${requested.path}.`,
+        `Canonical handoff content must link supporting document ${requested.path}. Checked the ${input.submittedContent ? "submitted body and the auto-externalized body" : "submitted body"}.`,
         { index, path: requested.path },
       );
     }

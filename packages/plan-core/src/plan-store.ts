@@ -3788,6 +3788,10 @@ export class PlanStore {
             effectiveInput = {
               ...input,
               content: externalized.content,
+              // The agent linked its documents in the body it submitted; this
+              // rewrite may have moved those links into the external file. Carry
+              // the original so validation judges the author's own linking.
+              submittedContent: materializedContent,
               supportingDocuments: [...(input.supportingDocuments ?? []), autoDoc],
             };
           }

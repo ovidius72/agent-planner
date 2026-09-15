@@ -506,6 +506,64 @@ describe("durable handoff context refresh", () => {
     });
   });
 
+  test("a linked document survives auto-externalization moving its section out of the body", async () => {
+    // T414: the reported failure. The agent links a document and cites its path
+    // in a section that auto-externalization later moves into .planner/docs/.
+    // Validation used to run against the rewritten body, so the path was gone and
+    // HANDOFF_SUPPORTING_DOCUMENT_INVALID fired on a correctly linked document.
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    const supportingContent = "# Extended detail\n\nCommand logs and design mappings for resumption.\n";
+    await writeFile(join(store.root, "docs", "t414-detail.md"), supportingContent, "utf8");
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+
+    // Push the body well past the externalization target, with the document link
+    // inside a section the rewrite relocates.
+    const filler = "Resume detail that pads the capsule past the inline target. ".repeat(220);
+    const content = [
+      baseInput.content,
+      "",
+      "## Supporting documents",
+      "- `.planner/docs/t414-detail.md` — command logs and design mappings required for resumption.",
+      "",
+      "## Current and partial state",
+      filler,
+    ].join("\n");
+
+    await store.refreshPhaseHandoff(phaseId, {
+      ...baseInput,
+      content,
+      supportingDocuments: [{ path: ".planner/docs/t414-detail.md", description: "Command logs and design mappings required for resumption." }],
+    });
+
+    const phase = await store.loadPhase(phaseId);
+    assert.ok(phase.handoff.length > 0, "handoff persisted");
+    const paths = phase.handoffAudit.supportingDocuments.map((doc) => doc.path);
+    assert.ok(paths.includes(".planner/docs/t414-detail.md"), "the agent's document is recorded");
+    assert.ok(paths.some((path) => /handoff-p\d+-/.test(path)), "the auto-externalized document is recorded too");
+  });
+
+  test("a document the agent never linked anywhere is still refused", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    await writeFile(join(store.root, "docs", "t414-unlinked.md"), "# Never referenced\n\nBody.\n", "utf8");
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, {
+        ...baseInput,
+        supportingDocuments: [{ path: ".planner/docs/t414-unlinked.md", description: "Never mentioned in the capsule at all." }],
+      }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must link supporting document/);
+        assert.match(error.message, /Checked the/);
+        return true;
+      },
+    );
+  });
+
   test("rolls back when persisted handoff read-back does not match the verified hash", async () => {
     const { store, phaseId, doneTaskId } = await setup();
     const prepared = await store.preparePhaseHandoff(phaseId);
