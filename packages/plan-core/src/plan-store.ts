@@ -2927,37 +2927,67 @@ export class PlanStore {
     return readJson(this.projectContextReadsPath(), ProjectContextReadStateDocumentSchema);
   }
 
-  async loadProjectContextDelivery(maxChars?: number): Promise<CompleteProjectContextDelivery> {
-    return withPlanRootWriteLock(this.root, async () => {
+  /**
+   * Read project.json and requirements.json as one coherent pair with no
+   * lock. A concurrent writer could otherwise interleave the two reads into
+   * a torn pair (half old, half new); instead of blocking behind the plan
+   * root write lock like a mutation, read twice and compare fingerprints,
+   * retrying until two consecutive reads agree (bounded, so a pathological
+   * writer cannot spin this forever).
+   */
+  private async readCoherentProjectAndRequirements(): Promise<{ project: Project; requirements: RequirementsDocument }> {
+    const maxAttempts = 5;
+    const readOnce = async () => {
       const [project, requirements] = await Promise.all([
         readJson(this.projectPath(), ProjectSchema),
         readJson(this.requirementsPath(), RequirementsDocumentSchema),
       ]);
-      return createCompleteProjectContextDelivery(project, requirements, maxChars);
-    });
+      return { project, requirements };
+    };
+    let current = await readOnce();
+    for (let attempt = 1; attempt < maxAttempts; attempt++) {
+      const currentFingerprint = projectContextFingerprint(createProjectContextSnapshot(current.project, current.requirements));
+      const next = await readOnce();
+      const nextFingerprint = projectContextFingerprint(createProjectContextSnapshot(next.project, next.requirements));
+      if (nextFingerprint === currentFingerprint) return next;
+      current = next;
+    }
+    return current;
+  }
+
+  async loadProjectContextDelivery(maxChars?: number): Promise<CompleteProjectContextDelivery> {
+    const { project, requirements } = await this.readCoherentProjectAndRequirements();
+    return createCompleteProjectContextDelivery(project, requirements, maxChars);
   }
 
   async projectContextReadStateForSession(sessionId: string): Promise<ProjectContextReadState> {
-    return withPlanRootWriteLock(this.root, async () => {
-      const [project, requirements, readState] = await Promise.all([
-        readJson(this.projectPath(), ProjectSchema),
-        readJson(this.requirementsPath(), RequirementsDocumentSchema),
-        this.loadProjectContextReadStateDocument(),
-      ]);
-      return projectContextReadState(createProjectContextSnapshot(project, requirements), readState.sessionInfo, sessionId);
-    });
+    const { project, requirements } = await this.readCoherentProjectAndRequirements();
+    const readState = await this.loadProjectContextReadStateDocument();
+    return projectContextReadState(createProjectContextSnapshot(project, requirements), readState.sessionInfo, sessionId);
   }
 
   /**
    * Persist a worktree-local project-context read only after receiving the exact
    * complete chunk sequence for the current project and Requirements revisions.
    */
+  /**
+   * Governance decision (P102(F005) accepted decision): a project-context
+   * read stamps sessionInfo on every requirement, the same way it stamps
+   * every project Accepted Decision's parent (project.json) and Project
+   * Guidelines — because the delivery this attests to is lossless and always
+   * contains every requirement in full. This intentionally lets a
+   * project-context read satisfy phase-scoped REQUIREMENTS_READ_REQUIRED
+   * gates: the agent has genuinely seen the requirement, whichever surface
+   * delivered it. `recordContextRead` stamps only the requirement ids it was
+   * given because that call is scoped to one task's linked requirements, not
+   * a full-project delivery.
+   */
   async recordProjectContextRead(input: RecordProjectContextReadInput): Promise<RecordProjectContextReadResult> {
     const sessionId = input.sessionId.trim();
     if (!sessionId) throw new PlanStoreError("Project-context attestation requires a non-empty sessionId.");
     const delivery = verifyProjectContextChunks(input.chunks);
     const createdAt = TimestampSchema.parse(input.createdAt ?? nowISO());
-    const result = await withPlanRootWriteLock(this.root, async () => {
+    const result = await this.runAsBatch(async () => {
       const project = await readJson(this.projectPath(), ProjectSchema);
       const requirements = await readJson(this.requirementsPath(), RequirementsDocumentSchema);
       const currentSnapshot = createProjectContextSnapshot(project, requirements);
@@ -2969,13 +2999,6 @@ export class PlanStore {
         );
       }
 
-      const readStatePath = this.projectContextReadsPath();
-      const previousReadStateExists = await access(readStatePath).then(() => true, () => false);
-      const previousReadState = await this.loadProjectContextReadStateDocument();
-      const nextReadState = ProjectContextReadStateDocumentSchema.parse({
-        version: PROJECT_CONTEXT_DELIVERY_VERSION,
-        sessionInfo: mergeProjectContextSessionInfo(previousReadState.sessionInfo, [{ sessionId, createdAt, fingerprint: currentFingerprint }]),
-      });
       let nextProject = project;
       if (project.projectGuidelines.content.trim()) {
         nextProject = {
@@ -2983,6 +3006,10 @@ export class PlanStore {
           projectGuidelines: upsertSessionInfo(project.projectGuidelines, sessionId, createdAt).entity,
         };
       }
+      // saveProject bumps touchTimestamp(), strips workDeviations, and merges
+      // projectGuidelines.sessionInfo against the on-disk copy the same way
+      // every other project write does.
+      if (nextProject !== project) await this.saveProject(nextProject);
 
       let requirementsChanged = false;
       const nextRequirements: RequirementsDocument = {
@@ -2992,46 +3019,21 @@ export class PlanStore {
           return updated.entity;
         }),
       };
-      let requirementsWritten = false;
-      let projectWritten = false;
-      let readStateWriteAttempted = false;
-      try {
-        if (requirementsChanged) {
-          await atomicWriteJson(this.requirementsPath(), RequirementsDocumentSchema.parse(nextRequirements), this.root);
-          requirementsWritten = true;
-        }
-        if (nextProject !== project) {
-          await atomicWriteJson(this.projectPath(), ProjectSchema.parse(nextProject), this.root);
-          projectWritten = true;
-        }
-        // The complete-read attestation is the commit marker and is written last.
-        readStateWriteAttempted = true;
-        await atomicWriteJson(readStatePath, nextReadState, this.root);
-      } catch (error) {
-        const rollbackErrors: unknown[] = [];
-        if (readStateWriteAttempted) {
-          if (previousReadStateExists) {
-            await atomicWriteJson(readStatePath, previousReadState, this.root).catch((rollbackError) => rollbackErrors.push(rollbackError));
-          } else {
-            await unlink(readStatePath).catch((rollbackError: NodeJS.ErrnoException) => {
-              if (rollbackError.code !== "ENOENT") rollbackErrors.push(rollbackError);
-            });
-          }
-        }
-        if (projectWritten) {
-          await atomicWriteJson(this.projectPath(), project, this.root).catch((rollbackError) => rollbackErrors.push(rollbackError));
-        }
-        if (requirementsWritten) {
-          await atomicWriteJson(this.requirementsPath(), requirements, this.root).catch((rollbackError) => rollbackErrors.push(rollbackError));
-        }
-        if (rollbackErrors.length > 0) {
-          throw new AggregateError([error, ...rollbackErrors], "Project-context attestation failed and rollback was incomplete.");
-        }
-        throw error;
-      }
+      // saveRequirements applies the stale-write guard and merges sessionInfo
+      // per requirement against the on-disk copy, same as recordContextRead.
+      if (requirementsChanged) await this.saveRequirements(nextRequirements);
+
+      // The complete-read attestation is the commit marker and is written
+      // last, after both save calls above have durably landed.
+      const previousReadState = await this.loadProjectContextReadStateDocument();
+      const nextReadState = ProjectContextReadStateDocumentSchema.parse({
+        version: PROJECT_CONTEXT_DELIVERY_VERSION,
+        sessionInfo: mergeProjectContextSessionInfo(previousReadState.sessionInfo, [{ sessionId, createdAt, fingerprint: currentFingerprint }]),
+      });
+      await atomicWriteJson(this.projectContextReadsPath(), nextReadState, this.root);
+
       return { project: nextProject, requirements: nextRequirements };
     });
-    await this.maybeAutoSync();
     return { ...result, delivery, createdAt };
   }
 

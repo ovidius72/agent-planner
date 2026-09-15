@@ -332,6 +332,80 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
   }
 });
 
+test("planner-load delivers the complete attested project-level context; task-start advises after it goes stale", async () => {
+  const session = await startMcpFixture({ name: "t404-project-context" });
+  try {
+    await session.store.updateProject((project) => ({
+      ...project,
+      description: "Fixture project description",
+      goal: "Ship the fixture feature",
+      scope: ["In-scope area"],
+      outOfScope: ["Out-of-scope area"],
+      technologies: ["TypeScript"],
+      tools: ["pnpm"],
+    }));
+
+    const loaded = await callTool(session, "planner-load", {});
+    const loadedStructured = toolStructured(loaded);
+    assert.equal(loadedStructured.projectContext.loaded, true);
+    assert.equal(loadedStructured.projectContext.contextComplete, true);
+    assert.equal(loadedStructured.projectContext.project.description, "Fixture project description");
+    assert.equal(loadedStructured.projectContext.project.goal, "Ship the fixture feature");
+    assert.deepEqual(loadedStructured.projectContext.project.scope, ["In-scope area"]);
+    assert.deepEqual(loadedStructured.projectContext.project.outOfScope, ["Out-of-scope area"]);
+    assert.deepEqual(loadedStructured.projectContext.project.technologies, ["TypeScript"]);
+    assert.deepEqual(loadedStructured.projectContext.project.tools, ["pnpm"]);
+    assert.equal(loadedStructured.projectContext.requirements.length, 1);
+    assert.equal(loadedStructured.projectContext.requirements[0].title, "Users can authenticate");
+    // The agent-only channel carries the same content, but it must never
+    // appear in the human-facing recap text (parity across result channels,
+    // without duplicating the Accepted Decision leak this mirrors).
+    assert.match(loadedStructured.agentContext.projectContext.text, /Fixture project description/);
+    assert.doesNotMatch(toolText(loaded), /Fixture project description/, "project context must not leak into the human recap");
+    assert.equal(loadedStructured.recap.text, toolText(loaded));
+
+    // A full, genuinely complete project-context read satisfies
+    // REQUIREMENTS_READ_REQUIRED task-wide (P102(F005) accepted decision):
+    // no further per-task requirement read is needed for T001.
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(started).started, true);
+    assert.equal(toolStructured(started).projectContextStale, false);
+
+    // Project content changes after the attested load. Task-start stays
+    // scoped to feature/phase/task context (it does not hard-block on this),
+    // but it surfaces a targeted, non-blocking refresh advisory instead of
+    // silently working from stale project-level context.
+    await session.store.updateProject((project) => ({ ...project, goal: "Changed after load" }));
+    const alreadyStarted = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(alreadyStarted).started, true);
+    assert.equal(toolStructured(alreadyStarted).projectContextStale, true);
+    assert.match(toolText(alreadyStarted), /Project-context advisory/);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-load reports contextComplete:false and does not attest the read when project context exceeds maxChars", async () => {
+  const session = await startMcpFixture({ name: "t404-project-context-oversized" });
+  try {
+    await session.store.updateProject((project) => ({ ...project, description: "x".repeat(2_000) }));
+    const loaded = await callTool(session, "planner-load", { maxChars: 100 });
+    const structured = toolStructured(loaded);
+    assert.equal(structured.projectContext.loaded, false);
+    assert.equal(structured.projectContext.contextComplete, false);
+    assert.ok(Array.isArray(structured.projectContext.nextActions) && structured.projectContext.nextActions.length > 0);
+    assert.ok(structured.projectContext.serializedChars > 100);
+    // The human recap is untouched (still exactly the recap), and the
+    // over-bound content was never attested as read.
+    assert.equal(structured.recap.text, toolText(loaded));
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 test("description freshness reports exact stale parents and explicit leaf-to-root reconciliation", async () => {
   const session = await startMcpFixture({ name: "t381-description-freshness" });
   try {

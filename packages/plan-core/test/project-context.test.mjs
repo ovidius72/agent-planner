@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { after, test } from "node:test";
 import {
   PlanStore,
@@ -13,6 +15,7 @@ import {
   renderProjectContext,
   verifyProjectContextChunks,
 } from "../dist/index.js";
+import { packageDist } from "../../../test/helpers/fixtures.mjs";
 
 const roots = [];
 after(async () => Promise.all(roots.map((root) => rm(root, { recursive: true, force: true }))));
@@ -24,6 +27,46 @@ async function setup(name = "Project context") {
   const store = new PlanStore(planRoot);
   await store.init(name);
   return { store, planRoot };
+}
+
+const CORE_URL = pathToFileURL(packageDist("plan-core")).href;
+
+async function waitForFile(path, timeoutMs = 2_000) {
+  const started = Date.now();
+  for (;;) {
+    try {
+      await access(path);
+      return;
+    } catch {
+      if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${path}`);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+}
+
+/** Spawn a child process that holds the plan-root write lock for holdMs. */
+function startHoldingWriter(planRoot, readyFile, holdMs = 400) {
+  const script = `
+    import { writeFile } from "node:fs/promises";
+    const { PlanStore } = await import(process.env.CORE_URL);
+    const store = new PlanStore(process.env.PLAN_ROOT);
+    await store.runBatch(async () => {
+      await writeFile(process.env.READY_FILE, "ready", "utf8");
+      await new Promise((resolve) => setTimeout(resolve, Number(process.env.HOLD_MS)));
+      await store.updateProject((project) => ({ ...project, description: "written by the holding process" }));
+    });
+  `;
+  const child = spawn(process.execPath, ["--input-type=module", "--eval", script], {
+    env: { ...process.env, CORE_URL, PLAN_ROOT: planRoot, READY_FILE: readyFile, HOLD_MS: String(holdMs) },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+  const exited = new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`Writer child exited ${code}: ${stderr}`)));
+  });
+  return { child, exited };
 }
 
 const acceptedDecision = {
@@ -204,4 +247,69 @@ test("legacy projects without project-context read state parse without rewriting
 
   const delivery = createCompleteProjectContextDelivery(loaded, await store.loadRequirements());
   assert.equal(delivery.evidence.complete, true);
+});
+
+test("recordProjectContextRead routes writes through saveProject/saveRequirements: timestamp bumps and workDeviations never reach shared project.json", async () => {
+  const { store, planRoot } = await setup("Attested project");
+  await store.updateProject((project) => ({
+    ...project,
+    projectGuidelines: { ...project.projectGuidelines, content: "Read this guideline." },
+  }));
+  await store.saveRequirements({ requirements: [requirement] });
+
+  const before = await store.loadManifest();
+  const delivery = await store.loadProjectContextDelivery();
+
+  // Simulate workDeviations having leaked into the shared project.json (the
+  // defect this fix defends against, even though normal writes never put
+  // them there post-migration). The project-context snapshot excludes
+  // workDeviations, so this does not change the delivery's fingerprint.
+  const projectPath = join(planRoot, "project.json");
+  const onDiskBefore = JSON.parse(await readFile(projectPath, "utf8"));
+  await writeFile(projectPath, JSON.stringify({
+    ...onDiskBefore,
+    workDeviations: [{
+      id: "deviation-1",
+      recommendedTaskId: "task-a",
+      temporaryTaskId: "task-b",
+      resumeTaskId: "task-a",
+      reason: "test",
+      snapshot: null,
+      requestedBy: "agent",
+      approvedBy: "user",
+      state: "approved",
+      createdAt: "2026-09-14T08:00:00.000Z",
+    }],
+  }), "utf8");
+
+  await store.recordProjectContextRead({ sessionId: "session-timestamp", chunks: delivery.chunks });
+
+  const after = await store.loadManifest();
+  assert.notEqual(after.updatedAt, before.updatedAt, "recordProjectContextRead must bump the planner timestamp marker via saveProject");
+
+  const onDiskAfter = JSON.parse(await readFile(projectPath, "utf8"));
+  assert.deepEqual(onDiskAfter.workDeviations, [], "saveProject must strip workDeviations before they reach shared project.json");
+});
+
+test("loadProjectContextDelivery and projectContextReadStateForSession take no write lock", async () => {
+  const root = await mkdtemp(join(tmpdir(), "project-context-nolock-"));
+  roots.push(root);
+  const planRoot = join(root, ".planner");
+  const store = new PlanStore(planRoot);
+  await store.init("No-lock reads");
+
+  const readyFile = join(root, "writer-ready");
+  const writer = startHoldingWriter(planRoot, readyFile, 450);
+  await waitForFile(readyFile);
+
+  const deliveryStarted = Date.now();
+  const delivery = await store.loadProjectContextDelivery();
+  assert.equal(delivery.evidence.complete, true);
+  assert.ok(Date.now() - deliveryStarted < 200, "loadProjectContextDelivery must not wait behind the plan-root write lock");
+
+  const readStateStarted = Date.now();
+  await store.projectContextReadStateForSession("session-nolock");
+  assert.ok(Date.now() - readStateStarted < 200, "projectContextReadStateForSession must not wait behind the plan-root write lock");
+
+  await writer.exited;
 });

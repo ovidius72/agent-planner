@@ -54,13 +54,14 @@
     "b5ae2400-ea8a-46c7-936d-27c668371cdf",
     "7faeacc4-9850-460c-b593-bb00adac823a",
     "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
-    "b2f169bf-cdf4-4d0b-a229-37ccd57e3c24"
+    "b2f169bf-cdf4-4d0b-a229-37ccd57e3c24",
+    "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f"
   ],
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "33358c24-340e-4b33-801f-f672c06a4d8a",
-      "date": "2026-09-14T13:09:15.806Z",
+      "id": "2434eff7-b9b7-46ba-8d2a-a354d16a8286",
+      "date": "2026-09-15T12:39:39.473Z",
       "fromStatus": "planned",
       "toStatus": "in-progress",
       "title": "planned → in-progress",
@@ -69,18 +70,5 @@
   ],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z",
-  "sessionInfo": [
-    {
-      "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
-      "createdAt": "2026-09-15T08:27:09.699Z"
-    },
-    {
-      "sessionId": "mcp-process:aaf36422-c5e1-4ba2-8e3e-75c25cd6bdb0",
-      "createdAt": "2026-09-14T18:20:41.518Z"
-    },
-    {
-      "sessionId": "mcp-process:e74c7cb7-de9f-4364-a7ba-ce80220ba21c",
-      "createdAt": "2026-09-14T13:25:03.609Z"
-    }
-  ]
+  "sessionInfo": []
 }

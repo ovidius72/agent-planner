@@ -335,6 +335,78 @@ describe("pi-adapter host harness", () => {
     }
   });
 
+  test("planner-load delivers the complete attested project-level context; task_start advises after it goes stale", async () => {
+    const host = await createPiHost({ name: "t404-project-context", seed: "minimal" });
+    try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
+      await host.store.updateProject((project) => ({
+        ...project,
+        description: "Fixture project description",
+        goal: "Ship the fixture feature",
+        scope: ["In-scope area"],
+        outOfScope: ["Out-of-scope area"],
+        technologies: ["TypeScript"],
+        tools: ["pnpm"],
+      }));
+
+      const loaded = await host.runTool("planner-load", {});
+      const details = toolDetails(loaded);
+      assert.equal(details.projectContext.loaded, true);
+      assert.equal(details.projectContext.contextComplete, true);
+      assert.equal(details.projectContext.project.description, "Fixture project description");
+      assert.equal(details.projectContext.project.goal, "Ship the fixture feature");
+      assert.deepEqual(details.projectContext.project.scope, ["In-scope area"]);
+      assert.deepEqual(details.projectContext.project.outOfScope, ["Out-of-scope area"]);
+      assert.deepEqual(details.projectContext.project.technologies, ["TypeScript"]);
+      assert.deepEqual(details.projectContext.project.tools, ["pnpm"]);
+      assert.equal(details.projectContext.requirements.length, 1);
+      assert.equal(details.projectContext.requirements[0].title, "Users can authenticate");
+      // The agent-only details channel carries the same content, but it must
+      // never appear in the human-facing recap text (parity with MCP's
+      // planner-load, and the same "must not leak" invariant as Accepted
+      // Decision agent context above).
+      assert.match(details.projectContext.text, /Fixture project description/);
+      assert.doesNotMatch(toolText(loaded), /Fixture project description/, "project context must not leak into the human recap");
+
+      // A full, genuinely complete project-context read satisfies
+      // REQUIREMENTS_READ_REQUIRED task-wide (P102(F005) accepted decision):
+      // no further per-task requirement read is needed for T001.
+      await host.runTool("task_get", { taskId: "T001", full: true });
+      await host.runTool("phase_get", { phaseId: "P001", full: true });
+      await host.runTool("feature_get", { featureId: "F001", full: true });
+      const started = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(started).started, true);
+      assert.equal(toolDetails(started).projectContextStale, false);
+
+      // Project content changes after the attested load. task_start stays
+      // scoped to feature/phase/task context (no hard block), but surfaces a
+      // targeted, non-blocking refresh advisory instead of silently working
+      // from stale project-level context.
+      await host.store.updateProject((project) => ({ ...project, goal: "Changed after load" }));
+      const alreadyStarted = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(alreadyStarted).started, true);
+      assert.equal(toolDetails(alreadyStarted).projectContextStale, true);
+      assert.match(toolText(alreadyStarted), /Project-context advisory/);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("planner-load reports contextComplete:false and does not attest the read when project context exceeds maxChars", async () => {
+    const host = await createPiHost({ name: "t404-project-context-oversized", seed: "minimal" });
+    try {
+      await host.store.updateProject((project) => ({ ...project, description: "x".repeat(2_000) }));
+      const loaded = await host.runTool("planner-load", { maxChars: 100 });
+      const details = toolDetails(loaded);
+      assert.equal(details.projectContext.loaded, false);
+      assert.equal(details.projectContext.contextComplete, false);
+      assert.ok(Array.isArray(details.projectContext.nextActions) && details.projectContext.nextActions.length > 0);
+      assert.ok(details.projectContext.serializedChars > 100);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
   test("decision_record appends the same decision to feature and phase", async () => {
     const host = await createPiHost({ name: "t272-decision-record", seed: "minimal" });
     try {

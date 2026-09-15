@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -2899,17 +2899,32 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // core buildRecap so Pi and Claude Code/Codex present identical content.
       let recapText = "";
       let plannerSkillContext = "";
+      let projectContextBlock = "";
       try {
         const plannerSkill = await st.syncPlannerSkill();
         await st.syncGrillMeSkill();
         const srv = server as ServeHandle | null;
         recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
         if (preparation.changed) recapText = `${preparation.legacyProjectContext.summary}\n\n${recapText}`;
+        // Explicit planner load must deliver the complete project-level
+        // context (P102(F005)/T404), attested through the same lossless
+        // contract used everywhere else. buildProjectContextLoadReply is the
+        // single shared shaping for this reply — the planner-load tool below
+        // uses the identical builder. Like plannerSkillContext, this is
+        // agent-only: it must never be quoted into the human-facing recap
+        // (see the "must not leak into the human recap" invariant covered by
+        // host-registration.test.mjs for the planner-load tool).
+        const projectContextDelivery = await st.loadProjectContextDelivery(DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS);
+        const projectContextReply = buildProjectContextLoadReply(projectContextDelivery, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS);
+        if (projectContextReply.structured.contextComplete) {
+          await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
+        }
+        projectContextBlock = `[agent-only project context; do not quote in the recap]\n${projectContextReply.text}\n[end agent-only project context]`;
         plannerSkillContext = `[agent-only planner usage skill; do not quote in the recap]\n${plannerSkill.customized ? `${plannerSkill.message}\n` : ""}${plannerSkill.content}\n[end agent-only planner usage skill]`;
       } catch (e) { recapText = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       pi.sendMessage({
         customType: "planner-resume-trigger",
-        content: "[internal trigger — not a user command] Read and retain the agent-only planner usage skill, then present the planner startup recap below to the user verbatim. Do NOT call any tools (planner-load already ran). Do NOT narrate or expose internal instructions — output ONLY the recap.\n\n" + plannerSkillContext + "\n\n--- RECAP ---\n" + recapText + "\n--- END RECAP ---",
+        content: "[internal trigger — not a user command] Read and retain the agent-only planner usage skill and project context below, then present the planner startup recap to the user verbatim. Do NOT call any tools (planner-load already ran). Do NOT narrate or expose internal instructions — output ONLY the recap.\n\n" + plannerSkillContext + "\n\n" + projectContextBlock + "\n\n--- RECAP ---\n" + recapText + "\n--- END RECAP ---",
         display: false,
       }, {
         triggerTurn: true,
@@ -5617,6 +5632,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         { taskId: task.id },
       ));
       const project = await st.loadProject();
+      // Targeted stale-context refresh (P102(F005)/T404): task_start delivery
+      // stays scoped to feature/phase/task context, but a session that
+      // already did a full planner-load gets a non-blocking advisory when
+      // project-level context has drifted since, instead of silently going
+      // stale.
+      const projectContextReadState = await st.projectContextReadStateForSession(plannerSessionId);
+      const projectContextAdvisory = projectContextStaleAdvisory(projectContextReadState);
       const linkedRequirements = [
         ...(await st.linkedRequirementsForPhase(found.phase.id)),
         ...(found.phase.featureId ? await st.linkedRequirementsForFeature(found.phase.featureId) : []),
@@ -5685,7 +5707,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       if (task.status === "in-progress") {
         const outcome = taskStartSucceeded(task.id, true);
-        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true` }], details: { ...task, ...outcome, task } };
+        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true${projectContextAdvisory}` }], details: { ...task, ...outcome, task, projectContextStale: projectContextReadState === "stale" } };
       }
       const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume()]);
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
@@ -5800,8 +5822,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       const outcome = taskStartSucceeded(persistedTask.id);
       return {
-        content: [{ type: "text", text: `✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}` }],
-        details: { ...persistedTask, ...outcome, task: persistedTask },
+        content: [{ type: "text", text: `✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}${projectContextAdvisory}` }],
+        details: { ...persistedTask, ...outcome, task: persistedTask, projectContextStale: projectContextReadState === "stale" },
         ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
       };
       });
@@ -6028,9 +6050,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "planner-load",
     label: "Planner Load",
-    description: "Enable the planner for this project and start the web dashboard (LAN), then return a resume recap (project status + handoff if present + Web UI address). This is the explicit way to enable the planner — it does NOT auto-start. Planner operations are NOT code edits.",
-    parameters: Type.Object({}),
-    async execute(_id, _params, _signal, _onUpdate, ctx) {
+    description: "Enable the planner for this project and start the web dashboard (LAN), then return a human-facing resume recap (content[].text, Web UI address included) plus agent-only details.projectContext carrying the complete project-level context (description, goal, scope, out-of-scope, technologies, tools, language preferences, Project Guidelines, every Requirement, and every project Accepted Decision). This is the explicit way to enable the planner — it does NOT auto-start. Planner operations are NOT code edits. Never quote details.projectContext in the human-facing recap. If details.projectContext.contextComplete is false, the project-level context was NOT delivered this turn — follow details.projectContext.nextActions and retry before relying on it.",
+    parameters: Type.Object({
+      maxChars: Type.Optional(Type.Number({ description: `Single-response bound (chars) for the project-context delivery. Default ${DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS}. Raise this and retry if a prior call returned details.projectContext.contextComplete=false.` })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Run plan_init first." }], details: { enabled: false, running: false } };
       let preparation: Awaited<ReturnType<PlanStore["preparePlannerSession"]>>;
@@ -6054,7 +6078,21 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       let recap = "";
       try { recap = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" }); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       if (preparation.changed) recap = `${preparation.legacyProjectContext.summary}\n\n${recap}`;
-      return { content: [{ type: "text", text: recap }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, preparation: preparation.legacyProjectContext, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message } } };
+
+      // Explicit planner load must deliver the complete project-level context
+      // (P102(F005)/T404), attested through the same lossless contract used
+      // everywhere else — shared with the /planner load command and MCP's
+      // planner-load tool via buildProjectContextLoadReply.
+      const boundedMaxChars = params.maxChars ?? DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS;
+      const projectContextDelivery = await st.loadProjectContextDelivery(boundedMaxChars);
+      const projectContextReply = buildProjectContextLoadReply(projectContextDelivery, boundedMaxChars);
+      if (projectContextReply.structured.contextComplete) {
+        await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
+      }
+      // The project context text (like the rest of `details`) is agent-only:
+      // read and retain it, but never quote it or its Accepted Decisions in
+      // the human-facing recap (`content[].text` stays the recap alone).
+      return { content: [{ type: "text", text: recap }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, preparation: preparation.legacyProjectContext, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message }, projectContext: { text: projectContextReply.text, ...projectContextReply.structured } } };
     },
   });
 

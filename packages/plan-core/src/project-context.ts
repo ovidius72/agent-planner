@@ -271,6 +271,19 @@ export function projectContextReadState(
   return attestation.fingerprint === projectContextFingerprint(snapshot) ? "valid" : "stale";
 }
 
+/**
+ * Non-blocking task-start advisory for when project-level context (delivered
+ * through explicit planner load) has drifted since this session's last
+ * attested read. Task-start's own gates stay scoped to feature/phase/task
+ * context (P102(F005)/T404 keeps that delivery separate and un-duplicated);
+ * this only signals that a targeted planner-load refresh is due, without
+ * blocking the task from starting.
+ */
+export function projectContextStaleAdvisory(state: ProjectContextReadState): string {
+  if (state !== "stale") return "";
+  return "\n\n⚠️ Project-context advisory: project-level context (description, scope, technologies, tools, languages, Requirements, or project Accepted Decisions) changed since your last planner-load. Call planner-load again to refresh it before relying on it.";
+}
+
 /** Render the complete snapshot without applying a transport truncation policy. */
 export function renderProjectContext(snapshot: ProjectContextSnapshot): string {
   const { project, requirements } = snapshot;
@@ -314,4 +327,56 @@ export function renderProjectContext(snapshot: ProjectContextSnapshot): string {
   }
   lines.push("", renderAcceptedDecisionsSection("Project Accepted Decisions", project.acceptedDecisions));
   return lines.join("\n");
+}
+
+/**
+ * Reply shaping for explicit planner load's project-context delivery.
+ *
+ * Every adapter (Pi, MCP, and any future harness) must deliver the same
+ * complete project-level context, so the reply is shaped once here instead
+ * of once per adapter — the same placement rule as handoff-reply.ts (AGENTS.md
+ * rule 4). Both channels carry the full snapshot on a complete delivery:
+ * some hosts surface only `text` to the agent, others only structuredContent
+ * ("structuredContent-only host compatibility"), so neither is optional.
+ */
+export interface ProjectContextReply {
+  text: string;
+  structured: Record<string, unknown>;
+}
+
+/**
+ * Build the reply for an explicit planner-load project-context delivery.
+ * `delivery` must come straight from `PlanStore.loadProjectContextDelivery`.
+ * This function only shapes the reply and never mutates; the caller is
+ * responsible for calling `PlanStore.recordProjectContextRead` with
+ * `delivery.chunks` immediately afterward, and only when, this returns
+ * `structured.contextComplete === true`.
+ */
+export function buildProjectContextLoadReply(delivery: CompleteProjectContextDelivery, maxChars: number): ProjectContextReply {
+  if (delivery.chunks.length > 1) {
+    return {
+      text: `Project context exceeds the ${maxChars}-character single-response bound (${delivery.evidence.serializedChars} characters across ${delivery.evidence.totalChunks} chunks). Project-level context (description, scope, out-of-scope, technologies, tools, languages, Project Guidelines, every Requirement, and every project Accepted Decision) was NOT delivered this turn, and the read was not attested.`,
+      structured: {
+        loaded: false,
+        contextComplete: false,
+        fingerprint: delivery.evidence.fingerprint,
+        totalChunks: delivery.evidence.totalChunks,
+        serializedChars: delivery.evidence.serializedChars,
+        nextActions: [
+          `Retry planner-load with a larger maxChars (at least ${delivery.evidence.serializedChars}) so the complete project context fits in one response.`,
+          "Do not treat this response as a complete project-context read: REQUIREMENTS_READ_REQUIRED and equivalent gates remain unsatisfied until a complete read is attested.",
+        ],
+      },
+    };
+  }
+  return {
+    text: renderProjectContext(delivery.snapshot),
+    structured: {
+      loaded: true,
+      contextComplete: true,
+      project: delivery.snapshot.project,
+      requirements: delivery.snapshot.requirements,
+      fingerprint: delivery.evidence.fingerprint,
+    },
+  };
 }
