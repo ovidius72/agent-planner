@@ -768,7 +768,9 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       // The same guidance is surfaced proactively, read before drafting.
       const prepared = await host.runTool("handoff_prepare", { phaseRef: "P001" });
       assert.match(toolText(prepared), /Supporting documents:.*supportingDocuments is optional/);
-      assert.match(toolDetails(prepared).supportingDocumentsGuidance, /optional/i);
+      // Guidance is prose the agent reads: text channel only (T412).
+      assert.match(toolText(prepared), /Supporting documents:.*optional/i);
+      assert.equal(Object.hasOwn(toolDetails(prepared), "supportingDocumentsGuidance"), false);
 
       // Valid at prepare time.
       await mkdir(join(host.planRoot, "docs"), { recursive: true });

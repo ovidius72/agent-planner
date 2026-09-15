@@ -216,6 +216,9 @@ export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): Hando
     coldStartInventoryCategories: _coldStartInventoryCategories,
     handoff,
     missingCompletionTasks,
+    // Guidance is instruction the agent reads; the text channel renders it,
+    // so it must not travel again in the structured payload.
+    supportingDocumentsGuidance: _supportingDocumentsGuidance,
     ...structuredAudit
   } = audit;
 

@@ -148,7 +148,9 @@ test("planner-handoff-prepare surfaces the supporting-document guidance before d
   try {
     const prepared = await callTool(session, "planner-handoff-prepare", { phaseRef: "P001" });
     assert.match(toolText(prepared), /Supporting documents:.*supportingDocuments is optional/);
-    assert.match(prepared.structuredContent.supportingDocumentsGuidance, /optional/i);
+    // Guidance is prose the agent reads: text channel only (T412).
+    assert.match(toolText(prepared), /Supporting documents:.*optional/i);
+    assert.equal(Object.hasOwn(prepared.structuredContent, "supportingDocumentsGuidance"), false);
 
     await mkdir(join(session.planRoot, "docs"), { recursive: true });
     const docPath = join(session.planRoot, "docs", "t407-detail.md");
