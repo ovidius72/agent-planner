@@ -234,11 +234,28 @@
       "priority": 5,
       "shortName": "measure-handoff-tool-cost-befo",
       "title": "Measure handoff tool cost before and after on the heca planner",
-      "status": "planned",
-      "description": "This repeats the method of P034(F005)/T137, which measured the per-turn injected Pi context on the same reference workspace and recorded ~10,963 characters / ~2,741 rough tokens with its hot spots. T137 explicitly did not cover on-demand tool results, which is where this phase's defects live.\n\nReference workspace: `/Users/antonio/projects/heca`. As recorded in T137: about 4.5 MB of `.planner`, 11 features, 90 phases, 393 tasks. The reported failing case involved a 56-task phase, a ~10,000-character capsule, a ~55 KB `prepare`, and three sends of the same body.\n\nMeasure read-only, before the T406-T409 changes land and again after. Record for each:\n- `planner-handoff-prepare` on the 56-task phase: total characters, and the split between text and structured channels.\n- `planner-handoff-show` on the same phase: total characters, work-map share, and how much of the capsule body is duplicated across channels.\n- A full write-fail-then-retry cycle: characters sent by the agent across all attempts, before (three full sends) and after (one send plus a field-only retry).\n- Rough token estimates alongside characters, using the same method as T137 so the two measurements stay comparable.\n\nConfirm after the changes:\n- `entries` returned by `buildPhaseWorkMap` matches what `content` shows, and the withheld count is stated (T406).\n- A bad supporting-document path fails during prepare with no body sent (T407).\n- No field appears in both the text and structured channels for show and prepare (T408).\n- A failed write followed by a retry without `content` succeeds and the total characters sent is roughly one body, not three (T409).\n\nDo not run measurements against heca's real `.planner/` in a way that mutates it. Reads only; any write-path measurement must use an isolated `mkdtemp` fixture per AGENTS.md rule 17.\n\nDeliverable: concise before/after notes attached to this task and summarized on P103(F005), naming the remaining hot spots so a future agent knows what was measured and what was left. Follow T137's precedent of keeping the notes in the planner rather than in a separate document.",
-      "descriptionUpdatedAt": "2026-09-14T13:04:59.770Z",
+      "status": "done",
+      "description": "This repeats the method of P034(F005)/T137, which measured the per-turn injected Pi context on the same reference workspace and recorded ~10,963 characters / ~2,741 rough tokens with its hot spots. T137 explicitly did not cover on-demand tool results, which is where this phase's defects live.\n\nReference workspace: `/Users/antonio/projects/heca`. As recorded in T137: about 4.5 MB of `.planner`, 11 features, 90 phases, 393 tasks. The reported failing case involved a 56-task phase, a ~10,000-character capsule, a ~55 KB `prepare`, and three sends of the same body.\n\nMeasure read-only, before the T406-T409 changes land and again after. Record for each:\n- `planner-handoff-prepare` on the 56-task phase: total characters, and the split between text and structured channels.\n- `planner-handoff-show` on the same phase: total characters, work-map share, and how much of the capsule body is duplicated across channels.\n- A full write-fail-then-retry cycle: characters sent by the agent across all attempts, before (three full sends) and after (one send plus a field-only retry).\n- Rough token estimates alongside characters, using the same method as T137 so the two measurements stay comparable.\n\nConfirm after the changes:\n- `entries` returned by `buildPhaseWorkMap` matches what `content` shows, and the withheld count is stated (T406).\n- A bad supporting-document path fails during prepare with no body sent (T407).\n- No field appears in both the text and structured channels for show and prepare (T408).\n- A failed write followed by a retry without `content` succeeds and the total characters sent is roughly one body, not three (T409).\n\nDo not run measurements against heca's real `.planner/` in a way that mutates it. Reads only; any write-path measurement must use an isolated `mkdtemp` fixture per AGENTS.md rule 17.\n\nDeliverable: concise before/after notes attached to this task and summarized on P103(F005), naming the remaining hot spots so a future agent knows what was measured and what was left. Follow T137's precedent of keeping the notes in the planner rather than in a separate document.\n\n---\n**Completion summary:**\nMeasured handoff tool cost before and after T406-T409, following P034(F005)/T137's method and keeping the notes on the task as T137 did.\n\nReference: /Users/antonio/projects/heca, .planner now 8.6 MB, 96 phases. The reported failing phase is P082 — 56 tasks, 5,634-character persisted handoff. Measurement was read-only: the phase and feature JSON were read directly from disk and passed to the pure functions (buildPhaseWorkMap, buildHandoffShowReply, buildHandoffPrepareReply, auditPhaseHandoff). No PlanStore was constructed against heca and nothing there was written. Token figures are chars/4, the same rough method as T137.\n\nTotals, both channels combined:\n- handoff-show: 59,823 -> 29,708 chars (50% less; ~14,956 -> ~7,427 tokens)\n- handoff-prepare: 64,560 -> 33,131 chars (49% less; ~16,140 -> ~8,283 tokens)\n\nThe 64,560-character prepare confirms the reported \"roughly 55 KB\" as accurate.\n\nWork map (T406): entries went from 56 to 18 of 56, i.e. 25,353 -> 8,865 bytes. The rendered text was already capped at 8,000; the untrimmed list beside it was the real cost.\n\nChannel split after the change:\n- show: text 13,760 / structured 15,948\n- prepare: text 7,143 / structured 25,988\n\nWrite cycle (T409), driven end to end through the real MCP tools against an mkdtemp fixture, not against heca: a write that fails on a bad supporting document now retains the body, and the retry omits content entirely. 7,841 characters sent in total instead of 23,523 for the same three-attempt sequence. One body instead of three.\n\nPost-change assertions, all confirmed on heca P082 data:\n- T406 entries mirror the admitted blocks in content, and the withheld count is stated in the truncation notice.\n- T407 a bad supporting-document path is refused during prepare with no body sent (covered by the MCP regression added in that task).\n- T408 the capsule body is absent from show's structured payload, and the scaffold appears in prepare's structured payload only, never in both channels.\n- T409 a failed write followed by a retry without content succeeds; a retry against a superseded token is refused and cannot overwrite newer state.\n\nRemaining hot spots, largest first:\n1. prepare.phaseWorkMap is 16,845 chars and is half of what prepare still sends. Prepare renders the map in no text channel, so it ships both content (8,000) and entries (8,865) in the structured payload. show does not have this problem because its structured payload carries only the machine-readable half. This is the shape inconsistency recorded at the end of T408: phaseWorkMap means something different in the two replies. Making prepare render the map in text and carry only entries in structured would remove about 8,000 chars per call.\n2. The planner-owned audit metadata is 6,732 chars in both replies (existingCompletenessAudit in prepare, handoffAudit in show). It is sent on every call including the empty-handoff branch. Worth checking which consumer actually reads it.\n3. show.structured is still slightly larger than show.text. Nothing in it is duplicated, but items 1 and 2 account for nearly all of it.\n\nNot done: the task also asked whether a dedicated no-duplication regression and a committed byte-count assertion should exist. Those were listed as not-done on T408 and remain so. The invariant is currently pinned inside three updated assertions rather than a dedicated test, and every byte count in this task was taken by hand. A committed fixture-based byte assertion would stop these numbers from silently regressing.\n\nVerification: measurement script ran against the current built plan-core dist at commit a0ea1ba. No code was changed by this task. No full repository gate was run, per AGENTS.md rule 17.",
+      "descriptionUpdatedAt": "2026-09-15T07:52:46.721Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "224e3d6b-57e7-4268-a98c-de9d0fda160b-check-001-planned-in-progress",
+          "date": "2026-09-15T07:51:19.770Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "224e3d6b-57e7-4268-a98c-de9d0fda160b-check-002-in-progress-done",
+          "date": "2026-09-15T07:52:46.718Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Measured handoff tool cost before and after T406-T409, following P034(F005)/T137's method and keeping the notes on the task as T137 did.\n\nReference: /Users/antonio/projects/heca, .planner now 8.6 MB, 96 phases. The reported failing phase is P082 — 56 tasks, 5,634-character persisted handoff. Measurement was read-only: the phase and feature JSON were read directly from disk and passed to the pure functions (buildPhaseWorkMap, buildHandoffShowReply, buildHandoffPrepareReply, auditPhaseHandoff). No PlanStore was constructed against heca and nothing there was written. Token figures are chars/4, the same rough method as T137.\n\nTotals, both channels combined:\n- handoff-show: 59,823 -> 29,708 chars (50% less; ~14,956 -> ~7,427 tokens)\n- handoff-prepare: 64,560 -> 33,131 chars (49% less; ~16,140 -> ~8,283 tokens)\n\nThe 64,560-character prepare confirms the reported \"roughly 55 KB\" as accurate.\n\nWork map (T406): entries went from 56 to 18 of 56, i.e. 25,353 -> 8,865 bytes. The rendered text was already capped at 8,000; the untrimmed list beside it was the real cost.\n\nChannel split after the change:\n- show: text 13,760 / structured 15,948\n- prepare: text 7,143 / structured 25,988\n\nWrite cycle (T409), driven end to end through the real MCP tools against an mkdtemp fixture, not against heca: a write that fails on a bad supporting document now retains the body, and the retry omits content entirely. 7,841 characters sent in total instead of 23,523 for the same three-attempt sequence. One body instead of three.\n\nPost-change assertions, all confirmed on heca P082 data:\n- T406 entries mirror the admitted blocks in content, and the withheld count is stated in the truncation notice.\n- T407 a bad supporting-document path is refused during prepare with no body sent (covered by the MCP regression added in that task).\n- T408 the capsule body is absent from show's structured payload, and the scaffold appears in prepare's structured payload only, never in both channels.\n- T409 a failed write followed by a retry without content succeeds; a retry against a superseded token is refused and cannot overwrite newer state.\n\nRemaining hot spots, largest first:\n1. prepare.phaseWorkMap is 16,845 chars and is half of what prepare still sends. Prepare renders the map in no text channel, so it ships both content (8,000) and entries (8,865) in the structured payload. show does not have this problem because its structured payload carries only the machine-readable half. This is the shape inconsistency recorded at the end of T408: phaseWorkMap means something different in the two replies. Making prepare render the map in text and carry only entries in structured would remove about 8,000 chars per call.\n2. The planner-owned audit metadata is 6,732 chars in both replies (existingCompletenessAudit in prepare, handoffAudit in show). It is sent on every call including the empty-handoff branch. Worth checking which consumer actually reads it.\n3. show.structured is still slightly larger than show.text. Nothing in it is duplicated, but items 1 and 2 account for nearly all of it.\n\nNot done: the task also asked whether a dedicated no-duplication regression and a committed byte-count assertion should exist. Those were listed as not-done on T408 and remain so. The invariant is currently pinned inside three updated assertions rather than a dedicated test, and every byte count in this task was taken by hand. A committed fixture-based byte assertion would stop these numbers from silently regressing.\n\nVerification: measurement script ran against the current built plan-core dist at commit a0ea1ba. No code was changed by this task. No full repository gate was run, per AGENTS.md rule 17."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -246,16 +263,21 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-15T07:51:19.770Z",
+      "completedAt": "2026-09-15T07:52:46.718Z",
       "createdAt": "2026-09-14T13:04:59.729Z",
-      "updatedAt": "2026-09-14T13:04:59.729Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-15T07:52:46.718Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+          "createdAt": "2026-09-15T07:51:19.679Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-14T13:03:31.252Z",
-  "updatedAt": "2026-09-14T18:45:05.454Z",
+  "updatedAt": "2026-09-15T07:52:46.718Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -269,9 +291,21 @@
       "toStatus": "in-progress",
       "title": "draft → in-progress",
       "description": ""
+    },
+    {
+      "id": "4be1efdf-7a9f-4edd-9427-f0c8d1acd98b",
+      "date": "2026-09-15T07:52:46.745Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+      "createdAt": "2026-09-15T07:51:19.679Z"
+    },
     {
       "sessionId": "mcp-process:aaf36422-c5e1-4ba2-8e3e-75c25cd6bdb0",
       "createdAt": "2026-09-14T18:20:41.518Z"
