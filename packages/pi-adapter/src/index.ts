@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -2365,22 +2365,23 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const { phase, task } = resolved;
         const description = await ctx.ui.input(`Execution notes / description [${task.description || ""}]`);
         const checklistSeed = await ctx.ui.input("Checklist items (comma-separated, blank to keep current)");
-        const checklist = checklistSeed?.trim()
-          ? splitCsv(checklistSeed).map((itemTitle, index) => ({
-              number: index + 1,
-              id: createChecklistItemId(task.id, index + 1, itemTitle),
-              title: itemTitle,
-              checked: false,
-            }))
-          : undefined;
-        await st.updateTask(phase.id, task.id, (current) => ({
-          ...current,
-          ...(description?.trim() ? { description: description.trim() } : {}),
-          ...(checklist ? { checklist } : {}),
-          updatedAt: nowISO(),
-        }));
+        const checklistTitles = checklistSeed?.trim() ? splitCsv(checklistSeed) : undefined;
+        let checklistLostTicks: string[] = [];
+        await st.updateTask(phase.id, task.id, (current) => {
+          const next = { ...current, updatedAt: nowISO() };
+          if (description?.trim()) next.description = description.trim();
+          if (checklistTitles) {
+            const replacement = replaceChecklist(current.checklist ?? [], checklistTitles, task.id);
+            next.checklist = replacement.items;
+            checklistLostTicks = replacement.lostTicks;
+          }
+          return next;
+        });
         await st.writeGenerated();
-          ctx.ui.notify(`Task ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} discussed and updated.`, "info");
+        const lostTicksNotice = checklistLostTicks.length > 0
+          ? ` Warning: lost tick on ${checklistLostTicks.length} item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
+          : "";
+        ctx.ui.notify(`Task ${formatPhaseRef(phase!.number, featureNumberOfPhase(phase!, (await st.loadFeatures()).features))}/T${String(task.number).padStart(3, "0")} discussed and updated.${lostTicksNotice}`, checklistLostTicks.length > 0 ? "warning" : "info");
         return;
       }
       if (b === "show") {
@@ -5116,7 +5117,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         acceptedAt: Type.String(),
       }), { description: "Deprecated compatibility field. Raw replacement is rejected; use accepted_decision_create, accepted_decision_update, or accepted_decision_delete." })),
       priority: Type.Optional(Type.Number({ description: "Display order within the phase (lower = higher)" })),
-      checklist: Type.Optional(Type.Array(Type.String(), { description: "Replace checklist (plain strings). For interactive toggling use the web UI." })),
+      checklist: Type.Optional(Type.Array(Type.String(), { description: "Replace checklist (plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick); an item that cannot be matched loses its tick and that loss is reported. For interactive toggling use the web UI or checklist_toggle/add/remove." })),
       subtasks: Type.Optional(Type.Array(Type.Object({ id: Type.Optional(Type.String()), title: Type.String(), description: Type.Optional(Type.String()), status: Type.Optional(Type.String()) }), { description: "Replace subtasks; existing IDs must belong to this task and omitted IDs are planner-generated." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -5129,6 +5130,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const hostPhase = found.phase;
       const now = nowISO();
       let updatedTask: Task | undefined;
+      let checklistLostTicks: string[] = [];
       // Validate the motivation requirement for restrictive status transitions,
       // mirroring the MCP adapter and the /planner task update command
       // (AGENTS.md rule 8 — rejected writes must leave the files unchanged).
@@ -5198,11 +5200,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           if (params.notes !== undefined) task.notes = params.notes.trim();
           if (params.decisions !== undefined) task.decisions = params.decisions.map((item) => item.trim()).filter(Boolean);
           if (params.checklist !== undefined) {
-            task.checklist = params.checklist.map((itemTitle, index) => ({ number: index + 1,
-              id: createChecklistItemId(task.id, index + 1, itemTitle),
-              title: itemTitle,
-              checked: false,
-            }));
+            const replacement = replaceChecklist(task.checklist ?? [], params.checklist, task.id);
+            task.checklist = replacement.items;
+            checklistLostTicks = replacement.lostTicks;
           }
           if (params.subtasks !== undefined) {
             task.subtasks = params.subtasks.map((item) => ({ id: item.id ?? randomUUID(), title: item.title.trim(), description: item.description?.trim() ?? "", status: (item.status ?? "planned") as Subtask["status"], createdAt: task.subtasks.find((candidate) => candidate.id === item.id)?.createdAt ?? now, updatedAt: now }));
@@ -5244,7 +5244,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const staleParentRefs = descriptionFreshness?.diagnostics
         .filter((entry) => entry.state === "stale" && ownerIds.has(entry.ownerId))
         .map((entry) => entry.ownerRef) ?? [];
-      return { content: [{ type: "text", text: `Task updated: ${updatedTask.id} (${updatedTask.status}). Fields saved: ${receivedFields.join(", ")}.` }], details: { ...updatedTask, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) } };
+      const lostTicksNotice = checklistLostTicks.length > 0
+        ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
+        : "";
+      return { content: [{ type: "text", text: `Task updated: ${updatedTask.id} (${updatedTask.status}). Fields saved: ${receivedFields.join(", ")}.${lostTicksNotice}` }], details: { ...updatedTask, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}), ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) } };
     },
   });
 

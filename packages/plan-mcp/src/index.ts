@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -1576,7 +1576,7 @@ server.registerTool("planner-task-discuss", {
     task: z.string().min(1),
     description: z.string().optional(),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full task description."),
-    checklist: z.array(z.string()).optional(),
+    checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick). Use planner-task-checklist-toggle/add/remove for granular edits."),
   },
 }, async ({ task: ref, description, descriptionRef: rawDescriptionRef, checklist }) => {
   const st = await requireStore();
@@ -1602,6 +1602,7 @@ server.registerTool("planner-task-discuss", {
     });
   }
   let updatedTask: Task | undefined;
+  let checklistLostTicks: string[] = [];
   await st.updatePhase(found.phase.id, (phase) => {
     const task = phase.tasks.find((entry) => entry.id === found.task.id);
     if (!task) return phase;
@@ -1611,7 +1612,11 @@ server.registerTool("planner-task-discuss", {
       if (descriptionRef) task.descriptionRef = descriptionRef;
       else delete task.descriptionRef;
     }
-    if (checklist !== undefined) task.checklist = checklist.map((item, index) => ({ id: createChecklistItemId(task.id, index + 1, item), number: index + 1, title: item, checked: false }));
+    if (checklist !== undefined) {
+      const replacement = replaceChecklist(task.checklist ?? [], checklist, task.id);
+      task.checklist = replacement.items;
+      checklistLostTicks = replacement.lostTicks;
+    }
     task.updatedAt = nowISO();
     phase.updatedAt = task.updatedAt;
     updatedTask = task;
@@ -1619,7 +1624,10 @@ server.registerTool("planner-task-discuss", {
   });
   const features = (await st.loadFeatures()).features;
   const t = updatedTask ?? found.task;
-  return writeAndSummarize(st, `✅ Task discussed/updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { task: t, discussed: true, updatedFields: receivedFields });
+  const lostTicksNotice = checklistLostTicks.length > 0
+    ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
+    : "";
+  return writeAndSummarize(st, `✅ Task discussed/updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${lostTicksNotice}`, { task: t, discussed: true, updatedFields: receivedFields, ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) });
 });
 
 server.registerTool("planner-task-dependency-add", {
@@ -1655,7 +1663,7 @@ server.registerTool("planner-task-update", {
     decisions: z.array(z.string()).optional().describe("Replace the task decisions list."),
     motivation: z.string().optional(),
     priority: z.number().int().nonnegative().optional().describe("Display order within the phase (lower = higher)."),
-    checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Agents should tick steps via planner-task-checklist-toggle, not write DONE in titles."),
+    checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick); an item that cannot be matched loses its tick and that loss is reported. Agents should tick steps via planner-task-checklist-toggle, not write DONE in titles, and use planner-task-checklist-add/remove for granular edits."),
     subtasks: z.array(z.object({ id: z.string().optional(), title: z.string().min(1), description: z.string().optional(), status: z.enum(STATUS_VALUES).optional() })).optional().describe("Replace subtasks; existing IDs must belong to this task and omitted IDs are planner-generated."),
   },
 }, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks }) => {
@@ -1707,6 +1715,7 @@ server.registerTool("planner-task-update", {
     }
   }
   let updatedTask: Task | undefined;
+  let checklistLostTicks: string[] = [];
   const timestamp = nowISO();
   try {
   await st.updateTask(found.phase.id, found.task.id, (task) => {
@@ -1721,12 +1730,9 @@ server.registerTool("planner-task-update", {
     if (notes !== undefined) task.notes = notes.trim();
     if (decisions !== undefined) task.decisions = decisions.map((item) => item.trim()).filter(Boolean);
     if (checklist !== undefined) {
-      task.checklist = checklist.map((item, index) => ({
-        id: createChecklistItemId(task.id, index + 1, item),
-        number: index + 1,
-        title: item.trim(),
-        checked: false,
-      }));
+      const replacement = replaceChecklist(task.checklist ?? [], checklist, task.id);
+      task.checklist = replacement.items;
+      checklistLostTicks = replacement.lostTicks;
     }
     if (subtasks !== undefined) {
       const existingIds = new Set(task.subtasks.map((item) => item.id));
@@ -1781,10 +1787,13 @@ server.registerTool("planner-task-update", {
   const staleParentRefs = descriptionFreshness?.diagnostics
     .filter((entry) => entry.state === "stale" && ownerIds.has(entry.ownerId))
     .map((entry) => entry.ownerRef) ?? [];
+  const lostTicksNotice = checklistLostTicks.length > 0
+    ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
+    : "";
   const details = resumeRequired
-    ? { task: t, updated: true, updatedFields: receivedFields, resumeRequired, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) }
-    : { task: t, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) };
-  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${resumeNotice}`, details);
+    ? { task: t, updated: true, updatedFields: receivedFields, resumeRequired, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}), ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) }
+    : { task: t, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}), ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) };
+  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${resumeNotice}${lostTicksNotice}`, details);
 });
 
 server.registerTool("planner-task-checklist-toggle", {

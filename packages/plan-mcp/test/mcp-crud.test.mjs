@@ -259,11 +259,12 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
     const storedAfterRejection = await session.store.loadPhase(id);
     assert.equal(storedAfterRejection.title, "Payouts", "mixed status update is rejected atomically");
     await callTool(session, "planner-feature-add", { name: "Parity owner", description: LONG });
+    const directDescriptionRef = ".planner/docs/p094-pane-hosts-any-app.md";
     const updated = await callTool(session, "planner-phase-update", {
       phase: shortId,
       title: "Payouts v2",
       featureId: "F002",
-      descriptionRef: ".planner/docs/phases/payouts.md",
+      descriptionRef: directDescriptionRef,
       goals: ["Ship payouts"],
       nonGoals: ["Redesign billing"],
       dependencies: ["Provider contract"],
@@ -276,7 +277,7 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
     let stored = await session.store.loadPhase(id);
     assert.equal(stored.title, "Payouts v2");
     assert.equal(stored.featureId, (await session.store.loadFeatures()).features.find((entry) => entry.number === 2).id);
-    assert.equal(stored.descriptionRef, ".planner/docs/phases/payouts.md");
+    assert.equal(stored.descriptionRef, directDescriptionRef);
     assert.deepEqual(stored.goals, ["Ship payouts"]);
     assert.deepEqual(stored.nonGoals, ["Redesign billing"]);
     assert.deepEqual(stored.dependencies, ["Provider contract"]);
@@ -409,6 +410,26 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     assert.deepEqual(checklist.map((item) => item.title), ["Review", "Ship"], "checklist add/toggle/remove renumbers cleanly");
     assert.equal(checklist[0].checked, true, "toggle marks C1 done");
 
+    // T413 (P104/F005) — planner-task-update's checklist replacement must
+    // carry tick state across via plan-core's replaceChecklist, not a
+    // private hand-built mapping, and must surface any tick it could not
+    // carry rather than dropping it in a "success" result.
+    const renamed = await callTool(session, "planner-task-update", { task: "T002", checklist: ["Review carefully", "Ship"] });
+    assert.equal(toolStructured(renamed).updated, true);
+    assert.equal(toolStructured(renamed).checklistLostTicks, undefined, "an equal-length rename must not report a loss");
+    assert.doesNotMatch(toolText(renamed), /Lost tick/);
+    const renamedTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
+    assert.deepEqual(renamedTask.checklist.map((item) => item.title), ["Review carefully", "Ship"]);
+    assert.equal(renamedTask.checklist[0].checked, true, "renaming the ticked item in place must keep its tick");
+
+    const dropped = await callTool(session, "planner-task-update", { task: "T002", checklist: ["Ship"] });
+    assert.equal(toolStructured(dropped).updated, true);
+    assert.deepEqual(toolStructured(dropped).checklistLostTicks, ["Review carefully"], "a checklist replacement that drops a ticked item must report it, not silently discard it");
+    assert.match(toolText(dropped), /Lost tick.*Review carefully/s);
+    const droppedTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
+    assert.deepEqual(droppedTask.checklist.map((item) => item.title), ["Ship"]);
+    assert.equal(droppedTask.checklist[0].checked, false);
+
     // make T002 the highest-priority ready task (seed T001 has priority 10)
     await callTool(session, "planner-task-update", { task: "T002", priority: 0 });
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).priority, 0);
@@ -501,6 +522,39 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const phase = (await session.store.loadAllPhases())[0];
     assert.equal(phase.tasks.some((entry) => entry.id === id), false);
     assert.equal(phase.taskIds.includes(id), false);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-discuss: checklist replacement carries ticks via plan-core, reports what it cannot", async () => {
+  // T413 (P104/F005) — planner-task-discuss builds its checklist replacement
+  // independently of planner-task-update; both must route through
+  // plan-core's replaceChecklist rather than each hardcoding checked:false.
+  const session = await startMcpFixture({ name: "t413-discuss-checklist" });
+  try {
+    await callTool(session, "planner-task-add", {
+      feature: "F001", phase: "P001", title: "Discuss checklist parity", description: LONG, checklist: ["Draft", "Review"],
+    });
+    const task = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.title === "Discuss checklist parity");
+    await callTool(session, "planner-task-checklist-toggle", { task: task.shortId, item: "C1" });
+    assert.equal((await session.store.loadPhase(task.phaseId)).tasks.find((entry) => entry.id === task.id).checklist[0].checked, true);
+
+    // Same-length rename keeps the tick, no loss reported.
+    const renamed = await callTool(session, "planner-task-discuss", { task: task.shortId, checklist: ["Draft carefully", "Review"] });
+    assert.equal(toolStructured(renamed).checklistLostTicks, undefined);
+    assert.doesNotMatch(toolText(renamed), /Lost tick/);
+    let stored = (await session.store.loadPhase(task.phaseId)).tasks.find((entry) => entry.id === task.id);
+    assert.deepEqual(stored.checklist.map((entry) => entry.title), ["Draft carefully", "Review"]);
+    assert.equal(stored.checklist[0].checked, true, "planner-task-discuss must carry the tick across a same-position rename");
+
+    // Dropping the ticked title reports the loss instead of silently discarding it.
+    const dropped = await callTool(session, "planner-task-discuss", { task: task.shortId, checklist: ["Review"] });
+    assert.deepEqual(toolStructured(dropped).checklistLostTicks, ["Draft carefully"]);
+    assert.match(toolText(dropped), /Lost tick.*Draft carefully/s);
+    stored = (await session.store.loadPhase(task.phaseId)).tasks.find((entry) => entry.id === task.id);
+    assert.deepEqual(stored.checklist.map((entry) => entry.title), ["Review"]);
+    assert.equal(stored.checklist[0].checked, false);
   } finally {
     await closeMcpFixture(session);
   }

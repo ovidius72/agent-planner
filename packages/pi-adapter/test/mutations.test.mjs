@@ -543,6 +543,28 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       const phaseOnDisk = JSON.parse(await readFile(join(host.planRoot, "phases", `${phase.id}.json`), "utf8"));
       assert.deepEqual(phaseOnDisk.tasks[0].checklist.map((item) => item.title), ["Review", "Execute"], "task_update persists checklist to the owning phase file");
 
+      // T413 (P104/F005) — task_update's checklist replacement must carry
+      // tick state across via plan-core's replaceChecklist, not a private
+      // hand-built mapping, and must surface any tick it could not carry.
+      await host.runTool("task_checklist_toggle", { taskId: "T001", item: "C1" });
+      assert.equal((await host.store.loadPhase(phase.id)).tasks[0].checklist[0].checked, true);
+
+      const renamed = await host.runTool("task_update", { taskId: "T001", checklist: ["Review carefully", "Execute"] });
+      assert.equal(toolDetails(renamed).updated, true);
+      assert.equal(toolDetails(renamed).checklistLostTicks, undefined, "an equal-length rename must not report a loss");
+      assert.doesNotMatch(toolText(renamed), /Lost tick/);
+      const renamedTask = (await host.store.loadPhase(phase.id)).tasks[0];
+      assert.deepEqual(renamedTask.checklist.map((item) => item.title), ["Review carefully", "Execute"]);
+      assert.equal(renamedTask.checklist[0].checked, true, "renaming the ticked item in place must keep its tick");
+
+      const dropped = await host.runTool("task_update", { taskId: "T001", checklist: ["Execute"] });
+      assert.equal(toolDetails(dropped).updated, true);
+      assert.deepEqual(toolDetails(dropped).checklistLostTicks, ["Review carefully"], "a checklist replacement that drops a ticked item must report it, not silently discard it");
+      assert.match(toolText(dropped), /Lost tick.*Review carefully/s);
+      const droppedTask = (await host.store.loadPhase(phase.id)).tasks[0];
+      assert.deepEqual(droppedTask.checklist.map((item) => item.title), ["Execute"]);
+      assert.equal(droppedTask.checklist[0].checked, false);
+
       for (const [tool, arguments_] of [
         ["feature_update", { featureId: "F001", acceptedDecisions: [] }],
         ["phase_update", { phaseId: "P001", acceptedDecisions: [] }],
