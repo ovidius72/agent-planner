@@ -3731,6 +3731,29 @@ export class PlanStore {
     }
   }
 
+  /** The full prior capsule's `##` headings for validateHandoffSectionReconciliation
+   * (P104(F005)/T416): the live phase's own compact-capsule headings, plus —
+   * when there is a live handoff to reconcile against — the headings of
+   * every document its own auto-externalization moved out, read back fresh
+   * here (never the elided copy, matching PhaseHandoffAudit.priorSectionHeadings
+   * as preparePhaseHandoff derives it). Empty when phase.handoff is "": a
+   * first handoff has nothing prior, and a handoff already archived by
+   * handoff_clear has nothing live left to reconcile even though stale
+   * handoffAudit.supportingDocuments may still name an old externalized
+   * file — this is what makes an archived-then-superseded write behave like
+   * a first write instead of demanding dispositions for content that is
+   * already gone. */
+  private async priorHandoffSectionHeadings(phase: Phase): Promise<string[]> {
+    if (!phase.handoff.trim()) return [];
+    const headings = extractHandoffSectionHeadings(phase.handoff);
+    const autoExternalizedDocuments = (phase.handoffAudit?.supportingDocuments ?? []).filter(isAutoExternalizedHandoffDocument);
+    for (const document of autoExternalizedDocuments) {
+      const content = await this.readExternalizedHandoffDocument(document.path);
+      if (content) headings.push(...extractHandoffSectionHeadings(content));
+    }
+    return [...new Set(headings)];
+  }
+
   /** Audit one exact phase before preparing a handoff refresh. When a
    * supporting-document manifest is already known (it is optional — most
    * handoffs need none), validate it here so every defect that does not
@@ -3773,7 +3796,15 @@ export class PlanStore {
         };
       }),
     );
-    return { ...audit, externalizedHandoffDocuments };
+    // A handoff already archived (handoff_clear) has phase.handoff === "" but
+    // may still carry stale handoffAudit.supportingDocuments referencing its
+    // old externalized file(s) — nothing left to reconcile against once
+    // archived, so priorSectionHeadings stays whatever auditPhaseHandoff
+    // already derived from the (empty) compact capsule: [].
+    const priorSectionHeadings = phase.handoff.trim()
+      ? [...new Set([...audit.priorSectionHeadings, ...externalizedHandoffDocuments.flatMap((document) => document.headings)])]
+      : audit.priorSectionHeadings;
+    return { ...audit, externalizedHandoffDocuments, priorSectionHeadings };
   }
 
   /** Refresh the single active handoff and synchronize durable task/phase/feature
@@ -3857,10 +3888,16 @@ export class PlanStore {
           }
         }
         const verifiedSupportingDocuments = await this.validateHandoffSupportingDocuments(effectiveInput.supportingDocuments ?? []);
+        // Derived from the live originalPhase, not a copy captured at
+        // prepare time — see priorHandoffSectionHeadings for why that is
+        // exactly what "the prior capsule the author was shown" means even
+        // across an intervening handoff_clear.
+        const priorSectionHeadings = await this.priorHandoffSectionHeadings(originalPhase);
         const verifiedInput: RefreshPhaseHandoffInput = {
           ...effectiveInput,
           verifiedSupportingDocuments: verifiedSupportingDocuments.metadata,
           verifiedSupportingDocumentContents: verifiedSupportingDocuments.contents,
+          priorSectionHeadings,
         };
         const originalFeature = originalFeatures.features[featureIndex]!;
         const applied = applyHandoffContextSync(originalPhase, originalFeature, verifiedInput, timestamp);

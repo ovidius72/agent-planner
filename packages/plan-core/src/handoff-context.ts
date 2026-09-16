@@ -75,7 +75,7 @@ export const HANDOFF_CANONICAL_SECTIONS = [
 
 export type HandoffCompletenessCategory = typeof HANDOFF_COMPLETENESS_CATEGORIES[number]["id"];
 export type HandoffColdStartInventoryCategory = typeof HANDOFF_COLD_START_INVENTORY_CATEGORIES[number]["id"];
-export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND" | "HANDOFF_RETAINED_CONTENT_NOT_FOUND";
+export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND" | "HANDOFF_RETAINED_CONTENT_NOT_FOUND" | "HANDOFF_SECTION_RECONCILIATION_REQUIRED";
 
 export class HandoffContractError extends Error {
   readonly code: HandoffContractErrorCode;
@@ -136,6 +136,19 @@ export function retainedHandoffContentNotFoundError(phaseId: string, expectedHan
       recovery: "Provide content once. After a write fails, a retry against the exact same expectedHandoffUpdatedAt may omit content to reuse the body just submitted; a fresh token (from a new handoff_prepare) or a phase that has since gone terminal has nothing retained.",
     },
   );
+}
+
+/** One prior section's fate, supplied by the author when validateHandoffSectionReconciliation
+ * names it as unaccounted for. `section` must match a heading named in the
+ * error's `unaccountedSections`; `disposition` is a short, substantive
+ * statement of what happened to it — dropped deliberately, superseded by
+ * newer content, or folded into a different section (including a rename).
+ * See P104(F005)/T416: this is the evidence that replaces the unchecked
+ * `reconciledExistingHandoff` boolean for the sections most likely to be
+ * silently lost. */
+export interface HandoffSectionDispositionInput {
+  section: string;
+  disposition: string;
 }
 
 export interface HandoffCompletenessAuditInput {
@@ -210,6 +223,64 @@ export function extractHandoffSectionHeadings(content: string): string[] {
   return headings;
 }
 
+/** Prior `##` headings with no counterpart heading in `newContent`. A
+ * section counts as carried forward only if its exact heading text
+ * (case-insensitive) still appears as a `##` heading somewhere in the new
+ * content — matching by heading, not by scanning prose for the words, keeps
+ * this a narrow structural check rather than a fuzzy content audit. Callers
+ * needing "did the author account for this" evidence use
+ * validateHandoffSectionReconciliation below, which turns this list into a
+ * typed refusal unless every entry has a disposition. */
+function unaccountedHandoffSections(priorSectionHeadings: string[], newContent: string): string[] {
+  const newHeadings = new Set(extractHandoffSectionHeadings(newContent).map((heading) => heading.trim().toLowerCase()));
+  return priorSectionHeadings.filter((heading) => !newHeadings.has(heading.trim().toLowerCase()));
+}
+
+/**
+ * Make reconciliation evidenced rather than asserted (P104(F005)/T416).
+ *
+ * Narrow by design: this compares `##` heading text only, never section
+ * content or a fixed category list — it is not a return to the 16-section
+ * scaffold and 14-category cold-start inventory P100(F021)/T396 removed for
+ * making authoring verbose and failing late. A prior capsule with no
+ * headings (or a new submission with none) simply has nothing to name here;
+ * the check degrades to a no-op rather than blocking the write.
+ *
+ * A prior section vanishes from the new content in three ways an author
+ * might legitimately intend: dropped because it no longer matters,
+ * superseded by newer content, or folded into a different section (a rename
+ * reads the same way — the old heading is gone, the content lives under a
+ * new one). This function does not try to tell those apart; it only
+ * requires the author to say which happened, per named section, before the
+ * write proceeds. A deliberate full rewrite where every prior section is
+ * obsolete is handled the same way: every heading is named, and the author
+ * writes one disposition per heading.
+ */
+export function validateHandoffSectionReconciliation(
+  priorSectionHeadings: string[],
+  newContent: string,
+  dispositions: HandoffSectionDispositionInput[] | undefined,
+): void {
+  const unaccounted = unaccountedHandoffSections(priorSectionHeadings, newContent);
+  if (unaccounted.length === 0) return;
+  const bySection = new Map<string, string>();
+  for (const entry of dispositions ?? []) {
+    const section = entry.section?.trim();
+    if (section) bySection.set(section.toLowerCase(), entry.disposition ?? "");
+  }
+  const stillUnaccounted = unaccounted.filter((section) => !isSubstantive(bySection.get(section.trim().toLowerCase()) ?? ""));
+  if (stillUnaccounted.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_SECTION_RECONCILIATION_REQUIRED",
+      "Prior handoff sections have no counterpart in the new content. Supply sectionDispositions with one substantive entry per named section (dropped, superseded, or folded into another section) before writing.",
+      {
+        unaccountedSections: stillUnaccounted,
+        recovery: "Retry against the same phaseRef and expectedHandoffUpdatedAt with sectionDispositions only; content may be omitted to reuse the body just submitted.",
+      },
+    );
+  }
+}
+
 export interface HandoffTaskContextUpdate {
   taskId: string;
   completionSummary: string;
@@ -266,6 +337,18 @@ export interface PhaseHandoffAudit {
    *  has no filesystem access) — PlanStore.preparePhaseHandoff fills it in
    *  after reading each document back from .planner/docs/. */
   externalizedHandoffDocuments: HandoffExternalizedDocumentAudit[];
+  /** `##` headings of the full prior capsule the next write will supersede:
+   *  the active handoff's own headings plus, per P104(F005)/T415, the
+   *  headings of every document its own auto-externalization moved out —
+   *  never the elided copy, so a heading that survives only in the
+   *  externalized file is still named. Empty when there is no active
+   *  handoff to reconcile against (first write, or one already archived by
+   *  handoff_clear). auditPhaseHandoff itself only derives this from the
+   *  compact capsule text (no filesystem access); PlanStore.preparePhaseHandoff
+   *  and PlanStore.refreshPhaseHandoff both overlay the externalized
+   *  documents' own headings after reading them back. See
+   *  validateHandoffSectionReconciliation, which consumes this list. */
+  priorSectionHeadings: string[];
 }
 
 export interface RefreshPhaseHandoffInput {
@@ -274,6 +357,19 @@ export interface RefreshPhaseHandoffInput {
   content: string;
   expectedHandoffUpdatedAt: string;
   reconciledExistingHandoff: boolean;
+  /** The full prior capsule's `##` headings (see PhaseHandoffAudit.priorSectionHeadings),
+   *  as PlanStore derived them from the live phase this write is targeting —
+   *  never a stale copy captured at prepare time, so a handoff archived
+   *  between prepare and write (phase.handoff now "") correctly yields no
+   *  sections to reconcile instead of demanding dispositions for content
+   *  that is no longer live. Populated by PlanStore; absent only in direct
+   *  unit calls to applyHandoffContextSync/validateHandoffContextSync that
+   *  do not exercise this check. */
+  priorSectionHeadings?: string[];
+  /** Per-section account for each entry in priorSectionHeadings that has no
+   *  counterpart heading in the submitted content. See
+   *  validateHandoffSectionReconciliation. */
+  sectionDispositions?: HandoffSectionDispositionInput[];
   completenessAudit?: HandoffCompletenessAuditInput;
   coldStartInventory?: HandoffColdStartInventoryInput;
   supportingDocuments?: HandoffSupportingDocumentInput[];
@@ -379,6 +475,9 @@ export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffA
     // Filled in by PlanStore.preparePhaseHandoff, which alone can read
     // .planner/docs/; this pure function has no filesystem access.
     externalizedHandoffDocuments: [],
+    // Compact-capsule headings only; PlanStore.preparePhaseHandoff overlays
+    // headings from auto-externalized documents once it has read them back.
+    priorSectionHeadings: phase.handoff.trim() ? extractHandoffSectionHeadings(phase.handoff) : [],
   };
 }
 
@@ -860,6 +959,15 @@ export function validateHandoffContextSync(
   }
   if (phase.handoff.trim() && !input.reconciledExistingHandoff) {
     throw new Error("An active handoff already exists. Reconcile its still-relevant content and set reconciledExistingHandoff=true.");
+  }
+  if (phase.handoff.trim()) {
+    // Judge against the body the author actually wrote, not the planner's
+    // own auto-externalized compaction (mirrors the supporting-document link
+    // check above): when this write itself got compacted, submittedContent
+    // is the full pre-compaction text and is what a prior section's heading
+    // would still appear in.
+    const newContentForHeadings = input.submittedContent ?? input.content;
+    validateHandoffSectionReconciliation(input.priorSectionHeadings ?? [], newContentForHeadings, input.sectionDispositions);
   }
 
   const sync = input.contextSync;

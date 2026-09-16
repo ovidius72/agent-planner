@@ -320,6 +320,12 @@ export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): Hando
         externalized.text,
       ]
       : []),
+    ...(audit.priorSectionHeadings.length > 0
+      ? [
+        "",
+        `Prior sections to account for: ${audit.priorSectionHeadings.join(", ")}. Any of these missing as a "##" heading from the written content will be refused (HANDOFF_SECTION_RECONCILIATION_REQUIRED) unless you also submit sectionDispositions naming what happened to it (dropped, superseded, or folded into another section).`,
+      ]
+      : []),
   ].join("\n");
 
   return {

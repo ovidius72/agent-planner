@@ -928,6 +928,174 @@ describe("durable handoff context refresh", () => {
   });
 });
 
+// P104(F005)/T416: reconciliation is evidenced rather than asserted. A prior
+// handoff's `##` sections with no counterpart heading in the new content are
+// named; the author accounts for each with a sectionDispositions entry
+// before the write proceeds. Narrow by design (see AGENTS.md and the task
+// description) — heading text only, no fixed category list, no required
+// prose beyond a short disposition; a capsule with no headings on either
+// side needs no dispositions at all.
+describe("prior handoff sections are named and require an evidenced disposition", () => {
+  test("names a prior section dropped from the new content and refuses to persist", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Current focus",
+      "Continue T001.",
+      "",
+      "## Known workarounds",
+      "- Restart the dev server after editing schema.ts.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit.priorSectionHeadings, ["Current focus", "Known workarounds"]);
+
+    const input = refreshInput(audit, doneTaskId); // its fixture content has "## Current focus" but never "## Known workarounds"
+    const before = await store.loadPhase(phaseId);
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, input),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SECTION_RECONCILIATION_REQUIRED");
+        assert.deepEqual(error.details.unaccountedSections, ["Known workarounds"]);
+        assert.match(error.details.recovery, /sectionDispositions/);
+        return true;
+      },
+    );
+    assert.deepEqual(await store.loadPhase(phaseId), before, "a refused write must not mutate the phase");
+  });
+
+  test("a substantive sectionDisposition for the named section satisfies the gate", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Current focus",
+      "Continue T001.",
+      "",
+      "## Known workarounds",
+      "- Restart the dev server after editing schema.ts.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const written = await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId, {
+      sectionDispositions: [{ section: "Known workarounds", disposition: "Superseded: the schema fix removed the need to restart the dev server." }],
+    }));
+    assert.match(written.phase.handoff, /Continue the phase\./);
+  });
+
+  test("a heading-free prior capsule needs no section dispositions", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, "Resume T001 directly; no headings were used in this capsule.");
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit.priorSectionHeadings, [], "nothing to name when the prior capsule used no headings");
+    const written = await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId));
+    assert.match(written.phase.handoff, /Continue the phase\./);
+  });
+
+  test("a section-reconciliation refusal is retried with only dispositions, never resending the capsule", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Known workarounds",
+      "- Restart the dev server after editing schema.ts.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, full),
+      (error) => error.code === "HANDOFF_SECTION_RECONCILIATION_REQUIRED",
+    );
+    const { content: _content, ...withoutContent } = full;
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...withoutContent,
+      sectionDispositions: [{ section: "Known workarounds", disposition: "Dropped: verified obsolete after the schema fix landed." }],
+    });
+    assert.match(written.phase.handoff, /Continue the phase\./, "the retry persisted the body retained from the refused attempt, not a resend");
+  });
+
+  test("a deliberate full rewrite requires a disposition per prior heading, not a bypass", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Current focus",
+      "Old focus, now abandoned.",
+      "",
+      "## Blockers and risks",
+      "- Old blocker, since resolved.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const input = refreshInput(audit, doneTaskId, {
+      content: "Complete rewrite: the earlier plan was abandoned in favor of a new design. Resume by reading the linked design document, then implement it end to end.",
+      completenessAudit: undefined,
+      coldStartInventory: undefined,
+    });
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, input),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SECTION_RECONCILIATION_REQUIRED");
+        assert.deepEqual([...error.details.unaccountedSections].sort(), ["Blockers and risks", "Current focus"]);
+        return true;
+      },
+    );
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...input,
+      sectionDispositions: [
+        { section: "Current focus", disposition: "Dropped: the old plan was abandoned in favor of the new design." },
+        { section: "Blockers and risks", disposition: "Dropped: the blocker was resolved before this rewrite started." },
+      ],
+    });
+    assert.match(written.phase.handoff, /Complete rewrite/);
+  });
+
+  test("a renamed section is accounted for via an explicit disposition, not auto-matched", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Blockers and risks",
+      "- Flaky CI on Windows runners.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const renamedContent = refreshInput(audit, doneTaskId).content.replace("## Blockers and risks", "## Risks");
+    const input = refreshInput(audit, doneTaskId, { content: renamedContent });
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, input),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SECTION_RECONCILIATION_REQUIRED");
+        assert.deepEqual(error.details.unaccountedSections, ["Blockers and risks"]);
+        return true;
+      },
+    );
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...input,
+      sectionDispositions: [{ section: "Blockers and risks", disposition: "Renamed to \"Risks\"; the content is retained under the new heading." }],
+    });
+    assert.match(written.phase.handoff, /## Risks/);
+  });
+
+  test("an archived handoff needs no reconciliation, even with a stale externalized-document reference", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit0 = await store.preparePhaseHandoff(phaseId);
+    const padding = "Implementing the reconciled handoff contract in exhaustive detail. ".repeat(200);
+    const oversized = `${refreshInput(audit0, doneTaskId).content}\n\n## Extended padding\n${padding}`;
+    const written = await store.refreshPhaseHandoff(phaseId, { ...refreshInput(audit0, doneTaskId), content: oversized });
+    assert.equal(written.handoffAudit.supportingDocuments.length, 1, "the oversized write auto-externalized a document");
+
+    await store.clearPhaseHandoff(phaseId, "manual");
+    const cleared = await store.loadPhase(phaseId);
+    assert.equal(cleared.handoff, "");
+    assert.ok(cleared.handoffAudit?.supportingDocuments?.length, "the stale audit still names the old externalized document after a clear");
+
+    const audit1 = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit1.priorSectionHeadings, [], "an archived handoff has nothing live to reconcile, despite the stale audit metadata");
+
+    const secondWrite = await store.refreshPhaseHandoff(phaseId, refreshInput(audit1, doneTaskId, { reconciledExistingHandoff: false }));
+    assert.match(secondWrite.phase.handoff, /Continue the phase\./, "an archived-then-fresh write needs neither the boolean nor any dispositions");
+  });
+});
+
 // T409: content is retained against phaseId + expectedHandoffUpdatedAt on any
 // failed refreshPhaseHandoff(), so a retry can omit content and reuse it
 // instead of resending a capsule up to MAX_HANDOFF_CONTENT_CHARS.

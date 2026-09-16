@@ -3827,6 +3827,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       markdown_content: Type.Optional(Type.String({ description: "Handoff text (markdown). Preferred over content. Omit (with content) only on a retry after a failed write against the exact same expectedHandoffUpdatedAt, to reuse the retained body." })),
       expectedHandoffUpdatedAt: Type.Optional(Type.String({ description: "Exact handoffUpdatedAt returned by handoff_prepare; use an empty string when no handoff exists." })),
       reconciledExistingHandoff: Type.Optional(Type.Boolean({ description: "Confirm that all still-relevant information from the existing handoff was retained in this single refreshed body." })),
+      sectionDispositions: Type.Optional(Type.Array(Type.Object({
+        section: Type.String({ description: "Exact prior heading text named by a HANDOFF_SECTION_RECONCILIATION_REQUIRED refusal." }),
+        disposition: Type.String({ description: "What happened to that section: dropped, superseded, or folded into another section." }),
+      }), { description: "Required only when a prior write was refused with HANDOFF_SECTION_RECONCILIATION_REQUIRED; one entry per section it named. Omit on a first write." })),
       completenessAudit: Type.Optional(Type.Object({
         version: Type.Literal(HANDOFF_COMPLETENESS_AUDIT_VERSION),
         entries: Type.Array(Type.Object({
@@ -3920,6 +3924,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ...(body !== undefined ? { content: body } : {}),
           expectedHandoffUpdatedAt: params.expectedHandoffUpdatedAt,
           reconciledExistingHandoff: params.reconciledExistingHandoff === true,
+          ...(params.sectionDispositions ? { sectionDispositions: params.sectionDispositions } : {}),
           ...(params.completenessAudit ? { completenessAudit: params.completenessAudit as HandoffCompletenessAuditInput } : {}),
           ...(params.coldStartInventory ? { coldStartInventory: params.coldStartInventory as HandoffColdStartInventoryInput } : {}),
           ...(params.supportingDocuments ? { supportingDocuments: params.supportingDocuments } : {}),

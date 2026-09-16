@@ -2843,6 +2843,10 @@ server.registerTool("planner-handoff-write", {
     content: z.string().min(1).optional().describe("Full reconciled handoff text (markdown). Omit only on a retry after a failed write against the exact same expectedHandoffUpdatedAt, to reuse the body retained from that failed attempt."),
     expectedHandoffUpdatedAt: z.string().optional().describe("Exact token returned by planner-handoff-prepare; empty when no handoff exists."),
     reconciledExistingHandoff: z.boolean().optional().describe("Confirm that still-relevant existing handoff information was retained."),
+    sectionDispositions: z.array(z.object({
+      section: z.string().min(1).describe("Exact prior heading text named by a HANDOFF_SECTION_RECONCILIATION_REQUIRED refusal."),
+      disposition: z.string().min(1).describe("What happened to that section: dropped, superseded, or folded into another section."),
+    })).optional().describe("Required only when a prior write was refused with HANDOFF_SECTION_RECONCILIATION_REQUIRED; one entry per section it named. Omit on a first write."),
     completenessAudit: z.object({
       version: z.literal(HANDOFF_COMPLETENESS_AUDIT_VERSION),
       entries: z.array(z.object({
@@ -2881,7 +2885,7 @@ server.registerTool("planner-handoff-write", {
     featureUpdate: z.object({ workDone: z.string().min(1), workRemaining: z.string().min(1) }).optional(),
     featureNoUpdateReason: z.string().min(1).optional(),
   },
-}, async ({ phaseRef, title, reason, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, completenessAudit, coldStartInventory, supportingDocuments, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
+}, async ({ phaseRef, title, reason, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, sectionDispositions, completenessAudit, coldStartInventory, supportingDocuments, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
   const st = await requireStore();
   // content is optional so a retry after a failed write can omit it and reuse
   // the body PlanStore retained against this phase + expectedHandoffUpdatedAt
@@ -2930,6 +2934,7 @@ server.registerTool("planner-handoff-write", {
       ...(body !== undefined ? { content: body } : {}),
       expectedHandoffUpdatedAt,
       reconciledExistingHandoff: reconciledExistingHandoff === true,
+      ...(sectionDispositions ? { sectionDispositions } : {}),
       ...(completenessAudit ? { completenessAudit: completenessAudit as HandoffCompletenessAuditInput } : {}),
       ...(coldStartInventory ? { coldStartInventory: coldStartInventory as HandoffColdStartInventoryInput } : {}),
       ...(supportingDocuments ? { supportingDocuments } : {}),
