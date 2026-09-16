@@ -47,7 +47,8 @@
     "af8bd80c-eaf9-4183-85a7-8f736ef9ca08",
     "f0aad358-9069-4e01-981e-cdb58af8ff06",
     "3aae7427-d661-44fc-b2f5-ad40f88a246f",
-    "defb1b2e-8446-449d-9fee-77372b70ad27"
+    "defb1b2e-8446-449d-9fee-77372b70ad27",
+    "6da39d53-e739-4e92-9694-3b2cf738f422"
   ],
   "tasks": [
     {
@@ -205,11 +206,20 @@
       "priority": 4,
       "shortName": "replace-the-unchecked-reconcil",
       "title": "Replace the unchecked reconciliation boolean with something the planner verifies",
-      "status": "planned",
+      "status": "in-progress",
       "description": "The only gate on the most loss-prone step in the handoff protocol is the author's own say-so.\n\nCurrent state: `handoff_write` takes `reconciledExistingHandoff` as a boolean. The agent asserts it; nothing checks it. `validateHandoffContextSync` in `packages/plan-core/src/handoff-context.ts` does not compare the new content against the prior capsule in any way. An agent that composed a fresh capsule and never looked at the previous one passes this gate exactly as easily as one that reconciled line by line.\n\nReported by a peer session on 2026-09-15, whose verified resume-ready handoff dropped six facts the previous one carried. They asserted `true` in good faith. Nothing caught it; a human did.\n\nThe planner is in a position to do better. `auditPhaseHandoff` already parses the prior capsule and, once P104(F005)/T415 lands, will have access to its externalized portion too. It can therefore see the prior capsule's sections and compare them with what the agent submitted.\n\nDesired state: reconciliation is evidenced rather than asserted. When sections present in the prior capsule are absent from the new content, the planner names them and the author accounts for each — deliberately dropped, superseded, or folded in elsewhere. A bare boolean should no longer be sufficient on its own.\n\nImplementation steps:\n- Derive the prior capsule's section headings during prepare and carry them to write, keyed to the prepare token so the comparison is against what the author was actually shown.\n- At write time, list prior sections with no counterpart in the new content and require an explicit per-section disposition before persisting.\n- Prefer a typed no-mutation outcome that names the unaccounted sections over a generic refusal, in the style of the existing `HANDOFF_PREFLIGHT_REQUIRED` and `HANDOFF_REASON_REQUIRED` codes.\n- Keep the cost of complying low. P103(F005)/T409 retains the submitted body against the prepare token, so a refusal here should let the author supply only the dispositions on retry, without resending the capsule. Verify that actually works rather than assuming it.\n- Do not make this a completeness audit. P100(F021)/T396 deliberately removed the 16-section scaffold and the 14-category inventory because they made authoring verbose and failed late. This must stay a narrow check — which prior sections vanished — not a return to that contract.\n\nBehaviors to preserve: free-form concise capsules with optional headings (P100(F021)/T396, second pass) — a capsule with no headings at all must still be writable, so the check must degrade gracefully when the prior capsule had no section structure either; the 8,000-character target; the candidate-then-verify contract; body retention from T409.\n\nEdge cases: a prior capsule with no headings; a deliberate full rewrite where every prior section is genuinely obsolete; a phase whose prior handoff was archived rather than superseded; a first handoff with nothing to reconcile against; a prior section renamed rather than dropped.\n\nDepends on P104(F005)/T415: comparing against an elided prior capsule would reproduce the original defect, since the sections most likely to be dropped are exactly the ones prepare currently hides.\n\nVerification: focused core, MCP and Pi suites. Add regressions for a dropped section being named, a per-section disposition satisfying the gate, a heading-free prior capsule still being writable, and a refusal followed by a retry that supplies only dispositions. Per AGENTS.md rule 17, no full repository gate.",
       "descriptionUpdatedAt": "2026-09-15T08:58:26.785Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "7bda878a-33ac-4b9d-a55d-0ab794dd47af-check-001-planned-in-progress",
+          "date": "2026-09-16T11:19:12.871Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -217,12 +227,17 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-09-16T11:19:12.871Z",
       "completedAt": "",
       "createdAt": "2026-09-15T08:58:26.739Z",
-      "updatedAt": "2026-09-15T08:58:26.739Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-09-16T11:19:12.871Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+          "createdAt": "2026-09-16T11:19:12.778Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9"
     },
     {
       "id": "af8bd80c-eaf9-4183-85a7-8f736ef9ca08",
@@ -331,10 +346,37 @@
       "updatedAt": "2026-09-15T13:52:37.840Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "6da39d53-e739-4e92-9694-3b2cf738f422",
+      "phaseId": "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+      "number": 421,
+      "shortId": "3M3S6",
+      "priority": 9,
+      "shortName": "show-priority-where-the-orderi",
+      "title": "Show priority where the ordering decision is made",
+      "status": "planned",
+      "description": "An agent reading a task in full cannot see where it sits in the order, so it cannot follow the ordering rule it has been given.\n\nCurrent state, verified 2026-09-16:\n\n`planner-task-show` (`packages/plan-mcp/src/index.ts:1525-1571`) with `full=true` never mentions priority — zero occurrences in the handler. Its text summary carries title, composite ref, shortId, status and phase ref (`:1534`). Its structured payload carries exactly four fields (`:1561-1567`): `ref`, `description`, `descriptionRef`, `acceptedDecisions`. No priority, no dependencies, no sibling ordering. `packages/pi-adapter/src/index.ts` has the same shape in its `task_get` twin.\n\nSo the compact `planner-task-list` shows priority and the full detail view drops it: the summary knows more about ordering than the detail view does.\n\n`planner-task-add` confirms creation (\"✅ Task created: P104(F005)/T413 — … (planned)\") without stating the priority it assigned. Eight tasks were created in this phase without a single priority number ever being shown.\n\n`planner-task-recommend` does carry the ordering, but costs about 49,000 characters to deliver it (see P104(F005)/T419).\n\nConsequence, observed in this session: an agent read P104(F005)/T415 and T416 through `planner-task-show`, formed its sense of what mattered from the prose, and proposed working out of order. The user caught it. `.planner/SKILL.md` already instructs \"Follow the lowest visible ready priority\", so the rule was present and the data was not — which is why adding more guidance text is not the fix.\n\nDesired state: an agent deciding what to do next sees the ordering at the moment it decides, without calling a second tool or paying for the recommendation payload.\n\nWork:\n- Add priority to the full task view in both adapters — text summary and structured payload. Include the task's own priority and enough context to place it: the phase's ready task count and how many precede it, or the next-by-priority sibling ref. Keep it to a line; this is data, not a lecture.\n- Add `dependsOn` to the same view. A task can be low priority and blocked, or high priority and ready, and neither is currently visible.\n- Make `planner-task-add` state the priority it assigned, so the creator knows where the task landed.\n- Have the planner-load recap name the recommended next task by ref. The recap already ends with a \"Next step\" line; naming the task there is data the reader can act on.\n- Shape all of this in plan-core so both adapters render the same thing. Do not write the ordering line into `packages/plan-mcp/src/index.ts` and `packages/pi-adapter/src/index.ts` separately — see `packages/plan-core/src/handoff-reply.ts` for the pattern this phase has used throughout.\n\nExplicitly NOT in scope: a per-read reminder sentence telling the agent to respect priority. The rule already exists in the skill and did not prevent the failure, because the rule was never what was missing. Adding guidance text would cost tokens on every call and leave the ordering just as invisible.\n\nBehaviors to preserve: the compact (non-full) task view stays compact — it is the cheap identity read and must not grow; `markCanonicalFullReadForSessionId` must continue to receive the full rendered text so the read gate still attests correctly; the existing summary format and composite-ref conventions; `planner-task-list`'s current output, which is already correct.\n\nEdge cases: a task with no explicit priority set; a phase where several tasks share a priority; a task whose dependencies are all done versus one still blocked; the first task in a phase; a done task, where ordering no longer matters and the line should not mislead.\n\nRelated: P104(F005)/T419 bounds the recommendation payload and adds the missing `/planner task recommend` command. That makes asking cheap; this makes asking unnecessary in the common case. Keep the two from overlapping.\n\nVerification: focused core, MCP and Pi suites. Add regressions asserting the full task view carries priority and dependencies in both channels, that the compact view does not grow, and that the read-gate attestation still succeeds against the enriched text. Per AGENTS.md rule 17, no full repository gate.",
+      "descriptionUpdatedAt": "2026-09-16T11:22:37.219Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-16T11:22:37.165Z",
+      "updatedAt": "2026-09-16T11:22:37.165Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-16T11:17:29.882Z",
+  "updatedAt": "2026-09-16T11:22:37.165Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -353,7 +395,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
-      "createdAt": "2026-09-16T08:35:04.757Z"
+      "createdAt": "2026-09-16T11:19:12.778Z"
     }
   ]
 }
