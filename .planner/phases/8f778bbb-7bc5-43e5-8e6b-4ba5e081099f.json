@@ -48,7 +48,8 @@
     "f0aad358-9069-4e01-981e-cdb58af8ff06",
     "3aae7427-d661-44fc-b2f5-ad40f88a246f",
     "defb1b2e-8446-449d-9fee-77372b70ad27",
-    "6da39d53-e739-4e92-9694-3b2cf738f422"
+    "6da39d53-e739-4e92-9694-3b2cf738f422",
+    "f741315d-92e5-40e9-a2d0-86e7c97223c5"
   ],
   "tasks": [
     {
@@ -381,10 +382,37 @@
       "updatedAt": "2026-09-16T11:22:37.165Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "f741315d-92e5-40e9-a2d0-86e7c97223c5",
+      "phaseId": "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+      "number": 422,
+      "shortId": "UJMZQ",
+      "priority": 10,
+      "shortName": "make-an-abandoned-phase-visibl",
+      "title": "Make an abandoned phase visible when work moves elsewhere",
+      "status": "planned",
+      "description": "Switching work to another phase silently leaves the previous one unfinished, and nothing surfaces it again.\n\nObserved in this session, twice over. P102(F005) is priority 34 with three tasks; T403 and T404 were completed and T405 was left `planned`. Work then moved to P104(F005), priority 36, and ran through four of its tasks before the user noticed P102 was stranded. `planner-task-recommend` had named T405 with the reason \"Continue the current phase before selecting new work elsewhere\", but that output costs about 49,000 characters (see P104(F005)/T419) and nothing else mentioned it again.\n\nWhy the existing machinery did not help:\n\n- `task_switch` / `planner-task-switch` atomically checkpoints the source task and preserves a LIFO return target. `task_deviation` / `planner-task-deviation` records a user-approved temporary detour with a resume target. Both protect an **in-flight task**.\n- Nothing was in flight. T404 had completed, so there was no active task to checkpoint and no return target to preserve. What was abandoned was a **phase** with one task still planned.\n- The phase simply stayed `in-progress`. `planner-show` reports feature-level counts and an authoritative active-task state, but never says \"these phases are in-progress with work remaining, in priority order\", so a stranded phase is invisible on the cheap read.\n\nThis is the same shape as the other defects in this phase: the data exists — phase status, phase priority, remaining task counts — but it is not present where the decision is made.\n\nDesired state: an agent cannot start work in a lower-priority phase without being told that a higher-priority phase is still open, and a human reading the plan can see stranded phases without paying for the recommendation.\n\nWork:\n- On `task_start` / `planner-task-start`, when the target task's phase is not the highest-priority in-progress phase with ready work, return a non-blocking advisory naming the higher-priority phase, its ref, and its remaining ready task count. Do not block the start — the user is allowed to direct work anywhere; they must simply be told. Follow the shape of the project-context staleness advisory added by P102(F005)/T404: informational, attached to a successful start.\n- Add in-progress phases with remaining work to `planner-show` and the planner-load recap, priority-ordered, with remaining ready task counts. Keep it bounded — a line per phase, not a phase dump, and mind P104(F005)/T419, which is bounding these payloads rather than growing them.\n- Shape both in plan-core so the two adapters render the same thing; see `packages/plan-core/src/handoff-reply.ts` for the pattern used throughout this phase.\n- Consider whether `task_deviation` should accept a phase-scoped target, so \"we are deliberately leaving P102 to do P104\" can be recorded with a resume target the way a task detour can. If it should, say so and scope it; if a phase-level advisory plus the recap listing is enough, record that judgement instead of building more machinery.\n\nExplicitly NOT in scope: a guidance sentence telling agents to respect phase order. `.planner/SKILL.md` already says \"Follow the lowest visible ready priority unless the automatic recommendation or an approved deviation says otherwise\". That rule was present and was not what was missing — it failed twice in one session.\n\nBehaviors to preserve: `task_start`'s existing blocking gates and typed denials, which must not be weakened by an advisory; the authoritative `activeTaskState` evidence contract in `planner-show`, which must keep proving absence from persisted task statuses rather than from counts; bounded human-facing output; the LIFO semantics of `task_switch` and the existing deviation records.\n\nEdge cases: several in-progress phases at the same priority; a higher-priority phase whose remaining tasks are all blocked by dependencies, which is not a reason to advise switching to it; a phase in-progress because of an active task rather than an unstarted one; the first task started in a session, with no prior context; a phase left in-progress deliberately and indefinitely.\n\nVerification: focused core, MCP and Pi suites. Add regressions proving the advisory appears when starting into a lower-priority phase, does not appear when the target phase is the highest-priority open one, never blocks a start, and that the recap lists stranded phases in priority order. Per AGENTS.md rule 17, no full repository gate.",
+      "descriptionUpdatedAt": "2026-09-16T14:09:31.093Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-16T14:09:31.045Z",
+      "updatedAt": "2026-09-16T14:09:31.045Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-16T13:08:32.586Z",
+  "updatedAt": "2026-09-16T14:09:31.045Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
