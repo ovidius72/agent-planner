@@ -161,6 +161,55 @@ export interface HandoffContentExternalization {
   supportingDocument?: HandoffSupportingDocumentInput;
 }
 
+/** One document that a previous handoff refresh moved out of the inline
+ * capsule because it exceeded TARGET_HANDOFF_CONTENT_CHARS. Populated by
+ * PlanStore.preparePhaseHandoff (which alone has filesystem access); pure
+ * code here only shapes the type and the recognition/heading helpers below.
+ * `headings` and `missing` are always meaningful even when `content` is
+ * omitted for budget reasons, so a caller who cannot inline the body can
+ * still name what it contained (see handoff-reply.ts). */
+export interface HandoffExternalizedDocumentAudit {
+  path: string;
+  description: string;
+  /** Level-2 (`##`) headings found in the document, in order. Present even
+   *  when `content` is null, so the omission names what the document held. */
+  headings: string[];
+  /** Full document body, or null when it could not be read back from disk
+   *  (deleted, moved, or unreadable). Bounding this for transport is the
+   *  reply builder's job (handoff-reply.ts), not this audit's. */
+  content: string | null;
+  contentLength: number;
+  missing: boolean;
+}
+
+/** The exact description externalizeOversizedHandoffContent stamps on the
+ * supporting-document entry it generates for an auto-externalized document.
+ * The single source of truth for recognizing one later: handoff_prepare
+ * matches on this instead of the timestamped file-naming convention, so
+ * detection and generation cannot drift apart. A document a human or agent
+ * linked deliberately (a different description) is already named in the
+ * persisted capsule's own "Supporting documents" bullet and is out of scope
+ * here — only content the tooling itself moved out without being asked. */
+export const HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION =
+  "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.";
+
+export function isAutoExternalizedHandoffDocument(document: { description: string }): boolean {
+  return document.description === HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION;
+}
+
+/** Level-2 (`##`) headings of a handoff document, in order. Used to name
+ * what an externalized document contains when its content cannot be
+ * inlined (budget, or the file is missing) and as a table of contents
+ * alongside content that is inlined. */
+export function extractHandoffSectionHeadings(content: string): string[] {
+  const headings: string[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(/^##\s+(.+?)\s*$/);
+    if (match) headings.push(match[1]!);
+  }
+  return headings;
+}
+
 export interface HandoffTaskContextUpdate {
   taskId: string;
   completionSummary: string;
@@ -210,6 +259,13 @@ export interface PhaseHandoffAudit {
   phaseWorkMap: PhaseWorkMap;
   /** Read before drafting: supportingDocuments is optional and rarely needed. */
   supportingDocumentsGuidance: string;
+  /** Documents the existing active handoff's own auto-externalization moved
+   *  out of the inline capsule (see HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION).
+   *  Empty when there is no active handoff or nothing was ever externalized
+   *  from it. auditPhaseHandoff itself never populates this (it is pure and
+   *  has no filesystem access) — PlanStore.preparePhaseHandoff fills it in
+   *  after reading each document back from .planner/docs/. */
+  externalizedHandoffDocuments: HandoffExternalizedDocumentAudit[];
 }
 
 export interface RefreshPhaseHandoffInput {
@@ -320,6 +376,9 @@ export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffA
     existingCompletenessAudit: phase.handoffAudit,
     phaseWorkMap: buildPhaseWorkMap(phase, feature.number),
     supportingDocumentsGuidance: HANDOFF_SUPPORTING_DOCUMENTS_GUIDANCE,
+    // Filled in by PlanStore.preparePhaseHandoff, which alone can read
+    // .planner/docs/; this pure function has no filesystem access.
+    externalizedHandoffDocuments: [],
   };
 }
 
@@ -570,10 +629,45 @@ function sectionBody(content: string, headings: string[]): string {
   return body.join("\n").trim();
 }
 
+/**
+ * Truncate `value` to at most `maxChars`, cutting at the nearest paragraph
+ * break, then line break, then word boundary before the limit — never
+ * mid-word and never mid-list-item. A raw `slice(0, maxChars)` is what
+ * previously cut a reporter's handoff mid-word ("Ownershi|p") and moved half
+ * of a numbered list into the externalized file while leaving the other
+ * half incoherent in the compact capsule; this is the one place that
+ * decides where an oversized section breaks, reused by every caller that
+ * needs to bound arbitrary handoff prose for transport (see
+ * handoff-reply.ts's boundedHandoffForTransport and its per-document use
+ * for externalized content).
+ */
+export function truncateAtSafeBoundary(value: string, maxChars: number): string {
+  if (maxChars <= 0) return "";
+  if (value.length <= maxChars) return value;
+  const slice = value.slice(0, maxChars);
+  const paragraphBreak = slice.lastIndexOf("\n\n");
+  const lineBreak = slice.lastIndexOf("\n");
+  const wordBreak = slice.lastIndexOf(" ");
+  const cut = paragraphBreak >= 0 ? paragraphBreak : lineBreak >= 0 ? lineBreak : wordBreak >= 0 ? wordBreak : maxChars;
+  return slice.slice(0, cut).trimEnd();
+}
+
+/** Truncate `content` to at most `maxChars` at a safe boundary (see
+ * truncateAtSafeBoundary) and report whether a cut happened. Callers append
+ * their own contextual continuation message — this stays message-agnostic
+ * so both the top-level handoff bound and the externalized-document bound
+ * in handoff-reply.ts share one truncation rule without sharing wording
+ * that fits only one of them. */
+export function boundedContentForTransport(content: string, maxChars: number): { content: string; truncated: boolean } {
+  if (content.length <= maxChars) return { content, truncated: false };
+  return { content: truncateAtSafeBoundary(content, maxChars), truncated: true };
+}
+
 function boundedSection(value: string, fallback: string, maxChars: number): string {
   const normalized = value.trim() || fallback;
   if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxChars - 86)).trimEnd()}\n\n[Extended detail continues in the linked planner document.]`;
+  const safe = truncateAtSafeBoundary(normalized, Math.max(0, maxChars - 86));
+  return `${safe}\n\n[Extended detail continues in the linked planner document.]`;
 }
 
 /**
@@ -626,7 +720,7 @@ export function externalizeOversizedHandoffContent(
     extendedContent: `${firstHeading} — extended detail\n\n${base}\n`,
     supportingDocument: {
       path: supportingDocumentPath,
-      description: "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+      description: HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION,
     },
   };
 }

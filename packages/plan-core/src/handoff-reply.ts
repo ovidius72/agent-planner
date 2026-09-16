@@ -14,7 +14,13 @@
  */
 import type { HandoffCompletenessAudit, HandoffSupportingDocument, Phase } from "./schema.js";
 import type { PhaseWorkMap } from "./task-context.js";
-import { MAX_HANDOFF_CONTENT_CHARS, handoffContentHash, type PhaseHandoffAudit } from "./handoff-context.js";
+import {
+  MAX_HANDOFF_CONTENT_CHARS,
+  boundedContentForTransport,
+  handoffContentHash,
+  type HandoffExternalizedDocumentAudit,
+  type PhaseHandoffAudit,
+} from "./handoff-context.js";
 
 export interface BoundedHandoffContent {
   content: string;
@@ -24,15 +30,60 @@ export interface BoundedHandoffContent {
 
 /** Bound raw handoff content to the absolute compatibility ceiling for
  * transport. Legacy or externally-written content can exceed the ceiling;
- * everything produced through the normal write path already respects it. */
+ * everything produced through the normal write path already respects it.
+ * Cuts at a safe boundary (paragraph, then line, then word — see
+ * boundedContentForTransport / truncateAtSafeBoundary in handoff-context.ts)
+ * rather than an arbitrary character offset, so the visible remainder never
+ * ends mid-word. */
 export function boundedHandoffForTransport(content: string): BoundedHandoffContent {
-  if (content.length <= MAX_HANDOFF_CONTENT_CHARS) return { content, fullLength: content.length, truncated: false };
   const suffix = "\n\n[Legacy handoff truncated for transport safety. Move extended detail to a linked file under .planner/docs/ and refresh the handoff.]";
-  return {
-    content: `${content.slice(0, MAX_HANDOFF_CONTENT_CHARS - suffix.length)}${suffix}`,
-    fullLength: content.length,
-    truncated: true,
-  };
+  if (content.length <= MAX_HANDOFF_CONTENT_CHARS) return { content, fullLength: content.length, truncated: false };
+  const bounded = boundedContentForTransport(content, Math.max(0, MAX_HANDOFF_CONTENT_CHARS - suffix.length));
+  return { content: `${bounded.content}${suffix}`, fullLength: content.length, truncated: true };
+}
+
+/**
+ * Render the existing handoff's auto-externalized documents (see
+ * HandoffExternalizedDocumentAudit) for the prepare text channel. Shares one
+ * budget across every document rather than bounding each independently to
+ * MAX_HANDOFF_CONTENT_CHARS, so several documents from successive rewrites
+ * cannot each spend the full ceiling — the reporting phase's own P082 capsule
+ * carried two linked documents at once, and a prior capsule's externalized
+ * document can by itself already be as large as the ceiling (a large draft
+ * is exactly what got externalized). Every document is still named — path,
+ * description, and heading table of contents — even when its content does
+ * not fit, so "elided" never again means "invisible": inlining degrades to
+ * naming, it never degrades to silence.
+ */
+function renderExternalizedHandoffDocuments(documents: HandoffExternalizedDocumentAudit[]): {
+  text: string;
+  structured: Array<Record<string, unknown>>;
+} {
+  let remaining = MAX_HANDOFF_CONTENT_CHARS;
+  const blocks: string[] = [];
+  const structured: Array<Record<string, unknown>> = [];
+  for (const document of documents) {
+    const headingsNote = document.headings.length > 0 ? ` (sections: ${document.headings.join(", ")})` : "";
+    const header = `- ${document.path} — ${document.description}${headingsNote}`;
+    if (document.missing) {
+      blocks.push(`${header}\n  [Not found on disk; its content is unavailable. Treat any facts it carried as unverified until confirmed another way.]`);
+      structured.push({ path: document.path, headings: document.headings, contentLength: document.contentLength, missing: true, inlined: false, truncated: false });
+      continue;
+    }
+    if (remaining <= 0) {
+      blocks.push(`${header}\n  [Not inlined: the reconciliation budget for externalized detail is exhausted. Read this document directly before drafting.]`);
+      structured.push({ path: document.path, headings: document.headings, contentLength: document.contentLength, missing: false, inlined: false, truncated: false });
+      continue;
+    }
+    const bounded = boundedContentForTransport(document.content ?? "", remaining);
+    remaining -= bounded.content.length;
+    const continuation = bounded.truncated
+      ? "\n\n[Not fully inlined: remaining detail exceeds the reconciliation budget. Read this document directly for the rest.]"
+      : "";
+    blocks.push(`${header}\n${bounded.content}${continuation}`);
+    structured.push({ path: document.path, headings: document.headings, contentLength: document.contentLength, missing: false, inlined: true, truncated: bounded.truncated });
+  }
+  return { text: blocks.join("\n\n"), structured };
 }
 
 /** A tool reply as one result: the human-readable body and the structured
@@ -206,7 +257,13 @@ export interface HandoffPrepareReplyInput {
  * `text` only, bounded for transport, with `structured` carrying just its
  * length/truncated flags. `missingCompletionTasks` duplicates the same
  * titles already rendered into `text`; `structured` keeps only the task ids
- * needed to address `taskUpdates`.
+ * needed to address `taskUpdates`. The existing handoff's auto-externalized
+ * documents follow the same rule as the existing handoff itself: their
+ * bodies are prose for `text` (see renderExternalizedHandoffDocuments),
+ * `structured` keeps only path/headings/size/inlined/truncated per document
+ * (existingHandoffExternalizedDocuments) — see P104(F005)/T415's accepted
+ * decision for why inlining (budget permitting) was chosen over a
+ * separate-field or names-only reply.
  */
 export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): HandoffReply {
   const { phaseRef, audit } = input;
@@ -219,6 +276,9 @@ export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): Hando
     // Guidance is instruction the agent reads; the text channel renders it,
     // so it must not travel again in the structured payload.
     supportingDocumentsGuidance: _supportingDocumentsGuidance,
+    // Raw document bodies; never spread as-is into structured (see below —
+    // content stays text-only, structured keeps only the small facts).
+    externalizedHandoffDocuments,
     ...structuredAudit
   } = audit;
 
@@ -227,6 +287,7 @@ export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): Hando
     .join("\n") || "- None";
   const existingBounded = boundedHandoffForTransport(handoff);
   const existingText = existingBounded.content.trim() || "(none)";
+  const externalized = renderExternalizedHandoffDocuments(externalizedHandoffDocuments);
 
   const text = [
     `Handoff preparation for ${phaseRef}`,
@@ -247,6 +308,18 @@ export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): Hando
     "",
     "Existing active handoff (reconcile all still-relevant content):",
     existingText,
+    // Content this same active handoff previously moved out automatically.
+    // Reconciling "the existing handoff" means reconciling this too — it is
+    // not optional background reading, it is the part most likely to hold a
+    // fact no task holds (see AGENTS.md rule 4: this belongs here once, not
+    // rediscovered per adapter).
+    ...(externalizedHandoffDocuments.length > 0
+      ? [
+        "",
+        "Externalized detail from the existing handoff (auto-moved out when the capsule exceeded the inline target; reconcile before drafting — this is part of \"the existing handoff\", not optional background):",
+        externalized.text,
+      ]
+      : []),
   ].join("\n");
 
   return {
@@ -260,6 +333,11 @@ export function buildHandoffPrepareReply(input: HandoffPrepareReplyInput): Hando
       existingCompletenessAudit: handoffAuditForTransport(structuredAudit.existingCompletenessAudit),
       existingHandoffLength: existingBounded.fullLength,
       existingHandoffTruncated: existingBounded.truncated,
+      // Bodies are text-only (see externalized.text above); structured keeps
+      // only the facts a structuredContent-only host needs to know more
+      // exists than it can see: path, headings, size, and whether this call
+      // inlined it.
+      existingHandoffExternalizedDocuments: externalized.structured,
       evidenceContract: HANDOFF_PREPARE_EVIDENCE_CONTRACT,
     },
   };

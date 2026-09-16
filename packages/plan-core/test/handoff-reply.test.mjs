@@ -176,6 +176,101 @@ test("handoff prepare carries no field in both channels and stays bounded", () =
   assert.ok(size < PREPARE_STRUCTURED_CEILING, `prepare structured payload grew to ${size}`);
 });
 
+// P104(F005)/T415 — handoff_prepare previously handed back only the compact
+// remainder of an existing handoff, with no way to see what a prior
+// auto-externalization had moved into .planner/docs/. These pin the fix:
+// content is inlined into `text` (never `structured`, per the no-duplication
+// invariant above) when it fits a shared budget, and every document is
+// named — path, description, headings — even when it does not fit or the
+// file is gone.
+test("handoff prepare inlines an externalized document's content, text only", () => {
+  const body = "# Existing\n\nCompact remainder.";
+  const { feature, phase } = bigPhase({ handoff: body, handoffAudit: auditFixture(body) });
+  const audit = {
+    ...auditPhaseHandoff(phase, feature),
+    externalizedHandoffDocuments: [{
+      path: ".planner/docs/handoff-p082-test.md",
+      description: "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+      headings: ["Current focus", "Current and partial state"],
+      content: "Moved fact: the reporting session's two live code defects live only here.",
+      contentLength: 74,
+      missing: false,
+    }],
+  };
+  const reply = buildHandoffPrepareReply({ phaseRef: "P082(F005)", audit });
+
+  assertNoChannelDuplication(reply, "prepare/externalized");
+  assert.ok(reply.text.includes("Moved fact: the reporting session's two live code defects live only here."));
+  assert.ok(reply.text.includes(".planner/docs/handoff-p082-test.md"));
+  assert.ok(reply.text.includes("Current focus"));
+
+  assert.equal(Object.hasOwn(reply.structured, "externalizedHandoffDocuments"), false);
+  assert.equal(reply.structured.existingHandoffExternalizedDocuments.length, 1);
+  const [entry] = reply.structured.existingHandoffExternalizedDocuments;
+  assert.equal(entry.path, ".planner/docs/handoff-p082-test.md");
+  assert.equal(entry.inlined, true);
+  assert.equal(entry.truncated, false);
+  assert.equal(Object.hasOwn(entry, "content"), false);
+});
+
+test("handoff prepare names a missing externalized document without fabricating content", () => {
+  const body = "# Existing\n\nCompact remainder.";
+  const { feature, phase } = bigPhase({ handoff: body, handoffAudit: auditFixture(body) });
+  const audit = {
+    ...auditPhaseHandoff(phase, feature),
+    externalizedHandoffDocuments: [{
+      path: ".planner/docs/handoff-p082-gone.md",
+      description: "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+      headings: [],
+      content: null,
+      contentLength: 9_074,
+      missing: true,
+    }],
+  };
+  const reply = buildHandoffPrepareReply({ phaseRef: "P082(F005)", audit });
+
+  assert.ok(reply.text.includes(".planner/docs/handoff-p082-gone.md"));
+  assert.match(reply.text, /not found on disk/i);
+  assert.equal(reply.structured.existingHandoffExternalizedDocuments[0].missing, true);
+  assert.equal(reply.structured.existingHandoffExternalizedDocuments[0].inlined, false);
+});
+
+test("handoff prepare shares one budget across several externalized documents instead of unbounded growth", () => {
+  const body = "# Existing\n\nCompact remainder.";
+  const { feature, phase } = bigPhase({ handoff: body, handoffAudit: auditFixture(body) });
+  // Three documents from successive rewrites, each near the per-document
+  // ceiling — mirrors the reporting phase's own P082 capsule, which had two
+  // linked documents at once and where a single externalized draft can
+  // already be as large as the ceiling.
+  const bigDoc = (name) => ({
+    path: `.planner/docs/${name}.md`,
+    description: "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+    headings: ["Current and partial state"],
+    content: `${name} detail. ${"Filler carried forward from an earlier rewrite. ".repeat(700)}`,
+    contentLength: 24_000,
+    missing: false,
+  });
+  const audit = {
+    ...auditPhaseHandoff(phase, feature),
+    externalizedHandoffDocuments: [bigDoc("first"), bigDoc("second"), bigDoc("third")],
+  };
+  const reply = buildHandoffPrepareReply({ phaseRef: "P082(F005)", audit });
+
+  assertNoChannelDuplication(reply, "prepare/externalized-budget");
+  // The combined inlined text stays bounded to roughly one more ceiling's
+  // worth, not three — the third (and possibly the second) document must be
+  // named without being fully inlined.
+  const notFullyInlined = reply.structured.existingHandoffExternalizedDocuments
+    .filter((entry) => !entry.inlined || entry.truncated);
+  assert.ok(notFullyInlined.length > 0, "at least one document must not be fully inlined once the shared budget is exhausted");
+  // Every document is still named even when its content is not.
+  for (const name of ["first", "second", "third"]) {
+    assert.ok(reply.text.includes(`.planner/docs/${name}.md`), `${name} must still be named`);
+  }
+  const size = JSON.stringify(reply.structured).length;
+  assert.ok(size < PREPARE_STRUCTURED_CEILING, `prepare structured payload grew to ${size}`);
+});
+
 test("handoff show empty and archived branches shed the same evidence", () => {
   const body = "# Archived\n\nClosed out at the terminal outcome.";
   const audit = auditFixture(body);

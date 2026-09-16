@@ -89,13 +89,16 @@ import {
   applyHandoffContextSync,
   auditPhaseHandoff,
   externalizeOversizedHandoffContent,
+  extractHandoffSectionHeadings,
   handoffContentHash,
+  isAutoExternalizedHandoffDocument,
   materializeHandoffMetadata,
   HandoffContractError,
   retainedHandoffContentNotFoundError,
   supportingDocumentInvalidError,
   TARGET_HANDOFF_CONTENT_CHARS,
   validateHandoffReadBackVerification,
+  type HandoffExternalizedDocumentAudit,
   type HandoffSupportingDocumentInput,
   type PhaseHandoffAudit,
   type RefreshPhaseHandoffInput,
@@ -3641,21 +3644,41 @@ export class PlanStore {
     if (next.length !== drafts.length) await this.saveRetainedHandoffDrafts(next);
   }
 
+  /** Resolve a `.planner/docs/*.md` path to an absolute on-disk target,
+   * enforcing the same format-and-containment rule everywhere a supporting
+   * document path is trusted: it must look like a Markdown path under
+   * `.planner/docs/` with no `..` segment, and must resolve inside the
+   * docs directory. Shared by validateHandoffSupportingDocuments (strict:
+   * throws on any defect) and readExternalizedHandoffDocument (lenient:
+   * treats any defect, including one it did not have to make itself, as
+   * "unavailable" — a persisted path is never re-trusted blindly). */
+  private resolveDocsTarget(rawPath: string): string {
+    const normalizedPath = rawPath.trim().replace(/\\/g, "/");
+    if (!/^\.planner\/docs\/.+\.md$/i.test(normalizedPath) || normalizedPath.includes("/../")) {
+      throw supportingDocumentInvalidError(
+        `Supporting document path must be a Markdown file under .planner/docs/: ${rawPath}`,
+        { path: rawPath },
+      );
+    }
+    const docsRoot = resolve(this.root, "docs");
+    const target = resolve(this.root, normalizedPath.slice(".planner/".length));
+    if (!target.startsWith(`${docsRoot}${sep}`)) {
+      throw supportingDocumentInvalidError(
+        `Supporting document escapes .planner/docs/: ${normalizedPath}`,
+        { path: normalizedPath },
+      );
+    }
+    return target;
+  }
+
   private async validateHandoffSupportingDocuments(
     documents: HandoffSupportingDocumentInput[],
   ): Promise<{ metadata: HandoffSupportingDocument[]; contents: string[] }> {
-    const docsRoot = resolve(this.root, "docs");
     const metadata: HandoffSupportingDocument[] = [];
     const contents: string[] = [];
     const seen = new Set<string>();
     for (const document of documents) {
       const normalizedPath = document.path.trim().replace(/\\/g, "/");
-      if (!/^\.planner\/docs\/.+\.md$/i.test(normalizedPath) || normalizedPath.includes("/../")) {
-        throw supportingDocumentInvalidError(
-          `Supporting document path must be a Markdown file under .planner/docs/: ${document.path}`,
-          { path: document.path },
-        );
-      }
       if (seen.has(normalizedPath)) {
         throw supportingDocumentInvalidError(
           `Supporting document appears more than once: ${normalizedPath}`,
@@ -3663,13 +3686,7 @@ export class PlanStore {
         );
       }
       seen.add(normalizedPath);
-      const target = resolve(this.root, normalizedPath.slice(".planner/".length));
-      if (!target.startsWith(`${docsRoot}${sep}`)) {
-        throw supportingDocumentInvalidError(
-          `Supporting document escapes .planner/docs/: ${normalizedPath}`,
-          { path: normalizedPath },
-        );
-      }
+      const target = this.resolveDocsTarget(document.path);
       const fileStat = await lstat(target).catch(() => null);
       if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) {
         throw supportingDocumentInvalidError(
@@ -3695,6 +3712,25 @@ export class PlanStore {
     return { metadata, contents };
   }
 
+  /** Read back one document a previous handoff refresh auto-externalized,
+   * for handoff_prepare to surface (see PhaseHandoffAudit.externalizedHandoffDocuments).
+   * Unlike validateHandoffSupportingDocuments this never throws: a stale
+   * path, a deleted file, a symlink, or any other defect is reported to the
+   * caller as "missing" rather than failing the whole prepare call — the
+   * document being gone is itself one of the edge cases this exists to
+   * surface, not a reason to hide that it was ever there. */
+  private async readExternalizedHandoffDocument(rawPath: string): Promise<string | null> {
+    try {
+      const target = this.resolveDocsTarget(rawPath);
+      const fileStat = await lstat(target).catch(() => null);
+      if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) return null;
+      const content = await readFile(target, "utf8").catch(() => null);
+      return content && content.trim() ? content : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Audit one exact phase before preparing a handoff refresh. When a
    * supporting-document manifest is already known (it is optional — most
    * handoffs need none), validate it here so every defect that does not
@@ -3713,7 +3749,31 @@ export class PlanStore {
     if (supportingDocuments && supportingDocuments.length > 0) {
       await this.validateHandoffSupportingDocuments(supportingDocuments);
     }
-    return auditPhaseHandoff(phase, feature);
+    const audit = auditPhaseHandoff(phase, feature);
+    // The active handoff's own auto-externalized documents are the elided
+    // content this task exists to surface (see HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION).
+    // A document the agent linked deliberately has a different description
+    // and is already named in the persisted capsule's own text; only the
+    // tooling's own silent moves are read back here. Skipped entirely (no
+    // I/O) when there is no prior handoff or nothing was ever externalized
+    // from it — the common case.
+    const autoExternalizedDocuments = (phase.handoffAudit?.supportingDocuments ?? [])
+      .filter(isAutoExternalizedHandoffDocument);
+    if (autoExternalizedDocuments.length === 0) return audit;
+    const externalizedHandoffDocuments: HandoffExternalizedDocumentAudit[] = await Promise.all(
+      autoExternalizedDocuments.map(async (document) => {
+        const content = await this.readExternalizedHandoffDocument(document.path);
+        return {
+          path: document.path,
+          description: document.description,
+          headings: content ? extractHandoffSectionHeadings(content) : [],
+          content,
+          contentLength: content?.length ?? document.contentLength,
+          missing: content === null,
+        };
+      }),
+    );
+    return { ...audit, externalizedHandoffDocuments };
   }
 
   /** Refresh the single active handoff and synchronize durable task/phase/feature

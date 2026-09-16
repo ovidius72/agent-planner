@@ -16,6 +16,8 @@ import {
   HANDOFF_COLD_START_INVENTORY_VERSION,
   HANDOFF_COLD_START_SOURCE_REVIEWS,
   HANDOFF_COLD_START_INVENTORY_CATEGORIES,
+  externalizeOversizedHandoffContent,
+  truncateAtSafeBoundary,
 } from "../dist/index.js";
 
 const roots = [];
@@ -604,6 +606,123 @@ describe("durable handoff context refresh", () => {
     assert.ok(extended.includes("x".repeat(100)));
   });
 
+  // P104(F005)/T415 — a prior externalization asked the next agent to
+  // "reconcile every still-relevant detail from an existing handoff" but
+  // handed back only the compact remainder; the moved facts were invisible.
+  // This is the regression: prepare must now surface them, not just the
+  // compact remainder's truncation markers.
+  test("prepare surfaces a previously externalized handoff's content for reconciliation", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    const marker = "UNIQUE-RESUME-FACT-CARRIED-ONLY-HERE-4471";
+    const oversized = `${baseInput.content}\n${marker}\n${"x".repeat(9_000)}`;
+    const written = await store.refreshPhaseHandoff(phaseId, { ...baseInput, content: oversized });
+    const autoDoc = written.phase.handoffAudit.supportingDocuments[0];
+
+    const nextPrepare = await store.preparePhaseHandoff(phaseId);
+    assert.equal(nextPrepare.externalizedHandoffDocuments.length, 1);
+    const [document] = nextPrepare.externalizedHandoffDocuments;
+    assert.equal(document.path, autoDoc.path);
+    assert.equal(document.missing, false);
+    // The fact that lived only in the externalized document is now visible
+    // to the agent preparing the next handoff, not just named as elided.
+    assert.ok(document.content.includes(marker), "moved content must be readable from the prepare audit");
+    // Every canonical section heading from the original submitted body is
+    // named, so even a caller that cannot use `content` still knows what
+    // was moved out.
+    for (const heading of ["Current focus", "Current and partial state", "Preservation constraints", "Supporting documents", "Blockers and risks", "How to resume"]) {
+      assert.ok(document.headings.includes(heading), `expected heading "${heading}" in ${JSON.stringify(document.headings)}`);
+    }
+  });
+
+  test("prepare names an externalized document as missing when it has been deleted from disk", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    const oversized = `${baseInput.content}\n${"x".repeat(9_000)}`;
+    const written = await store.refreshPhaseHandoff(phaseId, { ...baseInput, content: oversized });
+    const autoDoc = written.phase.handoffAudit.supportingDocuments[0];
+    const { unlink } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await unlink(join(store.root, autoDoc.path.slice(".planner/".length)));
+
+    const nextPrepare = await store.preparePhaseHandoff(phaseId);
+    assert.equal(nextPrepare.externalizedHandoffDocuments.length, 1);
+    const [document] = nextPrepare.externalizedHandoffDocuments;
+    assert.equal(document.missing, true);
+    assert.equal(document.content, null);
+    assert.deepEqual(document.headings, []);
+    // The path and description survive even though the body is gone, so the
+    // omission is named rather than silently dropped.
+    assert.equal(document.path, autoDoc.path);
+  });
+
+  test("a phase with no prior handoff reports no externalized documents", async () => {
+    const { store, phaseId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit.externalizedHandoffDocuments, []);
+  });
+
+  test("externalizing an oversized handoff never cuts a compacted section mid-word", async () => {
+    // Reproduce the reported defect's shape: a "Current and partial state"
+    // section long enough to force boundedSection's own truncation (budget
+    // 1,500 chars for this section, independent of the 8,000-char whole-body
+    // target that triggers externalization itself).
+    const prefix = "Detail ".repeat(200); // 1,400 chars, all complete words
+    const sectionBody = `${prefix}Ownership of the retained draft lifecycle must be documented before resuming, and this sentence continues well past the section budget so externalization is required for the whole handoff body to trigger the automatic split path under test right here.`;
+    const content = [
+      "# P001(F001) — draft",
+      "",
+      "Created at: 2026-08-24T00:00:00.000Z",
+      "Updated at: 2026-08-24T00:00:00.000Z",
+      "Reason: session boundary",
+      "",
+      "## Current focus", "Continue the phase.",
+      "## Current and partial state", sectionBody,
+      "## Preservation constraints", "Existing behavior must survive.",
+      "## Supporting documents", "- None.",
+      "## Blockers and risks", "- None.",
+      "## How to resume", `1. Resume. ${"x".repeat(8_000)}`,
+    ].join("\n");
+    const externalized = externalizeOversizedHandoffContent(content, ".planner/docs/handoff-p001-test.md");
+    assert.ok(externalized.externalized);
+
+    const marker = "[Extended detail continues in the linked planner document.]";
+    const compactSection = externalized.content.split("## Current and partial state")[1].split("## Preservation constraints")[0].trim();
+    assert.ok(compactSection.endsWith(marker));
+    const truncatedBody = compactSection.slice(0, compactSection.length - marker.length).trim();
+
+    // The section's own budget (1,500) minus the marker's own reserved room
+    // (86, see boundedSection) is exactly what truncateAtSafeBoundary is
+    // asked for; the compacted section must match it exactly, proving the
+    // integration goes through the safe-boundary path, not a raw slice.
+    const expected = truncateAtSafeBoundary(sectionBody, 1_500 - 86);
+    assert.equal(truncatedBody, expected);
+
+    // Confirm this fixture actually exercises a real divergence from the old
+    // behavior: a raw slice(0, maxChars) on the same input must differ from
+    // the safe-boundary result, otherwise this test would pass whether or
+    // not the fix existed.
+    const naiveSlice = sectionBody.slice(0, 1_500 - 86).trimEnd();
+    assert.notEqual(expected, naiveSlice, "fixture does not exercise a raw-slice-vs-safe-boundary divergence");
+    // The naive slice reproduces the reported defect's shape: it stops one
+    // or more characters into a word ("the" cut to "t") instead of at a
+    // word boundary. The character immediately following the naive cut, in
+    // the original body, must be a letter — that is what "mid-word" means.
+    assert.match(sectionBody[naiveSlice.length] ?? "", /[a-z]/i, "fixture should land mid-word under the old, unfixed behavior");
+    // The fixed compact section, by contrast, always ends exactly at a word
+    // boundary: the character right after it in the original body is
+    // whitespace, or it consumed the section body to its own end.
+    assert.ok(
+      truncatedBody.length >= sectionBody.length || /\s/.test(sectionBody[truncatedBody.length] ?? ""),
+      `fixed truncation must land on a word boundary, not mid-word: next char is ${JSON.stringify(sectionBody[truncatedBody.length])}`,
+    );
+
+    // The full original text, word intact, still lives in the externalized document.
+    assert.ok(externalized.extendedContent.includes("Ownership of the retained draft lifecycle"));
+  });
+
   test("keeps the absolute compatibility ceiling on non-externalized rendering", async () => {
     const { renderVerifiedHandoffContent } = await import("../dist/index.js");
     const { store, phaseId, doneTaskId } = await setup();
@@ -1008,5 +1127,29 @@ describe("retained handoff drafts make a failed write cheap to retry", () => {
     const fresh = new FreshStore(store.root);
     const written = await fresh.refreshPhaseHandoff(phaseId, withoutContent(full));
     assert.match(written.phase.handoff, /Continue the phase\./);
+  });
+});
+
+describe("truncateAtSafeBoundary never cuts mid-word", () => {
+  test("retreats to the preceding word boundary instead of slicing mid-word", () => {
+    const prefix = "A".repeat(50) + " "; // 51 chars, no partial word at any prefix length
+    const value = `${prefix}Ownership of the retained draft lifecycle must be documented.`;
+    // Cut 8 characters into the 9-character word "Ownership" — the exact
+    // shape of the reported "Ownershi|p" mid-word cut.
+    const cutInsideWord = prefix.length + 8;
+    const truncated = truncateAtSafeBoundary(value, cutInsideWord);
+    assert.ok(!truncated.endsWith("Ownershi"), `must not cut mid-word: ${JSON.stringify(truncated)}`);
+    assert.equal(truncated, prefix.trim());
+  });
+
+  test("prefers a paragraph break over a mid-sentence line break", () => {
+    const value = "First paragraph complete.\n\nSecond paragraph starts here and runs long enough to be cut.";
+    const truncated = truncateAtSafeBoundary(value, value.indexOf("Second") + 10);
+    assert.equal(truncated, "First paragraph complete.");
+  });
+
+  test("content already within budget is returned unchanged", () => {
+    const value = "Short and complete.";
+    assert.equal(truncateAtSafeBoundary(value, 100), value);
   });
 });
