@@ -2,22 +2,21 @@ import { ArrowLeft } from "lucide-react";
 import { useCallback, useRef } from "react";
 import { Form, Link, Outlet, useFetcher, useLoaderData, useNavigate } from "react-router-dom";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
+import { DetailMetricsRow } from "../../components/detail/detail-metrics-row";
+import { EntityDetailIdentity } from "../../components/detail/entity-detail-identity";
 import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
-import { CompactCard } from "../../components/ui/compact-card";
-import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
 import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
-import { DescriptionFreshnessNotice } from "../../components/ui/description-freshness-notice";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { StatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { ResumeSnapshot } from "../../components/task/resume-snapshot";
 import { useShortcut } from "../../lib/shortcuts";
-import type { Feature, Phase, Task, ChecklistItem, HierarchicalDescriptionFreshness } from "../../lib/types";
+import type { Feature, Phase, Task, ChecklistItem } from "../../lib/types";
 
 function ChecklistItemToggle({
   featureId,
@@ -63,7 +62,7 @@ function ChecklistItemToggle({
 }
 
 export function TaskDetailRoute() {
-  const { feature, phase, task, pendingResume, descriptionFreshness } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean; descriptionFreshness: HierarchicalDescriptionFreshness };
+  const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
   const canStart = task.status === "planned" || task.status === "waiting";
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
@@ -105,7 +104,7 @@ export function TaskDetailRoute() {
           <StatusBadge status={task.status} />
         </DetailEntityBar>
         </div>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{task.title}</h2>
+        <EntityDetailIdentity kind="task" title={task.title} reference={`T${String(task.number).padStart(3, "0")}`} />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {canStart ? (
             <Form method="post" action={`/features/${feature.id}/phases/${phase.id}/tasks/${task.id}/start`} className="inline-flex">
@@ -126,26 +125,45 @@ export function TaskDetailRoute() {
             <Button type="submit" variant="danger" shortcut="delete">Delete task</Button>
           </Form>
         </div>
+        {task.description ? (
+          <div className="mt-4">
+            <Accordion title={<><span>Description</span><LastUpdated value={task.descriptionUpdatedAt} /></>}>
+              <FormattedText text={task.description} className="plan-description" />
+            </Accordion>
+          </div>
+        ) : null}
+        <div className="mt-4">
+          <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} createdAt={task.createdAt} updatedAt={task.updatedAt} startedAt={task.startedAt} completedAt={task.completedAt} />
+        </div>
       </div>
-
-      <DescriptionFreshnessNotice freshness={descriptionFreshness} ownerIds={[phase.id, feature.id]} />
-
-      <StatusCardStepper statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} createdAt={task.createdAt} updatedAt={task.updatedAt} startedAt={task.startedAt} completedAt={task.completedAt} />
 
       {task.pauseSnapshot ? <ResumeSnapshot snapshot={task.pauseSnapshot} pendingResume={pendingResume} /> : null}
 
+      <Card className="grid gap-3">
+        <StatusHistoryAccordion statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} startedAt={task.startedAt} completedAt={task.completedAt} />
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="task" targetRef={task.id} />
+      </Card>
+
       <Card className="grid gap-4">
-        {task.description ? (
-          <Accordion title={<><span>Description</span><LastUpdated value={task.descriptionUpdatedAt} /></>}>
-            <FormattedText text={task.description} className="plan-description" />
-          </Accordion>
-        ) : null}
+        <DetailMetricsRow
+          label="Task metrics"
+          items={[
+            { label: "Steps", value: checklist.length },
+            { label: "Subtasks", value: task.subtasks?.length ?? 0 },
+            { label: "Dependencies", value: task.dependsOn?.length ?? 0 },
+            { label: "Priority", value: `P${task.priority}` },
+            { label: "Short name", value: task.shortName, visible: Boolean(task.shortName), wide: true },
+            { label: "Started", value: formatDateTime(task.startedAt), visible: Boolean(task.startedAt), wide: true },
+            { label: "Completed", value: formatDateTime(task.completedAt), visible: Boolean(task.completedAt), wide: true },
+            { label: "Updated", value: formatDateTime(task.updatedAt), visible: Boolean(task.updatedAt), wide: true },
+          ]}
+        />
+
         {task.notes ? (
           <Accordion title="Notes" defaultOpen={false}>
             <FormattedText text={task.notes} />
           </Accordion>
         ) : null}
-        <StatusHistoryAccordion statusLog={task.statusLog ?? []} currentStatus={task.status} backbone={["planned", "in-progress", "done"]} startedAt={task.startedAt} completedAt={task.completedAt} />
         {taskDecisions.length > 0 ? (
           <Accordion title="Decisions" count={taskDecisions.length} defaultOpen={false}>
             <div className="grid gap-2 border-l-2 border-[var(--border)] pl-4 ml-1">
@@ -157,23 +175,6 @@ export function TaskDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="task" targetRef={task.id} />
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Checklist items</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{checklist.length}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Subtasks</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{task.subtasks?.length ?? 0}</p></CompactCard>
-        </div>
-
-        <DetailMetadataGrid
-          items={[
-            { label: "Entity last updated", value: formatDateTime(task.updatedAt), visible: Boolean(task.updatedAt) },
-            { label: "Priority", value: formatPriority(task.priority), visible: task.priority > 0 },
-            { label: "Short name", value: task.shortName, visible: Boolean(task.shortName) },
-            { label: "Started", value: formatDateTime(task.startedAt), visible: Boolean(task.startedAt) },
-            { label: "Completed", value: formatDateTime(task.completedAt), visible: Boolean(task.completedAt) },
-            { label: "Phase", value: phase.title },
-          ]}
-        />
 
         <div className="grid gap-3">
           <div>

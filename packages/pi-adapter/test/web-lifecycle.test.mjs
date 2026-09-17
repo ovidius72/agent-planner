@@ -81,9 +81,13 @@ describe("pi-adapter web lifecycle", () => {
       assert.match(toolText(guidelines), /Project Guidelines updated\./);
       const legacyContext = await host.runTool("project_update", {
         globalRules: ["Keep generated output deterministic."],
-        decisions: ["Use automatic migration on explicit planner load."],
       });
       assert.match(toolText(legacyContext), /Project updated/);
+      // project_update no longer writes the legacy decisions array (it is
+      // read-only history now — see accepted-decision-guard.ts), so this
+      // migration fixture seeds it directly through the store, the way any
+      // pre-existing legacy content would already be on disk.
+      await host.store.updateProject((project) => ({ ...project, decisions: [...project.decisions, "Use automatic migration on explicit planner load."] }));
       await rm(join(host.planRoot, "skills", "grill-me", "SKILL.md"));
 
       const loaded = await host.runTool("planner-load", {});

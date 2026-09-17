@@ -269,6 +269,36 @@ test("accepted decision tools preserve identity and acceptedAt across every owne
   }
 });
 
+test("accepted decisions on a task remain visible after that task and its phase complete", async () => {
+  const session = await startMcpFixture({ name: "t405-post-completion-visibility" });
+  try {
+    const created = await callTool(session, "planner-accepted-decision-create", {
+      targetType: "task", targetRef: "P001/T001",
+      title: "Task decision surviving completion",
+      decision: "Keep this visible after completion.",
+      rationale: "Completion must not hide durable decisions.",
+      implementationNotes: "None required.",
+    });
+    const acceptedDecision = toolStructured(created).acceptedDecision;
+    await callTool(session, "planner-task-show", { task: "P001(F001)/T001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001(F001)", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001(F001)" });
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    if (started.isError) throw new Error(`planner-task-start failed: ${toolText(started)}`);
+    const completed = await callTool(session, "planner-task-complete", { task: "T001", description_update: "Completed to verify accepted decisions remain visible after completion.", force: true });
+    if (completed.isError) throw new Error(`planner-task-complete failed: ${toolText(completed)}`);
+    assert.match(toolText(completed), /Task completed/);
+    const shown = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const details = toolStructured(shown).task;
+    assert.equal(details.acceptedDecisions.some((entry) => entry.id === acceptedDecision.id), true, "accepted decision remains visible after task completion");
+    const persistedStatus = (await session.store.loadAllPhases()).flatMap((phase) => phase.tasks).find((entry) => entry.acceptedDecisions.some((decision) => decision.id === acceptedDecision.id)).status;
+    assert.equal(persistedStatus, "done", "the owning task is actually completed, proving this is a post-completion read");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 test("full reads, task start, and planner-load agentContext deliver canonical Accepted Decisions", async () => {
   const session = await startMcpFixture({ name: "t368-decision-context" });
   try {

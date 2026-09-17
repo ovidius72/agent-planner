@@ -14,6 +14,7 @@ export * from "./read-tracking.js";
 export * from "./payload-fallback.js";
 export * from "./handoff-context.js";
 export * from "./handoff-reply.js";
+export * from "./accepted-decision-guard.js";
 export * from "./project-context-migration.js";
 export * from "./project-context.js";
 export * from "./requirement-macro-tasks.js";

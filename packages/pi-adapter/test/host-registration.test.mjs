@@ -335,6 +335,37 @@ describe("pi-adapter host harness", () => {
     }
   });
 
+  test("accepted decisions on a task remain visible after that task and its phase complete", async () => {
+    const host = await createPiHost({ name: "t405-post-completion-visibility", seed: "minimal" });
+    try {
+      const created = await host.runTool("accepted_decision_create", {
+        targetType: "task", targetRef: "T001",
+        title: "Task decision surviving completion",
+        decision: "Keep this visible after completion.",
+        rationale: "Completion must not hide durable decisions.",
+        implementationNotes: "None required.",
+      });
+      const acceptedDecisionId = toolDetails(created).acceptedDecision.id;
+
+      await host.runTool("task_get", { taskId: "T001", full: true });
+      await host.runTool("phase_get", { phaseId: "P001", full: true });
+      await host.runTool("feature_get", { featureId: "F001", full: true });
+      await host.runTool("requirement_list", { phaseRef: "P001" });
+      assert.match(toolText(await host.runTool("task_start", { taskId: "T001" })), /Task started/);
+      const completed = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Completed to verify accepted decisions remain visible after completion." });
+      assert.match(toolText(completed), /Task completed/);
+
+      const persistedTask = (await host.store.loadAllPhases())[0].tasks[0];
+      assert.equal(persistedTask.status, "done");
+      assert.equal(persistedTask.acceptedDecisions.some((entry) => entry.id === acceptedDecisionId), true, "accepted decision remains visible after task completion");
+
+      const shown = await host.runTool("task_get", { taskId: "T001", full: true });
+      assert.match(toolText(shown), /Task decision surviving completion/, "task_get still surfaces the decision after the task is done");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
   test("planner-load delivers the complete attested project-level context; task_start advises after it goes stale", async () => {
     const host = await createPiHost({ name: "t404-project-context", seed: "minimal" });
     try {
@@ -407,8 +438,8 @@ describe("pi-adapter host harness", () => {
     }
   });
 
-  test("decision_record appends the same decision to feature and phase", async () => {
-    const host = await createPiHost({ name: "t272-decision-record", seed: "minimal" });
+  test("decision_record no longer dual-writes; it redirects to accepted_decision_create", async () => {
+    const host = await createPiHost({ name: "t405-decision-record-redirect", seed: "minimal" });
     try {
       const result = await host.runTool("decision_record", {
         featureId: "F001",
@@ -418,28 +449,44 @@ describe("pi-adapter host harness", () => {
         rationale: "Agents need context at feature and phase scope.",
         implementationNotes: "Append; never replace prior decisions.",
       });
-      assert.match(toolText(result), /Decision recorded on F001 and P001\(F001\)/);
+      const details = toolDetails(result);
+      assert.equal(details.deprecated, true);
+      assert.equal(details.written, false);
+      assert.equal(details.redirected, true);
+      assert.equal(details.redirectTool, "accepted_decision_create");
+      assert.match(toolText(result), /decision_record is deprecated and write-disabled/);
+      assert.match(toolText(result), /exactly one owner/);
+      assert.match(toolText(result), /accepted_decision_create/);
       const feature = (await host.store.loadFeatures()).features.find((entry) => entry.number === 1);
       const phase = (await host.store.loadAllPhases()).find((entry) => entry.number === 1);
-      assert.equal(feature?.acceptedDecisions.at(-1)?.title, "Keep paired decision history");
-      assert.equal(phase?.acceptedDecisions.at(-1)?.title, "Keep paired decision history");
+      assert.equal(feature?.acceptedDecisions.some((entry) => entry.title === "Keep paired decision history"), false, "decision_record must not write to the feature");
+      assert.equal(phase?.acceptedDecisions.some((entry) => entry.title === "Keep paired decision history"), false, "decision_record must not write to the phase");
     } finally {
       await closePiHost(host);
     }
   });
 
-  test("decision_record compensates the feature write when phase persistence fails", async () => {
-    const host = await createPiHost({ name: "t272-decision-rollback", seed: "minimal" });
+  test("decision_record performs no write at all, even when the phase store is unwritable", async () => {
+    const host = await createPiHost({ name: "t405-decision-record-no-write", seed: "minimal" });
     try {
       const originalUpdatePhase = PlanStore.prototype.updatePhase;
-      PlanStore.prototype.updatePhase = async () => { throw new Error("simulated phase write failure"); };
-      await assert.rejects(host.runTool("decision_record", {
-        featureId: "F001", phaseId: "P001", title: "Must not persist partially",
-        decision: "Reject partial writes.", rationale: "Dual-write consistency.", implementationNotes: "Compensate feature mutation.",
-      }), /simulated phase write failure/);
-      PlanStore.prototype.updatePhase = originalUpdatePhase;
+      PlanStore.prototype.updatePhase = async () => { throw new Error("updatePhase must not be called by decision_record"); };
+      const originalUpdateFeatures = PlanStore.prototype.updateFeatures;
+      PlanStore.prototype.updateFeatures = async () => { throw new Error("updateFeatures must not be called by decision_record"); };
+      try {
+        const result = await host.runTool("decision_record", {
+          featureId: "F001", phaseId: "P001", title: "Must not persist anywhere",
+          decision: "Reject any write.", rationale: "Single-owner rule.", implementationNotes: "Redirect only.",
+        });
+        assert.equal(toolDetails(result).written, false);
+      } finally {
+        PlanStore.prototype.updatePhase = originalUpdatePhase;
+        PlanStore.prototype.updateFeatures = originalUpdateFeatures;
+      }
       const feature = (await host.store.loadFeatures()).features.find((entry) => entry.number === 1);
-      assert.equal(feature?.acceptedDecisions.some((entry) => entry.title === "Must not persist partially"), false);
+      const phase = (await host.store.loadAllPhases()).find((entry) => entry.number === 1);
+      assert.equal(feature?.acceptedDecisions.some((entry) => entry.title === "Must not persist anywhere"), false);
+      assert.equal(phase?.acceptedDecisions.some((entry) => entry.title === "Must not persist anywhere"), false);
     } finally {
       await closePiHost(host);
     }

@@ -270,7 +270,6 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
       dependencies: ["Provider contract"],
       risks: ["Provider outage"],
       openQuestions: ["Which region first?"],
-      decisions: ["Use provider tokens"],
       completionCriteria: ["Payout succeeds"],
     });
     assert.match(toolText(updated), /P002\(F002\)/);
@@ -283,8 +282,10 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
     assert.deepEqual(stored.dependencies, ["Provider contract"]);
     assert.deepEqual(stored.risks, ["Provider outage"]);
     assert.deepEqual(stored.openQuestions, ["Which region first?"]);
-    assert.deepEqual(stored.decisions, ["Use provider tokens"]);
     assert.deepEqual(stored.completionCriteria, ["Payout succeeds"]);
+    const phaseDecisionsRejected = await callTool(session, "planner-phase-update", { phase: shortId, decisions: ["Should be rejected"] });
+    assert.equal(toolStructured(phaseDecisionsRejected).updated, false);
+    assert.equal(toolStructured(phaseDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
     const featureOwners = (await session.store.loadFeatures()).features;
     assert.equal(featureOwners.find((entry) => entry.number === 1).phaseIds.includes(id), false);
     assert.equal(featureOwners.find((entry) => entry.number === 2).phaseIds.includes(id), true);
@@ -363,17 +364,18 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
       task: "T002",
       descriptionRef: ".planner/docs/tasks/refund-flow.md",
       notes: "Provider behavior verified.",
-      decisions: ["Retry idempotently"],
       checklist: ["Review", "Execute"],
       subtasks: [{ title: "Validate provider", description: "Check contract" }, { title: "Execute refund" }],
     });
     assert.equal(toolStructured(parityUpdate).updated, true);
-    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes", "subtasks"]);
+    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "descriptionRef", "notes", "subtasks"]);
     const parityTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(parityTask.descriptionRef, ".planner/docs/tasks/refund-flow.md");
     assert.equal(parityTask.notes, "Provider behavior verified.");
-    assert.deepEqual(parityTask.decisions, ["Retry idempotently"]);
     assert.deepEqual(parityTask.checklist.map((item) => item.title), ["Review", "Execute"]);
+    const taskDecisionsRejected = await callTool(session, "planner-task-update", { task: "T002", decisions: ["Should be rejected"] });
+    assert.equal(toolStructured(taskDecisionsRejected).updated, false);
+    assert.equal(toolStructured(taskDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
     const phaseOnDisk = JSON.parse(await readFile(join(session.planRoot, "phases", `${task.phaseId}.json`), "utf8"));
     const taskOnDisk = phaseOnDisk.tasks.find((entry) => entry.id === id);
     assert.deepEqual(taskOnDisk.checklist.map((item) => item.title), ["Review", "Execute"], "planner-task-update persists checklist to the owning phase file");

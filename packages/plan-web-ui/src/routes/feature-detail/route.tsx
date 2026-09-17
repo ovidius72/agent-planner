@@ -6,16 +6,15 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
-import { CompactCard } from "../../components/ui/compact-card";
-import { DetailMetadataGrid, formatPriority, formatTimeline } from "../../components/ui/detail-metadata";
+import { DetailMetricsRow } from "../../components/detail/detail-metrics-row";
+import { EntityDetailIdentity } from "../../components/detail/entity-detail-identity";
 import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { DetailFilters } from "../../components/ui/detail-filters";
-import { DescriptionFreshnessNotice } from "../../components/ui/description-freshness-notice";
 import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
-import { DisplayStatusBadge, StatusBadge } from "../../components/ui/status-badge";
+import { DisplayStatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { matchesListQuery, passesDetailFilters, type DetailFilterValue } from "../../lib/list-filtering";
@@ -23,7 +22,7 @@ import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
 import { deriveFeatureDisplayFromPhases } from "../../lib/derive-display";
 import { compareEntities, type WorkTreeSortConfig } from "../../lib/dashboard-tree";
-import type { Feature, HierarchicalDescriptionFreshness, Phase } from "../../lib/types";
+import type { Feature, Phase } from "../../lib/types";
 
 function countTasks(phases: Phase[]) {
   return phases.reduce((total, phase) => total + phase.tasks.length, 0);
@@ -52,7 +51,7 @@ function findCurrentPhase(phases: Phase[]) {
 }
 
 export function FeatureDetailRoute() {
-  const { feature, phases, descriptionFreshness } = useLoaderData() as { feature: Feature; phases: Phase[]; descriptionFreshness: HierarchicalDescriptionFreshness };
+  const { feature, phases } = useLoaderData() as { feature: Feature; phases: Phase[] };
   const acceptedDecisions = feature.acceptedDecisions ?? [];
   const taskCount = countTasks(phases);
   const taskSummary = countTasksByStatus(phases);
@@ -125,15 +124,7 @@ export function FeatureDetailRoute() {
           <DisplayStatusBadge status={featureDisplay.displayStatus} breakdown={featureDisplay.breakdown} />
         </DetailEntityBar>
         </div>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">{feature.name}</h2>
-        {feature.description ? (
-          <Accordion title={<><span>Description</span><LastUpdated value={feature.descriptionUpdatedAt} /></>}>
-            <FormattedText text={feature.description} className="plan-description max-w-4xl" />
-          </Accordion>
-        ) : null}
-        <div className="mt-4">
-          <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} createdAt={feature.createdAt} updatedAt={feature.updatedAt} />
-        </div>
+        <EntityDetailIdentity kind="feature" title={feature.name} reference={`F${String(feature.number).padStart(3, "0")}`} />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit feature</Button></Link>
           <Form ref={deleteFormRef} method="post" action={`/features/${feature.id}/delete`} className="inline-flex" onSubmit={(event) => {
@@ -142,30 +133,37 @@ export function FeatureDetailRoute() {
             <Button type="submit" variant="danger" shortcut="delete">Delete feature</Button>
           </Form>
         </div>
+        {feature.description ? (
+          <div className="mt-4">
+            <Accordion title={<><span>Description</span><LastUpdated value={feature.descriptionUpdatedAt} /></>}>
+              <FormattedText text={feature.description} className="plan-description max-w-4xl" />
+            </Accordion>
+          </div>
+        ) : null}
+        <div className="mt-4">
+          <StatusCardStepper statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} createdAt={feature.createdAt} updatedAt={feature.updatedAt} />
+        </div>
       </div>
 
-      <DescriptionFreshnessNotice freshness={descriptionFreshness} ownerIds={[feature.id]} />
+      <Card className="grid gap-3">
+        <StatusHistoryAccordion statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="feature" targetRef={feature.id} />
+      </Card>
 
       <Card className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Phases</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{phases.length}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Tasks</p><p className="mt-2 text-3xl font-black text-[var(--text)]">{taskCount}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Current phase</p><p className="mt-2 text-sm font-semibold text-[var(--text)] break-words">{currentPhase?.title || "No active phase"}</p></CompactCard>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">In progress</p><p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.inProgress}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Remaining</p><p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.remaining}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Done</p><p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.done}</p></CompactCard>
-          <CompactCard><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">Blocked</p><p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.blocked}</p></CompactCard>
-        </div>
-
-        <DetailMetadataGrid
+        <DetailMetricsRow
+          label="Feature metrics"
           items={[
-            { label: "Entity last updated", value: formatDateTime(feature.updatedAt), visible: Boolean(feature.updatedAt) },
-            { label: "Priority", value: formatPriority(feature.priority), visible: feature.priority > 0 },
-            { label: "Timeline", value: formatTimeline(feature.startDate, feature.endDate), visible: Boolean(feature.startDate || feature.endDate) },
+            { label: "Current phase", value: currentPhase?.title || "No active phase", wide: true },
+            { label: "Phases", value: phases.length },
+            { label: "Tasks", value: taskCount },
+            { label: "Active", value: taskSummary.inProgress },
+            { label: "Remaining", value: taskSummary.remaining },
+            { label: "Done", value: taskSummary.done },
+            { label: "Blocked", value: taskSummary.blocked },
+            { label: "Priority", value: `P${feature.priority}` },
+            { label: "Updated", value: formatDateTime(feature.updatedAt), visible: Boolean(feature.updatedAt) },
+            { label: "Timeline", value: `${feature.startDate || "Not set"} → ${feature.endDate || "Not set"}`, visible: Boolean(feature.startDate || feature.endDate), wide: true },
           ]}
         />
 
@@ -177,8 +175,6 @@ export function FeatureDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="feature" targetRef={feature.id} />
-        <StatusHistoryAccordion statusLog={feature.statusLog ?? []} currentStatus={feature.status} backbone={["planned", "in-progress", "done"]} />
       </Card>
 
       <Card className="grid gap-5">

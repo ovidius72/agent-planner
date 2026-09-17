@@ -12,9 +12,9 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
-import type { ChecklistItem, AcceptedDecision, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
+import type { ChecklistItem, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -3089,13 +3089,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       technologies: Type.Optional(Type.Array(Type.String(), { description: "Replace technologies list" })),
       tools: Type.Optional(Type.Array(Type.String(), { description: "Replace tools list" })),
       globalRules: Type.Optional(Type.Array(Type.String(), { description: "Replace global rules" })),
-      decisions: Type.Optional(Type.Array(Type.String(), { description: "Replace project decisions" })),
+      decisions: Type.Optional(Type.Array(Type.String(), { description: "Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use accepted_decision_create for new durable decisions." })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found. Use plan_init first." }], details: {} };
+      if (params.decisions !== undefined) {
+        return {
+          content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }],
+          details: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "project" },
+          isError: true,
+        };
+      }
       const project = await st.loadProject();
-      const mutableFields = ["name", "description", "descriptionRef", "goal", "scope", "outOfScope", "technologies", "tools", "globalRules", "decisions"] as const;
+      const mutableFields = ["name", "description", "descriptionRef", "goal", "scope", "outOfScope", "technologies", "tools", "globalRules"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
         return mutationNoFieldsFailure({
@@ -3125,7 +3132,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (params.technologies !== undefined) project.technologies = params.technologies.map((entry) => entry.trim()).filter(Boolean);
       if (params.tools !== undefined) project.tools = params.tools.map((entry) => entry.trim()).filter(Boolean);
       if (params.globalRules !== undefined) project.globalRules = params.globalRules.map((entry) => entry.trim()).filter(Boolean);
-      if (params.decisions !== undefined) project.decisions = params.decisions.map((entry) => entry.trim()).filter(Boolean);
       const persisted = await st.updateProject((current) => {
         const next = {
           ...current,
@@ -3137,7 +3143,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ...(params.technologies !== undefined ? { technologies: params.technologies.map((entry) => entry.trim()).filter(Boolean) } : {}),
           ...(params.tools !== undefined ? { tools: params.tools.map((entry) => entry.trim()).filter(Boolean) } : {}),
           ...(params.globalRules !== undefined ? { globalRules: params.globalRules.map((entry) => entry.trim()).filter(Boolean) } : {}),
-          ...(params.decisions !== undefined ? { decisions: params.decisions.map((entry) => entry.trim()).filter(Boolean) } : {}),
         };
         if (params.descriptionRef !== undefined) {
           const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
@@ -4229,8 +4234,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       if (params.acceptedDecisions !== undefined) {
         return {
-          content: [{ type: "text", text: "Raw acceptedDecisions replacement is disabled. Use accepted_decision_create, accepted_decision_update, or accepted_decision_delete so IDs and acceptedAt are preserved." }],
-          details: { updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", targetType: "feature", targetRef: formatFeatureRef(resolvedFeature.feature.number) },
+          content: [{ type: "text", text: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }],
+          details: { updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, targetType: "feature", targetRef: formatFeatureRef(resolvedFeature.feature.number) },
           isError: true,
         };
       }
@@ -4563,7 +4568,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       dependencies: Type.Optional(Type.Array(Type.String(), { description: "Replace dependencies list" })),
       risks: Type.Optional(Type.Array(Type.String(), { description: "Replace risks list" })),
       openQuestions: Type.Optional(Type.Array(Type.String(), { description: "Replace open questions list" })),
-      decisions: Type.Optional(Type.Array(Type.String(), { description: "Replace decisions list" })),
+      decisions: Type.Optional(Type.Array(Type.String(), { description: "Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use accepted_decision_create for new durable decisions." })),
       acceptedDecisions: Type.Optional(Type.Array(Type.Object({
         id: Type.String(),
         title: Type.String(),
@@ -4593,12 +4598,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       if (params.acceptedDecisions !== undefined) {
         return {
-          content: [{ type: "text", text: "Raw acceptedDecisions replacement is disabled. Use accepted_decision_create, accepted_decision_update, or accepted_decision_delete so IDs and acceptedAt are preserved." }],
-          details: { updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", targetType: "phase", targetRef: formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)) },
+          content: [{ type: "text", text: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }],
+          details: { updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, targetType: "phase", targetRef: formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)) },
           isError: true,
         };
       }
-      const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "completionCriteria"] as const;
+      if (params.decisions !== undefined) {
+        return {
+          content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }],
+          details: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "phase", targetRef: formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)) },
+          isError: true,
+        };
+      }
+      const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
         return mutationNoFieldsFailure({
@@ -4642,7 +4654,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             ...(params.dependencies !== undefined ? { dependencies: params.dependencies.map((item) => item.trim()).filter(Boolean) } : {}),
             ...(params.risks !== undefined ? { risks: params.risks.map((item) => item.trim()).filter(Boolean) } : {}),
             ...(params.openQuestions !== undefined ? { openQuestions: params.openQuestions.map((item) => item.trim()).filter(Boolean) } : {}),
-            ...(params.decisions !== undefined ? { decisions: params.decisions.map((item) => item.trim()).filter(Boolean) } : {}),
             ...(params.completionCriteria !== undefined ? { completionCriteria: params.completionCriteria.map((item) => item.trim()).filter(Boolean) } : {}),
             ...(params.featureId !== undefined ? { featureId: nextFeatureIdForUpdate } : {}),
             updatedAt: nowISO(),
@@ -4680,7 +4691,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "decision_record",
     label: "Decision Record",
-    description: "Record a user-agreed decision on both a feature and one of its phases. This is planner metadata work, not a code edit. The decision is appended without overwriting existing history.",
+    description: "DEPRECATED AND WRITE-DISABLED — retained only for compatibility. It no longer records a decision on both a feature and a phase (a decision has exactly one owner). Call accepted_decision_create instead with the single project/feature/phase/task owner that actually holds this decision; this tool only resolves the given feature/phase and returns that guidance.",
     parameters: Type.Object({
       featureId: Type.String({ description: "Parent feature ref: F00x, shortId, UUID, or name" }),
       phaseId: Type.String({ description: "Active phase ref: P00x, shortId, UUID, or title" }),
@@ -4700,46 +4711,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (resolvedPhase.featureId !== resolvedFeature.feature.id) {
         return { content: [{ type: "text", text: `Phase ${formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features))} does not belong to feature ${formatFeatureRef(resolvedFeature.feature.number)}.` }], details: {} };
       }
-      const acceptedAt = nowISO();
-      const acceptedDecision: AcceptedDecision = {
-        id: crypto.randomUUID(),
-        title: params.title.trim(),
-        decision: params.decision.trim(),
-        rationale: params.rationale.trim(),
-        implementationNotes: params.implementationNotes.trim(),
-        acceptedAt,
-      };
-      await st.runBatch(() => withFeatureLock(resolvedFeature.feature.id, async () => {
-        let featureWritten = false;
-        try {
-          await st.updateFeatures((doc) => {
-            const feature = doc.features.find((entry) => entry.id === resolvedFeature.feature.id);
-            if (!feature) throw new Error(`Resolved feature no longer exists: ${resolvedFeature.feature.id}`);
-            feature.acceptedDecisions = [...(feature.acceptedDecisions ?? []), acceptedDecision];
-            feature.updatedAt = acceptedAt;
-            return doc;
-          });
-          featureWritten = true;
-          await st.updatePhase(resolvedPhase.id, (phase) => {
-            phase.acceptedDecisions = [...(phase.acceptedDecisions ?? []), acceptedDecision];
-            phase.updatedAt = acceptedAt;
-            return phase;
-          });
-        } catch (error) {
-          // Best-effort compensation keeps a failed dual-write from reporting
-          // success with a decision persisted only on the feature.
-          if (featureWritten) {
-            await st.updateFeatures((doc) => {
-              const feature = doc.features.find((entry) => entry.id === resolvedFeature.feature.id);
-              if (feature) feature.acceptedDecisions = (feature.acceptedDecisions ?? []).filter((entry) => entry.id !== acceptedDecision.id);
-              return doc;
-            }).catch(() => {});
-          }
-          throw error;
-        }
-      }));
-      await st.writeGenerated();
-      return { content: [{ type: "text", text: `✅ Decision recorded on ${formatFeatureRef(resolvedFeature.feature.number)} and ${formatPhaseRef(resolvedPhase.number, resolvedFeature.feature.number)}: ${acceptedDecision.title}` }], details: acceptedDecision };
+      // No write happens here — see buildDecisionRecordRedirectReply. This
+      // tool used to append the same AcceptedDecision to both the feature
+      // and the phase; that violated the single-owner rule and mishandled
+      // project-wide decisions discovered during task work, so it is now a
+      // pure, non-mutating redirect (AGENTS.md rule 4: the rule and its
+      // wording live once, in plan-core, not reinvented per adapter).
+      const reply = buildDecisionRecordRedirectReply({
+        featureRef: formatFeatureRef(resolvedFeature.feature.number),
+        phaseRef: formatPhaseRef(resolvedPhase.number, resolvedFeature.feature.number),
+      });
+      return { content: [{ type: "text", text: `⚠️ decision_record is deprecated and write-disabled. ${reply.text}` }], details: { deprecated: true, ...reply.structured } };
     },
   });
 
@@ -5112,7 +5094,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full task description." })),
       notes: Type.Optional(Type.String({ description: "New implementation notes" })),
       motivation: Type.Optional(Type.String({ description: "Motivation for status change. REQUIRED when changing to blocked, canceled, rejected, deferred, waiting, or back to planned from another status." })),
-      decisions: Type.Optional(Type.Array(Type.String(), { description: "Replace decisions list" })),
+      decisions: Type.Optional(Type.Array(Type.String(), { description: "Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use accepted_decision_create for new durable decisions." })),
       acceptedDecisions: Type.Optional(Type.Array(Type.Object({
         id: Type.String(),
         title: Type.String(),
@@ -5153,8 +5135,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       if (params.acceptedDecisions !== undefined) {
         return {
-          content: [{ type: "text", text: "Raw acceptedDecisions replacement is disabled. Use accepted_decision_create, accepted_decision_update, or accepted_decision_delete so IDs and acceptedAt are preserved." }],
-          details: { updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", targetType: "task", targetRef: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}` },
+          content: [{ type: "text", text: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }],
+          details: { updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, targetType: "task", targetRef: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}` },
+          isError: true,
+        };
+      }
+      if (params.decisions !== undefined) {
+        return {
+          content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }],
+          details: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "task", targetRef: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}` },
           isError: true,
         };
       }
@@ -5174,7 +5163,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const existingIds = new Set(found.task.subtasks.map((item) => item.id));
         if (params.subtasks.some((item) => item.id !== undefined && !existingIds.has(item.id))) return { content: [{ type: "text", text: "Subtask IDs must belong to the target task." }], details: { updated: false, errorCode: "SUBTASK_ID_INVALID" }, isError: true };
       }
-      const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "decisions", "priority", "checklist", "subtasks"] as const;
+      const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "priority", "checklist", "subtasks"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
         return mutationNoFieldsFailure({
@@ -5203,7 +5192,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             else delete task.descriptionRef;
           }
           if (params.notes !== undefined) task.notes = params.notes.trim();
-          if (params.decisions !== undefined) task.decisions = params.decisions.map((item) => item.trim()).filter(Boolean);
           if (params.checklist !== undefined) {
             const replacement = replaceChecklist(task.checklist ?? [], params.checklist, task.id);
             task.checklist = replacement.items;
@@ -6284,7 +6272,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "Operational rules:",
         "- Handoffs are context, not locks. Read the relevant handoff with handoff show <ref> before resuming.",
         "- BEFORE work: call task_start or task_switch first so valid sessionInfo attestations are reused. If denied, perform only the missing/stale reads listed in nextActions, then retry. Reads may be performed in any order within the current session. If nextActions includes project_guidelines_show, read that section and keep it in working memory while doing task work. A denial is an error with started=false; only details.started=true proves the task is in-progress. Only then touch code. AFTER finishing: task_complete with durable completion/verification evidence.",
-        "- Record every new decision or user-agreed modification in both the relevant feature and phase before treating the discussion as complete.",
+        `- ${ACCEPTED_DECISION_OWNERSHIP_RULE} Record it with accepted_decision_create on that single owner before treating the discussion as complete; decision_record no longer writes and only explains this.`,
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
         "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Compact feature_list / phase_list / task_list surfaces expose priority markers; when browsing manually, follow the lowest visible priority first among ready siblings. Prefer shortId or F00x/P00x/T00x refs. Read one entity via *_get(full=true).",

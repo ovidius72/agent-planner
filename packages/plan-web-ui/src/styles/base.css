@@ -306,6 +306,82 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
 }
 
+.entity-detail-identity {
+  margin-top: 0.9rem;
+  border-inline-start: 4px solid var(--entity-detail-color);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  padding: 0.35rem 0.8rem 0.45rem;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--entity-detail-color) 10%, transparent), transparent 72%);
+}
+.entity-detail-identity--feature { --entity-detail-color: var(--color-entity-feature); }
+.entity-detail-identity--phase { --entity-detail-color: var(--color-entity-phase); }
+.entity-detail-identity--task { --entity-detail-color: var(--color-entity-task); }
+.entity-detail-kind {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--entity-detail-color);
+  font-size: clamp(1.05rem, 1.7vw, 1.3rem);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+.entity-detail-title {
+  min-width: 0;
+  margin: 0.2rem 0 0;
+  color: var(--text);
+  font-size: clamp(1.65rem, 3.1vw, 2.35rem);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+.entity-detail-subtitle {
+  max-width: 64rem;
+  margin: 0.55rem 0 0;
+  color: var(--text-muted);
+}
+.detail-metrics-row {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-block: 0.1rem 0.35rem;
+  scrollbar-width: thin;
+}
+.detail-metric {
+  display: flex;
+  min-width: 6.75rem;
+  min-height: 3.5rem;
+  flex: 1 0 6.75rem;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) + 1px);
+  background: var(--surface-card);
+  padding: 0.55rem 0.7rem;
+}
+.detail-metric--wide {
+  min-width: 13rem;
+  flex-basis: 13rem;
+  flex-grow: 1.6;
+}
+.detail-metric-label {
+  color: var(--text-subtle);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+.detail-metric-value {
+  margin-top: 0.28rem;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 850;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
 /* ── Copyable entity id badge (click to copy the F/P/T path) ── */
 .copyable-id {
   appearance: none;

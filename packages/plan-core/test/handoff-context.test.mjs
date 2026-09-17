@@ -191,7 +191,17 @@ describe("durable handoff context refresh", () => {
     const task = phase.tasks.find((candidate) => candidate.id === doneTaskId);
     assert.match(task.description, /Completion summary/);
     assert.match(task.description, /visual verification was partial/);
+    // Decisions supplied in a handoff completion summary are rendered into
+    // that prose, labeled non-authoritative; they must not land in the
+    // legacy task.decisions/phase.decisions arrays, which nothing treats as
+    // decision authority (see accepted-decision-guard.ts).
+    assert.match(task.description, /Decisions mentioned \(not decision authority/);
+    assert.match(task.description, /Keep one active handoff\./);
+    assert.deepEqual(task.decisions, [], "handoff-supplied decisions must not persist to the legacy task.decisions array");
     assert.match(phase.notes, /core refresh contract is implemented/);
+    assert.match(phase.notes, /Decisions mentioned \(not decision authority/);
+    assert.match(phase.notes, /Refresh without superseded archives\./);
+    assert.deepEqual(phase.decisions, [], "handoff-supplied decisions must not persist to the legacy phase.decisions array");
     assert.equal(phase.handoffHistory.length, 0, "refresh must not archive a superseded handoff");
     const feature = (await store.loadFeatures()).features[0];
     assert.match(feature.workDone, /Core handoff reconciliation implemented/);

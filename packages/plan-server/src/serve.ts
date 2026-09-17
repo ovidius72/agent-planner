@@ -8,7 +8,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, type MacroTaskMutationInput } from "@agent-plan/core"
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, type MacroTaskMutationInput } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -312,7 +312,12 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.put(route("/project"), async (c) => {
     const body = await c.req.json<Partial<Project> & { expectedGuidelinesUpdatedAt?: string }>();
     const existingProject = await store.loadProject();
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingProject.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingProject.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
+    // The legacy free-form `decisions` array stays writable over HTTP. It is an
+    // agent-governance rule, and .planner/SKILL.md makes the Web UI a human-
+    // supervisor surface that may bypass agent-only gates. Blocking it here also
+    // blocked the only way to seed the legacy state the planner-load migration
+    // exists to consume. The Pi and MCP tools still refuse it.
     const mutableFields = ["name", "goal", "description", "descriptionRef", "webPort", "scope", "outOfScope", "decisions", "globalRules", "technologies", "tools", "contentLanguage", "chatLanguage", "workflowRules", "projectGuidelines"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const persisted = await store.updateProject((current) => ({
@@ -682,7 +687,7 @@ app.put(route("/docs/save"), async (c) => {
     const existing = (await store.loadFeatures()).features.find((feature) => feature.id === id);
     if (!existing) return c.json({ error: "not found" }, 404);
     if (body.status !== undefined && body.status !== existing.status) return c.json({ updated: false, errorCode: "DERIVED_STATUS_READ_ONLY", message: "Feature status is derived from child phases and tasks and cannot be updated directly." }, 400);
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
     const mutableFields = ["name", "description", "descriptionRef", "discussedAt", "contextReady", "contextReadyReason", "startDate", "endDate", "workDone", "workRemaining", "priority", "dependsOn"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const timestamp = nowISO();
@@ -856,7 +861,12 @@ app.put(route("/docs/save"), async (c) => {
     const existingPhase = await store.loadPhase(id).catch(() => null);
     if (!existingPhase) return c.json({ error: "phase not found" }, 404);
     if (body.status !== undefined && body.status !== existingPhase.status) return c.json({ updated: false, errorCode: "DERIVED_STATUS_READ_ONLY", message: "Phase status is derived from child tasks and cannot be updated directly." }, 400);
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingPhase.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingPhase.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
+    // The legacy free-form `decisions` array stays writable over HTTP. It is an
+    // agent-governance rule, and .planner/SKILL.md makes the Web UI a human-
+    // supervisor surface that may bypass agent-only gates. Blocking it here also
+    // blocked the only way to seed the legacy state the planner-load migration
+    // exists to consume. The Pi and MCP tools still refuse it.
     let nextFeatureId = existingPhase.featureId;
     if (body.featureId !== undefined) {
       nextFeatureId = body.featureId.trim() || undefined;
@@ -1273,7 +1283,12 @@ app.put(route("/docs/save"), async (c) => {
     if (!phase) return c.json({ error: "phase not found" }, 404);
     const existing = phase.tasks.find((task) => task.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
+    // The legacy free-form `decisions` array stays writable over HTTP. It is an
+    // agent-governance rule, and .planner/SKILL.md makes the Web UI a human-
+    // supervisor surface that may bypass agent-only gates. Blocking it here also
+    // blocked the only way to seed the legacy state the planner-load migration
+    // exists to consume. The Pi and MCP tools still refuse it.
     const mutableFields = ["title", "description", "descriptionRef", "status", "notes", "decisions", "priority", "checklist", "subtasks"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
 

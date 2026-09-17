@@ -6,14 +6,13 @@ import { Breadcrumbs } from "../../components/ui/breadcrumbs";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { DetailEntityBar } from "../../components/detail/detail-entity-bar";
-import { CompactCard } from "../../components/ui/compact-card";
-import { DetailMetadataGrid, formatPriority } from "../../components/ui/detail-metadata";
+import { DetailMetricsRow } from "../../components/detail/detail-metrics-row";
+import { EntityDetailIdentity } from "../../components/detail/entity-detail-identity";
 import { formatDateTime, LastUpdated } from "../../components/ui/last-updated";
 import { HandoffBadge } from "../../components/ui/badges";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { Accordion } from "../../components/ui/accordion";
 import { DetailFilters } from "../../components/ui/detail-filters";
-import { DescriptionFreshnessNotice } from "../../components/ui/description-freshness-notice";
 import { SortControl } from "../../components/ui/sort-control";
 import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-list";
 import { DisplayStatusBadge } from "../../components/ui/status-badge";
@@ -25,7 +24,7 @@ import { matchesListQuery, passesDetailFilters, type DetailFilterValue } from ".
 import { useShortcut } from "../../lib/shortcuts";
 import { taskStatuses } from "../../lib/statuses";
 import { derivePhaseDisplayFromTasks } from "../../lib/derive-display";
-import type { Feature, HierarchicalDescriptionFreshness, Phase } from "../../lib/types";
+import type { Feature, Phase } from "../../lib/types";
 
 function summarizeTasks(phase: Phase) {
   let inProgress = 0;
@@ -44,7 +43,7 @@ function summarizeTasks(phase: Phase) {
 }
 
 export function PhaseDetailRoute() {
-  const { feature, phase, descriptionFreshness } = useLoaderData() as { feature: Feature; phase: Phase; descriptionFreshness: HierarchicalDescriptionFreshness };
+  const { feature, phase } = useLoaderData() as { feature: Feature; phase: Phase };
   const phaseDecisions = phase.decisions ?? [];
   const acceptedDecisions = phase.acceptedDecisions ?? [];
   const linkedRequirements = phase.linkedRequirements ?? [];
@@ -146,11 +145,12 @@ export function PhaseDetailRoute() {
           <DisplayStatusBadge status={phaseDisplay.displayStatus} breakdown={phaseDisplay.breakdown} />
         </DetailEntityBar>
         </div>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-[var(--text)] min-w-0 break-words [overflow-wrap:anywhere] sm:text-3xl">
-          {phase.title}
-        </h2>
-        {phase.summary ? <FormattedText text={phase.summary} className="mt-3 max-w-4xl" /> : null}
-        <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} createdAt={phase.createdAt} updatedAt={phase.updatedAt} />
+        <EntityDetailIdentity
+          kind="phase"
+          title={phase.title}
+          reference={`P${String(phase.number).padStart(3, "0")}`}
+          subtitle={phase.summary}
+        />
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Link to="edit"><Button type="button" shortcut="edit">Edit phase</Button></Link>
           <Form
@@ -165,76 +165,40 @@ export function PhaseDetailRoute() {
             <Button type="submit" variant="danger" shortcut="delete">Delete phase</Button>
           </Form>
         </div>
+        {phase.description ? (
+          <div className="mt-4">
+            <Accordion title={<><span>Description</span><LastUpdated value={phase.descriptionUpdatedAt} /></>}>
+              <FormattedText text={phase.description} className="plan-description" />
+            </Accordion>
+          </div>
+        ) : null}
+        <div className="mt-4">
+          <StatusCardStepper statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} createdAt={phase.createdAt} updatedAt={phase.updatedAt} />
+        </div>
       </div>
 
-      <DescriptionFreshnessNotice freshness={descriptionFreshness} ownerIds={[phase.id, feature.id]} />
+      <Card className="grid gap-3">
+        <StatusHistoryAccordion statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
+        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="phase" targetRef={phase.id} />
+      </Card>
 
       <Card className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Tasks
-            </p>
-            <p className="mt-2 text-3xl font-black text-[var(--text)]">{phase.tasks.length}</p>
-          </CompactCard>
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              In progress
-            </p>
-            <p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.inProgress}</p>
-          </CompactCard>
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Remaining
-            </p>
-            <p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.remaining}</p>
-          </CompactCard>
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Done
-            </p>
-            <p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.done}</p>
-          </CompactCard>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Blocked
-            </p>
-            <p className="mt-2 text-2xl font-black text-[var(--text)]">{taskSummary.blocked}</p>
-          </CompactCard>
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Goals
-            </p>
-            <p className="mt-2 text-2xl font-black text-[var(--text)]">{phase.goals.length}</p>
-          </CompactCard>
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Dependencies
-            </p>
-            <p className="mt-2 text-2xl font-black text-[var(--text)]">
-              {phase.dependencies.length}
-            </p>
-          </CompactCard>
-          <CompactCard>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-subtle)]">
-              Completion criteria
-            </p>
-            <p className="mt-2 text-2xl font-black text-[var(--text)]">
-              {phase.completionCriteria.length}
-            </p>
-          </CompactCard>
-        </div>
-
-        <DetailMetadataGrid
+        <DetailMetricsRow
+          label="Phase metrics"
           items={[
-            { label: "Entity last updated", value: formatDateTime(phase.updatedAt), visible: Boolean(phase.updatedAt) },
-            { label: "Priority", value: formatPriority(phase.priority), visible: phase.priority > 0 },
-            { label: "Linked requirements", value: linkedRequirements.length, visible: linkedRequirements.length > 0, valueClassName: "text-2xl font-black" },
-            { label: "Risks", value: phase.risks.length, visible: phase.risks.length > 0, valueClassName: "text-2xl font-black" },
-            { label: "Open questions", value: phase.openQuestions.length, visible: phase.openQuestions.length > 0, valueClassName: "text-2xl font-black" },
+            { label: "Tasks", value: phase.tasks.length },
+            { label: "Active", value: taskSummary.inProgress },
+            { label: "Remaining", value: taskSummary.remaining },
+            { label: "Done", value: taskSummary.done },
+            { label: "Blocked", value: taskSummary.blocked },
+            { label: "Goals", value: phase.goals.length },
+            { label: "Dependencies", value: phase.dependencies.length },
+            { label: "Criteria", value: phase.completionCriteria.length },
+            { label: "Requirements", value: linkedRequirements.length },
+            { label: "Risks", value: phase.risks.length },
+            { label: "Questions", value: phase.openQuestions.length },
+            { label: "Priority", value: `P${phase.priority}` },
+            { label: "Updated", value: formatDateTime(phase.updatedAt), visible: Boolean(phase.updatedAt) },
           ]}
         />
 
@@ -270,11 +234,6 @@ export function PhaseDetailRoute() {
             <p className="text-sm text-[var(--text-muted)]">No linked requirements yet.</p>
           )}
         </Accordion>
-        {phase.description ? (
-          <Accordion title={<><span>Description</span><LastUpdated value={phase.descriptionUpdatedAt} /></>}>
-            <FormattedText text={phase.description} className="plan-description" />
-          </Accordion>
-        ) : null}
         {phaseDecisions.length > 0 ? (
           <Accordion title="Decisions" count={phaseDecisions.length} defaultOpen={false}>
             <div className="grid gap-2 border-l-2 border-[var(--border)] pl-4 ml-1">
@@ -286,8 +245,6 @@ export function PhaseDetailRoute() {
             </div>
           </Accordion>
         ) : null}
-        <AcceptedDecisionsList decisions={acceptedDecisions} targetType="phase" targetRef={phase.id} />
-        <StatusHistoryAccordion statusLog={phase.statusLog ?? []} currentStatus={phase.status} backbone={["draft", "discovery", "planned", "in-progress", "done"]} />
       </Card>
 
       {handoffContent ? (

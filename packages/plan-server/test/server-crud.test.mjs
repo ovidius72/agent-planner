@@ -180,24 +180,29 @@ test("feature, phase, and task update routes persist canonical context and rejec
   const targetFeature = await request(fx, "/features", { ...json({ name: "Relink target", description: "Target owner" }), expectStatus: 201 });
   const phase = (await request(fx, "/phases")).body[0];
 
+  const directDescriptionRef = ".planner/docs/p094-pane-hosts-any-app.md";
   const updatedPhase = await request(fx, `/phases/${phase.id}`, put({
     id: phase.id,
     featureId: targetFeature.body.id,
-    descriptionRef: ".planner/docs/phases/phase-context.md",
+    descriptionRef: directDescriptionRef,
     goals: ["Deliver parity"],
     nonGoals: ["Change derived status"],
     dependencies: ["Core schema"],
     risks: ["Contract drift"],
     openQuestions: ["None"],
-    decisions: ["Use semantic fields"],
     completionCriteria: ["All harnesses agree"],
   }));
   assert.equal(updatedPhase.body.featureId, targetFeature.body.id);
-  assert.equal(updatedPhase.body.descriptionRef, ".planner/docs/phases/phase-context.md");
+  assert.equal(updatedPhase.body.descriptionRef, directDescriptionRef);
   assert.deepEqual(updatedPhase.body.goals, ["Deliver parity"]);
-  assert.deepEqual(updatedPhase.body.decisions, ["Use semantic fields"]);
   assert.ok(!(await request(fx, `/features/${sourceFeature.id}`)).body.phaseIds.includes(phase.id));
   assert.ok((await request(fx, `/features/${targetFeature.body.id}`)).body.phaseIds.includes(phase.id));
+
+  // The legacy decisions array stays writable over HTTP: it is an agent-governance
+  // rule and the Web UI is a supervisor surface (T405 review). The Pi and MCP tools
+  // still refuse it; those guards are asserted in their own suites.
+  const phaseDecisionsAccepted = await request(fx, `/phases/${phase.id}`, put({ decisions: ["Legacy seed"] }));
+  assert.deepEqual(phaseDecisionsAccepted.body.decisions, ["Legacy seed"]);
 
   const task = updatedPhase.body.tasks[0];
   const checklist = [{ id: "parity-check", number: 1, title: "Verify parity", checked: true }];
@@ -206,15 +211,16 @@ test("feature, phase, and task update routes persist canonical context and rejec
     title: "Updated through canonical fields",
     descriptionRef: ".planner/docs/tasks/task-context.md",
     notes: "Implementation evidence",
-    decisions: ["Keep transport parity"],
     checklist,
   }));
   assert.equal(updatedTask.body.descriptionRef, ".planner/docs/tasks/task-context.md");
   assert.equal(updatedTask.body.notes, "Implementation evidence");
-  assert.deepEqual(updatedTask.body.decisions, ["Keep transport parity"]);
   assert.deepEqual(updatedTask.body.checklist, checklist);
   const phaseOnDisk = JSON.parse(await readFile(join(fx.planRoot, "phases", `${phase.id}.json`), "utf8"));
   assert.deepEqual(phaseOnDisk.tasks.find((entry) => entry.id === task.id).checklist, checklist, "HTTP task update persists checklist to the owning phase file");
+
+  const taskDecisionsAccepted = await request(fx, `/tasks/${task.id}`, put({ phaseId: phase.id, decisions: ["Legacy seed"] }));
+  assert.deepEqual(taskDecisionsAccepted.body.decisions, ["Legacy seed"]);
 
   const phaseStatusRejected = await request(fx, `/phases/${phase.id}`, {
     ...put({ title: "Must not persist", status: "done" }),
@@ -569,6 +575,11 @@ test("no-field update payloads return typed no-op responses across entity routes
   assert.equal(project.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
   assert.equal(project.body.updated, false);
 
+  // Writable over HTTP so legacy state can be seeded for the planner-load
+  // migration to consume; the agent tools still refuse it (T405 review).
+  const projectDecisionsAccepted = await request(fx, "/project", put({ decisions: ["Legacy seed"] }));
+  assert.deepEqual(projectDecisionsAccepted.body.decisions, ["Legacy seed"]);
+
   const featureNoop = await request(fx, `/features/${feature.id}`, { ...put({ expectedUpdatedAt: feature.updatedAt }), expectStatus: 400 });
   assert.equal(featureNoop.body.error, "NO_MUTABLE_FIELDS_RECEIVED");
 
@@ -736,6 +747,20 @@ test("accepted decision routes manage project, feature, phase, and task owners s
   const deleted = await request(fx, `/accepted-decisions/${projectDecision.body.acceptedDecision.id}`, { ...json({ targetType: "project", confirmed: true }), method: "DELETE" });
   assert.equal(deleted.body.deleted, true);
   assert.equal((await request(fx, "/project")).body.acceptedDecisions.length, 0);
+
+  // Invalid target: atomic no-op, nothing persisted.
+  const invalidTarget = await request(fx, "/accepted-decisions", { ...json({ targetType: "task", targetRef: "not-a-real-task", title: "Should not persist" }), expectStatus: 404 });
+  assert.equal(invalidTarget.body.created, false);
+  assert.match(invalidTarget.body.error, /task not found/);
+  assert.equal((await request(fx, `/tasks/${task.id}`)).body.acceptedDecisions.some((entry) => entry.title === "Should not persist"), false);
+
+  // A decision recorded against a task stays visible after that task (and
+  // its phase) reach a terminal/completed state — completion never hides it.
+  await request(fx, `/tasks/${task.id}/start`, json({}));
+  await request(fx, `/tasks/${task.id}`, put({ phaseId: phase.id, status: "done" }));
+  const completedTask = await request(fx, `/tasks/${task.id}`);
+  assert.equal(completedTask.body.status, "done");
+  assert.equal(completedTask.body.acceptedDecisions[0].id, taskDecision.body.acceptedDecision.id, "accepted decision remains visible after task completion");
 });
 
 // ── Ideas Inbox CRUD ─────────────────────────────────────────────────────

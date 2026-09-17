@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -591,12 +591,15 @@ server.registerTool("planner-project-discuss", {
     technologies: z.array(z.string()).optional(),
     tools: z.array(z.string()).optional(),
     globalRules: z.array(z.string()).optional(),
-    decisions: z.array(z.string()).optional(),
+    decisions: z.array(z.string()).optional().describe("Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use planner-accepted-decision-create for new durable decisions."),
   },
 }, async (params) => {
   const st = await requireStore();
+  if (params.decisions !== undefined) {
+    return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "project" } };
+  }
   const project = await st.loadProject();
-  const mutableFields = ["description", "descriptionRef", "goal", "scope", "outOfScope", "technologies", "tools", "globalRules", "decisions"] as const;
+  const mutableFields = ["description", "descriptionRef", "goal", "scope", "outOfScope", "technologies", "tools", "globalRules"] as const;
   const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
   if (receivedFields.length === 0) {
     return mutationNoFieldsFailure({
@@ -625,7 +628,6 @@ server.registerTool("planner-project-discuss", {
   if (params.technologies !== undefined) project.technologies = params.technologies.map((entry) => entry.trim()).filter(Boolean);
   if (params.tools !== undefined) project.tools = params.tools.map((entry) => entry.trim()).filter(Boolean);
   if (params.globalRules !== undefined) project.globalRules = params.globalRules.map((entry) => entry.trim()).filter(Boolean);
-  if (params.decisions !== undefined) project.decisions = params.decisions.map((entry) => entry.trim()).filter(Boolean);
   const persisted = await st.updateProject((current) => {
     const next = {
       ...current,
@@ -636,7 +638,6 @@ server.registerTool("planner-project-discuss", {
       ...(params.technologies !== undefined ? { technologies: params.technologies.map((entry) => entry.trim()).filter(Boolean) } : {}),
       ...(params.tools !== undefined ? { tools: params.tools.map((entry) => entry.trim()).filter(Boolean) } : {}),
       ...(params.globalRules !== undefined ? { globalRules: params.globalRules.map((entry) => entry.trim()).filter(Boolean) } : {}),
-      ...(params.decisions !== undefined ? { decisions: params.decisions.map((entry) => entry.trim()).filter(Boolean) } : {}),
     };
     if (params.descriptionRef !== undefined) {
       const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
@@ -1347,7 +1348,7 @@ server.registerTool("planner-phase-update", {
     dependencies: z.array(z.string()).optional(),
     risks: z.array(z.string()).optional(),
     openQuestions: z.array(z.string()).optional(),
-    decisions: z.array(z.string()).optional(),
+    decisions: z.array(z.string()).optional().describe("Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use planner-accepted-decision-create for new durable decisions."),
     completionCriteria: z.array(z.string()).optional(),
   },
 }, async ({ phase: ref, ...updates }) => {
@@ -1358,7 +1359,10 @@ server.registerTool("planner-phase-update", {
   if (updates.status !== undefined) {
     return derivedStatusReadOnlyResult("phase", formatPhaseRef(found.number, featureNumberOfPhase(found, features)), updates.status, found.status);
   }
-  const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "decisions", "completionCriteria"] as const;
+  if (updates.decisions !== undefined) {
+    return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "phase", targetRef: formatPhaseRef(found.number, featureNumberOfPhase(found, features)) } };
+  }
+  const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
   const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
   if (receivedFields.length === 0) {
     return mutationNoFieldsFailure({
@@ -1408,7 +1412,6 @@ server.registerTool("planner-phase-update", {
       if (updates.dependencies !== undefined) entry.dependencies = updates.dependencies.map((item) => item.trim()).filter(Boolean);
       if (updates.risks !== undefined) entry.risks = updates.risks.map((item) => item.trim()).filter(Boolean);
       if (updates.openQuestions !== undefined) entry.openQuestions = updates.openQuestions.map((item) => item.trim()).filter(Boolean);
-      if (updates.decisions !== undefined) entry.decisions = updates.decisions.map((item) => item.trim()).filter(Boolean);
       if (updates.completionCriteria !== undefined) entry.completionCriteria = updates.completionCriteria.map((item) => item.trim()).filter(Boolean);
       entry.updatedAt = nowISO();
       return entry;
@@ -1660,7 +1663,7 @@ server.registerTool("planner-task-update", {
     description: z.string().optional(),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full task description."),
     notes: z.string().optional().describe("Implementation notes."),
-    decisions: z.array(z.string()).optional().describe("Replace the task decisions list."),
+    decisions: z.array(z.string()).optional().describe("Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use planner-accepted-decision-create for new durable decisions."),
     motivation: z.string().optional(),
     priority: z.number().int().nonnegative().optional().describe("Display order within the phase (lower = higher)."),
     checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick); an item that cannot be matched loses its tick and that loss is reported. Agents should tick steps via planner-task-checklist-toggle, not write DONE in titles, and use planner-task-checklist-add/remove for granular edits."),
@@ -1678,6 +1681,10 @@ server.registerTool("planner-task-update", {
     return text("Task completion transitions require planner-task-complete with durable completion and verification evidence.");
   }
 
+  if (decisions !== undefined) {
+    return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "task", targetRef: taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features) } };
+  }
+
   // Validate motivation requirement for status transitions.
   if (status !== undefined && needsMotivation(found.task.status, status)) {
     if (!motivation || !motivation.trim()) {
@@ -1688,7 +1695,7 @@ server.registerTool("planner-task-update", {
     }
   }
 
-  const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "decisions", "motivation", "priority", "checklist", "subtasks"] as const;
+  const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "priority", "checklist", "subtasks"] as const;
   const updateInputs = { title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks };
   const receivedFields = mutableFields.filter((field) => updateInputs[field] !== undefined);
   if (receivedFields.length === 0) {
@@ -1728,7 +1735,6 @@ server.registerTool("planner-task-update", {
       else delete task.descriptionRef;
     }
     if (notes !== undefined) task.notes = notes.trim();
-    if (decisions !== undefined) task.decisions = decisions.map((item) => item.trim()).filter(Boolean);
     if (checklist !== undefined) {
       const replacement = replaceChecklist(task.checklist ?? [], checklist, task.id);
       task.checklist = replacement.items;

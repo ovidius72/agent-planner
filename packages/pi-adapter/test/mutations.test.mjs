@@ -494,7 +494,6 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         dependencies: ["Canonical store"],
         risks: ["Contract drift"],
         openQuestions: ["Which client remains?"],
-        decisions: ["Use semantic mutations"],
         completionCriteria: ["All surfaces agree"],
       });
       assert.equal(toolDetails(updated).updated, true);
@@ -506,8 +505,10 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.deepEqual(persistedPhase.dependencies, ["Canonical store"]);
       assert.deepEqual(persistedPhase.risks, ["Contract drift"]);
       assert.deepEqual(persistedPhase.openQuestions, ["Which client remains?"]);
-      assert.deepEqual(persistedPhase.decisions, ["Use semantic mutations"]);
       assert.deepEqual(persistedPhase.completionCriteria, ["All surfaces agree"]);
+      const phaseDecisionsRejected = await host.runTool("phase_update", { phaseId: "P001", decisions: ["Should be rejected"] });
+      assert.equal(toolDetails(phaseDecisionsRejected).updated, false);
+      assert.equal(toolDetails(phaseDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
       const owners = (await host.store.loadFeatures()).features;
       assert.equal(owners.find((feature) => feature.number === 1).phaseIds.includes(phase.id), false);
       assert.equal(owners.find((feature) => feature.number === 2).phaseIds.includes(phase.id), true);
@@ -530,16 +531,17 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         taskId: "T001",
         descriptionRef: ".planner/docs/tasks/parity-task.md",
         notes: "Implementation context retained.",
-        decisions: ["Keep lifecycle tools authoritative"],
         checklist: ["Review", "Execute"],
       });
       assert.equal(toolDetails(taskUpdate).updated, true);
-      assert.deepEqual(toolDetails(taskUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes"]);
+      assert.deepEqual(toolDetails(taskUpdate).updatedFields.sort(), ["checklist", "descriptionRef", "notes"]);
       const task = (await host.store.loadPhase(phase.id)).tasks[0];
       assert.equal(task.descriptionRef, ".planner/docs/tasks/parity-task.md");
       assert.equal(task.notes, "Implementation context retained.");
-      assert.deepEqual(task.decisions, ["Keep lifecycle tools authoritative"]);
       assert.deepEqual(task.checklist.map((item) => item.title), ["Review", "Execute"]);
+      const taskDecisionsRejected = await host.runTool("task_update", { taskId: "T001", decisions: ["Should be rejected"] });
+      assert.equal(toolDetails(taskDecisionsRejected).updated, false);
+      assert.equal(toolDetails(taskDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
       const phaseOnDisk = JSON.parse(await readFile(join(host.planRoot, "phases", `${phase.id}.json`), "utf8"));
       assert.deepEqual(phaseOnDisk.tasks[0].checklist.map((item) => item.title), ["Review", "Execute"], "task_update persists checklist to the owning phase file");
 
@@ -914,10 +916,12 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         technologies: ["TypeScript", " "],
         tools: ["Node.js test runner", " "],
         globalRules: ["Keep integration fixtures isolated", " "],
-        decisions: ["Exercise handlers through the public adapter", " "],
       });
       assert.match(toolText(project), /Project updated:/);
       assert.equal(toolDetails(project).goal, "Exercise the real management surface.");
+      const projectDecisionsRejected = await host.runTool("project_update", { decisions: ["Should be rejected"] });
+      assert.equal(toolDetails(projectDecisionsRejected).updated, false);
+      assert.equal(toolDetails(projectDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
 
       assert.match(toolText(await host.runTool("requirement_list", {})), /Users can authenticate|No requirements/);
       assert.match(toolText(await host.runTool("plan_get", {})), /Plan "/);

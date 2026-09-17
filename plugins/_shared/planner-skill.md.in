@@ -64,6 +64,16 @@ Do not convert a denial into a planner status change merely to bypass the gate. 
 - Explicit planner load automatically and atomically deduplicates legacy `globalRules`, textual `workflowRules`, and project `decisions` into canonical Project Guidelines and Accepted Decisions before recap/context delivery. Ordinary entity reads remain non-mutating. `project_context_migrate` and `planner-project-context-migrate` remain manual preview/recovery diagnostics; repeated applications are idempotent.
 - The Web UI may display the section for the human supervisor, but guideline-read enforcement applies to agents.
 
+## Accepted Decision ownership
+
+A decision has exactly one owner: the project when it is project-wide, a feature when it is feature-wide, a phase when it is phase-specific, or a task when the decision is genuinely local to that task's work and will not outlive it. Never record the same decision on more than one owner — there is no default that duplicates a decision across scopes.
+
+- Record every new decision or user-agreed modification with `accepted_decision_create` / `planner-accepted-decision-create` on that single owner, choosing `targetType` (`project`, `feature`, `phase`, or `task`) by where the decision actually belongs, not by where the discussion happened to take place. A project-wide decision discovered while a task is active still goes to the project, not the task.
+- `accepted_decision_update` / `planner-accepted-decision-update` and `accepted_decision_delete` / `planner-accepted-decision-delete` (confirmation-required) mutate one decision on its existing owner in place; they never move a decision to a different owner or replace the full array.
+- `decision_record` (Pi) is a deprecated, write-disabled compatibility tool. It performs no write and no longer duplicates a decision across a feature and a phase; it resolves the given feature/phase and returns guidance to call `accepted_decision_create` with the correct single owner instead.
+- The legacy free-form `decisions` array (project, phase, task) is read-only history. Supplying it to an update tool is rejected (`LEGACY_DECISIONS_ARRAY_READ_ONLY`); it is not decision authority and is never treated as satisfying a decision-record requirement. The same applies to a description, notes, a status log, or a handoff completion summary — any of these may reference a canonical decision's id, but none of them is the record itself.
+- A completed or archived owner still shows its Accepted Decisions on read; completion never hides them. A decision recorded against a task that is later deleted is deleted with it — record project/feature/phase-durable decisions on an owner that will outlive the task.
+
 ## Task execution
 
 - Create rich feature, phase, and task descriptions with current state, concrete goals, relevant systems, file/symbol references, behaviors to preserve, and edge cases.
@@ -215,7 +225,7 @@ The Pi adapter registers these tools:
 - Project and requirements: `project_set_language_preferences`, `project_update`, `project_guidelines_show`, `project_guidelines_update`, `project_context_migrate`, `accepted_decision_create`, `accepted_decision_update`, `accepted_decision_delete`, `requirement_list`, `requirement_create`, `requirement_update`, `requirement_delete`.
 - Plan: `plan_init`, `plan_get`, `description_freshness`, `plan_render`, `plan_repair`, `plan_cleanup_orphan_phases`, `plan_authorize_bypass`, `plan_clear_bypass`.
 - Features: `feature_list`, `feature_get`, `feature_create`, `feature_discuss`, `feature_update`, `feature_delete`.
-- Phases and decisions: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record`.
+- Phases: `phase_list`, `phase_get`, `phase_create`, `phase_discuss`, `phase_update`, `phase_delete`, `decision_record` (deprecated, write-disabled compatibility redirect — see Accepted Decision ownership).
 - Tasks: `task_list`, `task_get`, `task_create`, `task_update`, `task_dependency_add`, `task_dependency_delete`, `task_delete`, `task_recommend`, `task_deviation`, `task_pause`, `task_switch`, `task_start`, `task_reopen`, `task_complete`, `task_checklist_toggle`, `task_checklist_add`, `task_checklist_remove`.
 - Handoffs: `handoff_list`, `handoff_show`, `handoff_prepare`, `handoff_write`, `handoff_verify`, `handoff_clear`.
 - Dashboard and lifecycle: `planner-web`, `planner-load`, `planner-stop`.

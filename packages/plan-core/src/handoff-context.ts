@@ -1030,6 +1030,14 @@ export function applyHandoffContextSync(
   for (const update of input.contextSync.taskUpdates) {
     const task = nextPhase.tasks.find((candidate) => candidate.id === update.taskId)!;
     const files = uniqueStrings(update.filesTouched ?? []);
+    // Decisions mentioned in a completion summary are prose, not decision
+    // authority (a completion summary is explicitly one of the places a new
+    // durable decision must not live only in). Render them into the section
+    // text with that caveat instead of appending to the legacy task.decisions
+    // array, which nothing treats as authoritative and which is otherwise
+    // read-only going forward (see accepted-decision-guard.ts). A decision
+    // worth keeping needs its own accepted_decision_create call on the right
+    // owner; this list is not a substitute for that.
     const decisions = uniqueStrings(update.decisions ?? []);
     const section = [
       COMPLETION_SUMMARY_HEADING,
@@ -1041,25 +1049,26 @@ export function applyHandoffContextSync(
       "**Remaining or unverified:**",
       update.remainingWork.trim(),
       ...(files.length > 0 ? ["", "**Files touched:**", ...files.map((file) => `- ${file}`)] : []),
+      ...(decisions.length > 0 ? ["", "**Decisions mentioned (not decision authority; record any durable decision with accepted_decision_create on its actual owner):**", ...decisions.map((decision) => `- ${decision}`)] : []),
     ].join("\n");
     task.description = appendSection(task.description, section);
     task.descriptionUpdatedAt = timestamp;
-    task.decisions = uniqueStrings([...(task.decisions ?? []), ...decisions]);
     task.updatedAt = timestamp;
     updatedTaskIds.push(task.id);
   }
 
   const phaseUpdate = input.contextSync.phaseUpdate;
   if (phaseUpdate) {
+    const phaseDecisions = uniqueStrings(phaseUpdate.decisions ?? []);
     const section = [
       "**Handoff context update:**",
       phaseUpdate.progressSummary.trim(),
       "",
       "**Remaining work:**",
       phaseUpdate.remainingWork.trim(),
+      ...(phaseDecisions.length > 0 ? ["", "**Decisions mentioned (not decision authority; record any durable decision with accepted_decision_create on its actual owner):**", ...phaseDecisions.map((decision) => `- ${decision}`)] : []),
     ].join("\n");
     nextPhase.notes = appendSection(nextPhase.notes, section);
-    nextPhase.decisions = uniqueStrings([...(nextPhase.decisions ?? []), ...(phaseUpdate.decisions ?? [])]);
   }
 
   const featureUpdate = input.contextSync.featureUpdate;
