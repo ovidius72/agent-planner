@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Card } from "../ui/card";
-import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { EntityPathBadge } from "../ui/badges";
 import { SortControl } from "../ui/sort-control";
@@ -11,7 +10,6 @@ import { useDashboardTree } from "../../hooks/use-dashboard-tree";
 import {
   formatSequence,
   type WorkTreeFeature,
-  type WorkTreeSortConfig,
 } from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
 import type { Feature, Phase } from "../../lib/types";

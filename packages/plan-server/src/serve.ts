@@ -8,14 +8,13 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, type MacroTaskMutationInput } from "@agent-plan/core"
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, type MacroTaskMutationInput } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
 // ─── Watcher ────────────────────────────────────────────────────────────
 
 let watcherAbort: AbortController | null = null;
-let watcherHubRef: { current: WsHub | null } = { current: null };
 
 const SERVER_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/server");
 
@@ -96,11 +95,6 @@ async function resolveAcceptedDecisionTarget(store: PlanStore, targetType: Accep
   return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, targetRef: `P${String(found.phase.number).padStart(3, "0")}/T${String(found.task.number).padStart(3, "0")}`, event: { type: "task", phaseId: found.phase.id, taskId: found.task.id, featureId: found.phase.featureId ?? "" } };
 }
 
-function nextTaskNumber(phase: Phase): number {
-  const numbers = phase.tasks.map((task) => task.number || 0).filter((n) => Number.isFinite(n));
-  return (numbers.length > 0 ? Math.max(...numbers) : 0) + 1;
-}
-
 function isPrivateIpv4(address: string): boolean {
   return /^10\./.test(address) || /^192\.168\./.test(address) || /^172\.(1[6-9]|2\d|3[01])\./.test(address);
 }
@@ -176,7 +170,6 @@ function startWatcher(planRoot: string, hubRef: { current: WsHub | null }): void
 
   const ac = new AbortController();
   watcherAbort = ac;
-  watcherHubRef = hubRef;
 
   try {
     const watcher = watch(planRoot, { recursive: true, signal: ac.signal }, (_event: string, filename: string | null) => {
@@ -197,17 +190,6 @@ function stopWatcher() {
   watcherAbort?.abort();
   watcherAbort = null;
 }
-
-  // ── Helpers ─────────────────────────────────────────────────────────
-
-  async function propagateTaskStatus(phaseId: string) {
-    // This is now handled by PlanStore.syncStatuses()
-  }
-
-  async function propagatePhaseStatus(featureId: string | undefined) {
-    // This is now handled by PlanStore.syncStatuses()
-  }
-
 
 export interface ShortcutConfigSpec {
   key: string;
@@ -773,7 +755,6 @@ app.put(route("/docs/save"), async (c) => {
 
     let phase: Phase | undefined;
     await store.runBatch(() => withFeatureLock(featureId, async () => {
-      const allPhases = await store.loadAllPhases();
       const slug = normalizeSlug(title);
       const id = createPhaseId();
       const identity = await store.allocateEntityIdentity("phase", id);

@@ -252,7 +252,6 @@ export function PhaseTreeRow({
   resumeRequiredIds?: Set<string>;
 }) {
   const { phase, totalTasks, doneTasks, allTasks, hasActiveTask } = phaseEntry;
-  const phaseStatusNoPattern = "";
 
   return (
     <div

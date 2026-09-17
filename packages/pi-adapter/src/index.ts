@@ -13,14 +13,14 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
 import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, isUuid, validateResolvedTarget } from "@agent-plan/core/naming";
-import type { ChecklistItem, CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, ResumeFocus, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
+import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { writeFile, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { serve } from "@agent-plan/server/serve";
@@ -44,7 +44,6 @@ let plannerSessionId = "pi:uninitialized";
 // True while the agent is mutating .planner/ files. The web server returns 503-busy
 // during this window so the UI doesn't render inconsistent data.
 let planBusy = false;
-function setPlanBusy(value: boolean): void { planBusy = value; }
 function withPlanBusy<T>(fn: () => Promise<T> | T): Promise<T> {
   return Promise.resolve()
     .then(() => { planBusy = true; })
@@ -203,8 +202,6 @@ setWriteNotifyHook(() => {
     }
   } catch {}
 });
-let previousContextPercent = 0;
-let autoHandoffTriggered = false;
 let plannerSessionEnabled = false;
 
 // In-process guard bypass (per session, NOT persisted/shared). The edit/write
@@ -228,11 +225,9 @@ function isGuardBypassed(): boolean {
 let startupResumePromptPending = false;
 let startupResumeSummaryPending = false;
 let plannerHeavyInitDone = false; // runs migrate/heal/refreshResume once per session, not every turn
-let startupResumeSummaryText = "";
 let startupResumeSummaryTimer: ReturnType<typeof setTimeout> | null = null;
 let contextBlockCache = ""; // cached before_agent_start context; rebuilt only when plan changes
 let contextBlockDirty = true; // build on first turn; invalidated by write notify hook
-let editedThisTurn = false; // tracks edit/write activity for the task_complete reminder
 let taskCompleteReminderSaidThisTurn = false;
 const healedStatusRoots = new Set<string>();
 
@@ -340,11 +335,9 @@ function resetState(): void {
   plannerSessionEnabled = false;
   startupResumePromptPending = false;
   startupResumeSummaryPending = false;
-  startupResumeSummaryText = "";
   plannerHeavyInitDone = false;
   contextBlockCache = "";
   contextBlockDirty = true;
-  editedThisTurn = false;
   taskCompleteReminderSaidThisTurn = false;
 }
 
@@ -419,22 +412,6 @@ async function getPlannerExecutionGuard(st: PlanStore): Promise<{
     focusTaskId: focus?.task.id ?? "",
     focusTaskTitle: focus?.task.title ?? "",
   };
-}
-
-function formatSequence(value: number | undefined): string {
-  return String(value && value > 0 ? value : 0).padStart(3, "0");
-}
-
-function featureLabel(feature: Feature): string {
-  return `F${formatSequence(feature.number)} — ${feature.name}`;
-}
-
-function phaseLabel(phase: Phase): string {
-  return `P${formatSequence(phase.number)} — ${phase.title}`;
-}
-
-function taskLabel(task: Task): string {
-  return `T${formatSequence(task.number)} — ${task.title}`;
 }
 
 function resolveFeatureRefStrict(features: Feature[], ref: string):
@@ -998,7 +975,6 @@ function disablePlannerSession(): void {
   plannerSessionEnabled = false;
   startupResumePromptPending = false;
   startupResumeSummaryPending = false;
-  startupResumeSummaryText = "";
   if (startupResumeSummaryTimer) clearTimeout(startupResumeSummaryTimer);
   startupResumeSummaryTimer = null;
   contextBlockCache = "";
@@ -1064,23 +1040,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }));
 
     resetState();
-    autoHandoffTriggered = false;
-    previousContextPercent = 0;
     const st = ensureStore(ctx);
     st.enableAutoSync(true);
 
-    // Read any persisted web port (for reuse), but do NOT auto-start here.
-    // The two-step gating below decides whether to start the server.
-    let preferredPort: number | undefined;
-    for (const entry of ctx.sessionManager.getEntries()) {
-      if (entry.type === "custom" && (entry as { customType?: string }).customType === "plan-web-state") {
-        const data = (entry as { data?: { running?: boolean; port?: number } }).data;
-        if (data?.port) preferredPort = data.port;
-      }
-    }
-
     const exists = await st.exists().catch(() => false);
-    let project = exists ? await st.loadProject().catch(() => null) : null;
+    if (exists) await st.loadProject().catch(() => null);
 
     // ── Step 1: Enable gating ───────────────────────────────────────
     // No blocking prompt in session_start: ctx.ui.input()/select() do not
@@ -1133,12 +1097,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = ensureStore(ctx);
       if (await st.exists().catch(() => false)) {
         await writeProjectHandoff(st, "before compact").catch(() => {});
-        autoHandoffTriggered = true;
       }
     } catch {}
   });
 
-  pi.on("session_shutdown", async (event, ctx) => {
+  pi.on("session_shutdown", async (event) => {
     try {
       const st = store;
       if (st && await st.exists().catch(() => false)) {
@@ -1238,7 +1201,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // Reset per-turn flags at the start of each turn.
   pi.on("turn_start", async () => {
-    editedThisTurn = false;
     taskCompleteReminderSaidThisTurn = false;
   });
 
@@ -1247,7 +1209,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.on("tool_result", async (event, ctx) => {
     if (!plannerSessionEnabled) return;
     if (event.toolName !== "edit" && event.toolName !== "write") return;
-    editedThisTurn = true;
     if (taskCompleteReminderSaidThisTurn) return;
     try {
       const st = loadStore(ctx);
@@ -1542,35 +1503,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ?? features.find((feature) => feature.name.toLowerCase().includes(normalized))
         ?? null;
     }
-
-    function resolveFeatureRef(features: Feature[], ref: string):
-      | { ok: true; feature: Feature }
-      | { ok: false; error: string } {
-      const raw = ref.trim();
-      if (!raw) return { ok: false, error: "Feature ref is required." };
-      const normalized = raw.toLowerCase();
-      const byNumber = normalized.match(/^f(\d+)$/)
-        ? features.find((feature) => feature.number === parseInt(normalized.slice(1), 10))
-        : undefined;
-      if (byNumber) return { ok: true, feature: byNumber };
-
-      const byShortId = features.find((feature) => feature.shortId?.toLowerCase() === normalized);
-      if (byShortId) return { ok: true, feature: byShortId };
-
-      const byId = features.find((feature) => feature.id.toLowerCase() === normalized);
-      if (byId) return { ok: true, feature: byId };
-
-      const exactName = features.filter((feature) => feature.name.toLowerCase() === normalized);
-      if (exactName.length == 1) return { ok: true, feature: exactName[0]! };
-      if (exactName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Multiple features have that exact name; use F00x, shortId, or UUID.` };
-
-      const partialName = features.filter((feature) => feature.name.toLowerCase().includes(normalized));
-      if (partialName.length == 1) return { ok: true, feature: partialName[0]! };
-      if (partialName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Matches: ${partialName.map((feature) => formatFeatureRef(feature.number)).join(", ")}. Use a specific F00x, shortId, or UUID.` };
-
-      return { ok: false, error: `Feature not found: ${raw}` };
-    }
-
 
     function profile_packageManager(pkg: CodebaseProfile["packageJson"], lockfile: string): string {
       if (pkg?.packageManager) return pkg.packageManager;
@@ -2090,8 +2022,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const startDiscuss = await ctx.ui.input("Start phase discuss now? Type yes to continue");
         let phase: Phase | undefined;
         await st.runBatch(() => withFeatureLock(feature.id, async () => {
-          const phases = await st.loadAllPhases();
-          const featurePhases = phases.filter((p) => p.featureId === feature.id);
           const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
           const id = createPhaseId();
           const identity = await st.allocateEntityIdentity("phase", id);
@@ -3054,7 +2984,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (requirementTitles.length > 0) {
         const now = nowISO();
         await st.saveRequirements({
-          requirements: requirementTitles.map((title, index) => ({
+          requirements: requirementTitles.map((title) => ({
         id: createRequirementId(),
             title,
             description: "",
@@ -4096,7 +4026,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       return st.runBatch(async () => {
       const now = nowISO();
       const status = (params.status as Feature["status"] | undefined) ?? "planned";
-      const currentFeatures = (await st.loadFeatures()).features;
       const id = createFeatureId();
       const identity = await st.allocateEntityIdentity("feature", id);
       const priority = await st.nextPriority("feature");
@@ -4320,13 +4249,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const resolvedFeature = resolveFeatureRefStrict(features, params.featureId);
       if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
       const featureId = resolvedFeature.feature.id;
-      let deleted = false;
       let cascadeCount = 0;
       await st.runBatch(async () => {
         await st.updateFeatures((doc) => {
-          const before = doc.features.length;
           doc.features = doc.features.filter((f) => f.id !== featureId);
-          if (doc.features.length !== before) deleted = true;
           return doc;
         });
 

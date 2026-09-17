@@ -49,7 +49,8 @@
     "3aae7427-d661-44fc-b2f5-ad40f88a246f",
     "defb1b2e-8446-449d-9fee-77372b70ad27",
     "6da39d53-e739-4e92-9694-3b2cf738f422",
-    "f741315d-92e5-40e9-a2d0-86e7c97223c5"
+    "f741315d-92e5-40e9-a2d0-86e7c97223c5",
+    "f392817d-6ecd-4095-9549-c0544a89cdd1"
   ],
   "tasks": [
     {
@@ -409,10 +410,59 @@
       "updatedAt": "2026-09-16T14:09:31.045Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "f392817d-6ecd-4095-9549-c0544a89cdd1",
+      "phaseId": "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+      "number": 423,
+      "shortId": "CY2US",
+      "priority": 11,
+      "shortName": "enforce-unused-symbol-checking",
+      "title": "Enforce unused-symbol checking and clear the backlog",
+      "status": "done",
+      "description": "Unused locals, parameters and imports accumulate silently because nothing rejects them, and the resulting editor noise hides real warnings.\n\nCurrent state: there is no ESLint config in the repository. The warnings seen in editors come from the TypeScript language server's own hints, which are advisory only. `tsconfig.base.json` sets `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` but not `noUnusedLocals` or `noUnusedParameters`, so `tsc --noEmit` passes with them present and `pnpm verify:final` never objects.\n\nMeasured 2026-09-17 with both flags forced on: plan-core 12, plan-mcp 7, pi-adapter 22, plan-server 8, plan-web-ui 9 — 58 total.\n\nExamples: `packages/pi-adapter/src/index.ts` has unused `featurePhases`, `currentFeatures`, `deleted`, an unused loop `index`, and several `await` expressions on `capturedPi.sendUserMessage()`, which returns a plain value rather than a Promise. `packages/plan-server/src/serve.ts` has unused `createShortId`, `watcherHubRef`, `nextTaskNumber`, `propagateTaskStatus`, `propagatePhaseStatus`, `allPhases`.\n\nWork:\n- Add `noUnusedLocals` and `noUnusedParameters` to `tsconfig.base.json` so every package inherits them and the check runs inside the existing typecheck step. This is the durable part: clearing the backlog without enforcement lets it return.\n- Clear all 58. Delete genuinely dead code rather than prefixing names with an underscore; use the underscore convention only where a parameter must keep its position in a signature.\n- Where an `await` has no effect, check whether the callee should have been async before removing the keyword. A pointless `await` sometimes marks a function that was meant to return a Promise; removing it blindly would hide that.\n- Do not change behaviour. This is a hygiene pass, so any change that alters what the code does belongs in its own task, reported rather than folded in.\n\nBehaviors to preserve: every existing test and the canonical gate must pass unchanged; no public surface may be removed as \"unused\" without checking `test/surfaces.mjs` and the capability audit first.\n\nEdge cases: a symbol unused in source but referenced by a test; an unused export that is part of the published API; a parameter that must stay for signature compatibility; `plan-web-ui` uses a different tsconfig, so confirm it inherits the base.\n\nVerification: `npx tsc -p packages/<pkg>/tsconfig.json --noEmit` clean for all five packages with the new flags active, then `pnpm verify:final` once at the end since this touches every package.\n\nNote: this task is off the phase's stated theme, which is planner tools destroying or eliding state. It is co-located here rather than in a phase of its own because it is a single bounded hygiene pass, not a body of work.\n\n---\n**Completion summary:**\nAdded noUnusedLocals and noUnusedParameters to tsconfig.base.json (inherited by all 5 packages, plan-web-ui confirmed via extends). Cleared all 58 resulting errors, exact match to the measured baseline:\n- plan-core: 12 -> 0 (naming.ts, plan-store.ts, renderer.ts, task-selection.ts)\n- plan-mcp: 7 -> 0 (index.ts)\n- pi-adapter: 22 -> 0 (index.ts)\n- plan-server: 8 -> 0 (serve.ts)\n- plan-web-ui: 9 -> 0 (work-tree-rows.tsx, work-tree.tsx, feature-row.tsx, top-nav.tsx, phase-row.tsx, task-row.tsx, status-badge.tsx)\n\nVerification: `npx tsc -p packages/<pkg>/tsconfig.json --noEmit` clean for all 5 packages (independently re-run after fixes, confirmed 0 errors each). `pnpm verify:final` passed clean (build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed install smoke) at fingerprint 2fd226742b76.\n\nApproach: mostly deletion of dead imports/consts/functions with no side effects. Underscore-prefix used only twice, both genuine signature-position cases: naming.ts migratePhaseId(_featureId, _number, _slug) (exported compat shim, body is randomUUID()), plan-store.ts enableAutoSync(_value) (external call sites in plan-mcp/pi-adapter/agent-plan require the param), and top-nav.tsx TopNav's _planRoot (prop type/call site in app-shell.tsx requires it). No exported/public-surface symbol was removed as unused: every candidate was grepped against test/surfaces.mjs, scripts/capability-audit.mjs, docs/capability-audit.md and test/capability-audit.test.mjs first.\n\nAwait/async check (pi-adapter, rule 2): the 4 `await capturedPi.sendUserMessage(...)` call sites (lines ~1728, 1852, 2174, 2737) were investigated and left untouched (not part of the 22 errors). Confirmed via the vendored @earendil-works/pi-coding-agent type declarations that `sendUserMessage` on `ExtensionAPI` (the type of capturedPi) returns `void`, not a Promise — this is a third-party SDK method, correctly typed as synchronous, and the await is a harmless no-op rather than a sign our code should be async. Not a bug, no action taken.\n\nGenuine findings surfaced but left alone (no behavior change per rule 3, reported for human review):\n- plan-server/serve.ts: propagateTaskStatus/propagatePhaseStatus were dead stub functions (bodies were comments saying \"now handled by PlanStore.syncStatuses()\") with zero call sites anywhere in the repo — deleted as confirmed-intentional dead code, not a missed wiring.\n- plan-core/task-selection.ts: an unused `isPreservedResumeTarget` computation in checkExplicitTaskStart filtered deviations on states ('approved','active','resume-required','resolved') - broader than the `isTemporaryOverride` check actually used just above it, which only checks 'approved'/'active'. This looks like an unfinished branch (resume-required/resolved deviations may have been meant to affect startability) rather than leftover dead code. Deleted only the unused local (no behavior change), flagging the logic gap for separate review.\n- pi-adapter/index.ts feature_delete: the response message \"Feature deleted: X\" always fires regardless of whether the filter removed anything; the `deleted` flag that would have distinguished \"not found\" from \"removed\" was already dead before this pass (resolvedFeature validates existence first, so risk is low, but the message doesn't reflect an actual mutation check).\n\nLeft untouched outside scope: the three pre-existing uncommitted modifications from other in-progress tasks (.planner/features/5bb28fc7-8002-46f9-970d-4151d6cb4884.json, .planner/phases/8f778bbb-7bc5-43e5-8e6b-4ba5e081099f.json, e2e/responsive.spec.ts) were not touched.\n\nNo git commit/push/stash/checkout performed, per instructions.",
+      "descriptionUpdatedAt": "2026-09-17T08:06:30.389Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f392817d-6ecd-4095-9549-c0544a89cdd1-check-001-planned-in-progress",
+          "date": "2026-09-17T07:58:22.502Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f392817d-6ecd-4095-9549-c0544a89cdd1-check-002-in-progress-done",
+          "date": "2026-09-17T08:06:30.385Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added noUnusedLocals and noUnusedParameters to tsconfig.base.json (inherited by all 5 packages, plan-web-ui confirmed via extends). Cleared all 58 resulting errors, exact match to the measured baseline:\n- plan-core: 12 -> 0 (naming.ts, plan-store.ts, renderer.ts, task-selection.ts)\n- plan-mcp: 7 -> 0 (index.ts)\n- pi-adapter: 22 -> 0 (index.ts)\n- plan-server: 8 -> 0 (serve.ts)\n- plan-web-ui: 9 -> 0 (work-tree-rows.tsx, work-tree.tsx, feature-row.tsx, top-nav.tsx, phase-row.tsx, task-row.tsx, status-badge.tsx)\n\nVerification: `npx tsc -p packages/<pkg>/tsconfig.json --noEmit` clean for all 5 packages (independently re-run after fixes, confirmed 0 errors each). `pnpm verify:final` passed clean (build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed install smoke) at fingerprint 2fd226742b76.\n\nApproach: mostly deletion of dead imports/consts/functions with no side effects. Underscore-prefix used only twice, both genuine signature-position cases: naming.ts migratePhaseId(_featureId, _number, _slug) (exported compat shim, body is randomUUID()), plan-store.ts enableAutoSync(_value) (external call sites in plan-mcp/pi-adapter/agent-plan require the param), and top-nav.tsx TopNav's _planRoot (prop type/call site in app-shell.tsx requires it). No exported/public-surface symbol was removed as unused: every candidate was grepped against test/surfaces.mjs, scripts/capability-audit.mjs, docs/capability-audit.md and test/capability-audit.test.mjs first.\n\nAwait/async check (pi-adapter, rule 2): the 4 `await capturedPi.sendUserMessage(...)` call sites (lines ~1728, 1852, 2174, 2737) were investigated and left untouched (not part of the 22 errors). Confirmed via the vendored @earendil-works/pi-coding-agent type declarations that `sendUserMessage` on `ExtensionAPI` (the type of capturedPi) returns `void`, not a Promise — this is a third-party SDK method, correctly typed as synchronous, and the await is a harmless no-op rather than a sign our code should be async. Not a bug, no action taken.\n\nGenuine findings surfaced but left alone (no behavior change per rule 3, reported for human review):\n- plan-server/serve.ts: propagateTaskStatus/propagatePhaseStatus were dead stub functions (bodies were comments saying \"now handled by PlanStore.syncStatuses()\") with zero call sites anywhere in the repo — deleted as confirmed-intentional dead code, not a missed wiring.\n- plan-core/task-selection.ts: an unused `isPreservedResumeTarget` computation in checkExplicitTaskStart filtered deviations on states ('approved','active','resume-required','resolved') - broader than the `isTemporaryOverride` check actually used just above it, which only checks 'approved'/'active'. This looks like an unfinished branch (resume-required/resolved deviations may have been meant to affect startability) rather than leftover dead code. Deleted only the unused local (no behavior change), flagging the logic gap for separate review.\n- pi-adapter/index.ts feature_delete: the response message \"Feature deleted: X\" always fires regardless of whether the filter removed anything; the `deleted` flag that would have distinguished \"not found\" from \"removed\" was already dead before this pass (resolvedFeature validates existence first, so risk is low, but the message doesn't reflect an actual mutation check).\n\nLeft untouched outside scope: the three pre-existing uncommitted modifications from other in-progress tasks (.planner/features/5bb28fc7-8002-46f9-970d-4151d6cb4884.json, .planner/phases/8f778bbb-7bc5-43e5-8e6b-4ba5e081099f.json, e2e/responsive.spec.ts) were not touched.\n\nNo git commit/push/stash/checkout performed, per instructions."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-17T07:58:22.502Z",
+      "completedAt": "2026-09-17T08:06:30.385Z",
+      "createdAt": "2026-09-17T07:58:16.778Z",
+      "updatedAt": "2026-09-17T08:06:30.385Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+          "createdAt": "2026-09-17T07:58:22.406Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-16T14:09:31.045Z",
+  "updatedAt": "2026-09-17T08:06:30.385Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -431,7 +481,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
-      "createdAt": "2026-09-16T11:19:12.778Z"
+      "createdAt": "2026-09-17T07:58:22.406Z"
     }
   ]
 }

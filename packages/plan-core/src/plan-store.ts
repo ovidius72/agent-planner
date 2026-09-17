@@ -32,7 +32,6 @@ import {
   type TaskPauseSnapshot,
   TaskPauseSnapshotSchema,
   type PlanWorkspace,
-  PlanWorkspaceSchema,
   type Project,
   ProjectSchema,
   type AcceptedDecision,
@@ -1025,8 +1024,6 @@ type RawFeature = Omit<Feature, "status">;
 
 export class PlanStore {
   public readonly root: string;
-  private autoSync = false;
-  private syncGuard = false;
   // While true, maybeAutoSync() is a no-op. Used by batch operations
   // (migrateToUuids, ensureStructureOrdering, syncStatuses, repair) so that
   // their internal savePhase/saveFeatures calls do NOT re-trigger a full
@@ -1042,7 +1039,7 @@ export class PlanStore {
   /** When enabled, status rollup (syncStatuses) runs automatically after every
    *  phase/feature/project save. Used by the pi-adapter so the agent's tool
    *  mutations keep phase/feature statuses derived from task statuses. */
-  enableAutoSync(value: boolean): void { this.autoSync = value; }
+  enableAutoSync(_value: boolean): void {}
 
   /** Run a batch operation with autoSync suspended. Internal saves inside the
    *  batch will NOT re-trigger syncStatuses (which would be O(N^2) on large
@@ -2080,7 +2077,6 @@ export class PlanStore {
   /** Migrate legacy non-feature-scoped phase ids to feature-scoped ids and repair
    *  dangling feature.phaseIds references. Idempotent. */
   async migratePhaseIds(): Promise<{ renamed: number; repaired: number; inferred: number }> {
-    const { readdir, unlink } = await import("node:fs/promises");
     const phases = await this.loadAllPhases();
     const features = await this.loadFeatures();
 
@@ -3266,7 +3262,7 @@ export class PlanStore {
     options: { expectedUpdatedAt?: string } = {},
   ): Promise<{ phase: Phase; task: Task }> {
     let persisted: Task | undefined;
-    const phase = await this.updatePhase(phaseId, (currentPhase) => {
+    await this.updatePhase(phaseId, (currentPhase) => {
       const index = currentPhase.tasks.findIndex((task) => task.id === taskId);
       if (index < 0) throw new PlanStoreError(`Task ${taskId} does not belong to phase ${phaseId}.`);
       const current = currentPhase.tasks[index]!;

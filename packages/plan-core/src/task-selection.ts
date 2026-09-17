@@ -73,7 +73,6 @@ export interface ExplicitTaskStartEligibility {
   reason: string;
 }
 
-const unavailable = new Set(["blocked", "waiting", "deferred", "canceled", "rejected"]);
 const hardUnavailable = new Set(["blocked", "deferred", "canceled", "rejected"]);
 const terminal = new Set(["done", "canceled", "rejected"]);
 
@@ -210,13 +209,6 @@ export function checkExplicitTaskStart(
   const isTemporaryOverride = deviations.some((deviation) =>
     (deviation.state === "approved" || deviation.state === "active")
     && deviation.temporaryTaskId === taskId,
-  );
-  const isPreservedResumeTarget = deviations.some((deviation) =>
-    (deviation.state === "approved"
-      || deviation.state === "active"
-      || deviation.state === "resume-required"
-      || deviation.state === "resolved")
-    && deviation.resumeTaskId === taskId,
   );
   const startableStatus = candidate.task.status === "planned"
     || (candidate.task.status === "waiting" && isTemporaryOverride);
