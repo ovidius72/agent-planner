@@ -462,11 +462,243 @@
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-17T08:06:30.385Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
-  "handoffAudit": null,
-  "handoffReadAt": "",
+  "updatedAt": "2026-09-21T10:22:05.154Z",
+  "handoff": "# Five payload and visibility defects remain\n\nCreated at: 2026-09-21T10:22:05.154Z\nUpdated at: 2026-09-21T10:22:05.154Z\nReason: Session ending with P104 half done. The five remaining tasks are fully specified but unstarted, and the branch has eleven commits that have never been pushed or reviewed.\n\n- Feature: F005 — Improvements\n- Phase: P104(F005) — Stop planner tools destroying and eliding state they report as intact\n- Next task: P104(F005)/T417 — Bound tool results and state payload limits before a call fails (priority 5, planned, no dependencies)\n- Exact resume point: nothing is in flight. No task is active, the working tree has no partial work for this phase, and `pnpm verify:final` passes at fingerprint 2fd226742b76.\n\n## Current and partial state\n\nDone and committed on branch `feature/handoff-retry-cost`: T413 (checklist replacement no longer destroys ticks), T414 (document links validated against the submitted body, not the auto-externalized rewrite), T415 (prepare surfaces the externalized portion of a prior capsule, plus section-aware truncation), T416 (reconciliation is evidenced by a heading diff, not an unchecked boolean), T423 (noUnusedLocals/noUnusedParameters enforced, 58 cleared).\n\nPlanned and untouched: T417, T418, T419, T420, T421, T422. Each description carries its own measured evidence and file:line references — read the task, not this capsule, before starting.\n\nPhases P102(F005) and P103(F005) are complete and gated.\n\nEleven commits sit on `feature/handoff-retry-cost` and have never been pushed. No PR exists. The user has repeatedly declined one.\n\n## Preservation constraints\n\n- Shaping and validation belong in plan-core; both adapters consume it. `packages/plan-core/src/handoff-reply.ts` is the pattern. Four separate defects in this phase came from logic duplicated per adapter.\n- `packages/plan-core/test/handoff-reply.test.mjs` pins a no-duplication invariant and payload ceilings from P103. T417 and T419 both shrink payloads; do not regress those assertions to make room.\n- The legacy `decisions` array is writable over HTTP and refused on the agent tools. That split is deliberate (T405 review) — the Web UI is a supervisor surface.\n- `truncateAtSafeBoundary` in `handoff-context.ts` is the shared truncation helper. T419 folds in a third raw-slice site in `task-context.ts:76`; use the helper, do not write a fourth implementation.\n\n## Supporting documents\n\nNone. Every task in this phase carries its own evidence inline, and no `.planner/docs/` file was produced by this work.\n\n## Blockers and risks\n\n- No blockers. All six remaining tasks are independent and unblocked.\n- Risk worth knowing: focused suites passed 588/588 while T405 shipped a real regression that only the browser gate caught. Run `pnpm verify:final` at phase close, not just the focused suites.\n- Sonnet subagents hit account rate limits four times during this work. Expect interruptions; check what a killed agent left on disk before resuming it, since two left the tree in states their own reports did not mention.\n\n## How to resume\n\n1. Read `planner-task-show P104(F005)/T417 full=true` and `planner-phase-show P104(F005) full=true`, then `planner-task-start P104(F005)/T417`. Reading first makes the start succeed on the first call.\n2. Work T417 through T422 in priority order. The planner's ordering is authoritative; deviating from it twice in this session caused real rework.\n3. T419 depends on nothing but overlaps T417 — one bounds mutation results, the other bounds reads and the recommendation. Keep them from duplicating each other.\n4. Verify each task with the focused suites, then `pnpm verify:final` once at phase close.\n5. Two findings from T423 have no task and need one if they are to be looked at: an unused `isPreservedResumeTarget` in `task-selection.ts` filtering a broader deviation-state set than the check actually uses, and `feature_delete` in pi-adapter reporting success without checking anything was removed.",
+  "handoffUpdatedAt": "2026-09-21T10:22:05.154Z",
+  "handoffAudit": {
+    "version": 1,
+    "entries": [
+      {
+        "category": "exact-focus-resume-point",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "first-resume-action",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "partial-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "remaining-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "decisions-rationale",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "rejected-alternatives",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "files-symbols",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "branch-worktree",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "commands-tools",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "pending-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "runtime-limitations-workarounds",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "blockers-risks",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "user-visible-behavior",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "operator-actions",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "project-operating-notes",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "conversation-only-facts",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      }
+    ],
+    "coldStartInventory": {
+      "version": 1,
+      "sourceReviews": [
+        {
+          "source": "conversation",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "planner-entities",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "working-tree",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "verification-runtime",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "peer-agent-output",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        }
+      ],
+      "entries": [
+        {
+          "category": "files",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "symbols",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "working-tree-ownership",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "negative-state",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "commands-tools",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "runtime-wiring",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "preservation-constraints",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "verification-evidence",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "related-planned-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "user-visible-behavior",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "operator-actions",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "blockers-risks",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "remaining-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "ordered-resume-steps",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        }
+      ]
+    },
+    "supportingDocuments": [],
+    "contentHash": "8e40221ce4202af38d9987d41cbcfa4bb5f69341e9ef499677dd45a83bd534e6",
+    "contentLength": 3964,
+    "verifiedAt": "2026-09-21T10:22:05.154Z",
+    "resumeReadyAt": "2026-09-21T10:22:12.865Z",
+    "readBackSourceReviews": [
+      {
+        "source": "conversation",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "planner-entities",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "working-tree",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "verification-runtime",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "peer-agent-output",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      }
+    ]
+  },
+  "handoffReadAt": "2026-09-21T10:22:12.865Z",
   "handoffHistory": [],
   "statusLog": [
     {
