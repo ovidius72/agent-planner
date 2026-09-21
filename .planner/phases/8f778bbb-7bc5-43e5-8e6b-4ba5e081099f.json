@@ -50,7 +50,9 @@
     "defb1b2e-8446-449d-9fee-77372b70ad27",
     "6da39d53-e739-4e92-9694-3b2cf738f422",
     "f741315d-92e5-40e9-a2d0-86e7c97223c5",
-    "f392817d-6ecd-4095-9549-c0544a89cdd1"
+    "f392817d-6ecd-4095-9549-c0544a89cdd1",
+    "46980503-0a87-4490-b279-1a748e1465f2",
+    "7257db90-5723-4bee-abd7-8bf1e257b3b3"
   ],
   "tasks": [
     {
@@ -257,11 +259,28 @@
       "priority": 5,
       "shortName": "bound-tool-results-and-state-p",
       "title": "Bound tool results and state payload limits before a call fails",
-      "status": "planned",
-      "description": "Diagnosing an oversized payload currently costs more context than the payload did.\n\nCurrent state, both measured rather than reported:\n- A successful `planner-task-update` in this session returned a 122,628-character result. The harness had to spill it to a file and the caller then needed jq to read back whether `updated` was true. The tool echoes the entire task — full description, every checklist item, the whole statusLog — when one field changed.\n- A peer session on 2026-09-15 had a `description` of roughly 17,000 characters rejected, and the rejection came back as a 125,115-character tool result. Roughly 13,500 characters were accepted on a later attempt, so a limit exists but is nowhere stated.\n\nThe result is a tool that punishes the caller twice: once for exceeding an undocumented limit, and again for finding out.\n\nDesired state: a mutation result says what changed, not what the entity now contains in full. The size limit is discoverable before a call rather than after it fails.\n\nImplementation steps:\n- Shape mutation results in plan-core so both adapters inherit the bound. `packages/plan-core/src/handoff-reply.ts` is the precedent from P103(F005)/T408: reply shaping lives in the core and both adapters render what it returns. Do not fix this in `packages/plan-mcp/src/index.ts` alone.\n- Echo the fields named in `updatedFields`, plus identity and the freshness diagnostics, rather than the whole entity. A caller wanting the full entity can call the show tool.\n- State the accepted size in the tool description, and make the too-large failure a compact typed outcome naming the field, its length and the limit — not an echo of the payload that failed. The existing `DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED` path already tells callers to move long prose into `.planner/docs/` and pass a `descriptionRef`; that guidance should reach the caller in a few hundred characters, not a hundred thousand.\n- `descriptionRef` was unusable until `packages/plan-core/src/payload-fallback.ts` was relaxed to accept three-segment paths (committed at a0ea1ba, unreleased). Two peer sessions wrote \"do not retry it\" into their handoffs. Confirm the fallback path now works end to end from both adapters, because the advice to use it is worthless if the field still refuses.\n- Check `descriptionFreshness` and `staleParentRefs` on the update result: they are useful and should survive the trim.\n\nBehaviors to preserve: `updated`, `updatedFields`, and typed failure codes must stay exactly as they are — mutation-integrity checking depends on them; `NO_MUTABLE_FIELDS_RECEIVED`; the description-fallback flow; the freshness preview contract.\n\nEdge cases: an update that legitimately changes the description, where echoing the changed field is itself large — bound it and say it was bounded; a batch-shaped update touching several fields; a failure arriving before any field was parsed.\n\nVerification: focused core, MCP, Pi and server suites. Add a regression asserting a successful update result stays under a stated ceiling for a task with a long description and a long statusLog, and that an oversized-field rejection is compact and names the limit. Measure a real `planner-task-update` result before and after and record both figures. Per AGENTS.md rule 17, no full repository gate.",
-      "descriptionUpdatedAt": "2026-09-15T08:58:46.941Z",
+      "status": "done",
+      "description": "Diagnosing an oversized payload currently costs more context than the payload did.\n\nCurrent state, both measured rather than reported:\n- A successful `planner-task-update` in this session returned a 122,628-character result. The harness had to spill it to a file and the caller then needed jq to read back whether `updated` was true. The tool echoes the entire task — full description, every checklist item, the whole statusLog — when one field changed.\n- A peer session on 2026-09-15 had a `description` of roughly 17,000 characters rejected, and the rejection came back as a 125,115-character tool result. Roughly 13,500 characters were accepted on a later attempt, so a limit exists but is nowhere stated.\n\nThe result is a tool that punishes the caller twice: once for exceeding an undocumented limit, and again for finding out.\n\nDesired state: a mutation result says what changed, not what the entity now contains in full. The size limit is discoverable before a call rather than after it fails.\n\nImplementation steps:\n- Shape mutation results in plan-core so both adapters inherit the bound. `packages/plan-core/src/handoff-reply.ts` is the precedent from P103(F005)/T408: reply shaping lives in the core and both adapters render what it returns. Do not fix this in `packages/plan-mcp/src/index.ts` alone.\n- Echo the fields named in `updatedFields`, plus identity and the freshness diagnostics, rather than the whole entity. A caller wanting the full entity can call the show tool.\n- State the accepted size in the tool description, and make the too-large failure a compact typed outcome naming the field, its length and the limit — not an echo of the payload that failed. The existing `DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED` path already tells callers to move long prose into `.planner/docs/` and pass a `descriptionRef`; that guidance should reach the caller in a few hundred characters, not a hundred thousand.\n- `descriptionRef` was unusable until `packages/plan-core/src/payload-fallback.ts` was relaxed to accept three-segment paths (committed at a0ea1ba, unreleased). Two peer sessions wrote \"do not retry it\" into their handoffs. Confirm the fallback path now works end to end from both adapters, because the advice to use it is worthless if the field still refuses.\n- Check `descriptionFreshness` and `staleParentRefs` on the update result: they are useful and should survive the trim.\n\nBehaviors to preserve: `updated`, `updatedFields`, and typed failure codes must stay exactly as they are — mutation-integrity checking depends on them; `NO_MUTABLE_FIELDS_RECEIVED`; the description-fallback flow; the freshness preview contract.\n\nEdge cases: an update that legitimately changes the description, where echoing the changed field is itself large — bound it and say it was bounded; a batch-shaped update touching several fields; a failure arriving before any field was parsed.\n\nVerification: focused core, MCP, Pi and server suites. Add a regression asserting a successful update result stays under a stated ceiling for a task with a long description and a long statusLog, and that an oversized-field rejection is compact and names the limit. Measure a real `planner-task-update` result before and after and record both figures. Per AGENTS.md rule 17, no full repository gate.\n\n---\n**Completion summary:**\nA mutation result now says what changed, not what the entity contains. Measured against this repository's own planner directory, for a one-field update:\n\n- worst phase, P104(F005): 139,805 → 261 characters (99.8% smaller)\n- worst task, T405: 33,499 → 280 characters (99.2% smaller)\n\nShipped:\n\n`packages/plan-core/src/mutation-reply.ts` (new). `buildMutationReply` returns the text/structured pair every mutation tool renders, carrying: the operation flag (`updated` or `discussed`), `updatedFields`, canonical ref and identity, the changed values within budget, every diagnostic, and a `readBack` command for what it deliberately leaves out. `MUTATION_ECHO_MAX_FIELD_CHARS` (2,000) bounds one field; `MUTATION_REPLY_MAX_CHARS` (8,000, matching MAX_PHASE_WORK_MAP_CHARS so agents hold one number) bounds the payload. A long string is previewed with its true length, cut by `truncateAtSafeBoundary` — the same helper handoff truncation uses, not a fourth implementation. A large array degrades to a count rather than half an array read as whole. What does not fit the shared budget is listed in `omittedValues`, never silently dropped. `PLANNER_LONG_TEXT_FIELD_MAX_CHARS` (12,000) and `longTextFieldLimitNotice()` state the accepted size.\n\nWired at 18 result sites: plan-mcp (feature discuss/update, phase discuss/update, task discuss/update, requirement update, idea update, both dependency sites) and pi-adapter (project update, requirement update, feature discuss/update, phase discuss/update, task update, idea update, both dependency sites). Every hand-built `{ ...entity, updated: true }` is gone; both adapters render what the core returns, per AGENTS.md rule 4. 21 long-prose inputs across both adapters now state the limit, sourced from the one core constant.\n\nPreserved exactly: `updated`, `updatedFields`, typed failure codes, `NO_MUTABLE_FIELDS_RECEIVED`, the description-fallback flow, `descriptionFreshness` and `staleParentRefs`, `checklistLostTicks`, `resumeRequired`. Diagnostics are never trimmed — they are the reason to read a mutation result.\n\ndescriptionRef, end to end: both adapters already persisted the three-segment path relaxed at a0ea1ba. What was unproven is that the path a rejection hands back is one the planner will accept — the reason two peer sessions wrote \"do not retry it\". `packages/plan-mcp/test/ref-validation.test.mjs` now takes `fallbackDocPath` from a live rejection, retries with it, and asserts it persists.\n\nVerification: plan-core 380/380, plan-mcp 82/82, pi-adapter 82/82, plan-server 54/54. Both new regressions were proven live by reverting the code they cover: restoring the pre-a0ea1ba three-segment refusal failed 3 tests; turning the limit notice back into a plain double-quoted string failed 2. Per AGENTS.md rule 17, no full repository gate at task level — `pnpm verify:final` belongs at phase close.\n\nNew tests: `packages/plan-core/test/mutation-reply.test.mjs` (10 tests: the ceiling on the worst real entity, integrity fields unchanged, long-field preview, short-field passthrough, array degradation, diagnostics surviving, budget exhaustion naming what it dropped, canonical ref and read-back, untouched fields never echoed, the stated limit).\n\nA defect found in my own work and fixed before completion: four `.describe()` calls used `\"... ${LONG_TEXT_LIMIT_NOTICE}\"` inside plain double-quoted strings. That compiles and every suite stayed green while shipping the literal placeholder text to agents. Fixed to template literals, and `packages/plan-mcp/test/mcp-harness.test.mjs` now asserts what a caller actually reads, including that no `${` survives. Also reverted the notice from two nested macro-task description fields, where it advised a `descriptionRef` that does not exist on macro tasks.\n\nNot done here, by scope: T419 owns the read side — the recommendation payload, its missing command, and `planner-show`'s decisions block. Creation tools still return the new entity in full, which is correct: the caller does not have it yet.",
+      "descriptionUpdatedAt": "2026-09-21T10:57:14.690Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "af8bd80c-eaf9-4183-85a7-8f736ef9ca08-check-001-planned-in-progress",
+          "date": "2026-09-21T10:44:39.343Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "af8bd80c-eaf9-4183-85a7-8f736ef9ca08-check-002-in-progress-done",
+          "date": "2026-09-21T10:57:14.685Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "A mutation result now says what changed, not what the entity contains. Measured against this repository's own planner directory, for a one-field update:\n\n- worst phase, P104(F005): 139,805 → 261 characters (99.8% smaller)\n- worst task, T405: 33,499 → 280 characters (99.2% smaller)\n\nShipped:\n\n`packages/plan-core/src/mutation-reply.ts` (new). `buildMutationReply` returns the text/structured pair every mutation tool renders, carrying: the operation flag (`updated` or `discussed`), `updatedFields`, canonical ref and identity, the changed values within budget, every diagnostic, and a `readBack` command for what it deliberately leaves out. `MUTATION_ECHO_MAX_FIELD_CHARS` (2,000) bounds one field; `MUTATION_REPLY_MAX_CHARS` (8,000, matching MAX_PHASE_WORK_MAP_CHARS so agents hold one number) bounds the payload. A long string is previewed with its true length, cut by `truncateAtSafeBoundary` — the same helper handoff truncation uses, not a fourth implementation. A large array degrades to a count rather than half an array read as whole. What does not fit the shared budget is listed in `omittedValues`, never silently dropped. `PLANNER_LONG_TEXT_FIELD_MAX_CHARS` (12,000) and `longTextFieldLimitNotice()` state the accepted size.\n\nWired at 18 result sites: plan-mcp (feature discuss/update, phase discuss/update, task discuss/update, requirement update, idea update, both dependency sites) and pi-adapter (project update, requirement update, feature discuss/update, phase discuss/update, task update, idea update, both dependency sites). Every hand-built `{ ...entity, updated: true }` is gone; both adapters render what the core returns, per AGENTS.md rule 4. 21 long-prose inputs across both adapters now state the limit, sourced from the one core constant.\n\nPreserved exactly: `updated`, `updatedFields`, typed failure codes, `NO_MUTABLE_FIELDS_RECEIVED`, the description-fallback flow, `descriptionFreshness` and `staleParentRefs`, `checklistLostTicks`, `resumeRequired`. Diagnostics are never trimmed — they are the reason to read a mutation result.\n\ndescriptionRef, end to end: both adapters already persisted the three-segment path relaxed at a0ea1ba. What was unproven is that the path a rejection hands back is one the planner will accept — the reason two peer sessions wrote \"do not retry it\". `packages/plan-mcp/test/ref-validation.test.mjs` now takes `fallbackDocPath` from a live rejection, retries with it, and asserts it persists.\n\nVerification: plan-core 380/380, plan-mcp 82/82, pi-adapter 82/82, plan-server 54/54. Both new regressions were proven live by reverting the code they cover: restoring the pre-a0ea1ba three-segment refusal failed 3 tests; turning the limit notice back into a plain double-quoted string failed 2. Per AGENTS.md rule 17, no full repository gate at task level — `pnpm verify:final` belongs at phase close.\n\nNew tests: `packages/plan-core/test/mutation-reply.test.mjs` (10 tests: the ceiling on the worst real entity, integrity fields unchanged, long-field preview, short-field passthrough, array degradation, diagnostics surviving, budget exhaustion naming what it dropped, canonical ref and read-back, untouched fields never echoed, the stated limit).\n\nA defect found in my own work and fixed before completion: four `.describe()` calls used `\"... ${LONG_TEXT_LIMIT_NOTICE}\"` inside plain double-quoted strings. That compiles and every suite stayed green while shipping the literal placeholder text to agents. Fixed to template literals, and `packages/plan-mcp/test/mcp-harness.test.mjs` now asserts what a caller actually reads, including that no `${` survives. Also reverted the notice from two nested macro-task description fields, where it advised a `descriptionRef` that does not exist on macro tasks.\n\nNot done here, by scope: T419 owns the read side — the recommendation payload, its missing command, and `planner-show`'s decisions block. Creation tools still return the new entity in full, which is correct: the caller does not have it yet."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -269,11 +288,16 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-21T10:44:39.343Z",
+      "completedAt": "2026-09-21T10:57:14.685Z",
       "createdAt": "2026-09-15T08:58:46.898Z",
-      "updatedAt": "2026-09-15T08:58:46.898Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-21T10:57:14.685Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+          "createdAt": "2026-09-21T10:44:39.244Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -289,7 +313,11 @@
       "descriptionUpdatedAt": "2026-09-15T13:34:51.097Z",
       "notes": "",
       "statusLog": [],
-      "decisions": [],
+      "decisions": [
+        "Locate clears the filters once, on arrival, so the row it jumps to cannot be hidden. That part stays. What must stop is the effect re-firing afterwards and wiping every keystroke. Antonio said \"locate preserves the filter\" on 2026-09-21, meaning the filter he types after the jump, not the one in the box when he jumps — his original report was that typed text would not delete.",
+        "Once locate has finished, a filter that hides the located row is honoured. Locating is over at that point; filtering has started.",
+        "Fix the re-firing with a ref recording the handled locateNum. Do not trim the effect's dependencies — they are the retry loop that waits for the row to exist in the DOM."
+      ],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
@@ -299,7 +327,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-09-15T13:34:51.047Z",
-      "updatedAt": "2026-09-15T13:34:51.047Z",
+      "updatedAt": "2026-09-21T10:43:25.733Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -459,10 +487,132 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "46980503-0a87-4490-b279-1a748e1465f2",
+      "phaseId": "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+      "number": 424,
+      "shortId": "TYR95",
+      "priority": 12,
+      "shortName": "delete-a-feature-the-same-way",
+      "title": "Delete a feature the same way everywhere, and prove it happened",
+      "status": "planned",
+      "description": "Deleting a feature is written out four times, and two of the four leave broken phases behind. None of them checks the delete actually happened before reporting success.\n\nThe four copies:\n- `packages/pi-adapter/src/index.ts:4238` — the `feature_delete` tool. When `cascade` is false it deletes the feature and **does nothing to its phases**. They keep pointing at a feature that no longer exists. It then reports `Feature deleted: ${params.featureId}` using the raw text the caller typed, and returns `details: { deleted: params.featureId }` — no read-back, no canonical ref, no count.\n- `packages/plan-server/src/serve.ts:699` — `DELETE /features/:id`. Same orphan bug: filters the feature out, never touches phases. Returns `{ deleted: id }` without checking the id was ever present. Deleting a feature that does not exist returns success.\n- `packages/plan-mcp/src/index.ts:1124` — the only correct one. Resolves the ref strictly, and unlinks phases when cascade is false, deletes them when true.\n- `packages/pi-adapter/src/index.ts:1960` — the interactive `/planner feature delete` path. Also correct, but hand-written again.\n\nThis is the same shape as T413: a tool reports success while durable state is wrong. `planner-cleanup-orphan-phases` exists to clean up exactly the mess the two broken copies make — the cleanup tool is the symptom, not the fix.\n\nCurrent state vs desired state: four hand-written deletes, two of them wrong, and a repair tool covering for them. Desired: one function in plan-core that all four call.\n\nSteps:\n1. Add `deleteFeatureCascade(store, featureId, { cascade })` to plan-core, next to the existing shaping helpers (`packages/plan-core/src/handoff-reply.ts` is the pattern for core-owns-it, adapters-consume-it). It resolves, deletes, unlinks or cascades the phases, reads back, and returns the canonical ref plus the phase count. It fails loudly if the feature was not there.\n2. Replace all four call sites with it. Delete the hand-written bodies — do not leave one behind \"just for the server\".\n3. Report the canonical `F00x` ref, never the caller's raw input.\n4. Test: deleting with cascade false leaves phases alive and unlinked, not orphaned; deleting a missing feature fails instead of reporting success; all four surfaces produce the same result for the same input.\n\nEdge cases: a feature with no phases; cascade true with phases that have their own handoffs (phase deletion already archives them — do not re-implement that); concurrent delete where the feature vanished between resolve and write.\n\nFound during T423 and left unfiled when that session ended. Antonio approved filing it on 2026-09-21.",
+      "descriptionUpdatedAt": "2026-09-21T10:42:05.283Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "46980503-0a87-4490-b279-1a748e1465f2-check-001-add-deletefeaturecascade-to-plan-core-with-read-back-verification",
+          "number": 1,
+          "title": "Add deleteFeatureCascade to plan-core with read-back verification",
+          "checked": false
+        },
+        {
+          "id": "46980503-0a87-4490-b279-1a748e1465f2-check-002-point-pi-adapter-feature-delete-tool-at-it-fixes-the-orphan-phase-bug",
+          "number": 2,
+          "title": "Point pi-adapter feature_delete tool at it (fixes the orphan-phase bug)",
+          "checked": false
+        },
+        {
+          "id": "46980503-0a87-4490-b279-1a748e1465f2-check-003-point-plan-server-delete-features-id-at-it-fixes-the-orphan-phase-bug",
+          "number": 3,
+          "title": "Point plan-server DELETE /features/:id at it (fixes the orphan-phase bug)",
+          "checked": false
+        },
+        {
+          "id": "46980503-0a87-4490-b279-1a748e1465f2-check-004-point-plan-mcp-planner-feature-delete-at-it",
+          "number": 4,
+          "title": "Point plan-mcp planner-feature-delete at it",
+          "checked": false
+        },
+        {
+          "id": "46980503-0a87-4490-b279-1a748e1465f2-check-005-point-the-pi-interactive-planner-feature-delete-path-at-it",
+          "number": 5,
+          "title": "Point the pi interactive /planner feature delete path at it",
+          "checked": false
+        },
+        {
+          "id": "46980503-0a87-4490-b279-1a748e1465f2-check-006-report-the-canonical-f00x-ref-instead-of-the-caller-s-raw-input",
+          "number": 6,
+          "title": "Report the canonical F00x ref instead of the caller's raw input",
+          "checked": false
+        },
+        {
+          "id": "46980503-0a87-4490-b279-1a748e1465f2-check-007-test-cascade-false-unlinks-phases-missing-feature-fails-all-four-surfaces-agree",
+          "number": 7,
+          "title": "Test: cascade false unlinks phases, missing feature fails, all four surfaces agree",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-21T10:42:05.222Z",
+      "updatedAt": "2026-09-21T10:42:05.222Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "7257db90-5723-4bee-abd7-8bf1e257b3b3",
+      "phaseId": "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+      "number": 425,
+      "shortId": "A9Q7E",
+      "priority": 13,
+      "shortName": "decide-whether-a-resolved-devi",
+      "title": "Decide whether a resolved deviation still counts as open",
+      "status": "planned",
+      "description": "In `packages/plan-core/src/task-selection.ts:255`, `findResumeCandidate` builds its list of open deviations from four states:\n\n```\n.filter((deviation) => deviation.state === \"approved\"\n  || deviation.state === \"active\"\n  || deviation.state === \"resume-required\"\n  || deviation.state === \"resolved\")\n```\n\n`resolved` means the deviation is finished. Calling a finished deviation \"open\" is at best confusing and may be wrong: the newest deviation wins (`newestFirst`, line 260), so a resolved deviation can outrank a genuinely open older one and drive the recommendation. Ten lines down, `returnIsRequired` (line 264) treats `resolved` as requiring a return, which is why it is in the list at all — but that is the only place it is needed, and pulling it into the \"open\" set to get there is what makes the filter misleading.\n\nBackground: a helper named `isPreservedResumeTarget` used to sit alongside this and filtered a different, broader state set than the live check. It was deleted as unused by commit 1bbccaf (T423). Deleting it removed the noise but not the question: is the surviving four-state filter right?\n\nCurrent state vs desired state: one filter named `open` that includes a closed state, and a second condition that depends on that inclusion. Desired: the states are named for what they mean, and any list including `resolved` says why in the code.\n\nSteps:\n1. Work out whether a resolved deviation should be able to win `top` over an older approved or active one. Check the deviation tests in `packages/plan-core/test/` for the intended behaviour before changing anything — this is a read-first task.\n2. If the current behaviour is intended, split it: build the genuinely-open set, and handle the resolved-needs-return case separately so no one reads `open` and gets it wrong.\n3. If it is not intended, fix the ordering and add the test that was missing.\n4. Either way, leave a test pinning what a resolved deviation does to the recommendation, so the next person does not have to redo this reasoning.\n\nThis is a correctness question, not a cleanup. It may end with no behaviour change and one test — that is a valid outcome, as long as it is written down.\n\nFound during T423 and left unfiled when that session ended. Antonio approved filing it on 2026-09-21.",
+      "descriptionUpdatedAt": "2026-09-21T10:42:18.874Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7257db90-5723-4bee-abd7-8bf1e257b3b3-check-001-read-the-deviation-tests-in-plan-core-to-establish-intended-behaviour",
+          "number": 1,
+          "title": "Read the deviation tests in plan-core to establish intended behaviour",
+          "checked": false
+        },
+        {
+          "id": "7257db90-5723-4bee-abd7-8bf1e257b3b3-check-002-decide-should-a-resolved-deviation-outrank-an-older-open-one",
+          "number": 2,
+          "title": "Decide: should a resolved deviation outrank an older open one?",
+          "checked": false
+        },
+        {
+          "id": "7257db90-5723-4bee-abd7-8bf1e257b3b3-check-003-separate-the-genuinely-open-set-from-the-resolved-needs-return-case",
+          "number": 3,
+          "title": "Separate the genuinely-open set from the resolved-needs-return case",
+          "checked": false
+        },
+        {
+          "id": "7257db90-5723-4bee-abd7-8bf1e257b3b3-check-004-add-a-test-pinning-what-a-resolved-deviation-does-to-the-recommendation",
+          "number": 4,
+          "title": "Add a test pinning what a resolved deviation does to the recommendation",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-21T10:42:18.827Z",
+      "updatedAt": "2026-09-21T10:42:18.827Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-21T10:22:05.154Z",
+  "updatedAt": "2026-09-21T10:57:14.685Z",
   "handoff": "# Five payload and visibility defects remain\n\nCreated at: 2026-09-21T10:22:05.154Z\nUpdated at: 2026-09-21T10:22:05.154Z\nReason: Session ending with P104 half done. The five remaining tasks are fully specified but unstarted, and the branch has eleven commits that have never been pushed or reviewed.\n\n- Feature: F005 — Improvements\n- Phase: P104(F005) — Stop planner tools destroying and eliding state they report as intact\n- Next task: P104(F005)/T417 — Bound tool results and state payload limits before a call fails (priority 5, planned, no dependencies)\n- Exact resume point: nothing is in flight. No task is active, the working tree has no partial work for this phase, and `pnpm verify:final` passes at fingerprint 2fd226742b76.\n\n## Current and partial state\n\nDone and committed on branch `feature/handoff-retry-cost`: T413 (checklist replacement no longer destroys ticks), T414 (document links validated against the submitted body, not the auto-externalized rewrite), T415 (prepare surfaces the externalized portion of a prior capsule, plus section-aware truncation), T416 (reconciliation is evidenced by a heading diff, not an unchecked boolean), T423 (noUnusedLocals/noUnusedParameters enforced, 58 cleared).\n\nPlanned and untouched: T417, T418, T419, T420, T421, T422. Each description carries its own measured evidence and file:line references — read the task, not this capsule, before starting.\n\nPhases P102(F005) and P103(F005) are complete and gated.\n\nEleven commits sit on `feature/handoff-retry-cost` and have never been pushed. No PR exists. The user has repeatedly declined one.\n\n## Preservation constraints\n\n- Shaping and validation belong in plan-core; both adapters consume it. `packages/plan-core/src/handoff-reply.ts` is the pattern. Four separate defects in this phase came from logic duplicated per adapter.\n- `packages/plan-core/test/handoff-reply.test.mjs` pins a no-duplication invariant and payload ceilings from P103. T417 and T419 both shrink payloads; do not regress those assertions to make room.\n- The legacy `decisions` array is writable over HTTP and refused on the agent tools. That split is deliberate (T405 review) — the Web UI is a supervisor surface.\n- `truncateAtSafeBoundary` in `handoff-context.ts` is the shared truncation helper. T419 folds in a third raw-slice site in `task-context.ts:76`; use the helper, do not write a fourth implementation.\n\n## Supporting documents\n\nNone. Every task in this phase carries its own evidence inline, and no `.planner/docs/` file was produced by this work.\n\n## Blockers and risks\n\n- No blockers. All six remaining tasks are independent and unblocked.\n- Risk worth knowing: focused suites passed 588/588 while T405 shipped a real regression that only the browser gate caught. Run `pnpm verify:final` at phase close, not just the focused suites.\n- Sonnet subagents hit account rate limits four times during this work. Expect interruptions; check what a killed agent left on disk before resuming it, since two left the tree in states their own reports did not mention.\n\n## How to resume\n\n1. Read `planner-task-show P104(F005)/T417 full=true` and `planner-phase-show P104(F005) full=true`, then `planner-task-start P104(F005)/T417`. Reading first makes the start succeed on the first call.\n2. Work T417 through T422 in priority order. The planner's ordering is authoritative; deviating from it twice in this session caused real rework.\n3. T419 depends on nothing but overlaps T417 — one bounds mutation results, the other bounds reads and the recommendation. Keep them from duplicating each other.\n4. Verify each task with the focused suites, then `pnpm verify:final` once at phase close.\n5. Two findings from T423 have no task and need one if they are to be looked at: an unused `isPreservedResumeTarget` in `task-selection.ts` filtering a broader deviation-state set than the check actually uses, and `feature_delete` in pi-adapter reporting success without checking anything was removed.",
   "handoffUpdatedAt": "2026-09-21T10:22:05.154Z",
   "handoffAudit": {
@@ -711,6 +861,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+      "createdAt": "2026-09-21T10:44:39.244Z"
+    },
     {
       "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
       "createdAt": "2026-09-17T07:58:22.406Z"

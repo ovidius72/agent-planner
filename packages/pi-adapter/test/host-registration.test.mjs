@@ -215,7 +215,9 @@ describe("pi-adapter host harness", () => {
 
       const requirementUpdate = await host.runTool("requirement_update", { requirementId: requirement.id, title: "Updated requirement" });
       assert.equal(toolDetails(requirementUpdate).updated, true);
-      assert.equal(toolDetails(requirementUpdate).requirement.title, "Updated requirement");
+      // T417: the reply echoes changed fields, not the whole entity.
+      assert.deepEqual(toolDetails(requirementUpdate).updatedFields, ["title"]);
+      assert.equal(toolDetails(requirementUpdate).changed.title, "Updated requirement");
 
       const ideaCreate = await host.runTool("idea_create", { title: "Outcome idea" });
       assert.equal(toolDetails(ideaCreate).created, true);

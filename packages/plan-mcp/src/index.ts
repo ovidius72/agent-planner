@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -27,6 +27,11 @@ function plannerSessionIdFor(extra?: McpRequestExtra): string {
 }
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; structuredContent?: Record<string, unknown>; isError?: boolean };
+
+/** Stated on every long-prose input so a caller learns the limit before the
+ * call rather than from the rejection. The number itself lives in the core
+ * (PLANNER_LONG_TEXT_FIELD_MAX_CHARS) so both adapters state the same one. */
+const LONG_TEXT_LIMIT_NOTICE = longTextFieldLimitNotice();
 
 function text(textValue: string, structuredContent?: Record<string, unknown>): ToolResult {
   return structuredContent ? { content: [{ type: "text", text: textValue }], structuredContent } : { content: [{ type: "text", text: textValue }] };
@@ -582,7 +587,7 @@ server.registerTool("planner-project-language", {
 server.registerTool("planner-project-discuss", {
   description: "Record/update project-level discovery fields. This is the MCP equivalent of grouped project discuss without Pi UI prompts.",
   inputSchema: {
-    description: z.string().optional(),
+    description: z.string().optional().describe(LONG_TEXT_LIMIT_NOTICE),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full project description."),
     goal: z.string().optional(),
     scope: z.array(z.string()).optional(),
@@ -925,7 +930,7 @@ server.registerTool("planner-feature-add", {
   description: "Create a feature with a rich description. REQUIRED: description must include code references (file:line), current implementation state (what exists, what is unimplemented), systems/structs/traits involved, concrete goals, and behaviors to preserve. The description is the primary context for future agents resuming this feature; one-liners cause misalignment.",
   inputSchema: {
     name: z.string().min(1),
-    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, goals, and behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks without code refs.").describe("Required code references (file:line), current state of the art, structs/traits/systems involved, goals, and behaviors to preserve. Not a one-liner."),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, goals, and behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks without code refs.").describe(`Required code references (file:line), current state of the art, structs/traits/systems involved, goals, and behaviors to preserve. Not a one-liner. ${LONG_TEXT_LIMIT_NOTICE}`),
     status: z.enum(STATUS_VALUES).optional(),
   },
 }, async ({ name, description, status }) => {
@@ -999,7 +1004,7 @@ server.registerTool("planner-feature-discuss", {
   description: "Persist feature discovery/governance fields and mark the feature context as ready.",
   inputSchema: {
     feature: z.string().min(1).describe("Feature ref. Accepts F00x, shortId, UUID, or title."),
-    description: z.string().optional().describe("Current implementation state, scope, and goals for this feature."),
+    description: z.string().optional().describe(`Current implementation state, scope, and goals for this feature. ${LONG_TEXT_LIMIT_NOTICE}`),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full feature description."),
     workDone: z.string().optional().describe("What is already implemented / decided."),
     workRemaining: z.string().optional().describe("What still needs to be done."),
@@ -1049,7 +1054,14 @@ server.registerTool("planner-feature-discuss", {
     return doc;
   });
   const result = updated.features.find((entry) => entry.id === feature.id)!;
-  return writeAndSummarize(st, `✅ Feature discussed/updated: ${formatFeatureRef(result.number)} — ${result.name}${result.shortId ? ` · ${result.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { feature: result, discussed: true, updatedFields: receivedFields });
+  const featureDiscussReply = buildMutationReply({
+    identity: { entity: "feature", ref: formatFeatureRef(result.number), id: result.id, shortId: result.shortId, title: result.name, status: result.status },
+    operation: "discuss",
+    updatedFields: receivedFields,
+    changedValues: result as unknown as Record<string, unknown>,
+    readBackCommand: `planner-feature-show ${formatFeatureRef(result.number)} full=true`,
+  });
+  return writeAndSummarize(st, featureDiscussReply.text, featureDiscussReply.structured);
 });
 
 server.registerTool("planner-feature-update", {
@@ -1057,7 +1069,7 @@ server.registerTool("planner-feature-update", {
   inputSchema: {
     feature: z.string().min(1).describe("Feature ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."),
     name: z.string().optional(),
-    description: z.string().optional(),
+    description: z.string().optional().describe(LONG_TEXT_LIMIT_NOTICE),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full feature description."),
     status: z.enum(STATUS_VALUES).optional(),
     workDone: z.string().optional(),
@@ -1112,7 +1124,14 @@ server.registerTool("planner-feature-update", {
     return doc;
   });
   const result = updated.features.find((entry) => entry.id === feature.id)!;
-  return writeAndSummarize(st, `✅ Feature updated: ${formatFeatureRef(result.number)} — ${result.name}${result.shortId ? ` · ${result.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { feature: result, updated: true, updatedFields: receivedFields });
+  const featureUpdateReply = buildMutationReply({
+    identity: { entity: "feature", ref: formatFeatureRef(result.number), id: result.id, shortId: result.shortId, title: result.name, status: result.status },
+    operation: "update",
+    updatedFields: receivedFields,
+    changedValues: result as unknown as Record<string, unknown>,
+    readBackCommand: `planner-feature-show ${formatFeatureRef(result.number)} full=true`,
+  });
+  return writeAndSummarize(st, featureUpdateReply.text, featureUpdateReply.structured);
 });
 
 server.registerTool("planner-feature-delete", {
@@ -1150,7 +1169,7 @@ server.registerTool("planner-phase-add", {
     title: z.string().min(1),
     feature: z.string().min(1).optional().describe("Feature ref (required). Accepts F00x/P00x/T00x composite, bare F00x (global), 5-char shortId, UUID, or title."),
     summary: z.string().optional().describe("One-line summary of the phase"),
-    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner."),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Prefix with 'design-only' for pre-implementation design tasks.").describe(`Required code references (file:line), current state, structs/traits involved, concrete work items, behaviors to preserve. Not a one-liner. ${LONG_TEXT_LIMIT_NOTICE}`),
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
@@ -1325,7 +1344,16 @@ server.registerTool("planner-phase-discuss", {
     entry.updatedAt = nowISO();
     return entry;
   });
-  return writeAndSummarize(st, `✅ Phase discussed/context ready: ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { phase, discussed: true, contextReady: true, updatedFields: receivedFields });
+  const phaseDiscussRef = formatPhaseRef(found.number, featureNumberOfPhase(found, features));
+  const phaseDiscussReply = buildMutationReply({
+    identity: { entity: "phase", ref: phaseDiscussRef, id: phase.id, shortId: phase.shortId, title: phase.title, status: phase.status },
+    operation: "discuss",
+    updatedFields: receivedFields,
+    changedValues: phase as unknown as Record<string, unknown>,
+    extras: { contextReady: true },
+    readBackCommand: `planner-phase-show ${phaseDiscussRef} full=true`,
+  });
+  return writeAndSummarize(st, phaseDiscussReply.text, phaseDiscussReply.structured);
 });
 
 server.registerTool("planner-phase-update", {
@@ -1335,7 +1363,7 @@ server.registerTool("planner-phase-update", {
     title: z.string().optional(),
     status: z.enum(PHASE_STATUS_VALUES).optional(),
     summary: z.string().optional(),
-    description: z.string().optional(),
+    description: z.string().optional().describe(LONG_TEXT_LIMIT_NOTICE),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full phase description."),
     featureId: z.string().optional().describe("Feature ref to relink this phase to, or an empty string to unlink it."),
     priority: z.number().int().nonnegative().optional().describe("Display order within the feature (lower = higher)."),
@@ -1431,7 +1459,16 @@ server.registerTool("planner-phase-update", {
   const staleParentRefs = descriptionFreshness?.diagnostics
     .filter((entry) => entry.state === "stale" && entry.ownerId === persisted.featureId)
     .map((entry) => entry.ownerRef) ?? [];
-  return text(`✅ Phase updated: ${formatPhaseRef(persisted.number, featureNumberOfPhase(persisted, refreshedFeatures))} — ${persisted.title}${persisted.shortId ? ` · ${persisted.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`, { phase: persisted, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) });
+  const phaseUpdateRef = formatPhaseRef(persisted.number, featureNumberOfPhase(persisted, refreshedFeatures));
+  const phaseUpdateReply = buildMutationReply({
+    identity: { entity: "phase", ref: phaseUpdateRef, id: persisted.id, shortId: persisted.shortId, title: persisted.title, status: persisted.status },
+    operation: "update",
+    updatedFields: receivedFields,
+    changedValues: persisted as unknown as Record<string, unknown>,
+    extras: descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {},
+    readBackCommand: `planner-phase-show ${phaseUpdateRef} full=true`,
+  });
+  return text(phaseUpdateReply.text, phaseUpdateReply.structured);
 });
 
 server.registerTool("planner-phase-delete", {
@@ -1458,7 +1495,7 @@ server.registerTool("planner-task-add", {
     feature: z.string().min(1).optional().describe("Feature ref the task's phase belongs to. Accepts F00x/P00x/T00x composite, bare F00x (global), 5-char shortId, UUID, or title. REQUIRED."),
     phase: z.string().min(1).describe("Phase ref. Accepts F00x/P00x/T00x composite, bare P00x/T00x (global), 5-char shortId, UUID, or title."),
     title: z.string().min(1),
-    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Prefix with 'design-only' for pre-implementation design tasks.").describe("Required code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner."),
+    description: z.string().min(50, "Description must be at least 50 characters — include code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Prefix with 'design-only' for pre-implementation design tasks.").describe(`Required code references (file:line), current state vs desired state, structs/traits to modify, concrete implementation steps, edge cases. Not a one-liner. ${LONG_TEXT_LIMIT_NOTICE}`),
     checklist: z.array(z.string()).optional(),
   },
 }, async ({ feature: featureRef, phase: ref, title, description, checklist }) => {
@@ -1573,7 +1610,7 @@ server.registerTool("planner-task-discuss", {
   description: "Persist task execution notes/checklist.",
   inputSchema: {
     task: z.string().min(1),
-    description: z.string().optional(),
+    description: z.string().optional().describe(LONG_TEXT_LIMIT_NOTICE),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full task description."),
     checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick). Use planner-task-checklist-toggle/add/remove for granular edits."),
   },
@@ -1626,7 +1663,17 @@ server.registerTool("planner-task-discuss", {
   const lostTicksNotice = checklistLostTicks.length > 0
     ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
     : "";
-  return writeAndSummarize(st, `✅ Task discussed/updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${lostTicksNotice}`, { task: t, discussed: true, updatedFields: receivedFields, ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) });
+  const taskDiscussRef = taskCompositeRef(t, found.phase, features);
+  const taskDiscussReply = buildMutationReply({
+    identity: { entity: "task", ref: taskDiscussRef, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
+    operation: "discuss",
+    updatedFields: receivedFields,
+    changedValues: t as unknown as Record<string, unknown>,
+    extras: checklistLostTicks.length > 0 ? { checklistLostTicks } : {},
+    notices: [lostTicksNotice],
+    readBackCommand: `planner-task-show ${taskDiscussRef} full=true`,
+  });
+  return writeAndSummarize(st, taskDiscussReply.text, taskDiscussReply.structured);
 });
 
 server.registerTool("planner-task-dependency-add", {
@@ -1635,7 +1682,7 @@ server.registerTool("planner-task-dependency-add", {
 }, async ({ task: ref, dependsOn }) => {
   const st = await requireStore(); const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, ref); const dependency = findTaskByRef(await st.loadAllPhases(), features, dependsOn);
   if (!found || !dependency) return { ...text("Dependency target not found.", { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }), isError: true };
-  try { const result = await st.addTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return text(`✅ Dependency added: ${taskCompositeRef(found.task, found.phase, features)} depends on ${taskCompositeRef(dependency.task, dependency.phase, features)}.`, { updated: true, task: result }); }
+  try { const result = await st.addTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); const reply = buildMutationReply({ identity: { entity: "task", ref: taskCompositeRef(found.task, found.phase, features), id: result.id, shortId: result.shortId, title: result.title, status: result.status }, operation: "update", updatedFields: ["dependsOn"], changedValues: { dependsOn: result.dependsOn }, readBackCommand: `planner-task-show ${taskCompositeRef(found.task, found.phase, features)} full=true` }); return text(`${reply.text} Depends on ${taskCompositeRef(dependency.task, dependency.phase, features)}.`, reply.structured); }
   catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { ...text(error instanceof Error ? error.message : "Dependency update failed.", { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_UPDATE_FAILED" }), isError: true }; }
 });
 
@@ -1646,7 +1693,7 @@ server.registerTool("planner-task-dependency-delete", {
   if (!confirmed) return { ...text("Explicit confirmation is required to remove a dependency.", { updated: false, errorCode: "CONFIRMATION_REQUIRED" }), isError: true };
   const st = await requireStore(); const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, ref); const dependency = findTaskByRef(await st.loadAllPhases(), features, dependsOn);
   if (!found || !dependency) return { ...text("Dependency target not found.", { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }), isError: true };
-  try { const result = await st.deleteTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return text("✅ Dependency removed.", { updated: true, task: result }); }
+  try { const result = await st.deleteTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); const reply = buildMutationReply({ identity: { entity: "task", ref: taskCompositeRef(found.task, found.phase, features), id: result.id, shortId: result.shortId, title: result.title, status: result.status }, operation: "update", updatedFields: ["dependsOn"], changedValues: { dependsOn: result.dependsOn }, readBackCommand: `planner-task-show ${taskCompositeRef(found.task, found.phase, features)} full=true` }); return text(reply.text, reply.structured); }
   catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { ...text(error instanceof Error ? error.message : "Dependency deletion failed.", { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_DELETE_FAILED" }), isError: true }; }
 });
 
@@ -1656,7 +1703,7 @@ server.registerTool("planner-task-update", {
     task: z.string().min(1),
     title: z.string().optional(),
     status: z.enum(STATUS_VALUES).optional(),
-    description: z.string().optional(),
+    description: z.string().optional().describe(LONG_TEXT_LIMIT_NOTICE),
     descriptionRef: z.string().optional().describe("Optional markdown reference under .planner/docs/ for the full task description."),
     notes: z.string().optional().describe("Implementation notes."),
     decisions: z.array(z.string()).optional().describe("Deprecated legacy field. Read-only history now; supplying it returns LEGACY_DECISIONS_ARRAY_READ_ONLY. Use planner-accepted-decision-create for new durable decisions."),
@@ -1792,10 +1839,21 @@ server.registerTool("planner-task-update", {
   const lostTicksNotice = checklistLostTicks.length > 0
     ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
     : "";
-  const details = resumeRequired
-    ? { task: t, updated: true, updatedFields: receivedFields, resumeRequired, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}), ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) }
-    : { task: t, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}), ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) };
-  return writeAndSummarize(st, `✅ Task updated: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (${t.status})${t.shortId ? ` · ${t.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.${resumeNotice}${lostTicksNotice}`, details);
+  const taskUpdateRef = taskCompositeRef(t, found.phase, features);
+  const taskUpdateReply = buildMutationReply({
+    identity: { entity: "task", ref: taskUpdateRef, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
+    operation: "update",
+    updatedFields: receivedFields,
+    changedValues: t as unknown as Record<string, unknown>,
+    extras: {
+      ...(resumeRequired ? { resumeRequired } : {}),
+      ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}),
+      ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}),
+    },
+    notices: [resumeNotice, lostTicksNotice],
+    readBackCommand: `planner-task-show ${taskUpdateRef} full=true`,
+  });
+  return writeAndSummarize(st, taskUpdateReply.text, taskUpdateReply.structured);
 });
 
 server.registerTool("planner-task-checklist-toggle", {
@@ -2623,7 +2681,7 @@ server.registerTool("planner-requirement-create", {
   description: "Create a declarative product Requirement describing a user, business, or system outcome, with optional nested macro tasks. Never store coding standards, best practices, formatting, verification process, or other Project Guidelines here; use planner-project-guidelines-update instead. Requirements have no lifecycle status. Requirement and macro-task IDs/timestamps are assigned by the planner.",
   inputSchema: {
     title: z.string().min(1),
-    description: z.string().optional(),
+    description: z.string().optional().describe(LONG_TEXT_LIMIT_NOTICE),
     linkedPhaseIds: z.array(z.string().min(1)),
     macroTasks: z.array(z.object({
       title: z.string().min(1),
@@ -2667,7 +2725,7 @@ server.registerTool("planner-requirement-update", {
   inputSchema: {
     requirementId: z.string().min(1),
     title: z.string().min(1).optional(),
-    description: z.string().optional(),
+    description: z.string().optional().describe(LONG_TEXT_LIMIT_NOTICE),
     linkedPhaseIds: z.array(z.string().min(1)).optional(),
     macroTasks: z.array(z.object({
       id: z.string().min(1).optional(),
@@ -2690,6 +2748,12 @@ server.registerTool("planner-requirement-update", {
       retryCommand: `planner-requirement-update ${requirementId}`,
     });
   }
+  const requirementUpdatedFields = [
+    ...(title !== undefined ? ["title"] : []),
+    ...(description !== undefined ? ["description"] : []),
+    ...(linkedPhaseIds !== undefined ? ["linkedPhaseIds"] : []),
+    ...(macroTasks !== undefined ? ["macroTasks"] : []),
+  ];
   const links = linkedPhaseIds === undefined ? { ok: true as const, linkedPhaseIds: current.linkedPhaseIds } : await resolveRequirementPhaseRefs(st, linkedPhaseIds);
   if (!links.ok) return text(`❌ ${links.error}`, { updated: false, errorCode: "REQUIREMENT_PHASE_LINK_INVALID" });
   const now = nowISO();
@@ -2713,7 +2777,14 @@ server.registerTool("planner-requirement-update", {
     return text(`❌ ${message}`, { updated: false, errorCode: "REQUIREMENT_MACRO_TASK_INVALID" });
   }
   await st.writeGenerated();
-  return writeAndSummarize(st, `Requirement updated: ${next.id}.`, { requirement: next, updated: true });
+  const requirementUpdateReply = buildMutationReply({
+    identity: { entity: "requirement", ref: next.id, id: next.id, title: next.title },
+    operation: "update",
+    updatedFields: requirementUpdatedFields,
+    changedValues: next as unknown as Record<string, unknown>,
+    readBackCommand: "planner-requirement-list",
+  });
+  return writeAndSummarize(st, requirementUpdateReply.text, requirementUpdateReply.structured);
 });
 
 server.registerTool("planner-requirement-delete", {
@@ -2787,8 +2858,16 @@ server.registerTool("planner-idea-update", {
       retryCommand: `planner-idea-update ${ref}`,
     });
   }
+  const ideaUpdatedFields = [...(title !== undefined ? ["title"] : []), ...(description !== undefined ? ["description"] : [])];
   const idea = await st.updateIdea(current.id, { ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}) }); await st.writeGenerated();
-  return text(`Idea updated: ${formatIdeaRef(idea.number)} — ${idea.title}`, { idea, updated: true });
+  const ideaUpdateReply = buildMutationReply({
+    identity: { entity: "idea", ref: formatIdeaRef(idea.number), id: idea.id, title: idea.title },
+    operation: "update",
+    updatedFields: ideaUpdatedFields,
+    changedValues: idea as unknown as Record<string, unknown>,
+    readBackCommand: `planner-idea-show ${formatIdeaRef(idea.number)}`,
+  });
+  return text(ideaUpdateReply.text, ideaUpdateReply.structured);
 });
 
 server.registerTool("planner-idea-delete", {

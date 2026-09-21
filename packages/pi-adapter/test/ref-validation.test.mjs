@@ -601,8 +601,10 @@ describe("pi-adapter strict ref validation", () => {
       ],
     }, undefined, undefined, ctx);
     assert.equal(updated.details.updated, true);
-    assert.equal(updated.details.requirement.macroTasks[0].createdAt, created.details.requirement.macroTasks[0].createdAt);
-    assert.equal(updated.details.requirement.macroTasks[1].id, "MT-002");
+    // T417: the reply echoes changed fields, not the whole entity.
+    assert.equal(updated.details.requirement, undefined, "the full entity is not echoed back");
+    assert.equal(updated.details.changed.macroTasks[0].createdAt, created.details.requirement.macroTasks[0].createdAt);
+    assert.equal(updated.details.changed.macroTasks[1].id, "MT-002");
   });
 });
 

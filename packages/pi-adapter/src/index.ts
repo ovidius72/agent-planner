@@ -12,10 +12,15 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
+
+/** Stated on every long-prose input so a caller learns the limit before the
+ * call rather than from the rejection. The number lives in the core
+ * (PLANNER_LONG_TEXT_FIELD_MAX_CHARS) so both adapters state the same one. */
+const LONG_TEXT_LIMIT_NOTICE = longTextFieldLimitNotice();
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -2954,7 +2959,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Initialize a new project plan (.planner/) in the current cwd. Use once at the start of a project. When deriving the planner from an existing document or plan, use a concise human project title and ask the user to confirm it if your candidate title is long, compound, or looks like a phase heading.",
     parameters: Type.Object({
       projectName: Type.String({ description: "Concise project name/title" }),
-      description: Type.Optional(Type.String({ description: "Short project description" })),
+      description: Type.Optional(Type.String({ description: `Short project description. ${LONG_TEXT_LIMIT_NOTICE}` })),
       goal: Type.Optional(Type.String({ description: "Main project goal / objective" })),
       requirements: Type.Optional(Type.Array(Type.String(), { description: "Initial declarative product outcomes to seed as Requirements. Never include coding standards, best practices, formatting, verification process, or other Project Guidelines." })),
     }),
@@ -3011,7 +3016,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Update project-level metadata such as title, description, goal, scope, technologies, and rules. Use this after importing or refining an existing plan so the planner root is not left empty.",
     parameters: Type.Object({
       name: Type.Optional(Type.String({ description: "Project title" })),
-      description: Type.Optional(Type.String({ description: "Short project description" })),
+      description: Type.Optional(Type.String({ description: `Short project description. ${LONG_TEXT_LIMIT_NOTICE}` })),
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full project description." })),
       goal: Type.Optional(Type.String({ description: "Main project goal / objective" })),
       scope: Type.Optional(Type.Array(Type.String(), { description: "Replace in-scope items" })),
@@ -3082,7 +3087,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return next;
       });
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Project updated: ${persisted.name}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...persisted, updated: true, updatedFields: receivedFields } };
+      const projectUpdateReply = buildMutationReply({
+        identity: { entity: "project", ref: persisted.name, title: persisted.name },
+        operation: "update",
+        updatedFields: receivedFields,
+        changedValues: persisted as unknown as Record<string, unknown>,
+        readBackCommand: "plan_get",
+      });
+      return { content: [{ type: "text", text: projectUpdateReply.text }], details: projectUpdateReply.structured };
     },
   });
 
@@ -3224,7 +3236,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Create a declarative product Requirement describing a user, business, or system outcome, with optional nested macro tasks. Never store coding standards, best practices, formatting, verification process, or other Project Guidelines here; use project_guidelines_update instead. Requirements have no lifecycle status.",
     parameters: Type.Object({
       title: Type.String({ description: "Requirement title" }),
-      description: Type.Optional(Type.String({ description: "Requirement description" })),
+      description: Type.Optional(Type.String({ description: `Requirement description. ${LONG_TEXT_LIMIT_NOTICE}` })),
       linkedPhaseIds: Type.Optional(Type.Array(Type.String(), { description: "Optional linked phase IDs" })),
       macroTasks: Type.Optional(Type.Array(Type.Object({
         title: Type.String({ description: "Macro-task title" }),
@@ -3279,7 +3291,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       requirementId: Type.String({ description: "Requirement ID" }),
       title: Type.Optional(Type.String({ description: "Requirement title" })),
-      description: Type.Optional(Type.String({ description: "Requirement description" })),
+      description: Type.Optional(Type.String({ description: `Requirement description. ${LONG_TEXT_LIMIT_NOTICE}` })),
       linkedPhaseIds: Type.Optional(Type.Array(Type.String(), { description: "Replace linked phase IDs" })),
       macroTasks: Type.Optional(Type.Array(Type.Object({
         id: Type.Optional(Type.String({ description: "Existing planner-assigned macro-task ID; omit for a new item." })),
@@ -3306,6 +3318,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           retryCommand: `requirement_update ${params.requirementId}`,
         });
       }
+      const receivedFields = [
+        ...(params.title !== undefined ? ["title"] : []),
+        ...(params.description !== undefined ? ["description"] : []),
+        ...(params.linkedPhaseIds !== undefined ? ["linkedPhaseIds"] : []),
+        ...(params.macroTasks !== undefined ? ["macroTasks"] : []),
+      ];
       const links = params.linkedPhaseIds === undefined
         ? undefined
         : await resolveRequirementPhaseRefs(st, params.linkedPhaseIds);
@@ -3331,7 +3349,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return { content: [{ type: "text", text: message }], details: {} };
       }
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `Requirement updated: ${persisted.id}` }], details: { requirement: persisted, updated: true } };
+      const requirementUpdateReply = buildMutationReply({
+        identity: { entity: "requirement", ref: persisted.id, id: persisted.id, title: persisted.title },
+        operation: "update",
+        updatedFields: receivedFields,
+        changedValues: persisted as unknown as Record<string, unknown>,
+        readBackCommand: "requirement_list",
+      });
+      return { content: [{ type: "text", text: requirementUpdateReply.text }], details: requirementUpdateReply.structured };
     },
   });
 
@@ -3373,7 +3398,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
   pi.registerTool({
     name: "idea_update", label: "Idea Update", description: "Update an Ideas Inbox title or description.", parameters: Type.Object({ idea: Type.String(), title: Type.Optional(Type.String()), description: Type.Optional(Type.String()) }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return mutationNoFieldsFailure({ entity: "idea", ref: params.idea, operation: "update", mutableFields: ["title", "description"], retryCommand: `idea_update ${params.idea}` }); const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); return { content: [{ type: "text", text: `Idea updated: ${formatIdeaRef(idea.number)} — ${idea.title}` }], details: { idea, updated: true } }; },
+    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return mutationNoFieldsFailure({ entity: "idea", ref: params.idea, operation: "update", mutableFields: ["title", "description"], retryCommand: `idea_update ${params.idea}` }); const ideaUpdatedFields = [...(params.title !== undefined ? ["title"] : []), ...(params.description !== undefined ? ["description"] : [])]; const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); const ideaReply = buildMutationReply({ identity: { entity: "idea", ref: formatIdeaRef(idea.number), id: idea.id, title: idea.title }, operation: "update", updatedFields: ideaUpdatedFields, changedValues: idea as unknown as Record<string, unknown>, readBackCommand: `idea_show ${formatIdeaRef(idea.number)}` }); return { content: [{ type: "text", text: ideaReply.text }], details: ideaReply.structured }; },
   });
   pi.registerTool({
     name: "idea_delete", label: "Idea Delete", description: "Delete an Idea only after explicit user confirmation.", parameters: Type.Object({ idea: Type.String(), confirmed: Type.Boolean() }),
@@ -4071,7 +4096,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Persist feature discovery/governance fields so the feature context is ready before detailed implementation planning.",
     parameters: Type.Object({
       featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name" }),
-      description: Type.Optional(Type.String({ description: "Current implementation state, scope, and goals for this feature" })),
+      description: Type.Optional(Type.String({ description: `Current implementation state, scope, and goals for this feature. ${LONG_TEXT_LIMIT_NOTICE}` })),
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full feature description." })),
       workDone: Type.Optional(Type.String({ description: "What is already implemented / decided" })),
       workRemaining: Type.Optional(Type.String({ description: "What still needs to be done" })),
@@ -4123,7 +4148,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const feature = updatedDoc.features.find((f) => f.id === featureId);
       if (!feature) return { content: [{ type: "text", text: `Feature not found: ${params.featureId}` }], details: {} };
       await st.writeGenerated();
-      return { content: [{ type: "text", text: `✅ Feature discussed/updated: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...feature, discussed: true, updatedFields: receivedFields } };
+      const featureDiscussReply = buildMutationReply({
+        identity: { entity: "feature", ref: formatFeatureRef(feature.number), id: feature.id, shortId: feature.shortId, title: feature.name, status: feature.status },
+        operation: "discuss",
+        updatedFields: receivedFields,
+        changedValues: feature as unknown as Record<string, unknown>,
+        readBackCommand: `feature_get ${formatFeatureRef(feature.number)}`,
+      });
+      return { content: [{ type: "text", text: featureDiscussReply.text }], details: featureDiscussReply.structured };
     },
   });
 
@@ -4134,7 +4166,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       featureId: Type.String({ description: "Feature ref: F00x, shortId, UUID, or name" }),
       name: Type.Optional(Type.String({ description: "New name" })),
-      description: Type.Optional(Type.String({ description: "New description" })),
+      description: Type.Optional(Type.String({ description: `New description. ${LONG_TEXT_LIMIT_NOTICE}` })),
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full feature description." })),
       status: Type.Optional(Type.String({ description: "Deprecated compatibility field. Feature status is derived from child phases/tasks; supplying this field returns DERIVED_STATUS_READ_ONLY." })),
       startDate: Type.Optional(Type.String({ description: "Start date (YYYY-MM-DD)" })),
@@ -4229,7 +4261,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           type: "text",
           text: `✅ Feature updated: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.`,
         }],
-        details: { ...feature, updated: true, updatedFields: receivedFields },
+        details: buildMutationReply({
+          identity: { entity: "feature", ref: formatFeatureRef(feature.number), id: feature.id, shortId: feature.shortId, title: feature.name, status: feature.status },
+          operation: "update",
+          updatedFields: receivedFields,
+          changedValues: feature as unknown as Record<string, unknown>,
+          readBackCommand: `feature_get ${formatFeatureRef(feature.number)}`,
+        }).structured,
       };
     },
   });
@@ -4472,7 +4510,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       });
       await st.writeGenerated();
       const phaseRef = formatPhaseRef(phase.number, featureNumberOfPhase(phase, features));
-      return { content: [{ type: "text", text: `✅ Phase discussed/context ready: ${phaseRef} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...phase, discussed: true, contextReady: true, updatedFields: receivedFields } };
+      const phaseDiscussReply = buildMutationReply({
+        identity: { entity: "phase", ref: phaseRef, id: phase.id, shortId: phase.shortId, title: phase.title, status: phase.status },
+        operation: "discuss",
+        updatedFields: receivedFields,
+        changedValues: phase as unknown as Record<string, unknown>,
+        extras: { contextReady: true },
+        readBackCommand: `phase_get ${phaseRef}`,
+      });
+      return { content: [{ type: "text", text: phaseDiscussReply.text }], details: phaseDiscussReply.structured };
     },
   });
 
@@ -4485,7 +4531,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       title: Type.Optional(Type.String({ description: "New title" })),
       status: Type.Optional(Type.String({ description: "Deprecated compatibility field. Phase status is derived from task statuses; supplying this field returns DERIVED_STATUS_READ_ONLY." })),
       summary: Type.Optional(Type.String({ description: "New summary" })),
-      description: Type.Optional(Type.String({ description: "New description" })),
+      description: Type.Optional(Type.String({ description: `New description. ${LONG_TEXT_LIMIT_NOTICE}` })),
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full phase description." })),
       featureId: Type.Optional(Type.String({ description: "Link/unlink phase to a feature. Use empty string to unlink." })),
       priority: Type.Optional(Type.Number({ description: "Display order within the feature (lower = higher)" })),
@@ -4610,7 +4656,16 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const staleParentRefs = descriptionFreshness?.diagnostics
         .filter((entry) => entry.state === "stale" && entry.ownerId === phase.featureId)
         .map((entry) => entry.ownerRef) ?? [];
-      return { content: [{ type: "text", text: `✅ Phase updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseUpdateFeatures))} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}. Fields saved: ${receivedFields.join(", ")}.` }], details: { ...phase, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}) } };
+      const phaseUpdateRef = formatPhaseRef(phase.number, featureNumberOfPhase(phase, phaseUpdateFeatures));
+      const phaseUpdateReply = buildMutationReply({
+        identity: { entity: "phase", ref: phaseUpdateRef, id: phase.id, shortId: phase.shortId, title: phase.title, status: phase.status },
+        operation: "update",
+        updatedFields: receivedFields,
+        changedValues: phase as unknown as Record<string, unknown>,
+        extras: descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {},
+        readBackCommand: `phase_get ${phaseUpdateRef}`,
+      });
+      return { content: [{ type: "text", text: phaseUpdateReply.text }], details: phaseUpdateReply.structured };
     },
   });
 
@@ -4988,7 +5043,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId); const dependency = findTaskByRef(await st.loadAllPhases(), features, params.dependsOn);
       if (!found || !dependency) return { content: [{ type: "text", text: "Dependency target not found." }], details: { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }, isError: true };
-      try { const task = await st.addTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return { content: [{ type: "text", text: "Dependency added." }], details: { updated: true, task } }; }
+      try { const task = await st.addTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); const reply = buildMutationReply({ identity: { entity: "task", ref: task.id, id: task.id, shortId: task.shortId, title: task.title, status: task.status }, operation: "update", updatedFields: ["dependsOn"], changedValues: { dependsOn: task.dependsOn }, readBackCommand: `task_get ${task.id}` }); return { content: [{ type: "text", text: reply.text }], details: reply.structured }; }
       catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { content: [{ type: "text", text: error instanceof Error ? error.message : "Dependency update failed." }], details: { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_UPDATE_FAILED" }, isError: true }; }
     },
   });
@@ -5003,7 +5058,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId); const dependency = findTaskByRef(await st.loadAllPhases(), features, params.dependsOn);
       if (!found || !dependency) return { content: [{ type: "text", text: "Dependency target not found." }], details: { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }, isError: true };
-      try { const task = await st.deleteTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); return { content: [{ type: "text", text: "Dependency removed." }], details: { updated: true, task } }; }
+      try { const task = await st.deleteTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); const reply = buildMutationReply({ identity: { entity: "task", ref: task.id, id: task.id, shortId: task.shortId, title: task.title, status: task.status }, operation: "update", updatedFields: ["dependsOn"], changedValues: { dependsOn: task.dependsOn }, readBackCommand: `task_get ${task.id}` }); return { content: [{ type: "text", text: reply.text }], details: reply.structured }; }
       catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { content: [{ type: "text", text: error instanceof Error ? error.message : "Dependency deletion failed." }], details: { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_DELETE_FAILED" }, isError: true }; }
     },
   });
@@ -5016,7 +5071,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title" }),
       title: Type.Optional(Type.String({ description: "New title" })),
       status: Type.Optional(Type.String({ description: "New status: planned|in-progress|done|blocked|canceled|rejected|deferred|waiting" })),
-      description: Type.Optional(Type.String({ description: "New description" })),
+      description: Type.Optional(Type.String({ description: `New description. ${LONG_TEXT_LIMIT_NOTICE}` })),
       descriptionRef: Type.Optional(Type.String({ description: "Optional markdown reference under .planner/docs/ for the full task description." })),
       notes: Type.Optional(Type.String({ description: "New implementation notes" })),
       motivation: Type.Optional(Type.String({ description: "Motivation for status change. REQUIRED when changing to blocked, canceled, rejected, deferred, waiting, or back to planned from another status." })),
@@ -5166,7 +5221,19 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const lostTicksNotice = checklistLostTicks.length > 0
         ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
         : "";
-      return { content: [{ type: "text", text: `Task updated: ${updatedTask.id} (${updatedTask.status}). Fields saved: ${receivedFields.join(", ")}.${lostTicksNotice}` }], details: { ...updatedTask, updated: true, updatedFields: receivedFields, ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}), ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}) } };
+      const taskUpdateReply = buildMutationReply({
+        identity: { entity: "task", ref: updatedTask.id, id: updatedTask.id, shortId: updatedTask.shortId, title: updatedTask.title, status: updatedTask.status },
+        operation: "update",
+        updatedFields: receivedFields,
+        changedValues: updatedTask as unknown as Record<string, unknown>,
+        extras: {
+          ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}),
+          ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}),
+        },
+        notices: [lostTicksNotice],
+        readBackCommand: `task_get ${updatedTask.id}`,
+      });
+      return { content: [{ type: "text", text: taskUpdateReply.text }], details: taskUpdateReply.structured };
     },
   });
 

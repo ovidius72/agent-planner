@@ -918,7 +918,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         globalRules: ["Keep integration fixtures isolated", " "],
       });
       assert.match(toolText(project), /Project updated:/);
-      assert.equal(toolDetails(project).goal, "Exercise the real management surface.");
+      assert.equal(toolDetails(project).changed.goal, "Exercise the real management surface.");
       const projectDecisionsRejected = await host.runTool("project_update", { decisions: ["Should be rejected"] });
       assert.equal(toolDetails(projectDecisionsRejected).updated, false);
       assert.equal(toolDetails(projectDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");

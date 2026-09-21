@@ -295,6 +295,21 @@ describe("plan-mcp strict ref validation", () => {
       assert.equal(taskUpdate.isError, true);
       assert.equal(taskUpdate.structuredContent.fallbackDocPath, `.planner/docs/tasks/${phase.tasks[0].id}.md`);
       assert.deepEqual(await readFile(phasePath), phaseBefore, "fieldless task update leaves host phase JSON byte-identical");
+
+      // T417: the advice must be actionable. The path the rejection hands
+      // back is a three-segment one, which payload-fallback.ts refused until
+      // a0ea1ba — two peer sessions wrote "do not retry it" into their
+      // handoffs because of that. Retry with exactly the path we were given
+      // and confirm it persists, so the rejection can never again recommend
+      // something the planner will not accept.
+      const retry = await session.client.callTool({
+        name: "planner-task-update",
+        arguments: { task: "T001", description: "Summary here; full prose in the linked file.", descriptionRef: taskUpdate.structuredContent.fallbackDocPath },
+      });
+      assert.equal(retry.isError, undefined);
+      assert.equal(retry.structuredContent.updated, true);
+      const retried = (await st.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === phase.tasks[0].id);
+      assert.equal(retried.descriptionRef, taskUpdate.structuredContent.fallbackDocPath);
     } finally {
       await session.close();
     }
@@ -719,8 +734,12 @@ test("planner-task-recommend and planner-task-deviation retain an explicit resum
           ],
         },
       });
-      assert.equal(updated.structuredContent.requirement.macroTasks[0].createdAt, requirement.macroTasks[0].createdAt);
-      assert.equal(updated.structuredContent.requirement.macroTasks[1].id, "MT-002");
+      // T417: a mutation reply echoes the fields it changed, not the whole
+      // entity, so the reconciled macro tasks arrive under `changed`.
+      assert.deepEqual(updated.structuredContent.updatedFields, ["macroTasks"]);
+      assert.equal(updated.structuredContent.requirement, undefined, "the full entity is not echoed back");
+      assert.equal(updated.structuredContent.changed.macroTasks[0].createdAt, requirement.macroTasks[0].createdAt);
+      assert.equal(updated.structuredContent.changed.macroTasks[1].id, "MT-002");
       const deleted = await session.client.callTool({ name: "planner-requirement-delete", arguments: { requirementId: requirement.id } });
       assert.equal(deleted.structuredContent.deleted, true);
       assert.equal(deleted.structuredContent.requirementId, requirement.id);

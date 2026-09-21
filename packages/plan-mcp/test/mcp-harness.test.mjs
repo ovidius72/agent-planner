@@ -138,6 +138,24 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.equal(taskUpdate.properties.decisions.type, "array", "task-update exposes decisions");
     assert.equal(taskUpdate.properties.descriptionRef.type, "string", "task-update exposes descriptionRef");
 
+    // T417: every long-prose input states the size limit up front, so a
+    // caller learns it before the call instead of from the rejection. The
+    // literal-interpolation check is here because a `"... ${CONST}"` in a
+    // plain double-quoted string compiles and tests green while shipping the
+    // placeholder text to agents — this suite is the only thing that reads
+    // what a caller actually sees.
+    for (const [tool, field] of [
+      ["planner-task-update", "description"],
+      ["planner-task-add", "description"],
+      ["planner-phase-update", "description"],
+      ["planner-feature-update", "description"],
+    ]) {
+      const described = schema(tool).properties[field].description ?? "";
+      assert.match(described, /12,000 characters/, `${tool}.${field} states the limit`);
+      assert.match(described, /descriptionRef/, `${tool}.${field} names the fallback field`);
+      assert.ok(!described.includes("${"), `${tool}.${field} interpolates rather than printing the placeholder`);
+    }
+
     // handoff-write requires confirmed + phaseRef; content is optional (T409)
     // so a retry after a failed write can omit it and reuse the retained body.
     const handoffWrite = schema("planner-handoff-write");
