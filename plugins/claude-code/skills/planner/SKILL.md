@@ -182,6 +182,7 @@ Supported interactive command paths:
 - `/planner task delete <P00x(F00x)/T00x>`
 - `/planner task start <P00x(F00x)/T00x>`
 - `/planner task complete <P00x(F00x)/T00x>`
+- `/planner task recommend`
 - `/planner task checklist-add <task> <title>`
 - `/planner task checklist-remove <task> <C{n}|id|title>`
 - `/planner task checklist-toggle <task> <C{n}|id|title> [on|off]`
@@ -193,7 +194,7 @@ Supported interactive command paths:
 
 `handoff_verify` is an agent tool rather than an interactive command; call it only after `handoff_show` completes the separate persisted read-back.
 
-Pause, switch, deviation, recommendation, requirement, and decision operations are available through the registered Pi tools below rather than every interactive `/planner` path.
+Pause, switch, deviation, requirement, and decision operations are available through the registered Pi tools below rather than every interactive `/planner` path. Recommendation has both: `/planner task recommend` for a person at the command line, `task_recommend` for an agent.
 
 ### Dashboard, export, and guard
 

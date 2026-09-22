@@ -1,5 +1,6 @@
 import type { AcceptedDecision, Feature, Phase, Project, Requirement, Task } from "./schema.js";
 import { formatPhaseRef } from "./naming.js";
+import { truncateAtSafeBoundary } from "./text-bounds.js";
 
 export const MAX_ACCEPTED_DECISION_CONTEXT_CHARS = 8_000;
 export const MAX_PHASE_WORK_MAP_CHARS = 8_000;
@@ -71,9 +72,16 @@ export function buildBoundedAcceptedDecisionContext(
     ? "Accepted decisions: none."
     : populated.map((scope) => renderAcceptedDecisionsSection(`Accepted decisions — ${scope.scope}`, scope.decisions)).join("\n\n");
   if (full.length <= maxChars) return { content: full, total, truncated: false, maxChars };
+  // Cut at a safe boundary (paragraph, then line, then word — see
+  // truncateAtSafeBoundary) rather than a raw slice, which previously cut
+  // mid-word exactly as the handoff path once did (P104(F005)/T419). The
+  // helper still returns something even when the first decision alone
+  // exceeds `limit`: it falls back to a hard cut only when no boundary
+  // exists before it.
   const suffix = "\n\n[Accepted Decision context truncated for transport safety. Use the relevant full entity read to retrieve every canonical field.]";
   const limit = Math.max(0, maxChars - suffix.length);
-  return { content: `${full.slice(0, limit)}${suffix}`.slice(0, maxChars), total, truncated: true, maxChars };
+  const bounded = truncateAtSafeBoundary(full, limit);
+  return { content: `${bounded}${suffix}`.slice(0, maxChars), total, truncated: true, maxChars };
 }
 
 function conciseTaskGoal(task: Task): string {

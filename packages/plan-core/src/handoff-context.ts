@@ -9,6 +9,7 @@ import type {
   Task,
 } from "./schema.js";
 import { buildPhaseWorkMap, type PhaseWorkMap } from "./task-context.js";
+import { truncateAtSafeBoundary } from "./text-bounds.js";
 
 export const COMPLETION_SUMMARY_HEADING = "**Completion summary:**";
 export const HANDOFF_COMPLETENESS_AUDIT_VERSION = 1;
@@ -728,39 +729,10 @@ function sectionBody(content: string, headings: string[]): string {
   return body.join("\n").trim();
 }
 
-/**
- * Truncate `value` to at most `maxChars`, cutting at the nearest paragraph
- * break, then line break, then word boundary before the limit — never
- * mid-word and never mid-list-item. A raw `slice(0, maxChars)` is what
- * previously cut a reporter's handoff mid-word ("Ownershi|p") and moved half
- * of a numbered list into the externalized file while leaving the other
- * half incoherent in the compact capsule; this is the one place that
- * decides where an oversized section breaks, reused by every caller that
- * needs to bound arbitrary handoff prose for transport (see
- * handoff-reply.ts's boundedHandoffForTransport and its per-document use
- * for externalized content).
- */
-export function truncateAtSafeBoundary(value: string, maxChars: number): string {
-  if (maxChars <= 0) return "";
-  if (value.length <= maxChars) return value;
-  const slice = value.slice(0, maxChars);
-  const paragraphBreak = slice.lastIndexOf("\n\n");
-  const lineBreak = slice.lastIndexOf("\n");
-  const wordBreak = slice.lastIndexOf(" ");
-  const cut = paragraphBreak >= 0 ? paragraphBreak : lineBreak >= 0 ? lineBreak : wordBreak >= 0 ? wordBreak : maxChars;
-  return slice.slice(0, cut).trimEnd();
-}
-
-/** Truncate `content` to at most `maxChars` at a safe boundary (see
- * truncateAtSafeBoundary) and report whether a cut happened. Callers append
- * their own contextual continuation message — this stays message-agnostic
- * so both the top-level handoff bound and the externalized-document bound
- * in handoff-reply.ts share one truncation rule without sharing wording
- * that fits only one of them. */
-export function boundedContentForTransport(content: string, maxChars: number): { content: string; truncated: boolean } {
-  if (content.length <= maxChars) return { content, truncated: false };
-  return { content: truncateAtSafeBoundary(content, maxChars), truncated: true };
-}
+// truncateAtSafeBoundary / boundedContentForTransport moved to text-bounds.ts
+// (P104(F005)/T419) so task-context.ts can share them without creating a
+// cycle: this module already imports buildPhaseWorkMap from task-context.ts.
+// Both are exported directly from text-bounds.js at the package root now.
 
 function boundedSection(value: string, fallback: string, maxChars: number): string {
   const normalized = value.trim() || fallback;

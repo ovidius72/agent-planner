@@ -343,8 +343,16 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
     }
 
     const overview = await callTool(session, "planner-show", {});
+    // The rendered summary text is the one channel that carries every
+    // canonical field (decision, rationale, implementationNotes) — see
+    // P104(F005)/T419: echoing the same content again in structuredContent
+    // would duplicate it rather than bound it. structuredContent keeps only
+    // enough identity (id/title/acceptedAt) to reference the decision.
     assert.match(toolText(overview), /Project decision/);
-    assert.equal(toolStructured(overview).overview.project.acceptedDecisions[0].rationale, "Rationale for Project decision.");
+    assert.match(toolText(overview), /Rationale for Project decision\./);
+    const overviewDecision = toolStructured(overview).overview.project.acceptedDecisions[0];
+    assert.equal(overviewDecision.title, "Project decision");
+    assert.equal(overviewDecision.rationale, undefined, "structuredContent must not duplicate the full decision body already in text");
 
     for (const [tool, args, key, title] of [
       ["planner-feature-show", { feature: "F001", full: true }, "feature", "Feature decision"],

@@ -19,7 +19,7 @@
  * body, `structured` is the machine-readable payload, and no field is
  * carried by both.
  */
-import { truncateAtSafeBoundary } from "./handoff-context.js";
+import { truncateAtSafeBoundary } from "./text-bounds.js";
 import type { PlannerPayloadEntity, PlannerPayloadOperation } from "./payload-fallback.js";
 
 /**

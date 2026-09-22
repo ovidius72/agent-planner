@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -270,6 +270,7 @@ const PLANNER_COMMAND_COMPLETIONS = [
   { value: "task delete", label: "task delete", description: "Delete a task" },
   { value: "task start", label: "task start", description: "Mark a task in-progress" },
   { value: "task complete", label: "task complete", description: "Mark a task done" },
+  { value: "task recommend", label: "task recommend", description: "Show the next-work recommendation: active task if present, otherwise the priority pick" },
   { value: "task checklist-add", label: "task checklist-add", description: "Add a checklist step: /planner task checklist-add <T00x> <title>" },
   { value: "task checklist-remove", label: "task checklist-remove", description: "Remove a step: /planner task checklist-remove <T00x> <C{n}|title>" },
   { value: "task checklist-toggle", label: "task checklist-toggle", description: "Tick/untick a step: /planner task checklist-toggle <T00x> <C{n}|title> [on|off]" },
@@ -2239,7 +2240,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     // ═══════════════════════════════════════════════════════════════
     if (a === "task") {
       if (!b) {
-        ctx.ui.notify("task actions: add  |  show [id]  |  discuss [id|name]  |  delete  |  update  |  start [id]  |  complete [id]  |  checklist-add <T00x> <title>  |  checklist-remove <T00x> <C{n}|title>  |  checklist-toggle <T00x> <C{n}|title> [on|off]", "info");
+        ctx.ui.notify("task actions: add  |  show [id]  |  discuss [id|name]  |  delete  |  update  |  start [id]  |  complete [id]  |  recommend  |  checklist-add <T00x> <title>  |  checklist-remove <T00x> <C{n}|title>  |  checklist-toggle <T00x> <C{n}|title> [on|off]", "info");
         return;
       }
       if (b === "add") {
@@ -2421,6 +2422,35 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.syncTaskStatusRollup(phase.id);
         await st.writeGenerated();
           ctx.ui.notify(`Task updated: ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, (await st.loadFeatures()).features))}/T${String(result.task.number).padStart(3, "0")} — ${result.task.title} (${result.task.status})${result.task.shortId ? ` · ${result.task.shortId}` : ""}`, "info");
+        return;
+      }
+      if (b === "recommend") {
+        // "What should I work on next" is a supervisor question, not only
+        // an agent one (see P104(F005)/T419) — the only reason it lacked an
+        // interactive path was that the other agent-only commands (pause,
+        // switch, deviation) set the pattern by default. Reuses the same
+        // recommendNextWork + buildRecommendationReply pipeline as the
+        // task_recommend tool, so a person at the command line and an agent
+        // calling the tool see identical reasoning, just a compact few-line
+        // notify instead of a structured payload.
+        const [features, phases, project, resume, handoffs, archivedHandoffs] = await Promise.all([
+          st.loadFeatures(),
+          st.loadAllPhases(),
+          st.loadProject(),
+          st.loadResume(),
+          st.listHandoffs(),
+          st.listArchivedHandoffs(),
+        ]);
+        const result = recommendNextWork(features.features, phases, project.workDeviations, resume?.currentPhaseId, "", {
+          handoffs: handoffs.map((handoff) => ({
+            compositeRef: handoff.compositeRef,
+            firstLine: handoff.firstLine,
+            resumeReady: handoff.resumeReady,
+          })),
+          archivedHandoffs: archivedHandoffs.map(({ compositeRef, firstLine, reason }) => ({ compositeRef, firstLine, reason })),
+        });
+        const reply = buildRecommendationReply(result, features.features);
+        ctx.ui.notify(reply.text, "info");
         return;
       }
       if (b === "start") {
@@ -5287,15 +5317,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         })),
         archivedHandoffs: archivedHandoffs.map(({ compositeRef, firstLine, reason }) => ({ compositeRef, firstLine, reason })),
       });
-      const { selection } = result;
-      if (!selection.candidate) return { content: [{ type: "text", text: `No work recommendation: ${selection.reason}${result.claims.length ? `\nClaims:\n${result.claims.map((claim) => `- ${claim.kind} (${claim.source}): ${claim.ref || claim.title} — ${claim.reason}`).join("\n")}` : ""}` }], details: { ...selection, activeTask: result.activeTask, nextFeature: result.nextFeature, nextPhase: result.nextPhase, nextTask: result.nextTask, claims: result.claims } };
-      const { candidate } = selection;
-      const reference = `${formatPhaseRef(candidate.phase.number, featureNumberOfPhase(candidate.phase, features.features))}/T${String(candidate.task.number).padStart(3, "0")}`;
-      const activeLine = result.activeTask ? `Active task: ${result.activeTask.id} — ${result.activeTask.title}\n` : "";
-      const claimsText = result.claims.length ? `\nClaims:\n${result.claims.map((claim) => `- ${claim.kind} (${claim.source}): ${claim.ref || claim.title} — ${claim.reason}`).join("\n")}` : "";
+      const reply = buildRecommendationReply(result, features.features);
       return {
-        content: [{ type: "text", text: `${activeLine}Next work (${selection.kind}): ${reference} — ${candidate.task.title}\n${selection.reason}${selection.deviation ? `\nDeviation: ${selection.deviation.id}; resume target ${selection.deviation.resumeTaskId}.` : ""}${claimsText}` }],
-        details: { ...selection, taskId: candidate.task.id, phaseId: candidate.phase.id, featureId: candidate.feature?.id, activeTask: result.activeTask, nextFeature: result.nextFeature, nextPhase: result.nextPhase, nextTask: result.nextTask, claims: result.claims },
+        content: [{ type: "text", text: reply.text }],
+        details: reply.structured,
       };
     },
   });

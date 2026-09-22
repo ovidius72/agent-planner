@@ -16,11 +16,11 @@ import type { HandoffCompletenessAudit, HandoffSupportingDocument, Phase } from 
 import type { PhaseWorkMap } from "./task-context.js";
 import {
   MAX_HANDOFF_CONTENT_CHARS,
-  boundedContentForTransport,
   handoffContentHash,
   type HandoffExternalizedDocumentAudit,
   type PhaseHandoffAudit,
 } from "./handoff-context.js";
+import { boundedContentForTransport } from "./text-bounds.js";
 
 export interface BoundedHandoffContent {
   content: string;

@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -506,7 +506,13 @@ server.registerTool("planner-show", {
       description: project.description || null,
       descriptionRef: project.descriptionRef || null,
       goal: project.goal || null,
-      acceptedDecisions: project.acceptedDecisions,
+      // Identity only: `summary` above already carries every canonical field
+      // (decision, rationale, implementationNotes) through projectDecisionContext,
+      // bounded at MAX_ACCEPTED_DECISION_CONTEXT_CHARS. Echoing the full
+      // AcceptedDecision objects here too would duplicate that content in both
+      // channels — the discipline handoff-reply.ts and mutation-reply.ts hold
+      // to (P104(F005)/T419). Full canonical detail for every decision: planner-load.
+      acceptedDecisions: project.acceptedDecisions.map((decision) => ({ id: decision.id, title: decision.title, acceptedAt: decision.acceptedAt })),
       updatedAt: manifest.updatedAt || null,
     },
     counts: { features: features.length, phases: phases.length, tasks: totalTasks, activeTasks: activeTasks.length },
@@ -1975,35 +1981,8 @@ server.registerTool("planner-task-recommend", {
     })),
     archivedHandoffs: archivedHandoffs.map(({ compositeRef, firstLine, reason }) => ({ compositeRef, firstLine, reason })),
   });
-  const { selection } = result;
-  if (!selection.candidate) return text(`No work recommendation: ${selection.reason}${result.claims.length ? `\nClaims:\n${result.claims.map((claim) => `- ${claim.kind} (${claim.source}): ${claim.ref || claim.title} — ${claim.reason}`).join("\n")}` : ""}`, {
-    kind: selection.kind,
-    reason: selection.reason,
-    activeTaskIds: selection.activeCandidates?.map((candidate) => candidate.task.id) ?? [],
-    activeTask: result.activeTask,
-    nextFeature: result.nextFeature,
-    nextPhase: result.nextPhase,
-    nextTask: result.nextTask,
-    claims: result.claims,
-    selection,
-  });
-  const { candidate } = selection;
-  const ref = taskCompositeRef(candidate.task, candidate.phase, features.features);
-  const activeRef = result.activeTask ? `Active task: ${result.activeTask.id} — ${result.activeTask.title}\n` : "";
-  const claimsText = result.claims.length ? `\nClaims:\n${result.claims.map((claim) => `- ${claim.kind} (${claim.source}): ${claim.ref || claim.title} — ${claim.reason}`).join("\n")}` : "";
-  return text(`${activeRef}Next work (${selection.kind}): ${ref} — ${candidate.task.title}\n${selection.reason}${selection.deviation ? `\nDeviation: ${selection.deviation.id}; resume target ${selection.deviation.resumeTaskId}.` : ""}${claimsText}`, {
-    kind: selection.kind,
-    taskId: candidate.task.id,
-    phaseId: candidate.phase.id,
-    featureId: candidate.feature?.id,
-    deviation: selection.deviation,
-    activeTask: result.activeTask,
-    nextFeature: result.nextFeature,
-    nextPhase: result.nextPhase,
-    nextTask: result.nextTask,
-    claims: result.claims,
-    selection,
-  });
+  const reply = buildRecommendationReply(result, features.features);
+  return text(reply.text, reply.structured);
 });
 
 server.registerTool("planner-task-deviation", {
