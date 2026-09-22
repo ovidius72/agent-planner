@@ -175,3 +175,34 @@ export function renderRoute(routes: RouteObject[], initialEntry = "/") {
   const router = createMemoryRouter(routes, { initialEntries: [initialEntry] });
   return { router, ...render(<RouterProvider router={router} />) };
 }
+
+/**
+ * Give a test a working `window.localStorage`.
+ *
+ * This environment has no usable localStorage (node reports
+ * "`--localstorage-file` was provided without a valid path"), so any component
+ * reading it throws on mount — useDashboardTree does, which is why every test
+ * touching the Work Tree needs this. It was hand-copied into three separate
+ * test files before T418; put it here so a fourth copy is never needed.
+ *
+ * Backed by a real in-memory map, so a component that writes a preference and
+ * reads it back behaves as it would in a browser. The store starts empty on
+ * every call.
+ */
+export function stubLocalStorage(): Map<string, string> {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, String(value)),
+      removeItem: (key: string) => void store.delete(key),
+      clear: () => store.clear(),
+      key: (index: number) => [...store.keys()][index] ?? null,
+      get length() {
+        return store.size;
+      },
+    },
+  });
+  return store;
+}

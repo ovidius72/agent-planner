@@ -13,7 +13,7 @@ import { FeatureRow } from "../src/components/features/feature-row";
 import { PhaseRow } from "../src/components/phases/phase-row";
 import { TaskTreeRow } from "../src/components/dashboard/work-tree-rows";
 import { createEmptyStatusSummary } from "../src/lib/status-summary";
-import { makeFeature, makePhase, makeProject, makeTask, renderRoute } from "./fixtures";
+import { makeFeature, makePhase, makeProject, makeTask, renderRoute, stubLocalStorage } from "./fixtures";
 
 describe("entity references and timestamps", () => {
   it("renders canonical Project Context without exposing agent-only files and flags unmigrated legacy context", () => {
@@ -186,14 +186,7 @@ describe("entity references and timestamps", () => {
   });
 
   it("keeps the top navigation usable with mobile-first controls and full labels", () => {
-    Object.defineProperty(window, "localStorage", {
-      configurable: true,
-      value: {
-        getItem: () => null,
-        setItem: () => {},
-        clear: () => {},
-      },
-    });
+    stubLocalStorage();
     window.matchMedia = window.matchMedia ?? (() => ({ matches: true, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia;
 
     renderRoute([
