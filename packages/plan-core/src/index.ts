@@ -11,6 +11,7 @@ export * from "./text-bounds.js";
 export * from "./task-context.js";
 export * from "./task-selection.js";
 export * from "./task-start-outcome.js";
+export * from "./task-order-context.js";
 export * from "./read-tracking.js";
 export * from "./payload-fallback.js";
 export * from "./handoff-context.js";

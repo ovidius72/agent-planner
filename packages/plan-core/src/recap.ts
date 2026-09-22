@@ -1,6 +1,7 @@
 import type { PlanStore } from "./plan-store.js";
 import { formatPhaseRef, formatTwoDigitNumber } from "./naming.js";
 import { buildPhaseWorkMap } from "./task-context.js";
+import { recommendNextTask } from "./task-selection.js";
 
 /**
  * Web UI info for the recap (harness-agnostic — no module globals).
@@ -216,6 +217,23 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
         ? `⚠️ nextSteps free-text da resume.json — può essere stale; verifica contro lo stato attuale prima di agire.`
         : `⚠️ nextSteps are free-text from resume.json — may be stale; verify against current state before acting.`);
     lines.push(staleNote);
+  } else if (!planComplete) {
+    // No active task, resume advisory, checkpoint, pending handoff, or
+    // legacy resume.json nextSteps: every branch above already names a
+    // concrete ref to act on, but this, the ordinary case, previously fell
+    // through with no "Next step" line at all — the reader had to go call
+    // task_recommend to learn what the recap already knew (P104(F005)/T421).
+    const recommendation = recommendNextTask(feats, phases, plan.project.workDeviations);
+    if (recommendation.kind === "priority" && recommendation.candidate) {
+      const { candidate } = recommendation;
+      const candidateFeature = feats.find((entry) => entry.id === candidate.phase.featureId);
+      const ref = `${formatPhaseRef(candidate.phase.number, candidateFeature?.number)}/${tref(candidate.task.number)}`;
+      lines.push(
+        italian
+          ? `Prossimo step: ${ref} — ${candidate.task.title} (priorità più bassa pronta). Avvia con ${taskStartCmd} ${ref}.`
+          : `Next step: ${ref} — ${candidate.task.title} (lowest-priority ready task). Start with ${taskStartCmd} ${ref}.`,
+      );
+    }
   }
 
   if (pendingResume) {

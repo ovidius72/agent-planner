@@ -379,6 +379,53 @@ describe("pi-adapter strict ref validation", () => {
     assert.match(toolText(result), /Seed task — P001\(F001\)\/T001/);
   });
 
+  test("task_get full=true carries priority and dependsOn where the ordering decision is made (P104(F005)/T421)", async () => {
+    const { root } = await setup();
+    const ctx = makeCtx(root);
+
+    const created = await tools.get("task_create").execute("id", {
+      featureId: "F001",
+      phaseId: "P001",
+      title: "Second task",
+      description: "src/order-context.ts:1 a second sibling task so the ordering line has something to report against T001.",
+    }, undefined, undefined, ctx);
+    // task_create itself states the priority it assigned.
+    assert.match(toolText(created), /priority \d+/);
+
+    await tools.get("task_dependency_add").execute("id", { taskId: "T002", dependsOn: "T001" }, undefined, undefined, ctx);
+
+    // Compact view stays exactly the cheap identity read: no ordering line,
+    // no priority/dependsOn in details — this task must not grow.
+    const compact = await tools.get("task_get").execute("id", { taskId: "T002" }, undefined, undefined, ctx);
+    assert.deepEqual(compact.details, {});
+    assert.doesNotMatch(toolText(compact), /Priority \d+/);
+    assert.doesNotMatch(toolText(compact), /Depends on/);
+
+    // Full view of T002 (blocked: its one dependency, T001, is still
+    // planned) names its own priority and its dependency's ref and status.
+    const t2 = await tools.get("task_get").execute("id", { taskId: "T002", full: true }, undefined, undefined, ctx);
+    assert.match(toolText(t2), /Priority \d+ · \d+ ready in phase · \d+ ready ahead of this one/);
+    assert.match(toolText(t2), /Depends on: P001\(F001\)\/T001 \(planned\)/);
+    assert.equal(typeof t2.details.task.priority, "number");
+    assert.deepEqual(t2.details.task.dependsOn, [{ ref: "P001(F001)/T001", taskId: t2.details.task.dependsOn[0].taskId, status: "planned" }]);
+    assert.equal(typeof t2.details.taskOrder.readyCount, "number");
+    assert.equal(typeof t2.details.taskOrder.readyAheadCount, "number");
+
+    // T001 has no dependency of its own and is the only ready task in the
+    // phase (T002 is blocked on it), so it is its own next-by-priority pick.
+    const t1 = await tools.get("task_get").execute("id", { taskId: "T001", full: true }, undefined, undefined, ctx);
+    assert.match(toolText(t1), /Depends on: None\./);
+    assert.equal(t1.details.taskOrder.nextByPriorityRef, null);
+
+    // The enriched full-read text still satisfies the read-gate attestation
+    // markCanonicalFullReadForSessionId records: task_start still succeeds
+    // off the very same reads used above (T420's contract holds).
+    await tools.get("phase_get").execute("id", { phaseId: "P001", full: true }, undefined, undefined, ctx);
+    await tools.get("feature_get").execute("id", { featureId: "F001", full: true }, undefined, undefined, ctx);
+    const started = await tools.get("task_start").execute("id", { taskId: "T001" }, undefined, undefined, ctx);
+    assert.equal(started.details.started, true);
+  });
+
 
   test("task_create rejects orphan phase refs and does not allocate a number", async () => {
     const { root, st } = await setup();

@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -1560,7 +1560,7 @@ server.registerTool("planner-task-add", {
     return entry;
   });
   const finalFeatures = (await st.loadFeatures()).features;
-  return writeAndSummarize(st, `✅ Task created: ${taskCompositeRef(task, found, finalFeatures)} — ${task.title} (planned)${task.shortId ? ` · ${task.shortId}` : ""}`);
+  return writeAndSummarize(st, `✅ Task created: ${taskCompositeRef(task, found, finalFeatures)} — ${task.title} (planned; ${taskCreatedPriorityFragment(task.priority)})${task.shortId ? ` · ${task.shortId}` : ""}`);
   });
 });
 
@@ -1570,9 +1570,10 @@ server.registerTool("planner-task-show", {
   }, async ({ task: ref, full }, extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  const features = (await st.loadFeatures()).features;
+  const allPhases = await st.loadAllPhases();
+  const found = findTaskByRef(allPhases, features, ref);
   if (!found) return text(`Task not found: ${ref}`);
-    const features = (await st.loadFeatures()).features;
     const summary = `${found.task.title} — ${taskCompositeRef(found.task, found.phase, features)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status}; phase ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))})`;
     if (!full) return text(summary);
     const project = await st.loadProject();
@@ -1584,7 +1585,12 @@ server.registerTool("planner-task-show", {
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
     const snapshot = found.task.pauseSnapshot ?? pendingDeviation?.snapshot ?? null;
     const log = (found.task.statusLog ?? []).map((e) => `  - ${e.date.slice(0,10)} ${e.title}`).join("\n");
-    const sections = [summary];
+    // P104(F005)/T421: priority and dependsOn at the point an agent reads
+    // the task and decides what to do next — the fact planner-task-list and
+    // planner-task-recommend already have, made visible here instead of
+    // requiring a second call.
+    const orderContext = buildTaskOrderContext(found.task, found.phase, allPhases, features);
+    const sections = [summary, taskOrderContextLine(orderContext, found.task.status)];
     if (found.task.description?.trim()) sections.push(found.task.description.trim());
     if (found.task.descriptionRef) sections.push(`Description reference:\n- ${found.task.descriptionRef}`);
     if (snapshot || pendingDeviation) {
@@ -1606,6 +1612,13 @@ server.registerTool("planner-task-show", {
         description: found.task.description,
         descriptionRef: found.task.descriptionRef || "",
         acceptedDecisions: found.task.acceptedDecisions,
+        priority: orderContext.priority,
+        dependsOn: orderContext.dependsOn,
+      },
+      taskOrder: {
+        readyCount: orderContext.readyCount,
+        readyAheadCount: orderContext.readyAheadCount,
+        nextByPriorityRef: orderContext.nextByPriorityRef,
       },
     });
     markCanonicalFullReadForSessionId(plannerSessionId, "task", found.task, result.content[0]!.text);

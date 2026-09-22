@@ -657,6 +657,60 @@ test("planner-task-show full=true reports task_start readiness up front (P104(F0
   }
 });
 
+test("planner-task-show full=true carries priority and dependsOn where the ordering decision is made (P104(F005)/T421)", async () => {
+  const session = await startMcpFixture({ name: "t421-order-context" });
+  try {
+    const added = await callTool(session, "planner-task-add", {
+      feature: "F001",
+      phase: "P001",
+      title: "Second task",
+      description: "src/order-context.ts:1 a second sibling task so the ordering line has something to report against T001.",
+    });
+    // planner-task-add itself states the priority it assigned — eight tasks
+    // were created in this phase before without a priority ever shown.
+    assert.match(toolText(added), /priority \d+/);
+
+    await callTool(session, "planner-task-dependency-add", { task: "T002", dependsOn: "T001" });
+
+    // Compact view stays exactly the cheap identity read: no structured
+    // content, no ordering line — this task must not grow.
+    const compact = await callTool(session, "planner-task-show", { task: "T002" });
+    assert.equal(toolStructured(compact), null);
+    assert.doesNotMatch(toolText(compact), /Priority \d+/);
+    assert.doesNotMatch(toolText(compact), /Depends on/);
+
+    // Full view of T002 (blocked: its one dependency, T001, is still
+    // planned) names its own priority and its dependency's ref and status.
+    const t2 = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.match(toolText(t2), /Priority \d+ · \d+ ready in phase · \d+ ready ahead of this one/);
+    assert.match(toolText(t2), /Depends on: P001\(F001\)\/T001 \(planned\)/);
+    const t2Structured = toolStructured(t2);
+    assert.equal(typeof t2Structured.task.priority, "number");
+    assert.deepEqual(t2Structured.task.dependsOn, [{ ref: "P001(F001)/T001", taskId: t2Structured.task.dependsOn[0].taskId, status: "planned" }]);
+    assert.equal(typeof t2Structured.taskOrder.readyCount, "number");
+    assert.equal(typeof t2Structured.taskOrder.readyAheadCount, "number");
+
+    // T001 has no dependency of its own and is the only ready task in the
+    // phase (T002 is blocked on it), so it is its own next-by-priority pick.
+    const t1 = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    assert.match(toolText(t1), /Depends on: None\./);
+    const t1Structured = toolStructured(t1);
+    assert.equal(t1Structured.taskOrder.nextByPriorityRef, null);
+
+    // The enriched full-read text still satisfies the read-gate attestation
+    // that markCanonicalFullReadForSessionId records: task_start still
+    // succeeds off the very same reads used above (T420's contract holds).
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(started.isError, undefined);
+    assert.equal(toolStructured(started).started, true);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 test("context reads in any order satisfy task_start (no out-of-order gate)", async () => {
   const session = await startMcpFixture({ name: "t346-out-of-order" });
   try {
