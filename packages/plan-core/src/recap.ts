@@ -2,6 +2,7 @@ import type { PlanStore } from "./plan-store.js";
 import { formatPhaseRef, formatTwoDigitNumber } from "./naming.js";
 import { buildPhaseWorkMap } from "./task-context.js";
 import { recommendNextTask } from "./task-selection.js";
+import { listOpenPhaseWork, openPhaseWorkLines } from "./stranded-phase.js";
 
 /**
  * Web UI info for the recap (harness-agnostic — no module globals).
@@ -112,6 +113,20 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
       ? `Avanzamento: feature ${doneF}/${totalF} completate (${activeF} attive) · fasi ${doneP}/${totalP} completate (${activeP} attive) · task ${doneT}/${totalT} completati (${activeT} attivi, ${checkpointedT} con checkpoint)`
       : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active, ${checkpointedT} with checkpoints)`,
   );
+
+  // P104(F005)/T422: a phase left in-progress with no active task had no
+  // signal anywhere cheap to read — this states it, priority-ordered, every
+  // recap, instead of leaving it discoverable only by paying for
+  // task_recommend's full claim evidence.
+  const openPhaseWork = listOpenPhaseWork(phases, feats);
+  const openPhaseWorkText = openPhaseWorkLines(openPhaseWork);
+  if (openPhaseWorkText) {
+    lines.push(
+      "",
+      italian ? "In-progress: fasi con lavoro rimanente (ordine di priorità):" : "In-progress phases with work left (priority order):",
+      openPhaseWorkText,
+    );
+  }
 
   if (activeTasks.length > 1) {
     const conflicts = activeTasks.map(({ phase, task }) => {

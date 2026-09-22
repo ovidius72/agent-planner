@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -484,6 +484,12 @@ server.registerTool("planner-show", {
     const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
     return `- ${formatFeatureRef(feature.number)}${feature.shortId ? ` · ${feature.shortId}` : ""} — ${feature.name} (${feature.status}; ${featurePhases.length} phases, ${taskCount} tasks)`;
   });
+  // P104(F005)/T422: a phase can be left in-progress with no active task and
+  // nothing else says so on this cheap read — this renders that fact,
+  // priority-ordered, instead of leaving it discoverable only by paying for
+  // planner-task-recommend.
+  const openPhaseWork = listOpenPhaseWork(phases, features);
+  const openPhaseWorkText = openPhaseWorkLines(openPhaseWork);
   const summary = [
     `📋 ${project.name}`,
     `Description: ${project.description || "(not set)"}`,
@@ -494,6 +500,7 @@ server.registerTool("planner-show", {
     activeTasks.length === 0
       ? "Active tasks: none (verified from all persisted phase task statuses)"
       : `Active tasks (${activeTasks.length})${activeTaskState === "conflict" ? " — CONFLICT: multiple tasks are in progress" : ""}:\n${activeTasks.map((task) => `- ${task.ref} — ${task.title} (in-progress)`).join("\n")}`,
+    ...(openPhaseWorkText ? [`In-progress phases with work left (priority order):`, openPhaseWorkText] : []),
     `Updated: ${manifest.updatedAt || "(unknown)"}`,
     "",
     "Features:",
@@ -518,6 +525,8 @@ server.registerTool("planner-show", {
     counts: { features: features.length, phases: phases.length, tasks: totalTasks, activeTasks: activeTasks.length },
     activeTaskState,
     activeTasks,
+    openPhaseWork: boundedOpenPhaseWork(openPhaseWork),
+    openPhaseWorkTotal: openPhaseWork.length,
     features: features.map((feature) => ({
       ref: formatFeatureRef(feature.number),
       shortId: feature.shortId || null,
@@ -2312,7 +2321,8 @@ server.registerTool("planner-task-start", {
 
   return st.runBatch(async () => {
   const features = (await st.loadFeatures()).features;
-  const found = findTaskByRef(await st.loadAllPhases(), features, ref);
+  const initialPhases = await st.loadAllPhases();
+  const found = findTaskByRef(initialPhases, features, ref);
   if (!found) return taskStartError(taskStartDenied("TASK_NOT_FOUND", `Task not found: ${ref}`, ["Resolve the task with planner-task-list or planner-task-show, then retry planner-task-start."]));
   const taskRef = taskCompositeRef(found.task, found.phase, features);
   const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
@@ -2389,7 +2399,9 @@ server.registerTool("planner-task-start", {
   }
   if (found.task.status === "in-progress") {
     const outcome = taskStartSucceeded(found.task.id, true);
-    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true${projectContextAdvisory}`, { ...outcome, task: found.task, projectContextStale: projectContextReadState === "stale" });
+    const higherPriorityPhase = findHigherPriorityOpenPhase(initialPhases, features, found.phase.id, found.phase.priority ?? found.phase.number);
+    const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
+    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}`, { ...outcome, task: found.task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase });
   }
   const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume()]);
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
@@ -2514,11 +2526,14 @@ server.registerTool("planner-task-start", {
     ));
   }
   const outcome = taskStartSucceeded(persistedTask.id);
-  return text(`✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}${projectContextAdvisory}`, {
+  const higherPriorityPhase = findHigherPriorityOpenPhase(phases, features, found.phase.id, found.phase.priority ?? found.phase.number);
+  const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
+  return text(`✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}${projectContextAdvisory}${phaseOrderAdvisory}`, {
     ...outcome,
     task: persistedTask,
     ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
     projectContextStale: projectContextReadState === "stale",
+    higherPriorityOpenPhase: higherPriorityPhase,
   });
   });
 });

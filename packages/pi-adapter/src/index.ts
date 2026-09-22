@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -3493,9 +3493,20 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ? "Active tasks: none (verified from all persisted phase task statuses)"
         : `Active tasks (${activeTasks.length})${activeTasks.length > 1 ? " — CONFLICT" : ""}: ${activeTasks.map((task) => `${task.ref} — ${task.title}`).join("; ")}`;
       const projectDecisionContext = buildBoundedAcceptedDecisionContext([{ scope: "project", decisions: plan.project.acceptedDecisions }]);
+      // P104(F005)/T422: a phase can be left in-progress with no active task
+      // and nothing else said so on this cheap read — render that fact,
+      // priority-ordered, the same shape planner-show renders on the MCP side.
+      const openPhaseWork = listOpenPhaseWork(plan.phases, plan.features.features);
+      const openPhaseWorkText = openPhaseWorkLines(openPhaseWork);
       return {
-        content: [{ type: "text", text: `Plan "${plan.project.name}": ${plan.features.features.length} features, ${plan.phases.length} phases, ${plan.requirements.requirements.length} requirements. ${activeTaskEvidence}\n${projectDecisionContext.content}` }],
-        details: { ...plan, activeTaskState: activeTasks.length === 0 ? "none" : activeTasks.length === 1 ? "single" : "conflict", activeTasks },
+        content: [{ type: "text", text: `Plan "${plan.project.name}": ${plan.features.features.length} features, ${plan.phases.length} phases, ${plan.requirements.requirements.length} requirements. ${activeTaskEvidence}${openPhaseWorkText ? `\nIn-progress phases with work left (priority order):\n${openPhaseWorkText}` : ""}\n${projectDecisionContext.content}` }],
+        details: {
+          ...plan,
+          activeTaskState: activeTasks.length === 0 ? "none" : activeTasks.length === 1 ? "single" : "conflict",
+          activeTasks,
+          openPhaseWork: boundedOpenPhaseWork(openPhaseWork),
+          openPhaseWorkTotal: openPhaseWork.length,
+        },
       };
     },
   });
@@ -5702,7 +5713,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!st) return taskStartFailure(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry task_start."]));
       return st.runBatch(async () => {
       const features = (await st.loadFeatures()).features;
-      const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
+      const initialPhases = await st.loadAllPhases();
+      const found = findTaskByRef(initialPhases, features, params.taskId.trim());
       if (!found) return taskStartFailure(taskStartDenied("TASK_NOT_FOUND", `Task not found: ${params.taskId}`, ["Resolve the task with task_list or task_get, then retry task_start."]));
       const task = found.task;
       const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
@@ -5791,7 +5803,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
       if (task.status === "in-progress") {
         const outcome = taskStartSucceeded(task.id, true);
-        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true${projectContextAdvisory}` }], details: { ...task, ...outcome, task, projectContextStale: projectContextReadState === "stale" } };
+        const higherPriorityPhase = findHigherPriorityOpenPhase(initialPhases, features, found.phase.id, found.phase.priority ?? found.phase.number);
+        const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
+        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}` }], details: { ...task, ...outcome, task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase } };
       }
       const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume()]);
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
@@ -5905,9 +5919,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ));
       }
       const outcome = taskStartSucceeded(persistedTask.id);
+      const higherPriorityPhase = findHigherPriorityOpenPhase(phases, features, found.phase.id, found.phase.priority ?? found.phase.number);
+      const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
       return {
-        content: [{ type: "text", text: `✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}${projectContextAdvisory}` }],
-        details: { ...persistedTask, ...outcome, task: persistedTask, projectContextStale: projectContextReadState === "stale" },
+        content: [{ type: "text", text: `✅ Task started: ${taskRef} — ${persistedTask.title} (in-progress)${persistedTask.shortId ? ` · ${persistedTask.shortId}` : ""}\nstarted: true${phaseContext}${advisory}${projectContextAdvisory}${phaseOrderAdvisory}` }],
+        details: { ...persistedTask, ...outcome, task: persistedTask, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase },
         ...(resumeProposal ? { resumeRequired: resumeProposal.structured } : {}),
       };
       });
