@@ -40,16 +40,17 @@ Feature and phase statuses are derived from their children. Do not write their s
 
 ## Lifecycle-first context protocol
 
-Before touching code, call `task_start` / `planner-task-start`, or use `task_switch` / `planner-task-switch` when another task is already active. The lifecycle tool may deny the transition and return typed diagnostics.
+Read before you call the lifecycle tool; do not use a denial to discover what to read. Before touching code:
 
-When denied:
+1. Read the exact task with `task_get` / `planner-task-show` (`full=true`). Its response reports `taskStartGateState` and, when anything is still outstanding, `taskStartNextActions` — the same checks `task_start` itself runs, seen up front instead of from a rejection.
+2. Perform the reads that state still lists as outstanding: the parent phase with `full=true`; the parent feature with `full=true`, when there is one; `project_guidelines_show` / `planner-project-guidelines-show`, when Project Guidelines are listed; and `requirement_list` / `planner-requirement-list` with the exact `phaseRef` given, when linked requirements are listed — a broad unscoped inventory does not attest that every requirement was read. Reads may be completed in any order, and fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session, so this is usually few or none of these, not a fixed list per task. A full feature/phase/task read is complete only when it delivers all canonical Accepted Decision fields (`id`, `title`, `decision`, `rationale`, `implementationNotes`, `acceptedAt`); title-only summaries never satisfy the read gate.
+3. Use the phase's task list or the task's own sibling refs to review sibling task goals, dependencies, statuses, and remaining capability ownership. Before proposing or creating work, reread the canonical phase and the relevant sibling task full view; never duplicate a capability already owned by another task.
+4. Call `task_start` / `planner-task-start`, or `task_switch` / `planner-task-switch` when another task is already active.
+
+`task_start` still checks every read itself at call time and denies the transition with typed diagnostics if anything is missing or has gone stale since — this is the enforcement, and it is a safety net for a stale or skipped read, not the step that is supposed to teach you what to read. If it denies:
 
 1. Confirm `started` is `false` and read `errorCode` plus `nextActions`.
-2. Perform only the missing or stale reads listed in `nextActions`. Reads may be completed in any order within the current session.
-3. If Project Guidelines are listed, call `project_guidelines_show` or `planner-project-guidelines-show` and retain the content while working.
-4. Read each task on every start or resume. Fresh unchanged feature, phase, and linked-requirement reads may be reused across sibling tasks in the same session. When linked requirements are requested, call `requirement_list` or `planner-requirement-list` with the exact `phaseRef` from `nextActions`; a broad unscoped inventory does not attest that every requirement was read. A full feature/phase/task read is complete only when it delivers all canonical Accepted Decision fields (`id`, `title`, `decision`, `rationale`, `implementationNotes`, `acceptedAt`); title-only summaries never satisfy the read gate.
-5. Use the returned priority-ordered phase work map to review sibling task refs, goals, dependencies, statuses, and remaining capability ownership. Before proposing or creating work, reread the canonical phase and the relevant sibling task full view; never duplicate a capability already owned by another task.
-6. Retry the lifecycle operation. Only `started: true` proves work is active.
+2. Perform only the missing or stale reads listed in `nextActions`, then retry. Only `started: true` proves work is active.
 
 Do not convert a denial into a planner status change merely to bypass the gate. Common typed denials include `PROJECT_GUIDELINES_READ_REQUIRED`, `CONTEXT_READ_REQUIRED`, `REQUIREMENTS_READ_REQUIRED`, `START_NOT_ALLOWED`, `ACTIVE_TASK_CONFLICT`, `TASK_DONE`, and persistence verification failures.
 

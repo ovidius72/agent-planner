@@ -620,6 +620,43 @@ test("planned sibling can start when another task makes the parent derive waitin
   }
 });
 
+test("planner-task-show full=true reports task_start readiness up front (P104(F005)/T420)", async () => {
+  const session = await startMcpFixture({ name: "t420-gate-state" });
+  try {
+    // Fresh session: only the task itself has been read by this call.
+    // Nothing else in this session has been read yet, so task_start would
+    // still deny — and the reply says so without a failed task_start call.
+    const firstShow = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const firstGate = toolStructured(firstShow).taskStartGateState;
+    assert.equal(firstGate.ready, false);
+    assert.ok(firstGate.missingReads.some((read) => read.kind === "phase"));
+    assert.ok(firstGate.missingReads.some((read) => read.kind === "feature"));
+    assert.ok(firstGate.missingRequirementIds.length > 0, "the fixture's linked requirement is still unread");
+    const firstActions = toolStructured(firstShow).taskStartNextActions;
+    assert.ok(firstActions.some((action) => action.includes("planner-phase-show")));
+    assert.ok(firstActions.some((action) => action.includes("planner-feature-show")));
+    assert.ok(firstActions.some((action) => action.includes("planner-requirement-list")));
+    assert.match(toolText(firstShow), /task_start readiness: not ready/);
+
+    // Perform exactly what the report named, then read the task again.
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
+    const secondShow = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const secondGate = toolStructured(secondShow).taskStartGateState;
+    assert.equal(secondGate.ready, true);
+    assert.equal(toolStructured(secondShow).taskStartNextActions, undefined);
+    assert.match(toolText(secondShow), /task_start readiness: ready\./);
+
+    // The report was accurate: task_start now succeeds on the very next call.
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(started.isError, undefined);
+    assert.equal(toolStructured(started).started, true);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 test("context reads in any order satisfy task_start (no out-of-order gate)", async () => {
   const session = await startMcpFixture({ name: "t346-out-of-order" });
   try {

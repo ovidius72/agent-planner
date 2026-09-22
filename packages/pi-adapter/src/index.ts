@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -4978,7 +4978,51 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           },
         };
         markCanonicalFullReadForSessionId(plannerSessionId, "task", found.task, result.content[0]!.text);
-        return result;
+
+        // Advisory only (P104(F005)/T420): report whether task_start would
+        // succeed right now, using the exact checks it runs itself, so a
+        // caller reading the task before starting it learns what else is
+        // needed in this same call instead of from a denial. task_start
+        // recomputes this at call time and remains the sole authority on
+        // whether work may begin.
+        const parentFeature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
+        const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
+        const featureRef = parentFeature ? formatFeatureRef(parentFeature.number) : "";
+        const taskRef = `${phaseRef}/T${pad(found.task.number)}`;
+        const linkedRequirements = [
+          ...(await st.linkedRequirementsForPhase(found.phase.id)),
+          ...(found.phase.featureId ? await st.linkedRequirementsForFeature(found.phase.featureId) : []),
+        ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+        const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
+        const contextEligibility = contextReadEligibilityForSession({
+          sessionId: plannerSessionId,
+          taskId: found.task.id,
+          phaseId: found.phase.id,
+          ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}),
+          task: found.task,
+          phase: found.phase,
+          ...(parentFeature ? { feature: parentFeature } : {}),
+          requirements: linkedRequirements,
+          requirementIds: linkedRequirementIds,
+        });
+        const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+        const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
+        const gateState = taskStartGateState(contextEligibility, requirementEligibility, projectGuidelinesReadState);
+        const gateNextActions = gateState.ready ? [] : piContextReadActions(
+          contextEligibility,
+          { task: taskRef, phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
+          projectGuidelinesReadState !== "valid" && projectGuidelinesReadState !== "not-required",
+          !requirementEligibility.eligible,
+          `task_start ${taskRef}`,
+        );
+        return {
+          content: [{ type: "text" as const, text: `${result.content[0]!.text}\n\n${taskStartGateStateLine(gateState)}` }],
+          details: {
+            ...result.details,
+            taskStartGateState: gateState,
+            ...(gateNextActions.length > 0 ? { taskStartNextActions: gateNextActions } : {}),
+          },
+        };
       },
     });
 

@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -1609,7 +1609,49 @@ server.registerTool("planner-task-show", {
       },
     });
     markCanonicalFullReadForSessionId(plannerSessionId, "task", found.task, result.content[0]!.text);
-    return result;
+
+    // Advisory only (P104(F005)/T420): report whether planner-task-start
+    // would succeed right now, using the exact checks it runs itself, so a
+    // caller reading the task before starting it learns what else is needed
+    // in this same call instead of from a denial. task-start recomputes this
+    // at call time and remains the sole authority on whether work may begin.
+    const parentFeature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
+    const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
+    const featureRef = parentFeature ? formatFeatureRef(parentFeature.number) : "";
+    const linkedRequirements = [
+      ...(await st.linkedRequirementsForPhase(found.phase.id)),
+      ...(found.phase.featureId ? await st.linkedRequirementsForFeature(found.phase.featureId) : []),
+    ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+    const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
+    const contextEligibility = contextReadEligibilityForSession({
+      sessionId: plannerSessionId,
+      taskId: found.task.id,
+      phaseId: found.phase.id,
+      ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}),
+      task: found.task,
+      phase: found.phase,
+      ...(parentFeature ? { feature: parentFeature } : {}),
+      requirements: linkedRequirements,
+      requirementIds: linkedRequirementIds,
+    });
+    const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
+    const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
+    const gateState = taskStartGateState(contextEligibility, requirementEligibility, projectGuidelinesReadState);
+    const gateNextActions = gateState.ready ? [] : mcpContextReadActions(
+      contextEligibility,
+      { task: taskCompositeRef(found.task, found.phase, features), phase: phaseRef, ...(featureRef ? { feature: featureRef } : {}) },
+      projectGuidelinesReadState !== "valid" && projectGuidelinesReadState !== "not-required",
+      !requirementEligibility.eligible,
+      `planner-task-start ${taskCompositeRef(found.task, found.phase, features)}`,
+    );
+    return {
+      content: [{ type: "text", text: `${result.content[0]!.text}\n\n${taskStartGateStateLine(gateState)}` }],
+      structuredContent: {
+        ...result.structuredContent,
+        taskStartGateState: gateState,
+        ...(gateNextActions.length > 0 ? { taskStartNextActions: gateNextActions } : {}),
+      },
+    };
 });
 
 server.registerTool("planner-task-discuss", {
