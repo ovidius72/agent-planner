@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -1992,25 +1992,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           ctx.ui.notify("Aborted", "warning");
           return;
         }
-        const featureId = feature.id;
-        await st.updateFeatures((doc) => {
-          doc.features = doc.features.filter((entry) => entry.id !== featureId);
-          return doc;
-        });
-        let affectedPhases = 0;
-        if (cascade) {
-          for (const phase of phases) {
-            await st.deletePhase(phase.id);
-            affectedPhases += 1;
-          }
-        } else {
-          for (const phase of phases) {
-            await st.updatePhase(phase.id, (current) => ({ ...current, featureId: undefined, updatedAt: nowISO() }));
-            affectedPhases += 1;
-          }
+        const outcome = await deleteFeatureCascade(st, feature.id, { cascade });
+        if (!outcome.ok) {
+          ctx.ui.notify(`Feature delete failed: ${outcome.error}`, "error");
+          return;
         }
-        await st.writeGenerated();
-        ctx.ui.notify(`Feature deleted: ${featureId}${phases.length > 0 ? cascade ? `; deleted ${affectedPhases} phase(s)` : `; unlinked ${affectedPhases} phase(s)` : ""}`, "info");
+        const { result } = outcome;
+        ctx.ui.notify(`Feature deleted: ${result.ref}${result.phaseCount > 0 ? (result.cascade ? `; deleted ${result.phaseCount} phase(s)` : `; unlinked ${result.phaseCount} phase(s)`) : ""}`, "info");
         return;
       }
       ctx.ui.notify(`Unknown feature action "${b}". Try: list, add, show, discuss, update, delete`, "warning");
@@ -4340,24 +4328,15 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const features = (await st.loadFeatures()).features;
       const resolvedFeature = resolveFeatureRefStrict(features, params.featureId);
       if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
-      const featureId = resolvedFeature.feature.id;
-      let cascadeCount = 0;
-      await st.runBatch(async () => {
-        await st.updateFeatures((doc) => {
-          doc.features = doc.features.filter((f) => f.id !== featureId);
-          return doc;
-        });
-
-        if (params.cascade) {
-          const phases = await st.loadAllPhases();
-          for (const phase of phases.filter((p) => p.featureId === featureId)) {
-            await st.deletePhase(phase.id);
-            cascadeCount += 1;
-          }
-        }
-        await st.writeGenerated();
-      });
-      return { content: [{ type: "text", text: `Feature deleted: ${params.featureId}${params.cascade ? ` (cascade: ${cascadeCount} phases)` : ""}` }], details: { deleted: params.featureId, cascadedPhases: cascadeCount } };
+      const outcome = await deleteFeatureCascade(st, resolvedFeature.feature.id, { cascade: Boolean(params.cascade) });
+      if (!outcome.ok) {
+        return { content: [{ type: "text", text: `Feature delete failed: ${outcome.error}` }], details: { deleted: false, errorCode: outcome.errorCode }, isError: true };
+      }
+      const { result } = outcome;
+      return {
+        content: [{ type: "text", text: `Feature deleted: ${result.ref}${result.cascade ? ` (cascade: ${result.phaseCount} phases)` : result.phaseCount > 0 ? ` (unlinked: ${result.phaseCount} phases)` : ""}` }],
+        details: { deleted: true, ref: result.ref, id: result.id, cascadedPhases: result.cascade ? result.phaseCount : 0, unlinkedPhases: result.cascade ? 0 : result.phaseCount },
+      };
     },
   });
 

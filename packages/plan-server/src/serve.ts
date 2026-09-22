@@ -8,7 +8,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, type MacroTaskMutationInput } from "@agent-plan/core"
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, type MacroTaskMutationInput } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -698,11 +698,20 @@ app.put(route("/docs/save"), async (c) => {
 
   app.delete(route("/features/:id"), async (c) => {
     const id = c.req.param("id");
-    await store.updateFeatures((doc) => {
-      doc.features = doc.features.filter((f) => f.id !== id);
-      return doc;
-    });
-    await store.writeGenerated();
+    if (!id) return c.json({ error: "id required" }, 400);
+    const cascade = c.req.query("cascade") === "true";
+    const outcome = await deleteFeatureCascade(store, id, { cascade });
+    if (!outcome.ok) {
+      // FEATURE_NOT_FOUND: no such feature, or it vanished between resolve
+      // and write (race). Either way, this is a 404 — never a reported
+      // success for a delete that did not happen (same defect class as
+      // T413).
+      return c.json({ error: outcome.error }, 404);
+    }
+    const { result } = outcome;
+    for (const phase of result.phases) {
+      hub()?.broadcast({ type: "phases-updated", data: { action: phase.action === "deleted" ? "deleted" : "updated", id: phase.id, phaseId: phase.id, featureId: phase.action === "deleted" ? id : "" } });
+    }
     hub()?.broadcast({ type: "features-updated", data: { action: "deleted", id, featureId: id } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.syncStatuses();
