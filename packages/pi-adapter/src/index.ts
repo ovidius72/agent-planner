@@ -41,6 +41,23 @@ const SERVER_PACKAGE = resolvedPackageVersion("@agent-plan/server", import.meta.
 
 let capturedPi: ExtensionAPI | null = null;
 
+/**
+ * Hand a message to the agent, and report whether the bridge was there.
+ *
+ * `ExtensionAPI.sendUserMessage` returns `void`, not a promise: it queues
+ * the message and returns immediately. Four call sites awaited it, which
+ * reads as "the message has been delivered, now continue" and is not true —
+ * TypeScript flagged every one of them. They also each rewrote the same
+ * `capturedPi` null check. Both live here now, so no caller re-derives
+ * either, and the missing-bridge case stays each caller's own decision:
+ * some notify the user, some carry on silently.
+ */
+function sendToAgent(message: string): boolean {
+  if (!capturedPi) return false;
+  capturedPi.sendUserMessage(message);
+  return true;
+}
+
 let store: PlanStore | null = null;
 let server: ServeHandle | null = null;
 let lastKnownWebPort: number | null = null;
@@ -1662,8 +1679,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
         ctx.ui.notify("Initial profile saved. The agent will now take over as Lead Architect to conduct discovery.", "info");
 
-        if (capturedPi) {
-          await capturedPi.sendUserMessage(
+        sendToAgent(
             "I have provided the initial project goal and description. You are now the Lead Architect for Agent Plan only. " +
             "Do NOT invoke GSD workflows, GSD skills, or reinterpret this discuss flow as GSD orchestration. " +
             "Your mission is to produce a professional-grade specification. " +
@@ -1676,8 +1692,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             "3. Formulate and ask me targeted, iterative questions to resolve these gaps.\n" +
             "4. We will iterate until you have a complete, detailed picture.\n\n" +
             "Once you are 100% certain and we agree the context is complete, you will then generate the exhaustive professional specification (Features, Phases, Tasks) including deep logic, code examples, and technical references as previously required."
-          );
-        }
+        );
         return;
       }
       if (b === "language") {
@@ -1786,9 +1801,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const targetType = await ctx.ui.select("Promotion target", ["feature", "phase", "task"]);
         if (!targetType) return;
         const skill = await st.ideaDiscussionSkill();
-        if (capturedPi) {
-          await capturedPi.sendUserMessage(`Discuss promotion of ${formatIdeaRef(idea.number)} — ${idea.title} to a ${targetType}.\n\n${skill}\n\nDo not create or persist a target until the discussion is complete and I explicitly confirm the exact destination. For a phase, recommend and confirm its feature. For a task, recommend and confirm its feature and phase. After creating the confirmed target with the normal planner tool, record the promotion with idea_promotion_finalize.`);
-        } else {
+        if (!sendToAgent(`Discuss promotion of ${formatIdeaRef(idea.number)} — ${idea.title} to a ${targetType}.\n\n${skill}\n\nDo not create or persist a target until the discussion is complete and I explicitly confirm the exact destination. For a phase, recommend and confirm its feature. For a task, recommend and confirm its feature and phase. After creating the confirmed target with the normal planner tool, record the promotion with idea_promotion_finalize.`)) {
           ctx.ui.notify("Promotion discussion instructions loaded. Use the idea_promotion_begin tool in an agent session.", "info");
         }
         return;
@@ -2106,13 +2119,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
             notes: `${current.notes ? current.notes + "\n" : ""}[discuss ${nowISO()}] ${note}`,
             updatedAt: nowISO(),
           }));
-          if (capturedPi) {
-            await capturedPi.sendUserMessage(
+          sendToAgent(
               `Before planning tasks for phase ${phase.id} (${phase.title}), the user reported a change: ${changeNote.trim()}. ` +
               "Discuss this change with the user, update the phase scope/dependencies/risks if needed, then propose the task breakdown. " +
               "Do NOT invoke GSD. Stay in Agent Plan."
-            );
-          }
+          );
         }
 
 
@@ -2698,8 +2709,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return;
       }
       if (action === "prepare") {
-        if (!capturedPi) { ctx.ui.notify("Agent bridge unavailable; use /planner handoff write for an auto-generated handoff.", "warning"); return; }
-        await capturedPi.sendUserMessage(
+        const handoffPrepared = sendToAgent(
           "Prepare a canonical session handoff proposal. Do not write anything yet. First identify from this conversation and the latest planner lifecycle events the exact feature and phase where the decisions/work belong. Never use the first in-progress phase or a stale resume pointer as a target.\n\n" +
           "If the last phase was just completed, do not create an operational handoff for it; its existing handoff must have been archived by the phase-done lifecycle. If another non-done phase is the real continuation, identify that phase explicitly.\n\n" +
           "Before writing, tell the user exactly: `I propose writing this handoff on P00x(F00x) — <phase title>. Confirm?` Wait for an explicit confirmation. If the target is ambiguous, ask the user to identify the feature and phase instead of guessing.\n\n" +
@@ -2715,7 +2725,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           "- `## How to resume`: explicit ordered steps\n" +
           "Pass a meaningful title beginning with the confirmed phase ref. Generic titles are rejected. Handoff refresh synchronizes durable task/phase/feature context and updates the single active phase.handoff; `.planner/HANDOFF.md` is deprecated."
         );
-        ctx.ui.notify("Instructing the agent to prepare the phase handoff…", "info");
+        ctx.ui.notify(handoffPrepared
+          ? "Instructing the agent to prepare the phase handoff…"
+          : "Agent bridge unavailable; use /planner handoff write for an auto-generated handoff.",
+          handoffPrepared ? "info" : "warning");
         return;
       }
       if (action === "clear" || action === "delete") {

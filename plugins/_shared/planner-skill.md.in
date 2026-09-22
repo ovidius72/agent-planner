@@ -32,9 +32,10 @@ Discover before mutating:
 1. List features, phases, or tasks using compact list tools.
 2. Follow the lowest visible ready priority unless the automatic recommendation or an approved deviation says otherwise.
 3. Use `task_recommend` / `planner-task-recommend` when choosing the next task. Treat its `claims` as bounded evidence: priority is a policy signal, a handoff is actionable only when persisted `resumeReady=true`, and Markdown prose or terminal archives never create an action claim.
-4. Read the exact entity with its full-detail show/get surface when full context is needed.
-5. Never infer an ambiguous bare reference. Ask for the exact composite reference.
-6. Never claim that no task is active from counts, feature summaries, or omitted task detail. Use an explicit `activeTaskState`/`activeTasks` result from `plan_get`, `planner-show`, or the lifecycle recommendation. Only `activeTaskState: none` (verified from all persisted task statuses) proves absence; `conflict` means multiple active tasks must be reconciled.
+4. A task that comes up in conversation is not the next task. Discussing a subject, describing a capability, or naming a task is not an instruction to work on it: the recommendation decides what is next, and a task already in progress stays in progress. When the conversation suggests other work is more valuable, propose it as an explicit deviation with its reason and wait for a decision, or record the change through `task_switch` / `task_deviation`. Being told directly to work on something is an instruction — follow it, and it needs no ceremony.
+5. Read the exact entity with its full-detail show/get surface when full context is needed.
+6. Never infer an ambiguous bare reference. Ask for the exact composite reference.
+7. Never claim that no task is active from counts, feature summaries, or omitted task detail. Use an explicit `activeTaskState`/`activeTasks` result from `plan_get`, `planner-show`, or the lifecycle recommendation. Only `activeTaskState: none` (verified from all persisted task statuses) proves absence; `conflict` means multiple active tasks must be reconciled.
 
 Feature and phase statuses are derived from their children. Do not write their status directly; update the relevant child tasks. A `DERIVED_STATUS_READ_ONLY` result is a non-success result.
 
