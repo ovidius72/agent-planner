@@ -1,0 +1,215 @@
+{
+  "id": "dff7481a-5d80-4ef0-9409-5fe40b56fb94",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 105,
+  "shortId": "UVWDA",
+  "priority": 37,
+  "slug": "remove-logic-re-derived-per-adapter-and-per-call-site",
+  "title": "Remove logic re-derived per adapter and per call site",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Findings surfaced during P104 that had no owner: shared logic written once per adapter, a URL-rewrite technique re-derived three times, and a guard blind spot documented but untracked.",
+  "description": "Everything here was found while completing P104(F005) and left unowned. P104 fixed the instances that its own tasks named; these are the ones it revealed and did not cover. All were verified against the code on 2026-09-23, not carried over as claims.\n\nThe unifying fault is the one AGENTS.md rule 4 exists to prevent: a decision made in a shared place and then re-derived at each consumer. P104 hit four separate defects caused by exactly this, and the sweep below shows how much of it is left.\n\n**1. Shared helpers written privately in both adapters.**\n\nTen functions are defined independently in `packages/plan-mcp/src/index.ts` and `packages/pi-adapter/src/index.ts`: `acceptedDecisionMutationFailure`, `applyTaskLifecycleDates`, `boundedPage`, `derivedStatusReadOnlyResult`, `handoffContractFailure`, `legacyContextMigrationSummary`, `mutationNoFieldsFailure`, `nowISO`, `resolveAcceptedDecisionTarget`, `resolveFeatureRefStrict`.\n\nThree more are adapter-local copies of something plan-core already exports: `featureNumberOfPhase` (plan-mcp shadows `plan-core/naming.ts:120`, which pi-adapter imports correctly), `createRequirementId` (pi-adapter shadows `naming.ts`), `statusIcon` (pi-adapter shadows `render-utils.ts`).\n\nThe three shadowing cases are unambiguous: delete the copy, import the export. The ten are not uniformly movable, and the task that does this must not treat them as one blob — `handoffContractFailure` and `mutationNoFieldsFailure` return adapter-specific result shapes, so what belongs in the core is the decision and the message, with each adapter rendering its own envelope. That split is exactly what P104's successful tasks did (see `mutation-reply.ts`, `guard-decision.ts`, `task-completion-gate.ts`): the core decides and returns a text/structured pair, the adapter wraps it.\n\nThe sweep that produced this list should be recorded so it can be re-run rather than re-invented: parse `^(export )?(async )?function (\\w+)` from both adapter entry points and from `packages/plan-core/src/*.ts`, then intersect. It takes seconds and catches the next one.\n\n**2. Writing the URL without a router navigation, re-derived three times.**\n\n`packages/plan-web-ui/src/components/dashboard/work-tree.tsx:27` (`clearLocateParam`), `packages/plan-web-ui/src/routes/feature-detail/route.tsx:83`, and `packages/plan-web-ui/src/routes/phase-detail/route.tsx:75` each hand-write the same `window.history.replaceState(window.history.state, \"\", ...)` call, each with its own comment explaining the same reason: avoid a router navigation so React Router's `<ScrollRestoration />` does not reset the page scroll.\n\nAll three are correct today. The two route ones do not have the defect P104(F005)/T418 fixed in the work tree, because they only write the URL and never read the param back — the bug needed both halves. But the technique carries a non-obvious hazard that T418 documented the hard way: `replaceState` bypasses the router, so `useSearchParams` never observes the change, and any code that later reads that param sees a stale value for the life of the mount. A fourth site written by someone who has not read T418's comment is where that returns.\n\nOne helper, with the hazard stated once, removes the class. Whether it should also expose a read-side companion is a judgement for the task.\n\n**3. The no-task guard cannot see a write made through an interpreter.**\n\nP104(F005)/T427 made the guard detect write-shaped Bash — redirection, `tee`, in-place `sed`/`perl`, file-creating `cp`/`mv`, `rm`, tree-rewriting `git` — and deliberately documented what it cannot see rather than implying coverage: a command like `python3 - <<PY` or `node -e` that opens a file and writes to it is opaque from the command line.\n\nThis is not hypothetical. It is the exact pattern used to edit source files throughout the session that built P104, and it is what the harness instructs agents to use in bypass-permissions mode. So the most common editing path in that mode is the one the guard cannot see.\n\nWhether this is worth closing is a real question and the task should answer it before writing code. Detecting interpreter writes reliably means either parsing the script body — brittle and endless — or moving the check elsewhere, such as a PostToolUse hook that notices the working tree changed while no task was in progress. A PostToolUse check cannot prevent the edit, but it can surface it, which may be the better fit for something whose purpose is visibility rather than prevention. Deciding not to close it, with the reason written down, is an acceptable outcome.\n\n**Not in scope, recorded so it is not lost:** the branch `feature/handoff-retry-cost` carries 27 commits, has never been pushed, and has no PR. Antonio declined a PR twice during earlier phases and the reason was never recorded. That is a decision for him, not a task.\n\n**Behaviors to preserve across all of this:** the core stays harness-agnostic (AGENTS.md rule 4) — moving adapter-specific result envelopes into it would be the same mistake in the opposite direction. The payload bounds established by P103 and P104 must not regress; `packages/plan-core/test/handoff-reply.test.mjs` pins them. Per AGENTS.md rule 17, focused suites during implementation and `pnpm verify:final` once at phase close.",
+  "descriptionUpdatedAt": "2026-09-23T13:29:00.220Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "281c6d44-b860-4176-90ed-4733ec27415d",
+    "59a4f184-efcc-4a10-82af-01a59f424745",
+    "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7"
+  ],
+  "tasks": [
+    {
+      "id": "281c6d44-b860-4176-90ed-4733ec27415d",
+      "phaseId": "dff7481a-5d80-4ef0-9409-5fe40b56fb94",
+      "number": 429,
+      "shortId": "QMFB7",
+      "priority": 1,
+      "shortName": "delete-the-adapter-local-copie",
+      "title": "Delete the adapter-local copies of shared logic",
+      "status": "planned",
+      "description": "Thirteen functions are written per adapter instead of once. Verified on 2026-09-23 by parsing function declarations out of both adapter entry points and every `packages/plan-core/src/*.ts`, then intersecting.\n\n**Three are unambiguous — an adapter-local copy of something plan-core already exports.** Delete the copy, import the export:\n- `featureNumberOfPhase` — `packages/plan-mcp/src/index.ts:289` shadows `packages/plan-core/src/naming.ts:120`. pi-adapter already imports the core one, so the two adapters disagree about where this lives.\n- `createRequirementId` — pi-adapter shadows `naming.ts`.\n- `statusIcon` — pi-adapter shadows `render-utils.ts`.\n\n**Ten are defined privately in BOTH adapters:** `acceptedDecisionMutationFailure`, `applyTaskLifecycleDates`, `boundedPage`, `derivedStatusReadOnlyResult`, `handoffContractFailure`, `legacyContextMigrationSummary`, `mutationNoFieldsFailure`, `resolveAcceptedDecisionTarget`, `resolveFeatureRefStrict`, `nowISO`.\n\nDo not treat those ten as one blob. They fall into three kinds and the fix differs:\n\n- *Pure logic with no adapter shape* — `nowISO`, `boundedPage`, `applyTaskLifecycleDates`, `resolveFeatureRefStrict`, `resolveAcceptedDecisionTarget`. These move to plan-core whole and both adapters import them.\n- *A decision plus an adapter-specific envelope* — `handoffContractFailure`, `mutationNoFieldsFailure`, `acceptedDecisionMutationFailure`, `derivedStatusReadOnlyResult`. MCP returns `{ isError, content, structuredContent }`; Pi returns `{ content, details }`. Moving the envelope into the core would be rule 4 broken in the opposite direction. Move the decision and the message; let each adapter wrap its own result. This is the split every successful P104 task used — see `mutation-reply.ts`, `guard-decision.ts`, `task-completion-gate.ts`, each returning a text/structured pair the adapter renders.\n- *Rendering* — `legacyContextMigrationSummary`. Decide deliberately which half is shared.\n\nBefore moving any of them, diff the two copies. Two implementations of the same name that have silently drifted is the more serious finding, and it is what this task most needs to surface: P104(F005)/T424 found exactly that shape in feature delete, where two of four copies had a data-integrity bug the other two did not. Report any divergence explicitly rather than picking one and moving on.\n\nSteps:\n1. Diff each pair. Record every divergence found, with which behaviour is correct and why.\n2. Delete the three shadowing copies; import the core export.\n3. Move the pure-logic five to plan-core; both adapters import.\n4. For the four failure builders, move the decision and message; leave each envelope in its adapter.\n5. Decide `legacyContextMigrationSummary` deliberately and say why.\n6. Record the sweep as a check that can be re-run — a script or a test asserting no function name is defined in both adapter entry points — so the next copy is caught rather than accumulated.\n\nBehaviors to preserve: every typed error code and result field exactly as it is; mutation-integrity checking across this project reads `updated`, `updatedFields` and `errorCode`. `noUnusedLocals`/`noUnusedParameters` are enforced. Focused suites during work: plan-core, plan-mcp, pi-adapter, plan-server and agent-plan — all five, because a test in agent-plan went unnoticed for four commits during P104 when it was left out of that list.\n\nEdge cases: a helper whose two copies differ only in a message string, where the wording is deliberately adapter-specific; a helper only one adapter actually calls, which may simply be dead in the other.",
+      "descriptionUpdatedAt": "2026-09-23T13:29:22.467Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-001-diff-each-of-the-ten-pairs-record-every-divergence-found",
+          "number": 1,
+          "title": "Diff each of the ten pairs; record every divergence found",
+          "checked": false
+        },
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-002-delete-the-three-copies-shadowing-an-existing-plan-core-export",
+          "number": 2,
+          "title": "Delete the three copies shadowing an existing plan-core export",
+          "checked": false
+        },
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-003-move-the-five-pure-logic-helpers-to-plan-core",
+          "number": 3,
+          "title": "Move the five pure-logic helpers to plan-core",
+          "checked": false
+        },
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-004-split-the-four-failure-builders-decision-and-message-shared-envelope-per-adapter",
+          "number": 4,
+          "title": "Split the four failure builders: decision and message shared, envelope per adapter",
+          "checked": false
+        },
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-005-decide-legacycontextmigrationsummary-deliberately",
+          "number": 5,
+          "title": "Decide legacyContextMigrationSummary deliberately",
+          "checked": false
+        },
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-006-add-a-re-runnable-check-that-no-function-is-defined-in-both-adapter-entry-points",
+          "number": 6,
+          "title": "Add a re-runnable check that no function is defined in both adapter entry points",
+          "checked": false
+        },
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-007-all-five-focused-suites-green-including-agent-plan",
+          "number": 7,
+          "title": "All five focused suites green, including agent-plan",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-23T13:29:22.420Z",
+      "updatedAt": "2026-09-23T13:29:22.420Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "59a4f184-efcc-4a10-82af-01a59f424745",
+      "phaseId": "dff7481a-5d80-4ef0-9409-5fe40b56fb94",
+      "number": 430,
+      "shortId": "GFVE7",
+      "priority": 2,
+      "shortName": "write-the-url-without-a-router",
+      "title": "Write the URL without a router navigation in one place",
+      "status": "planned",
+      "description": "Three components hand-write the same `window.history.replaceState(window.history.state, \"\", ...)` call, each with its own comment giving the same reason.\n\n- `packages/plan-web-ui/src/components/dashboard/work-tree.tsx:27` — `clearLocateParam`, stripping `?locate=` after scrolling the located row into view.\n- `packages/plan-web-ui/src/routes/feature-detail/route.tsx:83` — syncing filter state into the URL for deep-linking.\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx:75` — the same, for phases.\n\nThe shared reason: a router navigation would make React Router's `<ScrollRestoration />` reset the page scroll, undoing a deliberate scroll or yanking the page while the user is filtering.\n\nAll three are correct today. The two route sites do not have the defect P104(F005)/T418 fixed in the work tree, because they only write the URL and never read the param back — that bug needed both halves.\n\nThe hazard is what makes this worth centralizing rather than leaving as three tidy copies: `replaceState` bypasses the router, so `useSearchParams()` never observes the change. Any code that later reads that param keeps seeing the old value for the life of the mount. In the work tree that turned into a user-visible bug — the locate effect kept firing and wiped the search box on every keystroke — and it took tracing the whole effect to find. The comment explaining it lives in `work-tree.tsx` and nowhere else. A fourth call site, written by someone who has not read that comment, is where this returns.\n\nDesired state: one helper, with the hazard stated once where anyone using it will read it, and all three call sites using it.\n\nSteps:\n- Put the helper somewhere a route and a component both reach naturally — `packages/plan-web-ui/src/lib/` is where the other shared browser utilities live.\n- State both halves in its doc comment: why it avoids a router navigation, and that the router will not see the change, so a param written or cleared this way must not be read back through `useSearchParams` and trusted.\n- Convert all three sites.\n- Judgement call the task must make and record: whether to also expose a read-side companion that reads the param from `window.location` rather than the router, so the stale-read hazard has a safe answer rather than only a warning. Decide it deliberately; either answer is fine with a reason.\n\nBehaviors to preserve: the work tree's scroll-and-pulse behaviour and its `handledLocateRef` guard from T418; both detail routes' deep-link filter syncing; no router navigation from any of the three.\n\nVerification: focused Web UI suite (`pnpm test` in `packages/plan-web-ui`, 105 tests at last count including T418's four locate regressions) and `pnpm check`. Project guidelines require a unit test for a component touched; the existing `work-tree-locate.test.tsx` already covers the work-tree behaviour and must keep passing unchanged.",
+      "descriptionUpdatedAt": "2026-09-23T13:29:39.363Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-001-add-the-helper-under-src-lib-with-the-hazard-stated-in-its-doc-comment",
+          "number": 1,
+          "title": "Add the helper under src/lib/ with the hazard stated in its doc comment",
+          "checked": false
+        },
+        {
+          "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-002-convert-all-three-call-sites",
+          "number": 2,
+          "title": "Convert all three call sites",
+          "checked": false
+        },
+        {
+          "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-003-decide-whether-a-read-side-companion-belongs-with-it-and-record-why",
+          "number": 3,
+          "title": "Decide whether a read-side companion belongs with it, and record why",
+          "checked": false
+        },
+        {
+          "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-004-web-ui-suite-and-pnpm-check-green-the-t418-locate-regressions-unchanged",
+          "number": 4,
+          "title": "Web UI suite and pnpm check green; the T418 locate regressions unchanged",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-23T13:29:39.320Z",
+      "updatedAt": "2026-09-23T13:29:39.320Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7",
+      "phaseId": "dff7481a-5d80-4ef0-9409-5fe40b56fb94",
+      "number": 431,
+      "shortId": "B4JQJ",
+      "priority": 3,
+      "shortName": "decide-what-to-do-about-a-writ",
+      "title": "Decide what to do about a write the guard cannot see",
+      "status": "planned",
+      "description": "P104(F005)/T427 made the no-task guard detect write-shaped Bash — output redirection, `tee`, in-place `sed`/`perl`, file-creating `cp`/`mv`, `rm`, tree-rewriting `git` — and deliberately documented what it cannot see instead of implying coverage. `packages/plan-core/src/guard-decision.ts` says so in the comment on `extractBashWriteTargets`.\n\nThe gap: a command that writes through an interpreter is opaque from the command line. `python3 - <<PY` followed by `open(path, \"w\").write(...)`, or `node -e`, or a script invoked by name, all edit files while the command string shows nothing write-shaped. Verified on 2026-09-23: a `python3` heredoc writing to `packages/plan-core/src/` is allowed silently, while the same write via `cat >` or `sed -i` correctly asks.\n\nThis is not a hypothetical corner. It is the exact pattern used to edit source files throughout the session that built P104, and the harness instructs agents to edit that way in bypass-permissions mode. So in that mode the most common editing path is the one the guard cannot see.\n\n**Answer the question before writing code.** This task may correctly end with a recorded decision not to close the gap, and that is a real outcome, not a failure. The options are not equal:\n\n- *Parse the script body.* Brittle and unbounded — a path can be computed, read from argv, or built at runtime. It would produce false confidence, which is worse than a documented limit, because the comment currently tells the truth.\n- *Move the check after the fact.* A `PostToolUse` hook can notice that tracked files changed while no task was in progress. It cannot prevent the edit, but the guard's purpose is visibility, not prevention — `permissionDecision: \"ask\"` already assumes the user may say yes. Something that says \"these files changed and no task was in progress\" fits that purpose and is not defeated by how the write was made.\n- *Leave it.* The limit is documented, the common cases are covered, and an agent editing through an interpreter in a bypass session is usually doing so because the harness told it to. Record the reasoning and close the task.\n\nIf the PostToolUse route is chosen: it must not fire on `.planner/` changes (P104(F005)/T427's firmest requirement — writing a handoff or recording task state is never blocked and should never be nagged about either), must not run on every tool call if that is expensive, and must not duplicate the write-detection already in `guard-decision.ts`. `plugins/claude-code/hooks/hooks.json` is where hooks are registered; `pnpm plugins:sync` and `pnpm plugins:check` after any change to a `.in` file.\n\nWhatever is decided, update the comment in `guard-decision.ts` so it points at the decision rather than leaving a future reader to rediscover the question.\n\nVerification: `packages/plan-core/test/guard-decision.test.mjs` (16 tests) and `packages/agent-plan/test/guard-pre-tool-use.test.mjs` (7 tests) are the existing coverage. If behaviour changes, prove the new test is live by reverting the change and confirming it fails. All five focused suites must stay green: plan-core, plan-mcp, pi-adapter, plan-server, agent-plan.",
+      "descriptionUpdatedAt": "2026-09-23T13:29:57.950Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-001-decide-between-parsing-a-posttooluse-check-and-leaving-it-documented-record-the-reasoning",
+          "number": 1,
+          "title": "Decide between parsing, a PostToolUse check, and leaving it documented; record the reasoning",
+          "checked": false
+        },
+        {
+          "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-002-if-a-check-is-added-never-fire-on-planner-reuse-guard-decision-ts-s-detection",
+          "number": 2,
+          "title": "If a check is added: never fire on .planner/, reuse guard-decision.ts's detection",
+          "checked": false
+        },
+        {
+          "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-003-update-the-comment-in-guard-decision-ts-to-point-at-the-decision",
+          "number": 3,
+          "title": "Update the comment in guard-decision.ts to point at the decision",
+          "checked": false
+        },
+        {
+          "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-004-all-five-focused-suites-green",
+          "number": 4,
+          "title": "All five focused suites green",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-23T13:29:57.905Z",
+      "updatedAt": "2026-09-23T13:29:57.905Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-23T13:29:00.148Z",
+  "updatedAt": "2026-09-23T13:29:57.905Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [],
+  "sessionInfo": []
+}
