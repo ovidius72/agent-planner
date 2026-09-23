@@ -490,7 +490,7 @@ test("planner-handoff-write rejects writing to a done phase", async () => {
     // Seed phase P001 has one task T001. We'll complete it.
     // Start and complete the task.
     await callTool(session, "planner-task-start", { task: "T001" });
-    await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified for terminal handoff coverage." });
+    await callTool(session, "planner-task-complete", { task: "T001", force: true, motivation: "Seed checklist item not relevant to this handoff-write coverage.", description_update: "Seed task completed and verified for terminal handoff coverage." });
     // Now the phase should be derived as done (since all tasks done).
     // Try to write handoff to P001.
     const res = await writePreparedHandoff(session, {

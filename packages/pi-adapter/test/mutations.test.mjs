@@ -341,7 +341,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress");
 
       // Force-complete succeeds and rolls the phase (and feature) to done.
-      const done = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "All done in this fixture." });
+      const done = await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Fixture checklist item not relevant to this lifecycle coverage.", description_update: "All done in this fixture." });
       assert.match(toolText(done), /Task completed/);
       const phase = (await host.store.loadAllPhases())[0];
       assert.equal(phase.tasks[0].status, "done");
@@ -351,6 +351,61 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(features.features[0].status, "done", "feature rolls to done");
       assert.equal(features.features[0].description, preservedFeatureDescription, "Pi lifecycle writes preserve newer feature metadata");
       assert.equal(features.features[0].workDone, preservedWorkDone, "Pi lifecycle writes preserve metadata committed after context reads");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("task_complete: refusal names the toggle before force, force requires motivation, and an override is recorded and stays visible as done-with-open-items (P104(F005)/T428)", async () => {
+    const host = await createPiHost({ name: "t428-completion-gate", seed: "minimal" });
+    try {
+      // Seed T001 ships with one unchecked checklist item ("Add route").
+      await readTaskContext(host, "T001");
+      await host.runTool("task_start", { taskId: "T001" });
+
+      // No force: the refusal names the toggle command before it ever
+      // mentions force — the escape hatch is not the first thing an agent
+      // reading the refusal sees.
+      const refused = await host.runTool("task_complete", { taskId: "T001", description_update: "Attempting completion with the checklist still open." });
+      const refusedText = toolText(refused);
+      assert.match(refusedText, /task_checklist_toggle/, "refusal names the toggle command");
+      assert.match(refusedText, /Add route/, "refusal names the specific open item");
+      const toggleIndex = refusedText.indexOf("task_checklist_toggle");
+      const forceIndex = refusedText.indexOf("force=true");
+      assert.ok(toggleIndex >= 0 && forceIndex >= 0 && toggleIndex < forceIndex, "toggle is named before force");
+      assert.equal(toolDetails(refused).errorCode, "CHECKLIST_INCOMPLETE");
+
+      // force=true without a motivation is refused too — the same convention
+      // needsMotivation already applies to blocked/canceled/deferred/rejected.
+      const forcedNoMotivation = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Attempting a forced completion with no motivation given." });
+      assert.match(toolText(forcedNoMotivation), /requires a motivation/);
+      assert.equal(toolDetails(forcedNoMotivation).errorCode, "FORCE_MOTIVATION_REQUIRED");
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress", "a denied forced completion never mutates status");
+
+      // force=true with a motivation succeeds, and the override is recorded —
+      // never by ticking the item (T413's rule: an unticked item after a
+      // forced completion is information, not a bug to silently fix).
+      const forced = await host.runTool("task_complete", {
+        taskId: "T001", force: true,
+        motivation: "The route already shipped in a different task; this checklist item no longer applies.",
+        description_update: "Completed via forced override for P104(F005)/T428 coverage.",
+      });
+      assert.match(toolText(forced), /Task completed/);
+      const forcedTask = (await host.store.loadAllPhases())[0].tasks[0];
+      assert.equal(forcedTask.status, "done");
+      assert.equal(forcedTask.checklist.find((item) => item.title === "Add route").checked, false, "the override never ticks the item it overrode");
+      assert.match(forcedTask.description, /Add route/, "completion evidence names the skipped step");
+      assert.match(forcedTask.description, /route already shipped in a different task/, "completion evidence carries the motivation");
+      assert.match(forcedTask.statusLog.at(-1).description, /Add route/, "the status log entry itself names the skipped step, independent of the checklist");
+
+      // The mismatch — done, with an item still open — is legible on the full
+      // task view next to the T421 order context, not left for a reader to
+      // notice by comparing two fields themselves.
+      const shown = await host.runTool("task_get", { taskId: "T001", full: true });
+      const shownText = toolText(shown);
+      assert.match(shownText, /done with 1 of \d+ checklist item\(s\) still open/i);
+      assert.match(shownText, /Add route/);
+      assert.equal(toolDetails(shown).task.checklistMismatch?.includes("Add route"), true, "the mismatch is also in structured content, not just prose");
     } finally {
       await closePiHost(host);
     }
@@ -397,7 +452,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
       assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
-      const done = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Temporary task completed and verified." });
+      const done = await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Seed checklist item superseded by the switch coverage exercised here.", description_update: "Temporary task completed and verified." });
       assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
       assert.equal((await host.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 
@@ -759,7 +814,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.ok(archived.length > 0, "archived handoff file exists");
 
       // Terminal phase (done) rejects new handoffs; the phase stays clean.
-      await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Fixture completed and verified through the adapter mutation test." });
+      await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Seed checklist item not relevant to this terminal-phase handoff coverage.", description_update: "Fixture completed and verified through the adapter mutation test." });
       assert.equal((await phase()).status, "done");
       const late = await host.runTool("handoff_write", {
         phaseRef: "P001", title: "P001 — late handoff", reason: "Fixture terminal-phase rejection coverage.", content: canonicalHandoff("P001 — late handoff", "Late handoff."), confirmed: true,

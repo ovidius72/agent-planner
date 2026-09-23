@@ -206,7 +206,7 @@ describe("pi-adapter resume flow and CLI smoke", () => {
         confirmed: true,
         ...(await preparedHandoffArgs(host)),
       });
-      await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Authentication task completed and verified by the resume flow test." });
+      await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Seed checklist item not relevant to this resume-flow coverage.", description_update: "Authentication task completed and verified by the resume flow test." });
       p = await phase();
       assert.equal(p.status, "done", "phase rolled to done");
       assert.equal(p.handoff, "", "phase completion auto-archived the handoff");

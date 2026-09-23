@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -4960,6 +4960,8 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // requiring a second call.
         const orderContext = buildTaskOrderContext(found.task, found.phase, allPhases, features);
         const sections = [summary, taskOrderContextLine(orderContext, found.task.status)];
+        const completionMismatch = taskCompletionMismatchLine(found.task.status, found.task.checklist);
+        if (completionMismatch) sections.push(completionMismatch);
         if (found.task.description?.trim()) sections.push(found.task.description.trim());
         if (found.task.descriptionRef) sections.push(`Description reference:\n- ${found.task.descriptionRef}`);
         if (snapshot || pendingDeviation) {
@@ -4985,6 +4987,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
               acceptedDecisions: found.task.acceptedDecisions,
               priority: orderContext.priority,
               dependsOn: orderContext.dependsOn,
+              ...(completionMismatch ? { checklistMismatch: completionMismatch } : {}),
             },
             taskOrder: {
               readyCount: orderContext.readyCount,
@@ -5912,10 +5915,11 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_complete",
     label: "Task Complete",
-    description: "Mark a task as done with mandatory durable completion and verification evidence. Sets completedAt and startedAt (if missing) automatically. Checks for unchecked checklist items and warns unless force=true.",
+    description: "Mark a task as done with mandatory durable completion and verification evidence. Sets completedAt and startedAt (if missing) automatically. Fails if checklist is incomplete — tick the completed items with task_checklist_toggle first. force=true is the exception for a checklist that no longer matches the work, and requires a motivation; the overridden items are recorded, never auto-ticked.",
     parameters: Type.Object({
       taskId: Type.String({ description: "Task ref: F00x/P00x/T00x, bare T00x (global), 5-char shortId, UUID, or title to complete" }),
       force: Type.Optional(Type.Boolean({ description: "Skip checklist completion check. Default: false" })),
+      motivation: Type.Optional(Type.String({ description: "Required when force=true overrides unchecked checklist items: why the checklist no longer matches the work." })),
       description_update: Type.String({ minLength: 10, description: "Required evidence: shipped work, verification level including partial verification, remaining/unverified work, files, decisions, and updated code references." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -5929,13 +5933,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const completionSummary = params.description_update?.trim() ?? "";
       if (completionSummary.length < 10) return { content: [{ type: "text", text: "Task completion denied: provide at least 10 characters of durable completion and verification evidence." }], details: { error: "completion evidence required" } };
       if (task.pauseSnapshot) return { content: [{ type: "text", text: "Task completion denied: resume checkpointed work with task_start before completing it, or cancel it explicitly with motivation." }], details: task };
-      const unchecked = task.checklist.filter((item) => !item.checked);
-      if (unchecked.length > 0 && !params.force) {
+      const gate = evaluateTaskCompletionGate(task.checklist, params.force === true, params.motivation);
+      if (!gate.allowed) {
+        const message = gate.errorCode === "FORCE_MOTIVATION_REQUIRED"
+          ? taskCompletionForceMotivationRequired(gate.uncheckedItems)
+          : taskCompletionChecklistRefusal(gate.uncheckedItems, `task_checklist_toggle ${params.taskId.trim()} <item>`);
         return {
-          content: [{ type: "text", text: `⚠️  ${unchecked.length} checklist item(s) not done: ${unchecked.map((i) => i.title).join(", ")}. Use task_complete with force=true to override.` }],
-          details: { task, uncheckedChecklistItems: unchecked },
+          content: [{ type: "text", text: message }],
+          details: { task, errorCode: gate.errorCode, uncheckedChecklistItems: gate.uncheckedItems },
         };
       }
+      const overrideNote = taskCompletionOverrideNote(gate.overriddenItems, params.motivation);
+      const completionEvidence = overrideNote ? `${completionSummary}\n\n${overrideNote}` : completionSummary;
       const now = nowISO();
       let completedTask: Task | undefined;
       await st.updatePhase(found.phase.id, (phase) => {
@@ -5946,10 +5955,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         t.statusLog = [...t.statusLog, {
           id: createChecklistItemId(t.id, t.statusLog.length + 1, `${previousStatus}-done`),
           date: now, fromStatus: previousStatus, toStatus: "done",
-          title: `${previousStatus} → done`, description: completionSummary,
+          title: `${previousStatus} → done`, description: completionEvidence,
         }];
         const sep = t.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
-        t.description = t.description + sep + completionSummary;
+        t.description = t.description + sep + completionEvidence;
         t.descriptionUpdatedAt = now;
         t.updatedAt = now;
         phase.updatedAt = now;

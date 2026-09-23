@@ -12,6 +12,7 @@ export * from "./task-context.js";
 export * from "./task-selection.js";
 export * from "./task-start-outcome.js";
 export * from "./task-order-context.js";
+export * from "./task-completion-gate.js";
 export * from "./stranded-phase.js";
 export * from "./read-tracking.js";
 export * from "./payload-fallback.js";

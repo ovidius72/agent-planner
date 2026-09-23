@@ -502,7 +502,7 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const missingEvidence = await callTool(session, "planner-task-complete", { task: "T002", force: true }, { expectError: true });
     assert.match(toolText(missingEvidence), /description_update/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "in-progress");
-    const done = await callTool(session, "planner-task-complete", { task: "T002", force: true, description_update: "Created task completed and verified through MCP CRUD coverage." });
+    const done = await callTool(session, "planner-task-complete", { task: "T002", force: true, motivation: "Checklist item no longer applies; verified through MCP CRUD coverage instead.", description_update: "Created task completed and verified through MCP CRUD coverage." });
     assert.match(toolText(done), /\(done\)/);
     const doneTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(doneTask.status, "done");
@@ -857,7 +857,7 @@ test("priority is overridable but active task switches require a snapshot and de
     assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
     assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
-    const done = await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Temporary task completed and verified through MCP switch coverage." });
+    const done = await callTool(session, "planner-task-complete", { task: "T001", force: true, motivation: "Seed checklist item superseded by the switch coverage exercised here.", description_update: "Temporary task completed and verified through MCP switch coverage." });
     assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
     assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 

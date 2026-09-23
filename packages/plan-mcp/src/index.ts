@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -1591,6 +1591,8 @@ server.registerTool("planner-task-show", {
     // requiring a second call.
     const orderContext = buildTaskOrderContext(found.task, found.phase, allPhases, features);
     const sections = [summary, taskOrderContextLine(orderContext, found.task.status)];
+    const completionMismatch = taskCompletionMismatchLine(found.task.status, found.task.checklist);
+    if (completionMismatch) sections.push(completionMismatch);
     if (found.task.description?.trim()) sections.push(found.task.description.trim());
     if (found.task.descriptionRef) sections.push(`Description reference:\n- ${found.task.descriptionRef}`);
     if (snapshot || pendingDeviation) {
@@ -1614,6 +1616,7 @@ server.registerTool("planner-task-show", {
         acceptedDecisions: found.task.acceptedDecisions,
         priority: orderContext.priority,
         dependsOn: orderContext.dependsOn,
+        ...(completionMismatch ? { checklistMismatch: completionMismatch } : {}),
       },
       taskOrder: {
         readyCount: orderContext.readyCount,
@@ -2530,21 +2533,30 @@ server.registerTool("planner-task-start", {
 });
 
 server.registerTool("planner-task-complete", {
-  description: "Set a task to done with mandatory durable completion and verification evidence. Fails if checklist is incomplete unless force=true.",
+  description: "Set a task to done with mandatory durable completion and verification evidence. Fails if checklist is incomplete — tick the completed items with planner-task-checklist-toggle first. force=true is the exception for a checklist that no longer matches the work, and requires a motivation; the overridden items are recorded, never auto-ticked.",
   inputSchema: {
     task: z.string().min(1),
     force: z.boolean().optional(),
+    motivation: z.string().optional().describe("Required when force=true overrides unchecked checklist items: why the checklist no longer matches the work."),
     description_update: z.string().min(10).describe("Required evidence: shipped work, verification level including partial verification, remaining/unverified work, files, decisions, and updated code references."),
   },
-}, async ({ task: ref, force, description_update }) => {
+}, async ({ task: ref, force, motivation, description_update }) => {
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
   const completionSummary = description_update.trim();
   if (completionSummary.length < 10) return text("Task completion denied: provide at least 10 characters of durable completion and verification evidence.");
   if (found.task.pauseSnapshot) return text("Task completion denied: resume checkpointed work with planner-task-start before completing it, or cancel it explicitly with motivation.");
-  const unchecked = found.task.checklist.filter((item) => !item.checked);
-  if (unchecked.length > 0 && !force) return text(`${unchecked.length} checklist item(s) not done. Re-run with force=true to complete anyway.`);
+  const gate = evaluateTaskCompletionGate(found.task.checklist, force === true, motivation);
+  if (!gate.allowed) {
+    const taskRefForToggle = taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features);
+    const message = gate.errorCode === "FORCE_MOTIVATION_REQUIRED"
+      ? taskCompletionForceMotivationRequired(gate.uncheckedItems)
+      : taskCompletionChecklistRefusal(gate.uncheckedItems, `planner-task-checklist-toggle ${taskRefForToggle} <item>`);
+    return text(message, { completed: false, errorCode: gate.errorCode, uncheckedItems: gate.uncheckedItems.map((item) => item.title) });
+  }
+  const overrideNote = taskCompletionOverrideNote(gate.overriddenItems, motivation);
+  const completionEvidence = overrideNote ? `${completionSummary}\n\n${overrideNote}` : completionSummary;
   const timestamp = nowISO();
   let updatedTask: Task | undefined;
   await st.updatePhase(found.phase.id, (phase) => {
@@ -2558,11 +2570,11 @@ server.registerTool("planner-task-complete", {
       fromStatus: previousStatus,
       toStatus: "done",
       title: `${previousStatus} → done`,
-      description: completionSummary,
+      description: completionEvidence,
     };
     task.statusLog = [...(task.statusLog ?? []), entry];
     const sep = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
-    task.description = task.description + sep + completionSummary;
+    task.description = task.description + sep + completionEvidence;
     task.descriptionUpdatedAt = timestamp;
     task.updatedAt = timestamp;
     phase.updatedAt = timestamp;

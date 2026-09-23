@@ -941,11 +941,28 @@
       "priority": 16,
       "shortName": "stop-a-task-reporting-done-whi",
       "title": "Stop a task reporting done while every step says not done",
-      "status": "planned",
-      "description": "26 tasks in this project are marked `done` with every checklist item still unticked. Not some items — every item, in all 26 cases: P24/T216, P40/T182, P42/T199, P43/T196, P43/T202, P44/T195, P44/T200, P45/T194, P46/T201, P47/T197, P47/T198, P47/T203, P48/T204, P48/T213, P49/T205, P63/T274, P63/T275, P63/T276, P70/T302, P72/T305, P72/T306, P72/T307, P72/T308, P72/T319, P93/T365, P97/T386. The uniformity is the tell: agents are not ticking as they go and then forcing past the gate at the end, so the checklist records nothing about what was actually done.\n\nThis is the same class as P104(F005)/T413 and T424: durable state says one thing while the tool reports another. A task whose status is `done` and whose every step is `not done` cannot both be true, and a human reading the Web UI sees the contradiction directly — which is how this was reported on 2026-09-22.\n\nCurrent state:\n- `packages/plan-mcp/src/index.ts:2547` — `if (unchecked.length > 0 && !force) return text(...)`. `force=true` overrides with no reason required and no record that it happened.\n- `packages/pi-adapter/src/index.ts:5935` — the `task_complete` tool, same shape, message points at `force=true`.\n- `packages/pi-adapter/src/index.ts:2577` — the interactive path asks the human `Complete anyway? (y/N)`, which is the correct shape for a supervisor surface and is not the problem.\n- The gate exists in each adapter separately; there is no shared decision.\n\nWhat must NOT be done: automatically ticking the remaining items on completion. That destroys the distinction between a step that was done and a step that was skipped, which is precisely the mistake T413 fixed for checklist replacement. An unticked item after a forced completion is information; overwriting it is the bug, not the fix.\n\nDesired state:\n- Forcing is still possible — an agent must be able to complete a task whose checklist no longer matches what the work turned out to need. But a forced completion records what it overrode: which items were open, and the reason given.\n- `force` requires a substantive motivation, the same way a status change to `blocked`, `canceled`, `deferred` or `rejected` already does. The project already has this convention (`needsMotivation` in plan-core); reuse it rather than inventing a second.\n- The completion evidence names the skipped steps, so the record shows what was not done instead of leaving the checklist to imply it silently.\n- A task that is `done` with open items is visible as such where it is read, in the same spirit as P104(F005)/T421 and T422: show the fact, do not add a rule telling anyone to look. The full task view already carries the checklist; it should make the mismatch legible rather than leaving a reader to compare two fields.\n- The decision lives in `packages/plan-core` and both adapters consume it (AGENTS.md rule 4). Today the rule is written twice with two different messages.\n\nThe 26 existing tasks are historical debt from completed phases. Do not rewrite their checklists — that would be the same destructive overwrite. Surfacing them is sufficient; a count is enough for a human to judge.\n\nImplementation steps:\n- Add the completion-gate decision to plan-core: given a task's checklist and a `force` flag plus motivation, return whether completion is allowed and which items are being overridden. Both adapters call it.\n- Require a motivation with `force`, using the existing `needsMotivation` convention.\n- Record the overridden item titles in the task's completion evidence and status log, so the record survives independently of the checklist.\n- Make the mismatch visible in the full task view alongside the existing order context from T421.\n- Leave the interactive `(y/N)` confirmation as it is: a human answering a direct question is a supervisor decision, not an agent bypassing a gate.\n\nEdge cases: a task with no checklist at all (unchanged, no gate); a task completed through the Web UI, which is a supervisor surface and may keep its current behaviour; reopening a task that was force-completed, where the override record must not be lost; a checklist replaced after completion.\n\nVerification: focused core, MCP and Pi suites. Pin that a forced completion without a motivation is refused, that one with a motivation succeeds and records the overridden titles, and that nothing ticks an item the agent did not tick.\n\nReported by Antonio on 2026-09-22 after seeing unticked checkboxes on completed tasks in the Web UI.",
-      "descriptionUpdatedAt": "2026-09-23T08:19:03.584Z",
+      "status": "done",
+      "description": "26 tasks in this project are marked `done` with every checklist item still unticked. Not some items — every item, in all 26 cases: P24/T216, P40/T182, P42/T199, P43/T196, P43/T202, P44/T195, P44/T200, P45/T194, P46/T201, P47/T197, P47/T198, P47/T203, P48/T204, P48/T213, P49/T205, P63/T274, P63/T275, P63/T276, P70/T302, P72/T305, P72/T306, P72/T307, P72/T308, P72/T319, P93/T365, P97/T386. The uniformity is the tell: agents are not ticking as they go and then forcing past the gate at the end, so the checklist records nothing about what was actually done.\n\nThis is the same class as P104(F005)/T413 and T424: durable state says one thing while the tool reports another. A task whose status is `done` and whose every step is `not done` cannot both be true, and a human reading the Web UI sees the contradiction directly — which is how this was reported on 2026-09-22.\n\nCurrent state:\n- `packages/plan-mcp/src/index.ts:2547` — `if (unchecked.length > 0 && !force) return text(...)`. `force=true` overrides with no reason required and no record that it happened.\n- `packages/pi-adapter/src/index.ts:5935` — the `task_complete` tool, same shape, message points at `force=true`.\n- `packages/pi-adapter/src/index.ts:2577` — the interactive path asks the human `Complete anyway? (y/N)`, which is the correct shape for a supervisor surface and is not the problem.\n- The gate exists in each adapter separately; there is no shared decision.\n\nWhat must NOT be done: automatically ticking the remaining items on completion. That destroys the distinction between a step that was done and a step that was skipped, which is precisely the mistake T413 fixed for checklist replacement. An unticked item after a forced completion is information; overwriting it is the bug, not the fix.\n\nDesired state:\n- Forcing is still possible — an agent must be able to complete a task whose checklist no longer matches what the work turned out to need. But a forced completion records what it overrode: which items were open, and the reason given.\n- `force` requires a substantive motivation, the same way a status change to `blocked`, `canceled`, `deferred` or `rejected` already does. The project already has this convention (`needsMotivation` in plan-core); reuse it rather than inventing a second.\n- The completion evidence names the skipped steps, so the record shows what was not done instead of leaving the checklist to imply it silently.\n- A task that is `done` with open items is visible as such where it is read, in the same spirit as P104(F005)/T421 and T422: show the fact, do not add a rule telling anyone to look. The full task view already carries the checklist; it should make the mismatch legible rather than leaving a reader to compare two fields.\n- The decision lives in `packages/plan-core` and both adapters consume it (AGENTS.md rule 4). Today the rule is written twice with two different messages.\n\nThe 26 existing tasks are historical debt from completed phases. Do not rewrite their checklists — that would be the same destructive overwrite. Surfacing them is sufficient; a count is enough for a human to judge.\n\nImplementation steps:\n- Add the completion-gate decision to plan-core: given a task's checklist and a `force` flag plus motivation, return whether completion is allowed and which items are being overridden. Both adapters call it.\n- Require a motivation with `force`, using the existing `needsMotivation` convention.\n- Record the overridden item titles in the task's completion evidence and status log, so the record survives independently of the checklist.\n- Make the mismatch visible in the full task view alongside the existing order context from T421.\n- Leave the interactive `(y/N)` confirmation as it is: a human answering a direct question is a supervisor decision, not an agent bypassing a gate.\n\nEdge cases: a task with no checklist at all (unchanged, no gate); a task completed through the Web UI, which is a supervisor surface and may keep its current behaviour; reopening a task that was force-completed, where the override record must not be lost; a checklist replaced after completion.\n\nVerification: focused core, MCP and Pi suites. Pin that a forced completion without a motivation is refused, that one with a motivation succeeds and records the overridden titles, and that nothing ticks an item the agent did not tick.\n\nReported by Antonio on 2026-09-22 after seeing unticked checkboxes on completed tasks in the Web UI.\n\n---\n**Completion summary:**\nShipped: a new plan-core module packages/plan-core/src/task-completion-gate.ts holding the completion-gate decision (evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine). schema.ts's needsMotivation gained an additive `forced` parameter (default false, every existing 2-arg call site unaffected) so the force-completion motivation requirement reuses the same convention as blocked/canceled/deferred/rejected rather than inventing a second one.\n\nBoth packages/plan-mcp/src/index.ts (planner-task-complete) and packages/pi-adapter/src/index.ts (task_complete) now call the shared gate: the refusal without force names the toggle command (planner-task-checklist-toggle / task_checklist_toggle) before ever mentioning force=true; force=true with open items and no motivation is refused (FORCE_MOTIVATION_REQUIRED); force=true with a motivation succeeds and the overridden item titles + motivation are appended to both the completion evidence (task.description) and the statusLog entry's own description, so the record survives independently of the checklist and reopening (verified reopenTask only appends a statusLog entry and never touches description/checklist). Nothing ever ticks an item automatically — overriddenItems is reported, never written back as checked:true.\n\nplanner-task-show (MCP) and task_get (Pi) full views now render a computed \"done with N of M checklist item(s) still open\" line (taskCompletionMismatchLine) next to the existing T421 order-context line, plus a structured checklistMismatch field — surfacing the fact without rewriting the 26 historical done-with-everything-unchecked tasks (left untouched, as instructed). The interactive Pi (y/N) complete path at index.ts ~2568 was left unchanged, as instructed.\n\nVerification: plan-core 445/445 (433 baseline + 12 new unit tests in test/task-completion-gate.test.mjs), plan-mcp 92/92 (91 baseline + 1 new end-to-end test in mcp-harness.test.mjs), pi-adapter 93/93 (92 baseline + 1 new end-to-end test in mutations.test.mjs), plan-server 57/57 baseline unchanged (no plan-server changes — its REST completion path does not implement this gate and was out of scope per the Web UI edge case), agent-plan 14/14 baseline unchanged. Regressions proved live: reverted schema.ts/index.ts (plan-core) and both adapters' index.ts to pre-fix state, rebuilt, and confirmed the new plan-core suite fails to import (SyntaxError: no export evaluateTaskCompletionGate) and both new adapter tests fail on the exact old refusal wording (\"Re-run with force=true to complete anyway.\" / \"Use task_complete with force=true to override.\" — no toggle command named); then restored all four files from backup, rebuilt, and reran all five suites green.\n\nExisting tests updated (not weakened): 6 plan-mcp tests and 5 pi-adapter tests that force-completed the seeded T001 (which ships with one unchecked checklist item) now pass an explicit motivation, matching the new required behavior; none of those tests exercise the checklist gate itself, so no assertions were removed or loosened.\n\nFiles: packages/plan-core/src/{schema.ts,index.ts,task-completion-gate.ts}, packages/plan-core/test/task-completion-gate.test.mjs, packages/plan-mcp/src/index.ts, packages/plan-mcp/test/{mcp-crud,mcp-handoff,mcc-harness,mcp-planner-web}.test.mjs (mcp-harness + others), packages/pi-adapter/src/index.ts, packages/pi-adapter/test/{host-registration,mutations,resume}.test.mjs.\n\nNot done / out of scope, as instructed: the 26 historical done-with-unchecked-checklist tasks were not rewritten. plan-server's REST completion path was not touched (Web UI is a supervisor surface, explicit edge case). The interactive Pi (y/N) confirm path was not touched.",
+      "descriptionUpdatedAt": "2026-09-23T13:12:40.486Z",
       "notes": "Agent account confirming the mechanism, reported by Antonio on 2026-09-23:\n\n\"task_complete ha avvisato che i checkbox erano ancora aperti; invece di marcarli prima, ho usato force=true per completare comunque il task.\"\n(\"task_complete warned that the checkboxes were still open; instead of ticking them first, I used force=true to complete the task anyway.\")\n\nThis is the gate working as taught, not an agent ignoring it. The refusal message names the bypass and nothing else:\n\n- `packages/plan-mcp/src/index.ts:2547` — \"N checklist item(s) not done. Re-run with force=true to complete anyway.\"\n- `packages/pi-adapter/src/index.ts:5935` — \"...Use task_complete with force=true to override.\"\n\nNeither mentions `planner-task-checklist-toggle` / `task_checklist_toggle`, which is how an agent satisfies the gate rather than evades it. An agent that hits this refusal is handed the escape hatch and never told the way through.\n\nThat is the same defect shape as P104(F005)/T420, already fixed in this phase for task start: the denial was the documented path, so every start cost a guaranteed failure and taught the wrong lesson. Here the refusal teaches its own bypass, which is why all 26 historical cases show every item untouched rather than some.\n\nThis adds a step to the fix, ahead of the motivation requirement: the refusal must name the way to pass first — tick the completed steps with the exact toggle command — and present `force` as the exception for a checklist that no longer matches the work, carrying a reason. Wording an agent reads at the moment of the decision is doing the same job the T421 order context does: it is the instrument available at the point the choice is made.",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-001-planned-in-progress",
+          "date": "2026-09-23T12:59:48.457Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-002-in-progress-done",
+          "date": "2026-09-23T13:12:40.481Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: a new plan-core module packages/plan-core/src/task-completion-gate.ts holding the completion-gate decision (evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine). schema.ts's needsMotivation gained an additive `forced` parameter (default false, every existing 2-arg call site unaffected) so the force-completion motivation requirement reuses the same convention as blocked/canceled/deferred/rejected rather than inventing a second one.\n\nBoth packages/plan-mcp/src/index.ts (planner-task-complete) and packages/pi-adapter/src/index.ts (task_complete) now call the shared gate: the refusal without force names the toggle command (planner-task-checklist-toggle / task_checklist_toggle) before ever mentioning force=true; force=true with open items and no motivation is refused (FORCE_MOTIVATION_REQUIRED); force=true with a motivation succeeds and the overridden item titles + motivation are appended to both the completion evidence (task.description) and the statusLog entry's own description, so the record survives independently of the checklist and reopening (verified reopenTask only appends a statusLog entry and never touches description/checklist). Nothing ever ticks an item automatically — overriddenItems is reported, never written back as checked:true.\n\nplanner-task-show (MCP) and task_get (Pi) full views now render a computed \"done with N of M checklist item(s) still open\" line (taskCompletionMismatchLine) next to the existing T421 order-context line, plus a structured checklistMismatch field — surfacing the fact without rewriting the 26 historical done-with-everything-unchecked tasks (left untouched, as instructed). The interactive Pi (y/N) complete path at index.ts ~2568 was left unchanged, as instructed.\n\nVerification: plan-core 445/445 (433 baseline + 12 new unit tests in test/task-completion-gate.test.mjs), plan-mcp 92/92 (91 baseline + 1 new end-to-end test in mcp-harness.test.mjs), pi-adapter 93/93 (92 baseline + 1 new end-to-end test in mutations.test.mjs), plan-server 57/57 baseline unchanged (no plan-server changes — its REST completion path does not implement this gate and was out of scope per the Web UI edge case), agent-plan 14/14 baseline unchanged. Regressions proved live: reverted schema.ts/index.ts (plan-core) and both adapters' index.ts to pre-fix state, rebuilt, and confirmed the new plan-core suite fails to import (SyntaxError: no export evaluateTaskCompletionGate) and both new adapter tests fail on the exact old refusal wording (\"Re-run with force=true to complete anyway.\" / \"Use task_complete with force=true to override.\" — no toggle command named); then restored all four files from backup, rebuilt, and reran all five suites green.\n\nExisting tests updated (not weakened): 6 plan-mcp tests and 5 pi-adapter tests that force-completed the seeded T001 (which ships with one unchecked checklist item) now pass an explicit motivation, matching the new required behavior; none of those tests exercise the checklist gate itself, so no assertions were removed or loosened.\n\nFiles: packages/plan-core/src/{schema.ts,index.ts,task-completion-gate.ts}, packages/plan-core/test/task-completion-gate.test.mjs, packages/plan-mcp/src/index.ts, packages/plan-mcp/test/{mcp-crud,mcp-handoff,mcc-harness,mcp-planner-web}.test.mjs (mcp-harness + others), packages/pi-adapter/src/index.ts, packages/pi-adapter/test/{host-registration,mutations,resume}.test.mjs.\n\nNot done / out of scope, as instructed: the 26 historical done-with-unchecked-checklist tasks were not rewritten. plan-server's REST completion path was not touched (Web UI is a supervisor surface, explicit edge case). The interactive Pi (y/N) confirm path was not touched."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -953,60 +970,65 @@
           "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-001-refusal-message-names-the-toggle-command-first-force-is-the-documented-exception-not-the-documented-path",
           "number": 1,
           "title": "Refusal message names the toggle command first; force is the documented exception, not the documented path",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-002-move-the-completion-gate-into-plan-core-both-adapters-consume-it",
           "number": 2,
           "title": "Move the completion gate into plan-core; both adapters consume it",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-003-require-a-motivation-with-force-reusing-needsmotivation",
           "number": 3,
           "title": "Require a motivation with force, reusing needsMotivation",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-004-record-the-overridden-item-titles-in-completion-evidence-and-the-status-log",
           "number": 4,
           "title": "Record the overridden item titles in completion evidence and the status log",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-005-make-a-done-with-open-items-task-legible-in-the-full-task-view",
           "number": 5,
           "title": "Make a done-with-open-items task legible in the full task view",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-006-leave-the-interactive-y-n-confirmation-alone",
           "number": 6,
           "title": "Leave the interactive y/N confirmation alone",
-          "checked": false
+          "checked": true
         },
         {
           "id": "ee958b37-1822-4103-8859-30c3f75f8023-check-007-tests-refusal-names-the-toggle-force-without-motivation-refused-with-motivation-records-the-override-nothing-auto-ticks",
           "number": 7,
           "title": "Tests: refusal names the toggle, force without motivation refused, with motivation records the override, nothing auto-ticks",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-23T12:59:48.457Z",
+      "completedAt": "2026-09-23T13:12:40.481Z",
       "createdAt": "2026-09-23T08:19:03.534Z",
-      "updatedAt": "2026-09-23T08:38:03.924Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-23T13:12:40.481Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+          "createdAt": "2026-09-23T12:59:48.329Z"
+        }
+      ],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-15T08:57:11.696Z",
-  "updatedAt": "2026-09-23T08:38:50.432Z",
-  "handoff": "# Five payload and visibility defects remain\n\nCreated at: 2026-09-21T10:22:05.154Z\nUpdated at: 2026-09-21T10:22:05.154Z\nReason: Session ending with P104 half done. The five remaining tasks are fully specified but unstarted, and the branch has eleven commits that have never been pushed or reviewed.\n\n- Feature: F005 — Improvements\n- Phase: P104(F005) — Stop planner tools destroying and eliding state they report as intact\n- Next task: P104(F005)/T417 — Bound tool results and state payload limits before a call fails (priority 5, planned, no dependencies)\n- Exact resume point: nothing is in flight. No task is active, the working tree has no partial work for this phase, and `pnpm verify:final` passes at fingerprint 2fd226742b76.\n\n## Current and partial state\n\nDone and committed on branch `feature/handoff-retry-cost`: T413 (checklist replacement no longer destroys ticks), T414 (document links validated against the submitted body, not the auto-externalized rewrite), T415 (prepare surfaces the externalized portion of a prior capsule, plus section-aware truncation), T416 (reconciliation is evidenced by a heading diff, not an unchecked boolean), T423 (noUnusedLocals/noUnusedParameters enforced, 58 cleared).\n\nPlanned and untouched: T417, T418, T419, T420, T421, T422. Each description carries its own measured evidence and file:line references — read the task, not this capsule, before starting.\n\nPhases P102(F005) and P103(F005) are complete and gated.\n\nEleven commits sit on `feature/handoff-retry-cost` and have never been pushed. No PR exists. The user has repeatedly declined one.\n\n## Preservation constraints\n\n- Shaping and validation belong in plan-core; both adapters consume it. `packages/plan-core/src/handoff-reply.ts` is the pattern. Four separate defects in this phase came from logic duplicated per adapter.\n- `packages/plan-core/test/handoff-reply.test.mjs` pins a no-duplication invariant and payload ceilings from P103. T417 and T419 both shrink payloads; do not regress those assertions to make room.\n- The legacy `decisions` array is writable over HTTP and refused on the agent tools. That split is deliberate (T405 review) — the Web UI is a supervisor surface.\n- `truncateAtSafeBoundary` in `handoff-context.ts` is the shared truncation helper. T419 folds in a third raw-slice site in `task-context.ts:76`; use the helper, do not write a fourth implementation.\n\n## Supporting documents\n\nNone. Every task in this phase carries its own evidence inline, and no `.planner/docs/` file was produced by this work.\n\n## Blockers and risks\n\n- No blockers. All six remaining tasks are independent and unblocked.\n- Risk worth knowing: focused suites passed 588/588 while T405 shipped a real regression that only the browser gate caught. Run `pnpm verify:final` at phase close, not just the focused suites.\n- Sonnet subagents hit account rate limits four times during this work. Expect interruptions; check what a killed agent left on disk before resuming it, since two left the tree in states their own reports did not mention.\n\n## How to resume\n\n1. Read `planner-task-show P104(F005)/T417 full=true` and `planner-phase-show P104(F005) full=true`, then `planner-task-start P104(F005)/T417`. Reading first makes the start succeed on the first call.\n2. Work T417 through T422 in priority order. The planner's ordering is authoritative; deviating from it twice in this session caused real rework.\n3. T419 depends on nothing but overlaps T417 — one bounds mutation results, the other bounds reads and the recommendation. Keep them from duplicating each other.\n4. Verify each task with the focused suites, then `pnpm verify:final` once at phase close.\n5. Two findings from T423 have no task and need one if they are to be looked at: an unused `isPreservedResumeTarget` in `task-selection.ts` filtering a broader deviation-state set than the check actually uses, and `feature_delete` in pi-adapter reporting success without checking anything was removed.",
+  "updatedAt": "2026-09-23T13:12:40.481Z",
+  "handoff": "",
   "handoffUpdatedAt": "2026-09-21T10:22:05.154Z",
   "handoffAudit": {
     "version": 1,
@@ -1242,7 +1264,13 @@
     ]
   },
   "handoffReadAt": "2026-09-21T10:22:12.865Z",
-  "handoffHistory": [],
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/8f778bbb-7bc5-43e5-8e6b-4ba5e081099f-2026-09-23T13-12-40-510Z.md",
+      "clearedAt": "2026-09-23T13:12:40.510Z",
+      "reason": "phase-done"
+    }
+  ],
   "statusLog": [
     {
       "id": "ee0f7193-1369-441c-ab2f-dd6d6d4c1fcb",
@@ -1251,12 +1279,20 @@
       "toStatus": "in-progress",
       "title": "draft → in-progress",
       "description": ""
+    },
+    {
+      "id": "d89191ae-c27f-4dc1-bcdf-b1f592a59158",
+      "date": "2026-09-23T13:12:40.561Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
-      "createdAt": "2026-09-23T08:24:07.281Z"
+      "createdAt": "2026-09-23T12:59:48.329Z"
     },
     {
       "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",

@@ -304,7 +304,7 @@ test("accepted decisions on a task remain visible after that task and its phase 
     await callTool(session, "planner-requirement-list", { phaseRef: "P001(F001)" });
     const started = await callTool(session, "planner-task-start", { task: "T001" });
     if (started.isError) throw new Error(`planner-task-start failed: ${toolText(started)}`);
-    const completed = await callTool(session, "planner-task-complete", { task: "T001", description_update: "Completed to verify accepted decisions remain visible after completion.", force: true });
+    const completed = await callTool(session, "planner-task-complete", { task: "T001", description_update: "Completed to verify accepted decisions remain visible after completion.", force: true, motivation: "Seed checklist item not relevant to this accepted-decision coverage." });
     if (completed.isError) throw new Error(`planner-task-complete failed: ${toolText(completed)}`);
     assert.match(toolText(completed), /Task completed/);
     const shown = await callTool(session, "planner-task-show", { task: "T001", full: true });
@@ -580,6 +580,61 @@ test("harness drives a CRUD round trip; composite refs in output, state persiste
     assert.equal(structured.kind, "priority", "structured content carries the selection kind");
     assert.ok(typeof structured.taskId === "string" && structured.taskId.length > 0, "structured content carries a resolved task id");
     assert.ok(structured.nextTask, "structured content carries nextTask");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-complete: refusal names the toggle before force, force requires motivation, and an override is recorded and stays visible as done-with-open-items (P104(F005)/T428)", async () => {
+  const session = await startMcpFixture({ name: "t428-completion-gate" });
+  try {
+    // Seed T001 ships with one unchecked checklist item ("Add route").
+    await readTaskContext(session, "T001", "P001", "F001");
+    await callTool(session, "planner-task-start", { task: "T001" });
+
+    // No force: the refusal names the toggle command before it ever
+    // mentions force — the escape hatch is not the first thing an agent
+    // reading the refusal sees.
+    const refused = await callTool(session, "planner-task-complete", { task: "T001", description_update: "Attempting completion with the checklist still open." });
+    const refusedText = toolText(refused);
+    assert.match(refusedText, /planner-task-checklist-toggle/, "refusal names the toggle command");
+    assert.match(refusedText, /Add route/, "refusal names the specific open item");
+    const toggleIndex = refusedText.indexOf("planner-task-checklist-toggle");
+    const forceIndex = refusedText.indexOf("force=true");
+    assert.ok(toggleIndex >= 0 && forceIndex >= 0 && toggleIndex < forceIndex, "toggle is named before force");
+    assert.equal(toolStructured(refused).errorCode, "CHECKLIST_INCOMPLETE");
+
+    // force=true without a motivation is refused too — the same convention
+    // needsMotivation already applies to blocked/canceled/deferred/rejected.
+    const forcedNoMotivation = await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Attempting a forced completion with no motivation given." });
+    assert.match(toolText(forcedNoMotivation), /requires a motivation/);
+    assert.equal(toolStructured(forcedNoMotivation).errorCode, "FORCE_MOTIVATION_REQUIRED");
+    assert.equal((await session.store.loadAllPhases()).flatMap((p) => p.tasks).find((t) => t.number === 1).status, "in-progress", "a denied forced completion never mutates status");
+
+    // force=true with a motivation succeeds, and the override is recorded —
+    // never by ticking the item (T413's rule: an unticked item after a
+    // forced completion is information, not a bug to silently fix).
+    const forced = await callTool(session, "planner-task-complete", {
+      task: "T001", force: true,
+      motivation: "The route already shipped in a different task; this checklist item no longer applies.",
+      description_update: "Completed via forced override for P104(F005)/T428 coverage.",
+    });
+    assert.match(toolText(forced), /Task completed/);
+    const forcedTask = (await session.store.loadAllPhases()).flatMap((p) => p.tasks).find((t) => t.number === 1);
+    assert.equal(forcedTask.status, "done");
+    assert.equal(forcedTask.checklist.find((item) => item.title === "Add route").checked, false, "the override never ticks the item it overrode");
+    assert.match(forcedTask.description, /Add route/, "completion evidence names the skipped step");
+    assert.match(forcedTask.description, /route already shipped in a different task/, "completion evidence carries the motivation");
+    assert.match(forcedTask.statusLog.at(-1).description, /Add route/, "the status log entry itself names the skipped step, independent of the checklist");
+
+    // The mismatch — done, with an item still open — is legible on the full
+    // task view next to the T421 order context, not left for a reader to
+    // notice by comparing two fields themselves.
+    const shown = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const shownText = toolText(shown);
+    assert.match(shownText, /done with 1 of \d+ checklist item\(s\) still open/i);
+    assert.match(shownText, /Add route/);
+    assert.equal(toolStructured(shown).task.checklistMismatch?.includes("Add route"), true, "the mismatch is also in structured content, not just prose");
   } finally {
     await closeMcpFixture(session);
   }

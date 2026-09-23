@@ -354,7 +354,7 @@ describe("pi-adapter host harness", () => {
       await host.runTool("feature_get", { featureId: "F001", full: true });
       await host.runTool("requirement_list", { phaseRef: "P001" });
       assert.match(toolText(await host.runTool("task_start", { taskId: "T001" })), /Task started/);
-      const completed = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Completed to verify accepted decisions remain visible after completion." });
+      const completed = await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Seed checklist item not relevant to this accepted-decision coverage.", description_update: "Completed to verify accepted decisions remain visible after completion." });
       assert.match(toolText(completed), /Task completed/);
 
       const persistedTask = (await host.store.loadAllPhases())[0].tasks[0];
