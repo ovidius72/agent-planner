@@ -261,3 +261,24 @@ test("resolved deviations retain their explicit resume target; canceled records 
   const canceled = { ...resolved, state: "canceled" };
   assert.equal(recommendation(features, phases, [canceled]).kind, "priority");
 });
+
+test("a newer resolved deviation outranks an older still-approved deviation, matching the LIFO deviation stack", () => {
+  // "resolved" is a legacy synonym for "resume-required" (see task-selection.ts):
+  // both mean temporary work ended and the preserved task must be returned to.
+  // Deviations form a LIFO stack (see "nested deviations..." above), so the
+  // most recent one wins regardless of whether it is "approved"/"active" or
+  // already "resolved"/"resume-required" — an older, still-open deviation
+  // never outranks it. This pins that a resolved deviation legitimately
+  // drives the recommendation ahead of an older open one.
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [
+    task("task-a", 1, 1, "waiting"), task("temp-a", 2, 2, "waiting"),
+    task("task-b", 3, 3, "waiting"), task("temp-b", 4, 4, "done"),
+  ])];
+  const older = { ...deviation("temp-a", "task-a"), createdAt: "2026-08-10T00:00:00.000Z" };
+  const newer = { ...deviation("temp-b", "task-b", "resolved"), createdAt: "2026-08-10T01:00:00.000Z", resolvedAt: "2026-08-10T01:00:00.000Z" };
+  const result = recommendation(features, phases, [older, newer]);
+  assert.equal(result.kind, "resume");
+  assert.equal(result.candidate.task.id, "task-b");
+  assert.equal(result.deviation.id, newer.id);
+});
