@@ -27,6 +27,10 @@
  *    into acceptedDecisions, and only through the existing explicit
  *    project-context migration, never automatically here.
  */
+import { PlanStoreError, type PlanStore } from "./plan-store.js";
+import { formatFeatureRef, formatPhaseRef, featureNumberOfPhase } from "./naming.js";
+import { findPhaseByRef, findTaskByRef, resolveFeatureRefStrict } from "./refs.js";
+import type { MutationReply } from "./mutation-reply.js";
 
 export const ACCEPTED_DECISION_OWNERSHIP_RULE =
   "A decision has exactly one owner: the project when it is project-wide, a feature when it is feature-wide, a phase when it is phase-specific, or a task when the decision is genuinely local to that task's work and will not outlive it. Never record the same decision on more than one owner.";
@@ -85,5 +89,65 @@ export function buildDecisionRecordRedirectReply(input: DecisionRecordRedirectIn
         task: { targetType: "task", targetRef: null },
       },
     },
+  };
+}
+
+/**
+ * Resolve an Accepted Decision target (project/feature/phase/task) to its
+ * owning entity id and a display ref. Both adapters carried an identical
+ * copy for accepted_decision_create/update/delete; kept here so target
+ * resolution can never drift from `resolveFeatureRefStrict`/
+ * `findPhaseByRef`/`findTaskByRef` — the same ref grammar this project uses
+ * everywhere else.
+ */
+export type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
+export type AcceptedDecisionTargetResolution =
+  | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; ref: string }
+  | { ok: false; error: string };
+
+export async function resolveAcceptedDecisionTarget(
+  st: PlanStore,
+  targetType: AcceptedDecisionTargetType,
+  targetRef: string | undefined,
+): Promise<AcceptedDecisionTargetResolution> {
+  if (targetType === "project") {
+    const project = await st.loadProject();
+    return { ok: true, owner: { kind: "project" }, ref: project.name };
+  }
+  const ref = targetRef?.trim();
+  if (!ref) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions.` };
+  const [featuresDoc, phases] = await Promise.all([st.loadFeatures(), st.loadAllPhases()]);
+  const features = featuresDoc.features;
+  if (targetType === "feature") {
+    const resolved = resolveFeatureRefStrict(features, ref);
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    return { ok: true, owner: { kind: "feature", featureId: resolved.feature.id }, ref: formatFeatureRef(resolved.feature.number) };
+  }
+  if (targetType === "phase") {
+    const phase = findPhaseByRef(phases, features, ref);
+    if (!phase) return { ok: false, error: `Phase not found: ${ref}` };
+    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)) };
+  }
+  const found = findTaskByRef(phases, features, ref);
+  if (!found) return { ok: false, error: `Task not found: ${ref}` };
+  return {
+    ok: true,
+    owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id },
+    ref: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(found.task.number).padStart(3, "0")}`,
+  };
+}
+
+/**
+ * Render a PlanStoreError raised by an Accepted Decision create/update/delete
+ * as a text/structured pair, or rethrow when it isn't one of those (a
+ * different failure is the caller's to handle). Both adapters carried an
+ * identical copy of this decision; kept here so the type check and the
+ * message can never drift. Each adapter still wraps its own envelope.
+ */
+export function acceptedDecisionMutationFailureReply(error: unknown, outcome: "created" | "updated" | "deleted"): MutationReply {
+  if (!(error instanceof PlanStoreError) || !String(error.details?.errorCode ?? "").startsWith("ACCEPTED_DECISION_")) throw error;
+  return {
+    text: `❌ Accepted Decision mutation failed [${error.details?.errorCode}]: ${error.message}`,
+    structured: { [outcome]: false, ...error.details },
   };
 }

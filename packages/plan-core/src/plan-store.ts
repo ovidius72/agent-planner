@@ -115,7 +115,11 @@ import {
   unsupportedAllocationKindDetails,
 } from "./runtime-diagnostics.js";
 
-function nowISO(): string {
+/** Current timestamp in ISO-8601. The one place that decides "now" for every
+ *  planner write — adapters import this instead of each calling
+ *  `new Date().toISOString()` themselves, so a future need to freeze or mock
+ *  time has one call site to change. */
+export function nowISO(): string {
   return new Date().toISOString();
 }
 

@@ -1,5 +1,8 @@
 export * from "./naming.js";
 export * from "./refs.js";
+export * from "./render-utils.js";
+export * from "./pagination.js";
+export * from "./task-lifecycle.js";
 export * from "./schema.js";
 export * from "./checklist.js";
 export * from "./recap.js";
@@ -29,7 +32,7 @@ export * from "./package-version.js";
 export * from "./runtime-diagnostics.js";
 export * from "./write-coordination.js";
 export * from "./guard-decision.js";
-export { PlanStore, PlanStoreError, PlanStaleWriteError, PlanUnsupportedAllocationKindError, assertPlannerRevision, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, type IdeaCreateInput, type IdeaUpdateInput, type IdeaPromotionTargetInput, type AcceptedDecisionOwner, type AcceptedDecisionCreateInput, type AcceptedDecisionUpdateInput, type RecordProjectContextReadInput, type RecordProjectContextReadResult, type PhaseHandoffSummary, type OrphanPhaseSummary } from "./plan-store.js";
+export { PlanStore, PlanStoreError, PlanStaleWriteError, PlanUnsupportedAllocationKindError, assertPlannerRevision, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, nowISO, type IdeaCreateInput, type IdeaUpdateInput, type IdeaPromotionTargetInput, type AcceptedDecisionOwner, type AcceptedDecisionCreateInput, type AcceptedDecisionUpdateInput, type RecordProjectContextReadInput, type RecordProjectContextReadResult, type PhaseHandoffSummary, type OrphanPhaseSummary } from "./plan-store.js";
 export { PlanRenderer } from "./renderer.js";
 export { ExportService } from "./export-service.js";
 export type { CodebaseProfile, ResumeFocus, ActivityEntry, ActivityLog, AmbientFacts } from "./schema.js";

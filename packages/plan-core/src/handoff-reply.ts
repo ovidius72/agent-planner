@@ -17,10 +17,27 @@ import type { PhaseWorkMap } from "./task-context.js";
 import {
   MAX_HANDOFF_CONTENT_CHARS,
   handoffContentHash,
+  type HandoffContractError,
   type HandoffExternalizedDocumentAudit,
   type PhaseHandoffAudit,
 } from "./handoff-context.js";
 import { boundedContentForTransport } from "./text-bounds.js";
+import type { MutationReply } from "./mutation-reply.js";
+
+/**
+ * Render a HandoffContractError (handoff refresh/prepare denial) as a
+ * text/structured pair. Both adapters carried an identical copy; kept here
+ * so the message and the `errorCode`/details shape can never drift between
+ * MCP and Pi. Each adapter still owns its own envelope (`isError` +
+ * `structuredContent` for MCP, `details` for Pi) — see AGENTS.md rule 4.
+ */
+export function handoffContractFailureReply(error: HandoffContractError, action: "refresh" | "preparation" = "refresh"): MutationReply {
+  const recovery = typeof error.details.recovery === "string" ? ` Recovery: ${error.details.recovery}` : "";
+  return {
+    text: `❌ Handoff ${action} denied [${error.code}]: ${error.message}${recovery}`,
+    structured: { errorCode: error.code, ...error.details },
+  };
+}
 
 export interface BoundedHandoffContent {
   content: string;

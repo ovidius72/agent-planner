@@ -227,3 +227,51 @@ export function buildMutationReply(input: MutationReplyInput): MutationReply {
 
   return { text: lines.join(" "), structured };
 }
+
+export interface DerivedStatusReadOnlyInput {
+  entity: "feature" | "phase";
+  ref: string;
+  attemptedStatus: string;
+  effectiveStatus: string;
+  /** Full "retry without the status field" instruction. Each adapter names
+   *  its own update tool (`planner-feature-update` vs `feature_update`), so
+   *  this one line stays adapter-supplied rather than templated here —
+   *  moving it into the core would restate a tool name the core doesn't own. */
+  retryAction: string;
+}
+
+/**
+ * A feature/phase `status` field cannot be set directly — it is derived
+ * from child phases/tasks. Both adapters carried an identical copy of this
+ * refusal for feature_update/phase_update; only the retry line's tool name
+ * differs, which is why it is the one caller-supplied piece.
+ */
+export function derivedStatusReadOnlyReply(input: DerivedStatusReadOnlyInput): MutationReply {
+  const { entity, ref, attemptedStatus, effectiveStatus, retryAction } = input;
+  const childKind = entity === "feature" ? "phases" : "tasks";
+  const label = `${entity[0]!.toUpperCase()}${entity.slice(1)}`;
+  const nextActions = [
+    `${label} status is derived from child ${childKind}; update the child ${childKind} instead of setting ${entity}.status.`,
+    retryAction,
+  ];
+  return {
+    text: [
+      `❌ ${entity.toUpperCase()} UPDATE FAILED [DERIVED_STATUS_READ_ONLY]`,
+      `${label} status is derived from child ${childKind} and cannot be set directly.`,
+      `Attempted status: ${attemptedStatus}`,
+      `Effective derived status: ${effectiveStatus}`,
+      "No planner data was changed.",
+      "Next required actions:",
+      ...nextActions.map((action, index) => `${index + 1}. ${action}`),
+    ].join("\n"),
+    structured: {
+      updated: false,
+      errorCode: "DERIVED_STATUS_READ_ONLY",
+      entity,
+      ref,
+      attemptedStatus,
+      effectiveStatus,
+      nextActions,
+    },
+  };
+}

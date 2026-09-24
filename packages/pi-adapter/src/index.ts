@@ -12,8 +12,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine } from "@agent-plan/core";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon } from "@agent-plan/core";
+import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -91,44 +91,20 @@ function taskStartFailure(
   };
 }
 
-function derivedStatusReadOnlyResult(
+function piDerivedStatusReadOnlyResult(
   entity: "feature" | "phase",
   ref: string,
   attemptedStatus: string,
   effectiveStatus: string,
 ) {
-  const childKind = entity === "feature" ? "phases" : "tasks";
   const retryAction = entity === "feature"
     ? `Retry feature_update ${ref} without the status field if you need to update metadata.`
     : `Retry phase_update ${ref} without the status field if you need to update metadata.`;
-  const nextActions = [
-    `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind}; update the child ${childKind} instead of setting ${entity}.status.`,
-    retryAction,
-  ];
-  return {
-    isError: true,
-    content: [{ type: "text" as const, text: [
-      `❌ ${entity.toUpperCase()} UPDATE FAILED [DERIVED_STATUS_READ_ONLY]`,
-      `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind} and cannot be set directly.`,
-      `Attempted status: ${attemptedStatus}`,
-      `Effective derived status: ${effectiveStatus}`,
-      "No planner data was changed.",
-      "Next required actions:",
-      ...nextActions.map((action, index) => `${index + 1}. ${action}`),
-    ].join("\n") }],
-    details: {
-      updated: false,
-      errorCode: "DERIVED_STATUS_READ_ONLY",
-      entity,
-      ref,
-      attemptedStatus,
-      effectiveStatus,
-      nextActions,
-    },
-  };
+  const reply = derivedStatusReadOnlyReply({ entity, ref, attemptedStatus, effectiveStatus, retryAction });
+  return { isError: true, content: [{ type: "text" as const, text: reply.text }], details: reply.structured };
 }
 
-function mutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceived>[0]) {
+function piMutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceived>[0]) {
   const outcome = noMutableFieldsReceived(input);
   return {
     isError: true,
@@ -137,45 +113,14 @@ function mutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceive
   };
 }
 
-function acceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted") {
-  if (!(error instanceof PlanStoreError) || !String(error.details?.errorCode ?? "").startsWith("ACCEPTED_DECISION_")) throw error;
-  return {
-    isError: true,
-    content: [{ type: "text" as const, text: `❌ Accepted Decision mutation failed [${error.details?.errorCode}]: ${error.message}` }],
-    details: { [outcome]: false, ...error.details },
-  };
+function piAcceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted") {
+  const reply = acceptedDecisionMutationFailureReply(error, outcome);
+  return { isError: true, content: [{ type: "text" as const, text: reply.text }], details: reply.structured };
 }
 
-function legacyContextMigrationSummary(preview: Awaited<ReturnType<PlanStore["previewLegacyProjectContextMigration"]>>): string {
-  return [
-    `Legacy context present: ${preview.hasLegacyContext ? "yes" : "no"}`,
-    `Guideline additions: ${preview.guidelineAdditions.length} (${preview.skippedGuidelineDuplicates} duplicate(s) skipped)`,
-    `Accepted decision additions: ${preview.acceptedDecisionAdditions.length} (${preview.skippedDecisionDuplicates} duplicate(s) skipped)`,
-    `Legacy counts: globalRules=${preview.legacyCounts.globalRules}, workflowRules=${preview.legacyCounts.workflowRules}, decisions=${preview.legacyCounts.decisions}`,
-    `Fields cleared on apply: ${preview.fieldsClearedOnApply.join(", ") || "none"}`,
-  ].join("\n");
-}
-
-function handoffContractFailure(error: HandoffContractError, action: "refresh" | "preparation" = "refresh") {
-  const recovery = typeof error.details.recovery === "string" ? ` Recovery: ${error.details.recovery}` : "";
-  return {
-    isError: true,
-    content: [{ type: "text" as const, text: `❌ Handoff ${action} denied [${error.code}]: ${error.message}${recovery}` }],
-    details: { errorCode: error.code, ...error.details },
-  };
-}
-
-function boundedPage<T>(items: T[], page: number, pageSize: number): { items: T[]; page: number; pageSize: number; total: number; totalPages: number } {
-  const size = Math.min(25, Math.max(1, Math.trunc(pageSize)));
-  const totalPages = Math.max(1, Math.ceil(items.length / size));
-  const currentPage = Math.min(totalPages, Math.max(1, Math.trunc(page)));
-  return {
-    items: items.slice((currentPage - 1) * size, currentPage * size),
-    page: currentPage,
-    pageSize: size,
-    total: items.length,
-    totalPages,
-  };
+function piHandoffContractFailure(error: HandoffContractError, action: "refresh" | "preparation" = "refresh") {
+  const reply = handoffContractFailureReply(error, action);
+  return { isError: true, content: [{ type: "text" as const, text: reply.text }], details: reply.structured };
 }
 
 function piContextReadActions(
@@ -318,16 +263,8 @@ function hasPlannerCommandArgument(prefix: string): boolean {
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-function nowISO(): string {
-  return new Date().toISOString();
-}
-
 function manifestPathFor(root: string): string {
   return join(root, "manifest.json");
-}
-
-function createRequirementId(): string {
-  return crypto.randomUUID();
 }
 
 function planRootForCwd(cwd: string): string {
@@ -435,34 +372,6 @@ async function getPlannerExecutionGuard(st: PlanStore): Promise<{
     focusTaskId: focus?.task.id ?? "",
     focusTaskTitle: focus?.task.title ?? "",
   };
-}
-
-function resolveFeatureRefStrict(features: Feature[], ref: string):
-  | { ok: true; feature: Feature }
-  | { ok: false; error: string } {
-  const raw = ref.trim();
-  if (!raw) return { ok: false, error: "Feature ref is required." };
-  const normalized = raw.toLowerCase();
-  const byNumber = normalized.match(/^f(\d+)$/)
-    ? features.find((feature) => feature.number === parseInt(normalized.slice(1), 10))
-    : undefined;
-  if (byNumber) return { ok: true, feature: byNumber };
-
-  const byShortId = features.find((feature) => feature.shortId?.toLowerCase() === normalized);
-  if (byShortId) return { ok: true, feature: byShortId };
-
-  const byId = features.find((feature) => feature.id.toLowerCase() === normalized);
-  if (byId) return { ok: true, feature: byId };
-
-  const exactName = features.filter((feature) => feature.name.toLowerCase() === normalized);
-  if (exactName.length === 1) return { ok: true, feature: exactName[0]! };
-  if (exactName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Multiple features have that exact name; use F00x, shortId, or UUID.` };
-
-  const partialName = features.filter((feature) => feature.name.toLowerCase().includes(normalized));
-  if (partialName.length === 1) return { ok: true, feature: partialName[0]! };
-  if (partialName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Matches: ${partialName.map((feature) => formatFeatureRef(feature.number)).join(", ")}. Use a specific F00x, shortId, or UUID.` };
-
-  return { ok: false, error: `Feature not found: ${raw}` };
 }
 
 async function buildHandoffMarkdown(
@@ -768,60 +677,8 @@ function readUiConfig(ctx: ExtensionContext): UiConfig | undefined {
   };
 }
 
-function statusIcon(status: string): string {
-  const icons: Record<string, string> = {
-    draft: "📄", discovery: "🔍", planned: "📋",
-    "in-progress": "🚧", done: "✅", blocked: "🚫", canceled: "❌",
-    rejected: "❌", deferred: "⏳", waiting: "⏱️",
-  };
-  return icons[status] ?? "❓";
-}
-
 function pad(n: number): string {
   return String(n).padStart(3, "0");
-}
-
-type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
-type AcceptedDecisionTargetResolution =
-  | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; ref: string }
-  | { ok: false; error: string };
-
-async function resolveAcceptedDecisionTarget(st: PlanStore, targetType: AcceptedDecisionTargetType, targetRef: string | undefined): Promise<AcceptedDecisionTargetResolution> {
-  if (targetType === "project") {
-    const project = await st.loadProject();
-    return { ok: true, owner: { kind: "project" }, ref: project.name };
-  }
-  const ref = targetRef?.trim();
-  if (!ref) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions.` };
-  const [featuresDoc, phases] = await Promise.all([st.loadFeatures(), st.loadAllPhases()]);
-  const features = featuresDoc.features;
-  if (targetType === "feature") {
-    const resolved = resolveFeatureRefStrict(features, ref);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
-    return { ok: true, owner: { kind: "feature", featureId: resolved.feature.id }, ref: formatFeatureRef(resolved.feature.number) };
-  }
-  if (targetType === "phase") {
-    const phase = findPhaseByRef(phases, features, ref);
-    if (!phase) return { ok: false, error: `Phase not found: ${ref}` };
-    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)) };
-  }
-  const found = findTaskByRef(phases, features, ref);
-  if (!found) return { ok: false, error: `Task not found: ${ref}` };
-  return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, ref: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}` };
-}
-
-function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): void {
-  const previousStatus = task.status;
-  if (nextStatus === "in-progress" && !task.startedAt) {
-    task.startedAt = now;
-  }
-  if (nextStatus === "done") {
-    if (!task.startedAt) task.startedAt = now;
-    task.completedAt = now;
-  } else if (previousStatus === "done") {
-    task.completedAt = "";
-  }
-  task.status = nextStatus;
 }
 
 async function isPortAvailable(port: number): Promise<boolean> {
@@ -3071,7 +2928,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const mutableFields = ["name", "description", "descriptionRef", "goal", "scope", "outOfScope", "technologies", "tools", "globalRules"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
-        return mutationNoFieldsFailure({
+        return piMutationNoFieldsFailure({
           entity: "project",
           ref: project.name,
           operation: "update",
@@ -3341,7 +3198,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return { content: [{ type: "text", text: "title required" }], details: { errorCode: "TITLE_REQUIRED", updated: false } };
       }
       if (params.title === undefined && params.description === undefined && params.linkedPhaseIds === undefined && params.macroTasks === undefined) {
-        return mutationNoFieldsFailure({
+        return piMutationNoFieldsFailure({
           entity: "requirement",
           ref: params.requirementId,
           operation: "update",
@@ -3429,7 +3286,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   });
   pi.registerTool({
     name: "idea_update", label: "Idea Update", description: "Update an Ideas Inbox title or description.", parameters: Type.Object({ idea: Type.String(), title: Type.Optional(Type.String()), description: Type.Optional(Type.String()) }),
-    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return mutationNoFieldsFailure({ entity: "idea", ref: params.idea, operation: "update", mutableFields: ["title", "description"], retryCommand: `idea_update ${params.idea}` }); const ideaUpdatedFields = [...(params.title !== undefined ? ["title"] : []), ...(params.description !== undefined ? ["description"] : [])]; const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); const ideaReply = buildMutationReply({ identity: { entity: "idea", ref: formatIdeaRef(idea.number), id: idea.id, title: idea.title }, operation: "update", updatedFields: ideaUpdatedFields, changedValues: idea as unknown as Record<string, unknown>, readBackCommand: `idea_show ${formatIdeaRef(idea.number)}` }); return { content: [{ type: "text", text: ideaReply.text }], details: ideaReply.structured }; },
+    async execute(_id, params, _signal, _onUpdate, ctx) { const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} }; const current = findIdeaByRef((await st.loadIdeas()).ideas, params.idea); if (!current) return { content: [{ type: "text", text: `Idea not found: ${params.idea}` }], details: { errorCode: "NOT_FOUND", updated: false } }; if (params.title === undefined && params.description === undefined) return piMutationNoFieldsFailure({ entity: "idea", ref: params.idea, operation: "update", mutableFields: ["title", "description"], retryCommand: `idea_update ${params.idea}` }); const ideaUpdatedFields = [...(params.title !== undefined ? ["title"] : []), ...(params.description !== undefined ? ["description"] : [])]; const idea = await st.updateIdea(current.id, { ...(params.title !== undefined ? { title: params.title } : {}), ...(params.description !== undefined ? { description: params.description } : {}) }); await st.writeGenerated(); const ideaReply = buildMutationReply({ identity: { entity: "idea", ref: formatIdeaRef(idea.number), id: idea.id, title: idea.title }, operation: "update", updatedFields: ideaUpdatedFields, changedValues: idea as unknown as Record<string, unknown>, readBackCommand: `idea_show ${formatIdeaRef(idea.number)}` }); return { content: [{ type: "text", text: ideaReply.text }], details: ideaReply.structured }; },
   });
   pi.registerTool({
     name: "idea_delete", label: "Idea Delete", description: "Delete an Idea only after explicit user confirmation.", parameters: Type.Object({ idea: Type.String(), confirmed: Type.Boolean() }),
@@ -3781,7 +3638,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           details: { phaseRef: r.compositeRef, ...result, resumeReady: true, verificationRequired: false },
         };
       } catch (error) {
-        if (error instanceof HandoffContractError) return handoffContractFailure(error);
+        if (error instanceof HandoffContractError) return piHandoffContractFailure(error);
         const message = error instanceof Error ? error.message : String(error);
         return { isError: true, content: [{ type: "text", text: `❌ Handoff read-back verification denied: ${message}` }], details: { resumeReady: false, error: message } };
       }
@@ -3809,7 +3666,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const reply = buildHandoffPrepareReply({ phaseRef: r.compositeRef, audit });
         return { content: [{ type: "text", text: reply.text }], details: reply.structured };
       } catch (error) {
-        if (error instanceof HandoffContractError) return handoffContractFailure(error, "preparation");
+        if (error instanceof HandoffContractError) return piHandoffContractFailure(error, "preparation");
         const message = error instanceof Error ? error.message : String(error);
         return { content: [{ type: "text", text: `❌ Handoff preparation failed: ${message}` }], details: { error: message } };
       }
@@ -3961,7 +3818,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           },
         };
       } catch (error) {
-        if (error instanceof HandoffContractError) return handoffContractFailure(error);
+        if (error instanceof HandoffContractError) return piHandoffContractFailure(error);
         const message = error instanceof Error ? error.message : String(error);
         return { content: [{ type: "text", text: `❌ Handoff refresh denied: ${message} If you retry against the same phaseRef and expectedHandoffUpdatedAt, you may omit content/markdown_content to reuse the body just submitted.` }], details: { error: message } };
       }
@@ -4154,7 +4011,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const mutableFields = ["description", "descriptionRef", "workDone", "workRemaining", "dependencies"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
-        return mutationNoFieldsFailure({
+        return piMutationNoFieldsFailure({
           entity: "feature",
           ref: formatFeatureRef(resolvedFeature.feature.number),
           operation: "discuss",
@@ -4233,7 +4090,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!resolvedFeature.ok) return { content: [{ type: "text", text: resolvedFeature.error }], details: {} };
       const featureId = resolvedFeature.feature.id;
       if (params.status !== undefined) {
-        return derivedStatusReadOnlyResult("feature", formatFeatureRef(resolvedFeature.feature.number), String(params.status), resolvedFeature.feature.status);
+        return piDerivedStatusReadOnlyResult("feature", formatFeatureRef(resolvedFeature.feature.number), String(params.status), resolvedFeature.feature.status);
       }
       if (params.acceptedDecisions !== undefined) {
         return {
@@ -4254,7 +4111,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       ] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
-        return mutationNoFieldsFailure({
+        return piMutationNoFieldsFailure({
           entity: "feature",
           ref: formatFeatureRef(resolvedFeature.feature.number),
           operation: "update",
@@ -4505,7 +4362,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const mutableFields = ["goal", "goals", "summary", "scope", "descriptionRef", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
-        return mutationNoFieldsFailure({
+        return piMutationNoFieldsFailure({
           entity: "phase",
           ref: formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)),
           operation: "discuss",
@@ -4599,7 +4456,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }
 
       if (params.status !== undefined) {
-        return derivedStatusReadOnlyResult("phase", formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)), String(params.status), resolvedPhase.status);
+        return piDerivedStatusReadOnlyResult("phase", formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)), String(params.status), resolvedPhase.status);
       }
       if (params.acceptedDecisions !== undefined) {
         return {
@@ -4618,7 +4475,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
-        return mutationNoFieldsFailure({
+        return piMutationNoFieldsFailure({
           entity: "phase",
           ref: formatPhaseRef(resolvedPhase.number, featureNumberOfPhase(resolvedPhase, features)),
           operation: "update",
@@ -4767,7 +4624,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.writeGenerated();
         return { content: [{ type: "text", text: `✅ Accepted decision created on ${target.ref}: ${acceptedDecision.title}` }], details: { created: true, targetType: params.targetType, targetRef: target.ref, acceptedDecision } };
       } catch (error) {
-        return acceptedDecisionMutationFailure(error, "created");
+        return piAcceptedDecisionMutationFailure(error, "created");
       }
     },
   });
@@ -4817,7 +4674,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.writeGenerated();
         return { content: [{ type: "text", text: `✅ Accepted decision updated on ${target.ref}: ${acceptedDecision.title}` }], details: { updated: true, targetType: params.targetType, targetRef: target.ref, acceptedDecision, updatedFields: receivedFields } };
       } catch (error) {
-        return acceptedDecisionMutationFailure(error, "updated");
+        return piAcceptedDecisionMutationFailure(error, "updated");
       }
     },
   });
@@ -4845,7 +4702,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         await st.writeGenerated();
         return { content: [{ type: "text", text: `✅ Accepted decision deleted from ${target.ref}: ${acceptedDecision.title}` }], details: { deleted: true, targetType: params.targetType, targetRef: target.ref, decisionId: params.decisionId, acceptedDecision } };
       } catch (error) {
-        return acceptedDecisionMutationFailure(error, "deleted");
+        return piAcceptedDecisionMutationFailure(error, "deleted");
       }
     },
   });
@@ -5240,7 +5097,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "priority", "checklist", "subtasks"] as const;
       const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
       if (receivedFields.length === 0) {
-        return mutationNoFieldsFailure({
+        return piMutationNoFieldsFailure({
           entity: "task",
           ref: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}`,
           operation: "update",

@@ -5,10 +5,10 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, validateResolvedTarget } from "@agent-plan/core/naming";
+import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { Feature, Phase, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -37,70 +37,29 @@ function text(textValue: string, structuredContent?: Record<string, unknown>): T
   return structuredContent ? { content: [{ type: "text", text: textValue }], structuredContent } : { content: [{ type: "text", text: textValue }] };
 }
 
-function handoffContractFailure(error: HandoffContractError, action: "refresh" | "preparation" = "refresh"): ToolResult {
-  const recovery = typeof error.details.recovery === "string" ? ` Recovery: ${error.details.recovery}` : "";
-  return {
-    isError: true,
-    content: [{ type: "text", text: `❌ Handoff ${action} denied [${error.code}]: ${error.message}${recovery}` }],
-    structuredContent: { errorCode: error.code, ...error.details },
-  };
+function mcpHandoffContractFailure(error: HandoffContractError, action: "refresh" | "preparation" = "refresh"): ToolResult {
+  const reply = handoffContractFailureReply(error, action);
+  return { isError: true, content: [{ type: "text", text: reply.text }], structuredContent: reply.structured };
 }
 
 function handoffPreflightFailure(errorCode: "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED", message: string, details: Record<string, unknown> = {}): ToolResult {
   return { isError: true, content: [{ type: "text", text: `❌ Handoff refresh denied [${errorCode}]: ${message}` }], structuredContent: { errorCode, persisted: false, ...details } };
 }
 
-function boundedPage<T>(items: T[], page: number, pageSize: number): { items: T[]; page: number; pageSize: number; total: number; totalPages: number } {
-  const size = Math.min(25, Math.max(1, Math.trunc(pageSize)));
-  const totalPages = Math.max(1, Math.ceil(items.length / size));
-  const currentPage = Math.min(totalPages, Math.max(1, Math.trunc(page)));
-  return {
-    items: items.slice((currentPage - 1) * size, currentPage * size),
-    page: currentPage,
-    pageSize: size,
-    total: items.length,
-    totalPages,
-  };
-}
-
-function derivedStatusReadOnlyResult(
+function mcpDerivedStatusReadOnlyResult(
   entity: "feature" | "phase",
   ref: string,
   attemptedStatus: string,
   effectiveStatus: string,
 ): ToolResult {
-  const childKind = entity === "feature" ? "phases" : "tasks";
   const retryAction = entity === "feature"
     ? `Retry planner-feature-update ${ref} without the status field if you need to update metadata.`
     : `Retry planner-phase-update ${ref} without the status field if you need to update metadata.`;
-  const nextActions = [
-    `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind}; update the child ${childKind} instead of setting ${entity}.status.`,
-    retryAction,
-  ];
-  return {
-    isError: true,
-    content: [{ type: "text", text: [
-      `❌ ${entity.toUpperCase()} UPDATE FAILED [DERIVED_STATUS_READ_ONLY]`,
-      `${entity[0]!.toUpperCase()}${entity.slice(1)} status is derived from child ${childKind} and cannot be set directly.`,
-      `Attempted status: ${attemptedStatus}`,
-      `Effective derived status: ${effectiveStatus}`,
-      "No planner data was changed.",
-      "Next required actions:",
-      ...nextActions.map((action, index) => `${index + 1}. ${action}`),
-    ].join("\n") }],
-    structuredContent: {
-      updated: false,
-      errorCode: "DERIVED_STATUS_READ_ONLY",
-      entity,
-      ref,
-      attemptedStatus,
-      effectiveStatus,
-      nextActions,
-    },
-  };
+  const reply = derivedStatusReadOnlyReply({ entity, ref, attemptedStatus, effectiveStatus, retryAction });
+  return { isError: true, content: [{ type: "text", text: reply.text }], structuredContent: reply.structured };
 }
 
-function mutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceived>[0]): ToolResult {
+function mcpMutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceived>[0]): ToolResult {
   const outcome = noMutableFieldsReceived(input);
   return {
     isError: true,
@@ -109,23 +68,9 @@ function mutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsReceive
   };
 }
 
-function acceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted"): ToolResult {
-  if (!(error instanceof PlanStoreError) || !String(error.details?.errorCode ?? "").startsWith("ACCEPTED_DECISION_")) throw error;
-  return {
-    isError: true,
-    content: [{ type: "text", text: `❌ Accepted Decision mutation failed [${error.details?.errorCode}]: ${error.message}` }],
-    structuredContent: { [outcome]: false, ...error.details },
-  };
-}
-
-function legacyContextMigrationSummary(preview: Awaited<ReturnType<PlanStore["previewLegacyProjectContextMigration"]>>): string {
-  return [
-    `Legacy context present: ${preview.hasLegacyContext ? "yes" : "no"}`,
-    `Guideline additions: ${preview.guidelineAdditions.length} (${preview.skippedGuidelineDuplicates} duplicate(s) skipped)`,
-    `Accepted decision additions: ${preview.acceptedDecisionAdditions.length} (${preview.skippedDecisionDuplicates} duplicate(s) skipped)`,
-    `Legacy counts: globalRules=${preview.legacyCounts.globalRules}, workflowRules=${preview.legacyCounts.workflowRules}, decisions=${preview.legacyCounts.decisions}`,
-    `Fields cleared on apply: ${preview.fieldsClearedOnApply.join(", ") || "none"}`,
-  ].join("\n");
+function mcpAcceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted"): ToolResult {
+  const reply = acceptedDecisionMutationFailureReply(error, outcome);
+  return { isError: true, content: [{ type: "text", text: reply.text }], structuredContent: reply.structured };
 }
 
 function taskStartError(
@@ -167,10 +112,6 @@ function mcpContextReadActions(
 
 const MCP_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/mcp");
 const CORE_PACKAGE = resolvedPackageVersion("@agent-plan/core", import.meta.url);
-
-function nowISO(): string {
-  return new Date().toISOString();
-}
 
 function planRoot(): string {
   return process.env.AGENT_PLAN_ROOT || join(process.cwd(), ".planner");
@@ -257,81 +198,8 @@ function findFeatureByRef(features: Feature[], ref: string): Feature | undefined
     ?? features.find((feature) => feature.name.toLowerCase().includes(normalized));
 }
 
-function resolveFeatureRefStrict(features: Feature[], ref: string):
-  | { ok: true; feature: Feature }
-  | { ok: false; error: string } {
-  const raw = ref.trim();
-  if (!raw) return { ok: false, error: "Feature ref is required." };
-  const normalized = raw.toLowerCase();
-  const byNumber = normalized.match(/^f(\d+)$/)
-    ? features.find((feature) => feature.number === parseInt(normalized.slice(1), 10))
-    : undefined;
-  if (byNumber) return { ok: true, feature: byNumber };
-
-  const byShortId = features.find((feature) => feature.shortId?.toLowerCase() === normalized);
-  if (byShortId) return { ok: true, feature: byShortId };
-
-  const byId = features.find((feature) => feature.id.toLowerCase() === normalized);
-  if (byId) return { ok: true, feature: byId };
-
-  const exactName = features.filter((feature) => feature.name.toLowerCase() === normalized);
-  if (exactName.length === 1) return { ok: true, feature: exactName[0]! };
-  if (exactName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Multiple features have that exact name; use F00x, shortId, or UUID.` };
-
-  const partialName = features.filter((feature) => feature.name.toLowerCase().includes(normalized));
-  if (partialName.length === 1) return { ok: true, feature: partialName[0]! };
-  if (partialName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Matches: ${partialName.map((feature) => formatFeatureRef(feature.number)).join(", ")}. Use a specific F00x, shortId, or UUID.` };
-
-  return { ok: false, error: `Feature not found: ${raw}` };
-}
-/** Belt-and-suspenders validation: a resolved ref must be a real UUID and the target
- *  must still exist in the store before we allocate numbers or write. */
-function featureNumberOfPhase(phase: Phase, features: Feature[]): number | undefined {
-  return phase.featureId ? features.find((f) => f.id === phase.featureId)?.number : undefined;
-}
 function taskCompositeRef(task: Task, phase: Phase, features: Feature[]): string {
   return `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${String(task.number).padStart(3, "0")}`;
-}
-
-type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
-type AcceptedDecisionTargetResolution =
-  | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; ref: string }
-  | { ok: false; error: string };
-
-async function resolveAcceptedDecisionTarget(st: PlanStore, targetType: AcceptedDecisionTargetType, targetRef: string | undefined): Promise<AcceptedDecisionTargetResolution> {
-  if (targetType === "project") {
-    const project = await st.loadProject();
-    return { ok: true, owner: { kind: "project" }, ref: project.name };
-  }
-  const ref = targetRef?.trim();
-  if (!ref) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions.` };
-  const [featuresDoc, phases] = await Promise.all([st.loadFeatures(), st.loadAllPhases()]);
-  const features = featuresDoc.features;
-  if (targetType === "feature") {
-    const resolved = resolveFeatureRefStrict(features, ref);
-    if (!resolved.ok) return { ok: false, error: resolved.error };
-    return { ok: true, owner: { kind: "feature", featureId: resolved.feature.id }, ref: formatFeatureRef(resolved.feature.number) };
-  }
-  if (targetType === "phase") {
-    const phase = findPhaseByRef(phases, features, ref);
-    if (!phase) return { ok: false, error: `Phase not found: ${ref}` };
-    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, ref: formatPhaseRef(phase.number, featureNumberOfPhase(phase, features)) };
-  }
-  const found = findTaskByRef(phases, features, ref);
-  if (!found) return { ok: false, error: `Task not found: ${ref}` };
-  return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, ref: taskCompositeRef(found.task, found.phase, features) };
-}
-
-function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): void {
-  const previousStatus = task.status;
-  if (nextStatus === "in-progress" && !task.startedAt) task.startedAt = now;
-  if (nextStatus === "done") {
-    if (!task.startedAt) task.startedAt = now;
-    task.completedAt = now;
-  } else if (previousStatus === "done") {
-    task.completedAt = "";
-  }
-  task.status = nextStatus;
 }
 
 async function writeAndSummarize(st: PlanStore, message: string, structuredContent?: Record<string, unknown>): Promise<ToolResult> {
@@ -621,7 +489,7 @@ server.registerTool("planner-project-discuss", {
   const mutableFields = ["description", "descriptionRef", "goal", "scope", "outOfScope", "technologies", "tools", "globalRules"] as const;
   const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "project",
       ref: project.name,
       operation: "discuss",
@@ -856,7 +724,7 @@ server.registerTool("planner-accepted-decision-create", {
       acceptedDecision,
     });
   } catch (error) {
-    return acceptedDecisionMutationFailure(error, "created");
+    return mcpAcceptedDecisionMutationFailure(error, "created");
   }
 });
 
@@ -875,7 +743,7 @@ server.registerTool("planner-accepted-decision-update", {
   const mutableFields = ["title", "decision", "rationale", "implementationNotes"] as const;
   const receivedFields = mutableFields.filter((field) => ({ title, decision, rationale, implementationNotes })[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "acceptedDecision",
       ref: decisionId,
       operation: "update",
@@ -902,7 +770,7 @@ server.registerTool("planner-accepted-decision-update", {
       acceptedDecision,
     });
   } catch (error) {
-    return acceptedDecisionMutationFailure(error, "updated");
+    return mcpAcceptedDecisionMutationFailure(error, "updated");
   }
 });
 
@@ -937,7 +805,7 @@ server.registerTool("planner-accepted-decision-delete", {
       acceptedDecision,
     });
   } catch (error) {
-    return acceptedDecisionMutationFailure(error, "deleted");
+    return mcpAcceptedDecisionMutationFailure(error, "deleted");
   }
 });
 
@@ -1035,7 +903,7 @@ server.registerTool("planner-feature-discuss", {
   const discussInputs = { description, descriptionRef: rawDescriptionRef, workDone, workRemaining, dependencies };
   const receivedFields = mutableFields.filter((field) => discussInputs[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "feature",
       ref: formatFeatureRef(feature.number),
       operation: "discuss",
@@ -1100,12 +968,12 @@ server.registerTool("planner-feature-update", {
   if (!resolvedFeature.ok) return text(resolvedFeature.error);
   const feature = resolvedFeature.feature;
   if (updates.status !== undefined) {
-    return derivedStatusReadOnlyResult("feature", formatFeatureRef(feature.number), updates.status, feature.status);
+    return mcpDerivedStatusReadOnlyResult("feature", formatFeatureRef(feature.number), updates.status, feature.status);
   }
   const mutableFields = ["name", "description", "descriptionRef", "workDone", "workRemaining", "startDate", "endDate", "priority"] as const;
   const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "feature",
       ref: formatFeatureRef(feature.number),
       operation: "update",
@@ -1314,7 +1182,7 @@ server.registerTool("planner-phase-discuss", {
   const mutableFields = ["goal", "goals", "summary", "scope", "descriptionRef", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
   const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "phase",
       ref: formatPhaseRef(found.number, featureNumberOfPhase(found, features)),
       operation: "discuss",
@@ -1387,7 +1255,7 @@ server.registerTool("planner-phase-update", {
   const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
   if (!found) return text(`Phase not found: ${ref}`);
   if (updates.status !== undefined) {
-    return derivedStatusReadOnlyResult("phase", formatPhaseRef(found.number, featureNumberOfPhase(found, features)), updates.status, found.status);
+    return mcpDerivedStatusReadOnlyResult("phase", formatPhaseRef(found.number, featureNumberOfPhase(found, features)), updates.status, found.status);
   }
   if (updates.decisions !== undefined) {
     return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "phase", targetRef: formatPhaseRef(found.number, featureNumberOfPhase(found, features)) } };
@@ -1395,7 +1263,7 @@ server.registerTool("planner-phase-update", {
   const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
   const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "phase",
       ref: formatPhaseRef(found.number, featureNumberOfPhase(found, features)),
       operation: "update",
@@ -1686,7 +1554,7 @@ server.registerTool("planner-task-discuss", {
   const discussInputs = { description, descriptionRef: rawDescriptionRef, checklist };
   const receivedFields = mutableFields.filter((field) => discussInputs[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "task",
       ref: taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features),
       operation: "discuss",
@@ -1806,7 +1674,7 @@ server.registerTool("planner-task-update", {
   const updateInputs = { title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks };
   const receivedFields = mutableFields.filter((field) => updateInputs[field] !== undefined);
   if (receivedFields.length === 0) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "task",
       ref: taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features),
       operation: "update",
@@ -2684,7 +2552,7 @@ server.registerTool("planner-handoff-verify", {
       verificationRequired: false,
     });
   } catch (error) {
-    if (error instanceof HandoffContractError) return handoffContractFailure(error);
+    if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error);
     const message = error instanceof Error ? error.message : String(error);
     return text(`❌ Handoff read-back verification denied: ${message}`, { resumeReady: false, error: message });
   }
@@ -2792,7 +2660,7 @@ server.registerTool("planner-requirement-update", {
   const current = requirements.requirements.find((requirement) => requirement.id === requirementId);
   if (!current) return text(`❌ Requirement not found: ${requirementId}`, { updated: false, errorCode: "NOT_FOUND" });
   if (title === undefined && description === undefined && linkedPhaseIds === undefined && macroTasks === undefined) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "requirement",
       ref: requirementId,
       operation: "update",
@@ -2902,7 +2770,7 @@ server.registerTool("planner-idea-update", {
   const st = await requireStore(); const current = findIdeaByRef((await st.loadIdeas()).ideas, ref);
   if (!current) return text(`Idea not found: ${ref}`, { errorCode: "NOT_FOUND", updated: false });
   if (title === undefined && description === undefined) {
-    return mutationNoFieldsFailure({
+    return mcpMutationNoFieldsFailure({
       entity: "idea",
       ref,
       operation: "update",
@@ -3099,7 +2967,7 @@ server.registerTool("planner-handoff-write", {
       ],
     });
   } catch (error) {
-    if (error instanceof HandoffContractError) return handoffContractFailure(error);
+    if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error);
     const message = error instanceof Error ? error.message : String(error);
     return text(`❌ Handoff refresh denied: ${message} If you retry against the same phaseRef and expectedHandoffUpdatedAt, you may omit content to reuse the body just submitted.`, { error: message });
   }
@@ -3128,7 +2996,7 @@ server.registerTool("planner-handoff-prepare", {
     const reply = buildHandoffPrepareReply({ phaseRef: r.compositeRef, audit });
     return text(reply.text, reply.structured);
   } catch (error) {
-    if (error instanceof HandoffContractError) return handoffContractFailure(error, "preparation");
+    if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error, "preparation");
     const message = error instanceof Error ? error.message : String(error);
     return text(`❌ Handoff preparation failed: ${message}`, { error: message });
   }

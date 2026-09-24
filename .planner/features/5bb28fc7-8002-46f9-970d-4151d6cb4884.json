@@ -59,7 +59,16 @@
     "dff7481a-5d80-4ef0-9409-5fe40b56fb94"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "946194d9-ca40-4e6c-93ae-c4c4b39537c3",
+      "date": "2026-09-24T10:14:49.219Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z",
   "sessionInfo": []

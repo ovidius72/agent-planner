@@ -25,7 +25,8 @@
   "taskIds": [
     "281c6d44-b860-4176-90ed-4733ec27415d",
     "59a4f184-efcc-4a10-82af-01a59f424745",
-    "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7"
+    "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7",
+    "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87"
   ],
   "tasks": [
     {
@@ -36,11 +37,28 @@
       "priority": 1,
       "shortName": "delete-the-adapter-local-copie",
       "title": "Delete the adapter-local copies of shared logic",
-      "status": "planned",
-      "description": "Thirteen functions are written per adapter instead of once. Verified on 2026-09-23 by parsing function declarations out of both adapter entry points and every `packages/plan-core/src/*.ts`, then intersecting.\n\n**Three are unambiguous — an adapter-local copy of something plan-core already exports.** Delete the copy, import the export:\n- `featureNumberOfPhase` — `packages/plan-mcp/src/index.ts:289` shadows `packages/plan-core/src/naming.ts:120`. pi-adapter already imports the core one, so the two adapters disagree about where this lives.\n- `createRequirementId` — pi-adapter shadows `naming.ts`.\n- `statusIcon` — pi-adapter shadows `render-utils.ts`.\n\n**Ten are defined privately in BOTH adapters:** `acceptedDecisionMutationFailure`, `applyTaskLifecycleDates`, `boundedPage`, `derivedStatusReadOnlyResult`, `handoffContractFailure`, `legacyContextMigrationSummary`, `mutationNoFieldsFailure`, `resolveAcceptedDecisionTarget`, `resolveFeatureRefStrict`, `nowISO`.\n\nDo not treat those ten as one blob. They fall into three kinds and the fix differs:\n\n- *Pure logic with no adapter shape* — `nowISO`, `boundedPage`, `applyTaskLifecycleDates`, `resolveFeatureRefStrict`, `resolveAcceptedDecisionTarget`. These move to plan-core whole and both adapters import them.\n- *A decision plus an adapter-specific envelope* — `handoffContractFailure`, `mutationNoFieldsFailure`, `acceptedDecisionMutationFailure`, `derivedStatusReadOnlyResult`. MCP returns `{ isError, content, structuredContent }`; Pi returns `{ content, details }`. Moving the envelope into the core would be rule 4 broken in the opposite direction. Move the decision and the message; let each adapter wrap its own result. This is the split every successful P104 task used — see `mutation-reply.ts`, `guard-decision.ts`, `task-completion-gate.ts`, each returning a text/structured pair the adapter renders.\n- *Rendering* — `legacyContextMigrationSummary`. Decide deliberately which half is shared.\n\nBefore moving any of them, diff the two copies. Two implementations of the same name that have silently drifted is the more serious finding, and it is what this task most needs to surface: P104(F005)/T424 found exactly that shape in feature delete, where two of four copies had a data-integrity bug the other two did not. Report any divergence explicitly rather than picking one and moving on.\n\nSteps:\n1. Diff each pair. Record every divergence found, with which behaviour is correct and why.\n2. Delete the three shadowing copies; import the core export.\n3. Move the pure-logic five to plan-core; both adapters import.\n4. For the four failure builders, move the decision and message; leave each envelope in its adapter.\n5. Decide `legacyContextMigrationSummary` deliberately and say why.\n6. Record the sweep as a check that can be re-run — a script or a test asserting no function name is defined in both adapter entry points — so the next copy is caught rather than accumulated.\n\nBehaviors to preserve: every typed error code and result field exactly as it is; mutation-integrity checking across this project reads `updated`, `updatedFields` and `errorCode`. `noUnusedLocals`/`noUnusedParameters` are enforced. Focused suites during work: plan-core, plan-mcp, pi-adapter, plan-server and agent-plan — all five, because a test in agent-plan went unnoticed for four commits during P104 when it was left out of that list.\n\nEdge cases: a helper whose two copies differ only in a message string, where the wording is deliberately adapter-specific; a helper only one adapter actually calls, which may simply be dead in the other.",
-      "descriptionUpdatedAt": "2026-09-23T13:29:22.467Z",
+      "status": "done",
+      "description": "Thirteen functions are written per adapter instead of once. Verified on 2026-09-23 by parsing function declarations out of both adapter entry points and every `packages/plan-core/src/*.ts`, then intersecting.\n\n**Three are unambiguous — an adapter-local copy of something plan-core already exports.** Delete the copy, import the export:\n- `featureNumberOfPhase` — `packages/plan-mcp/src/index.ts:289` shadows `packages/plan-core/src/naming.ts:120`. pi-adapter already imports the core one, so the two adapters disagree about where this lives.\n- `createRequirementId` — pi-adapter shadows `naming.ts`.\n- `statusIcon` — pi-adapter shadows `render-utils.ts`.\n\n**Ten are defined privately in BOTH adapters:** `acceptedDecisionMutationFailure`, `applyTaskLifecycleDates`, `boundedPage`, `derivedStatusReadOnlyResult`, `handoffContractFailure`, `legacyContextMigrationSummary`, `mutationNoFieldsFailure`, `resolveAcceptedDecisionTarget`, `resolveFeatureRefStrict`, `nowISO`.\n\nDo not treat those ten as one blob. They fall into three kinds and the fix differs:\n\n- *Pure logic with no adapter shape* — `nowISO`, `boundedPage`, `applyTaskLifecycleDates`, `resolveFeatureRefStrict`, `resolveAcceptedDecisionTarget`. These move to plan-core whole and both adapters import them.\n- *A decision plus an adapter-specific envelope* — `handoffContractFailure`, `mutationNoFieldsFailure`, `acceptedDecisionMutationFailure`, `derivedStatusReadOnlyResult`. MCP returns `{ isError, content, structuredContent }`; Pi returns `{ content, details }`. Moving the envelope into the core would be rule 4 broken in the opposite direction. Move the decision and the message; let each adapter wrap its own result. This is the split every successful P104 task used — see `mutation-reply.ts`, `guard-decision.ts`, `task-completion-gate.ts`, each returning a text/structured pair the adapter renders.\n- *Rendering* — `legacyContextMigrationSummary`. Decide deliberately which half is shared.\n\nBefore moving any of them, diff the two copies. Two implementations of the same name that have silently drifted is the more serious finding, and it is what this task most needs to surface: P104(F005)/T424 found exactly that shape in feature delete, where two of four copies had a data-integrity bug the other two did not. Report any divergence explicitly rather than picking one and moving on.\n\nSteps:\n1. Diff each pair. Record every divergence found, with which behaviour is correct and why.\n2. Delete the three shadowing copies; import the core export.\n3. Move the pure-logic five to plan-core; both adapters import.\n4. For the four failure builders, move the decision and message; leave each envelope in its adapter.\n5. Decide `legacyContextMigrationSummary` deliberately and say why.\n6. Record the sweep as a check that can be re-run — a script or a test asserting no function name is defined in both adapter entry points — so the next copy is caught rather than accumulated.\n\nBehaviors to preserve: every typed error code and result field exactly as it is; mutation-integrity checking across this project reads `updated`, `updatedFields` and `errorCode`. `noUnusedLocals`/`noUnusedParameters` are enforced. Focused suites during work: plan-core, plan-mcp, pi-adapter, plan-server and agent-plan — all five, because a test in agent-plan went unnoticed for four commits during P104 when it was left out of that list.\n\nEdge cases: a helper whose two copies differ only in a message string, where the wording is deliberately adapter-specific; a helper only one adapter actually calls, which may simply be dead in the other.\n\n---\n**Completion summary:**\nDiffed all ten pairs before moving anything, then centralized per the three-kind split.\n\nDIVERGENCES FOUND:\n- statusIcon: REAL drift, now fixed. pi-adapter's local copy used deferred:\"⏳\" waiting:\"⏱️\"; plan-core's render-utils.ts (already used everywhere else — renderer.ts, export-service.ts, PLAN.md generation) uses deferred:\"⏸️\" waiting:\"⏳\". Pi's handoff markdown task list was showing different icons for these two statuses than PLAN.md shows for the same task in the same session. Deleted pi's copy, now imports core's (the version already canonical everywhere else) — this is the correct fix, not an arbitrary pick.\n- A third, undeclared copy: packages/plan-server/src/serve.ts independently defines its own nowISO, applyTaskLifecycleDates (returns Task, not void — harmless extra return, callers ignore it), and resolveAcceptedDecisionTarget. The server's resolveAcceptedDecisionTarget is functionally WEAKER than the shared one: its feature lookup has no ambiguity detection or partial-name match, and its task lookup only matches task.id or a bare `T\\d+` — no findTaskByRef, so composite refs (P00x/T00x), shortIds, and title fallback that MCP/Pi accept all fail over HTTP for the same operation. Left untouched — out of this task's literal scope (adapter entry points only, per the task description and phase's own sweep), and fixing it changes the HTTP API's accepted ref grammar, which needs its own decision and test coverage. Flagging as a follow-up.\n- Everything else (boundedPage, resolveFeatureRefStrict, applyTaskLifecycleDates, resolveAcceptedDecisionTarget between the two adapters, legacyContextMigrationSummary, and the decision/message halves of handoffContractFailure/mutationNoFieldsFailure/acceptedDecisionMutationFailure/derivedStatusReadOnlyResult) was byte-identical or behaviorally equivalent between plan-mcp and pi-adapter. derivedStatusReadOnlyResult's retryAction line differs deliberately (tool name: planner-feature-update vs feature_update) — kept as adapter-supplied input, matching the task's own \"edge case\" callout.\n- Also noticed (not fixed, different name so unaffected by the new check): pi-adapter has its own `pad()` that duplicates naming.ts's `formatThreeDigitNumber`.\n\nWHAT MOVED:\n- Shadowing copies deleted, now import the core export: featureNumberOfPhase (plan-mcp), createRequirementId + statusIcon (pi-adapter).\n- Pure logic moved whole to plan-core, both adapters import: nowISO (exported from plan-store.ts, where it already lived privately), boundedPage (new packages/plan-core/src/pagination.ts), applyTaskLifecycleDates (new packages/plan-core/src/task-lifecycle.ts), resolveFeatureRefStrict (added to refs.ts), resolveAcceptedDecisionTarget + its two types (added to accepted-decision-guard.ts).\n- legacyContextMigrationSummary: identical string-builder in both, no adapter shape at all — moved whole to project-context-migration.ts (rendering decision: nothing to split, it's already just data->text).\n- Four failure builders split per the mutation-reply.ts pattern (text/structured pair from core, adapter renders its own envelope): handoffContractFailureReply (handoff-reply.ts), derivedStatusReadOnlyReply (mutation-reply.ts, retryAction is caller-supplied), acceptedDecisionMutationFailureReply (accepted-decision-guard.ts, still rethrows non-ACCEPTED_DECISION_ errors). mutationNoFieldsFailure needed no new core function — noMutableFieldsReceived already was the shared decision+message; only the envelope was adapter-local.\n- Each adapter kept a thin per-adapter wrapper for these four, renamed with an mcp/pi prefix (mcpHandoffContractFailure/piHandoffContractFailure, etc.) — following the existing mcpContextReadActions/piContextReadActions convention — so the wrapper still exists once per adapter without violating the new \"no shared function name\" check.\n\nRE-RUNNABLE CHECK (item 6): added test/adapter-shared-logic.test.mjs (auto-picked up by scripts/test-all.mjs's integration scope, same as the existing planner-skill-inventory.test.mjs pattern — regex-parses top-level function declarations, no fixtures). Two assertions: (1) zero function names declared in both packages/plan-mcp/src/index.ts and packages/pi-adapter/src/index.ts, (2) neither adapter re-declares a function plan-core already exports. Both pass now; ran it standalone (`node --test test/adapter-shared-logic.test.mjs`) — 2/2 green.\n\nVERIFICATION: pnpm -w check (full monorepo tsc -b) — clean. All five required suites match baseline exactly: plan-core 445/445, plan-mcp 92/92 (node --test packages/plan-mcp/test/**/*.test.mjs), pi-adapter 93/93, plan-server 57/57 (untouched, confirms no fallout), agent-plan 14/14. noUnusedLocals/noUnusedParameters enforced by tsc -b and passed. Did not touch packages/plan-core/planner-skill.md, so plugins:sync/plugins:check were not needed.\n\nFiles changed: packages/plan-core/src/{index.ts,plan-store.ts,refs.ts,accepted-decision-guard.ts,mutation-reply.ts,handoff-reply.ts,project-context-migration.ts,pagination.ts(new),task-lifecycle.ts(new)}, packages/plan-mcp/src/index.ts, packages/pi-adapter/src/index.ts, test/adapter-shared-logic.test.mjs (new). Left uncommitted per instructions.",
+      "descriptionUpdatedAt": "2026-09-24T10:27:07.707Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-001-planned-in-progress",
+          "date": "2026-09-24T10:14:49.125Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-002-in-progress-done",
+          "date": "2026-09-24T10:27:07.705Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Diffed all ten pairs before moving anything, then centralized per the three-kind split.\n\nDIVERGENCES FOUND:\n- statusIcon: REAL drift, now fixed. pi-adapter's local copy used deferred:\"⏳\" waiting:\"⏱️\"; plan-core's render-utils.ts (already used everywhere else — renderer.ts, export-service.ts, PLAN.md generation) uses deferred:\"⏸️\" waiting:\"⏳\". Pi's handoff markdown task list was showing different icons for these two statuses than PLAN.md shows for the same task in the same session. Deleted pi's copy, now imports core's (the version already canonical everywhere else) — this is the correct fix, not an arbitrary pick.\n- A third, undeclared copy: packages/plan-server/src/serve.ts independently defines its own nowISO, applyTaskLifecycleDates (returns Task, not void — harmless extra return, callers ignore it), and resolveAcceptedDecisionTarget. The server's resolveAcceptedDecisionTarget is functionally WEAKER than the shared one: its feature lookup has no ambiguity detection or partial-name match, and its task lookup only matches task.id or a bare `T\\d+` — no findTaskByRef, so composite refs (P00x/T00x), shortIds, and title fallback that MCP/Pi accept all fail over HTTP for the same operation. Left untouched — out of this task's literal scope (adapter entry points only, per the task description and phase's own sweep), and fixing it changes the HTTP API's accepted ref grammar, which needs its own decision and test coverage. Flagging as a follow-up.\n- Everything else (boundedPage, resolveFeatureRefStrict, applyTaskLifecycleDates, resolveAcceptedDecisionTarget between the two adapters, legacyContextMigrationSummary, and the decision/message halves of handoffContractFailure/mutationNoFieldsFailure/acceptedDecisionMutationFailure/derivedStatusReadOnlyResult) was byte-identical or behaviorally equivalent between plan-mcp and pi-adapter. derivedStatusReadOnlyResult's retryAction line differs deliberately (tool name: planner-feature-update vs feature_update) — kept as adapter-supplied input, matching the task's own \"edge case\" callout.\n- Also noticed (not fixed, different name so unaffected by the new check): pi-adapter has its own `pad()` that duplicates naming.ts's `formatThreeDigitNumber`.\n\nWHAT MOVED:\n- Shadowing copies deleted, now import the core export: featureNumberOfPhase (plan-mcp), createRequirementId + statusIcon (pi-adapter).\n- Pure logic moved whole to plan-core, both adapters import: nowISO (exported from plan-store.ts, where it already lived privately), boundedPage (new packages/plan-core/src/pagination.ts), applyTaskLifecycleDates (new packages/plan-core/src/task-lifecycle.ts), resolveFeatureRefStrict (added to refs.ts), resolveAcceptedDecisionTarget + its two types (added to accepted-decision-guard.ts).\n- legacyContextMigrationSummary: identical string-builder in both, no adapter shape at all — moved whole to project-context-migration.ts (rendering decision: nothing to split, it's already just data->text).\n- Four failure builders split per the mutation-reply.ts pattern (text/structured pair from core, adapter renders its own envelope): handoffContractFailureReply (handoff-reply.ts), derivedStatusReadOnlyReply (mutation-reply.ts, retryAction is caller-supplied), acceptedDecisionMutationFailureReply (accepted-decision-guard.ts, still rethrows non-ACCEPTED_DECISION_ errors). mutationNoFieldsFailure needed no new core function — noMutableFieldsReceived already was the shared decision+message; only the envelope was adapter-local.\n- Each adapter kept a thin per-adapter wrapper for these four, renamed with an mcp/pi prefix (mcpHandoffContractFailure/piHandoffContractFailure, etc.) — following the existing mcpContextReadActions/piContextReadActions convention — so the wrapper still exists once per adapter without violating the new \"no shared function name\" check.\n\nRE-RUNNABLE CHECK (item 6): added test/adapter-shared-logic.test.mjs (auto-picked up by scripts/test-all.mjs's integration scope, same as the existing planner-skill-inventory.test.mjs pattern — regex-parses top-level function declarations, no fixtures). Two assertions: (1) zero function names declared in both packages/plan-mcp/src/index.ts and packages/pi-adapter/src/index.ts, (2) neither adapter re-declares a function plan-core already exports. Both pass now; ran it standalone (`node --test test/adapter-shared-logic.test.mjs`) — 2/2 green.\n\nVERIFICATION: pnpm -w check (full monorepo tsc -b) — clean. All five required suites match baseline exactly: plan-core 445/445, plan-mcp 92/92 (node --test packages/plan-mcp/test/**/*.test.mjs), pi-adapter 93/93, plan-server 57/57 (untouched, confirms no fallout), agent-plan 14/14. noUnusedLocals/noUnusedParameters enforced by tsc -b and passed. Did not touch packages/plan-core/planner-skill.md, so plugins:sync/plugins:check were not needed.\n\nFiles changed: packages/plan-core/src/{index.ts,plan-store.ts,refs.ts,accepted-decision-guard.ts,mutation-reply.ts,handoff-reply.ts,project-context-migration.ts,pagination.ts(new),task-lifecycle.ts(new)}, packages/plan-mcp/src/index.ts, packages/pi-adapter/src/index.ts, test/adapter-shared-logic.test.mjs (new). Left uncommitted per instructions."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -48,54 +66,59 @@
           "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-001-diff-each-of-the-ten-pairs-record-every-divergence-found",
           "number": 1,
           "title": "Diff each of the ten pairs; record every divergence found",
-          "checked": false
+          "checked": true
         },
         {
           "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-002-delete-the-three-copies-shadowing-an-existing-plan-core-export",
           "number": 2,
           "title": "Delete the three copies shadowing an existing plan-core export",
-          "checked": false
+          "checked": true
         },
         {
           "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-003-move-the-five-pure-logic-helpers-to-plan-core",
           "number": 3,
           "title": "Move the five pure-logic helpers to plan-core",
-          "checked": false
+          "checked": true
         },
         {
           "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-004-split-the-four-failure-builders-decision-and-message-shared-envelope-per-adapter",
           "number": 4,
           "title": "Split the four failure builders: decision and message shared, envelope per adapter",
-          "checked": false
+          "checked": true
         },
         {
           "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-005-decide-legacycontextmigrationsummary-deliberately",
           "number": 5,
           "title": "Decide legacyContextMigrationSummary deliberately",
-          "checked": false
+          "checked": true
         },
         {
           "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-006-add-a-re-runnable-check-that-no-function-is-defined-in-both-adapter-entry-points",
           "number": 6,
           "title": "Add a re-runnable check that no function is defined in both adapter entry points",
-          "checked": false
+          "checked": true
         },
         {
           "id": "281c6d44-b860-4176-90ed-4733ec27415d-check-007-all-five-focused-suites-green-including-agent-plan",
           "number": 7,
           "title": "All five focused suites green, including agent-plan",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-24T10:14:49.125Z",
+      "completedAt": "2026-09-24T10:27:07.705Z",
       "createdAt": "2026-09-23T13:29:22.420Z",
-      "updatedAt": "2026-09-23T13:29:22.420Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-24T10:27:07.705Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+          "createdAt": "2026-09-24T10:14:49.027Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -201,15 +224,93 @@
       "updatedAt": "2026-09-23T13:29:57.905Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87",
+      "phaseId": "dff7481a-5d80-4ef0-9409-5fe40b56fb94",
+      "number": 432,
+      "shortId": "LBB2P",
+      "priority": 4,
+      "shortName": "make-a-reference-resolve-the-s",
+      "title": "Make a reference resolve the same way over HTTP as it does in the adapters",
+      "status": "planned",
+      "description": "`packages/plan-server/src/serve.ts` carries a third, independent copy of logic P105(F005)/T429 just consolidated for the two adapters — and its version is weaker, so the same reference that works from an agent fails from the Web UI.\n\nFound during T429 and verified on 2026-09-24. T429's sweep was scoped to the two adapter entry points, so the server was out of its scope; the divergence is real and belongs in this phase.\n\n**The behavioural gap.** `resolveAcceptedDecisionTarget` at `serve.ts:71` resolves a task at `:87` by raw UUID, or by a bare `T\\d+` pattern, and nothing else:\n\n    const found = phases.flatMap(...).find(({ task }) => task.id === targetRef)\n      ?? (() => { const m = targetRef.match(/^T(\\d+)$/i); ... })\n\nBoth adapters use `findTaskByRef` from plan-core, which additionally accepts the composite form (`P104(F005)/T428`), the 5-character shortId, and an exact title. So attaching an accepted decision to a task succeeds with `P104(F005)/T428` from MCP or Pi and fails with the same string over HTTP. Project decision D10 makes composite refs the canonical way to name an entity, which is precisely the form the HTTP path rejects.\n\nFeature resolution at `:78` has a second, quieter problem: it takes the first match with no ambiguity detection, where `resolveFeatureRefStrict` (now in `packages/plan-core/src/refs.ts` after T429) reports an ambiguous reference instead of silently picking one. A caller naming two features by an overlapping title gets a silent wrong answer over HTTP and an error everywhere else.\n\n**Also duplicated in the same file:** `nowISO` at `:21` and `applyTaskLifecycleDates` at `:152`. Both now live in plan-core (`plan-store.ts` and the new `task-lifecycle.ts`). `applyTaskLifecycleDates` is the one that matters — it sets `startedAt` / `completedAt` on a status change, so a drift between the two copies would mean a task completed over HTTP carries different lifecycle dates than the same task completed by an agent. Diff them before replacing, and report any divergence found: that comparison is the valuable part, exactly as it was in T429, where `statusIcon` turned out to have been showing ⏳ for `deferred` in one surface while core used ⏳ for `waiting`.\n\n**Steps:**\n1. Diff the server's three copies against the plan-core versions. Record any divergence and which behaviour is correct.\n2. Replace them with the core functions: `findTaskByRef` and `resolveFeatureRefStrict` for resolution, `nowISO` and `applyTaskLifecycleDates` for the rest.\n3. Extend T429's duplication check (`test/adapter-shared-logic.test.mjs`) to cover `plan-server/src/serve.ts` as a third entry point, so this cannot regrow. That check is proven live — re-introducing a duplicate makes it fail.\n4. Verify the HTTP path now accepts a composite ref, a shortId and a title for a task, and reports ambiguity for a feature.\n\n**Behaviors to preserve:** the server is a supervisor surface and some of its permissiveness is deliberate — the legacy `decisions` array stays writable over HTTP and refused on agent tools, by an accepted decision from P103(F005)/T405. Do not tighten that. This task is about a reference resolving consistently, not about making the Web UI obey agent-only gates. Every existing response shape and WebSocket broadcast stays as it is; `packages/plan-server/test/` is 57 tests and must stay green.\n\n**Edge case worth deciding:** whether the HTTP path should accept a bare `T\\d+` at all once composite refs work. It is ambiguous across phases in a project with global numbering, and dropping it would be a breaking change for any existing Web UI caller. Decide deliberately and say why.",
+      "descriptionUpdatedAt": "2026-09-24T10:29:25.297Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87-check-001-diff-the-server-s-three-copies-against-plan-core-record-any-divergence",
+          "number": 1,
+          "title": "Diff the server's three copies against plan-core; record any divergence",
+          "checked": false
+        },
+        {
+          "id": "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87-check-002-replace-resolution-with-findtaskbyref-and-resolvefeaturerefstrict",
+          "number": 2,
+          "title": "Replace resolution with findTaskByRef and resolveFeatureRefStrict",
+          "checked": false
+        },
+        {
+          "id": "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87-check-003-replace-nowiso-and-applytasklifecycledates-with-the-core-versions",
+          "number": 3,
+          "title": "Replace nowISO and applyTaskLifecycleDates with the core versions",
+          "checked": false
+        },
+        {
+          "id": "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87-check-004-extend-the-duplication-check-to-cover-serve-ts-as-a-third-entry-point",
+          "number": 4,
+          "title": "Extend the duplication check to cover serve.ts as a third entry point",
+          "checked": false
+        },
+        {
+          "id": "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87-check-005-verify-composite-ref-shortid-and-title-resolve-over-http-ambiguity-is-reported",
+          "number": 5,
+          "title": "Verify composite ref, shortId and title resolve over HTTP; ambiguity is reported",
+          "checked": false
+        },
+        {
+          "id": "4749fbfd-8487-4d78-8d1f-a08fbd8cfd87-check-006-decide-whether-bare-t-d-stays-and-say-why",
+          "number": 6,
+          "title": "Decide whether bare T\\d+ stays, and say why",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-24T10:29:25.242Z",
+      "updatedAt": "2026-09-24T10:29:25.242Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-23T13:29:00.148Z",
-  "updatedAt": "2026-09-23T13:29:57.905Z",
+  "updatedAt": "2026-09-24T10:29:25.242Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
-  "sessionInfo": []
+  "statusLog": [
+    {
+      "id": "f52a7363-b53c-4796-8b9d-67b29d747d89",
+      "date": "2026-09-24T10:14:49.150Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+      "createdAt": "2026-09-24T10:14:49.027Z"
+    }
+  ]
 }
