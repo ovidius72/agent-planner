@@ -203,11 +203,28 @@
       "priority": 3,
       "shortName": "decide-what-to-do-about-a-writ",
       "title": "Decide what to do about a write the guard cannot see",
-      "status": "planned",
-      "description": "P104(F005)/T427 made the no-task guard detect write-shaped Bash — output redirection, `tee`, in-place `sed`/`perl`, file-creating `cp`/`mv`, `rm`, tree-rewriting `git` — and deliberately documented what it cannot see instead of implying coverage. `packages/plan-core/src/guard-decision.ts` says so in the comment on `extractBashWriteTargets`.\n\nThe gap: a command that writes through an interpreter is opaque from the command line. `python3 - <<PY` followed by `open(path, \"w\").write(...)`, or `node -e`, or a script invoked by name, all edit files while the command string shows nothing write-shaped. Verified on 2026-09-23: a `python3` heredoc writing to `packages/plan-core/src/` is allowed silently, while the same write via `cat >` or `sed -i` correctly asks.\n\nThis is not a hypothetical corner. It is the exact pattern used to edit source files throughout the session that built P104, and the harness instructs agents to edit that way in bypass-permissions mode. So in that mode the most common editing path is the one the guard cannot see.\n\n**Answer the question before writing code.** This task may correctly end with a recorded decision not to close the gap, and that is a real outcome, not a failure. The options are not equal:\n\n- *Parse the script body.* Brittle and unbounded — a path can be computed, read from argv, or built at runtime. It would produce false confidence, which is worse than a documented limit, because the comment currently tells the truth.\n- *Move the check after the fact.* A `PostToolUse` hook can notice that tracked files changed while no task was in progress. It cannot prevent the edit, but the guard's purpose is visibility, not prevention — `permissionDecision: \"ask\"` already assumes the user may say yes. Something that says \"these files changed and no task was in progress\" fits that purpose and is not defeated by how the write was made.\n- *Leave it.* The limit is documented, the common cases are covered, and an agent editing through an interpreter in a bypass session is usually doing so because the harness told it to. Record the reasoning and close the task.\n\nIf the PostToolUse route is chosen: it must not fire on `.planner/` changes (P104(F005)/T427's firmest requirement — writing a handoff or recording task state is never blocked and should never be nagged about either), must not run on every tool call if that is expensive, and must not duplicate the write-detection already in `guard-decision.ts`. `plugins/claude-code/hooks/hooks.json` is where hooks are registered; `pnpm plugins:sync` and `pnpm plugins:check` after any change to a `.in` file.\n\nWhatever is decided, update the comment in `guard-decision.ts` so it points at the decision rather than leaving a future reader to rediscover the question.\n\nVerification: `packages/plan-core/test/guard-decision.test.mjs` (16 tests) and `packages/agent-plan/test/guard-pre-tool-use.test.mjs` (7 tests) are the existing coverage. If behaviour changes, prove the new test is live by reverting the change and confirming it fails. All five focused suites must stay green: plan-core, plan-mcp, pi-adapter, plan-server, agent-plan.",
-      "descriptionUpdatedAt": "2026-09-23T13:29:57.950Z",
+      "status": "done",
+      "description": "P104(F005)/T427 made the no-task guard detect write-shaped Bash — output redirection, `tee`, in-place `sed`/`perl`, file-creating `cp`/`mv`, `rm`, tree-rewriting `git` — and deliberately documented what it cannot see instead of implying coverage. `packages/plan-core/src/guard-decision.ts` says so in the comment on `extractBashWriteTargets`.\n\nThe gap: a command that writes through an interpreter is opaque from the command line. `python3 - <<PY` followed by `open(path, \"w\").write(...)`, or `node -e`, or a script invoked by name, all edit files while the command string shows nothing write-shaped. Verified on 2026-09-23: a `python3` heredoc writing to `packages/plan-core/src/` is allowed silently, while the same write via `cat >` or `sed -i` correctly asks.\n\nThis is not a hypothetical corner. It is the exact pattern used to edit source files throughout the session that built P104, and the harness instructs agents to edit that way in bypass-permissions mode. So in that mode the most common editing path is the one the guard cannot see.\n\n**Answer the question before writing code.** This task may correctly end with a recorded decision not to close the gap, and that is a real outcome, not a failure. The options are not equal:\n\n- *Parse the script body.* Brittle and unbounded — a path can be computed, read from argv, or built at runtime. It would produce false confidence, which is worse than a documented limit, because the comment currently tells the truth.\n- *Move the check after the fact.* A `PostToolUse` hook can notice that tracked files changed while no task was in progress. It cannot prevent the edit, but the guard's purpose is visibility, not prevention — `permissionDecision: \"ask\"` already assumes the user may say yes. Something that says \"these files changed and no task was in progress\" fits that purpose and is not defeated by how the write was made.\n- *Leave it.* The limit is documented, the common cases are covered, and an agent editing through an interpreter in a bypass session is usually doing so because the harness told it to. Record the reasoning and close the task.\n\nIf the PostToolUse route is chosen: it must not fire on `.planner/` changes (P104(F005)/T427's firmest requirement — writing a handoff or recording task state is never blocked and should never be nagged about either), must not run on every tool call if that is expensive, and must not duplicate the write-detection already in `guard-decision.ts`. `plugins/claude-code/hooks/hooks.json` is where hooks are registered; `pnpm plugins:sync` and `pnpm plugins:check` after any change to a `.in` file.\n\nWhatever is decided, update the comment in `guard-decision.ts` so it points at the decision rather than leaving a future reader to rediscover the question.\n\nVerification: `packages/plan-core/test/guard-decision.test.mjs` (16 tests) and `packages/agent-plan/test/guard-pre-tool-use.test.mjs` (7 tests) are the existing coverage. If behaviour changes, prove the new test is live by reverting the change and confirming it fails. All five focused suites must stay green: plan-core, plan-mcp, pi-adapter, plan-server, agent-plan.\n\n---\n**Completion summary:**\nDecision: leave the interpreter-write gap in place, documented, not closed by code.\n\nReasoning (now recorded in packages/plan-core/src/guard-decision.ts, on extractBashWriteTargets):\n- Parsing the script body is unbounded (computed/argv/runtime paths) and trades an honest documented limit for false confidence.\n- The PostToolUse \"tracked files changed while no task was in progress\" option was evaluated concretely and rejected: this repo's own task protocol leaves a completed task's changes uncommitted for the orchestrator to review, so \"no task in-progress + tracked files changed outside .planner/\" is the ROUTINE state right after every task completes (this task ends in exactly that state). A naive check fires there constantly. Avoiding that false positive requires diffing only the delta from one specific Bash call, which needs a session-scoped git-status baseline checked on every Bash invocation, including read-only ones (grep/ls/tests) since you can't know in advance which command wrote through an interpreter. That statefulness and per-call cost is worse than the gap it closes, and it does not fit the \"not expensive, runs after every tool call\" constraint.\n- The gap is real but is the harness's own instructed editing pattern in bypass mode, not something being smuggled past the guard.\n\nNo functional code changed; guard-decision.ts behavior is untouched (isWriteShapedBashCommand / extractBashWriteTargets / decideGuardPreToolUse all unchanged). Only the doc comment changed, so no new test is expected or added — verification is that all five focused suites plus root are unchanged and green:\nplan-core 445/445, plan-mcp 92/92, pi-adapter 93/93, plan-server 57/57, agent-plan 14/14, root 62/62 — all match stated baselines, all pass.\n\nChecklist: C1 done (decision made, reasoning recorded), C2 not applicable (no check was added, so nothing to gate on .planner/ or dedupe against guard-decision.ts — reported explicitly rather than forced), C3 done (comment updated in guard-decision.ts), C4 done (all five focused suites confirmed green).\n\nFiles touched: packages/plan-core/src/guard-decision.ts (comment only, above extractBashWriteTargets). .planner/ task/phase state updated via the planner tools for this task's start/checklist/complete lifecycle. Left uncommitted per instruction, for the orchestrator to review and commit.",
+      "descriptionUpdatedAt": "2026-09-24T10:35:21.971Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-001-planned-in-progress",
+          "date": "2026-09-24T10:32:33.234Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-002-in-progress-done",
+          "date": "2026-09-24T10:35:21.968Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Decision: leave the interpreter-write gap in place, documented, not closed by code.\n\nReasoning (now recorded in packages/plan-core/src/guard-decision.ts, on extractBashWriteTargets):\n- Parsing the script body is unbounded (computed/argv/runtime paths) and trades an honest documented limit for false confidence.\n- The PostToolUse \"tracked files changed while no task was in progress\" option was evaluated concretely and rejected: this repo's own task protocol leaves a completed task's changes uncommitted for the orchestrator to review, so \"no task in-progress + tracked files changed outside .planner/\" is the ROUTINE state right after every task completes (this task ends in exactly that state). A naive check fires there constantly. Avoiding that false positive requires diffing only the delta from one specific Bash call, which needs a session-scoped git-status baseline checked on every Bash invocation, including read-only ones (grep/ls/tests) since you can't know in advance which command wrote through an interpreter. That statefulness and per-call cost is worse than the gap it closes, and it does not fit the \"not expensive, runs after every tool call\" constraint.\n- The gap is real but is the harness's own instructed editing pattern in bypass mode, not something being smuggled past the guard.\n\nNo functional code changed; guard-decision.ts behavior is untouched (isWriteShapedBashCommand / extractBashWriteTargets / decideGuardPreToolUse all unchanged). Only the doc comment changed, so no new test is expected or added — verification is that all five focused suites plus root are unchanged and green:\nplan-core 445/445, plan-mcp 92/92, pi-adapter 93/93, plan-server 57/57, agent-plan 14/14, root 62/62 — all match stated baselines, all pass.\n\nChecklist: C1 done (decision made, reasoning recorded), C2 not applicable (no check was added, so nothing to gate on .planner/ or dedupe against guard-decision.ts — reported explicitly rather than forced), C3 done (comment updated in guard-decision.ts), C4 done (all five focused suites confirmed green).\n\nFiles touched: packages/plan-core/src/guard-decision.ts (comment only, above extractBashWriteTargets). .planner/ task/phase state updated via the planner tools for this task's start/checklist/complete lifecycle. Left uncommitted per instruction, for the orchestrator to review and commit."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -215,7 +232,7 @@
           "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-001-decide-between-parsing-a-posttooluse-check-and-leaving-it-documented-record-the-reasoning",
           "number": 1,
           "title": "Decide between parsing, a PostToolUse check, and leaving it documented; record the reasoning",
-          "checked": false
+          "checked": true
         },
         {
           "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-002-if-a-check-is-added-never-fire-on-planner-reuse-guard-decision-ts-s-detection",
@@ -227,24 +244,29 @@
           "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-003-update-the-comment-in-guard-decision-ts-to-point-at-the-decision",
           "number": 3,
           "title": "Update the comment in guard-decision.ts to point at the decision",
-          "checked": false
+          "checked": true
         },
         {
           "id": "8a3671e5-c06f-4bb3-bcf5-e0fbf8d97ad7-check-004-all-five-focused-suites-green",
           "number": 4,
           "title": "All five focused suites green",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-24T10:32:33.234Z",
+      "completedAt": "2026-09-24T10:35:21.968Z",
       "createdAt": "2026-09-23T13:29:57.905Z",
-      "updatedAt": "2026-09-23T13:29:57.905Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-24T10:35:21.968Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+          "createdAt": "2026-09-24T10:32:33.134Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -313,7 +335,7 @@
     }
   ],
   "createdAt": "2026-09-23T13:29:00.148Z",
-  "updatedAt": "2026-09-24T10:31:37.004Z",
+  "updatedAt": "2026-09-24T10:35:21.968Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -332,7 +354,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
-      "createdAt": "2026-09-24T10:29:55.472Z"
+      "createdAt": "2026-09-24T10:32:33.134Z"
     }
   ]
 }

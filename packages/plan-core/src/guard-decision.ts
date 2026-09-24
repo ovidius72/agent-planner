@@ -110,6 +110,28 @@ export function isWriteShapedBashCommand(command: string): boolean {
  * computed (a variable, command substitution, etc.) rather than written
  * literally in the command line — that case is expected to fall through to
  * the normal in-progress/bypass checks below, not to be silently allowed.
+ *
+ * A wider gap of the same kind: a command that writes through an
+ * interpreter (`python3 - <<PY` then `open(path, "w")`, `node -e`, a script
+ * invoked by name) is opaque here — nothing in the command line looks
+ * write-shaped. P105(F005)/T431 evaluated closing this and chose not to,
+ * for reasons that also rule out revisiting it the same way later:
+ *   - Parsing the script body is unbounded (a path can be computed, read
+ *     from argv, or built at runtime) and would trade an honest documented
+ *     limit for false confidence.
+ *   - A PostToolUse hook that notices tracked files changed while no task
+ *     was in progress sounds like a fit (the guard's job is visibility, not
+ *     prevention), but it collides with this project's own workflow: a
+ *     task is left with its changes uncommitted for the orchestrator to
+ *     review, so "no task in-progress, tracked files changed outside
+ *     .planner/" is the routine state right after every task completes,
+ *     not a signal of anything wrong. Telling that apart from a real
+ *     interpreter write means diffing only the delta from one specific
+ *     Bash call, which needs a session-scoped git-status baseline checked
+ *     on every Bash invocation — read-only ones included, since which
+ *     commands wrote can't be known in advance. That statefulness and
+ *     per-call cost is worse than the gap it would close.
+ * The limit stands, documented rather than silently assumed away.
  */
 export function extractBashWriteTargets(command: string): string[] {
   const targets: string[] = [];
