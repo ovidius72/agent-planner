@@ -12,6 +12,7 @@
  *   - Title:  exact match, then includes (backward-compat fallback)
  */
 import type { Phase, Feature, Idea } from "./schema.js";
+import { formatFeatureRef } from "./naming.js";
 
 // P00x  or  P00x(F00x)  — accept 1+ digits so "p1" == "p001".
 const PHASE_REF_RE = /^p(\d+)(?:\(f(\d+)\))?$/;
@@ -40,6 +41,43 @@ export function findIdeaByRef(ideas: Idea[], ref: string): Idea | undefined {
 
   return ideas.find((idea) => idea.title.toLowerCase() === normalized)
     ?? ideas.find((idea) => idea.title.toLowerCase().includes(normalized));
+}
+
+/**
+ * Resolve a feature reference to a Feature, or a typed error when it can't
+ * be resolved unambiguously. Unlike `findPhaseByRef`/`findTaskByRef` (which
+ * return `undefined` on any miss), callers of this one — accepted-decision
+ * target resolution, feature-scoped tools — need to tell "not found" apart
+ * from "ambiguous" so the message can say which. Both adapters carried an
+ * identical copy; kept here so the ref grammar (number, shortId, UUID, exact
+ * name, partial name with ambiguity detection) is one decision.
+ */
+export function resolveFeatureRefStrict(features: Feature[], ref: string):
+  | { ok: true; feature: Feature }
+  | { ok: false; error: string } {
+  const raw = ref.trim();
+  if (!raw) return { ok: false, error: "Feature ref is required." };
+  const normalized = raw.toLowerCase();
+  const byNumber = normalized.match(/^f(\d+)$/)
+    ? features.find((feature) => feature.number === parseInt(normalized.slice(1), 10))
+    : undefined;
+  if (byNumber) return { ok: true, feature: byNumber };
+
+  const byShortId = features.find((feature) => feature.shortId?.toLowerCase() === normalized);
+  if (byShortId) return { ok: true, feature: byShortId };
+
+  const byId = features.find((feature) => feature.id.toLowerCase() === normalized);
+  if (byId) return { ok: true, feature: byId };
+
+  const exactName = features.filter((feature) => feature.name.toLowerCase() === normalized);
+  if (exactName.length === 1) return { ok: true, feature: exactName[0]! };
+  if (exactName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Multiple features have that exact name; use F00x, shortId, or UUID.` };
+
+  const partialName = features.filter((feature) => feature.name.toLowerCase().includes(normalized));
+  if (partialName.length === 1) return { ok: true, feature: partialName[0]! };
+  if (partialName.length > 1) return { ok: false, error: `Ambiguous feature ref: ${raw}. Matches: ${partialName.map((feature) => formatFeatureRef(feature.number)).join(", ")}. Use a specific F00x, shortId, or UUID.` };
+
+  return { ok: false, error: `Feature not found: ${raw}` };
 }
 
 /**

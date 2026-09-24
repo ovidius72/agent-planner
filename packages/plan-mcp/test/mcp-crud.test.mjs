@@ -259,31 +259,33 @@ test("phase CRUD: invalid parents rejected atomically, refs resolve, deletes cle
     const storedAfterRejection = await session.store.loadPhase(id);
     assert.equal(storedAfterRejection.title, "Payouts", "mixed status update is rejected atomically");
     await callTool(session, "planner-feature-add", { name: "Parity owner", description: LONG });
+    const directDescriptionRef = ".planner/docs/p094-pane-hosts-any-app.md";
     const updated = await callTool(session, "planner-phase-update", {
       phase: shortId,
       title: "Payouts v2",
       featureId: "F002",
-      descriptionRef: ".planner/docs/phases/payouts.md",
+      descriptionRef: directDescriptionRef,
       goals: ["Ship payouts"],
       nonGoals: ["Redesign billing"],
       dependencies: ["Provider contract"],
       risks: ["Provider outage"],
       openQuestions: ["Which region first?"],
-      decisions: ["Use provider tokens"],
       completionCriteria: ["Payout succeeds"],
     });
     assert.match(toolText(updated), /P002\(F002\)/);
     let stored = await session.store.loadPhase(id);
     assert.equal(stored.title, "Payouts v2");
     assert.equal(stored.featureId, (await session.store.loadFeatures()).features.find((entry) => entry.number === 2).id);
-    assert.equal(stored.descriptionRef, ".planner/docs/phases/payouts.md");
+    assert.equal(stored.descriptionRef, directDescriptionRef);
     assert.deepEqual(stored.goals, ["Ship payouts"]);
     assert.deepEqual(stored.nonGoals, ["Redesign billing"]);
     assert.deepEqual(stored.dependencies, ["Provider contract"]);
     assert.deepEqual(stored.risks, ["Provider outage"]);
     assert.deepEqual(stored.openQuestions, ["Which region first?"]);
-    assert.deepEqual(stored.decisions, ["Use provider tokens"]);
     assert.deepEqual(stored.completionCriteria, ["Payout succeeds"]);
+    const phaseDecisionsRejected = await callTool(session, "planner-phase-update", { phase: shortId, decisions: ["Should be rejected"] });
+    assert.equal(toolStructured(phaseDecisionsRejected).updated, false);
+    assert.equal(toolStructured(phaseDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
     const featureOwners = (await session.store.loadFeatures()).features;
     assert.equal(featureOwners.find((entry) => entry.number === 1).phaseIds.includes(id), false);
     assert.equal(featureOwners.find((entry) => entry.number === 2).phaseIds.includes(id), true);
@@ -362,17 +364,18 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
       task: "T002",
       descriptionRef: ".planner/docs/tasks/refund-flow.md",
       notes: "Provider behavior verified.",
-      decisions: ["Retry idempotently"],
       checklist: ["Review", "Execute"],
       subtasks: [{ title: "Validate provider", description: "Check contract" }, { title: "Execute refund" }],
     });
     assert.equal(toolStructured(parityUpdate).updated, true);
-    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes", "subtasks"]);
+    assert.deepEqual(toolStructured(parityUpdate).updatedFields.sort(), ["checklist", "descriptionRef", "notes", "subtasks"]);
     const parityTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(parityTask.descriptionRef, ".planner/docs/tasks/refund-flow.md");
     assert.equal(parityTask.notes, "Provider behavior verified.");
-    assert.deepEqual(parityTask.decisions, ["Retry idempotently"]);
     assert.deepEqual(parityTask.checklist.map((item) => item.title), ["Review", "Execute"]);
+    const taskDecisionsRejected = await callTool(session, "planner-task-update", { task: "T002", decisions: ["Should be rejected"] });
+    assert.equal(toolStructured(taskDecisionsRejected).updated, false);
+    assert.equal(toolStructured(taskDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
     const phaseOnDisk = JSON.parse(await readFile(join(session.planRoot, "phases", `${task.phaseId}.json`), "utf8"));
     const taskOnDisk = phaseOnDisk.tasks.find((entry) => entry.id === id);
     assert.deepEqual(taskOnDisk.checklist.map((item) => item.title), ["Review", "Execute"], "planner-task-update persists checklist to the owning phase file");
@@ -408,6 +411,26 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const checklist = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).checklist;
     assert.deepEqual(checklist.map((item) => item.title), ["Review", "Ship"], "checklist add/toggle/remove renumbers cleanly");
     assert.equal(checklist[0].checked, true, "toggle marks C1 done");
+
+    // T413 (P104/F005) — planner-task-update's checklist replacement must
+    // carry tick state across via plan-core's replaceChecklist, not a
+    // private hand-built mapping, and must surface any tick it could not
+    // carry rather than dropping it in a "success" result.
+    const renamed = await callTool(session, "planner-task-update", { task: "T002", checklist: ["Review carefully", "Ship"] });
+    assert.equal(toolStructured(renamed).updated, true);
+    assert.equal(toolStructured(renamed).checklistLostTicks, undefined, "an equal-length rename must not report a loss");
+    assert.doesNotMatch(toolText(renamed), /Lost tick/);
+    const renamedTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
+    assert.deepEqual(renamedTask.checklist.map((item) => item.title), ["Review carefully", "Ship"]);
+    assert.equal(renamedTask.checklist[0].checked, true, "renaming the ticked item in place must keep its tick");
+
+    const dropped = await callTool(session, "planner-task-update", { task: "T002", checklist: ["Ship"] });
+    assert.equal(toolStructured(dropped).updated, true);
+    assert.deepEqual(toolStructured(dropped).checklistLostTicks, ["Review carefully"], "a checklist replacement that drops a ticked item must report it, not silently discard it");
+    assert.match(toolText(dropped), /Lost tick.*Review carefully/s);
+    const droppedTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
+    assert.deepEqual(droppedTask.checklist.map((item) => item.title), ["Ship"]);
+    assert.equal(droppedTask.checklist[0].checked, false);
 
     // make T002 the highest-priority ready task (seed T001 has priority 10)
     await callTool(session, "planner-task-update", { task: "T002", priority: 0 });
@@ -479,7 +502,7 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const missingEvidence = await callTool(session, "planner-task-complete", { task: "T002", force: true }, { expectError: true });
     assert.match(toolText(missingEvidence), /description_update/);
     assert.equal((await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id).status, "in-progress");
-    const done = await callTool(session, "planner-task-complete", { task: "T002", force: true, description_update: "Created task completed and verified through MCP CRUD coverage." });
+    const done = await callTool(session, "planner-task-complete", { task: "T002", force: true, motivation: "Checklist item no longer applies; verified through MCP CRUD coverage instead.", description_update: "Created task completed and verified through MCP CRUD coverage." });
     assert.match(toolText(done), /\(done\)/);
     const doneTask = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.id === id);
     assert.equal(doneTask.status, "done");
@@ -501,6 +524,39 @@ test("task CRUD: checklist, motivation gate, reopen, no UUID leak", async () => 
     const phase = (await session.store.loadAllPhases())[0];
     assert.equal(phase.tasks.some((entry) => entry.id === id), false);
     assert.equal(phase.taskIds.includes(id), false);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-discuss: checklist replacement carries ticks via plan-core, reports what it cannot", async () => {
+  // T413 (P104/F005) — planner-task-discuss builds its checklist replacement
+  // independently of planner-task-update; both must route through
+  // plan-core's replaceChecklist rather than each hardcoding checked:false.
+  const session = await startMcpFixture({ name: "t413-discuss-checklist" });
+  try {
+    await callTool(session, "planner-task-add", {
+      feature: "F001", phase: "P001", title: "Discuss checklist parity", description: LONG, checklist: ["Draft", "Review"],
+    });
+    const task = (await session.store.loadAllPhases()).flatMap((entry) => entry.tasks).find((entry) => entry.title === "Discuss checklist parity");
+    await callTool(session, "planner-task-checklist-toggle", { task: task.shortId, item: "C1" });
+    assert.equal((await session.store.loadPhase(task.phaseId)).tasks.find((entry) => entry.id === task.id).checklist[0].checked, true);
+
+    // Same-length rename keeps the tick, no loss reported.
+    const renamed = await callTool(session, "planner-task-discuss", { task: task.shortId, checklist: ["Draft carefully", "Review"] });
+    assert.equal(toolStructured(renamed).checklistLostTicks, undefined);
+    assert.doesNotMatch(toolText(renamed), /Lost tick/);
+    let stored = (await session.store.loadPhase(task.phaseId)).tasks.find((entry) => entry.id === task.id);
+    assert.deepEqual(stored.checklist.map((entry) => entry.title), ["Draft carefully", "Review"]);
+    assert.equal(stored.checklist[0].checked, true, "planner-task-discuss must carry the tick across a same-position rename");
+
+    // Dropping the ticked title reports the loss instead of silently discarding it.
+    const dropped = await callTool(session, "planner-task-discuss", { task: task.shortId, checklist: ["Review"] });
+    assert.deepEqual(toolStructured(dropped).checklistLostTicks, ["Draft carefully"]);
+    assert.match(toolText(dropped), /Lost tick.*Draft carefully/s);
+    stored = (await session.store.loadPhase(task.phaseId)).tasks.find((entry) => entry.id === task.id);
+    assert.deepEqual(stored.checklist.map((entry) => entry.title), ["Review"]);
+    assert.equal(stored.checklist[0].checked, false);
   } finally {
     await closeMcpFixture(session);
   }
@@ -559,6 +615,97 @@ test("planned sibling can start when another task makes the parent derive waitin
     assert.match(toolText(started), /Task started: P001\(F001\)\/T001/);
     const updatedPhase = (await session.store.loadAllPhases()).find((entry) => entry.number === 1);
     assert.equal(updatedPhase.tasks.find((task) => task.number === 1).status, "in-progress");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-show full=true reports task_start readiness up front (P104(F005)/T420)", async () => {
+  const session = await startMcpFixture({ name: "t420-gate-state" });
+  try {
+    // Fresh session: only the task itself has been read by this call.
+    // Nothing else in this session has been read yet, so task_start would
+    // still deny — and the reply says so without a failed task_start call.
+    const firstShow = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const firstGate = toolStructured(firstShow).taskStartGateState;
+    assert.equal(firstGate.ready, false);
+    assert.ok(firstGate.missingReads.some((read) => read.kind === "phase"));
+    assert.ok(firstGate.missingReads.some((read) => read.kind === "feature"));
+    assert.ok(firstGate.missingRequirementIds.length > 0, "the fixture's linked requirement is still unread");
+    const firstActions = toolStructured(firstShow).taskStartNextActions;
+    assert.ok(firstActions.some((action) => action.includes("planner-phase-show")));
+    assert.ok(firstActions.some((action) => action.includes("planner-feature-show")));
+    assert.ok(firstActions.some((action) => action.includes("planner-requirement-list")));
+    assert.match(toolText(firstShow), /task_start readiness: not ready/);
+
+    // Perform exactly what the report named, then read the task again.
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
+    const secondShow = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const secondGate = toolStructured(secondShow).taskStartGateState;
+    assert.equal(secondGate.ready, true);
+    assert.equal(toolStructured(secondShow).taskStartNextActions, undefined);
+    assert.match(toolText(secondShow), /task_start readiness: ready\./);
+
+    // The report was accurate: task_start now succeeds on the very next call.
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(started.isError, undefined);
+    assert.equal(toolStructured(started).started, true);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-show full=true carries priority and dependsOn where the ordering decision is made (P104(F005)/T421)", async () => {
+  const session = await startMcpFixture({ name: "t421-order-context" });
+  try {
+    const added = await callTool(session, "planner-task-add", {
+      feature: "F001",
+      phase: "P001",
+      title: "Second task",
+      description: "src/order-context.ts:1 a second sibling task so the ordering line has something to report against T001.",
+    });
+    // planner-task-add itself states the priority it assigned — eight tasks
+    // were created in this phase before without a priority ever shown.
+    assert.match(toolText(added), /priority \d+/);
+
+    await callTool(session, "planner-task-dependency-add", { task: "T002", dependsOn: "T001" });
+
+    // Compact view stays exactly the cheap identity read: no structured
+    // content, no ordering line — this task must not grow.
+    const compact = await callTool(session, "planner-task-show", { task: "T002" });
+    assert.equal(toolStructured(compact), null);
+    assert.doesNotMatch(toolText(compact), /Priority \d+/);
+    assert.doesNotMatch(toolText(compact), /Depends on/);
+
+    // Full view of T002 (blocked: its one dependency, T001, is still
+    // planned) names its own priority and its dependency's ref and status.
+    const t2 = await callTool(session, "planner-task-show", { task: "T002", full: true });
+    assert.match(toolText(t2), /Priority \d+ · \d+ ready in phase · \d+ ready ahead of this one/);
+    assert.match(toolText(t2), /Depends on: P001\(F001\)\/T001 \(planned\)/);
+    const t2Structured = toolStructured(t2);
+    assert.equal(typeof t2Structured.task.priority, "number");
+    assert.deepEqual(t2Structured.task.dependsOn, [{ ref: "P001(F001)/T001", taskId: t2Structured.task.dependsOn[0].taskId, status: "planned" }]);
+    assert.equal(typeof t2Structured.taskOrder.readyCount, "number");
+    assert.equal(typeof t2Structured.taskOrder.readyAheadCount, "number");
+
+    // T001 has no dependency of its own and is the only ready task in the
+    // phase (T002 is blocked on it), so it is its own next-by-priority pick.
+    const t1 = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    assert.match(toolText(t1), /Depends on: None\./);
+    const t1Structured = toolStructured(t1);
+    assert.equal(t1Structured.taskOrder.nextByPriorityRef, null);
+
+    // The enriched full-read text still satisfies the read-gate attestation
+    // that markCanonicalFullReadForSessionId records: task_start still
+    // succeeds off the very same reads used above (T420's contract holds).
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(started.isError, undefined);
+    assert.equal(toolStructured(started).started, true);
   } finally {
     await closeMcpFixture(session);
   }
@@ -710,7 +857,7 @@ test("priority is overridable but active task switches require a snapshot and de
     assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
     assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
-    const done = await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Temporary task completed and verified through MCP switch coverage." });
+    const done = await callTool(session, "planner-task-complete", { task: "T001", force: true, motivation: "Seed checklist item superseded by the switch coverage exercised here.", description_update: "Temporary task completed and verified through MCP switch coverage." });
     assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
     assert.equal((await session.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 

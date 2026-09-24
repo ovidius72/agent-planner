@@ -203,12 +203,17 @@ export const STATUS_LOG_MOTIVATION_REQUIRED = new Set([
 
 /**
  * Returns true when a status transition requires a written motivation.
- * - → DONE never requires motivation.
+ * - → DONE never requires motivation for an ordinary completion.
+ * - → DONE with `forced: true` — a completion pushed through past checklist
+ *   items still open (see task-completion-gate.ts, P104(F005)/T428) — is the
+ *   one case where a → DONE transition does require it: the same rule this
+ *   function already enforces for blocked/canceled/deferred/rejected,
+ *   applied to the one case where reaching DONE is itself an override.
  * - → BLOCKED / CANCELED / DEFERRED / REJECTED / WAITING always require it.
  * - → PLANNED from a non-PLANNED status requires it.
  */
-export function needsMotivation(fromStatus: string, toStatus: string): boolean {
-  if (toStatus === "done") return false;
+export function needsMotivation(fromStatus: string, toStatus: string, forced = false): boolean {
+  if (toStatus === "done") return forced;
   if (STATUS_LOG_MOTIVATION_REQUIRED.has(toStatus)) return true;
   if (toStatus === "planned" && fromStatus !== "planned") return true;
   return false;

@@ -194,7 +194,7 @@ test("planner repair archive counts", async () => {
     // only arrive from disk (legacy state / manual edits) — inject it directly
     // into the completed seed phase's JSON, exactly the state repair is for.
     await callTool(session, "planner-task-start", { task: "T001" });
-    await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified before stale handoff repair." });
+    await callTool(session, "planner-task-complete", { task: "T001", force: true, motivation: "Seed checklist item not relevant to this stale-handoff repair coverage.", description_update: "Seed task completed and verified before stale handoff repair." });
     const allPhases = await session.store.loadAllPhases();
     const seedPhase = allPhases.find((p) => p.number === 1);
     assert.ok(seedPhase, "seed phase P001 must exist");
@@ -237,7 +237,7 @@ test("task completion rollup and active-task summaries", async () => {
     await callTool(session, "planner-feature-show", { feature: "F001", full: true });
     await callTool(session, "planner-requirement-list", { phaseRef: "P001" });
     await callTool(session, "planner-task-start", { task: "T001" });
-    await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Seed task completed and verified before rollup coverage." });
+    await callTool(session, "planner-task-complete", { task: "T001", force: true, motivation: "Seed checklist item not relevant to this rollup coverage.", description_update: "Seed task completed and verified before rollup coverage." });
 
     // Create a feature, phase, and two tasks
     await callTool(session, "planner-feature-add", {

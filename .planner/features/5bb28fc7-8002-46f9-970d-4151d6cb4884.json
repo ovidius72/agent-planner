@@ -51,10 +51,24 @@
     "23854635-5488-411e-8b55-be317433362e",
     "76cbb771-ad31-4c0d-8531-066e333c4429",
     "a6aeb8f3-0157-4748-8401-a911b6c0b3a6",
-    "b5ae2400-ea8a-46c7-936d-27c668371cdf"
+    "b5ae2400-ea8a-46c7-936d-27c668371cdf",
+    "7faeacc4-9850-460c-b593-bb00adac823a",
+    "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+    "b2f169bf-cdf4-4d0b-a229-37ccd57e3c24",
+    "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
+    "dff7481a-5d80-4ef0-9409-5fe40b56fb94"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "a564be81-1b62-442e-b2aa-a5ef6347e813",
+      "date": "2026-09-24T10:44:08.982Z",
+      "fromStatus": "planned",
+      "toStatus": "done",
+      "title": "planned → done",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z",
   "sessionInfo": []

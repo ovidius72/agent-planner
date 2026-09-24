@@ -1,0 +1,396 @@
+{
+  "id": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 102,
+  "shortId": "VJ9UA",
+  "priority": 34,
+  "slug": "lossless-project-context-loading-and-decision-ownership",
+  "title": "Lossless project context loading and decision ownership",
+  "discussedAt": "2026-09-14T07:40:57.973Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through phase_discuss tool.",
+  "summary": "Make project context complete and verifiable at planner load and enforce single-owner Accepted Decisions.",
+  "description": "Plan-core project-context modeling and completeness evidence; Pi and MCP planner-load and project-read surfaces; any necessary plan-server support; read-attestation semantics; Accepted Decisions ownership guidance and semantic operations; synchronized skills, capability inventory, and cross-harness regressions.",
+  "descriptionUpdatedAt": "2026-09-14T07:40:57.973Z",
+  "notes": "",
+  "goals": [
+    "Deliver every canonical project-level context field, all Requirements, and all project Accepted Decisions during planner load without silently treating truncated content as complete.",
+    "Make Pi and MCP expose equivalent, truthful project-context read contracts with explicit completeness evidence and safe continuation only when payload limits require it.",
+    "Keep task-start context scoped to feature, phase, and task work while preserving freshness-aware handling for context changed after project load.",
+    "Route each new durable decision to exactly one authoritative project, feature, phase, or task Accepted Decisions owner."
+  ],
+  "nonGoals": [
+    "Redesign the Web UI Project Context presentation unless a minimal compatibility change is required by the new API contract.",
+    "Remove historical or legacy persisted decision data automatically.",
+    "Eliminate payload safeguards or place unbounded content into human-facing recaps.",
+    "Move project-global context into task-start context."
+  ],
+  "dependencies": [
+    "Existing semantic accepted_decision_create/update/delete operations and AcceptedDecision schema.",
+    "Existing planner-load preparation, Project Guidelines read state, Requirement freshness tracking, and task-start context gates.",
+    "Existing Pi plan_get, MCP planner-show/planner-load, and bounded context helpers."
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Large Requirements or Accepted Decisions collections can exceed practical model or transport limits; partial delivery must remain explicit and non-attesting.",
+    "Changing decision_record may affect callers relying on its dual-write behavior, so compatibility must fail clearly or migrate to scope-aware semantic operations.",
+    "Removing redundant project context from task start before planner-load attestation is durable could create a context gap.",
+    "Pi and MCP expose different result channels, so tests must prove what is actually agent-visible rather than only inspecting UI-only details."
+  ],
+  "openQuestions": [
+    "Determine the safest compatibility treatment for decision_record: deprecate with a typed redirect, or replace it with an explicitly scoped target contract.",
+    "Determine whether exceptional oversized project context should be automatically drained by the adapter or exposed through mandatory continuation tokens while keeping planner load incomplete until all chunks are read."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "82e8865f-1bff-4838-915b-274dba6187f5",
+      "title": "A project-context read satisfies REQUIREMENTS_READ_REQUIRED for every requirement",
+      "decision": "recordProjectContextRead stamps sessionInfo on every requirement in the plan, not just requirements linked to the current task/phase. This means a complete, attested project-context read satisfies phase-scoped REQUIREMENTS_READ_REQUIRED gates everywhere, on any subsequent task, without a separate per-task requirement read.",
+      "rationale": "recordProjectContextRead only succeeds after verifyProjectContextChunks proves the agent received the exact, complete, fingerprint-matched set of every requirement in the plan (title, description, macro tasks) — not a count or a truncated excerpt. The agent has therefore genuinely read every requirement's canonical content, exactly as recordContextRead's per-requirement stamps attest for a narrower, task-scoped read. Gating on \"has this session seen this requirement\" is satisfied identically by either path; the two calls differ only in scope (whole plan vs. one task's linked requirements), not in the strength of the evidence. Treating a lossless full read as weaker than a partial one would force agents that already did the complete read to redo a strictly smaller one, with no correctness benefit. recordContextRead itself stamps only the ids it was given because it is intentionally task-scoped and has no evidence about requirements outside that scope; recordProjectContextRead has evidence about all of them, so it stamps all of them.",
+      "implementationNotes": "Implemented in packages/plan-core/src/plan-store.ts, recordProjectContextRead: every requirement in requirements.requirements gets upsertSessionInfo(sessionId, createdAt) applied, then the changed set is persisted through saveRequirements (fix for defect 1, routes through the same stale-write-guard and sessionInfo-merge path as every other requirement write). If this default should differ per gate or per harness in the future, that must be a new explicit decision, not a silent code change.",
+      "acceptedAt": "2026-09-15T08:49:13.071Z"
+    }
+  ],
+  "completionCriteria": [
+    "Planner load proves lossless delivery of all canonical project fields, all Requirements, and all project Accepted Decisions, or returns an explicit incomplete state that cannot attest a successful read.",
+    "Pi and MCP project-read surfaces no longer promise a full read when agent-visible content is incomplete.",
+    "Task start does not duplicate stable project-global context and still detects context made stale after load.",
+    "Decision guidance and semantic operations select one authoritative owner and no longer instruct automatic feature-plus-phase duplication.",
+    "Focused core, Pi, MCP, server, skill/capability, and compatibility regressions pass, followed by the canonical bounded final gate at phase close."
+  ],
+  "taskIds": [
+    "1d63653f-5163-4b50-ad04-04618b37646a",
+    "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20",
+    "eebc1156-33c5-4023-90af-ab587f995edc"
+  ],
+  "tasks": [
+    {
+      "id": "1d63653f-5163-4b50-ad04-04618b37646a",
+      "phaseId": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+      "number": 403,
+      "shortId": "KHW9Y",
+      "priority": 1,
+      "shortName": "project-context-contract",
+      "title": "Define lossless project-context delivery and completeness semantics",
+      "status": "done",
+      "description": "Define the canonical harness-agnostic project-context read contract in packages/plan-core/src/recap.ts, packages/plan-core/src/plan-store.ts, packages/plan-core/src/schema.ts, and focused plan-core tests. Current planner-load recap construction exposes the project name, goal, and Project Guidelines but does not provide one complete typed payload containing project.description, descriptionRef, scope, outOfScope, technologies, tools, contentLanguage, chatLanguage, every declarative Requirement, and every project-owned AcceptedDecision. Existing buildBoundedAcceptedDecisionContext imposes an 8,000-character aggregate limit, so a truncated result can be presented even though downstream descriptions imply complete context. Introduce a single canonical project-context representation with explicit delivery evidence such as complete/truncated status, delivered and total counts, stable ordering, and safe continuation metadata only when payload limits genuinely require chunking. A partial page or chunk must never count as a successful complete read or satisfy project-load attestation. Preserve exact Requirement IDs, linkage, descriptions, macro-task states, timestamps, AcceptedDecision IDs and acceptedAt values, Project Guidelines separation, legacy data parsing, and transport-safe bounded human recaps. Add regressions for empty, normal, oversized, continued, stale, and legacy project context; prove that all chunks reconstruct the exact canonical data without loss or duplication and that incomplete delivery cannot be attested.\n\n---\n**Completion summary:**\nImplemented the harness-agnostic lossless project-context contract in packages/plan-core/src/project-context.ts and exported it from packages/plan-core/src/index.ts. The canonical snapshot includes project description/descriptionRef, goal, scope/outOfScope, technologies/tools, languages, Project Guidelines, every project Requirement with macro-task lifecycle and timestamps, and every project Accepted Decision. Delivery uses validated bounded chunks with explicit partial/complete, truncation, counts, fingerprint, and continuation evidence; only an exact ordered reconstruction can produce complete evidence. PlanStore now reads project.json plus requirements.json under one coherent root lock, persists complete-read attestations worktree-locally only after current-fingerprint verification, stamps existing Guidelines/Requirement read evidence, and rolls back partial writes. Added packages/plan-core/test/project-context.test.mjs covering empty, normal, oversized/continued, missing/duplicate/reordered/tampered, stale project and Requirement changes, and legacy state. Verification: @agent-plan/core build passed; full @agent-plan/core package tests passed 320/320; whitespace/diff checks passed. No full repository gate was run because this is not phase close. No commit or push performed.",
+      "descriptionUpdatedAt": "2026-09-14T12:40:09.032Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-001-planned-in-progress",
+          "date": "2026-09-14T07:53:26.464Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-002-in-progress-done",
+          "date": "2026-09-14T12:40:09.026Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented the harness-agnostic lossless project-context contract in packages/plan-core/src/project-context.ts and exported it from packages/plan-core/src/index.ts. The canonical snapshot includes project description/descriptionRef, goal, scope/outOfScope, technologies/tools, languages, Project Guidelines, every project Requirement with macro-task lifecycle and timestamps, and every project Accepted Decision. Delivery uses validated bounded chunks with explicit partial/complete, truncation, counts, fingerprint, and continuation evidence; only an exact ordered reconstruction can produce complete evidence. PlanStore now reads project.json plus requirements.json under one coherent root lock, persists complete-read attestations worktree-locally only after current-fingerprint verification, stamps existing Guidelines/Requirement read evidence, and rolls back partial writes. Added packages/plan-core/test/project-context.test.mjs covering empty, normal, oversized/continued, missing/duplicate/reordered/tampered, stale project and Requirement changes, and legacy state. Verification: @agent-plan/core build passed; full @agent-plan/core package tests passed 320/320; whitespace/diff checks passed. No full repository gate was run because this is not phase close. No commit or push performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-001-inventory-every-canonical-project-field-and-current-planner-load-read-delivery-path",
+          "number": 1,
+          "title": "Inventory every canonical project field and current planner-load/read delivery path.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-002-define-the-typed-lossless-project-context-payload-and-completeness-continuation-evidence",
+          "number": 2,
+          "title": "Define the typed lossless project-context payload and completeness/continuation evidence.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-003-implement-deterministic-stable-ordering-and-exact-reconstruction-across-exceptional-oversized-payloads",
+          "number": 3,
+          "title": "Implement deterministic stable ordering and exact reconstruction across exceptional oversized payloads.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-004-ensure-only-complete-delivery-can-produce-a-project-context-read-attestation",
+          "number": 4,
+          "title": "Ensure only complete delivery can produce a project-context read attestation.",
+          "checked": true
+        },
+        {
+          "id": "1d63653f-5163-4b50-ad04-04618b37646a-check-005-add-focused-core-regressions-for-complete-oversized-continued-stale-and-legacy-contexts",
+          "number": 5,
+          "title": "Add focused core regressions for complete, oversized, continued, stale, and legacy contexts.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-14T07:53:26.464Z",
+      "completedAt": "2026-09-14T12:40:09.026Z",
+      "createdAt": "2026-09-14T07:41:15.863Z",
+      "updatedAt": "2026-09-14T12:40:09.026Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-14T07:53:26.160Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20",
+      "phaseId": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+      "number": 404,
+      "shortId": "3QJM8",
+      "priority": 2,
+      "shortName": "planner-load-context",
+      "title": "Deliver complete project context through Pi and MCP planner load",
+      "status": "done",
+      "description": "Apply the canonical project-context contract to packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, any required packages/plan-server/src/serve.ts support, synchronized planner skill sources, and representative integration tests. Current Pi plan_get advertises a full-plan read but its agent-visible content only includes project name, entity counts, active-task evidence, and a bounded project Accepted Decisions block; project description, goal, Guidelines, scope, technologies/tools, languages, and Requirement bodies are absent. Pi planner load exposes some fields only through a later ambient system prompt, while MCP planner-load structured agentContext contains the planner skill and bounded cross-scope decisions but omits most project context. Make explicit planner load deliver the complete project-level context to the agent in both harnesses, including the short description and descriptionRef, goal, scope and out-of-scope, technologies and tools, language preferences, Project Guidelines, every Requirement with canonical details, and every project Accepted Decision. Ensure human recap and structured agent payloads are truthful and consistent, automatically complete any necessary internal chunks or return loaded/contextComplete false with mandatory continuation actions, and never claim a full read from counts, UI-only details, or a truncated first chunk. Correct plan_get and MCP project-read descriptions/results so their declared completeness matches agent-visible content. Once durable load attestation exists, keep task-start delivery scoped to feature, phase, and task context; retain a targeted stale-context refresh when project content changes after load. Preserve explicit planner lifecycle, Guidelines read gates, Requirement freshness behavior, structuredContent-only host compatibility, Web UI startup metadata, bounded human-facing output, and existing active-task evidence. Add Pi/MCP/server regressions proving full visible delivery, incomplete-state behavior, continuation completion, post-load staleness, and parity across result channels.\n\n---\n\n## Carried-over defects in T403's committed code (folded in 2026-09-15)\n\nT403 delivered the contract in packages/plan-core/src/project-context.ts and PlanStore, and it is committed at a0ea1ba. Three defects were found during review and left unfixed. They sit directly under this task's wiring, so fix them here, before two adapters depend on the current behaviour.\n\n1. `recordProjectContextRead` (packages/plan-core/src/plan-store.ts) writes project.json and requirements.json with `atomicWriteJson` directly, bypassing `saveProject` and `saveRequirements`. Its sibling `recordContextRead` goes through the save methods. The bypass silently skips: `touchTimestamp()`, so the planner mtime marker is not bumped after the write; the `workDeviations` strip that `saveProject` performs and whose comment says workDeviations must never reach shared project.json; `mergeSessionInfo` against the on-disk copy; and the `assertSnapshotNotOlder` stale-write guard on requirements. It also re-implements the guidelines `updatedAt` stamping by hand. Route the forward writes through `this.saveProject` / `this.saveRequirements` inside `runAsBatch`, which also removes most of the hand-rolled rollback block.\n\n2. `loadProjectContextDelivery` and `projectContextReadStateForSession` take the plan-root **write** lock for pure reads. Every other multi-document read in the store, including `loadAll()` which reads project, requirements, phases and features together, takes no lock at all. The invariant comment in packages/plan-core/src/write-coordination.ts previously read \"Reads never take this lock, so secondary processes remain available for inspection\" and was reworded to permit this. These are the only reads in the codebase that can block behind a writer, and the contract was changed to fit the code. The module already computes a fingerprint: read both documents, recompute, retry on mismatch. That needs no lock and no contract change. Restore the original invariant wording.\n\n3. `recordProjectContextRead` stamps **every** requirement as read for the session. The sibling `recordContextRead` stamps only the requirement ids it was given. This means a project-context read satisfies phase-scoped `REQUIREMENTS_READ_REQUIRED` gates everywhere. That may be intended — a lossless delivery does contain every requirement — but it is a governance change that was never written down. Decide it explicitly, implement what is decided, and record the decision as a phase-owned Accepted Decision rather than leaving it implicit in code.\n\nVerification for the folded work: focused plan-core tests plus the existing project-context regressions; prove the timestamp is bumped, that workDeviations cannot reach shared state, and that the read path takes no write lock. The canonical full gate belongs at phase close, not here (AGENTS.md rule 17).\n\n---\n**Completion summary:**\nShipped both halves of T404.\n\nCORE FIXES (packages/plan-core/src/plan-store.ts, write-coordination.ts):\n1. recordProjectContextRead now runs inside runAsBatch and routes its project.json/requirements.json writes through this.saveProject/this.saveRequirements instead of atomicWriteJson, so it gets touchTimestamp(), the workDeviations strip, projectGuidelines sessionInfo merge, and the stale-write guard for free. Removed the now-unneeded hand-rolled rollback (each write is already atomic and idempotent to retry).\n2. loadProjectContextDelivery and projectContextReadStateForSession no longer take the plan-root write lock. Added private readCoherentProjectAndRequirements(): reads project+requirements, fingerprints the pair, re-reads and re-fingerprints, retries (bounded, 5 attempts) until two consecutive reads agree, else returns the last read. Restored write-coordination.ts's original invariant comment: \"Reads never take this lock, so secondary processes remain available for inspection.\"\n3. Governance decision: recordProjectContextRead keeps stamping every requirement (not just linked ones), because verifyProjectContextChunks only succeeds on an exact, complete, fingerprint-matched delivery of every requirement — the same evidentiary strength recordContextRead has for its narrower scope. Recorded as a phase-owned Accepted Decision on P102(F005): \"A project-context read satisfies REQUIREMENTS_READ_REQUIRED for every requirement\" (decision id 82e8865f-1bff-4838-915b-274dba6187f5).\n\nNew plan-core regressions in test/project-context.test.mjs: timestamp bump + workDeviations-never-reach-shared-project.json, and no-write-lock-blocking (holding writer via runBatch in a child process, confirming loadProjectContextDelivery/projectContextReadStateForSession return in <200ms).\n\nWIRING: added packages/plan-core/src/project-context.ts::buildProjectContextLoadReply (pure {text, structured} builder, same shape as handoff-reply.ts) and ::projectContextStaleAdvisory (non-blocking task-start advisory string). Both packages/pi-adapter/src/index.ts (planner-load tool, /planner load command, task_start tool) and packages/plan-mcp/src/index.ts (planner-load tool, planner-task-start tool) call the identical core functions — no duplicated rendering in either adapter (grepped to confirm).\n\nProject-level context (description, descriptionRef, goal, scope, outOfScope, technologies, tools, languages, Project Guidelines, every Requirement, every project Accepted Decision) is delivered via loadProjectContextDelivery + attested via recordProjectContextRead on every planner-load call, in both harnesses. maxChars is an optional tool param (default DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS=16000); oversized content returns contextComplete:false with nextActions and is NOT attested.\n\nIMPORTANT CORRECTION found via existing tests: the full context text must NOT be concatenated into the human-facing recap channel — both harnesses have a pre-existing, tested invariant (\"Accepted Decision context must not leak into the human recap\") that a naive first pass of mine violated for the whole project-context text too. Fixed by keeping content[].text / structuredContent.recap.text exactly as before, and delivering the full context only through the agent-only channel: MCP structuredContent.projectContext + structuredContent.agentContext.projectContext.text; Pi details.projectContext (with .text); the /planner load command's trigger message got a new \"[agent-only project context; do not quote in the recap]\" block alongside the existing plannerSkillContext block.\n\ntask_start/planner-task-start stays scoped to feature/phase/task context (unchanged blocking gates). Added a non-blocking advisory: when projectContextReadStateForSession(sessionId) is \"stale\" (project content changed after an earlier full load), both the text and structured result now include a \"Project-context advisory\" pointing back at planner-load, without blocking the start.\n\nUpdated packages/plan-core/planner-skill.md (and ran pnpm plugins:sync + plugins:check, both clean) to describe the contract and the loaded/contextComplete truthfulness rule.\n\nChecked plan_get (Pi) and planner-show (MCP): both already scope their descriptions accurately to what they return; left unchanged.\n\nTESTS: plan-core npm test 341/341 pass. plan-mcp: mcp-crud 14, mcp-handoff 21, mcp-harness 13 (added 2 new tests), mcp-planner-web 9, ref-validation 23 — 80/80 pass. pi-adapter: host-registration 19 (added 2 new tests), mutations 20, paginate 8, ref-validation 24, resume 4, web-lifecycle 6 — 81/81 pass. plan-server: requirements-api 4, server-crud 25, server-events 9, server-fixture 5, server-handoff 10, writer-coordination 1 — 54/54 pass. New regressions cover: full visible delivery in both harnesses, the incomplete/oversized state (maxChars forcing contextComplete:false + nextActions, not attested), post-load staleness (task-start advisory after project mutated), and parity across MCP/Pi result channels.\n\nTYPECHECK: npx tsc --noEmit clean for plan-core, plan-mcp, pi-adapter, plan-server.\n\nNOT DONE / NOT VERIFIED: did not add the same advisory to Pi's interactive /planner task start command handler (only the task_start TOOL and planner-task-start MCP tool got it) — scoped out as a UI-only convenience layer. Did not build a multi-round-trip chunk-continuation tool; oversized delivery returns contextComplete:false with a retry-with-larger-maxChars nextAction, since both adapters already hold the full delivery in one loadProjectContextDelivery call in-process. Did not run pnpm verify:final (excluded by the task; belongs at phase close). plan-server/src/serve.ts needed no changes — confirmed via grep it has no project-context delivery surface.",
+      "descriptionUpdatedAt": "2026-09-15T12:39:39.383Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-001-planned-in-progress",
+          "date": "2026-09-15T08:45:06.798Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-002-in-progress-done",
+          "date": "2026-09-15T12:39:39.380Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped both halves of T404.\n\nCORE FIXES (packages/plan-core/src/plan-store.ts, write-coordination.ts):\n1. recordProjectContextRead now runs inside runAsBatch and routes its project.json/requirements.json writes through this.saveProject/this.saveRequirements instead of atomicWriteJson, so it gets touchTimestamp(), the workDeviations strip, projectGuidelines sessionInfo merge, and the stale-write guard for free. Removed the now-unneeded hand-rolled rollback (each write is already atomic and idempotent to retry).\n2. loadProjectContextDelivery and projectContextReadStateForSession no longer take the plan-root write lock. Added private readCoherentProjectAndRequirements(): reads project+requirements, fingerprints the pair, re-reads and re-fingerprints, retries (bounded, 5 attempts) until two consecutive reads agree, else returns the last read. Restored write-coordination.ts's original invariant comment: \"Reads never take this lock, so secondary processes remain available for inspection.\"\n3. Governance decision: recordProjectContextRead keeps stamping every requirement (not just linked ones), because verifyProjectContextChunks only succeeds on an exact, complete, fingerprint-matched delivery of every requirement — the same evidentiary strength recordContextRead has for its narrower scope. Recorded as a phase-owned Accepted Decision on P102(F005): \"A project-context read satisfies REQUIREMENTS_READ_REQUIRED for every requirement\" (decision id 82e8865f-1bff-4838-915b-274dba6187f5).\n\nNew plan-core regressions in test/project-context.test.mjs: timestamp bump + workDeviations-never-reach-shared-project.json, and no-write-lock-blocking (holding writer via runBatch in a child process, confirming loadProjectContextDelivery/projectContextReadStateForSession return in <200ms).\n\nWIRING: added packages/plan-core/src/project-context.ts::buildProjectContextLoadReply (pure {text, structured} builder, same shape as handoff-reply.ts) and ::projectContextStaleAdvisory (non-blocking task-start advisory string). Both packages/pi-adapter/src/index.ts (planner-load tool, /planner load command, task_start tool) and packages/plan-mcp/src/index.ts (planner-load tool, planner-task-start tool) call the identical core functions — no duplicated rendering in either adapter (grepped to confirm).\n\nProject-level context (description, descriptionRef, goal, scope, outOfScope, technologies, tools, languages, Project Guidelines, every Requirement, every project Accepted Decision) is delivered via loadProjectContextDelivery + attested via recordProjectContextRead on every planner-load call, in both harnesses. maxChars is an optional tool param (default DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS=16000); oversized content returns contextComplete:false with nextActions and is NOT attested.\n\nIMPORTANT CORRECTION found via existing tests: the full context text must NOT be concatenated into the human-facing recap channel — both harnesses have a pre-existing, tested invariant (\"Accepted Decision context must not leak into the human recap\") that a naive first pass of mine violated for the whole project-context text too. Fixed by keeping content[].text / structuredContent.recap.text exactly as before, and delivering the full context only through the agent-only channel: MCP structuredContent.projectContext + structuredContent.agentContext.projectContext.text; Pi details.projectContext (with .text); the /planner load command's trigger message got a new \"[agent-only project context; do not quote in the recap]\" block alongside the existing plannerSkillContext block.\n\ntask_start/planner-task-start stays scoped to feature/phase/task context (unchanged blocking gates). Added a non-blocking advisory: when projectContextReadStateForSession(sessionId) is \"stale\" (project content changed after an earlier full load), both the text and structured result now include a \"Project-context advisory\" pointing back at planner-load, without blocking the start.\n\nUpdated packages/plan-core/planner-skill.md (and ran pnpm plugins:sync + plugins:check, both clean) to describe the contract and the loaded/contextComplete truthfulness rule.\n\nChecked plan_get (Pi) and planner-show (MCP): both already scope their descriptions accurately to what they return; left unchanged.\n\nTESTS: plan-core npm test 341/341 pass. plan-mcp: mcp-crud 14, mcp-handoff 21, mcp-harness 13 (added 2 new tests), mcp-planner-web 9, ref-validation 23 — 80/80 pass. pi-adapter: host-registration 19 (added 2 new tests), mutations 20, paginate 8, ref-validation 24, resume 4, web-lifecycle 6 — 81/81 pass. plan-server: requirements-api 4, server-crud 25, server-events 9, server-fixture 5, server-handoff 10, writer-coordination 1 — 54/54 pass. New regressions cover: full visible delivery in both harnesses, the incomplete/oversized state (maxChars forcing contextComplete:false + nextActions, not attested), post-load staleness (task-start advisory after project mutated), and parity across MCP/Pi result channels.\n\nTYPECHECK: npx tsc --noEmit clean for plan-core, plan-mcp, pi-adapter, plan-server.\n\nNOT DONE / NOT VERIFIED: did not add the same advisory to Pi's interactive /planner task start command handler (only the task_start TOOL and planner-task-start MCP tool got it) — scoped out as a UI-only convenience layer. Did not build a multi-round-trip chunk-continuation tool; oversized delivery returns contextComplete:false with a retry-with-larger-maxChars nextAction, since both adapters already hold the full delivery in one loadProjectContextDelivery call in-process. Did not run pnpm verify:final (excluded by the task; belongs at phase close). plan-server/src/serve.ts needed no changes — confirmed via grep it has no project-context delivery surface."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-001-wire-canonical-project-context-delivery-into-pi-planner-load-and-agent-visible-read-surfaces",
+          "number": 1,
+          "title": "Wire canonical project-context delivery into Pi planner load and agent-visible read surfaces.",
+          "checked": true
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-002-wire-equivalent-complete-context-and-evidence-into-mcp-planner-load-structuredcontent-and-read-surfaces",
+          "number": 2,
+          "title": "Wire equivalent complete context and evidence into MCP planner-load structuredContent and read surfaces.",
+          "checked": true
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-003-correct-misleading-full-plan-full-project-descriptions-and-partial-success-outcomes",
+          "number": 3,
+          "title": "Correct misleading full-plan/full-project descriptions and partial-success outcomes.",
+          "checked": true
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-004-separate-stable-project-load-context-from-task-start-context-while-preserving-targeted-stale-refresh",
+          "number": 4,
+          "title": "Separate stable project-load context from task-start context while preserving targeted stale refresh.",
+          "checked": true
+        },
+        {
+          "id": "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20-check-005-add-cross-harness-regressions-for-full-delivery-structured-only-clients-oversized-continuation-and-changed-after-load-context",
+          "number": 5,
+          "title": "Add cross-harness regressions for full delivery, structured-only clients, oversized continuation, and changed-after-load context.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "1d63653f-5163-4b50-ad04-04618b37646a"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-15T08:45:06.798Z",
+      "completedAt": "2026-09-15T12:39:39.380Z",
+      "createdAt": "2026-09-14T07:41:34.607Z",
+      "updatedAt": "2026-09-15T12:39:39.380Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+          "createdAt": "2026-09-15T08:45:06.692Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "eebc1156-33c5-4023-90af-ab587f995edc",
+      "phaseId": "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
+      "number": 405,
+      "shortId": "4PFPJ",
+      "priority": 3,
+      "shortName": "decision-ownership",
+      "title": "Enforce single-owner Accepted Decision routing",
+      "status": "done",
+      "description": "Correct Accepted Decisions ownership semantics across packages/plan-core/src/plan-store.ts and schema-facing helpers, packages/pi-adapter/src/index.ts, packages/plan-mcp/src/index.ts, any affected packages/plan-server/src/serve.ts routes, synchronized planner skill sources, capability inventories, and focused compatibility tests. Current Pi ambient guidance says to record every new decision or user-agreed modification in both the relevant feature and phase, and the decision_record tool implements that policy by appending duplicate AcceptedDecision records to both owners. This conflicts with the semantic accepted_decision_create/update/delete operations, which already support project, feature, phase, and task targets, and it mishandles project-wide decisions discovered during task development. Establish an explicit ownership rule: project-wide decisions belong only to project.acceptedDecisions; feature-wide decisions only to that feature; phase-specific decisions only to that phase; genuinely task-local durable decisions only to that task. Do not duplicate decisions across scopes by default. Replace the incorrect guidance and make decision_record compatibility safe by either returning a typed redirect to the scoped semantic operation or evolving it to require an explicit owner without silently dual-writing. New durable decisions must not be stored only in legacy free-form decisions arrays, descriptions, notes, status logs, or completion summaries; those surfaces may reference canonical decision IDs but are not decision authority. Preserve existing AcceptedDecision IDs, acceptedAt timestamps, rationale and implementationNotes, explicit delete confirmation, read-context visibility, legacy persisted data, and atomic no-op behavior on invalid targets. Add core, Pi, MCP, server, skill, and capability regressions for each ownership scope, project decisions created during task work, prevention of duplicate cross-scope writes, compatibility behavior for decision_record, and correct context delivery after an owner is completed or archived.\n\n---\n**Completion summary:**\nEnforced single-owner Accepted Decision routing across plan-core, Pi, MCP, and the HTTP API.\n\nOWNERSHIP RULE: A decision has exactly one owner (project/feature/phase/task) chosen by scope, never duplicated. Encoded once in new packages/plan-core/src/accepted-decision-guard.ts (ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, buildDecisionRecordRedirectReply), exported from plan-core/src/index.ts, and imported by pi-adapter, plan-mcp, and plan-server so the wording/behavior lives in one place (AGENTS.md rule 4). Documented in packages/plan-core/planner-skill.md under a new \"Accepted Decision ownership\" section; packages/pi-adapter's ambient \"Operational rules\" bullet now cites the same constant instead of its own \"record in both feature and phase\" text. Ran pnpm plugins:sync (regenerated plugins/_shared/planner-skill.md.in and plugins/claude-code/skills/planner/SKILL.md) then pnpm plugins:check (clean).\n\ndecision_record TREATMENT CHOSEN: typed redirect, not an explicit-owner rewrite. packages/pi-adapter/src/index.ts's decision_record tool still validates featureId/phaseId (atomic no-op on an invalid target, unchanged), but performs zero writes — it never calls updateFeatures/updatePhase — and returns buildDecisionRecordRedirectReply's guidance (details.written=false, redirected=true, redirectTool=\"accepted_decision_create\") telling the agent to call accepted_decision_create with the single correct targetType. Chosen over an explicit-owner parameter because accepted_decision_create already is that explicit-owner operation; adding a second tool with the same write semantics would duplicate logic AGENTS.md rule 4 says belongs once. The removed dual-write compensation logic (feature-write-then-rollback-on-phase-failure) is gone because there is no longer a write to compensate.\n\nLEGACY decisions ARRAY: the free-form `decisions: string[]` field on Project, Phase, and Task (Feature has none) is now read-only going forward. project_update/feature_update-equivalents, phase_update, task_update (Pi), planner-project-discuss/planner-phase-update/planner-task-update (MCP), and PUT /project|/phases/:id|/tasks/:id (HTTP) all reject a genuine change to `decisions` with errorCode LEGACY_DECISIONS_ARRAY_READ_ONLY, reusing the one core message. Pi/MCP reject any presence of the field (matches the pre-existing acceptedDecisions-raw-replacement precedent in those adapters); the HTTP routes compare against the existing persisted value (matching their own pre-existing acceptedDecisions precedent) so a GET-then-PUT round trip that merely echoes an unchanged `decisions: []` is not incorrectly rejected. Also fixed packages/plan-core/src/handoff-context.ts: handoff_write's taskUpdates[].decisions and phaseUpdate.decisions previously appended straight into task.decisions/phase.decisions (a second, less obvious path into the same non-authoritative array, reachable from both adapters since it is core code). They now render into the completion-summary/phase-update section text as a labeled \"Decisions mentioned (not decision authority; record any durable decision with accepted_decision_create on its actual owner)\" list instead.\n\nPRESERVED, UNCHANGED: AcceptedDecision ids/acceptedAt/rationale/implementationNotes; accepted_decision_delete's confirmed=true gate; read-context visibility (Accepted Decisions remain visible on a completed/archived owner — new regression proves this); atomic no-op on an invalid target (accepted_decision_create/update/delete already did this via resolveAcceptedDecisionTarget, untouched). LEGACY DUPLICATED DATA: decisions already written to two owners by the old decision_record dual-write are left exactly as persisted — no automatic migration or de-duplication was added; this is a stated non-goal of the phase. The project-level legacy `decisions` array's existing migrate-on-load path (previewLegacyProjectContextMigration/applyLegacyProjectContextMigration) is untouched and still works on whatever legacy content is already on disk.\n\nVERIFICATION: `npx tsc -p packages/<pkg>/tsconfig.json --noEmit` clean for plan-core, plan-mcp, pi-adapter, plan-server (all four, confirmed twice, including after the revert-and-restore below). `npm test` in plan-core: 370/370. Every other suite file run individually with `node --test <file>`: plan-mcp mcp-crud 15, mcp-handoff 21, mcp-harness 14, mcp-planner-web 9, ref-validation 23 (82 total); pi-adapter host-registration 20, mutations 20, paginate 8, ref-validation 24, resume 4, web-lifecycle 6 (82 total); plan-server requirements-api 4, server-crud 25, server-events 9, server-fixture 5, server-handoff 10, writer-coordination 1 (54 total). Grand total 588/588 passing. Each package rebuilt (tsc emit) before its tests, in dependency order (core first).\n\nREGRESSIONS ADDED, VERIFIED TO CATCH THE DEFECT: (1) pi-adapter host-registration.test.mjs replaced the two old dual-write tests with \"decision_record no longer dual-writes; it redirects to accepted_decision_create\" and \"decision_record performs no write at all, even when the phase store is unwritable\" (the latter stubs updateFeatures/updatePhase to throw, proving neither is called). Temporarily restored the old dual-write body in decision_record: both tests failed (one threw \"updateFeatures must not be called\", the other asserted a redirect that never happened); restored the fix, both pass again. (2) Legacy-decisions-array guard: added \"Should be rejected\"/LEGACY_DECISIONS_ARRAY_READ_ONLY assertions in pi-adapter mutations.test.mjs (phase/task/project), plan-mcp mcp-crud.test.mjs (phase/task), and plan-server server-crud.test.mjs (project/phase/task, plus an invalid-target and a post-completion-visibility case). Temporarily disabled the task_update guard in pi-adapter (`if (false && params.decisions...)`): the corresponding test failed (different errorCode than expected, proving the guard's absence is caught); restored, passes. (3) handoff decisions-leak: added assertions to plan-core handoff-context.test.mjs proving task.decisions/phase.decisions stay [] after a handoff_write carrying taskUpdates[].decisions/phaseUpdate.decisions, and that the text instead carries a \"Decisions mentioned (not decision authority\" block. Temporarily restored the old task.decisions/nextPhase.decisions appends: the test failed with actual ['Keep one active handoff.'] vs expected []; restored, passes. (4) New post-completion-visibility regressions in plan-mcp mcp-harness.test.mjs and pi-adapter host-registration.test.mjs: create an accepted decision on a task, start and force-complete the task, confirm the decision is still returned by task-show/task_get and still present in the persisted task after status=done.\n\nNOTICED BUT NOT CHANGED (out of scope for this task): resolveAcceptedDecisionTarget (ref-string → AcceptedDecisionOwner resolution) is duplicated near-verbatim in packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts (and again, differently shaped, in packages/plan-server/src/serve.ts) — a pre-existing violation of the same \"don't duplicate a rule\" principle this task fixed for the ownership rule and messages, but centralizing per-entity ref resolution is a larger refactor touching every entity type, not just Accepted Decisions, and was left alone. Also: pi-adapter's project_update tool has always had a second, unused local `project` variable mutation block that duplicates the real `st.updateProject(...)` write (dead code, harmless, predates this task) — only the `decisions` lines were removed from it, the rest of the duplication was left as found.\n\nUNVERIFIED: pnpm verify:final (the canonical full gate) was intentionally not run, per instructions — this is the last task in phase P102(F005), so the canonical gate is due at phase close, not here.\n\n---\n**Completion summary:**\nCORRECTION to the original completion evidence (below), after review: the legacy `decisions` array is agent governance, not an HTTP/Web-UI contract. .planner/SKILL.md already establishes the Web UI as a human-supervisor surface that may bypass agent-only gates, and PUT /api/project|/phases/:id|/tasks/:id is that surface's transport. Blocking `decisions` there broke e2e/bootstrap-crud.spec.ts's \"explicit planner load migrates legacy context before canonical Project Guidelines editing\" (chromium + mobile-chromium), which seeds legacy state via PUT /api/project with decisions:[...] specifically so it can then prove planner-load's migration consumes it — my guard blocked the only way to create the state the migration feature exists to handle, and none of my 588 focused Node-test-runner assertions caught it because I had replaced the pre-existing positive round-trip test with a rejection test instead of keeping both.\n\nFIX: restored `decisions` to the mutableFields list and the applied-field spread on all three plan-server HTTP routes (PUT /project, PUT /phases/:id, PUT /tasks/:id) in packages/plan-server/src/serve.ts, so it round-trips exactly as before this task touched it. The three LEGACY_DECISIONS_ARRAY_READ_ONLY rejection blocks on those routes (and their now-unused message/error-code import) were already removed in the same file. Test assertions in packages/plan-server/test/server-crud.test.mjs now assert the field is accepted and round-trips (phase/task/project), while keeping the invalid-target and post-completion-visibility Accepted Decision regressions from the original pass. Every Pi tool guard (project_update, phase_update, task_update) and every MCP tool guard (planner-project-discuss, planner-phase-update, planner-task-update) is UNCHANGED — those are the actual agent surfaces the ownership rule targets, and they still reject a genuine change to `decisions` with LEGACY_DECISIONS_ARRAY_READ_ONLY.\n\nVERIFICATION AFTER THE FIX: `npx tsc -p packages/<pkg>/tsconfig.json --noEmit` clean for all four packages. Every suite run file-by-file after a fresh build: plan-core 370/370, plan-mcp 82/82 (15+21+14+9+23), pi-adapter 82/82 (20+20+8+24+4+6), plan-server 54/54 (4+25+9+5+10+1) — 588/588 total, same count as before since no test was added or removed, only three assertions' expected outcome changed from reject to accept. `pnpm verify:final` now PASSES (build, typecheck, coverage, plugin sync, capability audit, browser end-to-end, packed installation smoke all green) — this is the canonical phase-closing gate for P102(F005) and it is clean.\n\nWHY THE FOCUSED SUITES DIDN'T CATCH IT / WHERE THE REGRESSION BELONGS: this was not a case where the browser gate is inherently the only place that could catch it — it's that I deleted the pre-existing plan-server positive round-trip coverage for `decisions` (phase/task update tests previously asserted `decisions: [...]` round-tripped) and replaced it with a rejection assertion, instead of recognizing that plan-server's HTTP contract for this field is legitimately different from the Pi/MCP agent tools. A plan-server-level Node test-runner assertion (PUT with `decisions` returns 200 and the value persists) is cheap, fast, and exactly targets this contract; it is now present again in server-crud.test.mjs. The browser/Playwright gate caught it somewhat incidentally, because it happens to use HTTP as legacy-state seeding infrastructure for an unrelated migration-flow test, not because a positive HTTP round-trip needs a browser to verify. Going forward, the plan-server-level regression is the right layer for this specific contract; the browser gate remains valuable for the actual migration behavior it was built to test, not for re-proving HTTP field mutability.\n\n--- ORIGINAL COMPLETION EVIDENCE (superseded above for the plan-server HTTP layer only; still accurate for plan-core, Pi, and MCP) ---\n\nEnforced single-owner Accepted Decision routing across plan-core, Pi, MCP, and the HTTP API.\n\nOWNERSHIP RULE: A decision has exactly one owner (project/feature/phase/task) chosen by scope, never duplicated. Encoded once in packages/plan-core/src/accepted-decision-guard.ts, exported from plan-core/src/index.ts, imported by pi-adapter, plan-mcp, and plan-server. Documented in packages/plan-core/planner-skill.md under \"Accepted Decision ownership\"; pi-adapter's ambient guidance cites the same constant. pnpm plugins:sync / plugins:check both clean.\n\ndecision_record TREATMENT: typed redirect (not an explicit-owner rewrite). It validates featureId/phaseId (atomic no-op on invalid target) but performs zero writes, returning buildDecisionRecordRedirectReply's guidance to call accepted_decision_create with the correct single owner. Chosen over a second explicit-owner tool because accepted_decision_create already is that operation.\n\nLEGACY decisions ARRAY (Pi/MCP agent tools only, per this correction): read-only going forward on Project/Phase/Task. Also fixed handoff_write's taskUpdates[].decisions/phaseUpdate.decisions in plan-core/src/handoff-context.ts, which previously leaked into task.decisions/phase.decisions; they now render into the completion-summary prose labeled non-authoritative instead.\n\nPRESERVED: AcceptedDecision ids/acceptedAt/rationale/implementationNotes; delete confirmation gate; read visibility on completed/archived owners (regression added); atomic no-op on invalid targets. Legacy decisions already duplicated across two owners by the old decision_record dual-write are left exactly as persisted — no auto-migration/de-dup added, a stated non-goal.\n\nREGRESSIONS VERIFIED BY TEMPORARY REVERT: decision_record dual-write (pi-adapter host-registration.test.mjs, 2 tests), legacy-decisions-array guard on the agent tools (pi-adapter/plan-mcp), handoff decisions-leak (plan-core handoff-context.test.mjs). Each reverted, confirmed to fail, restored, confirmed to pass.\n\nNOTICED BUT NOT CHANGED: resolveAcceptedDecisionTarget (ref-string resolution) is duplicated near-verbatim across pi-adapter, plan-mcp, and (differently shaped) plan-server — a pre-existing instance of the duplication this task fixed for the ownership rule, left alone as a larger, out-of-scope refactor.",
+      "descriptionUpdatedAt": "2026-09-17T07:46:11.217Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-001-planned-in-progress",
+          "date": "2026-09-16T14:09:45.463Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-002-in-progress-done",
+          "date": "2026-09-17T07:27:29.033Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Enforced single-owner Accepted Decision routing across plan-core, Pi, MCP, and the HTTP API.\n\nOWNERSHIP RULE: A decision has exactly one owner (project/feature/phase/task) chosen by scope, never duplicated. Encoded once in new packages/plan-core/src/accepted-decision-guard.ts (ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, buildDecisionRecordRedirectReply), exported from plan-core/src/index.ts, and imported by pi-adapter, plan-mcp, and plan-server so the wording/behavior lives in one place (AGENTS.md rule 4). Documented in packages/plan-core/planner-skill.md under a new \"Accepted Decision ownership\" section; packages/pi-adapter's ambient \"Operational rules\" bullet now cites the same constant instead of its own \"record in both feature and phase\" text. Ran pnpm plugins:sync (regenerated plugins/_shared/planner-skill.md.in and plugins/claude-code/skills/planner/SKILL.md) then pnpm plugins:check (clean).\n\ndecision_record TREATMENT CHOSEN: typed redirect, not an explicit-owner rewrite. packages/pi-adapter/src/index.ts's decision_record tool still validates featureId/phaseId (atomic no-op on an invalid target, unchanged), but performs zero writes — it never calls updateFeatures/updatePhase — and returns buildDecisionRecordRedirectReply's guidance (details.written=false, redirected=true, redirectTool=\"accepted_decision_create\") telling the agent to call accepted_decision_create with the single correct targetType. Chosen over an explicit-owner parameter because accepted_decision_create already is that explicit-owner operation; adding a second tool with the same write semantics would duplicate logic AGENTS.md rule 4 says belongs once. The removed dual-write compensation logic (feature-write-then-rollback-on-phase-failure) is gone because there is no longer a write to compensate.\n\nLEGACY decisions ARRAY: the free-form `decisions: string[]` field on Project, Phase, and Task (Feature has none) is now read-only going forward. project_update/feature_update-equivalents, phase_update, task_update (Pi), planner-project-discuss/planner-phase-update/planner-task-update (MCP), and PUT /project|/phases/:id|/tasks/:id (HTTP) all reject a genuine change to `decisions` with errorCode LEGACY_DECISIONS_ARRAY_READ_ONLY, reusing the one core message. Pi/MCP reject any presence of the field (matches the pre-existing acceptedDecisions-raw-replacement precedent in those adapters); the HTTP routes compare against the existing persisted value (matching their own pre-existing acceptedDecisions precedent) so a GET-then-PUT round trip that merely echoes an unchanged `decisions: []` is not incorrectly rejected. Also fixed packages/plan-core/src/handoff-context.ts: handoff_write's taskUpdates[].decisions and phaseUpdate.decisions previously appended straight into task.decisions/phase.decisions (a second, less obvious path into the same non-authoritative array, reachable from both adapters since it is core code). They now render into the completion-summary/phase-update section text as a labeled \"Decisions mentioned (not decision authority; record any durable decision with accepted_decision_create on its actual owner)\" list instead.\n\nPRESERVED, UNCHANGED: AcceptedDecision ids/acceptedAt/rationale/implementationNotes; accepted_decision_delete's confirmed=true gate; read-context visibility (Accepted Decisions remain visible on a completed/archived owner — new regression proves this); atomic no-op on an invalid target (accepted_decision_create/update/delete already did this via resolveAcceptedDecisionTarget, untouched). LEGACY DUPLICATED DATA: decisions already written to two owners by the old decision_record dual-write are left exactly as persisted — no automatic migration or de-duplication was added; this is a stated non-goal of the phase. The project-level legacy `decisions` array's existing migrate-on-load path (previewLegacyProjectContextMigration/applyLegacyProjectContextMigration) is untouched and still works on whatever legacy content is already on disk.\n\nVERIFICATION: `npx tsc -p packages/<pkg>/tsconfig.json --noEmit` clean for plan-core, plan-mcp, pi-adapter, plan-server (all four, confirmed twice, including after the revert-and-restore below). `npm test` in plan-core: 370/370. Every other suite file run individually with `node --test <file>`: plan-mcp mcp-crud 15, mcp-handoff 21, mcp-harness 14, mcp-planner-web 9, ref-validation 23 (82 total); pi-adapter host-registration 20, mutations 20, paginate 8, ref-validation 24, resume 4, web-lifecycle 6 (82 total); plan-server requirements-api 4, server-crud 25, server-events 9, server-fixture 5, server-handoff 10, writer-coordination 1 (54 total). Grand total 588/588 passing. Each package rebuilt (tsc emit) before its tests, in dependency order (core first).\n\nREGRESSIONS ADDED, VERIFIED TO CATCH THE DEFECT: (1) pi-adapter host-registration.test.mjs replaced the two old dual-write tests with \"decision_record no longer dual-writes; it redirects to accepted_decision_create\" and \"decision_record performs no write at all, even when the phase store is unwritable\" (the latter stubs updateFeatures/updatePhase to throw, proving neither is called). Temporarily restored the old dual-write body in decision_record: both tests failed (one threw \"updateFeatures must not be called\", the other asserted a redirect that never happened); restored the fix, both pass again. (2) Legacy-decisions-array guard: added \"Should be rejected\"/LEGACY_DECISIONS_ARRAY_READ_ONLY assertions in pi-adapter mutations.test.mjs (phase/task/project), plan-mcp mcp-crud.test.mjs (phase/task), and plan-server server-crud.test.mjs (project/phase/task, plus an invalid-target and a post-completion-visibility case). Temporarily disabled the task_update guard in pi-adapter (`if (false && params.decisions...)`): the corresponding test failed (different errorCode than expected, proving the guard's absence is caught); restored, passes. (3) handoff decisions-leak: added assertions to plan-core handoff-context.test.mjs proving task.decisions/phase.decisions stay [] after a handoff_write carrying taskUpdates[].decisions/phaseUpdate.decisions, and that the text instead carries a \"Decisions mentioned (not decision authority\" block. Temporarily restored the old task.decisions/nextPhase.decisions appends: the test failed with actual ['Keep one active handoff.'] vs expected []; restored, passes. (4) New post-completion-visibility regressions in plan-mcp mcp-harness.test.mjs and pi-adapter host-registration.test.mjs: create an accepted decision on a task, start and force-complete the task, confirm the decision is still returned by task-show/task_get and still present in the persisted task after status=done.\n\nNOTICED BUT NOT CHANGED (out of scope for this task): resolveAcceptedDecisionTarget (ref-string → AcceptedDecisionOwner resolution) is duplicated near-verbatim in packages/pi-adapter/src/index.ts and packages/plan-mcp/src/index.ts (and again, differently shaped, in packages/plan-server/src/serve.ts) — a pre-existing violation of the same \"don't duplicate a rule\" principle this task fixed for the ownership rule and messages, but centralizing per-entity ref resolution is a larger refactor touching every entity type, not just Accepted Decisions, and was left alone. Also: pi-adapter's project_update tool has always had a second, unused local `project` variable mutation block that duplicates the real `st.updateProject(...)` write (dead code, harmless, predates this task) — only the `decisions` lines were removed from it, the rest of the duplication was left as found.\n\nUNVERIFIED: pnpm verify:final (the canonical full gate) was intentionally not run, per instructions — this is the last task in phase P102(F005), so the canonical gate is due at phase close, not here."
+        },
+        {
+          "id": "e196a184-37c6-46ff-8239-d87822b178c4",
+          "date": "2026-09-17T07:40:41.313Z",
+          "fromStatus": "done",
+          "toStatus": "in-progress",
+          "title": "done → in-progress (reopened)",
+          "description": "Reopened through the confirmed lifecycle operation; prior completion evidence is retained."
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-004-in-progress-done",
+          "date": "2026-09-17T07:46:11.214Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "CORRECTION to the original completion evidence (below), after review: the legacy `decisions` array is agent governance, not an HTTP/Web-UI contract. .planner/SKILL.md already establishes the Web UI as a human-supervisor surface that may bypass agent-only gates, and PUT /api/project|/phases/:id|/tasks/:id is that surface's transport. Blocking `decisions` there broke e2e/bootstrap-crud.spec.ts's \"explicit planner load migrates legacy context before canonical Project Guidelines editing\" (chromium + mobile-chromium), which seeds legacy state via PUT /api/project with decisions:[...] specifically so it can then prove planner-load's migration consumes it — my guard blocked the only way to create the state the migration feature exists to handle, and none of my 588 focused Node-test-runner assertions caught it because I had replaced the pre-existing positive round-trip test with a rejection test instead of keeping both.\n\nFIX: restored `decisions` to the mutableFields list and the applied-field spread on all three plan-server HTTP routes (PUT /project, PUT /phases/:id, PUT /tasks/:id) in packages/plan-server/src/serve.ts, so it round-trips exactly as before this task touched it. The three LEGACY_DECISIONS_ARRAY_READ_ONLY rejection blocks on those routes (and their now-unused message/error-code import) were already removed in the same file. Test assertions in packages/plan-server/test/server-crud.test.mjs now assert the field is accepted and round-trips (phase/task/project), while keeping the invalid-target and post-completion-visibility Accepted Decision regressions from the original pass. Every Pi tool guard (project_update, phase_update, task_update) and every MCP tool guard (planner-project-discuss, planner-phase-update, planner-task-update) is UNCHANGED — those are the actual agent surfaces the ownership rule targets, and they still reject a genuine change to `decisions` with LEGACY_DECISIONS_ARRAY_READ_ONLY.\n\nVERIFICATION AFTER THE FIX: `npx tsc -p packages/<pkg>/tsconfig.json --noEmit` clean for all four packages. Every suite run file-by-file after a fresh build: plan-core 370/370, plan-mcp 82/82 (15+21+14+9+23), pi-adapter 82/82 (20+20+8+24+4+6), plan-server 54/54 (4+25+9+5+10+1) — 588/588 total, same count as before since no test was added or removed, only three assertions' expected outcome changed from reject to accept. `pnpm verify:final` now PASSES (build, typecheck, coverage, plugin sync, capability audit, browser end-to-end, packed installation smoke all green) — this is the canonical phase-closing gate for P102(F005) and it is clean.\n\nWHY THE FOCUSED SUITES DIDN'T CATCH IT / WHERE THE REGRESSION BELONGS: this was not a case where the browser gate is inherently the only place that could catch it — it's that I deleted the pre-existing plan-server positive round-trip coverage for `decisions` (phase/task update tests previously asserted `decisions: [...]` round-tripped) and replaced it with a rejection assertion, instead of recognizing that plan-server's HTTP contract for this field is legitimately different from the Pi/MCP agent tools. A plan-server-level Node test-runner assertion (PUT with `decisions` returns 200 and the value persists) is cheap, fast, and exactly targets this contract; it is now present again in server-crud.test.mjs. The browser/Playwright gate caught it somewhat incidentally, because it happens to use HTTP as legacy-state seeding infrastructure for an unrelated migration-flow test, not because a positive HTTP round-trip needs a browser to verify. Going forward, the plan-server-level regression is the right layer for this specific contract; the browser gate remains valuable for the actual migration behavior it was built to test, not for re-proving HTTP field mutability.\n\n--- ORIGINAL COMPLETION EVIDENCE (superseded above for the plan-server HTTP layer only; still accurate for plan-core, Pi, and MCP) ---\n\nEnforced single-owner Accepted Decision routing across plan-core, Pi, MCP, and the HTTP API.\n\nOWNERSHIP RULE: A decision has exactly one owner (project/feature/phase/task) chosen by scope, never duplicated. Encoded once in packages/plan-core/src/accepted-decision-guard.ts, exported from plan-core/src/index.ts, imported by pi-adapter, plan-mcp, and plan-server. Documented in packages/plan-core/planner-skill.md under \"Accepted Decision ownership\"; pi-adapter's ambient guidance cites the same constant. pnpm plugins:sync / plugins:check both clean.\n\ndecision_record TREATMENT: typed redirect (not an explicit-owner rewrite). It validates featureId/phaseId (atomic no-op on invalid target) but performs zero writes, returning buildDecisionRecordRedirectReply's guidance to call accepted_decision_create with the correct single owner. Chosen over a second explicit-owner tool because accepted_decision_create already is that operation.\n\nLEGACY decisions ARRAY (Pi/MCP agent tools only, per this correction): read-only going forward on Project/Phase/Task. Also fixed handoff_write's taskUpdates[].decisions/phaseUpdate.decisions in plan-core/src/handoff-context.ts, which previously leaked into task.decisions/phase.decisions; they now render into the completion-summary prose labeled non-authoritative instead.\n\nPRESERVED: AcceptedDecision ids/acceptedAt/rationale/implementationNotes; delete confirmation gate; read visibility on completed/archived owners (regression added); atomic no-op on invalid targets. Legacy decisions already duplicated across two owners by the old decision_record dual-write are left exactly as persisted — no auto-migration/de-dup added, a stated non-goal.\n\nREGRESSIONS VERIFIED BY TEMPORARY REVERT: decision_record dual-write (pi-adapter host-registration.test.mjs, 2 tests), legacy-decisions-array guard on the agent tools (pi-adapter/plan-mcp), handoff decisions-leak (plan-core handoff-context.test.mjs). Each reverted, confirmed to fail, restored, confirmed to pass.\n\nNOTICED BUT NOT CHANGED: resolveAcceptedDecisionTarget (ref-string resolution) is duplicated near-verbatim across pi-adapter, plan-mcp, and (differently shaped) plan-server — a pre-existing instance of the duplication this task fixed for the ownership rule, left alone as a larger, out-of-scope refactor."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-001-document-and-encode-the-authoritative-project-feature-phase-task-decision-ownership-rules",
+          "number": 1,
+          "title": "Document and encode the authoritative project/feature/phase/task decision ownership rules.",
+          "checked": true
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-002-remove-the-generic-feature-plus-phase-instruction-from-all-agent-guidance-and-synchronized-skill-artifacts",
+          "number": 2,
+          "title": "Remove the generic feature-plus-phase instruction from all agent guidance and synchronized skill artifacts.",
+          "checked": true
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-003-make-decision-record-compatibility-safe-without-silent-dual-writes",
+          "number": 3,
+          "title": "Make decision_record compatibility safe without silent dual writes.",
+          "checked": true
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-004-prevent-new-durable-decisions-from-relying-on-legacy-free-form-prose-or-decisions-arrays-as-authority",
+          "number": 4,
+          "title": "Prevent new durable decisions from relying on legacy free-form prose or decisions arrays as authority.",
+          "checked": true
+        },
+        {
+          "id": "eebc1156-33c5-4023-90af-ab587f995edc-check-005-add-cross-surface-regressions-for-all-scopes-duplicate-prevention-invalid-targets-and-post-completion-visibility",
+          "number": 5,
+          "title": "Add cross-surface regressions for all scopes, duplicate prevention, invalid targets, and post-completion visibility.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "ec3a15f0-cd37-49fd-b9a4-e23a95c70f20"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-16T14:09:45.463Z",
+      "completedAt": "2026-09-17T07:46:11.214Z",
+      "createdAt": "2026-09-14T07:41:57.563Z",
+      "updatedAt": "2026-09-17T07:46:11.214Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+          "createdAt": "2026-09-16T14:09:45.349Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-14T07:40:33.167Z",
+  "updatedAt": "2026-09-17T07:46:11.214Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-14T12:26:52.161Z",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/6c6fae66-e267-4b15-9d2c-ee293147dfe3-2026-09-17T07-27-29-056Z.md",
+      "clearedAt": "2026-09-17T07:27:29.056Z",
+      "reason": "phase-done"
+    },
+    {
+      "file": "handoff-archive/6c6fae66-e267-4b15-9d2c-ee293147dfe3-2026-09-14T12-26-52-136Z.md",
+      "clearedAt": "2026-09-14T12:26:52.136Z",
+      "reason": "superseded"
+    },
+    {
+      "file": "handoff-archive/6c6fae66-e267-4b15-9d2c-ee293147dfe3-2026-09-14T07-56-29-934Z.md",
+      "clearedAt": "2026-09-14T07:56:29.934Z",
+      "reason": "superseded"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "f8279073-e29d-4666-8033-a6f18356bdf1",
+      "date": "2026-09-14T07:53:26.513Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "b58e0388-62ec-48e7-83c9-125d223b2eae",
+      "date": "2026-09-17T07:27:29.102Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "a9290440-cb21-4be7-b9e2-1a4716cad815",
+      "date": "2026-09-17T07:40:41.342Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "d2b55d8b-3bcf-4a41-9eb6-eea698996324",
+      "date": "2026-09-17T07:46:11.244Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:f0f4bfc8-fe91-461d-85e6-eae5172b9fa9",
+      "createdAt": "2026-09-16T14:09:45.349Z"
+    },
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-14T07:53:26.160Z"
+    }
+  ]
+}

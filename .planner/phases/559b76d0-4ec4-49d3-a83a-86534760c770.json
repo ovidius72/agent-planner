@@ -36,7 +36,8 @@
     "1fecacf8-8f21-4c05-952c-f0f90319c6e6",
     "93ded1ba-f386-4f12-9c47-0ea531754884",
     "6c2bcea6-9c9c-4e1d-9520-c3cc3d778c1d",
-    "d68ce619-d94d-45fd-8b92-f10a984b27ac"
+    "d68ce619-d94d-45fd-8b92-f10a984b27ac",
+    "566562c9-2190-481f-825c-99f71ec9d1e7"
   ],
   "tasks": [
     {
@@ -1087,10 +1088,90 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "566562c9-2190-481f-825c-99f71ec9d1e7",
+      "phaseId": "559b76d0-4ec4-49d3-a83a-86534760c770",
+      "number": 401,
+      "shortId": "CJHKE",
+      "priority": 15,
+      "shortName": "accept-direct-description-refs",
+      "title": "Accept direct Markdown files in descriptionRef",
+      "status": "done",
+      "description": "Fix packages/plan-core/src/payload-fallback.ts and DescriptionRefSchema usage so valid planner-owned Markdown references directly beneath `.planner/docs/`, such as `.planner/docs/p094-pane-hosts-any-app.md`, are accepted. The current `isPlannerDescriptionRef` length check incorrectly requires an extra nested directory despite the public validation message allowing any path under `.planner/docs/`. Preserve rejection of paths outside `.planner/docs/`, relative traversal segments, empty segments, backslashes, NUL bytes, and directory-only references. Add direct validator tests plus representative Pi, MCP, server, and Web UI/update-path regressions proving the exact reported reference persists in structured `descriptionRef` without relying on prose. Do not modify any external project or real `.planner` directory; use repository fixtures or mkdtemp only.\n\n---\n**Completion summary:**\nFixed the descriptionRef path validator in packages/plan-core/src/payload-fallback.ts so a file directly beneath `.planner/docs/`, including the exact reported `.planner/docs/p094-pane-hosts-any-app.md`, is accepted. Retained rejection of external prefixes, empty paths/segments, `.` and `..` traversal segments, backslashes, and NUL bytes. Added direct core schema/validator regressions and updated representative MCP, Pi, real-HTTP plan-server, and Web UI form-action tests to persist/forward the exact structured reference rather than relying on prose. Focused builds passed for core/server/MCP/Pi/Web UI; focused tests passed 59/59 Node and 11/11 Web UI. Canonical `pnpm verify:final` passed fingerprint aa97e305ddfe, including build, typecheck, coverage, plugin synchronization, capability audit, browser E2E, and packed-install smoke. No external project was read or modified during the fix, and no commit/push/release was performed.",
+      "descriptionUpdatedAt": "2026-09-11T11:27:44.105Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "566562c9-2190-481f-825c-99f71ec9d1e7-check-001-planned-in-progress",
+          "date": "2026-09-11T11:21:57.633Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "566562c9-2190-481f-825c-99f71ec9d1e7-check-002-in-progress-done",
+          "date": "2026-09-11T11:27:44.102Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Fixed the descriptionRef path validator in packages/plan-core/src/payload-fallback.ts so a file directly beneath `.planner/docs/`, including the exact reported `.planner/docs/p094-pane-hosts-any-app.md`, is accepted. Retained rejection of external prefixes, empty paths/segments, `.` and `..` traversal segments, backslashes, and NUL bytes. Added direct core schema/validator regressions and updated representative MCP, Pi, real-HTTP plan-server, and Web UI form-action tests to persist/forward the exact structured reference rather than relying on prose. Focused builds passed for core/server/MCP/Pi/Web UI; focused tests passed 59/59 Node and 11/11 Web UI. Canonical `pnpm verify:final` passed fingerprint aa97e305ddfe, including build, typecheck, coverage, plugin synchronization, capability audit, browser E2E, and packed-install smoke. No external project was read or modified during the fix, and no commit/push/release was performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "566562c9-2190-481f-825c-99f71ec9d1e7-check-001-accept-planner-docs-file-md-while-retaining-path-safety-validation",
+          "number": 1,
+          "title": "Accept `.planner/docs/file.md` while retaining path-safety validation",
+          "checked": true
+        },
+        {
+          "id": "566562c9-2190-481f-825c-99f71ec9d1e7-check-002-add-exact-core-regression-for-planner-docs-p094-pane-hosts-any-app-md",
+          "number": 2,
+          "title": "Add exact core regression for `.planner/docs/p094-pane-hosts-any-app.md`",
+          "checked": true
+        },
+        {
+          "id": "566562c9-2190-481f-825c-99f71ec9d1e7-check-003-verify-representative-mutation-surfaces-persist-structured-descriptionref",
+          "number": 3,
+          "title": "Verify representative mutation surfaces persist structured descriptionRef",
+          "checked": true
+        },
+        {
+          "id": "566562c9-2190-481f-825c-99f71ec9d1e7-check-004-update-public-guidance-or-error-text-only-if-required-for-consistency",
+          "number": 4,
+          "title": "Update public guidance or error text only if required for consistency",
+          "checked": true
+        },
+        {
+          "id": "566562c9-2190-481f-825c-99f71ec9d1e7-check-005-run-focused-verification-and-one-canonical-final-gate",
+          "number": 5,
+          "title": "Run focused verification and one canonical final gate",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-11T11:21:57.633Z",
+      "completedAt": "2026-09-11T11:27:44.102Z",
+      "createdAt": "2026-09-11T11:21:44.120Z",
+      "updatedAt": "2026-09-11T11:27:44.102Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-11T11:21:57.533Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-01T15:00:40.024Z",
-  "updatedAt": "2026-09-11T08:38:27.951Z",
+  "updatedAt": "2026-09-11T11:27:44.102Z",
   "handoff": "",
   "handoffUpdatedAt": "2026-09-09T07:01:15.992Z",
   "handoffAudit": null,
@@ -1154,12 +1235,28 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "dbedd04c-0294-42f7-8012-04d9d2340644",
+      "date": "2026-09-11T11:21:57.659Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "5539c5e7-2d97-4314-9ab9-c195baf1c18b",
+      "date": "2026-09-11T11:27:44.136Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-11T08:29:46.010Z"
+      "createdAt": "2026-09-11T11:21:57.533Z"
     }
   ]
 }

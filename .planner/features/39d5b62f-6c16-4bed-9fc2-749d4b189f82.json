@@ -75,6 +75,22 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "ea2918ed-8b14-4db2-ba97-e8365a6c75ce",
+      "date": "2026-09-11T11:21:57.727Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "c41136ec-36d5-43fd-8dc4-f99c48c000bb",
+      "date": "2026-09-11T11:27:44.213Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-09-01T10:13:26.005Z",
@@ -82,7 +98,7 @@
   "sessionInfo": [
     {
       "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
-      "createdAt": "2026-09-11T08:29:46.010Z"
+      "createdAt": "2026-09-11T11:21:57.533Z"
     },
     {
       "sessionId": "pi:01a024ec-0aaf-7ebf-9a0d-e8a58d7d9d5d",

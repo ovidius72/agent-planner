@@ -8,20 +8,15 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createShortId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, type MacroTaskMutationInput } from "@agent-plan/core"
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
 // ─── Watcher ────────────────────────────────────────────────────────────
 
 let watcherAbort: AbortController | null = null;
-let watcherHubRef: { current: WsHub | null } = { current: null };
 
 const SERVER_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/server");
-
-function nowISO(): string {
-  return new Date().toISOString();
-}
 
 /** Resolve requirement phase refs before persistence so requirements never dangle. */
 async function resolveRequirementPhaseIds(
@@ -64,41 +59,27 @@ function noMutableFieldsResponse(fields: readonly string[]) {
   };
 }
 
-type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
-type AcceptedDecisionTargetResolution =
+type AcceptedDecisionEventTargetResolution =
   | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; targetRef: string; event: { type: "project" } | { type: "feature"; featureId: string } | { type: "phase"; phaseId: string; featureId: string } | { type: "task"; phaseId: string; taskId: string; featureId: string } }
   | { ok: false; error: string };
 
-async function resolveAcceptedDecisionTarget(store: PlanStore, targetType: AcceptedDecisionTargetType, rawTargetRef?: string): Promise<AcceptedDecisionTargetResolution> {
-  if (targetType === "project") return { ok: true, owner: { kind: "project" }, targetRef: "project", event: { type: "project" } };
-  const targetRef = rawTargetRef?.trim();
-  if (!targetRef) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions` };
-  const [featuresDocument, phases] = await Promise.all([store.loadFeatures(), store.loadAllPhases()]);
-  const features = featuresDocument.features;
-  if (targetType === "feature") {
-    const feature = features.find((entry) => entry.id === targetRef || `F${String(entry.number).padStart(3, "0")}`.toLowerCase() === targetRef.toLowerCase() || entry.shortId?.toLowerCase() === targetRef.toLowerCase());
-    if (!feature) return { ok: false, error: `feature not found: ${targetRef}` };
-    return { ok: true, owner: { kind: "feature", featureId: feature.id }, targetRef: `F${String(feature.number).padStart(3, "0")}`, event: { type: "feature", featureId: feature.id } };
-  }
-  if (targetType === "phase") {
-    const phase = findPhaseByRef(phases, features, targetRef);
-    if (!phase) return { ok: false, error: `phase not found: ${targetRef}` };
-    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, targetRef: `P${String(phase.number).padStart(3, "0")}`, event: { type: "phase", phaseId: phase.id, featureId: phase.featureId ?? "" } };
-  }
-  const found = phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task }))).find(({ task }) => task.id === targetRef)
-    ?? (() => {
-      const taskNumberMatch = targetRef.match(/^T(\d+)$/i);
-      return taskNumberMatch
-        ? phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task }))).find(({ task }) => task.number === Number(taskNumberMatch[1]))
-        : undefined;
-    })();
-  if (!found) return { ok: false, error: `task not found: ${targetRef}` };
-  return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, targetRef: `P${String(found.phase.number).padStart(3, "0")}/T${String(found.task.number).padStart(3, "0")}`, event: { type: "task", phaseId: found.phase.id, taskId: found.task.id, featureId: found.phase.featureId ?? "" } };
-}
-
-function nextTaskNumber(phase: Phase): number {
-  const numbers = phase.tasks.map((task) => task.number || 0).filter((n) => Number.isFinite(n));
-  return (numbers.length > 0 ? Math.max(...numbers) : 0) + 1;
+/**
+ * Resolve an accepted-decision target with the same ref grammar the adapters
+ * use (plan-core's resolveAcceptedDecisionTarget: composite/shortId/title for
+ * tasks, exact/partial name with ambiguity detection for features), then add
+ * the WebSocket broadcast envelope this HTTP layer alone needs. Resolution
+ * itself is never re-derived here — only the event shape is server-local.
+ */
+async function resolveAcceptedDecisionEventTarget(store: PlanStore, targetType: AcceptedDecisionTargetType, rawTargetRef?: string): Promise<AcceptedDecisionEventTargetResolution> {
+  const target = await resolveAcceptedDecisionTarget(store, targetType, rawTargetRef);
+  if (!target.ok) return target;
+  const { owner, ref: targetRef } = target;
+  if (owner.kind === "project") return { ok: true, owner, targetRef, event: { type: "project" } };
+  if (owner.kind === "feature") return { ok: true, owner, targetRef, event: { type: "feature", featureId: owner.featureId } };
+  const phase = await store.loadPhase(owner.phaseId).catch(() => null);
+  const featureId = phase?.featureId ?? "";
+  if (owner.kind === "phase") return { ok: true, owner, targetRef, event: { type: "phase", phaseId: owner.phaseId, featureId } };
+  return { ok: true, owner, targetRef, event: { type: "task", phaseId: owner.phaseId, taskId: owner.taskId, featureId } };
 }
 
 function isPrivateIpv4(address: string): boolean {
@@ -155,28 +136,12 @@ function fromWebUi(c: Context): boolean {
   return c.req.header("X-Planner-Source") === "web-ui";
 }
 
-function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): Task {
-  const previousStatus = task.status;
-  if (nextStatus === "in-progress" && !task.startedAt) {
-    task.startedAt = now;
-  }
-  if (nextStatus === "done") {
-    if (!task.startedAt) task.startedAt = now;
-    task.completedAt = now;
-  } else if (previousStatus === "done") {
-    task.completedAt = "";
-  }
-  task.status = nextStatus;
-  return task;
-}
-
 function startWatcher(planRoot: string, hubRef: { current: WsHub | null }): void {
   stopWatcher();
   if (!existsSync(planRoot)) return;
 
   const ac = new AbortController();
   watcherAbort = ac;
-  watcherHubRef = hubRef;
 
   try {
     const watcher = watch(planRoot, { recursive: true, signal: ac.signal }, (_event: string, filename: string | null) => {
@@ -197,17 +162,6 @@ function stopWatcher() {
   watcherAbort?.abort();
   watcherAbort = null;
 }
-
-  // ── Helpers ─────────────────────────────────────────────────────────
-
-  async function propagateTaskStatus(phaseId: string) {
-    // This is now handled by PlanStore.syncStatuses()
-  }
-
-  async function propagatePhaseStatus(featureId: string | undefined) {
-    // This is now handled by PlanStore.syncStatuses()
-  }
-
 
 export interface ShortcutConfigSpec {
   key: string;
@@ -312,7 +266,12 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.put(route("/project"), async (c) => {
     const body = await c.req.json<Partial<Project> & { expectedGuidelinesUpdatedAt?: string }>();
     const existingProject = await store.loadProject();
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingProject.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingProject.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
+    // The legacy free-form `decisions` array stays writable over HTTP. It is an
+    // agent-governance rule, and .planner/SKILL.md makes the Web UI a human-
+    // supervisor surface that may bypass agent-only gates. Blocking it here also
+    // blocked the only way to seed the legacy state the planner-load migration
+    // exists to consume. The Pi and MCP tools still refuse it.
     const mutableFields = ["name", "goal", "description", "descriptionRef", "webPort", "scope", "outOfScope", "decisions", "globalRules", "technologies", "tools", "contentLanguage", "chatLanguage", "workflowRules", "projectGuidelines"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const persisted = await store.updateProject((current) => ({
@@ -362,7 +321,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(result);
   });
 
-  const broadcastAcceptedDecisionMutation = (event: Extract<AcceptedDecisionTargetResolution, { ok: true }>["event"], action: "created" | "updated" | "deleted") => {
+  const broadcastAcceptedDecisionMutation = (event: Extract<AcceptedDecisionEventTargetResolution, { ok: true }>["event"], action: "created" | "updated" | "deleted") => {
     if (event.type === "project") hub()?.broadcast({ type: "project-updated", data: { action } });
     if (event.type === "feature") hub()?.broadcast({ type: "features-updated", data: { action, id: event.featureId, featureId: event.featureId } });
     if (event.type === "phase") hub()?.broadcast({ type: "phases-updated", data: { action, id: event.phaseId, phaseId: event.phaseId, featureId: event.featureId } });
@@ -373,7 +332,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.post(route("/accepted-decisions"), async (c) => {
     const body = await c.req.json<{ targetType?: AcceptedDecisionTargetType; targetRef?: string; title?: string; decision?: string; rationale?: string; implementationNotes?: string }>();
     if (!body.targetType) return c.json({ error: "targetType required" }, 400);
-    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    const target = await resolveAcceptedDecisionEventTarget(store, body.targetType, body.targetRef);
     if (!target.ok) return c.json({ error: target.error, created: false }, 404);
     const createInput = {
       title: body.title ?? "",
@@ -393,7 +352,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!body.targetType) return c.json({ error: "targetType required", updated: false }, 400);
     const mutableFields = ["title", "decision", "rationale", "implementationNotes"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
-    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    const target = await resolveAcceptedDecisionEventTarget(store, body.targetType, body.targetRef);
     if (!target.ok) return c.json({ error: target.error, updated: false }, 404);
     const updateInput = {
       ...(body.title !== undefined ? { title: body.title } : {}),
@@ -411,7 +370,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const decisionId = c.req.param("decisionId") ?? "";
     const body = await c.req.json<{ targetType?: AcceptedDecisionTargetType; targetRef?: string; confirmed?: boolean }>().catch((): { targetType?: AcceptedDecisionTargetType; targetRef?: string; confirmed?: boolean } => ({}));
     if (!body.targetType) return c.json({ error: "targetType required", deleted: false }, 400);
-    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    const target = await resolveAcceptedDecisionEventTarget(store, body.targetType, body.targetRef);
     if (!target.ok) return c.json({ error: target.error, deleted: false }, 404);
     if (body.confirmed !== true) return c.json({ error: "confirmation required", deleted: false, confirmRequired: true }, 400);
     const acceptedDecision = await store.deleteAcceptedDecision(target.owner, decisionId);
@@ -682,7 +641,7 @@ app.put(route("/docs/save"), async (c) => {
     const existing = (await store.loadFeatures()).features.find((feature) => feature.id === id);
     if (!existing) return c.json({ error: "not found" }, 404);
     if (body.status !== undefined && body.status !== existing.status) return c.json({ updated: false, errorCode: "DERIVED_STATUS_READ_ONLY", message: "Feature status is derived from child phases and tasks and cannot be updated directly." }, 400);
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
     const mutableFields = ["name", "description", "descriptionRef", "discussedAt", "contextReady", "contextReadyReason", "startDate", "endDate", "workDone", "workRemaining", "priority", "dependsOn"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
     const timestamp = nowISO();
@@ -711,11 +670,20 @@ app.put(route("/docs/save"), async (c) => {
 
   app.delete(route("/features/:id"), async (c) => {
     const id = c.req.param("id");
-    await store.updateFeatures((doc) => {
-      doc.features = doc.features.filter((f) => f.id !== id);
-      return doc;
-    });
-    await store.writeGenerated();
+    if (!id) return c.json({ error: "id required" }, 400);
+    const cascade = c.req.query("cascade") === "true";
+    const outcome = await deleteFeatureCascade(store, id, { cascade });
+    if (!outcome.ok) {
+      // FEATURE_NOT_FOUND: no such feature, or it vanished between resolve
+      // and write (race). Either way, this is a 404 — never a reported
+      // success for a delete that did not happen (same defect class as
+      // T413).
+      return c.json({ error: outcome.error }, 404);
+    }
+    const { result } = outcome;
+    for (const phase of result.phases) {
+      hub()?.broadcast({ type: "phases-updated", data: { action: phase.action === "deleted" ? "deleted" : "updated", id: phase.id, phaseId: phase.id, featureId: phase.action === "deleted" ? id : "" } });
+    }
     hub()?.broadcast({ type: "features-updated", data: { action: "deleted", id, featureId: id } });
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     await store.syncStatuses();
@@ -768,7 +736,6 @@ app.put(route("/docs/save"), async (c) => {
 
     let phase: Phase | undefined;
     await store.runBatch(() => withFeatureLock(featureId, async () => {
-      const allPhases = await store.loadAllPhases();
       const slug = normalizeSlug(title);
       const id = createPhaseId();
       const identity = await store.allocateEntityIdentity("phase", id);
@@ -856,7 +823,12 @@ app.put(route("/docs/save"), async (c) => {
     const existingPhase = await store.loadPhase(id).catch(() => null);
     if (!existingPhase) return c.json({ error: "phase not found" }, 404);
     if (body.status !== undefined && body.status !== existingPhase.status) return c.json({ updated: false, errorCode: "DERIVED_STATUS_READ_ONLY", message: "Phase status is derived from child tasks and cannot be updated directly." }, 400);
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingPhase.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existingPhase.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
+    // The legacy free-form `decisions` array stays writable over HTTP. It is an
+    // agent-governance rule, and .planner/SKILL.md makes the Web UI a human-
+    // supervisor surface that may bypass agent-only gates. Blocking it here also
+    // blocked the only way to seed the legacy state the planner-load migration
+    // exists to consume. The Pi and MCP tools still refuse it.
     let nextFeatureId = existingPhase.featureId;
     if (body.featureId !== undefined) {
       nextFeatureId = body.featureId.trim() || undefined;
@@ -1273,7 +1245,12 @@ app.put(route("/docs/save"), async (c) => {
     if (!phase) return c.json({ error: "phase not found" }, 404);
     const existing = phase.tasks.find((task) => task.id === taskId);
     if (!existing) return c.json({ error: "task not found" }, 404);
-    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: "ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED", message: "Raw acceptedDecisions replacement is disabled. Use the accepted-decisions semantic create, update, or delete endpoints so IDs and acceptedAt are preserved." }, 400);
+    if (body.acceptedDecisions !== undefined && JSON.stringify(body.acceptedDecisions) !== JSON.stringify(existing.acceptedDecisions)) return c.json({ updated: false, errorCode: ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, message: ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE }, 400);
+    // The legacy free-form `decisions` array stays writable over HTTP. It is an
+    // agent-governance rule, and .planner/SKILL.md makes the Web UI a human-
+    // supervisor surface that may bypass agent-only gates. Blocking it here also
+    // blocked the only way to seed the legacy state the planner-load migration
+    // exists to consume. The Pi and MCP tools still refuse it.
     const mutableFields = ["title", "description", "descriptionRef", "status", "notes", "decisions", "priority", "checklist", "subtasks"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
 

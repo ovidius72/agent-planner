@@ -215,7 +215,9 @@ describe("pi-adapter host harness", () => {
 
       const requirementUpdate = await host.runTool("requirement_update", { requirementId: requirement.id, title: "Updated requirement" });
       assert.equal(toolDetails(requirementUpdate).updated, true);
-      assert.equal(toolDetails(requirementUpdate).requirement.title, "Updated requirement");
+      // T417: the reply echoes changed fields, not the whole entity.
+      assert.deepEqual(toolDetails(requirementUpdate).updatedFields, ["title"]);
+      assert.equal(toolDetails(requirementUpdate).changed.title, "Updated requirement");
 
       const ideaCreate = await host.runTool("idea_create", { title: "Outcome idea" });
       assert.equal(toolDetails(ideaCreate).created, true);
@@ -335,8 +337,111 @@ describe("pi-adapter host harness", () => {
     }
   });
 
-  test("decision_record appends the same decision to feature and phase", async () => {
-    const host = await createPiHost({ name: "t272-decision-record", seed: "minimal" });
+  test("accepted decisions on a task remain visible after that task and its phase complete", async () => {
+    const host = await createPiHost({ name: "t405-post-completion-visibility", seed: "minimal" });
+    try {
+      const created = await host.runTool("accepted_decision_create", {
+        targetType: "task", targetRef: "T001",
+        title: "Task decision surviving completion",
+        decision: "Keep this visible after completion.",
+        rationale: "Completion must not hide durable decisions.",
+        implementationNotes: "None required.",
+      });
+      const acceptedDecisionId = toolDetails(created).acceptedDecision.id;
+
+      await host.runTool("task_get", { taskId: "T001", full: true });
+      await host.runTool("phase_get", { phaseId: "P001", full: true });
+      await host.runTool("feature_get", { featureId: "F001", full: true });
+      await host.runTool("requirement_list", { phaseRef: "P001" });
+      assert.match(toolText(await host.runTool("task_start", { taskId: "T001" })), /Task started/);
+      const completed = await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Seed checklist item not relevant to this accepted-decision coverage.", description_update: "Completed to verify accepted decisions remain visible after completion." });
+      assert.match(toolText(completed), /Task completed/);
+
+      const persistedTask = (await host.store.loadAllPhases())[0].tasks[0];
+      assert.equal(persistedTask.status, "done");
+      assert.equal(persistedTask.acceptedDecisions.some((entry) => entry.id === acceptedDecisionId), true, "accepted decision remains visible after task completion");
+
+      const shown = await host.runTool("task_get", { taskId: "T001", full: true });
+      assert.match(toolText(shown), /Task decision surviving completion/, "task_get still surfaces the decision after the task is done");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("planner-load delivers the complete attested project-level context; task_start advises after it goes stale", async () => {
+    const host = await createPiHost({ name: "t404-project-context", seed: "minimal" });
+    try {
+      await host.emit("session_start", { type: "session_start", reason: "startup" });
+      await host.store.updateProject((project) => ({
+        ...project,
+        description: "Fixture project description",
+        goal: "Ship the fixture feature",
+        scope: ["In-scope area"],
+        outOfScope: ["Out-of-scope area"],
+        technologies: ["TypeScript"],
+        tools: ["pnpm"],
+      }));
+
+      const loaded = await host.runTool("planner-load", {});
+      const details = toolDetails(loaded);
+      assert.equal(details.projectContext.loaded, true);
+      assert.equal(details.projectContext.contextComplete, true);
+      assert.equal(details.projectContext.project.description, "Fixture project description");
+      assert.equal(details.projectContext.project.goal, "Ship the fixture feature");
+      assert.deepEqual(details.projectContext.project.scope, ["In-scope area"]);
+      assert.deepEqual(details.projectContext.project.outOfScope, ["Out-of-scope area"]);
+      assert.deepEqual(details.projectContext.project.technologies, ["TypeScript"]);
+      assert.deepEqual(details.projectContext.project.tools, ["pnpm"]);
+      assert.equal(details.projectContext.requirements.length, 1);
+      assert.equal(details.projectContext.requirements[0].title, "Users can authenticate");
+      // The agent-only details channel carries the same content, but it must
+      // never appear in the human-facing recap text (parity with MCP's
+      // planner-load, and the same "must not leak" invariant as Accepted
+      // Decision agent context above).
+      assert.match(details.projectContext.text, /Fixture project description/);
+      assert.doesNotMatch(toolText(loaded), /Fixture project description/, "project context must not leak into the human recap");
+
+      // A full, genuinely complete project-context read satisfies
+      // REQUIREMENTS_READ_REQUIRED task-wide (P102(F005) accepted decision):
+      // no further per-task requirement read is needed for T001.
+      await host.runTool("task_get", { taskId: "T001", full: true });
+      await host.runTool("phase_get", { phaseId: "P001", full: true });
+      await host.runTool("feature_get", { featureId: "F001", full: true });
+      const started = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(started).started, true);
+      assert.equal(toolDetails(started).projectContextStale, false);
+
+      // Project content changes after the attested load. task_start stays
+      // scoped to feature/phase/task context (no hard block), but surfaces a
+      // targeted, non-blocking refresh advisory instead of silently working
+      // from stale project-level context.
+      await host.store.updateProject((project) => ({ ...project, goal: "Changed after load" }));
+      const alreadyStarted = await host.runTool("task_start", { taskId: "T001" });
+      assert.equal(toolDetails(alreadyStarted).started, true);
+      assert.equal(toolDetails(alreadyStarted).projectContextStale, true);
+      assert.match(toolText(alreadyStarted), /Project-context advisory/);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("planner-load reports contextComplete:false and does not attest the read when project context exceeds maxChars", async () => {
+    const host = await createPiHost({ name: "t404-project-context-oversized", seed: "minimal" });
+    try {
+      await host.store.updateProject((project) => ({ ...project, description: "x".repeat(2_000) }));
+      const loaded = await host.runTool("planner-load", { maxChars: 100 });
+      const details = toolDetails(loaded);
+      assert.equal(details.projectContext.loaded, false);
+      assert.equal(details.projectContext.contextComplete, false);
+      assert.ok(Array.isArray(details.projectContext.nextActions) && details.projectContext.nextActions.length > 0);
+      assert.ok(details.projectContext.serializedChars > 100);
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("decision_record no longer dual-writes; it redirects to accepted_decision_create", async () => {
+    const host = await createPiHost({ name: "t405-decision-record-redirect", seed: "minimal" });
     try {
       const result = await host.runTool("decision_record", {
         featureId: "F001",
@@ -346,28 +451,44 @@ describe("pi-adapter host harness", () => {
         rationale: "Agents need context at feature and phase scope.",
         implementationNotes: "Append; never replace prior decisions.",
       });
-      assert.match(toolText(result), /Decision recorded on F001 and P001\(F001\)/);
+      const details = toolDetails(result);
+      assert.equal(details.deprecated, true);
+      assert.equal(details.written, false);
+      assert.equal(details.redirected, true);
+      assert.equal(details.redirectTool, "accepted_decision_create");
+      assert.match(toolText(result), /decision_record is deprecated and write-disabled/);
+      assert.match(toolText(result), /exactly one owner/);
+      assert.match(toolText(result), /accepted_decision_create/);
       const feature = (await host.store.loadFeatures()).features.find((entry) => entry.number === 1);
       const phase = (await host.store.loadAllPhases()).find((entry) => entry.number === 1);
-      assert.equal(feature?.acceptedDecisions.at(-1)?.title, "Keep paired decision history");
-      assert.equal(phase?.acceptedDecisions.at(-1)?.title, "Keep paired decision history");
+      assert.equal(feature?.acceptedDecisions.some((entry) => entry.title === "Keep paired decision history"), false, "decision_record must not write to the feature");
+      assert.equal(phase?.acceptedDecisions.some((entry) => entry.title === "Keep paired decision history"), false, "decision_record must not write to the phase");
     } finally {
       await closePiHost(host);
     }
   });
 
-  test("decision_record compensates the feature write when phase persistence fails", async () => {
-    const host = await createPiHost({ name: "t272-decision-rollback", seed: "minimal" });
+  test("decision_record performs no write at all, even when the phase store is unwritable", async () => {
+    const host = await createPiHost({ name: "t405-decision-record-no-write", seed: "minimal" });
     try {
       const originalUpdatePhase = PlanStore.prototype.updatePhase;
-      PlanStore.prototype.updatePhase = async () => { throw new Error("simulated phase write failure"); };
-      await assert.rejects(host.runTool("decision_record", {
-        featureId: "F001", phaseId: "P001", title: "Must not persist partially",
-        decision: "Reject partial writes.", rationale: "Dual-write consistency.", implementationNotes: "Compensate feature mutation.",
-      }), /simulated phase write failure/);
-      PlanStore.prototype.updatePhase = originalUpdatePhase;
+      PlanStore.prototype.updatePhase = async () => { throw new Error("updatePhase must not be called by decision_record"); };
+      const originalUpdateFeatures = PlanStore.prototype.updateFeatures;
+      PlanStore.prototype.updateFeatures = async () => { throw new Error("updateFeatures must not be called by decision_record"); };
+      try {
+        const result = await host.runTool("decision_record", {
+          featureId: "F001", phaseId: "P001", title: "Must not persist anywhere",
+          decision: "Reject any write.", rationale: "Single-owner rule.", implementationNotes: "Redirect only.",
+        });
+        assert.equal(toolDetails(result).written, false);
+      } finally {
+        PlanStore.prototype.updatePhase = originalUpdatePhase;
+        PlanStore.prototype.updateFeatures = originalUpdateFeatures;
+      }
       const feature = (await host.store.loadFeatures()).features.find((entry) => entry.number === 1);
-      assert.equal(feature?.acceptedDecisions.some((entry) => entry.title === "Must not persist partially"), false);
+      const phase = (await host.store.loadAllPhases()).find((entry) => entry.number === 1);
+      assert.equal(feature?.acceptedDecisions.some((entry) => entry.title === "Must not persist anywhere"), false);
+      assert.equal(phase?.acceptedDecisions.some((entry) => entry.title === "Must not persist anywhere"), false);
     } finally {
       await closePiHost(host);
     }

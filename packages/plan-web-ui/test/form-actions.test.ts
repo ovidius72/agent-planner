@@ -140,10 +140,10 @@ describe("entity form actions", () => {
       throw new Error(`Unexpected request ${path}`);
     });
 
-    await editFeature({ request: formRequest({ name: "Updated", status: "done", priority: "not-a-number", descriptionRef: " .planner/docs/features/feature.md " }), params });
+    await editFeature({ request: formRequest({ name: "Updated", status: "done", priority: "not-a-number", descriptionRef: " .planner/docs/p094-pane-hosts-any-app.md " }), params });
     await editPhase({ request: formRequest({ title: "Updated phase", status: "discovery", priority: "Infinity", featureId: "feature-2", descriptionRef: " .planner/docs/phases/phase.md ", goals: "One\n Two ", nonGoals: "", dependencies: "", risks: "", openQuestions: "Question", decisions: "Decision", completionCriteria: "Done" }), params });
 
-    expect(payloads[0]).toMatchObject({ id: "feature-1", name: "Updated", priority: 0, descriptionRef: ".planner/docs/features/feature.md", expectedUpdatedAt: feature.updatedAt });
+    expect(payloads[0]).toMatchObject({ id: "feature-1", name: "Updated", priority: 0, descriptionRef: ".planner/docs/p094-pane-hosts-any-app.md", expectedUpdatedAt: feature.updatedAt });
     expect(payloads[0]).not.toHaveProperty("status");
     expect(payloads[0]).not.toHaveProperty("phaseIds");
     expect(payloads[0]).not.toHaveProperty("acceptedDecisions");

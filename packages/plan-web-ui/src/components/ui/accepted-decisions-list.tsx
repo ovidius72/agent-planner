@@ -1,4 +1,5 @@
 import { Form, useLocation } from "react-router-dom";
+import { Accordion } from "./accordion";
 import { Button } from "./button";
 import { FormattedText } from "./formatted-text";
 import type { AcceptedDecision } from "../../lib/types";
@@ -93,37 +94,32 @@ export function AcceptedDecisionsList({ decisions, targetType, targetRef }: Acce
   if (decisions.length === 0 && !canManage) return null;
 
   return (
-    <details key={location.key} className="group mt-4">
-      <summary className="flex cursor-pointer select-none items-center gap-2 font-semibold text-[var(--text)]">
-        <span>Accepted decisions ({decisions.length})</span>
-      </summary>
-      <div className="mt-2 grid gap-3">
-        {canManage && targetType ? <AcceptedDecisionManagement targetType={targetType} targetRef={targetRef} returnTo={returnTo} /> : null}
-        {decisions.map((entry) => (
-          <div key={entry.id} className="surface-card px-4 py-3">
-            <p className="text-sm font-semibold text-[var(--text)]">{entry.title}</p>
-            {entry.decision ? (
-              <div className="mt-2 text-sm text-[var(--text-muted)]">
-                <span className="font-semibold text-[var(--text)]">Decision:</span>
-                <FormattedText text={entry.decision} className="mt-1" />
-              </div>
-            ) : null}
-            {entry.rationale ? (
-              <div className="mt-1 text-sm text-[var(--text-muted)]">
-                <span className="font-semibold text-[var(--text)]">Rationale:</span>
-                <FormattedText text={entry.rationale} className="mt-1" />
-              </div>
-            ) : null}
-            {entry.implementationNotes ? (
-              <div className="mt-1 text-sm text-[var(--text-muted)]">
-                <span className="font-semibold text-[var(--text)]">Implementation:</span>
-                <FormattedText text={entry.implementationNotes} className="mt-1" />
-              </div>
-            ) : null}
-            {canManage && targetType ? <AcceptedDecisionActions entry={entry} targetType={targetType} targetRef={targetRef} returnTo={returnTo} /> : null}
-          </div>
-        ))}
-      </div>
-    </details>
+    <Accordion key={location.key} title={`Accepted decisions (${decisions.length})`} contentClassName="grid gap-3">
+      {canManage && targetType ? <AcceptedDecisionManagement targetType={targetType} targetRef={targetRef} returnTo={returnTo} /> : null}
+      {decisions.map((entry) => (
+        <div key={entry.id} className="surface-card px-4 py-3">
+          <p className="text-sm font-semibold text-[var(--text)]">{entry.title}</p>
+          {entry.decision ? (
+            <div className="mt-2 text-sm text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text)]">Decision:</span>
+              <FormattedText text={entry.decision} className="mt-1" />
+            </div>
+          ) : null}
+          {entry.rationale ? (
+            <div className="mt-1 text-sm text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text)]">Rationale:</span>
+              <FormattedText text={entry.rationale} className="mt-1" />
+            </div>
+          ) : null}
+          {entry.implementationNotes ? (
+            <div className="mt-1 text-sm text-[var(--text-muted)]">
+              <span className="font-semibold text-[var(--text)]">Implementation:</span>
+              <FormattedText text={entry.implementationNotes} className="mt-1" />
+            </div>
+          ) : null}
+          {canManage && targetType ? <AcceptedDecisionActions entry={entry} targetType={targetType} targetRef={targetRef} returnTo={returnTo} /> : null}
+        </div>
+      ))}
+    </Accordion>
   );
 }

@@ -231,3 +231,17 @@ export function applyLegacyProjectContextMigration(
     },
   };
 }
+
+/** Render a legacy-context migration preview/result as plain text. Both
+ *  adapters carried a byte-identical copy for the migrate-context preview
+ *  and apply replies; kept here because the rendering has no adapter shape
+ *  to speak of — it is the same text on every surface. */
+export function legacyContextMigrationSummary(preview: LegacyProjectContextMigrationPreview): string {
+  return [
+    `Legacy context present: ${preview.hasLegacyContext ? "yes" : "no"}`,
+    `Guideline additions: ${preview.guidelineAdditions.length} (${preview.skippedGuidelineDuplicates} duplicate(s) skipped)`,
+    `Accepted decision additions: ${preview.acceptedDecisionAdditions.length} (${preview.skippedDecisionDuplicates} duplicate(s) skipped)`,
+    `Legacy counts: globalRules=${preview.legacyCounts.globalRules}, workflowRules=${preview.legacyCounts.workflowRules}, decisions=${preview.legacyCounts.decisions}`,
+    `Fields cleared on apply: ${preview.fieldsClearedOnApply.join(", ") || "none"}`,
+  ].join("\n");
+}

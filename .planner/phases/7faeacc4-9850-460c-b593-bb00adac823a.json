@@ -1,0 +1,147 @@
+{
+  "id": "7faeacc4-9850-460c-b593-bb00adac823a",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 101,
+  "shortId": "3FMVA",
+  "priority": 33,
+  "slug": "web-ui-entity-detail-hierarchy-and-density",
+  "title": "Web UI entity detail hierarchy and density",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make feature, phase, and task detail pages immediately recognizable, consistently ordered, and compact across desktop and mobile.",
+  "description": "Update the React detail surfaces in packages/plan-web-ui/src/routes/feature-detail/route.tsx, phase-detail/route.tsx, and task-detail/route.tsx. The current layouts inconsistently place Description, status history, Accepted Decisions, metadata, and child lists; they also render DescriptionFreshnessNotice ahead of more important authored content and use large multi-row CompactCard grids. Introduce a shared typed identity treatment under the existing clickable DetailEntityBar from packages/plan-web-ui/src/components/detail/detail-entity-bar.tsx, preserving EntityPathBadge navigation and current F/P/T colors. Remove description freshness fetching/rendering only from Web UI loaders while retaining core/Pi/MCP structured diagnostics. Reorder each page to show ancestry, clickable segments, prominent entity type, H1 title, Description, status progression/history, Accepted Decisions, compact responsive metrics, then Search, Filters, and entity-specific Phases or Tasks lists. Preserve edit/delete/start/resume actions, accessibility, dark/light themes, scroll behavior, anchors, and responsive interactions.",
+  "descriptionUpdatedAt": "2026-09-11T14:35:54.383Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "dd3bbb9b-7612-4f31-9b34-52ae68b48e65"
+  ],
+  "tasks": [
+    {
+      "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65",
+      "phaseId": "7faeacc4-9850-460c-b593-bb00adac823a",
+      "number": 402,
+      "shortId": "ZL3QW",
+      "priority": 1,
+      "shortName": "unify-entity-details",
+      "title": "Unify and compact feature, phase, and task detail pages",
+      "status": "done",
+      "description": "Implement the approved entity-detail hierarchy across packages/plan-web-ui/src/routes/feature-detail/route.tsx, phase-detail/route.tsx, task-detail/route.tsx, their loaders, and shared detail components. Add a prominent typed Feature/Phase/Task identity label immediately above the H1 while leaving DetailEntityBar and its clickable EntityPathBadge segments unchanged. Move authored Description immediately below the identity/actions, followed by StatusCardStepper, StatusHistoryAccordion, and AcceptedDecisionsList. Replace oversized multi-row summary cards with a compact responsive single-row summary that remains horizontally usable on narrow screens. Place Search, Filters, and the entity-specific Phases or Tasks list below the summary. Remove DescriptionFreshnessNotice and /description-freshness fetching from Web UI details only; do not remove core, Pi, MCP, or server diagnostics. Preserve all current actions, state transitions, handoffs, notes, linked requirements, decisions, steps, dependencies, subtasks, keyboard behavior, semantic headings, theme tokens, and responsive navigation. Add typed shared-component/unit regressions and desktop/mobile Playwright coverage for hierarchy, clickable segments, absence of freshness UI, compact metrics, and Phases/Tasks labels.\n\n---\n**Completion summary:**\nCompleted the approved Web UI entity-detail redesign. Feature, phase, and task pages now share a prominent typed identity block immediately above an H1, retain clickable F/P/T segments and all existing actions, place authored Description before status progression/history and Accepted Decisions, use compact horizontally usable single-row metrics, and retain entity-specific Phases, Tasks, Steps, Dependencies, and Subtasks sections. Removed Description freshness rendering and detail-loader fetching from the Web UI only while preserving core/server/Pi/MCP diagnostics and compatibility types. Added unit and desktop/mobile browser regressions for hierarchy, closed disclosures, clickable segments, responsive containment, entity-specific section labels, and absence of freshness UI. Verification: Web UI tests 101/101, focused responsive Playwright 8/8, focused CRUD/Accepted Decisions Playwright 16/16, and canonical pnpm verify:final passed fingerprint 217b3baee7c2 across build, typecheck, coverage, plugin synchronization, capability audit, 42/42 browser E2E, packed-install smoke, and diff checks. No commit, push, merge, release, or publish performed.",
+      "descriptionUpdatedAt": "2026-09-13T18:09:38.549Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65-check-001-planned-in-progress",
+          "date": "2026-09-11T14:36:25.125Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65-check-002-in-progress-done",
+          "date": "2026-09-13T18:09:38.547Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Completed the approved Web UI entity-detail redesign. Feature, phase, and task pages now share a prominent typed identity block immediately above an H1, retain clickable F/P/T segments and all existing actions, place authored Description before status progression/history and Accepted Decisions, use compact horizontally usable single-row metrics, and retain entity-specific Phases, Tasks, Steps, Dependencies, and Subtasks sections. Removed Description freshness rendering and detail-loader fetching from the Web UI only while preserving core/server/Pi/MCP diagnostics and compatibility types. Added unit and desktop/mobile browser regressions for hierarchy, closed disclosures, clickable segments, responsive containment, entity-specific section labels, and absence of freshness UI. Verification: Web UI tests 101/101, focused responsive Playwright 8/8, focused CRUD/Accepted Decisions Playwright 16/16, and canonical pnpm verify:final passed fingerprint 217b3baee7c2 across build, typecheck, coverage, plugin synchronization, capability audit, 42/42 browser E2E, packed-install smoke, and diff checks. No commit, push, merge, release, or publish performed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65-check-001-create-a-shared-prominent-entity-identity-treatment-while-preserving-clickable-f-p-t-segments",
+          "number": 1,
+          "title": "Create a shared prominent entity identity treatment while preserving clickable F/P/T segments",
+          "checked": true
+        },
+        {
+          "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65-check-002-remove-description-freshness-only-from-web-ui-detail-loaders-and-rendered-pages",
+          "number": 2,
+          "title": "Remove Description freshness only from Web UI detail loaders and rendered pages",
+          "checked": true
+        },
+        {
+          "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65-check-003-reorder-feature-phase-and-task-details-consistently-around-description-status-decisions-metrics-and-child-content",
+          "number": 3,
+          "title": "Reorder Feature, Phase, and Task details consistently around Description, status, decisions, metrics, and child content",
+          "checked": true
+        },
+        {
+          "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65-check-004-make-summary-metrics-compact-and-responsive-with-entity-specific-phases-or-tasks-labels",
+          "number": 4,
+          "title": "Make summary metrics compact and responsive with entity-specific Phases or Tasks labels",
+          "checked": true
+        },
+        {
+          "id": "dd3bbb9b-7612-4f31-9b34-52ae68b48e65-check-005-add-focused-unit-browser-regressions-and-run-one-canonical-final-gate",
+          "number": 5,
+          "title": "Add focused unit/browser regressions and run one canonical final gate",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-11T14:36:25.125Z",
+      "completedAt": "2026-09-13T18:09:38.547Z",
+      "createdAt": "2026-09-11T14:36:05.066Z",
+      "updatedAt": "2026-09-13T18:09:38.547Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+          "createdAt": "2026-09-11T14:36:25.037Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-11T14:35:54.382Z",
+  "updatedAt": "2026-09-13T18:09:38.547Z",
+  "handoff": "",
+  "handoffUpdatedAt": "2026-09-11T14:41:07.205Z",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [
+    {
+      "file": "handoff-archive/7faeacc4-9850-460c-b593-bb00adac823a-2026-09-13T18-09-38-568Z.md",
+      "clearedAt": "2026-09-13T18:09:38.568Z",
+      "reason": "phase-done"
+    }
+  ],
+  "statusLog": [
+    {
+      "id": "e1951657-8792-4bd4-aeca-c9591b537a3d",
+      "date": "2026-09-11T14:36:25.148Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "ddd479c6-2cc1-4f7b-a14b-4ceee030d7ca",
+      "date": "2026-09-13T18:09:38.616Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0629e-cb11-71f8-8a40-6e3d61e30edc",
+      "createdAt": "2026-09-11T14:36:25.037Z"
+    }
+  ]
+}

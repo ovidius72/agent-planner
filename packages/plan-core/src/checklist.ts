@@ -53,3 +53,75 @@ export function toggleChecklistItem(items: ChecklistItem[], selector: string, ch
   found.checked = checked ?? !found.checked;
   return found;
 }
+
+export interface ChecklistReplacement {
+  items: ChecklistItem[];
+  /** Titles of previously-ticked items whose tick could not be carried over.
+   *  Empty on the common paths. Callers MUST surface a non-empty list: a
+   *  success result that drops ticks without saying so is the defect this
+   *  function exists to prevent. */
+  lostTicks: string[];
+}
+
+/**
+ * Build the replacement list for a whole-checklist update, carrying tick state
+ * across from the items being replaced.
+ *
+ * The input is plain titles, so item identity has to be reconstructed. Two
+ * passes, in this order:
+ *
+ *  1. Exact trimmed title. Order-independent, so reordering a list keeps every
+ *     tick. Each surviving item is consumed at most once, so duplicate titles
+ *     carry over one tick each rather than multiplying.
+ *  2. Position, but ONLY when the list length is unchanged. This is what makes
+ *     renaming an item keep its tick — the reported failure case. Restricting
+ *     it to equal-length lists means an insertion or deletion never shifts a
+ *     tick onto a neighbour.
+ *
+ * Anything still unmatched is a new item and starts unchecked; if it displaced
+ * a ticked item, that title is reported in `lostTicks` rather than dropped in
+ * silence.
+ */
+export function replaceChecklist(existing: ChecklistItem[], titles: string[], taskId: string): ChecklistReplacement {
+  const cleanTitles = titles.map((title) => title.trim()).filter((title) => title.length > 0);
+  const consumed = new Set<number>();
+  const carried = new Array<boolean>(cleanTitles.length).fill(false);
+  // Tracks whether pass 1 found an exact-title match, independent of that
+  // match's checked value. `carried[index]` alone cannot stand in for this:
+  // an exact match to an unticked item legitimately produces carried=false,
+  // and pass 2 must not treat that as "unmatched" and overwrite it with a
+  // stray tick from whatever unrelated item previously sat at this position.
+  const matchedByTitle = new Array<boolean>(cleanTitles.length).fill(false);
+
+  cleanTitles.forEach((title, index) => {
+    const match = existing.findIndex((item, i) => !consumed.has(i) && item.title.trim() === title);
+    if (match >= 0) {
+      consumed.add(match);
+      matchedByTitle[index] = true;
+      carried[index] = existing[match]!.checked;
+    }
+  });
+
+  if (cleanTitles.length === existing.length) {
+    cleanTitles.forEach((_title, index) => {
+      if (matchedByTitle[index]) return;
+      const candidate = existing[index];
+      if (!candidate || consumed.has(index)) return;
+      consumed.add(index);
+      carried[index] = candidate.checked;
+    });
+  }
+
+  const items = cleanTitles.map((title, index) => ({
+    id: createChecklistItemId(taskId, index + 1, title),
+    number: index + 1,
+    title,
+    checked: carried[index] ?? false,
+  }));
+
+  const lostTicks = existing
+    .filter((item, i) => item.checked && !consumed.has(i))
+    .map((item) => item.title);
+
+  return { items, lostTicks };
+}

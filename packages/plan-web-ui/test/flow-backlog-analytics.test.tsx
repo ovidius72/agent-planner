@@ -3,7 +3,7 @@ import { Outlet } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { FlowBacklogAnalytics } from "../src/components/dashboard/flow-backlog-analytics";
 import { DashboardRoute } from "../src/routes/dashboard/route";
-import { makeFeature, makePhase, makeProject, makeTask, renderRoute } from "./fixtures";
+import { makeFeature, makePhase, makeProject, makeTask, renderRoute, stubLocalStorage } from "./fixtures";
 
 function taskOnDay(day: number) {
   const date = `2026-01-${String(day).padStart(2, "0")}T00:00:00.000Z`;
@@ -136,10 +136,7 @@ describe("FlowBacklogAnalytics", () => {
   });
 
   it("applies and clears a stable-ID Work Tree drill-down without changing the URL or stored filters", async () => {
-    Object.defineProperty(window, "localStorage", {
-      configurable: true,
-      value: { getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {} },
-    });
+    stubLocalStorage();
     const openTask = makeTask({ id: "open-task", title: "Open analytics task", status: "planned", createdAt: "2026-01-01T00:00:00.000Z" });
     const doneTask = makeTask({ id: "done-task", title: "Done analytics task", status: "done", createdAt: "2026-01-01T00:00:00.000Z", completedAt: "2026-01-02T00:00:00.000Z", updatedAt: "2026-01-02T00:00:00.000Z" });
     const phase = makePhase({ tasks: [openTask, doneTask], taskIds: [openTask.id, doneTask.id] });
@@ -177,10 +174,7 @@ describe("FlowBacklogAnalytics", () => {
   });
 
   it("keeps the analytics section between aggregate stats and the Work Tree", async () => {
-    Object.defineProperty(window, "localStorage", {
-      configurable: true,
-      value: { getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {} },
-    });
+    stubLocalStorage();
     const task = taskOnDay(1);
     const phase = makePhase({ tasks: [task], taskIds: [task.id] });
     renderRoute([{

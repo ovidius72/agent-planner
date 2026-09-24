@@ -1,6 +1,8 @@
 import type { PlanStore } from "./plan-store.js";
 import { formatPhaseRef, formatTwoDigitNumber } from "./naming.js";
 import { buildPhaseWorkMap } from "./task-context.js";
+import { recommendNextTask } from "./task-selection.js";
+import { listOpenPhaseWork, openPhaseWorkLines } from "./stranded-phase.js";
 
 /**
  * Web UI info for the recap (harness-agnostic — no module globals).
@@ -112,6 +114,20 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
       : `Progress: Features ${doneF}/${totalF} done (${activeF} active) · Phases ${doneP}/${totalP} done (${activeP} active) · Tasks ${doneT}/${totalT} done (${activeT} active, ${checkpointedT} with checkpoints)`,
   );
 
+  // P104(F005)/T422: a phase left in-progress with no active task had no
+  // signal anywhere cheap to read — this states it, priority-ordered, every
+  // recap, instead of leaving it discoverable only by paying for
+  // task_recommend's full claim evidence.
+  const openPhaseWork = listOpenPhaseWork(phases, feats);
+  const openPhaseWorkText = openPhaseWorkLines(openPhaseWork);
+  if (openPhaseWorkText) {
+    lines.push(
+      "",
+      italian ? "In-progress: fasi con lavoro rimanente (ordine di priorità):" : "In-progress phases with work left (priority order):",
+      openPhaseWorkText,
+    );
+  }
+
   if (activeTasks.length > 1) {
     const conflicts = activeTasks.map(({ phase, task }) => {
       const feature = feats.find((entry) => entry.id === phase.featureId);
@@ -216,6 +232,23 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
         ? `⚠️ nextSteps free-text da resume.json — può essere stale; verifica contro lo stato attuale prima di agire.`
         : `⚠️ nextSteps are free-text from resume.json — may be stale; verify against current state before acting.`);
     lines.push(staleNote);
+  } else if (!planComplete) {
+    // No active task, resume advisory, checkpoint, pending handoff, or
+    // legacy resume.json nextSteps: every branch above already names a
+    // concrete ref to act on, but this, the ordinary case, previously fell
+    // through with no "Next step" line at all — the reader had to go call
+    // task_recommend to learn what the recap already knew (P104(F005)/T421).
+    const recommendation = recommendNextTask(feats, phases, plan.project.workDeviations);
+    if (recommendation.kind === "priority" && recommendation.candidate) {
+      const { candidate } = recommendation;
+      const candidateFeature = feats.find((entry) => entry.id === candidate.phase.featureId);
+      const ref = `${formatPhaseRef(candidate.phase.number, candidateFeature?.number)}/${tref(candidate.task.number)}`;
+      lines.push(
+        italian
+          ? `Prossimo step: ${ref} — ${candidate.task.title} (priorità più bassa pronta). Avvia con ${taskStartCmd} ${ref}.`
+          : `Next step: ${ref} — ${candidate.task.title} (lowest-priority ready task). Start with ${taskStartCmd} ${ref}.`,
+      );
+    }
   }
 
   if (pendingResume) {

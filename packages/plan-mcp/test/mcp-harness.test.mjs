@@ -138,11 +138,31 @@ test("listTools exposes the full published tool set with actionable input schema
     assert.equal(taskUpdate.properties.decisions.type, "array", "task-update exposes decisions");
     assert.equal(taskUpdate.properties.descriptionRef.type, "string", "task-update exposes descriptionRef");
 
-    // handoff-write requires confirmed + phaseRef + content
+    // T417: every long-prose input states the size limit up front, so a
+    // caller learns it before the call instead of from the rejection. The
+    // literal-interpolation check is here because a `"... ${CONST}"` in a
+    // plain double-quoted string compiles and tests green while shipping the
+    // placeholder text to agents — this suite is the only thing that reads
+    // what a caller actually sees.
+    for (const [tool, field] of [
+      ["planner-task-update", "description"],
+      ["planner-task-add", "description"],
+      ["planner-phase-update", "description"],
+      ["planner-feature-update", "description"],
+    ]) {
+      const described = schema(tool).properties[field].description ?? "";
+      assert.match(described, /12,000 characters/, `${tool}.${field} states the limit`);
+      assert.match(described, /descriptionRef/, `${tool}.${field} names the fallback field`);
+      assert.ok(!described.includes("${"), `${tool}.${field} interpolates rather than printing the placeholder`);
+    }
+
+    // handoff-write requires confirmed + phaseRef; content is optional (T409)
+    // so a retry after a failed write can omit it and reuse the retained body.
     const handoffWrite = schema("planner-handoff-write");
     assert.ok(handoffWrite.required.includes("confirmed"), "handoff-write requires confirmed");
     assert.ok(handoffWrite.required.includes("phaseRef"), "handoff-write requires phaseRef");
-    assert.ok(handoffWrite.required.includes("content"), "handoff-write requires content");
+    assert.ok(!handoffWrite.required.includes("content"), "handoff-write content is optional to support retention-backed retries");
+    assert.ok(handoffWrite.properties.content, "handoff-write still publishes a content schema");
     assert.ok(handoffWrite.properties.completenessAudit, "handoff-write retains the legacy completeness audit contract");
     assert.ok(handoffWrite.properties.coldStartInventory, "handoff-write retains the legacy cold-start inventory contract");
     assert.ok(handoffWrite.properties.coldStartInventory.properties.sourceReviews, "legacy cold-start inventory retains the source-review contract");
@@ -267,6 +287,36 @@ test("accepted decision tools preserve identity and acceptedAt across every owne
   }
 });
 
+test("accepted decisions on a task remain visible after that task and its phase complete", async () => {
+  const session = await startMcpFixture({ name: "t405-post-completion-visibility" });
+  try {
+    const created = await callTool(session, "planner-accepted-decision-create", {
+      targetType: "task", targetRef: "P001/T001",
+      title: "Task decision surviving completion",
+      decision: "Keep this visible after completion.",
+      rationale: "Completion must not hide durable decisions.",
+      implementationNotes: "None required.",
+    });
+    const acceptedDecision = toolStructured(created).acceptedDecision;
+    await callTool(session, "planner-task-show", { task: "P001(F001)/T001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001(F001)", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    await callTool(session, "planner-requirement-list", { phaseRef: "P001(F001)" });
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    if (started.isError) throw new Error(`planner-task-start failed: ${toolText(started)}`);
+    const completed = await callTool(session, "planner-task-complete", { task: "T001", description_update: "Completed to verify accepted decisions remain visible after completion.", force: true, motivation: "Seed checklist item not relevant to this accepted-decision coverage." });
+    if (completed.isError) throw new Error(`planner-task-complete failed: ${toolText(completed)}`);
+    assert.match(toolText(completed), /Task completed/);
+    const shown = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const details = toolStructured(shown).task;
+    assert.equal(details.acceptedDecisions.some((entry) => entry.id === acceptedDecision.id), true, "accepted decision remains visible after task completion");
+    const persistedStatus = (await session.store.loadAllPhases()).flatMap((phase) => phase.tasks).find((entry) => entry.acceptedDecisions.some((decision) => decision.id === acceptedDecision.id)).status;
+    assert.equal(persistedStatus, "done", "the owning task is actually completed, proving this is a post-completion read");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
 test("full reads, task start, and planner-load agentContext deliver canonical Accepted Decisions", async () => {
   const session = await startMcpFixture({ name: "t368-decision-context" });
   try {
@@ -293,8 +343,16 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
     }
 
     const overview = await callTool(session, "planner-show", {});
+    // The rendered summary text is the one channel that carries every
+    // canonical field (decision, rationale, implementationNotes) — see
+    // P104(F005)/T419: echoing the same content again in structuredContent
+    // would duplicate it rather than bound it. structuredContent keeps only
+    // enough identity (id/title/acceptedAt) to reference the decision.
     assert.match(toolText(overview), /Project decision/);
-    assert.equal(toolStructured(overview).overview.project.acceptedDecisions[0].rationale, "Rationale for Project decision.");
+    assert.match(toolText(overview), /Rationale for Project decision\./);
+    const overviewDecision = toolStructured(overview).overview.project.acceptedDecisions[0];
+    assert.equal(overviewDecision.title, "Project decision");
+    assert.equal(overviewDecision.rationale, undefined, "structuredContent must not duplicate the full decision body already in text");
 
     for (const [tool, args, key, title] of [
       ["planner-feature-show", { feature: "F001", full: true }, "feature", "Feature decision"],
@@ -325,6 +383,80 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
     assert.equal(decisionContext.truncated, false);
     for (const title of targets.map((target) => target.title)) assert.match(decisionContext.content, new RegExp(title));
     assert.match(decisionContext.content, /Implementation notes for Task decision/);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-load delivers the complete attested project-level context; task-start advises after it goes stale", async () => {
+  const session = await startMcpFixture({ name: "t404-project-context" });
+  try {
+    await session.store.updateProject((project) => ({
+      ...project,
+      description: "Fixture project description",
+      goal: "Ship the fixture feature",
+      scope: ["In-scope area"],
+      outOfScope: ["Out-of-scope area"],
+      technologies: ["TypeScript"],
+      tools: ["pnpm"],
+    }));
+
+    const loaded = await callTool(session, "planner-load", {});
+    const loadedStructured = toolStructured(loaded);
+    assert.equal(loadedStructured.projectContext.loaded, true);
+    assert.equal(loadedStructured.projectContext.contextComplete, true);
+    assert.equal(loadedStructured.projectContext.project.description, "Fixture project description");
+    assert.equal(loadedStructured.projectContext.project.goal, "Ship the fixture feature");
+    assert.deepEqual(loadedStructured.projectContext.project.scope, ["In-scope area"]);
+    assert.deepEqual(loadedStructured.projectContext.project.outOfScope, ["Out-of-scope area"]);
+    assert.deepEqual(loadedStructured.projectContext.project.technologies, ["TypeScript"]);
+    assert.deepEqual(loadedStructured.projectContext.project.tools, ["pnpm"]);
+    assert.equal(loadedStructured.projectContext.requirements.length, 1);
+    assert.equal(loadedStructured.projectContext.requirements[0].title, "Users can authenticate");
+    // The agent-only channel carries the same content, but it must never
+    // appear in the human-facing recap text (parity across result channels,
+    // without duplicating the Accepted Decision leak this mirrors).
+    assert.match(loadedStructured.agentContext.projectContext.text, /Fixture project description/);
+    assert.doesNotMatch(toolText(loaded), /Fixture project description/, "project context must not leak into the human recap");
+    assert.equal(loadedStructured.recap.text, toolText(loaded));
+
+    // A full, genuinely complete project-context read satisfies
+    // REQUIREMENTS_READ_REQUIRED task-wide (P102(F005) accepted decision):
+    // no further per-task requirement read is needed for T001.
+    await callTool(session, "planner-task-show", { task: "T001", full: true });
+    await callTool(session, "planner-phase-show", { phase: "P001", full: true });
+    await callTool(session, "planner-feature-show", { feature: "F001", full: true });
+    const started = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(started).started, true);
+    assert.equal(toolStructured(started).projectContextStale, false);
+
+    // Project content changes after the attested load. Task-start stays
+    // scoped to feature/phase/task context (it does not hard-block on this),
+    // but it surfaces a targeted, non-blocking refresh advisory instead of
+    // silently working from stale project-level context.
+    await session.store.updateProject((project) => ({ ...project, goal: "Changed after load" }));
+    const alreadyStarted = await callTool(session, "planner-task-start", { task: "T001" });
+    assert.equal(toolStructured(alreadyStarted).started, true);
+    assert.equal(toolStructured(alreadyStarted).projectContextStale, true);
+    assert.match(toolText(alreadyStarted), /Project-context advisory/);
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-load reports contextComplete:false and does not attest the read when project context exceeds maxChars", async () => {
+  const session = await startMcpFixture({ name: "t404-project-context-oversized" });
+  try {
+    await session.store.updateProject((project) => ({ ...project, description: "x".repeat(2_000) }));
+    const loaded = await callTool(session, "planner-load", { maxChars: 100 });
+    const structured = toolStructured(loaded);
+    assert.equal(structured.projectContext.loaded, false);
+    assert.equal(structured.projectContext.contextComplete, false);
+    assert.ok(Array.isArray(structured.projectContext.nextActions) && structured.projectContext.nextActions.length > 0);
+    assert.ok(structured.projectContext.serializedChars > 100);
+    // The human recap is untouched (still exactly the recap), and the
+    // over-bound content was never attested as read.
+    assert.equal(structured.recap.text, toolText(loaded));
   } finally {
     await closeMcpFixture(session);
   }
@@ -448,6 +580,61 @@ test("harness drives a CRUD round trip; composite refs in output, state persiste
     assert.equal(structured.kind, "priority", "structured content carries the selection kind");
     assert.ok(typeof structured.taskId === "string" && structured.taskId.length > 0, "structured content carries a resolved task id");
     assert.ok(structured.nextTask, "structured content carries nextTask");
+  } finally {
+    await closeMcpFixture(session);
+  }
+});
+
+test("planner-task-complete: refusal names the toggle before force, force requires motivation, and an override is recorded and stays visible as done-with-open-items (P104(F005)/T428)", async () => {
+  const session = await startMcpFixture({ name: "t428-completion-gate" });
+  try {
+    // Seed T001 ships with one unchecked checklist item ("Add route").
+    await readTaskContext(session, "T001", "P001", "F001");
+    await callTool(session, "planner-task-start", { task: "T001" });
+
+    // No force: the refusal names the toggle command before it ever
+    // mentions force — the escape hatch is not the first thing an agent
+    // reading the refusal sees.
+    const refused = await callTool(session, "planner-task-complete", { task: "T001", description_update: "Attempting completion with the checklist still open." });
+    const refusedText = toolText(refused);
+    assert.match(refusedText, /planner-task-checklist-toggle/, "refusal names the toggle command");
+    assert.match(refusedText, /Add route/, "refusal names the specific open item");
+    const toggleIndex = refusedText.indexOf("planner-task-checklist-toggle");
+    const forceIndex = refusedText.indexOf("force=true");
+    assert.ok(toggleIndex >= 0 && forceIndex >= 0 && toggleIndex < forceIndex, "toggle is named before force");
+    assert.equal(toolStructured(refused).errorCode, "CHECKLIST_INCOMPLETE");
+
+    // force=true without a motivation is refused too — the same convention
+    // needsMotivation already applies to blocked/canceled/deferred/rejected.
+    const forcedNoMotivation = await callTool(session, "planner-task-complete", { task: "T001", force: true, description_update: "Attempting a forced completion with no motivation given." });
+    assert.match(toolText(forcedNoMotivation), /requires a motivation/);
+    assert.equal(toolStructured(forcedNoMotivation).errorCode, "FORCE_MOTIVATION_REQUIRED");
+    assert.equal((await session.store.loadAllPhases()).flatMap((p) => p.tasks).find((t) => t.number === 1).status, "in-progress", "a denied forced completion never mutates status");
+
+    // force=true with a motivation succeeds, and the override is recorded —
+    // never by ticking the item (T413's rule: an unticked item after a
+    // forced completion is information, not a bug to silently fix).
+    const forced = await callTool(session, "planner-task-complete", {
+      task: "T001", force: true,
+      motivation: "The route already shipped in a different task; this checklist item no longer applies.",
+      description_update: "Completed via forced override for P104(F005)/T428 coverage.",
+    });
+    assert.match(toolText(forced), /Task completed/);
+    const forcedTask = (await session.store.loadAllPhases()).flatMap((p) => p.tasks).find((t) => t.number === 1);
+    assert.equal(forcedTask.status, "done");
+    assert.equal(forcedTask.checklist.find((item) => item.title === "Add route").checked, false, "the override never ticks the item it overrode");
+    assert.match(forcedTask.description, /Add route/, "completion evidence names the skipped step");
+    assert.match(forcedTask.description, /route already shipped in a different task/, "completion evidence carries the motivation");
+    assert.match(forcedTask.statusLog.at(-1).description, /Add route/, "the status log entry itself names the skipped step, independent of the checklist");
+
+    // The mismatch — done, with an item still open — is legible on the full
+    // task view next to the T421 order context, not left for a reader to
+    // notice by comparing two fields themselves.
+    const shown = await callTool(session, "planner-task-show", { task: "T001", full: true });
+    const shownText = toolText(shown);
+    assert.match(shownText, /done with 1 of \d+ checklist item\(s\) still open/i);
+    assert.match(shownText, /Add route/);
+    assert.equal(toolStructured(shown).task.checklistMismatch?.includes("Add route"), true, "the mismatch is also in structured content, not just prose");
   } finally {
     await closeMcpFixture(session);
   }

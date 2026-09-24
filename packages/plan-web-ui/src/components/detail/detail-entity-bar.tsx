@@ -37,7 +37,7 @@ export function DetailEntityBar({
   children,
 }: DetailEntityBarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" data-testid="detail-entity-bar">
       <EntityPathBadge
         featureNum={featureNum}
         phaseNum={phaseNum}

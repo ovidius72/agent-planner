@@ -89,24 +89,43 @@ describe("closed-by-default disclosures", () => {
     const phase = makePhase({ description: "Phase description", descriptionUpdatedAt: "2026-01-01T12:00:00.000Z", handoff: "# Handoff\n\nResume from tests.", linkedRequirements: [makeRequirement()], tasks: [task] });
 
     const featureRender = renderRoute([{ path: "/features/:featureId", loader: () => ({ feature, phases: [phase] }), element: <FeatureDetailRoute /> }], "/features/feature-1");
-    await screen.findByRole("heading", { name: "Example feature" });
-    expect(detailsWithSummary(featureRender.container, "Description").open).toBe(false);
+    await screen.findByRole("heading", { name: "Example feature", level: 1 });
+    expect(featureRender.container.querySelector('[data-entity-kind="feature"]')).toHaveTextContent("Feature");
+    expect(featureRender.container.querySelector('[aria-label="Feature metrics"]')).toBeInTheDocument();
+    const featureDescription = detailsWithSummary(featureRender.container, "Description");
+    const featureHistory = detailsWithSummary(featureRender.container, "Status history");
+    expect(featureDescription.open).toBe(false);
+    expect(featureDescription.compareDocumentPosition(featureHistory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(detailsWithSummary(featureRender.container, "Accepted decisions").open).toBe(false);
     expect(detailsWithSummary(featureRender.container, "Planning notes").open).toBe(false);
-    expect(detailsWithSummary(featureRender.container, "Status history").open).toBe(false);
+    expect(featureHistory.open).toBe(false);
+    expect(screen.queryByText("Description freshness")).not.toBeInTheDocument();
+    expect(document.title).toBe("Feature F001 · Example feature");
     featureRender.unmount();
 
     const phaseRender = renderRoute([{ path: "/features/:featureId/phases/:phaseId", loader: () => ({ feature, phase }), element: <PhaseDetailRoute /> }], "/features/feature-1/phases/phase-1");
-    await screen.findByRole("heading", { name: "Example phase" });
+    await screen.findByRole("heading", { name: "Example phase", level: 1 });
+    expect(phaseRender.container.querySelector('[data-entity-kind="phase"]')).toHaveTextContent("Phase");
+    expect(phaseRender.container.querySelector('[aria-label="Phase metrics"]')).toBeInTheDocument();
     expect(detailsWithSummary(phaseRender.container, "Linked requirements").open).toBe(false);
     expect(detailsWithSummary(phaseRender.container, "Description").open).toBe(false);
     expect(detailsWithSummary(phaseRender.container, "Handoff").open).toBe(false);
+    expect(detailsWithSummary(phaseRender.container, "Accepted decisions").open).toBe(false);
     expect(detailsWithSummary(phaseRender.container, "Status history").open).toBe(false);
+    expect(screen.queryByText("Description freshness")).not.toBeInTheDocument();
+    expect(document.title).toBe("Phase P001 · Example phase");
     phaseRender.unmount();
 
     const taskRender = renderRoute([{ path: "/features/:featureId/phases/:phaseId/tasks/:taskId", loader: () => ({ feature, phase, task, pendingResume: false }), element: <TaskDetailRoute /> }], "/features/feature-1/phases/phase-1/tasks/task-1");
-    await screen.findByRole("heading", { name: "Example task" });
+    await screen.findByRole("heading", { name: "Example task", level: 1 });
+    expect(taskRender.container.querySelector('[data-entity-kind="task"]')).toHaveTextContent("Task");
+    expect(taskRender.container.querySelector('[aria-label="Task metrics"]')).toBeInTheDocument();
     expect(detailsWithSummary(taskRender.container, "Description").open).toBe(false);
+    expect(detailsWithSummary(taskRender.container, "Accepted decisions").open).toBe(false);
     expect(detailsWithSummary(taskRender.container, "Status history").open).toBe(false);
+    expect(screen.queryByText("Description freshness")).not.toBeInTheDocument();
+    expect(taskRender.container.querySelectorAll(".entity-path-seg--link").length).toBe(3);
+    expect(document.title).toBe("Task T001 · Example task");
   });
 
   it("starts requirement and handoff list disclosures closed", async () => {

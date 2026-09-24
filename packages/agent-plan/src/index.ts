@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic } from "@agent-plan/core";
+import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, classifyGuardedTool, decideGuardPreToolUse, isEntirelyInsidePlannerRoot, type GuardEventInput } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
 import { basename, dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
@@ -37,7 +37,7 @@ function usage(): string {
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
     "  setup codex                 Add Agent Plan to Codex / Copilot CLI (project .codex/mcp.json by default, user scope with --user).",
-    "  guard pre-tool-use          Claude Code hook: block Edit/Write unless a task is in-progress or a bypass is authorized (bash stays free).",
+    "  guard pre-tool-use          Claude Code hook: ask before an edit outside .planner/ when no task is in-progress and no bypass is authorized (read-only commands stay free; .planner/ writes always allowed).",
     "",
     "Options:",
     "  --version, -v               Print the installed agent-plan CLI version.",
@@ -224,7 +224,7 @@ async function writeClaudeTaskGuard(scope: "project" | "user", flags: CliFlags):
   }).filter((group) => !(isRecord(group) && Array.isArray(group.hooks) && group.hooks.length === 0));
 
   cleaned.push({
-    matcher: "Edit|Write",
+    matcher: "Edit|Write|NotebookEdit|Bash",
     hooks: [
       {
         type: "command",
@@ -330,6 +330,25 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
+/** Build the harness-agnostic guard event from a Claude Code PreToolUse
+ * payload. Field names cover both the documented snake_case shape
+ * (`tool_name`, `tool_input.file_path`) and a defensive camelCase fallback. */
+function guardEventFromClaudeCodePayload(event: Record<string, unknown>, cwd: string, root: string): GuardEventInput {
+  const toolInput = (event.tool_input ?? event.toolInput ?? {}) as Record<string, unknown>;
+  const stringField = (value: unknown): string | undefined => typeof value === "string" && value ? value : undefined;
+  const filePath = stringField(toolInput.file_path ?? toolInput.filePath);
+  const notebookPath = stringField(toolInput.notebook_path ?? toolInput.notebookPath);
+  const command = stringField(toolInput.command);
+  return {
+    toolName: String(event.tool_name ?? event.toolName ?? ""),
+    cwd,
+    plannerRoot: root,
+    ...(filePath !== undefined ? { filePath } : {}),
+    ...(notebookPath !== undefined ? { notebookPath } : {}),
+    ...(command !== undefined ? { command } : {}),
+  };
+}
+
 async function guardPreToolUse(): Promise<void> {
   const raw = await readStdin();
   let event: Record<string, unknown> = {};
@@ -339,14 +358,21 @@ async function guardPreToolUse(): Promise<void> {
     return;
   }
 
-  const toolName = String(event.tool_name ?? event.toolName ?? "");
-  // Guard only the code-writing tools (Edit/Write). Bash stays free so that
-  // git pull, build, test, ls, etc. always work. This mirrors the Pi adapter.
-  if (toolName !== "Edit" && toolName !== "Write") return;
+  const cwd = projectCwd();
+  const root = plannerRoot(cwd);
+  const guardEvent = guardEventFromClaudeCodePayload(event, cwd, root);
 
-  const root = plannerRoot();
+  // Cheap, I/O-free pre-check: tool calls the guard doesn't cover (Read,
+  // Grep, MCP calls, read-only Bash, ...) and anything that resolves
+  // entirely inside .planner/ are decided from the event alone. Writing a
+  // handoff or recording task state must never be blocked or ask, even when
+  // no task is in progress — that write IS how an agent reports what it did.
+  const classification = classifyGuardedTool(guardEvent);
+  if (!classification.guarded || isEntirelyInsidePlannerRoot(classification.paths, root, cwd)) return;
+
   const st = new PlanStore(root);
-  if (!(await st.exists().catch(() => false))) return;
+  const hasPlannerDir = await st.exists().catch(() => false);
+  if (!hasPlannerDir) return;
 
   let plan;
   try {
@@ -356,21 +382,28 @@ async function guardPreToolUse(): Promise<void> {
   }
 
   const allTasks = plan.phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
-  if (allTasks.length === 0) return; // nothing to enforce yet
-  if (allTasks.some(({ task }) => task.status === "in-progress")) return; // a task is open → allow
-  if (await st.isGuardBypassed().catch(() => false)) return; // user authorized → allow
+  const hasInProgressTask = allTasks.some(({ task }) => task.status === "in-progress");
+  const guardBypassed = await st.isGuardBypassed().catch(() => false);
 
   const focus = allTasks.find(({ task }) => !["done", "canceled", "rejected"].includes(task.status));
   const startHint = focus
     ? ` Start a task with /planner task start ${focus.task.id} (${focus.task.title}), OR`
     : " Start a task with /planner task start, OR";
-  const reason = `Agent Plan guard: no task is in-progress, so ${toolName} is blocked.${startHint} ask the user to authorize a one-time bypass (they can run /planner bypass, or you can call planner-authorize-bypass). After authorization, ${toolName} will be allowed for a short window.`;
+
+  const decision = decideGuardPreToolUse(guardEvent, {
+    hasPlannerDir,
+    totalTasks: allTasks.length,
+    hasInProgressTask,
+    guardBypassed,
+    startHint,
+  });
+  if (decision.decision === "allow") return;
 
   console.log(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: reason,
+      permissionDecision: decision.decision,
+      permissionDecisionReason: decision.reason,
     },
   }));
 }

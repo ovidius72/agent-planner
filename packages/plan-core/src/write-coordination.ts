@@ -220,8 +220,8 @@ async function acquirePlanRootLock(planRoot: string): Promise<() => Promise<void
 
 /**
  * Serialize one logical planner mutation across processes for a planner root.
- * Nested writes in the same async transaction are re-entrant. Reads never take
- * this lock, so secondary processes remain available for inspection.
+ * Nested writes in the same async transaction are re-entrant. Reads never
+ * take this lock, so secondary processes remain available for inspection.
  */
 export async function withPlanRootWriteLock<T>(root: string, fn: () => Promise<T>): Promise<T> {
   const planRoot = resolve(root);
