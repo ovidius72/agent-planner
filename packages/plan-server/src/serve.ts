@@ -8,7 +8,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, type MacroTaskMutationInput } from "@agent-plan/core"
+import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 
@@ -17,10 +17,6 @@ import { WsHub } from "./ws-hub.js";
 let watcherAbort: AbortController | null = null;
 
 const SERVER_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/server");
-
-function nowISO(): string {
-  return new Date().toISOString();
-}
 
 /** Resolve requirement phase refs before persistence so requirements never dangle. */
 async function resolveRequirementPhaseIds(
@@ -63,36 +59,27 @@ function noMutableFieldsResponse(fields: readonly string[]) {
   };
 }
 
-type AcceptedDecisionTargetType = "project" | "feature" | "phase" | "task";
-type AcceptedDecisionTargetResolution =
+type AcceptedDecisionEventTargetResolution =
   | { ok: true; owner: { kind: "project" } | { kind: "feature"; featureId: string } | { kind: "phase"; phaseId: string } | { kind: "task"; phaseId: string; taskId: string }; targetRef: string; event: { type: "project" } | { type: "feature"; featureId: string } | { type: "phase"; phaseId: string; featureId: string } | { type: "task"; phaseId: string; taskId: string; featureId: string } }
   | { ok: false; error: string };
 
-async function resolveAcceptedDecisionTarget(store: PlanStore, targetType: AcceptedDecisionTargetType, rawTargetRef?: string): Promise<AcceptedDecisionTargetResolution> {
-  if (targetType === "project") return { ok: true, owner: { kind: "project" }, targetRef: "project", event: { type: "project" } };
-  const targetRef = rawTargetRef?.trim();
-  if (!targetRef) return { ok: false, error: `targetRef is required for ${targetType} accepted decisions` };
-  const [featuresDocument, phases] = await Promise.all([store.loadFeatures(), store.loadAllPhases()]);
-  const features = featuresDocument.features;
-  if (targetType === "feature") {
-    const feature = features.find((entry) => entry.id === targetRef || `F${String(entry.number).padStart(3, "0")}`.toLowerCase() === targetRef.toLowerCase() || entry.shortId?.toLowerCase() === targetRef.toLowerCase());
-    if (!feature) return { ok: false, error: `feature not found: ${targetRef}` };
-    return { ok: true, owner: { kind: "feature", featureId: feature.id }, targetRef: `F${String(feature.number).padStart(3, "0")}`, event: { type: "feature", featureId: feature.id } };
-  }
-  if (targetType === "phase") {
-    const phase = findPhaseByRef(phases, features, targetRef);
-    if (!phase) return { ok: false, error: `phase not found: ${targetRef}` };
-    return { ok: true, owner: { kind: "phase", phaseId: phase.id }, targetRef: `P${String(phase.number).padStart(3, "0")}`, event: { type: "phase", phaseId: phase.id, featureId: phase.featureId ?? "" } };
-  }
-  const found = phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task }))).find(({ task }) => task.id === targetRef)
-    ?? (() => {
-      const taskNumberMatch = targetRef.match(/^T(\d+)$/i);
-      return taskNumberMatch
-        ? phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task }))).find(({ task }) => task.number === Number(taskNumberMatch[1]))
-        : undefined;
-    })();
-  if (!found) return { ok: false, error: `task not found: ${targetRef}` };
-  return { ok: true, owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id }, targetRef: `P${String(found.phase.number).padStart(3, "0")}/T${String(found.task.number).padStart(3, "0")}`, event: { type: "task", phaseId: found.phase.id, taskId: found.task.id, featureId: found.phase.featureId ?? "" } };
+/**
+ * Resolve an accepted-decision target with the same ref grammar the adapters
+ * use (plan-core's resolveAcceptedDecisionTarget: composite/shortId/title for
+ * tasks, exact/partial name with ambiguity detection for features), then add
+ * the WebSocket broadcast envelope this HTTP layer alone needs. Resolution
+ * itself is never re-derived here — only the event shape is server-local.
+ */
+async function resolveAcceptedDecisionEventTarget(store: PlanStore, targetType: AcceptedDecisionTargetType, rawTargetRef?: string): Promise<AcceptedDecisionEventTargetResolution> {
+  const target = await resolveAcceptedDecisionTarget(store, targetType, rawTargetRef);
+  if (!target.ok) return target;
+  const { owner, ref: targetRef } = target;
+  if (owner.kind === "project") return { ok: true, owner, targetRef, event: { type: "project" } };
+  if (owner.kind === "feature") return { ok: true, owner, targetRef, event: { type: "feature", featureId: owner.featureId } };
+  const phase = await store.loadPhase(owner.phaseId).catch(() => null);
+  const featureId = phase?.featureId ?? "";
+  if (owner.kind === "phase") return { ok: true, owner, targetRef, event: { type: "phase", phaseId: owner.phaseId, featureId } };
+  return { ok: true, owner, targetRef, event: { type: "task", phaseId: owner.phaseId, taskId: owner.taskId, featureId } };
 }
 
 function isPrivateIpv4(address: string): boolean {
@@ -147,21 +134,6 @@ function phaseGovernanceReady(phase: Phase): boolean {
 // X-Planner-Source: web-ui header the browser client always sends.
 function fromWebUi(c: Context): boolean {
   return c.req.header("X-Planner-Source") === "web-ui";
-}
-
-function applyTaskLifecycleDates(task: Task, nextStatus: Task["status"], now: string): Task {
-  const previousStatus = task.status;
-  if (nextStatus === "in-progress" && !task.startedAt) {
-    task.startedAt = now;
-  }
-  if (nextStatus === "done") {
-    if (!task.startedAt) task.startedAt = now;
-    task.completedAt = now;
-  } else if (previousStatus === "done") {
-    task.completedAt = "";
-  }
-  task.status = nextStatus;
-  return task;
 }
 
 function startWatcher(planRoot: string, hubRef: { current: WsHub | null }): void {
@@ -349,7 +321,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json(result);
   });
 
-  const broadcastAcceptedDecisionMutation = (event: Extract<AcceptedDecisionTargetResolution, { ok: true }>["event"], action: "created" | "updated" | "deleted") => {
+  const broadcastAcceptedDecisionMutation = (event: Extract<AcceptedDecisionEventTargetResolution, { ok: true }>["event"], action: "created" | "updated" | "deleted") => {
     if (event.type === "project") hub()?.broadcast({ type: "project-updated", data: { action } });
     if (event.type === "feature") hub()?.broadcast({ type: "features-updated", data: { action, id: event.featureId, featureId: event.featureId } });
     if (event.type === "phase") hub()?.broadcast({ type: "phases-updated", data: { action, id: event.phaseId, phaseId: event.phaseId, featureId: event.featureId } });
@@ -360,7 +332,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.post(route("/accepted-decisions"), async (c) => {
     const body = await c.req.json<{ targetType?: AcceptedDecisionTargetType; targetRef?: string; title?: string; decision?: string; rationale?: string; implementationNotes?: string }>();
     if (!body.targetType) return c.json({ error: "targetType required" }, 400);
-    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    const target = await resolveAcceptedDecisionEventTarget(store, body.targetType, body.targetRef);
     if (!target.ok) return c.json({ error: target.error, created: false }, 404);
     const createInput = {
       title: body.title ?? "",
@@ -380,7 +352,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     if (!body.targetType) return c.json({ error: "targetType required", updated: false }, 400);
     const mutableFields = ["title", "decision", "rationale", "implementationNotes"];
     if (!hasDefinedField(body, mutableFields)) return c.json(noMutableFieldsResponse(mutableFields), 400);
-    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    const target = await resolveAcceptedDecisionEventTarget(store, body.targetType, body.targetRef);
     if (!target.ok) return c.json({ error: target.error, updated: false }, 404);
     const updateInput = {
       ...(body.title !== undefined ? { title: body.title } : {}),
@@ -398,7 +370,7 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     const decisionId = c.req.param("decisionId") ?? "";
     const body = await c.req.json<{ targetType?: AcceptedDecisionTargetType; targetRef?: string; confirmed?: boolean }>().catch((): { targetType?: AcceptedDecisionTargetType; targetRef?: string; confirmed?: boolean } => ({}));
     if (!body.targetType) return c.json({ error: "targetType required", deleted: false }, 400);
-    const target = await resolveAcceptedDecisionTarget(store, body.targetType, body.targetRef);
+    const target = await resolveAcceptedDecisionEventTarget(store, body.targetType, body.targetRef);
     if (!target.ok) return c.json({ error: target.error, deleted: false }, 404);
     if (body.confirmed !== true) return c.json({ error: "confirmation required", deleted: false, confirmRequired: true }, 400);
     const acceptedDecision = await store.deleteAcceptedDecision(target.owner, decisionId);

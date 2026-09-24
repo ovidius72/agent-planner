@@ -751,7 +751,11 @@ test("accepted decision routes manage project, feature, phase, and task owners s
   // Invalid target: atomic no-op, nothing persisted.
   const invalidTarget = await request(fx, "/accepted-decisions", { ...json({ targetType: "task", targetRef: "not-a-real-task", title: "Should not persist" }), expectStatus: 404 });
   assert.equal(invalidTarget.body.created, false);
-  assert.match(invalidTarget.body.error, /task not found/);
+  // P105(F005)/T432: this resolution now goes through plan-core's shared
+  // resolveAcceptedDecisionTarget (same one the adapters use), whose message
+  // is "Task not found:" (capital T) instead of the server's old private
+  // lowercase copy — match case-insensitively rather than pin the casing.
+  assert.match(invalidTarget.body.error, /task not found/i);
   assert.equal((await request(fx, `/tasks/${task.id}`)).body.acceptedDecisions.some((entry) => entry.title === "Should not persist"), false);
 
   // A decision recorded against a task stays visible after that task (and
@@ -761,6 +765,60 @@ test("accepted decision routes manage project, feature, phase, and task owners s
   const completedTask = await request(fx, `/tasks/${task.id}`);
   assert.equal(completedTask.body.status, "done");
   assert.equal(completedTask.body.acceptedDecisions[0].id, taskDecision.body.acceptedDecision.id, "accepted decision remains visible after task completion");
+});
+
+// P105(F005)/T432: the HTTP accepted-decision target resolver used to accept
+// only a raw UUID or a bare T\d+ for tasks, and id/F00x/shortId (never a
+// title) for features, with no ambiguity detection — weaker than the ref
+// grammar findTaskByRef/resolveFeatureRefStrict give the MCP and Pi adapters.
+// This proves the HTTP path now resolves the same composite ref, shortId,
+// and title forms the adapters accept, and reports (rather than silently
+// resolving) an ambiguous feature reference.
+test("accepted-decision task target resolves composite ref, shortId, and title over HTTP (same grammar as the adapters)", async () => {
+  const fx = await startServerFixture({ name: "accepted-decisions-ref-resolution" });
+  const phase = (await request(fx, "/phases")).body[0];
+  const task = phase.tasks[0];
+  assert.equal(task.number, 1);
+  assert.equal(task.shortId, "BBBBB");
+  assert.equal(task.title, "Implement login");
+
+  const byComposite = await request(fx, "/accepted-decisions", { ...json({ targetType: "task", targetRef: "P001(F001)/T001", title: "Via composite ref" }), expectStatus: 201 });
+  assert.equal(byComposite.body.created, true);
+  assert.equal(byComposite.body.targetRef, "P001(F001)/T001");
+
+  const byShortId = await request(fx, "/accepted-decisions", { ...json({ targetType: "task", targetRef: task.shortId, title: "Via shortId" }), expectStatus: 201 });
+  assert.equal(byShortId.body.created, true);
+
+  const byTitle = await request(fx, "/accepted-decisions", { ...json({ targetType: "task", targetRef: task.title, title: "Via title" }), expectStatus: 201 });
+  assert.equal(byTitle.body.created, true);
+
+  // Bare T00x is kept: task numbers are global (not per-phase), so a bare
+  // T\d+ is unambiguous under findTaskByRef the same way it already is for
+  // the adapters — dropping it would only remove capability, not fix a
+  // real ambiguity.
+  const byBareNumber = await request(fx, "/accepted-decisions", { ...json({ targetType: "task", targetRef: "T001", title: "Via bare T00x" }), expectStatus: 201 });
+  assert.equal(byBareNumber.body.created, true);
+
+  const reloaded = await request(fx, `/tasks/${task.id}`);
+  assert.equal(reloaded.body.acceptedDecisions.length, 4);
+});
+
+test("accepted-decision feature target reports ambiguity instead of silently picking one", async () => {
+  const fx = await startServerFixture({ name: "accepted-decisions-ambiguous-feature" });
+  const seedFeature = (await request(fx, "/features")).body[0];
+  assert.equal(seedFeature.name, "Auth API");
+
+  // A second feature with the exact same name makes "Auth API" ambiguous.
+  await request(fx, "/features", { ...json({ name: "Auth API" }), expectStatus: 201 });
+
+  const ambiguous = await request(fx, "/accepted-decisions", { ...json({ targetType: "feature", targetRef: "Auth API", title: "Should not persist" }), expectStatus: 404 });
+  assert.equal(ambiguous.body.created, false);
+  assert.match(ambiguous.body.error, /ambiguous/i);
+
+  // Unambiguous forms (number, shortId, UUID) still resolve.
+  const byNumber = await request(fx, "/accepted-decisions", { ...json({ targetType: "feature", targetRef: "F001", title: "Via F00x" }), expectStatus: 201 });
+  assert.equal(byNumber.body.created, true);
+  assert.equal((await request(fx, `/features/${seedFeature.id}`)).body.acceptedDecisions.some((entry) => entry.title === "Via F00x"), true);
 });
 
 // ── Ideas Inbox CRUD ─────────────────────────────────────────────────────
