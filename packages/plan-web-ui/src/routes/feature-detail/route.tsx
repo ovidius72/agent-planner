@@ -17,6 +17,7 @@ import { AcceptedDecisionsList } from "../../components/ui/accepted-decisions-li
 import { DisplayStatusBadge } from "../../components/ui/status-badge";
 import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
+import { replaceUrlSearchParams } from "../../lib/browser-url";
 import { matchesListQuery, passesDetailFilters, type DetailFilterValue } from "../../lib/list-filtering";
 import { useShortcut } from "../../lib/shortcuts";
 import { phaseStatuses } from "../../lib/statuses";
@@ -67,20 +68,21 @@ export function FeatureDetailRoute() {
     hidePlanned: searchParams.get("hidePlanned") === "1",
     onlyActive: searchParams.get("onlyActive") === "1",
   }));
-  // Keep the URL in sync (deep-link / share) via replaceState — no router
-  // navigation, so the window scroll position is preserved while filtering.
+  // See replaceUrlSearchParams's doc comment for why this avoids a router
+  // navigation, and why these params must never be read back through
+  // useSearchParams.
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const sync = (key: string, on: boolean, val = "1") => {
-      if (on) url.searchParams.set(key, val);
-      else url.searchParams.delete(key);
-    };
-    sync("q", filters.query.trim() !== "", filters.query.trim());
-    sync("status", filters.status !== "", filters.status);
-    sync("hideDone", filters.hideDone);
-    sync("hidePlanned", filters.hidePlanned);
-    sync("onlyActive", filters.onlyActive);
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    replaceUrlSearchParams((params) => {
+      const sync = (key: string, on: boolean, val = "1") => {
+        if (on) params.set(key, val);
+        else params.delete(key);
+      };
+      sync("q", filters.query.trim() !== "", filters.query.trim());
+      sync("status", filters.status !== "", filters.status);
+      sync("hideDone", filters.hideDone);
+      sync("hidePlanned", filters.hidePlanned);
+      sync("onlyActive", filters.onlyActive);
+    });
   }, [filters]);
   const sort: WorkTreeSortConfig = {
     key: sortParam === "priority" || sortParam === "number" || sortParam === "createdAt" || sortParam === "updatedAt" || sortParam === "title" || sortParam === "shortId" || sortParam === "status" || sortParam === "startedAt" || sortParam === "completedAt"

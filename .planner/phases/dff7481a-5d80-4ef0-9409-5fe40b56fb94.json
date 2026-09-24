@@ -129,11 +129,28 @@
       "priority": 2,
       "shortName": "write-the-url-without-a-router",
       "title": "Write the URL without a router navigation in one place",
-      "status": "planned",
-      "description": "Three components hand-write the same `window.history.replaceState(window.history.state, \"\", ...)` call, each with its own comment giving the same reason.\n\n- `packages/plan-web-ui/src/components/dashboard/work-tree.tsx:27` — `clearLocateParam`, stripping `?locate=` after scrolling the located row into view.\n- `packages/plan-web-ui/src/routes/feature-detail/route.tsx:83` — syncing filter state into the URL for deep-linking.\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx:75` — the same, for phases.\n\nThe shared reason: a router navigation would make React Router's `<ScrollRestoration />` reset the page scroll, undoing a deliberate scroll or yanking the page while the user is filtering.\n\nAll three are correct today. The two route sites do not have the defect P104(F005)/T418 fixed in the work tree, because they only write the URL and never read the param back — that bug needed both halves.\n\nThe hazard is what makes this worth centralizing rather than leaving as three tidy copies: `replaceState` bypasses the router, so `useSearchParams()` never observes the change. Any code that later reads that param keeps seeing the old value for the life of the mount. In the work tree that turned into a user-visible bug — the locate effect kept firing and wiped the search box on every keystroke — and it took tracing the whole effect to find. The comment explaining it lives in `work-tree.tsx` and nowhere else. A fourth call site, written by someone who has not read that comment, is where this returns.\n\nDesired state: one helper, with the hazard stated once where anyone using it will read it, and all three call sites using it.\n\nSteps:\n- Put the helper somewhere a route and a component both reach naturally — `packages/plan-web-ui/src/lib/` is where the other shared browser utilities live.\n- State both halves in its doc comment: why it avoids a router navigation, and that the router will not see the change, so a param written or cleared this way must not be read back through `useSearchParams` and trusted.\n- Convert all three sites.\n- Judgement call the task must make and record: whether to also expose a read-side companion that reads the param from `window.location` rather than the router, so the stale-read hazard has a safe answer rather than only a warning. Decide it deliberately; either answer is fine with a reason.\n\nBehaviors to preserve: the work tree's scroll-and-pulse behaviour and its `handledLocateRef` guard from T418; both detail routes' deep-link filter syncing; no router navigation from any of the three.\n\nVerification: focused Web UI suite (`pnpm test` in `packages/plan-web-ui`, 105 tests at last count including T418's four locate regressions) and `pnpm check`. Project guidelines require a unit test for a component touched; the existing `work-tree-locate.test.tsx` already covers the work-tree behaviour and must keep passing unchanged.",
-      "descriptionUpdatedAt": "2026-09-23T13:29:39.363Z",
+      "status": "done",
+      "description": "Three components hand-write the same `window.history.replaceState(window.history.state, \"\", ...)` call, each with its own comment giving the same reason.\n\n- `packages/plan-web-ui/src/components/dashboard/work-tree.tsx:27` — `clearLocateParam`, stripping `?locate=` after scrolling the located row into view.\n- `packages/plan-web-ui/src/routes/feature-detail/route.tsx:83` — syncing filter state into the URL for deep-linking.\n- `packages/plan-web-ui/src/routes/phase-detail/route.tsx:75` — the same, for phases.\n\nThe shared reason: a router navigation would make React Router's `<ScrollRestoration />` reset the page scroll, undoing a deliberate scroll or yanking the page while the user is filtering.\n\nAll three are correct today. The two route sites do not have the defect P104(F005)/T418 fixed in the work tree, because they only write the URL and never read the param back — that bug needed both halves.\n\nThe hazard is what makes this worth centralizing rather than leaving as three tidy copies: `replaceState` bypasses the router, so `useSearchParams()` never observes the change. Any code that later reads that param keeps seeing the old value for the life of the mount. In the work tree that turned into a user-visible bug — the locate effect kept firing and wiped the search box on every keystroke — and it took tracing the whole effect to find. The comment explaining it lives in `work-tree.tsx` and nowhere else. A fourth call site, written by someone who has not read that comment, is where this returns.\n\nDesired state: one helper, with the hazard stated once where anyone using it will read it, and all three call sites using it.\n\nSteps:\n- Put the helper somewhere a route and a component both reach naturally — `packages/plan-web-ui/src/lib/` is where the other shared browser utilities live.\n- State both halves in its doc comment: why it avoids a router navigation, and that the router will not see the change, so a param written or cleared this way must not be read back through `useSearchParams` and trusted.\n- Convert all three sites.\n- Judgement call the task must make and record: whether to also expose a read-side companion that reads the param from `window.location` rather than the router, so the stale-read hazard has a safe answer rather than only a warning. Decide it deliberately; either answer is fine with a reason.\n\nBehaviors to preserve: the work tree's scroll-and-pulse behaviour and its `handledLocateRef` guard from T418; both detail routes' deep-link filter syncing; no router navigation from any of the three.\n\nVerification: focused Web UI suite (`pnpm test` in `packages/plan-web-ui`, 105 tests at last count including T418's four locate regressions) and `pnpm check`. Project guidelines require a unit test for a component touched; the existing `work-tree-locate.test.tsx` already covers the work-tree behaviour and must keep passing unchanged.\n\n---\n**Completion summary:**\nAdded packages/plan-web-ui/src/lib/browser-url.ts exporting replaceUrlSearchParams(mutate), which reads window.location, applies the mutator to a URLSearchParams, and only calls history.replaceState(window.history.state, \"\", url) when the resulting path/search/hash actually differs from before (a strict generalization of work-tree's old \"only touch history if there's something to clear\" early-return, done in the helper rather than at each call site). Its doc comment states both halves of the hazard: why replaceState avoids a router navigation (ScrollRestoration would reset scroll), and that useSearchParams() never observes the change, so a param written/cleared this way must never be read back through it.\n\nConverted all three call sites to use it, no behavior change:\n- work-tree.tsx:23 clearLocateParam() now calls replaceUrlSearchParams(params => params.delete(\"locate\")); local comment points to the helper's doc and to handledLocateRef as the reason that hazard matters here.\n- routes/feature-detail/route.tsx:76 and routes/phase-detail/route.tsx:70 — the five-param filter-sync effect now passes its sync() closure into replaceUrlSearchParams instead of building its own URL/replaceState call.\n\nJudgement call (checklist C3): did not add a read-side companion (e.g. readUrlParam from window.location). None of the three call sites read a param back today — the task description itself notes the two route sites \"only write the URL and never read the param back.\" Per the task's own instruction not to add a \"just in case\" export, I left this as a documented warning only: the helper's doc comment states the hazard and tells a future caller that needs to read a param written this way to read window.location.search directly rather than useSearchParams, but exports no unused function for it.\n\nVerification: `pnpm check` (tsc --noEmit) clean. `pnpm test`: node suite 19/19 pass, vitest 105/105 pass across 15 files (matches stated baseline), including all 4 tests in test/work-tree-locate.test.tsx (T418 regressions) passing unchanged. Did not run pnpm verify:final per instructions (reserved for phase close). Nothing left broken or skipped.",
+      "descriptionUpdatedAt": "2026-09-24T10:31:37.007Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-001-planned-in-progress",
+          "date": "2026-09-24T10:29:55.576Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-002-in-progress-done",
+          "date": "2026-09-24T10:31:37.004Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added packages/plan-web-ui/src/lib/browser-url.ts exporting replaceUrlSearchParams(mutate), which reads window.location, applies the mutator to a URLSearchParams, and only calls history.replaceState(window.history.state, \"\", url) when the resulting path/search/hash actually differs from before (a strict generalization of work-tree's old \"only touch history if there's something to clear\" early-return, done in the helper rather than at each call site). Its doc comment states both halves of the hazard: why replaceState avoids a router navigation (ScrollRestoration would reset scroll), and that useSearchParams() never observes the change, so a param written/cleared this way must never be read back through it.\n\nConverted all three call sites to use it, no behavior change:\n- work-tree.tsx:23 clearLocateParam() now calls replaceUrlSearchParams(params => params.delete(\"locate\")); local comment points to the helper's doc and to handledLocateRef as the reason that hazard matters here.\n- routes/feature-detail/route.tsx:76 and routes/phase-detail/route.tsx:70 — the five-param filter-sync effect now passes its sync() closure into replaceUrlSearchParams instead of building its own URL/replaceState call.\n\nJudgement call (checklist C3): did not add a read-side companion (e.g. readUrlParam from window.location). None of the three call sites read a param back today — the task description itself notes the two route sites \"only write the URL and never read the param back.\" Per the task's own instruction not to add a \"just in case\" export, I left this as a documented warning only: the helper's doc comment states the hazard and tells a future caller that needs to read a param written this way to read window.location.search directly rather than useSearchParams, but exports no unused function for it.\n\nVerification: `pnpm check` (tsc --noEmit) clean. `pnpm test`: node suite 19/19 pass, vitest 105/105 pass across 15 files (matches stated baseline), including all 4 tests in test/work-tree-locate.test.tsx (T418 regressions) passing unchanged. Did not run pnpm verify:final per instructions (reserved for phase close). Nothing left broken or skipped."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -141,36 +158,41 @@
           "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-001-add-the-helper-under-src-lib-with-the-hazard-stated-in-its-doc-comment",
           "number": 1,
           "title": "Add the helper under src/lib/ with the hazard stated in its doc comment",
-          "checked": false
+          "checked": true
         },
         {
           "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-002-convert-all-three-call-sites",
           "number": 2,
           "title": "Convert all three call sites",
-          "checked": false
+          "checked": true
         },
         {
           "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-003-decide-whether-a-read-side-companion-belongs-with-it-and-record-why",
           "number": 3,
           "title": "Decide whether a read-side companion belongs with it, and record why",
-          "checked": false
+          "checked": true
         },
         {
           "id": "59a4f184-efcc-4a10-82af-01a59f424745-check-004-web-ui-suite-and-pnpm-check-green-the-t418-locate-regressions-unchanged",
           "number": 4,
           "title": "Web UI suite and pnpm check green; the T418 locate regressions unchanged",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-24T10:29:55.576Z",
+      "completedAt": "2026-09-24T10:31:37.004Z",
       "createdAt": "2026-09-23T13:29:39.320Z",
-      "updatedAt": "2026-09-23T13:29:39.320Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-24T10:31:37.004Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+          "createdAt": "2026-09-24T10:29:55.472Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -291,7 +313,7 @@
     }
   ],
   "createdAt": "2026-09-23T13:29:00.148Z",
-  "updatedAt": "2026-09-24T10:29:25.242Z",
+  "updatedAt": "2026-09-24T10:31:37.004Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -310,7 +332,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
-      "createdAt": "2026-09-24T10:14:49.027Z"
+      "createdAt": "2026-09-24T10:29:55.472Z"
     }
   ]
 }

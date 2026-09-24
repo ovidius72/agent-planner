@@ -71,5 +71,10 @@
   ],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z",
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:e05a0735-4d99-4a40-a53c-078bfc2ce7a4",
+      "createdAt": "2026-09-24T10:29:55.472Z"
+    }
+  ]
 }

@@ -12,19 +12,19 @@ import {
   type WorkTreeFeature,
 } from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
+import { replaceUrlSearchParams } from "../../lib/browser-url";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
 import { SortableItem } from "./sortable";
 import { SearchBar } from "./search-bar";
 
-// Strip the ?locate= query param from the URL WITHOUT a router navigation, so
-// React Router's <ScrollRestoration /> doesn't fire and reset the page scroll
-// to the top after we've already scrolled the located task into view.
+// See replaceUrlSearchParams's doc comment for why this avoids a router
+// navigation, and why "locate" must never be read back through
+// useSearchParams — handledLocateRef below exists because of that hazard.
 function clearLocateParam(): void {
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has("locate")) return;
-  url.searchParams.delete("locate");
-  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  replaceUrlSearchParams((params) => {
+    params.delete("locate");
+  });
 }
 
 /**
