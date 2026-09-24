@@ -44,7 +44,7 @@ export function isPlannerDescriptionRef(value: string): boolean {
   if (!value.startsWith(".planner/docs/")) return false;
   if (value.includes("\\") || value.includes("\0")) return false;
   const parts = value.split("/");
-  if (parts.length < 4) return false;
+  if (parts.length < 3) return false;
   if (parts[0] !== ".planner" || parts[1] !== "docs") return false;
   return parts.slice(2).every((part) => part.length > 0 && part !== "." && part !== "..");
 }

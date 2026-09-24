@@ -124,3 +124,30 @@ test("grill-me managed copies upgrade only when unmodified", async () => {
     assert.match(await loadProjectGrillMeSkill(root), /Project-specific interview rule/);
   });
 });
+
+/**
+ * T426 (P104/F005) — The skill must say that a task discussed is not a task
+ * assigned.
+ *
+ * Three Opus sessions across two projects changed, or proposed changing, the
+ * task they were on because another one came up in conversation. The gate
+ * catches this at the action boundary (ACTIVE_TASK_CONFLICT on a second
+ * task_start), but it cannot gate a sentence, and the planner cannot see the
+ * conversation — so there is no datum to surface and guidance is the only
+ * instrument. Pinned here so the statement cannot be dropped by a later
+ * rewrite of this section, and so the escape hatch for a direct instruction
+ * cannot be dropped either.
+ */
+test("the canonical skill states that a task mentioned in conversation is not the next task", async () => {
+  const skill = await loadCanonicalPlannerSkill();
+
+  assert.match(skill, /A task that comes up in conversation is not the next task\./);
+  // The recommendation, not the conversation, decides.
+  assert.match(skill, /the recommendation decides what is next/);
+  // Work already underway is not displaced by a topic.
+  assert.match(skill, /a task already in progress stays in progress/);
+  // A real change of direction has a recorded route.
+  assert.match(skill, /task_switch` \/ `task_deviation/);
+  // And a direct instruction must not read as needing deviation ceremony.
+  assert.match(skill, /Being told directly to work on something is an instruction/);
+});

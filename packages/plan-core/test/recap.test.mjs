@@ -92,6 +92,42 @@ describe("buildRecap — not complete, no active task", () => {
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
     assert.ok(r.includes("Use planner-task-add / planner-task-start to begin work"), "mcp begin-work hint");
   });
+
+  // P104(F005)/T421: with no active task, resume advisory, checkpoint,
+  // pending handoff, or legacy resume.json nextSteps, the recap previously
+  // ended with no "Next step" line at all — the reader had to call
+  // task_recommend separately to learn what the recap already knew.
+  // makePlan/store.init seeds a default legacy resume.json nextSteps
+  // ("Run /planner project discuss to bootstrap discovery"); clear it so
+  // these tests exercise the true fallback (no active task, no resume
+  // advisory, no checkpoint, no handoff, AND no legacy nextSteps).
+  async function clearLegacyNextSteps(store) {
+    await store.saveResume({
+      updatedAt: new Date().toISOString(), currentPhaseId: "", inProgressTaskIds: [],
+      nextSteps: [], blockers: [], notes: "", lastSessionSummary: "", guardBypassUntil: "",
+    });
+  }
+
+  test("names the recommended next task by ref when nothing else claims the Next step line (mcp)", async () => {
+    const { store } = await makePlan({ tasks: [{ status: "planned" }, { status: "planned" }] });
+    await clearLegacyNextSteps(store);
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.match(r, /Next step: P001\(F001\)\/T01 — task 1 \(lowest-priority ready task\)\. Start with planner-task-start P001\(F001\)\/T01\./);
+  });
+
+  test("names the recommended next task by ref when nothing else claims the Next step line (pi)", async () => {
+    const { store } = await makePlan({ tasks: [{ status: "planned" }, { status: "planned" }] });
+    await clearLegacyNextSteps(store);
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "pi" });
+    assert.match(r, /Next step: P001\(F001\)\/T01 — task 1 \(lowest-priority ready task\)\. Start with \/planner task start P001\(F001\)\/T01\./);
+  });
+
+  test("adds no Next step line when no ready task exists (does not mislead)", async () => {
+    const { store } = await makePlan({ tasks: [] });
+    await clearLegacyNextSteps(store);
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.doesNotMatch(r, /Next step:/);
+  });
 });
 
 describe("buildRecap — active task", () => {
@@ -185,6 +221,61 @@ describe("buildRecap — pending handoff", () => {
     const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
     assert.ok(r.includes("planner-handoff-show P001(F001)"), "mcp show cmd with ref");
     assert.ok(!r.includes("planner-handoff-show <ref>"), "no generic placeholder");
+  });
+});
+
+describe("buildRecap — stranded phases (P104(F005)/T422)", () => {
+  // Reproduces the reported session: P102 (priority 34) had one task left
+  // planned while work moved on to P104 (priority 36) with an active task.
+  // Nothing said P102 was still open. This pins the recap now saying so,
+  // priority-ordered, without needing task_recommend.
+  async function makeTwoPhasePlan() {
+    const root = await mkdtemp(join(tmpdir(), "recap-stranded-"));
+    dirs.push(root);
+    const store = new PlanStore(join(root, ".planner"));
+    await store.init("Stranded project");
+    const now = new Date().toISOString();
+    const feat = FeatureSchema.parse({ id: createFeatureId(), number: 5, name: "Feat Five", status: "in-progress", createdAt: now, updatedAt: now });
+    await store.saveFeature(feat);
+
+    const p102 = PhaseSchema.parse({ id: createPhaseId(), number: 102, featureId: feat.id, slug: "p102", title: "Stranded phase", priority: 34, createdAt: now, updatedAt: now });
+    await store.savePhase(p102);
+    await store.updatePhase(p102.id, (ph) => {
+      ph.tasks = [
+        { id: createTaskId(), number: 403, phaseId: p102.id, title: "t403", shortName: "t403", status: "done", createdAt: now, updatedAt: now },
+        { id: createTaskId(), number: 404, phaseId: p102.id, title: "t404", shortName: "t404", status: "done", createdAt: now, updatedAt: now },
+        { id: createTaskId(), number: 405, phaseId: p102.id, title: "t405", shortName: "t405", status: "planned", createdAt: now, updatedAt: now },
+      ];
+      return ph;
+    });
+
+    const p104 = PhaseSchema.parse({ id: createPhaseId(), number: 104, featureId: feat.id, slug: "p104", title: "Current phase", priority: 36, createdAt: now, updatedAt: now });
+    await store.savePhase(p104);
+    await store.updatePhase(p104.id, (ph) => {
+      ph.tasks = [
+        { id: createTaskId(), number: 420, phaseId: p104.id, title: "t420", shortName: "t420", status: "in-progress", createdAt: now, updatedAt: now },
+      ];
+      return ph;
+    });
+
+    return { store, feat, p102, p104 };
+  }
+
+  test("lists in-progress phases with work left, priority-ordered, above the current focus", async () => {
+    const { store } = await makeTwoPhasePlan();
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.match(r, /In-progress phases with work left \(priority order\):/);
+    assert.match(r, /P102\(F005\) — Stranded phase \(priority 34; 1 ready\)/);
+    assert.match(r, /P104\(F005\) — Current phase \(priority 36; 0 ready\)/);
+    const p102Index = r.indexOf("P102(F005) — Stranded phase");
+    const p104Index = r.indexOf("P104(F005) — Current phase");
+    assert.ok(p102Index !== -1 && p104Index !== -1 && p102Index < p104Index, "higher-priority (lower number) phase listed first");
+  });
+
+  test("omits the section entirely when no phase is in-progress", async () => {
+    const { store } = await makePlan({ tasks: [{ status: "planned" }] });
+    const r = await buildRecap(store, { localUrl: "http://127.0.0.1:1" }, { harness: "mcp" });
+    assert.doesNotMatch(r, /In-progress phases with work left/);
   });
 });
 

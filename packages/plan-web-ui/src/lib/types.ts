@@ -12,6 +12,7 @@ export interface AcceptedDecision {
   acceptedAt: string;
 }
 
+/** Agent/API diagnostic retained for typed compatibility; entity detail routes do not render it. */
 export interface DescriptionFreshnessDiagnostic {
   ownerKind: "feature" | "phase";
   ownerId: string;

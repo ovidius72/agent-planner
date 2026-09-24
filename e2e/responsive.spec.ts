@@ -72,31 +72,53 @@ test("desktop and mobile layouts keep core navigation, work tree controls, IDs, 
   if (compact) expect(modalSize.scrollableModal).toBe(true);
 });
 
-test("entity detail disclosures start closed on desktop and mobile navigation", async ({ page, planner }) => {
+test("entity detail hierarchy stays recognizable, compact, and closed by default on desktop and mobile", async ({ page, planner }) => {
   await planner.seed("full");
-  const features = (await planner.request("/features")).body as Array<{ id: string }>;
+  const features = (await planner.request("/features")).body as Array<{ id: string; name: string }>;
   const feature = features[0]!;
-  const phases = (await planner.request(`/phases?featureId=${feature.id}`)).body as Array<{ id: string; tasks: Array<{ id: string }> }>;
+  const phases = (await planner.request(`/phases?featureId=${feature.id}`)).body as Array<{ id: string; title: string; tasks: Array<{ id: string; title: string }> }>;
   const phase = phases.find((entry) => entry.tasks.length > 0)!;
   const task = phase.tasks[0]!;
 
-  const expectDetailClosed = async (summary: string) => {
-    const details = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: summary }) }).first();
-    await expect(details).toBeVisible();
-    await expect.poll(async () => details.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
+  const expectDetail = async (kind: "feature" | "phase" | "task", title: string) => {
+    await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
+    await expect(page.locator(`[data-entity-kind="${kind}"]`)).toHaveText(kind[0]!.toUpperCase() + kind.slice(1));
+    await expect(page.locator(`[aria-label="${kind[0]!.toUpperCase() + kind.slice(1)} metrics"]`)).toBeVisible();
+    await expect(page.getByText("Description freshness")).toHaveCount(0);
+
+    for (const summary of ["Description", "Status history", "Accepted decisions"]) {
+      const details = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: summary }) }).first();
+      await expect(details).toBeVisible();
+      await expect.poll(async () => details.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
+    }
+
+    const description = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: "Description" }) }).first();
+    await description.locator("summary").click();
+    await expect.poll(async () => description.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(true);
+
+    const size = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(size.scrollWidth).toBeLessThanOrEqual(size.clientWidth + 1);
   };
 
   await page.goto(`${planner.url}/features/${feature.id}`);
-  await expectDetailClosed("Description");
-  await expectDetailClosed("Status history");
+  await expectDetail("feature", feature.name);
+  await expect(page.getByTestId("detail-entity-bar").locator(".entity-path-seg--link")).toHaveCount(1);
+  await expect(page.getByText(/^Phases \(\d+\)$/)).toBeVisible();
 
   await page.goto(`${planner.url}/features/${feature.id}/phases/${phase.id}`);
-  await expectDetailClosed("Description");
-  await expectDetailClosed("Status history");
+  await expectDetail("phase", phase.title);
+  await expect(page.getByTestId("detail-entity-bar").locator(".entity-path-seg--link")).toHaveCount(2);
+  await expect(page.getByText(/^Tasks \(\d+\)$/)).toBeVisible();
 
   await page.goto(`${planner.url}/features/${feature.id}/phases/${phase.id}/tasks/${task.id}`);
-  await expectDetailClosed("Description");
-  await expectDetailClosed("Status history");
+  await expectDetail("task", task.title);
+  await expect(page.getByTestId("detail-entity-bar").locator(".entity-path-seg--link")).toHaveCount(3);
+  await expect(page.getByRole("heading", { name: /^Steps \(\d+\)$/ })).toBeVisible();
+  await expect(page.locator("summary").filter({ hasText: "Dependencies" })).toBeVisible();
+  await expect(page.locator("summary").filter({ hasText: "Subtasks" })).toBeVisible();
 });
 
 test("handoff archive stays navigable and horizontally contained", async ({ page, planner }) => {

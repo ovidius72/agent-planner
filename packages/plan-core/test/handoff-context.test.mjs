@@ -1,6 +1,6 @@
 import { after, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -16,6 +16,8 @@ import {
   HANDOFF_COLD_START_INVENTORY_VERSION,
   HANDOFF_COLD_START_SOURCE_REVIEWS,
   HANDOFF_COLD_START_INVENTORY_CATEGORIES,
+  externalizeOversizedHandoffContent,
+  truncateAtSafeBoundary,
 } from "../dist/index.js";
 
 const roots = [];
@@ -189,7 +191,17 @@ describe("durable handoff context refresh", () => {
     const task = phase.tasks.find((candidate) => candidate.id === doneTaskId);
     assert.match(task.description, /Completion summary/);
     assert.match(task.description, /visual verification was partial/);
+    // Decisions supplied in a handoff completion summary are rendered into
+    // that prose, labeled non-authoritative; they must not land in the
+    // legacy task.decisions/phase.decisions arrays, which nothing treats as
+    // decision authority (see accepted-decision-guard.ts).
+    assert.match(task.description, /Decisions mentioned \(not decision authority/);
+    assert.match(task.description, /Keep one active handoff\./);
+    assert.deepEqual(task.decisions, [], "handoff-supplied decisions must not persist to the legacy task.decisions array");
     assert.match(phase.notes, /core refresh contract is implemented/);
+    assert.match(phase.notes, /Decisions mentioned \(not decision authority/);
+    assert.match(phase.notes, /Refresh without superseded archives\./);
+    assert.deepEqual(phase.decisions, [], "handoff-supplied decisions must not persist to the legacy phase.decisions array");
     assert.equal(phase.handoffHistory.length, 0, "refresh must not archive a superseded handoff");
     const feature = (await store.loadFeatures()).features[0];
     assert.match(feature.workDone, /Core handoff reconciliation implemented/);
@@ -506,6 +518,64 @@ describe("durable handoff context refresh", () => {
     });
   });
 
+  test("a linked document survives auto-externalization moving its section out of the body", async () => {
+    // T414: the reported failure. The agent links a document and cites its path
+    // in a section that auto-externalization later moves into .planner/docs/.
+    // Validation used to run against the rewritten body, so the path was gone and
+    // HANDOFF_SUPPORTING_DOCUMENT_INVALID fired on a correctly linked document.
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    const supportingContent = "# Extended detail\n\nCommand logs and design mappings for resumption.\n";
+    await writeFile(join(store.root, "docs", "t414-detail.md"), supportingContent, "utf8");
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+
+    // Push the body well past the externalization target, with the document link
+    // inside a section the rewrite relocates.
+    const filler = "Resume detail that pads the capsule past the inline target. ".repeat(220);
+    const content = [
+      baseInput.content,
+      "",
+      "## Supporting documents",
+      "- `.planner/docs/t414-detail.md` — command logs and design mappings required for resumption.",
+      "",
+      "## Current and partial state",
+      filler,
+    ].join("\n");
+
+    await store.refreshPhaseHandoff(phaseId, {
+      ...baseInput,
+      content,
+      supportingDocuments: [{ path: ".planner/docs/t414-detail.md", description: "Command logs and design mappings required for resumption." }],
+    });
+
+    const phase = await store.loadPhase(phaseId);
+    assert.ok(phase.handoff.length > 0, "handoff persisted");
+    const paths = phase.handoffAudit.supportingDocuments.map((doc) => doc.path);
+    assert.ok(paths.includes(".planner/docs/t414-detail.md"), "the agent's document is recorded");
+    assert.ok(paths.some((path) => /handoff-p\d+-/.test(path)), "the auto-externalized document is recorded too");
+  });
+
+  test("a document the agent never linked anywhere is still refused", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    await writeFile(join(store.root, "docs", "t414-unlinked.md"), "# Never referenced\n\nBody.\n", "utf8");
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, {
+        ...baseInput,
+        supportingDocuments: [{ path: ".planner/docs/t414-unlinked.md", description: "Never mentioned in the capsule at all." }],
+      }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must link supporting document/);
+        assert.match(error.message, /Checked the/);
+        return true;
+      },
+    );
+  });
+
   test("rolls back when persisted handoff read-back does not match the verified hash", async () => {
     const { store, phaseId, doneTaskId } = await setup();
     const prepared = await store.preparePhaseHandoff(phaseId);
@@ -544,6 +614,123 @@ describe("durable handoff context refresh", () => {
     const { join } = await import("node:path");
     const extended = await readFile(join(store.root, autoDoc.path.slice(".planner/".length)), "utf8");
     assert.ok(extended.includes("x".repeat(100)));
+  });
+
+  // P104(F005)/T415 — a prior externalization asked the next agent to
+  // "reconcile every still-relevant detail from an existing handoff" but
+  // handed back only the compact remainder; the moved facts were invisible.
+  // This is the regression: prepare must now surface them, not just the
+  // compact remainder's truncation markers.
+  test("prepare surfaces a previously externalized handoff's content for reconciliation", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    const marker = "UNIQUE-RESUME-FACT-CARRIED-ONLY-HERE-4471";
+    const oversized = `${baseInput.content}\n${marker}\n${"x".repeat(9_000)}`;
+    const written = await store.refreshPhaseHandoff(phaseId, { ...baseInput, content: oversized });
+    const autoDoc = written.phase.handoffAudit.supportingDocuments[0];
+
+    const nextPrepare = await store.preparePhaseHandoff(phaseId);
+    assert.equal(nextPrepare.externalizedHandoffDocuments.length, 1);
+    const [document] = nextPrepare.externalizedHandoffDocuments;
+    assert.equal(document.path, autoDoc.path);
+    assert.equal(document.missing, false);
+    // The fact that lived only in the externalized document is now visible
+    // to the agent preparing the next handoff, not just named as elided.
+    assert.ok(document.content.includes(marker), "moved content must be readable from the prepare audit");
+    // Every canonical section heading from the original submitted body is
+    // named, so even a caller that cannot use `content` still knows what
+    // was moved out.
+    for (const heading of ["Current focus", "Current and partial state", "Preservation constraints", "Supporting documents", "Blockers and risks", "How to resume"]) {
+      assert.ok(document.headings.includes(heading), `expected heading "${heading}" in ${JSON.stringify(document.headings)}`);
+    }
+  });
+
+  test("prepare names an externalized document as missing when it has been deleted from disk", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const baseInput = refreshInput(audit, doneTaskId);
+    const oversized = `${baseInput.content}\n${"x".repeat(9_000)}`;
+    const written = await store.refreshPhaseHandoff(phaseId, { ...baseInput, content: oversized });
+    const autoDoc = written.phase.handoffAudit.supportingDocuments[0];
+    const { unlink } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await unlink(join(store.root, autoDoc.path.slice(".planner/".length)));
+
+    const nextPrepare = await store.preparePhaseHandoff(phaseId);
+    assert.equal(nextPrepare.externalizedHandoffDocuments.length, 1);
+    const [document] = nextPrepare.externalizedHandoffDocuments;
+    assert.equal(document.missing, true);
+    assert.equal(document.content, null);
+    assert.deepEqual(document.headings, []);
+    // The path and description survive even though the body is gone, so the
+    // omission is named rather than silently dropped.
+    assert.equal(document.path, autoDoc.path);
+  });
+
+  test("a phase with no prior handoff reports no externalized documents", async () => {
+    const { store, phaseId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit.externalizedHandoffDocuments, []);
+  });
+
+  test("externalizing an oversized handoff never cuts a compacted section mid-word", async () => {
+    // Reproduce the reported defect's shape: a "Current and partial state"
+    // section long enough to force boundedSection's own truncation (budget
+    // 1,500 chars for this section, independent of the 8,000-char whole-body
+    // target that triggers externalization itself).
+    const prefix = "Detail ".repeat(200); // 1,400 chars, all complete words
+    const sectionBody = `${prefix}Ownership of the retained draft lifecycle must be documented before resuming, and this sentence continues well past the section budget so externalization is required for the whole handoff body to trigger the automatic split path under test right here.`;
+    const content = [
+      "# P001(F001) — draft",
+      "",
+      "Created at: 2026-08-24T00:00:00.000Z",
+      "Updated at: 2026-08-24T00:00:00.000Z",
+      "Reason: session boundary",
+      "",
+      "## Current focus", "Continue the phase.",
+      "## Current and partial state", sectionBody,
+      "## Preservation constraints", "Existing behavior must survive.",
+      "## Supporting documents", "- None.",
+      "## Blockers and risks", "- None.",
+      "## How to resume", `1. Resume. ${"x".repeat(8_000)}`,
+    ].join("\n");
+    const externalized = externalizeOversizedHandoffContent(content, ".planner/docs/handoff-p001-test.md");
+    assert.ok(externalized.externalized);
+
+    const marker = "[Extended detail continues in the linked planner document.]";
+    const compactSection = externalized.content.split("## Current and partial state")[1].split("## Preservation constraints")[0].trim();
+    assert.ok(compactSection.endsWith(marker));
+    const truncatedBody = compactSection.slice(0, compactSection.length - marker.length).trim();
+
+    // The section's own budget (1,500) minus the marker's own reserved room
+    // (86, see boundedSection) is exactly what truncateAtSafeBoundary is
+    // asked for; the compacted section must match it exactly, proving the
+    // integration goes through the safe-boundary path, not a raw slice.
+    const expected = truncateAtSafeBoundary(sectionBody, 1_500 - 86);
+    assert.equal(truncatedBody, expected);
+
+    // Confirm this fixture actually exercises a real divergence from the old
+    // behavior: a raw slice(0, maxChars) on the same input must differ from
+    // the safe-boundary result, otherwise this test would pass whether or
+    // not the fix existed.
+    const naiveSlice = sectionBody.slice(0, 1_500 - 86).trimEnd();
+    assert.notEqual(expected, naiveSlice, "fixture does not exercise a raw-slice-vs-safe-boundary divergence");
+    // The naive slice reproduces the reported defect's shape: it stops one
+    // or more characters into a word ("the" cut to "t") instead of at a
+    // word boundary. The character immediately following the naive cut, in
+    // the original body, must be a letter — that is what "mid-word" means.
+    assert.match(sectionBody[naiveSlice.length] ?? "", /[a-z]/i, "fixture should land mid-word under the old, unfixed behavior");
+    // The fixed compact section, by contrast, always ends exactly at a word
+    // boundary: the character right after it in the original body is
+    // whitespace, or it consumed the section body to its own end.
+    assert.ok(
+      truncatedBody.length >= sectionBody.length || /\s/.test(sectionBody[truncatedBody.length] ?? ""),
+      `fixed truncation must land on a word boundary, not mid-word: next char is ${JSON.stringify(sectionBody[truncatedBody.length])}`,
+    );
+
+    // The full original text, word intact, still lives in the externalized document.
+    assert.ok(externalized.extendedContent.includes("Ownership of the retained draft lifecycle"));
   });
 
   test("keeps the absolute compatibility ceiling on non-externalized rendering", async () => {
@@ -647,6 +834,78 @@ describe("durable handoff context refresh", () => {
     assert.equal((await store.loadPhase(phaseId)).handoff, "");
   });
 
+  test("prepare rejects a bad supporting-document path before any handoff body is drafted or sent", async () => {
+    const { store, phaseId } = await setup();
+    await assert.rejects(
+      store.preparePhaseHandoff(phaseId, [{ path: "not-under-docs.md", description: "Substantive but wrongly placed content." }]),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must be a Markdown file under \.planner\/docs\//);
+        return true;
+      },
+    );
+    // Prepare never took a body; nothing was persisted or sent.
+    assert.equal((await store.loadPhase(phaseId)).handoff, "");
+  });
+
+  test("prepare error names supportingDocuments as an optional, droppable field", async () => {
+    const { store, phaseId } = await setup();
+    await assert.rejects(
+      store.preparePhaseHandoff(phaseId, [{ path: ".planner/docs/missing.md", description: "Content that does not exist on disk." }]),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must be a regular file/);
+        assert.match(error.details.recovery, /supportingDocuments/);
+        assert.match(error.details.recovery, /optional/i);
+        assert.match(error.details.recovery, /externalized automatically/i);
+        return true;
+      },
+    );
+    // The same statement is surfaced proactively in prepare output, read before drafting.
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.match(audit.supportingDocumentsGuidance, /supportingDocuments/);
+    assert.match(audit.supportingDocumentsGuidance, /optional/i);
+  });
+
+  test("prepare with no manifest behaves exactly as today: no supporting-document validation runs", async () => {
+    const { store, phaseId } = await setup();
+    // No manifest argument at all, and an explicit empty array: neither touches
+    // the filesystem for a supporting document, so both succeed identically.
+    const withoutArg = await store.preparePhaseHandoff(phaseId);
+    const withEmptyArray = await store.preparePhaseHandoff(phaseId, []);
+    assert.equal(withoutArg.handoffUpdatedAt, withEmptyArray.handoffUpdatedAt);
+    assert.equal(withoutArg.supportingDocumentsGuidance, withEmptyArray.supportingDocumentsGuidance);
+  });
+
+  test("write still refuses a supporting document that was valid at prepare and was deleted before write", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, "docs"), { recursive: true });
+    const docPath = join(store.root, "docs", "will-be-deleted.md");
+    await writeFile(docPath, "# Detail\n\nSubstantive linked content that will be removed before write.\n", "utf8");
+    const supportingDocuments = [{ path: ".planner/docs/will-be-deleted.md", description: "Substantive linked content for resumption." }];
+
+    // Valid at prepare time: the manifest passes cleanly.
+    const audit = await store.preparePhaseHandoff(phaseId, supportingDocuments);
+    const baseInput = refreshInput(audit, doneTaskId);
+
+    // Deleted between prepare and write.
+    await rm(docPath);
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, {
+        ...baseInput,
+        content: `${baseInput.content}\n- .planner/docs/will-be-deleted.md — substantive linked content for resumption.`,
+        supportingDocuments,
+      }),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+        assert.match(error.message, /must be a regular file/);
+        return true;
+      },
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, "");
+  });
+
   test("materializes required metadata from structured preflight inputs without late draft retries", async () => {
     const { store, phaseId, doneTaskId } = await setup();
     const audit = await store.preparePhaseHandoff(phaseId);
@@ -676,5 +935,399 @@ describe("durable handoff context refresh", () => {
     const phase = await store.loadPhase(phaseId);
     assert.equal(phase.handoffHistory.length, 1);
     assert.equal(phase.handoffHistory[0].reason, "superseded");
+  });
+});
+
+// P104(F005)/T416: reconciliation is evidenced rather than asserted. A prior
+// handoff's `##` sections with no counterpart heading in the new content are
+// named; the author accounts for each with a sectionDispositions entry
+// before the write proceeds. Narrow by design (see AGENTS.md and the task
+// description) — heading text only, no fixed category list, no required
+// prose beyond a short disposition; a capsule with no headings on either
+// side needs no dispositions at all.
+describe("prior handoff sections are named and require an evidenced disposition", () => {
+  test("names a prior section dropped from the new content and refuses to persist", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Current focus",
+      "Continue T001.",
+      "",
+      "## Known workarounds",
+      "- Restart the dev server after editing schema.ts.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit.priorSectionHeadings, ["Current focus", "Known workarounds"]);
+
+    const input = refreshInput(audit, doneTaskId); // its fixture content has "## Current focus" but never "## Known workarounds"
+    const before = await store.loadPhase(phaseId);
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, input),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SECTION_RECONCILIATION_REQUIRED");
+        assert.deepEqual(error.details.unaccountedSections, ["Known workarounds"]);
+        assert.match(error.details.recovery, /sectionDispositions/);
+        return true;
+      },
+    );
+    assert.deepEqual(await store.loadPhase(phaseId), before, "a refused write must not mutate the phase");
+  });
+
+  test("a substantive sectionDisposition for the named section satisfies the gate", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Current focus",
+      "Continue T001.",
+      "",
+      "## Known workarounds",
+      "- Restart the dev server after editing schema.ts.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const written = await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId, {
+      sectionDispositions: [{ section: "Known workarounds", disposition: "Superseded: the schema fix removed the need to restart the dev server." }],
+    }));
+    assert.match(written.phase.handoff, /Continue the phase\./);
+  });
+
+  test("a heading-free prior capsule needs no section dispositions", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, "Resume T001 directly; no headings were used in this capsule.");
+    const audit = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit.priorSectionHeadings, [], "nothing to name when the prior capsule used no headings");
+    const written = await store.refreshPhaseHandoff(phaseId, refreshInput(audit, doneTaskId));
+    assert.match(written.phase.handoff, /Continue the phase\./);
+  });
+
+  test("a section-reconciliation refusal is retried with only dispositions, never resending the capsule", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Known workarounds",
+      "- Restart the dev server after editing schema.ts.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, full),
+      (error) => error.code === "HANDOFF_SECTION_RECONCILIATION_REQUIRED",
+    );
+    const { content: _content, ...withoutContent } = full;
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...withoutContent,
+      sectionDispositions: [{ section: "Known workarounds", disposition: "Dropped: verified obsolete after the schema fix landed." }],
+    });
+    assert.match(written.phase.handoff, /Continue the phase\./, "the retry persisted the body retained from the refused attempt, not a resend");
+  });
+
+  test("a deliberate full rewrite requires a disposition per prior heading, not a bypass", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Current focus",
+      "Old focus, now abandoned.",
+      "",
+      "## Blockers and risks",
+      "- Old blocker, since resolved.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const input = refreshInput(audit, doneTaskId, {
+      content: "Complete rewrite: the earlier plan was abandoned in favor of a new design. Resume by reading the linked design document, then implement it end to end.",
+      completenessAudit: undefined,
+      coldStartInventory: undefined,
+    });
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, input),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SECTION_RECONCILIATION_REQUIRED");
+        assert.deepEqual([...error.details.unaccountedSections].sort(), ["Blockers and risks", "Current focus"]);
+        return true;
+      },
+    );
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...input,
+      sectionDispositions: [
+        { section: "Current focus", disposition: "Dropped: the old plan was abandoned in favor of the new design." },
+        { section: "Blockers and risks", disposition: "Dropped: the blocker was resolved before this rewrite started." },
+      ],
+    });
+    assert.match(written.phase.handoff, /Complete rewrite/);
+  });
+
+  test("a renamed section is accounted for via an explicit disposition, not auto-matched", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await store.setPhaseHandoff(phaseId, [
+      "# Prior handoff",
+      "",
+      "## Blockers and risks",
+      "- Flaky CI on Windows runners.",
+    ].join("\n"));
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const renamedContent = refreshInput(audit, doneTaskId).content.replace("## Blockers and risks", "## Risks");
+    const input = refreshInput(audit, doneTaskId, { content: renamedContent });
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, input),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_SECTION_RECONCILIATION_REQUIRED");
+        assert.deepEqual(error.details.unaccountedSections, ["Blockers and risks"]);
+        return true;
+      },
+    );
+    const written = await store.refreshPhaseHandoff(phaseId, {
+      ...input,
+      sectionDispositions: [{ section: "Blockers and risks", disposition: "Renamed to \"Risks\"; the content is retained under the new heading." }],
+    });
+    assert.match(written.phase.handoff, /## Risks/);
+  });
+
+  test("an archived handoff needs no reconciliation, even with a stale externalized-document reference", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit0 = await store.preparePhaseHandoff(phaseId);
+    const padding = "Implementing the reconciled handoff contract in exhaustive detail. ".repeat(200);
+    const oversized = `${refreshInput(audit0, doneTaskId).content}\n\n## Extended padding\n${padding}`;
+    const written = await store.refreshPhaseHandoff(phaseId, { ...refreshInput(audit0, doneTaskId), content: oversized });
+    assert.equal(written.handoffAudit.supportingDocuments.length, 1, "the oversized write auto-externalized a document");
+
+    await store.clearPhaseHandoff(phaseId, "manual");
+    const cleared = await store.loadPhase(phaseId);
+    assert.equal(cleared.handoff, "");
+    assert.ok(cleared.handoffAudit?.supportingDocuments?.length, "the stale audit still names the old externalized document after a clear");
+
+    const audit1 = await store.preparePhaseHandoff(phaseId);
+    assert.deepEqual(audit1.priorSectionHeadings, [], "an archived handoff has nothing live to reconcile, despite the stale audit metadata");
+
+    const secondWrite = await store.refreshPhaseHandoff(phaseId, refreshInput(audit1, doneTaskId, { reconciledExistingHandoff: false }));
+    assert.match(secondWrite.phase.handoff, /Continue the phase\./, "an archived-then-fresh write needs neither the boolean nor any dispositions");
+  });
+});
+
+// T409: content is retained against phaseId + expectedHandoffUpdatedAt on any
+// failed refreshPhaseHandoff(), so a retry can omit content and reuse it
+// instead of resending a capsule up to MAX_HANDOFF_CONTENT_CHARS.
+describe("retained handoff drafts make a failed write cheap to retry", () => {
+  function draftsPath(store) {
+    return join(store.root, ".local", "handoff-drafts.json");
+  }
+
+  async function readDrafts(store) {
+    return JSON.parse(await readFile(draftsPath(store), "utf8"));
+  }
+
+  // A real, structural failure that is not the token/terminal-phase gate:
+  // "done" tasks missing durable completion evidence. Distinct from `full`
+  // only in contextSync.taskUpdates, so `content` (the expensive part) is
+  // exactly what refreshInput() built.
+  function failingAttempt(full) {
+    const { contextSync, ...rest } = full;
+    return { ...rest, contextSync: { ...contextSync, taskUpdates: [] } };
+  }
+
+  function withoutContent(full) {
+    const { content, ...rest } = full;
+    return rest;
+  }
+
+  test("a failed write retains content; a retry omitting it succeeds, then discards the entry", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, failingAttempt(full)),
+      /missing durable completion evidence/,
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, "", "the failed attempt must not mutate the phase");
+    const retained = (await readDrafts(store)).find((d) => d.phaseId === phaseId);
+    assert.ok(retained, "the exact submitted content is retained after the failure");
+    assert.equal(retained.token, audit.handoffUpdatedAt);
+
+    // Retry: omit content entirely, correct only the field that actually failed.
+    const written = await store.refreshPhaseHandoff(phaseId, withoutContent(full));
+    assert.match(written.phase.handoff, /Continue the phase\./, "the persisted body is the retained content, not a resend");
+
+    // Success discards the entry for this token.
+    assert.ok(!(await readDrafts(store)).some((d) => d.phaseId === phaseId), "a successful write discards its retained draft");
+
+    // Content is genuinely required again: the same token now has nothing
+    // retained, so omitting content is a typed failure, not a stale-token one.
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_RETAINED_CONTENT_NOT_FOUND");
+        assert.match(error.details.recovery, /omit content/);
+        return true;
+      },
+    );
+  });
+
+  test("auto-externalization runs against a retained body on retry, exactly as on a first attempt", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    // Pad the already cold-start-covered base content past the externalization
+    // target, keeping every required inventory item intact and verbatim.
+    const baseFull = refreshInput(audit, doneTaskId);
+    const padding = "Implementing the reconciled handoff contract in exhaustive detail. ".repeat(200);
+    const oversizedContent = `${baseFull.content}\n\n## Extended padding\n${padding}`;
+    assert.ok(oversizedContent.length > 8_000, "fixture content must exceed the externalization target");
+    const full = { ...baseFull, content: oversizedContent };
+
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    const retained = (await readDrafts(store)).find((d) => d.phaseId === phaseId);
+    assert.ok(retained.content.length > 8_000, "the raw oversized body is retained, not a pre-externalized copy");
+
+    // Retry omitting content: externalization must run against the retained
+    // body exactly as it would on a first attempt with that same content.
+    const written = await store.refreshPhaseHandoff(phaseId, withoutContent(full));
+    assert.ok(written.phase.handoff.length < oversizedContent.length, "the persisted capsule is compacted, not the raw oversized retry");
+    assert.match(written.phase.handoff, /externalized automatically/);
+    assert.equal(written.handoffAudit.supportingDocuments.length, 1);
+    assert.match(written.handoffAudit.supportingDocuments[0].path, /^\.planner\/docs\/handoff-p001-/);
+    const externalizedPath = join(store.root, written.handoffAudit.supportingDocuments[0].path.slice(".planner/".length));
+    const externalizedContent = await readFile(externalizedPath, "utf8");
+    assert.match(externalizedContent, /Implementing the reconciled handoff contract in exhaustive detail\./);
+  });
+
+  test("a stale-token retry still refuses even though a body is retained for it", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    assert.ok((await readDrafts(store)).some((d) => d.phaseId === phaseId), "a draft is retained for the original token");
+
+    // Someone else moves the phase's handoff forward through a different path,
+    // advancing handoffUpdatedAt away from the token the draft was retained for.
+    await store.setPhaseHandoff(phaseId, "# Someone else's handoff\n\nWritten between prepare and this retry.");
+    const advanced = await store.loadPhase(phaseId);
+    assert.notEqual(advanced.handoffUpdatedAt, audit.handoffUpdatedAt);
+
+    // Retention still finds a body for the old token, but the token itself is
+    // stale — the write must still refuse, and must not touch the new content.
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      /Handoff changed after preparation/,
+    );
+    assert.equal((await store.loadPhase(phaseId)).handoff, advanced.handoff, "the stale retry must not overwrite the newer handoff");
+  });
+
+  test("a retained draft is discarded when the phase reaches a terminal status", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    assert.ok((await readDrafts(store)).some((d) => d.phaseId === phaseId), "the failed write retained a draft");
+
+    // Drive every task to done so the phase derives a terminal status.
+    await store.updatePhase(phaseId, (p) => {
+      const now = new Date().toISOString();
+      for (const t of p.tasks) { t.status = "done"; t.startedAt ||= now; t.completedAt = now; }
+      return p;
+    });
+    await store.syncTaskStatusRollup(phaseId);
+    assert.equal((await store.loadPhase(phaseId)).status, "done");
+
+    assert.ok(!(await readDrafts(store)).some((d) => d.phaseId === phaseId), "a terminal phase discards its retained draft");
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      /terminal phases have no pending handoff/,
+    );
+  });
+
+  test("handoff_clear discards a retained draft even with no active handoff to archive", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+    assert.ok((await readDrafts(store)).some((d) => d.phaseId === phaseId));
+    assert.equal((await store.loadPhase(phaseId)).handoff, "", "nothing was ever successfully written for handoff_clear to archive");
+
+    await store.clearPhaseHandoff(phaseId, "manual");
+    assert.ok(!(await readDrafts(store)).some((d) => d.phaseId === phaseId), "handoff_clear discards the draft regardless of whether there was a body to archive");
+  });
+
+  test("an expired retained draft is treated as absent", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await mkdir(join(store.root, ".local"), { recursive: true });
+    const expired = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // > 24h age cap
+    await writeFile(draftsPath(store), JSON.stringify([
+      { phaseId, token: audit.handoffUpdatedAt, content: "stale unrecoverable draft", failureReason: "an earlier session", retainedAt: expired },
+    ], null, 2), "utf8");
+
+    await assert.rejects(
+      store.refreshPhaseHandoff(phaseId, withoutContent(full)),
+      (error) => {
+        assert.equal(error.code, "HANDOFF_RETAINED_CONTENT_NOT_FOUND");
+        return true;
+      },
+    );
+  });
+
+  test("retained drafts are capped in count, evicting the oldest first", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    await mkdir(join(store.root, ".local"), { recursive: true });
+    const seeded = Array.from({ length: 20 }, (_, i) => ({
+      phaseId: `seed-phase-${i}`,
+      token: "t",
+      content: `seed content ${i}`,
+      failureReason: "seed",
+      retainedAt: new Date(Date.now() - (20 - i) * 1000).toISOString(), // ascending; seed-phase-0 is oldest
+    }));
+    await writeFile(draftsPath(store), JSON.stringify(seeded, null, 2), "utf8");
+
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+
+    const drafts = await readDrafts(store);
+    assert.equal(drafts.length, 20, "the total stays capped at MAX_RETAINED_HANDOFF_DRAFTS");
+    assert.ok(!drafts.some((d) => d.phaseId === "seed-phase-0"), "the oldest entry was evicted to make room");
+    assert.ok(drafts.some((d) => d.phaseId === phaseId), "the newest failure is retained");
+  });
+
+  test("a retained draft survives a new PlanStore instance against the same root", async () => {
+    const { store, phaseId, doneTaskId } = await setup();
+    const audit = await store.preparePhaseHandoff(phaseId);
+    const full = refreshInput(audit, doneTaskId);
+    await assert.rejects(store.refreshPhaseHandoff(phaseId, failingAttempt(full)), /missing durable completion evidence/);
+
+    // Simulate a process restart in the same worktree: a new PlanStore
+    // instance against the same root, as if a fresh session opened it after
+    // a context compaction separated the failure from the retry.
+    const { PlanStore: FreshStore } = await import("../dist/index.js");
+    const fresh = new FreshStore(store.root);
+    const written = await fresh.refreshPhaseHandoff(phaseId, withoutContent(full));
+    assert.match(written.phase.handoff, /Continue the phase\./);
+  });
+});
+
+describe("truncateAtSafeBoundary never cuts mid-word", () => {
+  test("retreats to the preceding word boundary instead of slicing mid-word", () => {
+    const prefix = "A".repeat(50) + " "; // 51 chars, no partial word at any prefix length
+    const value = `${prefix}Ownership of the retained draft lifecycle must be documented.`;
+    // Cut 8 characters into the 9-character word "Ownership" — the exact
+    // shape of the reported "Ownershi|p" mid-word cut.
+    const cutInsideWord = prefix.length + 8;
+    const truncated = truncateAtSafeBoundary(value, cutInsideWord);
+    assert.ok(!truncated.endsWith("Ownershi"), `must not cut mid-word: ${JSON.stringify(truncated)}`);
+    assert.equal(truncated, prefix.trim());
+  });
+
+  test("prefers a paragraph break over a mid-sentence line break", () => {
+    const value = "First paragraph complete.\n\nSecond paragraph starts here and runs long enough to be cut.";
+    const truncated = truncateAtSafeBoundary(value, value.indexOf("Second") + 10);
+    assert.equal(truncated, "First paragraph complete.");
+  });
+
+  test("content already within budget is returned unchanged", () => {
+    const value = "Short and complete.";
+    assert.equal(truncateAtSafeBoundary(value, 100), value);
   });
 });

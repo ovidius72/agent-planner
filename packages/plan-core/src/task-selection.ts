@@ -73,7 +73,6 @@ export interface ExplicitTaskStartEligibility {
   reason: string;
 }
 
-const unavailable = new Set(["blocked", "waiting", "deferred", "canceled", "rejected"]);
 const hardUnavailable = new Set(["blocked", "deferred", "canceled", "rejected"]);
 const terminal = new Set(["done", "canceled", "rejected"]);
 
@@ -211,13 +210,6 @@ export function checkExplicitTaskStart(
     (deviation.state === "approved" || deviation.state === "active")
     && deviation.temporaryTaskId === taskId,
   );
-  const isPreservedResumeTarget = deviations.some((deviation) =>
-    (deviation.state === "approved"
-      || deviation.state === "active"
-      || deviation.state === "resume-required"
-      || deviation.state === "resolved")
-    && deviation.resumeTaskId === taskId,
-  );
   const startableStatus = candidate.task.status === "planned"
     || (candidate.task.status === "waiting" && isTemporaryOverride);
   if (!startableStatus) return { eligible: false, reason: `Task is not startable from ${candidate.task.status}.` };
@@ -260,18 +252,26 @@ export function recommendNextTask(
   const newestFirst = (left: WorkDeviation, right: WorkDeviation) => right.createdAt.localeCompare(left.createdAt);
   const resumable = (candidate: TaskCandidate | undefined) => candidate
     && (candidate.task.status === "planned" || candidate.task.status === "waiting");
-  const open = deviations
+  // "resolved" is a legacy synonym for "resume-required": both mean the
+  // temporary work has ended and the preserved task must be returned to.
+  // No live code path writes "resolved" anymore (setWorkDeviationState only
+  // ever sets "resume-required" / "resumed" / "canceled"), but every reader
+  // of persisted deviations still treats the two states identically (see
+  // recap.ts, plan-mcp/src/index.ts, plan-server/src/serve.ts, and
+  // pi-adapter/src/index.ts). Naming the pair here keeps that equivalence
+  // explicit instead of two bare string literals that look like an
+  // accidental inclusion of a "closed" state in an "open" list.
+  const returnRequiredStates = new Set(["resume-required", "resolved"]);
+  const liveDeviations = deviations
     .filter((deviation) => deviation.state === "approved"
       || deviation.state === "active"
-      || deviation.state === "resume-required"
-      || deviation.state === "resolved")
+      || returnRequiredStates.has(deviation.state))
     .sort(newestFirst);
-  const top = open[0];
+  const top = liveDeviations[0];
   if (top) {
     const temporary = byTaskId.get(top.temporaryTaskId);
     const resume = byTaskId.get(top.resumeTaskId);
-    const returnIsRequired = top.state === "resume-required"
-      || top.state === "resolved"
+    const returnIsRequired = returnRequiredStates.has(top.state)
       || (temporary && terminal.has(temporary.task.status));
     if (returnIsRequired && resume && resumable(resume)) {
       return { kind: "resume", candidate: resume, deviation: top, reason: "Resume required: return to the task preserved by the most recent deviation." };

@@ -220,8 +220,11 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       await assertFileUntouched("missing phase ref");
 
       // Handoff text/title validations are rejected without touching the phase.
+      // Omitting content is only for a retry against a token from a previously
+      // failed write (T409); with no expectedHandoffUpdatedAt at all this hits
+      // the ordinary preflight-token gate, not a content-specific message.
       const empty = await host.runTool("handoff_write", { phaseRef: "P001", confirmed: true, completenessAudit: completeHandoffAudit() });
-      assert.match(toolText(empty), /Provide the handoff text/);
+      assert.match(toolText(empty), /HANDOFF_PREFLIGHT_REQUIRED/);
       await assertFileUntouched("empty handoff text");
       const generic = await host.runTool("handoff_write", { phaseRef: "P001", content: "Handoff", completenessAudit: completeHandoffAudit() });
       assert.match(toolText(generic), /Generic handoff title/);
@@ -338,7 +341,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress");
 
       // Force-complete succeeds and rolls the phase (and feature) to done.
-      const done = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "All done in this fixture." });
+      const done = await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Fixture checklist item not relevant to this lifecycle coverage.", description_update: "All done in this fixture." });
       assert.match(toolText(done), /Task completed/);
       const phase = (await host.store.loadAllPhases())[0];
       assert.equal(phase.tasks[0].status, "done");
@@ -348,6 +351,61 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(features.features[0].status, "done", "feature rolls to done");
       assert.equal(features.features[0].description, preservedFeatureDescription, "Pi lifecycle writes preserve newer feature metadata");
       assert.equal(features.features[0].workDone, preservedWorkDone, "Pi lifecycle writes preserve metadata committed after context reads");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("task_complete: refusal names the toggle before force, force requires motivation, and an override is recorded and stays visible as done-with-open-items (P104(F005)/T428)", async () => {
+    const host = await createPiHost({ name: "t428-completion-gate", seed: "minimal" });
+    try {
+      // Seed T001 ships with one unchecked checklist item ("Add route").
+      await readTaskContext(host, "T001");
+      await host.runTool("task_start", { taskId: "T001" });
+
+      // No force: the refusal names the toggle command before it ever
+      // mentions force — the escape hatch is not the first thing an agent
+      // reading the refusal sees.
+      const refused = await host.runTool("task_complete", { taskId: "T001", description_update: "Attempting completion with the checklist still open." });
+      const refusedText = toolText(refused);
+      assert.match(refusedText, /task_checklist_toggle/, "refusal names the toggle command");
+      assert.match(refusedText, /Add route/, "refusal names the specific open item");
+      const toggleIndex = refusedText.indexOf("task_checklist_toggle");
+      const forceIndex = refusedText.indexOf("force=true");
+      assert.ok(toggleIndex >= 0 && forceIndex >= 0 && toggleIndex < forceIndex, "toggle is named before force");
+      assert.equal(toolDetails(refused).errorCode, "CHECKLIST_INCOMPLETE");
+
+      // force=true without a motivation is refused too — the same convention
+      // needsMotivation already applies to blocked/canceled/deferred/rejected.
+      const forcedNoMotivation = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Attempting a forced completion with no motivation given." });
+      assert.match(toolText(forcedNoMotivation), /requires a motivation/);
+      assert.equal(toolDetails(forcedNoMotivation).errorCode, "FORCE_MOTIVATION_REQUIRED");
+      assert.equal((await host.store.loadAllPhases())[0].tasks[0].status, "in-progress", "a denied forced completion never mutates status");
+
+      // force=true with a motivation succeeds, and the override is recorded —
+      // never by ticking the item (T413's rule: an unticked item after a
+      // forced completion is information, not a bug to silently fix).
+      const forced = await host.runTool("task_complete", {
+        taskId: "T001", force: true,
+        motivation: "The route already shipped in a different task; this checklist item no longer applies.",
+        description_update: "Completed via forced override for P104(F005)/T428 coverage.",
+      });
+      assert.match(toolText(forced), /Task completed/);
+      const forcedTask = (await host.store.loadAllPhases())[0].tasks[0];
+      assert.equal(forcedTask.status, "done");
+      assert.equal(forcedTask.checklist.find((item) => item.title === "Add route").checked, false, "the override never ticks the item it overrode");
+      assert.match(forcedTask.description, /Add route/, "completion evidence names the skipped step");
+      assert.match(forcedTask.description, /route already shipped in a different task/, "completion evidence carries the motivation");
+      assert.match(forcedTask.statusLog.at(-1).description, /Add route/, "the status log entry itself names the skipped step, independent of the checklist");
+
+      // The mismatch — done, with an item still open — is legible on the full
+      // task view next to the T421 order context, not left for a reader to
+      // notice by comparing two fields themselves.
+      const shown = await host.runTool("task_get", { taskId: "T001", full: true });
+      const shownText = toolText(shown);
+      assert.match(shownText, /done with 1 of \d+ checklist item\(s\) still open/i);
+      assert.match(shownText, /Add route/);
+      assert.equal(toolDetails(shown).task.checklistMismatch?.includes("Add route"), true, "the mismatch is also in structured content, not just prose");
     } finally {
       await closePiHost(host);
     }
@@ -394,7 +452,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.deepEqual(tasks.map((task) => task.status), ["in-progress", "planned", "planned"]);
       assert.equal(tasks[1].pauseSnapshot.resumeLocation, "src/task-start.ts:20");
 
-      const done = await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Temporary task completed and verified." });
+      const done = await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Seed checklist item superseded by the switch coverage exercised here.", description_update: "Temporary task completed and verified." });
       assert.match(toolText(done), /RESUME REQUIRED: P001\(F001\)\/T002/);
       assert.equal((await host.store.loadProject()).workDeviations.at(-1).state, "resume-required");
 
@@ -481,29 +539,31 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       });
       const phase = (await host.store.loadAllPhases())[0];
       const featureTwo = (await host.store.loadFeatures()).features.find((feature) => feature.number === 2);
+      const directDescriptionRef = ".planner/docs/p094-pane-hosts-any-app.md";
       const updated = await host.runTool("phase_update", {
         phaseId: "P001",
         featureId: "F002",
-        descriptionRef: ".planner/docs/phases/parity-phase.md",
+        descriptionRef: directDescriptionRef,
         goals: ["Close adapter parity"],
         nonGoals: ["Change status rollups"],
         dependencies: ["Canonical store"],
         risks: ["Contract drift"],
         openQuestions: ["Which client remains?"],
-        decisions: ["Use semantic mutations"],
         completionCriteria: ["All surfaces agree"],
       });
       assert.equal(toolDetails(updated).updated, true);
       let persistedPhase = await host.store.loadPhase(phase.id);
       assert.equal(persistedPhase.featureId, featureTwo.id);
-      assert.equal(persistedPhase.descriptionRef, ".planner/docs/phases/parity-phase.md");
+      assert.equal(persistedPhase.descriptionRef, directDescriptionRef);
       assert.deepEqual(persistedPhase.goals, ["Close adapter parity"]);
       assert.deepEqual(persistedPhase.nonGoals, ["Change status rollups"]);
       assert.deepEqual(persistedPhase.dependencies, ["Canonical store"]);
       assert.deepEqual(persistedPhase.risks, ["Contract drift"]);
       assert.deepEqual(persistedPhase.openQuestions, ["Which client remains?"]);
-      assert.deepEqual(persistedPhase.decisions, ["Use semantic mutations"]);
       assert.deepEqual(persistedPhase.completionCriteria, ["All surfaces agree"]);
+      const phaseDecisionsRejected = await host.runTool("phase_update", { phaseId: "P001", decisions: ["Should be rejected"] });
+      assert.equal(toolDetails(phaseDecisionsRejected).updated, false);
+      assert.equal(toolDetails(phaseDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
       const owners = (await host.store.loadFeatures()).features;
       assert.equal(owners.find((feature) => feature.number === 1).phaseIds.includes(phase.id), false);
       assert.equal(owners.find((feature) => feature.number === 2).phaseIds.includes(phase.id), true);
@@ -526,18 +586,41 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         taskId: "T001",
         descriptionRef: ".planner/docs/tasks/parity-task.md",
         notes: "Implementation context retained.",
-        decisions: ["Keep lifecycle tools authoritative"],
         checklist: ["Review", "Execute"],
       });
       assert.equal(toolDetails(taskUpdate).updated, true);
-      assert.deepEqual(toolDetails(taskUpdate).updatedFields.sort(), ["checklist", "decisions", "descriptionRef", "notes"]);
+      assert.deepEqual(toolDetails(taskUpdate).updatedFields.sort(), ["checklist", "descriptionRef", "notes"]);
       const task = (await host.store.loadPhase(phase.id)).tasks[0];
       assert.equal(task.descriptionRef, ".planner/docs/tasks/parity-task.md");
       assert.equal(task.notes, "Implementation context retained.");
-      assert.deepEqual(task.decisions, ["Keep lifecycle tools authoritative"]);
       assert.deepEqual(task.checklist.map((item) => item.title), ["Review", "Execute"]);
+      const taskDecisionsRejected = await host.runTool("task_update", { taskId: "T001", decisions: ["Should be rejected"] });
+      assert.equal(toolDetails(taskDecisionsRejected).updated, false);
+      assert.equal(toolDetails(taskDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
       const phaseOnDisk = JSON.parse(await readFile(join(host.planRoot, "phases", `${phase.id}.json`), "utf8"));
       assert.deepEqual(phaseOnDisk.tasks[0].checklist.map((item) => item.title), ["Review", "Execute"], "task_update persists checklist to the owning phase file");
+
+      // T413 (P104/F005) — task_update's checklist replacement must carry
+      // tick state across via plan-core's replaceChecklist, not a private
+      // hand-built mapping, and must surface any tick it could not carry.
+      await host.runTool("task_checklist_toggle", { taskId: "T001", item: "C1" });
+      assert.equal((await host.store.loadPhase(phase.id)).tasks[0].checklist[0].checked, true);
+
+      const renamed = await host.runTool("task_update", { taskId: "T001", checklist: ["Review carefully", "Execute"] });
+      assert.equal(toolDetails(renamed).updated, true);
+      assert.equal(toolDetails(renamed).checklistLostTicks, undefined, "an equal-length rename must not report a loss");
+      assert.doesNotMatch(toolText(renamed), /Lost tick/);
+      const renamedTask = (await host.store.loadPhase(phase.id)).tasks[0];
+      assert.deepEqual(renamedTask.checklist.map((item) => item.title), ["Review carefully", "Execute"]);
+      assert.equal(renamedTask.checklist[0].checked, true, "renaming the ticked item in place must keep its tick");
+
+      const dropped = await host.runTool("task_update", { taskId: "T001", checklist: ["Execute"] });
+      assert.equal(toolDetails(dropped).updated, true);
+      assert.deepEqual(toolDetails(dropped).checklistLostTicks, ["Review carefully"], "a checklist replacement that drops a ticked item must report it, not silently discard it");
+      assert.match(toolText(dropped), /Lost tick.*Review carefully/s);
+      const droppedTask = (await host.store.loadPhase(phase.id)).tasks[0];
+      assert.deepEqual(droppedTask.checklist.map((item) => item.title), ["Execute"]);
+      assert.equal(droppedTask.checklist[0].checked, false);
 
       for (const [tool, arguments_] of [
         ["feature_update", { featureId: "F001", acceptedDecisions: [] }],
@@ -618,7 +701,10 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
     try {
       const phase = async () => (await host.store.loadAllPhases())[0];
       const prepared = await host.runTool("handoff_prepare", { phaseRef: "P001" });
-      assert.match(toolText(prepared), /Use this exact scaffold before drafting/);
+      // The scaffold lives in the structured details; the text channel points at it
+      // instead of carrying a second copy (T408).
+      assert.match(toolText(prepared), /scaffold is provided in the structured result's draftTemplate field/);
+      assert.equal(toolText(prepared).includes(toolDetails(prepared).draftTemplate), false, "the scaffold must not travel in both channels");
       assert.match(toolText(prepared), /Required human inputs before drafting/);
       assert.match(toolText(prepared), /Planner-generated metadata \(do not add these to Markdown\)/);
       assert.match(toolText(prepared), /Completeness audit and cold-start evidence are planner-owned metadata/);
@@ -686,8 +772,11 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(toolDetails(list).page, 1);
       assert.equal(Object.hasOwn(toolDetails(list).handoffs[0], "content"), false, "compact list must not embed full bodies");
       const shown = await host.runTool("handoff_show", { phaseRef: "P001" });
+      // The capsule body is readable prose and travels in the text channel only;
+      // the structured details keep the machine-readable evidence about it (T408).
       assert.match(toolText(shown), /Body of the handoff\./);
-      assert.match(toolDetails(shown).content, /Body of the handoff\./);
+      assert.equal(Object.hasOwn(toolDetails(shown), "content"), false, "the body must not travel in both channels");
+      assert.equal(typeof toolDetails(shown).contentHash, "string");
       assert.equal(toolDetails(shown).truncated, false);
       assert.equal(toolDetails(shown).handoffAudit.version, 1);
       assert.equal(toolDetails(shown).persistenceVerified, true);
@@ -725,7 +814,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.ok(archived.length > 0, "archived handoff file exists");
 
       // Terminal phase (done) rejects new handoffs; the phase stays clean.
-      await host.runTool("task_complete", { taskId: "T001", force: true, description_update: "Fixture completed and verified through the adapter mutation test." });
+      await host.runTool("task_complete", { taskId: "T001", force: true, motivation: "Seed checklist item not relevant to this terminal-phase handoff coverage.", description_update: "Fixture completed and verified through the adapter mutation test." });
       assert.equal((await phase()).status, "done");
       const late = await host.runTool("handoff_write", {
         phaseRef: "P001", title: "P001 — late handoff", reason: "Fixture terminal-phase rejection coverage.", content: canonicalHandoff("P001 — late handoff", "Late handoff."), confirmed: true,
@@ -733,6 +822,96 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       });
       assert.match(toolText(late), /Cannot write a handoff on done phase/);
       assert.equal((await phase()).handoff, "");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("handoff_prepare rejects a bad supporting-document manifest before any body is drafted or sent, and handoff_write still catches a document deleted after prepare", async () => {
+    const host = await createPiHost({ name: "t407-prepare-supporting-documents", seed: "minimal" });
+    try {
+      const phase = async () => (await host.store.loadAllPhases())[0];
+
+      // Bad path fails at prepare, with no body ever sent.
+      const badManifest = await host.runTool("handoff_prepare", {
+        phaseRef: "P001",
+        supportingDocuments: [{ path: ".planner/docs/does-not-exist.md", description: "Content that was never written to disk." }],
+      });
+      assert.equal(badManifest.isError, true);
+      assert.equal(toolDetails(badManifest).errorCode, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+      assert.match(toolDetails(badManifest).recovery, /supportingDocuments/);
+      assert.match(toolDetails(badManifest).recovery, /optional/i);
+      assert.match(toolText(badManifest), /Recovery:.*supportingDocuments/);
+      assert.equal((await phase()).handoff, "", "no handoff body was sent or persisted");
+
+      // The same guidance is surfaced proactively, read before drafting.
+      const prepared = await host.runTool("handoff_prepare", { phaseRef: "P001" });
+      assert.match(toolText(prepared), /Supporting documents:.*supportingDocuments is optional/);
+      // Guidance is prose the agent reads: text channel only (T412).
+      assert.match(toolText(prepared), /Supporting documents:.*optional/i);
+      assert.equal(Object.hasOwn(toolDetails(prepared), "supportingDocumentsGuidance"), false);
+
+      // Valid at prepare time.
+      await mkdir(join(host.planRoot, "docs"), { recursive: true });
+      const docPath = join(host.planRoot, "docs", "t407-detail.md");
+      await writeFile(docPath, "# Detail\n\nSubstantive linked content that will be removed before write.\n", "utf8");
+      const supportingDocuments = [{ path: ".planner/docs/t407-detail.md", description: "Substantive linked content for resumption." }];
+      const preparedWithManifest = await host.runTool("handoff_prepare", { phaseRef: "P001", supportingDocuments });
+      assert.equal(preparedWithManifest.isError, undefined);
+
+      // Deleted between prepare and write: the write-time check is still the authority.
+      await rm(docPath);
+      const preparedArgs = await preparedHandoffArgs(host);
+      const write = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        title: "P001 — deleted supporting document",
+        reason: "Fixture verifies write-time authority after prepare-time validation.",
+        content: `${canonicalHandoff("P001 — deleted supporting document", "Body linking a supporting document removed after prepare.")}\n- .planner/docs/t407-detail.md — substantive linked content for resumption.`,
+        confirmed: true,
+        supportingDocuments,
+        ...preparedArgs,
+      });
+      assert.equal(write.isError, true);
+      assert.equal(toolDetails(write).errorCode, "HANDOFF_SUPPORTING_DOCUMENT_INVALID");
+      assert.equal((await phase()).handoff, "");
+    } finally {
+      await closePiHost(host);
+    }
+  });
+
+  test("handoff_write retains content after a core-level write failure; a retry omitting content succeeds (T409)", async () => {
+    const host = await createPiHost({ name: "t409-retain-and-retry", seed: "minimal" });
+    try {
+      const phase = async () => (await host.store.loadAllPhases())[0];
+      const prepared = await preparedHandoffArgs(host);
+      const content = canonicalHandoff("P001 — retained content for retry", "Body that must survive a retry without being resent.");
+
+      // First attempt fails deep inside the write contract (missing durable
+      // phase-context evidence), not on an adapter-level preflight gate — so
+      // PlanStore.refreshPhaseHandoff actually retains the submitted content.
+      const { phaseNoUpdateReason: _drop, ...preparedWithoutPhaseReason } = prepared;
+      const failed = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        reason: "Fixture handoff reason for a cold resume.",
+        content,
+        confirmed: true,
+        ...preparedWithoutPhaseReason,
+      });
+      assert.match(toolText(failed), /phaseNoUpdateReason/);
+      assert.match(toolText(failed), /omit content\/markdown_content/);
+      assert.equal((await phase()).handoff, "", "the failed attempt must not mutate the phase");
+
+      // Retry: same phaseRef + expectedHandoffUpdatedAt, correct only the
+      // field that actually failed, and omit content/markdown_content entirely.
+      const retried = await host.runTool("handoff_write", {
+        phaseRef: "P001",
+        reason: "Fixture handoff reason for a cold resume.",
+        confirmed: true,
+        ...prepared,
+      });
+      assert.equal(retried.isError, undefined);
+      assert.equal(toolDetails(retried).persisted, true);
+      assert.match((await phase()).handoff, /Body that must survive a retry without being resent\./);
     } finally {
       await closePiHost(host);
     }
@@ -792,10 +971,12 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
         technologies: ["TypeScript", " "],
         tools: ["Node.js test runner", " "],
         globalRules: ["Keep integration fixtures isolated", " "],
-        decisions: ["Exercise handlers through the public adapter", " "],
       });
       assert.match(toolText(project), /Project updated:/);
-      assert.equal(toolDetails(project).goal, "Exercise the real management surface.");
+      assert.equal(toolDetails(project).changed.goal, "Exercise the real management surface.");
+      const projectDecisionsRejected = await host.runTool("project_update", { decisions: ["Should be rejected"] });
+      assert.equal(toolDetails(projectDecisionsRejected).updated, false);
+      assert.equal(toolDetails(projectDecisionsRejected).errorCode, "LEGACY_DECISIONS_ARRAY_READ_ONLY");
 
       assert.match(toolText(await host.runTool("requirement_list", {})), /Users can authenticate|No requirements/);
       assert.match(toolText(await host.runTool("plan_get", {})), /Plan "/);

@@ -25,7 +25,7 @@ function LiveStatusBadge({ liveStatus }: { liveStatus: LiveStatus }) {
 export function TopNav({
   projectName,
   projectRoot,
-  planRoot,
+  planRoot: _planRoot,
   agentPlanVersion,
   liveStatus,
 }: {

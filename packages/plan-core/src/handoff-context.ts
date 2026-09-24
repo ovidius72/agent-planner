@@ -9,6 +9,7 @@ import type {
   Task,
 } from "./schema.js";
 import { buildPhaseWorkMap, type PhaseWorkMap } from "./task-context.js";
+import { truncateAtSafeBoundary } from "./text-bounds.js";
 
 export const COMPLETION_SUMMARY_HEADING = "**Completion summary:**";
 export const HANDOFF_COMPLETENESS_AUDIT_VERSION = 1;
@@ -75,7 +76,7 @@ export const HANDOFF_CANONICAL_SECTIONS = [
 
 export type HandoffCompletenessCategory = typeof HANDOFF_COMPLETENESS_CATEGORIES[number]["id"];
 export type HandoffColdStartInventoryCategory = typeof HANDOFF_COLD_START_INVENTORY_CATEGORIES[number]["id"];
-export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND";
+export type HandoffContractErrorCode = "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED" | "HANDOFF_CANONICAL_SECTIONS_REQUIRED" | "HANDOFF_COMPLETENESS_AUDIT_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_REQUIRED" | "HANDOFF_COLD_START_INVENTORY_UNCOVERED" | "HANDOFF_CONTENT_LIMIT_EXCEEDED" | "HANDOFF_SUPPORTING_DOCUMENT_INVALID" | "HANDOFF_PERSISTENCE_VERIFICATION_FAILED" | "HANDOFF_READBACK_VERIFICATION_REQUIRED" | "HANDOFF_READBACK_GAPS_FOUND" | "HANDOFF_RETAINED_CONTENT_NOT_FOUND" | "HANDOFF_SECTION_RECONCILIATION_REQUIRED";
 
 export class HandoffContractError extends Error {
   readonly code: HandoffContractErrorCode;
@@ -87,6 +88,68 @@ export class HandoffContractError extends Error {
     this.code = code;
     this.details = details;
   }
+}
+
+/** Single source of truth for the supportingDocuments recovery statement.
+ * Rendered in prepare output (before drafting) and attached to every
+ * agent-supplied-manifest failure of HANDOFF_SUPPORTING_DOCUMENT_INVALID
+ * (as details.recovery) so both adapters can render it without duplicating
+ * the wording. */
+export const HANDOFF_SUPPORTING_DOCUMENTS_GUIDANCE =
+  "supportingDocuments is optional and usually unnecessary: content above the target length is externalized automatically into .planner/docs/. Drop the field and retry unless you are linking a document you created yourself.";
+
+/** Build a HANDOFF_SUPPORTING_DOCUMENT_INVALID error for a defect in an
+ * agent-supplied manifest entry, always carrying the droppable-field
+ * recovery statement. Do not use this for planner-owned failures (e.g. the
+ * auto-externalized document's own path) — those are not something dropping
+ * the agent's field would fix. */
+export function supportingDocumentInvalidError(message: string, details: Record<string, unknown> = {}): HandoffContractError {
+  return new HandoffContractError("HANDOFF_SUPPORTING_DOCUMENT_INVALID", message, { ...details, recovery: HANDOFF_SUPPORTING_DOCUMENTS_GUIDANCE });
+}
+
+/** Build a HANDOFF_SUPPORTING_DOCUMENT_INVALID error for a PlanStore-internal
+ * invariant (the count of requested vs. PlanStore-verified documents must
+ * always match; PlanStore either throws for a defective entry or returns one
+ * verified entry per requested document, in lockstep). This is unreachable
+ * through the documented tool flow, so unlike supportingDocumentInvalidError
+ * it must not carry the droppable-field recovery statement: dropping the
+ * field would not be the fix for an invariant violation, and advertising it
+ * would mislead the agent. */
+function supportingDocumentInvariantError(message: string, details: Record<string, unknown> = {}): HandoffContractError {
+  return new HandoffContractError("HANDOFF_SUPPORTING_DOCUMENT_INVALID", message, details);
+}
+
+/** Build a HANDOFF_RETAINED_CONTENT_NOT_FOUND error: `content` was omitted
+ * from a handoff_write call and PlanStore has no body retained for this
+ * phase + expectedHandoffUpdatedAt token (see PlanStore.retainHandoffDraft /
+ * getRetainedHandoffDraft). Reasons: no write against this token has ever
+ * failed, the retained draft aged out, the phase went terminal and its
+ * drafts were discarded, or the token itself is wrong/stale. Content is
+ * always required on the first write attempt for a token; it becomes
+ * optional only on a retry that reuses a retained one. */
+export function retainedHandoffContentNotFoundError(phaseId: string, expectedHandoffUpdatedAt: string): HandoffContractError {
+  return new HandoffContractError(
+    "HANDOFF_RETAINED_CONTENT_NOT_FOUND",
+    "content was omitted but no retained draft was found for this phase and expectedHandoffUpdatedAt token.",
+    {
+      phaseId,
+      expectedHandoffUpdatedAt,
+      recovery: "Provide content once. After a write fails, a retry against the exact same expectedHandoffUpdatedAt may omit content to reuse the body just submitted; a fresh token (from a new handoff_prepare) or a phase that has since gone terminal has nothing retained.",
+    },
+  );
+}
+
+/** One prior section's fate, supplied by the author when validateHandoffSectionReconciliation
+ * names it as unaccounted for. `section` must match a heading named in the
+ * error's `unaccountedSections`; `disposition` is a short, substantive
+ * statement of what happened to it — dropped deliberately, superseded by
+ * newer content, or folded into a different section (including a rename).
+ * See P104(F005)/T416: this is the evidence that replaces the unchecked
+ * `reconciledExistingHandoff` boolean for the sections most likely to be
+ * silently lost. */
+export interface HandoffSectionDispositionInput {
+  section: string;
+  disposition: string;
 }
 
 export interface HandoffCompletenessAuditInput {
@@ -110,6 +173,113 @@ export interface HandoffContentExternalization {
   externalized: boolean;
   extendedContent: string;
   supportingDocument?: HandoffSupportingDocumentInput;
+}
+
+/** One document that a previous handoff refresh moved out of the inline
+ * capsule because it exceeded TARGET_HANDOFF_CONTENT_CHARS. Populated by
+ * PlanStore.preparePhaseHandoff (which alone has filesystem access); pure
+ * code here only shapes the type and the recognition/heading helpers below.
+ * `headings` and `missing` are always meaningful even when `content` is
+ * omitted for budget reasons, so a caller who cannot inline the body can
+ * still name what it contained (see handoff-reply.ts). */
+export interface HandoffExternalizedDocumentAudit {
+  path: string;
+  description: string;
+  /** Level-2 (`##`) headings found in the document, in order. Present even
+   *  when `content` is null, so the omission names what the document held. */
+  headings: string[];
+  /** Full document body, or null when it could not be read back from disk
+   *  (deleted, moved, or unreadable). Bounding this for transport is the
+   *  reply builder's job (handoff-reply.ts), not this audit's. */
+  content: string | null;
+  contentLength: number;
+  missing: boolean;
+}
+
+/** The exact description externalizeOversizedHandoffContent stamps on the
+ * supporting-document entry it generates for an auto-externalized document.
+ * The single source of truth for recognizing one later: handoff_prepare
+ * matches on this instead of the timestamped file-naming convention, so
+ * detection and generation cannot drift apart. A document a human or agent
+ * linked deliberately (a different description) is already named in the
+ * persisted capsule's own "Supporting documents" bullet and is out of scope
+ * here — only content the tooling itself moved out without being asked. */
+export const HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION =
+  "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.";
+
+export function isAutoExternalizedHandoffDocument(document: { description: string }): boolean {
+  return document.description === HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION;
+}
+
+/** Level-2 (`##`) headings of a handoff document, in order. Used to name
+ * what an externalized document contains when its content cannot be
+ * inlined (budget, or the file is missing) and as a table of contents
+ * alongside content that is inlined. */
+export function extractHandoffSectionHeadings(content: string): string[] {
+  const headings: string[] = [];
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(/^##\s+(.+?)\s*$/);
+    if (match) headings.push(match[1]!);
+  }
+  return headings;
+}
+
+/** Prior `##` headings with no counterpart heading in `newContent`. A
+ * section counts as carried forward only if its exact heading text
+ * (case-insensitive) still appears as a `##` heading somewhere in the new
+ * content — matching by heading, not by scanning prose for the words, keeps
+ * this a narrow structural check rather than a fuzzy content audit. Callers
+ * needing "did the author account for this" evidence use
+ * validateHandoffSectionReconciliation below, which turns this list into a
+ * typed refusal unless every entry has a disposition. */
+function unaccountedHandoffSections(priorSectionHeadings: string[], newContent: string): string[] {
+  const newHeadings = new Set(extractHandoffSectionHeadings(newContent).map((heading) => heading.trim().toLowerCase()));
+  return priorSectionHeadings.filter((heading) => !newHeadings.has(heading.trim().toLowerCase()));
+}
+
+/**
+ * Make reconciliation evidenced rather than asserted (P104(F005)/T416).
+ *
+ * Narrow by design: this compares `##` heading text only, never section
+ * content or a fixed category list — it is not a return to the 16-section
+ * scaffold and 14-category cold-start inventory P100(F021)/T396 removed for
+ * making authoring verbose and failing late. A prior capsule with no
+ * headings (or a new submission with none) simply has nothing to name here;
+ * the check degrades to a no-op rather than blocking the write.
+ *
+ * A prior section vanishes from the new content in three ways an author
+ * might legitimately intend: dropped because it no longer matters,
+ * superseded by newer content, or folded into a different section (a rename
+ * reads the same way — the old heading is gone, the content lives under a
+ * new one). This function does not try to tell those apart; it only
+ * requires the author to say which happened, per named section, before the
+ * write proceeds. A deliberate full rewrite where every prior section is
+ * obsolete is handled the same way: every heading is named, and the author
+ * writes one disposition per heading.
+ */
+export function validateHandoffSectionReconciliation(
+  priorSectionHeadings: string[],
+  newContent: string,
+  dispositions: HandoffSectionDispositionInput[] | undefined,
+): void {
+  const unaccounted = unaccountedHandoffSections(priorSectionHeadings, newContent);
+  if (unaccounted.length === 0) return;
+  const bySection = new Map<string, string>();
+  for (const entry of dispositions ?? []) {
+    const section = entry.section?.trim();
+    if (section) bySection.set(section.toLowerCase(), entry.disposition ?? "");
+  }
+  const stillUnaccounted = unaccounted.filter((section) => !isSubstantive(bySection.get(section.trim().toLowerCase()) ?? ""));
+  if (stillUnaccounted.length > 0) {
+    throw new HandoffContractError(
+      "HANDOFF_SECTION_RECONCILIATION_REQUIRED",
+      "Prior handoff sections have no counterpart in the new content. Supply sectionDispositions with one substantive entry per named section (dropped, superseded, or folded into another section) before writing.",
+      {
+        unaccountedSections: stillUnaccounted,
+        recovery: "Retry against the same phaseRef and expectedHandoffUpdatedAt with sectionDispositions only; content may be omitted to reuse the body just submitted.",
+      },
+    );
+  }
 }
 
 export interface HandoffTaskContextUpdate {
@@ -159,6 +329,27 @@ export interface PhaseHandoffAudit {
   coldStartInventoryCategories: ReadonlyArray<{ id: HandoffColdStartInventoryCategory; label: string }>;
   existingCompletenessAudit: HandoffCompletenessAudit | null;
   phaseWorkMap: PhaseWorkMap;
+  /** Read before drafting: supportingDocuments is optional and rarely needed. */
+  supportingDocumentsGuidance: string;
+  /** Documents the existing active handoff's own auto-externalization moved
+   *  out of the inline capsule (see HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION).
+   *  Empty when there is no active handoff or nothing was ever externalized
+   *  from it. auditPhaseHandoff itself never populates this (it is pure and
+   *  has no filesystem access) — PlanStore.preparePhaseHandoff fills it in
+   *  after reading each document back from .planner/docs/. */
+  externalizedHandoffDocuments: HandoffExternalizedDocumentAudit[];
+  /** `##` headings of the full prior capsule the next write will supersede:
+   *  the active handoff's own headings plus, per P104(F005)/T415, the
+   *  headings of every document its own auto-externalization moved out —
+   *  never the elided copy, so a heading that survives only in the
+   *  externalized file is still named. Empty when there is no active
+   *  handoff to reconcile against (first write, or one already archived by
+   *  handoff_clear). auditPhaseHandoff itself only derives this from the
+   *  compact capsule text (no filesystem access); PlanStore.preparePhaseHandoff
+   *  and PlanStore.refreshPhaseHandoff both overlay the externalized
+   *  documents' own headings after reading them back. See
+   *  validateHandoffSectionReconciliation, which consumes this list. */
+  priorSectionHeadings: string[];
 }
 
 export interface RefreshPhaseHandoffInput {
@@ -167,9 +358,26 @@ export interface RefreshPhaseHandoffInput {
   content: string;
   expectedHandoffUpdatedAt: string;
   reconciledExistingHandoff: boolean;
+  /** The full prior capsule's `##` headings (see PhaseHandoffAudit.priorSectionHeadings),
+   *  as PlanStore derived them from the live phase this write is targeting —
+   *  never a stale copy captured at prepare time, so a handoff archived
+   *  between prepare and write (phase.handoff now "") correctly yields no
+   *  sections to reconcile instead of demanding dispositions for content
+   *  that is no longer live. Populated by PlanStore; absent only in direct
+   *  unit calls to applyHandoffContextSync/validateHandoffContextSync that
+   *  do not exercise this check. */
+  priorSectionHeadings?: string[];
+  /** Per-section account for each entry in priorSectionHeadings that has no
+   *  counterpart heading in the submitted content. See
+   *  validateHandoffSectionReconciliation. */
+  sectionDispositions?: HandoffSectionDispositionInput[];
   completenessAudit?: HandoffCompletenessAuditInput;
   coldStartInventory?: HandoffColdStartInventoryInput;
   supportingDocuments?: HandoffSupportingDocumentInput[];
+  /** The body exactly as the agent submitted it, before auto-externalization
+   *  rewrote `content`. Set by PlanStore only when a rewrite happened, so the
+   *  agent's own document links are still judged against what the agent wrote. */
+  submittedContent?: string;
   /** Populated and verified by PlanStore before pure domain application. */
   verifiedSupportingDocuments?: HandoffSupportingDocument[];
   /** Content is kept in-memory only for cold-start coverage validation. */
@@ -264,6 +472,13 @@ export function auditPhaseHandoff(phase: Phase, feature: Feature): PhaseHandoffA
     coldStartInventoryCategories: HANDOFF_COLD_START_INVENTORY_CATEGORIES,
     existingCompletenessAudit: phase.handoffAudit,
     phaseWorkMap: buildPhaseWorkMap(phase, feature.number),
+    supportingDocumentsGuidance: HANDOFF_SUPPORTING_DOCUMENTS_GUIDANCE,
+    // Filled in by PlanStore.preparePhaseHandoff, which alone can read
+    // .planner/docs/; this pure function has no filesystem access.
+    externalizedHandoffDocuments: [],
+    // Compact-capsule headings only; PlanStore.preparePhaseHandoff overlays
+    // headings from auto-externalized documents once it has read them back.
+    priorSectionHeadings: phase.handoff.trim() ? extractHandoffSectionHeadings(phase.handoff) : [],
   };
 }
 
@@ -514,10 +729,16 @@ function sectionBody(content: string, headings: string[]): string {
   return body.join("\n").trim();
 }
 
+// truncateAtSafeBoundary / boundedContentForTransport moved to text-bounds.ts
+// (P104(F005)/T419) so task-context.ts can share them without creating a
+// cycle: this module already imports buildPhaseWorkMap from task-context.ts.
+// Both are exported directly from text-bounds.js at the package root now.
+
 function boundedSection(value: string, fallback: string, maxChars: number): string {
   const normalized = value.trim() || fallback;
   if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxChars - 86)).trimEnd()}\n\n[Extended detail continues in the linked planner document.]`;
+  const safe = truncateAtSafeBoundary(normalized, Math.max(0, maxChars - 86));
+  return `${safe}\n\n[Extended detail continues in the linked planner document.]`;
 }
 
 /**
@@ -570,7 +791,7 @@ export function externalizeOversizedHandoffContent(
     extendedContent: `${firstHeading} — extended detail\n\n${base}\n`,
     supportingDocument: {
       path: supportingDocumentPath,
-      description: "Full submitted handoff detail externalized automatically; required for cold resume and reconciliation.",
+      description: HANDOFF_AUTO_EXTERNALIZED_DOCUMENT_DESCRIPTION,
     },
   };
 }
@@ -661,16 +882,14 @@ export function validateHandoffContextSync(
   const requestedDocuments = input.supportingDocuments ?? [];
   const verifiedDocuments = input.verifiedSupportingDocuments ?? [];
   if (requestedDocuments.length !== verifiedDocuments.length) {
-    throw new HandoffContractError(
-      "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+    throw supportingDocumentInvariantError(
       "Every supporting document must be validated by PlanStore before the handoff is written.",
       { requestedCount: requestedDocuments.length, verifiedCount: verifiedDocuments.length },
     );
   }
   const verifiedContents = input.verifiedSupportingDocumentContents ?? [];
   if (verifiedContents.length !== verifiedDocuments.length) {
-    throw new HandoffContractError(
-      "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+    throw supportingDocumentInvariantError(
       "Validated supporting-document content is required for cold-start inventory coverage checks.",
       { verifiedDocumentCount: verifiedDocuments.length, verifiedContentCount: verifiedContents.length },
     );
@@ -679,16 +898,26 @@ export function validateHandoffContextSync(
     const requested = requestedDocuments[index]!;
     const verified = verifiedDocuments[index]!;
     if (requested.path !== verified.path || !isSubstantive(requested.description) || requested.description.trim() !== verified.description) {
-      throw new HandoffContractError(
-        "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
+      throw supportingDocumentInvalidError(
         `Supporting document ${requested.path || `(index ${index})`} is not valid or lacks a substantive description.`,
         { index, path: requested.path },
       );
     }
-    if (!input.content.includes(requested.path)) {
-      throw new HandoffContractError(
-        "HANDOFF_SUPPORTING_DOCUMENT_INVALID",
-        `Canonical handoff content must link supporting document ${requested.path}.`,
+    // Body-dependent: the manifest is valid on its own, but the drafted content
+    // never linked it. This is the one check that cannot move to prepare, since
+    // prepare runs before the body exists.
+    //
+    // Check the submitted body as well as the persisted one. Auto-externalization
+    // rewrites `content` after the agent submitted it, moving whole sections into
+    // a .planner/docs/ file; a path the author linked inside one of those sections
+    // is no longer in `content` through no fault of theirs. The planner's own
+    // auto-externalized document is the mirror case — its path is generated during
+    // the rewrite, so it appears only in `content`. Accepting either body covers
+    // both without letting through a path the agent never linked anywhere.
+    const linkedBodies = [input.content, ...(input.submittedContent ? [input.submittedContent] : [])];
+    if (!linkedBodies.some((body) => body.includes(requested.path))) {
+      throw supportingDocumentInvalidError(
+        `Canonical handoff content must link supporting document ${requested.path}. Checked the ${input.submittedContent ? "submitted body and the auto-externalized body" : "submitted body"}.`,
         { index, path: requested.path },
       );
     }
@@ -702,6 +931,15 @@ export function validateHandoffContextSync(
   }
   if (phase.handoff.trim() && !input.reconciledExistingHandoff) {
     throw new Error("An active handoff already exists. Reconcile its still-relevant content and set reconciledExistingHandoff=true.");
+  }
+  if (phase.handoff.trim()) {
+    // Judge against the body the author actually wrote, not the planner's
+    // own auto-externalized compaction (mirrors the supporting-document link
+    // check above): when this write itself got compacted, submittedContent
+    // is the full pre-compaction text and is what a prior section's heading
+    // would still appear in.
+    const newContentForHeadings = input.submittedContent ?? input.content;
+    validateHandoffSectionReconciliation(input.priorSectionHeadings ?? [], newContentForHeadings, input.sectionDispositions);
   }
 
   const sync = input.contextSync;
@@ -764,6 +1002,14 @@ export function applyHandoffContextSync(
   for (const update of input.contextSync.taskUpdates) {
     const task = nextPhase.tasks.find((candidate) => candidate.id === update.taskId)!;
     const files = uniqueStrings(update.filesTouched ?? []);
+    // Decisions mentioned in a completion summary are prose, not decision
+    // authority (a completion summary is explicitly one of the places a new
+    // durable decision must not live only in). Render them into the section
+    // text with that caveat instead of appending to the legacy task.decisions
+    // array, which nothing treats as authoritative and which is otherwise
+    // read-only going forward (see accepted-decision-guard.ts). A decision
+    // worth keeping needs its own accepted_decision_create call on the right
+    // owner; this list is not a substitute for that.
     const decisions = uniqueStrings(update.decisions ?? []);
     const section = [
       COMPLETION_SUMMARY_HEADING,
@@ -775,25 +1021,26 @@ export function applyHandoffContextSync(
       "**Remaining or unverified:**",
       update.remainingWork.trim(),
       ...(files.length > 0 ? ["", "**Files touched:**", ...files.map((file) => `- ${file}`)] : []),
+      ...(decisions.length > 0 ? ["", "**Decisions mentioned (not decision authority; record any durable decision with accepted_decision_create on its actual owner):**", ...decisions.map((decision) => `- ${decision}`)] : []),
     ].join("\n");
     task.description = appendSection(task.description, section);
     task.descriptionUpdatedAt = timestamp;
-    task.decisions = uniqueStrings([...(task.decisions ?? []), ...decisions]);
     task.updatedAt = timestamp;
     updatedTaskIds.push(task.id);
   }
 
   const phaseUpdate = input.contextSync.phaseUpdate;
   if (phaseUpdate) {
+    const phaseDecisions = uniqueStrings(phaseUpdate.decisions ?? []);
     const section = [
       "**Handoff context update:**",
       phaseUpdate.progressSummary.trim(),
       "",
       "**Remaining work:**",
       phaseUpdate.remainingWork.trim(),
+      ...(phaseDecisions.length > 0 ? ["", "**Decisions mentioned (not decision authority; record any durable decision with accepted_decision_create on its actual owner):**", ...phaseDecisions.map((decision) => `- ${decision}`)] : []),
     ].join("\n");
     nextPhase.notes = appendSection(nextPhase.notes, section);
-    nextPhase.decisions = uniqueStrings([...(nextPhase.decisions ?? []), ...(phaseUpdate.decisions ?? [])]);
   }
 
   const featureUpdate = input.contextSync.featureUpdate;

@@ -134,7 +134,7 @@ export function isLegacyPhaseId(phaseId: string): boolean {
 }
 
 /** Compute the feature-scoped id for a legacy phase, preserving featureId/number/slug. */
-export function migratePhaseId(featureId: string, number: number, slug: string): string {
+export function migratePhaseId(_featureId: string, _number: number, _slug: string): string {
   // In UUID world, this is just randomUUID, but we keep signature for compatibility if needed
   return randomUUID();
 }

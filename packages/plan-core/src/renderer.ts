@@ -1,4 +1,4 @@
-import type { AcceptedDecision, Feature, Idea, Phase, PlanWorkspace, Requirement, Task } from "./schema.js";
+import type { Feature, Idea, Phase, PlanWorkspace, Task } from "./schema.js";
 import { bullet, statusBadge, statusIcon, renderAcceptedDecisions } from "./render-utils.js";
 
 function seq(value: number | undefined): string {

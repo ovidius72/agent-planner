@@ -1,9 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, DragOverlay, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Card } from "../ui/card";
-import { Button } from "../ui/button";
 import { StatusBadge } from "../ui/status-badge";
 import { EntityPathBadge } from "../ui/badges";
 import { SortControl } from "../ui/sort-control";
@@ -11,22 +10,21 @@ import { useDashboardTree } from "../../hooks/use-dashboard-tree";
 import {
   formatSequence,
   type WorkTreeFeature,
-  type WorkTreeSortConfig,
 } from "../../lib/dashboard-tree";
 import { reorder, repairPlan, type ActiveTaskSummary, type RepairReport } from "../../lib/api";
+import { replaceUrlSearchParams } from "../../lib/browser-url";
 import type { Feature, Phase } from "../../lib/types";
 import { FeatureTreeRow } from "./work-tree-rows";
 import { SortableItem } from "./sortable";
 import { SearchBar } from "./search-bar";
 
-// Strip the ?locate= query param from the URL WITHOUT a router navigation, so
-// React Router's <ScrollRestoration /> doesn't fire and reset the page scroll
-// to the top after we've already scrolled the located task into view.
+// See replaceUrlSearchParams's doc comment for why this avoids a router
+// navigation, and why "locate" must never be read back through
+// useSearchParams — handledLocateRef below exists because of that hazard.
 function clearLocateParam(): void {
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has("locate")) return;
-  url.searchParams.delete("locate");
-  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  replaceUrlSearchParams((params) => {
+    params.delete("locate");
+  });
 }
 
 /**
@@ -241,11 +239,23 @@ export function WorkTree({
   // change), then strips the param. Re-runs after expansion/filter renders until
   // the row is in the DOM. ──────────────────────────────────────────────
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [locatePulseId, setLocatePulseId] = useState<string | null>(null);
   const locateParam = searchParams.get("locate");
   const locateNum = locateParam ? parseInt(locateParam.replace(/^T/i, ""), 10) : null;
+  // clearLocateParam strips the param with replaceState, which the router never
+  // observes, so locateNum stays set for the life of this mount. Without a
+  // record of the locate we already carried out, the filter dependencies below
+  // would make the one-time "clear the filters that could hide the row" run
+  // again on every later render — wiping the search box on every keystroke for
+  // the rest of the visit. Those dependencies are the retry loop that waits for
+  // the row to reach the DOM; this ref is what ends the loop, not trimming them.
+  // Keyed by navigation, so locating the same task a second time still works.
+  const handledLocateRef = useRef<string | null>(null);
+  const locateToken = locateNum == null ? null : `${location.key}:${locateNum}`;
   useEffect(() => {
     if (locateNum == null || Number.isNaN(locateNum)) return;
+    if (locateToken != null && handledLocateRef.current === locateToken) return;
     const found = phases
       .flatMap((p) => p.tasks.map((t) => ({ t, p })))
       .find(({ t }) => t.number === locateNum);
@@ -255,6 +265,7 @@ export function WorkTree({
       // arrives, instead of stripping it prematurely and never scrolling.
       // Only strip when the data is present and the task genuinely doesn't exist.
       if (phases.length === 0) return;
+      handledLocateRef.current = locateToken;
       clearLocateParam();
       return;
     }
@@ -290,12 +301,16 @@ export function WorkTree({
       window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
       setLocatePulseId(t.id);
       const pulse = window.setTimeout(() => setLocatePulseId(null), 2500);
+      // Locating is finished here. Anything the user types from now on is a
+      // filter, and is honoured even if it hides the row we just scrolled to.
+      handledLocateRef.current = locateToken;
       clearLocateParam();
       return () => window.clearTimeout(pulse);
     }
     // else: expansion/filter change just requested → effect re-runs after render
   }, [
     locateNum,
+    locateToken,
     phases,
     tree.expandedFeatureIds,
     tree.expandedPhaseIds,

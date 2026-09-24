@@ -93,9 +93,14 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   const plannerCommand = readFileSync(join(cwd, ".claude", "commands", "planner.md"), "utf-8");
   assert.match(plannerCommand, /# Agent Plan operating guide/);
   assert.match(plannerCommand, /`planner-version`/);
-  assert.match(plannerCommand, /call `task_start` \/ `planner-task-start`/);
+  // These pin that the lifecycle protocol survives generation into
+  // planner.md, not its exact prose. P104(F005)/T420 reordered the section
+  // so reading comes before the call, and two assertions that quoted whole
+  // sentences broke — undetected, because this package's suite is not one
+  // of the four run during that phase. Match the durable claim instead.
+  assert.match(plannerCommand, /`task_start` \/ `planner-task-start`/);
   assert.match(plannerCommand, /Perform only the missing or stale reads listed in `nextActions`/);
-  assert.match(plannerCommand, /Reads may be completed in any order within the current session/);
+  assert.match(plannerCommand, /Reads may be completed in any order/);
   assert.match(plannerCommand, /Follow the lowest visible ready priority/);
   assert.match(plannerCommand, /DESCRIPTION_MARKDOWN_FALLBACK_REQUIRED/);
   assert.match(plannerCommand, /retry with a concise inline summary plus `descriptionRef`/);
@@ -108,7 +113,7 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   assert.match(plannerCommand, /latest terminal archive/);
   assert.doesNotMatch(plannerCommand, /read the exact lineage in this order/);
   const claudeSettings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
-  assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write"));
+  assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write|NotebookEdit|Bash"));
 });
 
 test("Claude guard ignores non-writing tools without requiring planner state", () => {

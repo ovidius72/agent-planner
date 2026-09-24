@@ -1,5 +1,6 @@
 import type { AcceptedDecision, Feature, Phase, Project, Requirement, Task } from "./schema.js";
 import { formatPhaseRef } from "./naming.js";
+import { truncateAtSafeBoundary } from "./text-bounds.js";
 
 export const MAX_ACCEPTED_DECISION_CONTEXT_CHARS = 8_000;
 export const MAX_PHASE_WORK_MAP_CHARS = 8_000;
@@ -19,6 +20,7 @@ export interface PhaseWorkMapEntry {
 
 export interface PhaseWorkMap {
   content: string;
+  /** Mirrors `content`: holds exactly the entries whose rendered block was admitted. Use `total` for the full count. */
   entries: PhaseWorkMapEntry[];
   total: number;
   truncated: boolean;
@@ -70,9 +72,16 @@ export function buildBoundedAcceptedDecisionContext(
     ? "Accepted decisions: none."
     : populated.map((scope) => renderAcceptedDecisionsSection(`Accepted decisions — ${scope.scope}`, scope.decisions)).join("\n\n");
   if (full.length <= maxChars) return { content: full, total, truncated: false, maxChars };
+  // Cut at a safe boundary (paragraph, then line, then word — see
+  // truncateAtSafeBoundary) rather than a raw slice, which previously cut
+  // mid-word exactly as the handoff path once did (P104(F005)/T419). The
+  // helper still returns something even when the first decision alone
+  // exceeds `limit`: it falls back to a hard cut only when no boundary
+  // exists before it.
   const suffix = "\n\n[Accepted Decision context truncated for transport safety. Use the relevant full entity read to retrieve every canonical field.]";
   const limit = Math.max(0, maxChars - suffix.length);
-  return { content: `${full.slice(0, limit)}${suffix}`.slice(0, maxChars), total, truncated: true, maxChars };
+  const bounded = truncateAtSafeBoundary(full, limit);
+  return { content: `${bounded}${suffix}`.slice(0, maxChars), total, truncated: true, maxChars };
 }
 
 function conciseTaskGoal(task: Task): string {
@@ -106,27 +115,38 @@ export function buildPhaseWorkMap(
       current: task.id === currentTaskId,
     }));
   const header = `Phase work map — canonical sibling capability ownership (${entries.length}, priority order):`;
-  const blocks = entries.map((entry) => [
-    `- ${entry.ref}${entry.current ? " (current)" : ""} — ${entry.title} [priority ${entry.priority}; ${entry.status}]`,
-    `  Goal: ${entry.conciseGoal}`,
-    `  Depends on: ${entry.dependencies.length > 0 ? entry.dependencies.join(", ") : "None."}`,
-    entry.remainingCapabilityOwner
-      ? `  Ownership: ${entry.ref} owns this remaining capability; do not duplicate it in another task.`
-      : "  Ownership: no remaining capability ownership (terminal task).",
-  ].join("\n"));
-  const suffix = "[Phase work map truncated for transport safety. Read the canonical phase and task full views before proposing work; place deeper context under .planner/docs/.]";
+  const rendered = entries.map((entry) => ({
+    entry,
+    block: [
+      `- ${entry.ref}${entry.current ? " (current)" : ""} — ${entry.title} [priority ${entry.priority}; ${entry.status}]`,
+      `  Goal: ${entry.conciseGoal}`,
+      `  Depends on: ${entry.dependencies.length > 0 ? entry.dependencies.join(", ") : "None."}`,
+      entry.remainingCapabilityOwner
+        ? `  Ownership: ${entry.ref} owns this remaining capability; do not duplicate it in another task.`
+        : "  Ownership: no remaining capability ownership (terminal task).",
+    ].join("\n"),
+  }));
+  const truncationNotice = (withheldCount: number): string =>
+    `[Phase work map truncated for transport safety: ${withheldCount} lower-priority ${withheldCount === 1 ? "entry" : "entries"} withheld. Read the canonical phase and task full views before proposing work; place deeper context under .planner/docs/.]`;
+  // Reserve space using the full task count as the withheld-count placeholder: since the
+  // eventual withheld count can never exceed it, this reservation is always a safe upper
+  // bound on the final notice length, so shrinking it afterward cannot overflow maxChars.
+  const reservedSuffixLen = truncationNotice(entries.length).length;
   const included: string[] = [];
+  const admittedEntries: PhaseWorkMapEntry[] = [];
   let truncated = false;
-  for (const block of blocks) {
+  for (const { entry, block } of rendered) {
     const candidate = [header, ...included, block].join("\n");
-    if (candidate.length + suffix.length + 1 > maxChars) {
+    if (candidate.length + reservedSuffixLen + 1 > maxChars) {
       truncated = true;
       break;
     }
     included.push(block);
+    admittedEntries.push(entry);
   }
+  const suffix = truncationNotice(entries.length - admittedEntries.length);
   const content = [header, ...included, ...(truncated ? [suffix] : [])].join("\n").slice(0, maxChars);
-  return { content, entries, total: entries.length, truncated, maxChars };
+  return { content, entries: admittedEntries, total: entries.length, truncated, maxChars };
 }
 
 /**
