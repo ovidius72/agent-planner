@@ -288,7 +288,7 @@ server.registerTool("planner-export", {
 });
 
 server.registerTool("planner-authorize-bypass", {
-  description: "Authorize a temporary guard bypass (default 15 minutes) so edit/write tools can proceed even when no task is in-progress. Use ONLY after the user explicitly authorizes proceeding without a task. Harness-agnostic: stored in resume.json so all adapters (Pi, Claude Code, Codex, ...) respect it.",
+  description: "Authorize a temporary guard bypass (default 15 minutes) that silences the no-task warning. Edits are never blocked; this only stops the agent being warned when it changes project code with no task in-progress. Use ONLY after the user explicitly authorizes working without a task. Harness-agnostic: stored in resume.json so all adapters (Pi, Claude Code, Codex, ...) respect it.",
   inputSchema: {
     durationMinutes: z.number().optional().describe("Bypass window in minutes. Default 15."),
   },

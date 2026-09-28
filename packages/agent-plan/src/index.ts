@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, classifyGuardedTool, decideGuardPreToolUse, isEntirelyInsidePlannerRoot, type GuardEventInput } from "@agent-plan/core";
+import { PlanStore, ExportService, loadCanonicalPlannerSkill, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, type GuardEventInput } from "@agent-plan/core";
 import { startStdioServer } from "@agent-plan/mcp";
 import { basename, dirname, join, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
@@ -37,7 +37,7 @@ function usage(): string {
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
     "  setup codex                 Add Agent Plan to Codex / Copilot CLI (project .codex/mcp.json by default, user scope with --user).",
-    "  guard pre-tool-use          Claude Code hook: ask before an edit outside .planner/ when no task is in-progress and no bypass is authorized (read-only commands stay free; .planner/ writes always allowed).",
+    "  guard pre-tool-use          Claude Code hook: warn the agent (never block or prompt) when a call changes project code while no task is in-progress. Planner changes and writes outside the project never warn.",
     "",
     "Options:",
     "  --version, -v               Print the installed agent-plan CLI version.",
@@ -130,8 +130,16 @@ async function readJsonFile(path: string): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
+/** The CLI's own file, with links followed. Version managers such as fnm
+ * start it through a link in a per-shell temp folder that disappears later,
+ * so saving that link into a hook or MCP config breaks it. */
 function localCliPath(): string {
-  return resolve(process.argv[1] ?? "packages/agent-plan/dist/index.js");
+  const path = resolve(process.argv[1] ?? "packages/agent-plan/dist/index.js");
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
 }
 
 function localCliArgs(): string[] {
@@ -362,48 +370,26 @@ async function guardPreToolUse(): Promise<void> {
   const root = plannerRoot(cwd);
   const guardEvent = guardEventFromClaudeCodePayload(event, cwd, root);
 
-  // Cheap, I/O-free pre-check: tool calls the guard doesn't cover (Read,
-  // Grep, MCP calls, read-only Bash, ...) and anything that resolves
-  // entirely inside .planner/ are decided from the event alone. Writing a
-  // handoff or recording task state must never be blocked or ask, even when
-  // no task is in progress — that write IS how an agent reports what it did.
-  const classification = classifyGuardedTool(guardEvent);
-  if (!classification.guarded || isEntirelyInsidePlannerRoot(classification.paths, root, cwd)) return;
+  // Cheap, I/O-free pre-check: anything that cannot change project code
+  // (read-only tools, writes to .planner/ or outside the project) is decided
+  // from the event alone, before loading the plan.
+  if (!classifyGuardedTool(guardEvent).guarded) return;
 
-  const st = new PlanStore(root);
-  const hasPlannerDir = await st.exists().catch(() => false);
-  if (!hasPlannerDir) return;
-
-  let plan;
+  let state;
   try {
-    plan = await st.loadAll();
+    state = await loadNoTaskGuardState(new PlanStore(root));
   } catch {
     return;
   }
+  const { warning } = noTaskWarning(guardEvent, state);
+  if (!warning) return;
 
-  const allTasks = plan.phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
-  const hasInProgressTask = allTasks.some(({ task }) => task.status === "in-progress");
-  const guardBypassed = await st.isGuardBypassed().catch(() => false);
-
-  const focus = allTasks.find(({ task }) => !["done", "canceled", "rejected"].includes(task.status));
-  const startHint = focus
-    ? ` Start a task with /planner task start ${focus.task.id} (${focus.task.title}), OR`
-    : " Start a task with /planner task start, OR";
-
-  const decision = decideGuardPreToolUse(guardEvent, {
-    hasPlannerDir,
-    totalTasks: allTasks.length,
-    hasInProgressTask,
-    guardBypassed,
-    startHint,
-  });
-  if (decision.decision === "allow") return;
-
+  // A warning for the agent only. No permissionDecision: the call goes
+  // through Claude Code's normal permission flow, never blocked or prompted.
   console.log(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
-      permissionDecision: decision.decision,
-      permissionDecisionReason: decision.reason,
+      additionalContext: warning,
     },
   }));
 }

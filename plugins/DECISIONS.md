@@ -119,8 +119,12 @@ of task state.
 when no task is in-progress (user-reported blocker). Aligns with AGENTS.md
 operational protocol.
 
-**Implementation.** Documented in the `/planner` skill operational protocol;
-a future PostToolUse guard (if added) would skip `.planner/` paths.
+**Implementation.** Documented in the `/planner` skill operational protocol.
+The PreToolUse guard skips `.planner/` paths and anything outside the
+project, and since 2026-09-28 it never blocks or prompts at all: it only
+warns the agent when project code changes with no task in progress (project
+Accepted Decision "The no-task guard never blocks or asks; it only warns the
+agent").
 
 ### D10 — Composite IDs in chat, never raw UUIDs
 **Decision.** Entity references in chat use human composite IDs (`F001`,

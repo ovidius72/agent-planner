@@ -32,6 +32,7 @@ export * from "./package-version.js";
 export * from "./runtime-diagnostics.js";
 export * from "./write-coordination.js";
 export * from "./guard-decision.js";
+export * from "./guard-state.js";
 export { PlanStore, PlanStoreError, PlanStaleWriteError, PlanUnsupportedAllocationKindError, assertPlannerRevision, setWriteBusyHook, setWriteNotifyHook, migrateToUuids, migrateToGlobalSequence, withFeatureLock, nowISO, type IdeaCreateInput, type IdeaUpdateInput, type IdeaPromotionTargetInput, type AcceptedDecisionOwner, type AcceptedDecisionCreateInput, type AcceptedDecisionUpdateInput, type RecordProjectContextReadInput, type RecordProjectContextReadResult, type PhaseHandoffSummary, type OrphanPhaseSummary } from "./plan-store.js";
 export { PlanRenderer } from "./renderer.js";
 export { ExportService } from "./export-service.js";

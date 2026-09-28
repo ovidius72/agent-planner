@@ -1,11 +1,12 @@
 /**
  * End-to-end coverage of the `agent-plan guard pre-tool-use` CLI wiring: the
- * decision logic itself is unit-tested against fabricated events in
+ * warning logic itself is unit-tested against fabricated events in
  * @agent-plan/core (packages/plan-core/test/guard-decision.test.mjs). These
  * tests exercise the real stdin → hookSpecificOutput JSON contract against a
  * real .planner/ fixture, so a wiring regression (wrong field name, wrong
- * cwd, stale plannerRoot) is caught even though the pure decision function
- * is fine.
+ * cwd, stale plannerRoot) is caught even though the pure warning function
+ * is fine. The hook never blocks or prompts: it prints nothing, or a warning
+ * for the agent with no permissionDecision.
  */
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
@@ -23,6 +24,18 @@ const roots = [];
 after(async () => {
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
 });
+
+/** The hook's output must be a warning for the agent and nothing that can
+ * block or prompt. Returns the warning text. */
+function warningFrom(result) {
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).hookSpecificOutput;
+  assert.equal(output.hookEventName, "PreToolUse");
+  assert.equal(output.permissionDecision, undefined);
+  assert.equal(output.permissionDecisionReason, undefined);
+  assert.equal(typeof output.additionalContext, "string");
+  return output.additionalContext;
+}
 
 function runGuard(payload, cwd) {
   return spawnSync(process.execPath, [cliPath, "guard", "pre-tool-use"], {
@@ -52,24 +65,31 @@ async function fixtureWithPlannedTask() {
   return { root, store, phaseId: phase.id, taskId };
 }
 
-test("an Edit inside .planner/ is allowed even with a planned, not-started task", async () => {
+test("an Edit inside .planner/ prints nothing even with a planned, not-started task", async () => {
   const { root } = await fixtureWithPlannedTask();
   const result = runGuard({ tool_name: "Edit", tool_input: { file_path: join(root, ".planner", "docs", "handoff.md") } }, root);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "");
 });
 
-test("an Edit outside .planner/ with no task in progress asks, and names the concrete task to start", async () => {
+test("an Edit to project code with no task in progress only warns the agent, and names the task to start", async () => {
   const { root, taskId } = await fixtureWithPlannedTask();
-  const result = runGuard({ tool_name: "Edit", tool_input: { file_path: join(root, "src", "index.ts") } }, root);
-  assert.equal(result.status, 0, result.stderr);
-  const output = JSON.parse(result.stdout);
-  assert.equal(output.hookSpecificOutput.permissionDecision, "ask");
-  assert.match(output.hookSpecificOutput.permissionDecisionReason, /no task is in-progress/);
-  assert.match(output.hookSpecificOutput.permissionDecisionReason, new RegExp(taskId));
+  const warning = warningFrom(runGuard({ tool_name: "Edit", tool_input: { file_path: join(root, "src", "index.ts") } }, root));
+  assert.match(warning, /no task is in progress/);
+  assert.match(warning, /not blocked/);
+  assert.match(warning, new RegExp(taskId));
 });
 
-test("a task in-progress allows the Edit outside .planner/", async () => {
+test("writes outside the project print nothing, even with no task in progress", async () => {
+  const { root } = await fixtureWithPlannedTask();
+  for (const command of ["grep -rn x . 2>/dev/null", `echo hi > ${join(tmpdir(), "agent-plan-guard-scratch.txt")}`]) {
+    const result = runGuard({ tool_name: "Bash", tool_input: { command } }, root);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "", command);
+  }
+});
+
+test("a task in-progress silences the warning", async () => {
   const { root, store, phaseId } = await fixtureWithPlannedTask();
   await store.updatePhase(phaseId, (ph) => {
     ph.tasks[0].status = "in-progress";
@@ -80,7 +100,7 @@ test("a task in-progress allows the Edit outside .planner/", async () => {
   assert.equal(result.stdout, "");
 });
 
-test("an authorized bypass allows the Edit outside .planner/", async () => {
+test("an authorized bypass silences the warning", async () => {
   const { root, store } = await fixtureWithPlannedTask();
   await store.authorizeGuardBypass(15);
   const result = runGuard({ tool_name: "Edit", tool_input: { file_path: join(root, "src", "index.ts") } }, root);
@@ -88,32 +108,27 @@ test("an authorized bypass allows the Edit outside .planner/", async () => {
   assert.equal(result.stdout, "");
 });
 
-test("read-only Bash is allowed even with a planned, not-started task", async () => {
+test("read-only Bash prints nothing even with a planned, not-started task", async () => {
   const { root } = await fixtureWithPlannedTask();
   const result = runGuard({ tool_name: "Bash", tool_input: { command: "git status && pnpm build" } }, root);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "");
 });
 
-test("write-shaped Bash outside .planner/ asks; the identical shape targeting .planner/ is allowed", async () => {
+test("write-shaped Bash to project code warns; the identical shape targeting .planner/ prints nothing", async () => {
   const { root } = await fixtureWithPlannedTask();
 
-  const outside = runGuard({ tool_name: "Bash", tool_input: { command: `echo hi > ${join(root, "src", "out.txt")}` } }, root);
-  assert.equal(outside.status, 0, outside.stderr);
-  const outsideOutput = JSON.parse(outside.stdout);
-  assert.equal(outsideOutput.hookSpecificOutput.permissionDecision, "ask");
+  warningFrom(runGuard({ tool_name: "Bash", tool_input: { command: `echo hi > ${join(root, "src", "out.txt")}` } }, root));
 
   const inside = runGuard({ tool_name: "Bash", tool_input: { command: `echo hi > ${join(root, ".planner", "docs", "note.md")}` } }, root);
   assert.equal(inside.status, 0, inside.stderr);
   assert.equal(inside.stdout, "");
 });
 
-test("a NotebookEdit outside .planner/ asks; inside it is allowed", async () => {
+test("a NotebookEdit to project code warns; inside .planner/ it prints nothing", async () => {
   const { root } = await fixtureWithPlannedTask();
 
-  const outside = runGuard({ tool_name: "NotebookEdit", tool_input: { notebook_path: join(root, "notebooks", "a.ipynb") } }, root);
-  const outsideOutput = JSON.parse(outside.stdout);
-  assert.equal(outsideOutput.hookSpecificOutput.permissionDecision, "ask");
+  warningFrom(runGuard({ tool_name: "NotebookEdit", tool_input: { notebook_path: join(root, "notebooks", "a.ipynb") } }, root));
 
   const inside = runGuard({ tool_name: "NotebookEdit", tool_input: { notebook_path: join(root, ".planner", "a.ipynb") } }, root);
   assert.equal(inside.stdout, "");

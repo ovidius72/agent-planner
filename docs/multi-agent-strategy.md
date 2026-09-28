@@ -78,7 +78,7 @@ The core now also carries explicit persistent ordering metadata (`feature.number
 | Atomic persistence + busy signaling | no | yes (plan-core + plan-server) |
 | Gating "Enable planner? (y/n/(a)lways)" | **yes (Pi)** | rewritten per-host |
 | Startup/resume summary injection | **yes (Pi)** | rewritten per-host |
-| `tool_call` guardrail (block `edit`/`write` when no task is `in-progress`; `bash` stays free) | **yes (Pi)** | Claude: `PreToolUse` hook; others: `AGENTS.md` rules |
+| No-task warning (never blocks; warns the agent when `edit`/`write`/write-shaped `bash` changes project code with no task `in-progress`) | **yes (Pi)** | Claude: `PreToolUse` hook; others: `AGENTS.md` rules |
 | `ctx.ui.notify` / `ctx.ui.input` | **yes (Pi)** | MCP text output + tool prompts |
 | Language preferences persistence | no | yes (in `project.json`) |
 
@@ -208,7 +208,7 @@ Each MCP tool handler is a thin wrapper around `PlanStore` methods or shared pla
 ### Claude Code
 - **Tools**: MCP server in project `.mcp.json` `mcpServers`, or user-scope MCP via `claude mcp add`.
 - **Slash command**: `agent-plan setup claude-code` writes `.claude/commands/planner.md` (project) or `~/.claude/commands/planner.md` (user) as a `/planner ...` router to MCP tools.
-- **Guardrail**: setup installs a `PreToolUse` hook for `Edit|Write`; it blocks write tools when a planner exists, tasks exist, and no task is `in-progress`.
+- **Guardrail**: setup installs a `PreToolUse` hook for `Edit|Write|NotebookEdit|Bash`; it never blocks or prompts, and warns the agent when a call changes project code while tasks exist and none is `in-progress`.
 - **Bypass**: the guard reads a shared `guardBypassUntil` value from `resume.json`, so the user can explicitly authorize a temporary bypass and all adapters respect it.
 - **Startup**: `SessionStart` resume summary remains future work. In Pi, the startup summary now shows the dashboard URL when active and treats handoff targets as hints to validate when nothing is in progress.
 - **Gating**: explicit project initialization via `/planner init`; setup does not create `.planner/`.

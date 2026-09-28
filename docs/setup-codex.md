@@ -79,7 +79,7 @@ Codex MCP hooks are not standardized yet. When Codex exposes a pre-tool-use hook
 agent-plan guard pre-tool-use
 ```
 
-The guard blocks `Edit`/`Write` unless a task is `in-progress` or a bypass has been authorized. Until Codex exposes such a hook, the guard must be applied at the project policy level or via custom Codex configuration.
+The guard never blocks: when a call changes project code while no task is `in-progress` (and no bypass is authorized), it only warns the agent. Until Codex exposes such a hook, the warning must come from project policy or custom Codex configuration.
 
 ## Public references
 
