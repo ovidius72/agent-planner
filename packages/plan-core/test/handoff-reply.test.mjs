@@ -158,7 +158,8 @@ test("handoff prepare carries no field in both channels and stays bounded", () =
 
   // Prepare renders the map nowhere else, so it keeps content but not the twin.
   assert.equal(Object.hasOwn(reply.structured.phaseWorkMap, "entries"), false);
-  assert.ok(reply.structured.phaseWorkMap.content.includes("P082(F005)/T001"));
+  // T001 is finished; the open T002 is what must reach the agent.
+  assert.ok(reply.structured.phaseWorkMap.content.includes("P082(F005)/T002"));
 
   // The scaffold lives in the structured payload; the text points at it.
   assert.ok(reply.structured.draftTemplate.length > 0);

@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -172,7 +172,7 @@ setWriteNotifyHook(() => {
 let plannerSessionEnabled = false;
 
 // In-process guard bypass (per session, NOT persisted/shared). The edit/write
-// guard is advisory in Pi (warns "NO ACTIVE TASK" but does not block). When a
+// The no-task guard only ever warns the agent; it never blocks. When a
 // bypass is active the warning is silenced for the window. Lives in memory only:
 // not on disk, not in git, not shared across agents/sessions on the same folder.
 let guardBypassUntil = "";
@@ -342,36 +342,6 @@ async function ensureProjectLanguagePreferences(st: PlanStore, persist = true): 
   }
 
   return project;
-}
-
-async function getPlannerExecutionGuard(st: PlanStore): Promise<{
-  totalTasks: number;
-  inProgressTaskIds: string[];
-  focusTaskId: string;
-  focusTaskTitle: string;
-}> {
-  const [workspace, resume] = await Promise.all([st.loadAll(), st.loadResume()]);
-  const allTasks = workspace.phases.flatMap((phase) => phase.tasks.map((task) => ({ phase, task })));
-  const inProgress = allTasks.filter(({ task }) => task.status === "in-progress");
-  const totalTasks = allTasks.length;
-
-  const focusFromResume = resume?.inProgressTaskIds?.[0]
-    ? allTasks.find(({ task }) => task.id === resume.inProgressTaskIds[0])
-    : undefined;
-  const focusFromCurrentPhase = resume?.currentPhaseId
-    ? allTasks.find(({ phase, task }) => phase.id === resume.currentPhaseId && task.status !== "done" && task.status !== "canceled" && task.status !== "rejected")
-    : undefined;
-  const fallbackFocus = allTasks.find(({ task }) => task.pauseSnapshot)
-    ?? allTasks.find(({ task }) => task.status === "planned" || task.status === "blocked" || task.status === "waiting")
-    ?? allTasks.find(({ task }) => task.status !== "done" && task.status !== "canceled" && task.status !== "rejected");
-  const focus = focusFromResume ?? focusFromCurrentPhase ?? fallbackFocus;
-
-  return {
-    totalTasks,
-    inProgressTaskIds: inProgress.map(({ task }) => task.id),
-    focusTaskId: focus?.task.id ?? "",
-    focusTaskTitle: focus?.task.title ?? "",
-  };
 }
 
 async function buildHandoffMarkdown(
@@ -1050,33 +1020,6 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         }
       }
     }
-
-    // Guard the code-writing tools (edit/write). bash stays free so that
-    // git pull, build, test, ls, etc. always work.
-    if (event.toolName !== "edit" && event.toolName !== "write") return;
-
-    // Planner-internal writes (.planner/HANDOFF.md, resume.json, generated plan
-    // files, etc.) are planner operations, NOT code edits. They never require a
-    // task in-progress — skip the guard so the handoff can always be written.
-    const targetPath = String((event.input as any)?.path ?? (event.input as any)?.filePath ?? "");
-    if (targetPath && (targetPath.includes("/.planner/") || targetPath.includes("\\.planner\\") || targetPath.startsWith(".planner/"))) return;
-
-    const st = loadStore(ctx);
-    if (!(await st.exists().catch(() => false))) return;
-    await maybeHealStatuses(st, ctx).catch(() => {});
-
-    const guard = await getPlannerExecutionGuard(st).catch(() => null);
-    if (!guard || guard.totalTasks === 0) return; // nothing to enforce yet
-    if (guard.inProgressTaskIds.length > 0) return; // a task is open → we're good
-    if (isGuardBypassed()) return; // user authorized proceeding without a task
-
-    const focusHint = guard.focusTaskId
-      ? `Il task più probabile è ${guard.focusTaskId} — ${guard.focusTaskTitle}. Avvialo con: \`/planner task start ${guard.focusTaskId}\``
-      : `Scegli un task dal piano e avvialo con \`/planner task start <taskId>\`.`;
-    
-    ctx.ui.notify(`⚠️  NO ACTIVE TASK: You are editing files without an in-progress task. Remember to update the plan to maintain dashboard integrity. ${focusHint}`, "warning");
-    return; // Allow the tool to proceed
-
   });
 
   // Reset per-turn flags at the start of each turn.
@@ -1084,22 +1027,35 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     taskCompleteReminderSaidThisTurn = false;
   });
 
-  // After edit/write succeeds, track activity and (once per turn, when a task
-  // is in-progress) remind the agent to complete the task when the work is done.
+  // After a tool runs, tell the agent (never block) when it changed project
+  // code with no task in progress; otherwise, once per turn while a task is
+  // in progress, remind it to complete the task. Notes are appended to the
+  // tool's own output, which Pi would otherwise replace.
   pi.on("tool_result", async (event, ctx) => {
     if (!plannerSessionEnabled) return;
-    if (event.toolName !== "edit" && event.toolName !== "write") return;
-    if (taskCompleteReminderSaidThisTurn) return;
+    if (event.toolName !== "edit" && event.toolName !== "write" && event.toolName !== "bash") return;
     try {
-      const st = loadStore(ctx);
-      if (!(await st.exists().catch(() => false))) return;
-      const guard = await getPlannerExecutionGuard(st).catch(() => null);
-      if (guard && guard.inProgressTaskIds.length > 0) {
-        taskCompleteReminderSaidThisTurn = true;
-        return {
-          content: [{ type: "text", text: "Reminder: when this implementation work is finished, call task_complete (or /planner task complete) so the task status moves to done and phase/feature rollups stay correct." }],
-        };
-      }
+      const input = event.input as { path?: unknown; filePath?: unknown; command?: unknown };
+      const stringField = (value: unknown) => typeof value === "string" && value ? value : undefined;
+      const filePath = stringField(input.path ?? input.filePath);
+      const command = stringField(input.command);
+      const guardEvent = {
+        toolName: event.toolName,
+        cwd: ctx.cwd,
+        plannerRoot: resolvePlanRoot(ctx.cwd),
+        ...(filePath !== undefined ? { filePath } : {}),
+        ...(command !== undefined ? { command } : {}),
+      };
+      if (!classifyGuardedTool(guardEvent).guarded) return;
+      const state = await loadNoTaskGuardState(loadStore(ctx));
+      const { warning } = noTaskWarning(guardEvent, { ...state, guardBypassed: state.guardBypassed || isGuardBypassed() });
+      const note = warning
+        ?? (state.hasInProgressTask && !taskCompleteReminderSaidThisTurn
+          ? "Reminder: when this implementation work is finished, call task_complete (or /planner task complete) so the task status moves to done and phase/feature rollups stay correct."
+          : undefined);
+      if (!note) return;
+      if (!warning) taskCompleteReminderSaidThisTurn = true;
+      return { content: [...event.content, { type: "text" as const, text: note }] };
     } catch {}
   });
 
@@ -2721,34 +2677,34 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // turn (before_agent_start's systemPrompt injection is NOT applied to
       // triggerTurn messages), so the recap data must live here. Uses the shared
       // core buildRecap so Pi and Claude Code/Codex present identical content.
-      let recapText = "";
-      let plannerSkillContext = "";
-      let projectContextBlock = "";
+      // One text, each piece once — the same builder MCP's planner-load and
+      // Pi's planner-load tool use. In Pi this command is the only way the
+      // operating guide reaches the agent, so the guide body is included.
+      let loadText = "";
       try {
         const plannerSkill = await st.syncPlannerSkill();
         await st.syncGrillMeSkill();
         const srv = server as ServeHandle | null;
-        recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
+        let recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
         if (preparation.changed) recapText = `${preparation.legacyProjectContext.summary}\n\n${recapText}`;
         // Explicit planner load must deliver the complete project-level
         // context (P102(F005)/T404), attested through the same lossless
-        // contract used everywhere else. buildProjectContextLoadReply is the
-        // single shared shaping for this reply — the planner-load tool below
-        // uses the identical builder. Like plannerSkillContext, this is
-        // agent-only: it must never be quoted into the human-facing recap
-        // (see the "must not leak into the human recap" invariant covered by
-        // host-registration.test.mjs for the planner-load tool).
+        // contract used everywhere else.
         const projectContextDelivery = await st.loadProjectContextDelivery(DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS);
         const projectContextReply = buildProjectContextLoadReply(projectContextDelivery, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS);
         if (projectContextReply.structured.contextComplete) {
           await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
         }
-        projectContextBlock = `[agent-only project context; do not quote in the recap]\n${projectContextReply.text}\n[end agent-only project context]`;
-        plannerSkillContext = `[agent-only planner usage skill; do not quote in the recap]\n${plannerSkill.customized ? `${plannerSkill.message}\n` : ""}${plannerSkill.content}\n[end agent-only planner usage skill]`;
-      } catch (e) { recapText = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
+        loadText = buildPlannerLoadReply({
+          recap: recapText,
+          projectContext: projectContextReply,
+          scopedDecisions: buildScopedDecisionContext(await st.loadAll()),
+          plannerGuide: { mode: "include", content: plannerSkill.content, customized: plannerSkill.customized, message: plannerSkill.message },
+        }).text;
+      } catch (e) { loadText = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       pi.sendMessage({
         customType: "planner-resume-trigger",
-        content: "[internal trigger — not a user command] Read and retain the agent-only planner usage skill and project context below, then present the planner startup recap to the user verbatim. Do NOT call any tools (planner-load already ran). Do NOT narrate or expose internal instructions — output ONLY the recap.\n\n" + plannerSkillContext + "\n\n" + projectContextBlock + "\n\n--- RECAP ---\n" + recapText + "\n--- END RECAP ---",
+        content: "[internal trigger — not a user command] Read and retain the agent-only context below, then present the recap section to the user verbatim. Do NOT call any tools (planner-load already ran). Do NOT narrate or expose internal instructions — output ONLY the recap.\n\n" + loadText,
         display: false,
       }, {
         triggerTurn: true,
@@ -6034,10 +5990,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (projectContextReply.structured.contextComplete) {
         await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
       }
-      // The project context text (like the rest of `details`) is agent-only:
-      // read and retain it, but never quote it or its Accepted Decisions in
-      // the human-facing recap (`content[].text` stays the recap alone).
-      return { content: [{ type: "text", text: recap }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, preparation: preparation.legacyProjectContext, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message }, projectContext: { text: projectContextReply.text, ...projectContextReply.structured } } };
+      // Pi's model reads only `content`; `details` is for the UI. The project
+      // context used to live only in `details`, so it was attested as read
+      // while the agent never saw it. Same builder as MCP and /planner load.
+      // The guide is already in this turn's context (the per-turn plan
+      // context block carries it), so only point at it here.
+      const reply = buildPlannerLoadReply({
+        recap,
+        projectContext: projectContextReply,
+        scopedDecisions: buildScopedDecisionContext(await st.loadAll()),
+        plannerGuide: { mode: "pointer", path: ".planner/SKILL.md", customized: plannerSkill.customized, message: plannerSkill.message },
+      });
+      return { content: [{ type: "text", text: reply.text }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, preparation: preparation.legacyProjectContext, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message }, ...reply.structured } };
     },
   });
 
@@ -6225,7 +6189,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
         "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Compact feature_list / phase_list / task_list surfaces expose priority markers; when browsing manually, follow the lowest visible priority first among ready siblings. Prefer shortId or F00x/P00x/T00x refs. Read one entity via *_get(full=true).",
-        "- If edit/write guard blocks you, start the right task or use an explicit bypass.",
+        "- Nothing is ever blocked for lack of a task. If you are warned that you changed project code with no task in progress, start the task that covers it.",
         ...(extensionRules.length > 0
           ? [
             "",

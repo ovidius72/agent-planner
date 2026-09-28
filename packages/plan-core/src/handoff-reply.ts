@@ -11,6 +11,11 @@
  * per-field comments) rather than by a single blanket rule — see AGENTS.md
  * rule 4: this placement decision belongs in the core exactly once, not
  * once per adapter.
+ *
+ * Transport note: Claude Code shows the agent only structuredContent when a
+ * result has one, so the MCP server folds `text` into the structured part
+ * for every tool (foldTextIntoStructured in plan-mcp). The rule above still
+ * holds for what these builders return; the fold is the MCP transport's job.
  */
 import type { HandoffCompletenessAudit, HandoffSupportingDocument, Phase } from "./schema.js";
 import type { PhaseWorkMap } from "./task-context.js";

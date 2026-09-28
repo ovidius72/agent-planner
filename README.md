@@ -741,15 +741,14 @@ For this reason, Agent Plan provides dedicated lifecycle tools and blocks the wr
 - use `task_complete` / `planner-task-complete` / `/planner task complete` to finish work and surface any required return target;
 - do **not** use `task_update` to move a task directly to `in-progress`, `paused`, or `done`.
 
-### Write guard and temporary bypass
+### No-task warning and temporary bypass
 
-Agent Plan enforces task discipline only where it matters most: **write operations**.
+Agent Plan never blocks a tool call and never asks the user to confirm one because of task state. When a call changes the project's code (a file inside the project, outside `.planner/`) and no task is `in-progress`, the agent gets a warning telling it which task to start. The call goes through either way.
 
-The guard exists because agents often need to inspect the repo, run tests, or pull changes before opening a task. Blocking all shell access was too restrictive. The current model therefore:
-
-- keeps `bash` free for `git pull`, build, test, search, and inspection;
-- blocks only `edit` / `write` when a planner exists, tasks exist, and no task is `in-progress`;
-- allows an explicit **temporary bypass** when the user authorizes proceeding without opening a task.
+- Planner changes never need a task: CRUD on the project, features, phases, tasks, requirements, decisions and handoffs, and any write under `.planner/`.
+- Writes outside the project never warn: `/dev/null`, `~/.claude/...`, temp folders, other repositories.
+- Read-only commands never warn: `git pull`, build, test, search, inspection.
+- An authorized **temporary bypass** silences the warning for its window.
 
 Recommended workflow:
 
@@ -782,11 +781,9 @@ The bypass is stored in `.planner/resume.json` as `guardBypassUntil`, so it is s
 
 ### Claude Code task guard
 
-`agent-plan setup claude-code` installs a Claude Code `PreToolUse` hook for `Edit|Write` (bash is intentionally not guarded, so `git pull`, build and test always work).
+`agent-plan setup claude-code` (and the Claude Code plugin) installs a `PreToolUse` hook for `Edit|Write|NotebookEdit|Bash`. It never blocks and never prompts: when a call changes project code while no task is in-progress, it adds a warning to the agent's context and sets no permission decision, so Claude Code's normal permission flow is unchanged. Bash counts only when the command writes (redirect, `tee`, `sed -i`, `cp`/`mv`, `rm`, tree-rewriting `git`) into the project.
 
-The hook **blocks Edit/Write when no task is in-progress**, unless the user has authorized a temporary bypass. The block is not a dead wall: the agent can start a task with `/planner task start`, OR the user can authorize a one-time bypass so Edit/Write proceeds without a task.
-
-Authorize a bypass:
+To silence the warning for a while, authorize a bypass:
 
 ```text
 /planner bypass

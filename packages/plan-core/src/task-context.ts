@@ -114,20 +114,30 @@ export function buildPhaseWorkMap(
       remainingCapabilityOwner: !["done", "canceled", "rejected"].includes(task.status),
       current: task.id === currentTaskId,
     }));
-  const header = `Phase work map — canonical sibling capability ownership (${entries.length}, priority order):`;
-  const rendered = entries.map((entry) => ({
-    entry,
-    block: [
-      `- ${entry.ref}${entry.current ? " (current)" : ""} — ${entry.title} [priority ${entry.priority}; ${entry.status}]`,
-      `  Goal: ${entry.conciseGoal}`,
-      `  Depends on: ${entry.dependencies.length > 0 ? entry.dependencies.join(", ") : "None."}`,
-      entry.remainingCapabilityOwner
-        ? `  Ownership: ${entry.ref} owns this remaining capability; do not duplicate it in another task.`
-        : "  Ownership: no remaining capability ownership (terminal task).",
-    ].join("\n"),
-  }));
+  // Open work first, in full: that is what the agent must not duplicate and
+  // may pick up. Finished tasks follow as one line each — enough to see a
+  // capability already exists — so a long phase does not spend the reply on
+  // closed work, and the budget cuts finished lines before open ones.
+  const open = entries.filter((entry) => entry.remainingCapabilityOwner);
+  const closed = entries.filter((entry) => !entry.remainingCapabilityOwner);
+  const header = `Phase work map — canonical sibling capability ownership (${open.length} open, ${closed.length} finished; open first, priority order):`;
+  const rendered = [
+    ...open.map((entry) => ({
+      entry,
+      block: [
+        `- ${entry.ref}${entry.current ? " (current)" : ""} — ${entry.title} [priority ${entry.priority}; ${entry.status}]`,
+        `  Goal: ${entry.conciseGoal}`,
+        `  Depends on: ${entry.dependencies.length > 0 ? entry.dependencies.join(", ") : "None."}`,
+        `  Ownership: ${entry.ref} owns this remaining capability; do not duplicate it in another task.`,
+      ].join("\n"),
+    })),
+    ...closed.map((entry, index) => ({
+      entry,
+      block: `${index === 0 ? "Finished (already built; do not redo):\n" : ""}- ${entry.ref} — ${entry.title} [${entry.status}]`,
+    })),
+  ];
   const truncationNotice = (withheldCount: number): string =>
-    `[Phase work map truncated for transport safety: ${withheldCount} lower-priority ${withheldCount === 1 ? "entry" : "entries"} withheld. Read the canonical phase and task full views before proposing work; place deeper context under .planner/docs/.]`;
+    `[Phase work map truncated for transport safety: ${withheldCount} ${withheldCount === 1 ? "entry" : "entries"} withheld, finished ones first. Read the canonical phase and task full views before proposing work; place deeper context under .planner/docs/.]`;
   // Reserve space using the full task count as the withheld-count placeholder: since the
   // eventual withheld count can never exceed it, this reservation is always a safe upper
   // bound on the final notice length, so shrinking it afterward cannot overflow maxChars.

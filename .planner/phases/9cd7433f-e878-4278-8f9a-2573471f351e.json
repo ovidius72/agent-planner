@@ -1,0 +1,236 @@
+{
+  "id": "9cd7433f-e878-4278-8f9a-2573471f351e",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 106,
+  "shortId": "3QBBS",
+  "priority": 38,
+  "slug": "no-task-guard-asks-only-for-writes-inside-the-project",
+  "title": "No-task guard asks only for writes inside the project",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Stop the no-task guard prompting for writes that never touch the project's code (/dev/null, ~/.claude, /tmp).",
+  "description": "The no-task edit guard (`decideGuardPreToolUse` / `classifyGuardedTool` in `packages/plan-core/src/guard-decision.ts`, run by the Claude Code PreToolUse hook `guardPreToolUse` in `packages/agent-plan/src/index.ts:~350-410`) asks the user to confirm any write whose target is outside `.planner/`. The user's rule is narrower: a task is required only when the project's code changes.\n\nObserved 2026-09-24:\n- Read-only commands ending in `2>/dev/null` prompt, because `>` is write-shaped and `/dev/null` is \"outside .planner/\".\n- Editing `~/.claude/settings.json` (Claude Code config, not the project) prompts in another project and suggests starting an unrelated task.\n- The prompt text reads \"…, OR Or authorize a temporary bypass\": the hook's startHint ends with \", OR\" and the reason continues with \" Or authorize\".\n\nGoal: the guard only asks when a write lands inside the project folder (the directory owning `.planner/`) and outside `.planner/`. Writes whose known targets are all outside the project (devices, home config, temp dirs, other repos) pass silently. Unknown targets (computed heredoc, variables) still ask — never silently allowed. The rule lives in one place (plan-core) so the hook's cheap early-exit and the full decision cannot disagree.\n\nPreserve: `.planner/` writes always allowed; no planner dir / no tasks / in-progress task / bypass all allow; read-only Bash stays unguarded; the documented interpreter-write gap stays documented.",
+  "descriptionUpdatedAt": "2026-09-24T16:54:15.158Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "568d3e2f-841c-4411-a0e4-4f735f988e32",
+    "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93"
+  ],
+  "tasks": [
+    {
+      "id": "568d3e2f-841c-4411-a0e4-4f735f988e32",
+      "phaseId": "9cd7433f-e878-4278-8f9a-2573471f351e",
+      "number": 433,
+      "shortId": "K5VA4",
+      "priority": 1,
+      "shortName": "guard-only-project-writes-and",
+      "title": "Guard only project writes and fix the doubled OR in the prompt",
+      "status": "done",
+      "description": "Current state: `classifyGuardedTool` (packages/plan-core/src/guard-decision.ts) marks every write-shaped Bash / Edit / Write / NotebookEdit as guarded and returns raw targets; `decideGuardPreToolUse` then allows only when every target is inside `.planner/`. The hook in packages/agent-plan/src/index.ts repeats that planner check for its early-exit (`!classification.guarded || isEntirelyInsidePlannerRoot(...)`), so the rule is written twice.\n\nChange:\n1. In plan-core, make `classifyGuardedTool` return only the targets that matter: inside the project root (dirname of plannerRoot) and outside `.planner/`. Expand a leading `~` / `$HOME` before resolving. If the call had known targets and none matter → `guarded: false`. If the targets are unknown (empty list) → still guarded (asks). `decideGuardPreToolUse` and the hook's early-exit both just read `classification.guarded`; drop the duplicated planner check in the hook.\n2. Fix the reason text: the start hint becomes a full sentence (\"Start a task with /planner task start <id> (<title>).\") and the reason joins it with \"Or authorize…\" once. Update index.ts hint and the test fixture.\n3. Tests (packages/plan-core/test/guard-decision.test.mjs): `2>/dev/null` / `>/dev/null` allowed; write to `~/.claude/settings.json` and `/tmp/x` allowed (Bash and Edit); write inside the project outside .planner still asks; mixed project + /dev/null asks; unknown target still asks; reason has no \"OR Or\". Keep agent-plan CLI tests green (packages/agent-plan/test/guard-pre-tool-use.test.mjs).\n4. Update the doc comments to state the rule. Run `pnpm plugins:check` if a `.in` file is touched.\n\nEdge cases: relative `../other-repo/file` is outside → allowed; `$OUT` unexpanded variable resolves inside the project → asks (conservative); symlinked temp dirs via existing canonicalize.\n\n---\n**Completion summary:**\nShipped: the no-task guard now asks only when a write changes a project file outside .planner/.\n\n- packages/plan-core/src/guard-decision.ts: `classifyGuardedTool` is the single place the rule lives. It returns guarded=false when every known write target is outside the project (the directory owning .planner/) or inside .planner/, and narrows `paths` to project-code targets. Unknown targets (Edit with no path, `$VAR` redirect) still ask. New export `isProjectCodePath`; paths have quotes stripped and a leading `~` / `$HOME` expanded. New `maskQuotedOperators` + `normalizeBashCommand`: `> < | ; &` and newlines inside quotes are text, so a commit message with `<noreply@anthropic.com>` or `grep \"a|b\"` no longer reads as a write. Removed `isEntirelyInsidePlannerRoot` (only used for the duplicated check). `decideGuardPreToolUse` reads only `classification.guarded`. Reason text now says \"changes a project file outside .planner/\".\n- packages/agent-plan/src/index.ts: hook early-exit is just `!classifyGuardedTool(event).guarded`; start hint is a full sentence ending with \".\" so the prompt no longer reads \"OR Or\".\n- packages/plan-core/test/guard-decision.test.mjs: new cases for 2>/dev/null, &>/dev/null, ~/.claude/settings.json, $HOME, /tmp, ../other-repo, Edit outside project, mixed project + /dev/null (asks), mixed planner + project (asks, reports only project path), quoted operators in commit messages/grep, quoted redirect targets, unknown targets (ask), no \"OR Or\".\n\nVerification: plan-core 450/450, agent-plan 14/14 (built). Against the old guard the new test file fails to load (missing `isProjectCodePath`), so per-case failure on old code was not shown individually.\n\nNot done: plan-mcp / pi-adapter / plan-server suites not run (they don't import the guard; grep confirms). Heredoc bodies with `>` in unquoted text can still false-positive (unchanged, pre-existing). Nothing committed.",
+      "descriptionUpdatedAt": "2026-09-24T16:56:37.667Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "568d3e2f-841c-4411-a0e4-4f735f988e32-check-001-planned-in-progress",
+          "date": "2026-09-24T16:54:29.067Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "568d3e2f-841c-4411-a0e4-4f735f988e32-check-002-in-progress-done",
+          "date": "2026-09-24T16:56:37.664Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: the no-task guard now asks only when a write changes a project file outside .planner/.\n\n- packages/plan-core/src/guard-decision.ts: `classifyGuardedTool` is the single place the rule lives. It returns guarded=false when every known write target is outside the project (the directory owning .planner/) or inside .planner/, and narrows `paths` to project-code targets. Unknown targets (Edit with no path, `$VAR` redirect) still ask. New export `isProjectCodePath`; paths have quotes stripped and a leading `~` / `$HOME` expanded. New `maskQuotedOperators` + `normalizeBashCommand`: `> < | ; &` and newlines inside quotes are text, so a commit message with `<noreply@anthropic.com>` or `grep \"a|b\"` no longer reads as a write. Removed `isEntirelyInsidePlannerRoot` (only used for the duplicated check). `decideGuardPreToolUse` reads only `classification.guarded`. Reason text now says \"changes a project file outside .planner/\".\n- packages/agent-plan/src/index.ts: hook early-exit is just `!classifyGuardedTool(event).guarded`; start hint is a full sentence ending with \".\" so the prompt no longer reads \"OR Or\".\n- packages/plan-core/test/guard-decision.test.mjs: new cases for 2>/dev/null, &>/dev/null, ~/.claude/settings.json, $HOME, /tmp, ../other-repo, Edit outside project, mixed project + /dev/null (asks), mixed planner + project (asks, reports only project path), quoted operators in commit messages/grep, quoted redirect targets, unknown targets (ask), no \"OR Or\".\n\nVerification: plan-core 450/450, agent-plan 14/14 (built). Against the old guard the new test file fails to load (missing `isProjectCodePath`), so per-case failure on old code was not shown individually.\n\nNot done: plan-mcp / pi-adapter / plan-server suites not run (they don't import the guard; grep confirms). Heredoc bodies with `>` in unquoted text can still false-positive (unchanged, pre-existing). Nothing committed."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "568d3e2f-841c-4411-a0e4-4f735f988e32-check-001-move-the-inside-project-outside-planner-rule-into-classifyguardedtool-and-drop-the-hook-s-duplicate-check",
+          "number": 1,
+          "title": "Move the 'inside project, outside .planner' rule into classifyGuardedTool and drop the hook's duplicate check",
+          "checked": true
+        },
+        {
+          "id": "568d3e2f-841c-4411-a0e4-4f735f988e32-check-002-fix-the-doubled-or-in-the-prompt-text",
+          "number": 2,
+          "title": "Fix the doubled OR in the prompt text",
+          "checked": true
+        },
+        {
+          "id": "568d3e2f-841c-4411-a0e4-4f735f988e32-check-003-add-tests-for-dev-null-home-config-temp-project-writes-unknown-targets",
+          "number": 3,
+          "title": "Add tests for /dev/null, home config, temp, project writes, unknown targets",
+          "checked": true
+        },
+        {
+          "id": "568d3e2f-841c-4411-a0e4-4f735f988e32-check-004-run-the-focused-plan-core-and-agent-plan-suites",
+          "number": 4,
+          "title": "Run the focused plan-core and agent-plan suites",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-24T16:54:29.067Z",
+      "completedAt": "2026-09-24T16:56:37.664Z",
+      "createdAt": "2026-09-24T16:54:24.055Z",
+      "updatedAt": "2026-09-24T16:56:37.664Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:645cf1ad-ecaf-4c9e-988d-bb2adce0a3b3",
+          "createdAt": "2026-09-24T16:54:28.972Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93",
+      "phaseId": "9cd7433f-e878-4278-8f9a-2573471f351e",
+      "number": 434,
+      "shortId": "HWBJG",
+      "priority": 2,
+      "shortName": "make-the-no-task-guard-a-warni",
+      "title": "Make the no-task guard a warning to the agent, never a prompt",
+      "status": "done",
+      "description": "User decision 2026-09-28: \"MUST be allowed for every command except the codebase just a warning is showed to the agent. NO BLOCKING things. If the agent is editing the planner (CRUD on tasks, phases, feature, project…) nothing should require an in-progress task.\"\n\nCurrent state:\n- packages/plan-core/src/guard-decision.ts `decideGuardPreToolUse` returns `ask` for a project-code write with no in-progress task; the Claude Code hook (packages/agent-plan/src/index.ts `guardPreToolUse`) prints `permissionDecision: \"ask\"`, which prompts the user.\n- packages/pi-adapter/src/index.ts tool_call handler (~1052-1080) already only warns, but hand-rolls its own rule: a text match on \"/.planner/\", only edit/write, an Italian hint (breaks AGENTS.md rule 16), and it notifies the UI instead of the agent.\n- Verified no planner mutation (MCP/Pi/server) requires an in-progress task; only task pause requires the paused task itself to be running.\n\nChange:\n1. plan-core: replace the allow/ask/deny decision with a warning result: `{ warning?: string }` (a type named for what it is). Never ask or deny. Same conditions as before decide whether a warning exists (project-code write per classifyGuardedTool, planner exists, tasks exist, none in progress, no bypass). One shared warning text in core, addressed to the agent: what happened, the task to start, that planner changes never need a task.\n2. Claude Code hook: emit `hookSpecificOutput.additionalContext` with the warning and no `permissionDecision`, so the normal permission flow is untouched and nothing prompts.\n3. Pi adapter: use core's classifyGuardedTool + warning text instead of its own string match and Italian hint; cover bash the same way core does.\n4. Update CLI help text, plugin .in comment (then pnpm plugins:sync / plugins:check), tests (plan-core guard-decision, agent-plan guard-pre-tool-use CLI tests, pi-adapter if it asserts the text).\n\nPreserve: bypass still silences the warning; read-only tools never load the plan; .planner/ and out-of-project writes produce nothing.\n\n---\n**Completion summary:**\nShipped: the no-task guard never blocks and never prompts; it only warns the agent (project Accepted Decision \"The no-task guard never blocks or asks; it only warns the agent\").\n\n- plan-core/src/guard-decision.ts: `decideGuardPreToolUse` (allow/ask/deny) replaced by `noTaskWarning(event, state) → { warning? }`. One shared agent-facing text: names the project paths, says it was not blocked, suggests the task to start, says planner changes never need a task. Tool names are matched case-insensitively so Pi's `edit/write/bash` use the same rule. Removed GuardPermissionDecision/GuardDecision/startHint.\n- plan-core/src/guard-state.ts (new): `loadNoTaskGuardState(store)` — the one loader of planner state for the warning (task counts, in-progress ids, persisted bypass, suggested task using resume → current phase → paused → first open). Replaces Pi's private getPlannerExecutionGuard and the hook's inline copy.\n- agent-plan/src/index.ts: hook prints `hookSpecificOutput.additionalContext` only, no permissionDecision. Help text updated. `localCliPath` now follows links (realpath) so `setup --local` no longer saves an fnm per-shell temp path into hooks/MCP config.\n- pi-adapter/src/index.ts: tool_call no longer runs its own guard (removed text match on \"/.planner/\" and the Italian hint). tool_result warns the agent for edit/write/bash via core, and appends notes to the tool output instead of replacing it (the old \"call task_complete\" reminder replaced the edit's own output).\n- plan-mcp: planner-authorize-bypass description now says it silences the warning.\n- Docs: README, docs/setup-claude-code.md, docs/setup-codex.md, docs/multi-agent-strategy.md, plugins/DECISIONS.md, plugins/_shared/guard-pre-tool-use.sh.in (+ synced derived script, plugins:check green).\n\nVerified no planner mutation anywhere requires an in-progress task (only pausing a task needs that task running).\n\nTests: plan-core 453/453 (guard 24 incl. \"result is only ever a warning\", Pi lowercase names, no-focus hint); agent-plan 16/16 (CLI asserts additionalContext and no permissionDecision; out-of-project writes print nothing; new link-path setup test); pi-adapter 93/93; plan-mcp 92/92. No full gate (AGENTS.md rule 17). Not committed; not released — installed 0.3.0 and marketplace plugin 0.2.0 still prompt until a release.",
+      "descriptionUpdatedAt": "2026-09-28T08:17:11.199Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93-check-001-planned-in-progress",
+          "date": "2026-09-28T08:12:26.258Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93-check-002-in-progress-done",
+          "date": "2026-09-28T08:17:11.196Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: the no-task guard never blocks and never prompts; it only warns the agent (project Accepted Decision \"The no-task guard never blocks or asks; it only warns the agent\").\n\n- plan-core/src/guard-decision.ts: `decideGuardPreToolUse` (allow/ask/deny) replaced by `noTaskWarning(event, state) → { warning? }`. One shared agent-facing text: names the project paths, says it was not blocked, suggests the task to start, says planner changes never need a task. Tool names are matched case-insensitively so Pi's `edit/write/bash` use the same rule. Removed GuardPermissionDecision/GuardDecision/startHint.\n- plan-core/src/guard-state.ts (new): `loadNoTaskGuardState(store)` — the one loader of planner state for the warning (task counts, in-progress ids, persisted bypass, suggested task using resume → current phase → paused → first open). Replaces Pi's private getPlannerExecutionGuard and the hook's inline copy.\n- agent-plan/src/index.ts: hook prints `hookSpecificOutput.additionalContext` only, no permissionDecision. Help text updated. `localCliPath` now follows links (realpath) so `setup --local` no longer saves an fnm per-shell temp path into hooks/MCP config.\n- pi-adapter/src/index.ts: tool_call no longer runs its own guard (removed text match on \"/.planner/\" and the Italian hint). tool_result warns the agent for edit/write/bash via core, and appends notes to the tool output instead of replacing it (the old \"call task_complete\" reminder replaced the edit's own output).\n- plan-mcp: planner-authorize-bypass description now says it silences the warning.\n- Docs: README, docs/setup-claude-code.md, docs/setup-codex.md, docs/multi-agent-strategy.md, plugins/DECISIONS.md, plugins/_shared/guard-pre-tool-use.sh.in (+ synced derived script, plugins:check green).\n\nVerified no planner mutation anywhere requires an in-progress task (only pausing a task needs that task running).\n\nTests: plan-core 453/453 (guard 24 incl. \"result is only ever a warning\", Pi lowercase names, no-focus hint); agent-plan 16/16 (CLI asserts additionalContext and no permissionDecision; out-of-project writes print nothing; new link-path setup test); pi-adapter 93/93; plan-mcp 92/92. No full gate (AGENTS.md rule 17). Not committed; not released — installed 0.3.0 and marketplace plugin 0.2.0 still prompt until a release."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93-check-001-core-returns-a-warning-never-ask-deny-with-one-shared-text",
+          "number": 1,
+          "title": "Core returns a warning, never ask/deny, with one shared text",
+          "checked": true
+        },
+        {
+          "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93-check-002-claude-code-hook-emits-additionalcontext-only",
+          "number": 2,
+          "title": "Claude Code hook emits additionalContext only",
+          "checked": true
+        },
+        {
+          "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93-check-003-pi-adapter-uses-the-core-rule-and-text",
+          "number": 3,
+          "title": "Pi adapter uses the core rule and text",
+          "checked": true
+        },
+        {
+          "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93-check-004-help-text-plugin-script-comment-and-sync",
+          "number": 4,
+          "title": "Help text, plugin script comment and sync",
+          "checked": true
+        },
+        {
+          "id": "eb8fc0ed-fb12-4a6b-a6b2-e7d52b031d93-check-005-focused-tests-plan-core-agent-plan-pi-adapter",
+          "number": 5,
+          "title": "Focused tests: plan-core, agent-plan, pi-adapter",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T08:12:26.258Z",
+      "completedAt": "2026-09-28T08:17:11.196Z",
+      "createdAt": "2026-09-28T08:12:20.275Z",
+      "updatedAt": "2026-09-28T08:17:11.196Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:efe1b3fe-54d2-44eb-9d8d-2b69956443c8",
+          "createdAt": "2026-09-28T08:12:26.166Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-24T16:54:15.085Z",
+  "updatedAt": "2026-09-28T08:17:11.196Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "edbe6d5d-9a9f-4054-b6aa-f18da65356e1",
+      "date": "2026-09-24T16:54:29.094Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "5ed0cd8c-afdb-465e-b53a-67525ed4f236",
+      "date": "2026-09-24T16:56:37.691Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    },
+    {
+      "id": "777ee4b3-a11c-4305-a71d-a951212377cf",
+      "date": "2026-09-28T08:12:26.282Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "af25c39f-0eec-426b-980f-3943e9ffd1cc",
+      "date": "2026-09-28T08:17:11.224Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:efe1b3fe-54d2-44eb-9d8d-2b69956443c8",
+      "createdAt": "2026-09-28T08:12:26.166Z"
+    },
+    {
+      "sessionId": "mcp-process:645cf1ad-ecaf-4c9e-988d-bb2adce0a3b3",
+      "createdAt": "2026-09-24T16:54:28.972Z"
+    }
+  ]
+}

@@ -55,8 +55,13 @@ describe("handoff and requirement routes", () => {
     renderRoute([{ path: "/", loader: () => ({ handoffs: [pending] }), element: <HandoffRoute /> }]);
 
     await screen.findAllByText("Resume route tests");
-    window.dispatchEvent(new CustomEvent("agent-plan:ws-event", { detail: { type: "handoffUpdated" } }));
-    expect(await screen.findByText("Updated over WebSocket")).toBeInTheDocument();
+    // The route subscribes in an effect that can run after the first render
+    // is visible; an event sent before that is lost. Keep sending until the
+    // refresh shows, as a live server would on its next change.
+    await waitFor(() => {
+      window.dispatchEvent(new CustomEvent("agent-plan:ws-event", { detail: { type: "handoffUpdated" } }));
+      expect(screen.getByText("Updated over WebSocket")).toBeInTheDocument();
+    });
   });
 
   it("renders archive metadata and does not mix archived entries into pending UI", async () => {

@@ -56,20 +56,27 @@
     "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
     "b2f169bf-cdf4-4d0b-a229-37ccd57e3c24",
     "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
-    "dff7481a-5d80-4ef0-9409-5fe40b56fb94"
+    "dff7481a-5d80-4ef0-9409-5fe40b56fb94",
+    "9cd7433f-e878-4278-8f9a-2573471f351e",
+    "c2575bd0-85b7-4be7-bfac-afb9894d1623"
   ],
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "a564be81-1b62-442e-b2aa-a5ef6347e813",
-      "date": "2026-09-24T10:44:08.982Z",
+      "id": "1077bd1c-0c31-44e4-96ba-9c86a768c77b",
+      "date": "2026-09-28T08:54:00.671Z",
       "fromStatus": "planned",
-      "toStatus": "done",
-      "title": "planned → done",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
       "description": ""
     }
   ],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z",
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+      "createdAt": "2026-09-28T09:07:51.595Z"
+    }
+  ]
 }
