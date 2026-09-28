@@ -157,6 +157,14 @@
       "rationale": "User decision 2026-09-28: \"MUST be allowed for every command except the codebase just a warning is showed to the agent. NO BLOCKING things.\" Guessing writes from shell text misfires, and a prompt interrupts the user for a false positive; a warning to the agent costs nothing when wrong.",
       "implementationNotes": "Rule lives once in packages/plan-core/src/guard-decision.ts (classifyGuardedTool decides what is project code; the guard returns only an optional warning text). Adapters only deliver the warning: Claude Code hook via hookSpecificOutput.additionalContext with no permissionDecision; Pi via its tool_call handler. The bypass window silences the warning.",
       "acceptedAt": "2026-09-28T08:12:32.080Z"
+    },
+    {
+      "id": "93c3ddf3-aa62-4ae4-8f08-982570d9b017",
+      "title": "Parked tasks are re-checked, never silently skipped",
+      "decision": "Task recommendation and the load recap list on-hold tasks (deferred, waiting, blocked) in phases already under way, plus the phase being recommended, each with the reason it was parked. When a reason names planner refs (P097, P097(F003), F003/P097, P094(F011)/T449, T468) and every named phase or task is finished, the task is flagged \"may be ready\" and becomes a recommendation claim. Free-text reasons are shown but never flagged. The list is bounded and never blocks or changes a task's status.",
+      "rationale": "heca 2026-09-28: after P082's planned work finished, the recommendation jumped to an unstarted phase while four parked tasks whose blocker (P097) had finished stayed hidden; the user had to notice. A reason is prose, so a match is a hint for the agent to re-check, not an automatic resume.",
+      "implementationNotes": "One module, packages/plan-core/src/on-hold.ts (listOnHoldWork, refsNamedIn, startedOpenPhaseIds, renderOnHoldWork). recommendNextWork adds `onHold` and \"on-hold\" claims ahead of other advisories; buildRecommendationReply and buildRecap render the same block, so MCP, Pi and the server agree. Refs resolve by number only, never by title; a ref naming nothing in the plan, or the task itself, is not treated as finished.",
+      "acceptedAt": "2026-09-28T13:43:12.759Z"
     }
   ],
   "nextFeatureNumber": 17,
