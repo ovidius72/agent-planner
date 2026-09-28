@@ -1,0 +1,381 @@
+{
+  "id": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 107,
+  "shortId": "JQP4E",
+  "priority": 39,
+  "slug": "planner-replies-send-each-piece-once-and-stay-small",
+  "title": "Planner replies send each piece once and stay small",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Stop planner-load and handoff-show replies from repeating content and blowing past what Claude Code will show.",
+  "description": "Reported 2026-09-28 from heca (a real project, read only through temp copies):\n\n1. `planner-load` at the default maxChars did not fit heca's project context, so it said to retry larger. The retry returned 79,266 characters, which Claude Code refused to show. Cause, in packages/plan-mcp/src/index.ts planner-load handler (~3100-3130): the same project context is sent as `structuredContent.projectContext` (fields) and again as `agentContext.projectContext.text`; the recap is sent as `content` text and again as `recap.text`; and `agentContext.content` carries the whole planner guide (~25.7k chars) that the `/planner` command already delivered in the same turn. The handoff read had the same kind of repetition removed on 15 Sep (T411); load never got it.\n2. `planner-handoff-show` for heca P082(F003) came back at ~11.1k tokens. The core reply (buildHandoffShowReply + buildPhaseWorkMap) measures ~13.2k chars (~3.3k tokens), so the growth is either in the MCP transport or in an older server still running in that session. Must be measured against the real MCP server before changing anything.\n3. A Claude Code session keeps the planner server it started with. After an upgrade, that session runs old code with no sign of it — which is how an old bug can look like it came back.\n\nGoal: every piece of a reply is sent once, replies stay under the size Claude Code shows, and a stale server says so. Pi must stay equivalent (it has its own load path in packages/pi-adapter/src/index.ts). No change to what the agent is told to read, only to how many times it is sent.",
+  "descriptionUpdatedAt": "2026-09-28T08:22:01.187Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "dff143a8-f6f2-4726-a85f-6b9bf79d513c",
+    "137497ba-72ee-4341-89e6-2ca39b887ddb",
+    "2ba53881-9d02-4c92-9fa1-88aef1999711",
+    "f835ad8a-8763-456e-99a1-8b337f1abe38"
+  ],
+  "tasks": [
+    {
+      "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 435,
+      "shortId": "TKCH2",
+      "priority": 1,
+      "shortName": "send-each-piece-of-the-planner",
+      "title": "Send each piece of the planner-load reply once",
+      "status": "done",
+      "description": "Current state (packages/plan-mcp/src/index.ts, planner-load handler ~3060-3130): the reply carries `content[0].text` = recap, `structuredContent.recap.text` = the same recap, `structuredContent.projectContext` = buildProjectContextLoadReply(...).structured (full project fields), `structuredContent.agentContext.projectContext.text` = the same context rendered as text, and `structuredContent.agentContext.content` = the whole planner guide (~25.7k chars). On heca this reached 79,266 chars and Claude Code would not show it.\n\nWork:\n1. Measure first: run the real MCP server over stdio on a mkdtemp copy of heca's .planner and record each field's size.\n2. Send the project context once. Keep the structured form (contextComplete, nextActions and the attested read depend on it); drop the text twin unless something reads it (grep adapters, server, web UI, tests).\n3. Send the recap once.\n4. Stop sending the planner guide in the load reply when the caller already has it. The `/planner` command (Claude Code commands/planner.md, generated from the same canonical guide) already delivers it. Decide with evidence whether load must still carry it for a bare `planner-load` call (not via the command); if so send a short pointer or its hash, not the body.\n5. Recheck that the default maxChars then fits heca's context, so the first call succeeds without the retry.\n6. Keep Pi's load reply equivalent (packages/pi-adapter/src/index.ts planner-load path); shared shaping belongs in plan-core, not in each adapter.\n7. Update the tool description, which currently tells agents the context is in both places.\n\nVerification: focused plan-mcp, pi-adapter, plan-core tests; add a size regression test on a fixture (no byte-count test exists yet — T411 flagged it); re-measure heca via temp copy and record before/after.\n\n---\n**Completion summary:**\nShipped: planner-load sends each piece once, in one text, and heca's full context fits on the first call.\n\nMeasured on a mkdtemp copy of heca (real MCP server over stdio):\n- Before, default call: 41,231 total / 37,713 structured, and the context did NOT fit (requirements 16,552 > 16,000 default) → retry needed.\n- Before, retry maxChars 60000: 82,784 total / 79,266 structured (the size Claude Code refused): project context twice (21,097 JSON + 21,252 text), recap twice (3.4k each), planner guide 25,915, decisions 6,699 (mostly project decisions already in the context).\n- After, default call: 29,889 structured (what Claude Code shows), complete context, no retry.\n\nChanges:\n- plan-core/src/load-reply.ts (new): `buildPlannerLoadReply` — one text: \"## Recap — show this to the user verbatim\", then \"## Agent-only context\" with the project context, feature/phase/task decisions, and the guide (pointer or body). `structured` holds status only. `splitPlannerLoadText` separates recap from agent context for any client/test. `buildScopedDecisionContext(plan)` — feature/phase/task decisions (project ones are in the context).\n- plan-core/src/project-context.ts: buildProjectContextLoadReply carries the snapshot once, as text; structured = {loaded, contextComplete, fingerprint, requirementCount | nextActions}. DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS 16,000 → 32,000.\n- plan-mcp planner-load: uses the builder; guide as pointer to .planner/SKILL.md (the /planner command carries the body); tool description rewritten.\n- pi-adapter: /planner load command uses the builder with the guide body (a triggered turn gets no per-turn context). planner-load tool uses the builder with a pointer (per-turn context already has the guide). Fixed a real bug: the Pi tool attested the project-context read while putting the context only in `details`, which Pi never shows the model. Per-turn rule text no longer says the guard blocks.\n\nTests: plan-core 457/457 incl. new load-reply.test.mjs (reply ≤ parts + 600 chars layout, so any second copy fails; pointer never sends the guide; recap splits cleanly; incomplete context reported); plan-mcp 92/92; pi-adapter 93/93; MCP/Pi load tests now assert context appears exactly once and never in the recap.",
+      "descriptionUpdatedAt": "2026-09-28T08:34:05.184Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-001-planned-in-progress",
+          "date": "2026-09-28T08:22:29.306Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "5b1ffa40-e17a-4163-946b-479e09ba78b8",
+          "date": "2026-09-28T08:24:50.498Z",
+          "fromStatus": "in-progress",
+          "toStatus": "planned",
+          "title": "in-progress → planned (checkpoint saved)",
+          "description": "Reason: Found that Claude Code shows agents only structuredContent; the load fix depends on how text is carried, so the transport fix comes first.\nWhat was being done: Measured planner-load on a temp copy of heca: default call 41,231 chars (planner guide 25,915, accepted decisions 6,699, recap twice 3.4k each, context incomplete because requirements are 16,552 > 16,000 default); maxChars 60000 call 82,784 total / 79,266 structured with project context twice (21,097 + 21,252). No code changed yet for T435.\nResume location: packages/plan-mcp/src/index.ts planner-load handler (~3060-3130) and plan-core buildProjectContextLoadReply.\nHow to resume: After T438 lands, drop agentContext.projectContext.text and structured recap (the folded text covers it), stop sending the planner guide body, then raise/adjust the default so heca's context fits in one call. Measure again with the stdio script pattern (spawn dist/index.js mcp in a mkdtemp copy of heca)."
+        },
+        {
+          "id": "62514d99-548e-4bf0-a3d3-3c88579afec6",
+          "date": "2026-09-28T08:28:13.321Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress (resume checkpoint)",
+          "description": "Resumed from packages/plan-mcp/src/index.ts planner-load handler (~3060-3130) and plan-core buildProjectContextLoadReply.. After T438 lands, drop agentContext.projectContext.text and structured recap (the folded text covers it), stop sending the planner guide body, then raise/adjust the default so heca's context fits in one call. Measure again with the stdio script pattern (spawn dist/index.js mcp in a mkdtemp copy of heca)."
+        },
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-004-in-progress-done",
+          "date": "2026-09-28T08:34:05.181Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: planner-load sends each piece once, in one text, and heca's full context fits on the first call.\n\nMeasured on a mkdtemp copy of heca (real MCP server over stdio):\n- Before, default call: 41,231 total / 37,713 structured, and the context did NOT fit (requirements 16,552 > 16,000 default) → retry needed.\n- Before, retry maxChars 60000: 82,784 total / 79,266 structured (the size Claude Code refused): project context twice (21,097 JSON + 21,252 text), recap twice (3.4k each), planner guide 25,915, decisions 6,699 (mostly project decisions already in the context).\n- After, default call: 29,889 structured (what Claude Code shows), complete context, no retry.\n\nChanges:\n- plan-core/src/load-reply.ts (new): `buildPlannerLoadReply` — one text: \"## Recap — show this to the user verbatim\", then \"## Agent-only context\" with the project context, feature/phase/task decisions, and the guide (pointer or body). `structured` holds status only. `splitPlannerLoadText` separates recap from agent context for any client/test. `buildScopedDecisionContext(plan)` — feature/phase/task decisions (project ones are in the context).\n- plan-core/src/project-context.ts: buildProjectContextLoadReply carries the snapshot once, as text; structured = {loaded, contextComplete, fingerprint, requirementCount | nextActions}. DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS 16,000 → 32,000.\n- plan-mcp planner-load: uses the builder; guide as pointer to .planner/SKILL.md (the /planner command carries the body); tool description rewritten.\n- pi-adapter: /planner load command uses the builder with the guide body (a triggered turn gets no per-turn context). planner-load tool uses the builder with a pointer (per-turn context already has the guide). Fixed a real bug: the Pi tool attested the project-context read while putting the context only in `details`, which Pi never shows the model. Per-turn rule text no longer says the guard blocks.\n\nTests: plan-core 457/457 incl. new load-reply.test.mjs (reply ≤ parts + 600 chars layout, so any second copy fails; pointer never sends the guide; recap splits cleanly; incomplete context reported); plan-mcp 92/92; pi-adapter 93/93; MCP/Pi load tests now assert context appears exactly once and never in the recap."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-001-measure-load-reply-fields-on-a-temp-copy-of-heca",
+          "number": 1,
+          "title": "Measure load reply fields on a temp copy of heca",
+          "checked": true
+        },
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-002-send-project-context-and-recap-once-drop-unread-twins",
+          "number": 2,
+          "title": "Send project context and recap once; drop unread twins",
+          "checked": true
+        },
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-003-stop-resending-the-planner-guide",
+          "number": 3,
+          "title": "Stop resending the planner guide",
+          "checked": true
+        },
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-004-default-maxchars-fits-heca-s-context-on-the-first-call",
+          "number": 4,
+          "title": "Default maxChars fits heca's context on the first call",
+          "checked": true
+        },
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-005-pi-load-reply-equivalent-via-plan-core",
+          "number": 5,
+          "title": "Pi load reply equivalent via plan-core",
+          "checked": true
+        },
+        {
+          "id": "dff143a8-f6f2-4726-a85f-6b9bf79d513c-check-006-size-regression-test-and-before-after-numbers",
+          "number": 6,
+          "title": "Size regression test and before/after numbers",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [
+        {
+          "id": "2d270288-0860-4122-888f-23df0a83d2d9",
+          "reason": "Found that Claude Code shows agents only structuredContent; the load fix depends on how text is carried, so the transport fix comes first.",
+          "whatWasBeingDone": "Measured planner-load on a temp copy of heca: default call 41,231 chars (planner guide 25,915, accepted decisions 6,699, recap twice 3.4k each, context incomplete because requirements are 16,552 > 16,000 default); maxChars 60000 call 82,784 total / 79,266 structured with project context twice (21,097 + 21,252). No code changed yet for T435.",
+          "resumeLocation": "packages/plan-mcp/src/index.ts planner-load handler (~3060-3130) and plan-core buildProjectContextLoadReply.",
+          "howToResume": "After T438 lands, drop agentContext.projectContext.text and structured recap (the folded text covers it), stop sending the planner guide body, then raise/adjust the default so heca's context fits in one call. Measure again with the stdio script pattern (spawn dist/index.js mcp in a mkdtemp copy of heca).",
+          "relatedTaskId": "f835ad8a-8763-456e-99a1-8b337f1abe38",
+          "pausedAt": "2026-09-28T08:24:50.498Z",
+          "pausedBy": ""
+        }
+      ],
+      "startedAt": "2026-09-28T08:22:29.306Z",
+      "completedAt": "2026-09-28T08:34:05.181Z",
+      "createdAt": "2026-09-28T08:22:10.824Z",
+      "updatedAt": "2026-09-28T08:34:05.181Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T08:28:13.217Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "137497ba-72ee-4341-89e6-2ca39b887ddb",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 436,
+      "shortId": "LKJ9K",
+      "priority": 2,
+      "shortName": "find-why-handoff-show-grew-bac",
+      "title": "Find why handoff-show grew back, fix it, list open tasks first",
+      "status": "done",
+      "description": "Reported: `planner-handoff-show P082(F003)` in heca → Claude Code \"Large MCP response (~11.1k tokens)\". After T411 (15 Sep) the same call measured 14,610 chars (~3.6k tokens). Today's core reply for heca P082 (57 tasks, 4,728-char handoff) measures text 12,677 + structured 566 chars; the phase work map is 7,645 of it.\n\nWork:\n1. Measure the real MCP reply on a mkdtemp copy of heca with the current build and with 0.3.0; compare with what the heca session got. If current code is small, the cause is a stale server in that session (see the stale-server task) — record that rather than inventing a fix.\n2. Whatever the size, make the phase work map list open tasks first (in-progress, planned, blocked, waiting) and summarize done tasks as a count or a short tail, so a 57-task phase does not spend most of the reply on finished work. Shared in plan-core buildPhaseWorkMap / transport helpers so show and prepare and Pi agree.\n3. Keep: sibling capability ownership still reaches the agent; the T408 no-field-in-both-channels rule; archived/empty branches.\n\nVerification: plan-core handoff tests, plan-mcp, pi-adapter; size regression test on a many-task fixture; before/after on heca copy.\n\n---\n**Completion summary:**\nShipped: the phase work map lists open work first, in full, and finished tasks after as one line each; the size budget cuts finished lines before any open task.\n\nFinding on \"handoff-show grew back\": it did not grow. On a mkdtemp copy of heca, planner-handoff-show P082(F003) is 13,489 chars with this branch and with the installed 0.3.0 alike; heca's handoff has been ~5k chars for its last 8 versions, and every running planner server started after 0.3.0 was installed. The ~11.1k-token warning is not reproduced by any reply size measured; the real defect was different and worse: Claude Code showed the agent only the 566-char structured part, so the handoff body never reached it (fixed by T438). What remained was the map: sorted by priority, the 46 finished tasks came first, filled the ~8k budget and cut 39 entries including open ones.\n\n- plan-core/src/task-context.ts buildPhaseWorkMap: open tasks (not done/canceled/rejected) first with goal/dependencies/ownership; then \"Finished (already built; do not redo):\" one line per task; header shows open/finished counts; truncation note says finished ones go first. Shared by handoff show, prepare, task start, recap — MCP and Pi.\n- heca P082 now: all 11 open tasks in full + 24 finished lines (22 finished withheld) in 7,930 chars; handoff-show structured part (what Claude Code shows) 13,677 chars with the body, versus 566 without it before.\n\nTests: plan-core 458/458 incl. new \"lists open work first and cuts finished work before open work\" (60 tasks, 50 finished: all 10 open admitted, no open after finished, finished lines have no goal/ownership); updated order expectations in handoff-context, handoff-reply, task-context; plan-mcp 92/92; pi-adapter 93/93.",
+      "descriptionUpdatedAt": "2026-09-28T08:36:30.527Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "137497ba-72ee-4341-89e6-2ca39b887ddb-check-001-planned-in-progress",
+          "date": "2026-09-28T08:34:33.679Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "137497ba-72ee-4341-89e6-2ca39b887ddb-check-002-in-progress-done",
+          "date": "2026-09-28T08:36:30.524Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: the phase work map lists open work first, in full, and finished tasks after as one line each; the size budget cuts finished lines before any open task.\n\nFinding on \"handoff-show grew back\": it did not grow. On a mkdtemp copy of heca, planner-handoff-show P082(F003) is 13,489 chars with this branch and with the installed 0.3.0 alike; heca's handoff has been ~5k chars for its last 8 versions, and every running planner server started after 0.3.0 was installed. The ~11.1k-token warning is not reproduced by any reply size measured; the real defect was different and worse: Claude Code showed the agent only the 566-char structured part, so the handoff body never reached it (fixed by T438). What remained was the map: sorted by priority, the 46 finished tasks came first, filled the ~8k budget and cut 39 entries including open ones.\n\n- plan-core/src/task-context.ts buildPhaseWorkMap: open tasks (not done/canceled/rejected) first with goal/dependencies/ownership; then \"Finished (already built; do not redo):\" one line per task; header shows open/finished counts; truncation note says finished ones go first. Shared by handoff show, prepare, task start, recap — MCP and Pi.\n- heca P082 now: all 11 open tasks in full + 24 finished lines (22 finished withheld) in 7,930 chars; handoff-show structured part (what Claude Code shows) 13,677 chars with the body, versus 566 without it before.\n\nTests: plan-core 458/458 incl. new \"lists open work first and cuts finished work before open work\" (60 tasks, 50 finished: all 10 open admitted, no open after finished, finished lines have no goal/ownership); updated order expectations in handoff-context, handoff-reply, task-context; plan-mcp 92/92; pi-adapter 93/93."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "137497ba-72ee-4341-89e6-2ca39b887ddb-check-001-measure-real-mcp-reply-current-build-vs-0-3-0-on-a-heca-copy",
+          "number": 1,
+          "title": "Measure real MCP reply, current build vs 0.3.0, on a heca copy",
+          "checked": true
+        },
+        {
+          "id": "137497ba-72ee-4341-89e6-2ca39b887ddb-check-002-open-tasks-first-done-tasks-summarized",
+          "number": 2,
+          "title": "Open tasks first; done tasks summarized",
+          "checked": true
+        },
+        {
+          "id": "137497ba-72ee-4341-89e6-2ca39b887ddb-check-003-size-regression-test-and-before-after-numbers",
+          "number": 3,
+          "title": "Size regression test and before/after numbers",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T08:34:33.679Z",
+      "completedAt": "2026-09-28T08:36:30.524Z",
+      "createdAt": "2026-09-28T08:22:17.258Z",
+      "updatedAt": "2026-09-28T08:36:30.524Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T08:34:33.579Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "2ba53881-9d02-4c92-9fa1-88aef1999711",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 437,
+      "shortId": "75628",
+      "priority": 3,
+      "shortName": "warn-when-a-session-s-planner",
+      "title": "Warn when a session's planner server is older than the installed one",
+      "status": "done",
+      "description": "A Claude Code session keeps the MCP planner server process it started with. After upgrading agent-plan, that session still runs the old code and nothing says so, so an already-fixed bug looks like it came back.\n\nWork:\n1. At startup the MCP server records its own version (resolvedPackageVersion / packageVersionFromModule already exist in plan-core).\n2. On calls (cheaply — not a disk scan per call; e.g. check at most once every few minutes, or on planner-load and planner-version), compare with the version currently installed at the path the server was started from (re-read that package.json). If the installed one is newer, add one short line to the reply: \"This session's planner server is <old>; <new> is installed. Restart the session (or /mcp reconnect) to use it.\"\n3. Put the comparison in plan-core so Pi can use the same check if it has the same problem.\n4. Never block; never add the line when versions match or cannot be read.\n\nVerification: unit test for the comparison; plan-mcp test that bumps a temp package.json after start and sees the line.\n\n---\n**Completion summary:**\nShipped: an MCP planner server that is older than what is now installed says so in one line on its replies.\n\n- plan-core/src/package-version.ts: `createStaleProcessCheck(loaded, { intervalMs = 10 min, now })` re-reads the loaded package's own package.json at most once per interval and returns a one-line notice while the version on disk differs from the loaded one (\"This session is running @agent-plan/mcp X, but Y is now installed. Restart the session (in Claude Code: /mcp, then reconnect agent-plan)…\"). Never throws; no path or unreadable file → no notice.\n- plan-mcp: `staleServerNotice = createStaleProcessCheck(MCP_PACKAGE)`; the registerTool wrapper (same one that folds text into structuredContent) appends the notice to every reply's content while stale, so no handler knows about it.\n- Works for global npm installs (the upgrade replaces node_modules/agent-plan/node_modules/@agent-plan/mcp/package.json in place). Does NOT detect upgrades when the server was started via `npx` from a versioned cache path (old path keeps its old file) — noted, not solved.\n\nTests: plan-core 461/461 incl. new stale-process.test.mjs (match → none; bump after start → one line, respecting interval; missing/unreadable → none); plan-mcp 92/92.\n\nNot done: Pi is not wired (Pi has no single tool wrapper; the check is in core and can be added to Pi's tool_result handler later).",
+      "descriptionUpdatedAt": "2026-09-28T08:38:04.325Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "2ba53881-9d02-4c92-9fa1-88aef1999711-check-001-planned-in-progress",
+          "date": "2026-09-28T08:37:08.442Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "2ba53881-9d02-4c92-9fa1-88aef1999711-check-002-in-progress-done",
+          "date": "2026-09-28T08:38:04.319Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: an MCP planner server that is older than what is now installed says so in one line on its replies.\n\n- plan-core/src/package-version.ts: `createStaleProcessCheck(loaded, { intervalMs = 10 min, now })` re-reads the loaded package's own package.json at most once per interval and returns a one-line notice while the version on disk differs from the loaded one (\"This session is running @agent-plan/mcp X, but Y is now installed. Restart the session (in Claude Code: /mcp, then reconnect agent-plan)…\"). Never throws; no path or unreadable file → no notice.\n- plan-mcp: `staleServerNotice = createStaleProcessCheck(MCP_PACKAGE)`; the registerTool wrapper (same one that folds text into structuredContent) appends the notice to every reply's content while stale, so no handler knows about it.\n- Works for global npm installs (the upgrade replaces node_modules/agent-plan/node_modules/@agent-plan/mcp/package.json in place). Does NOT detect upgrades when the server was started via `npx` from a versioned cache path (old path keeps its old file) — noted, not solved.\n\nTests: plan-core 461/461 incl. new stale-process.test.mjs (match → none; bump after start → one line, respecting interval; missing/unreadable → none); plan-mcp 92/92.\n\nNot done: Pi is not wired (Pi has no single tool wrapper; the check is in core and can be added to Pi's tool_result handler later)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2ba53881-9d02-4c92-9fa1-88aef1999711-check-001-shared-version-drift-check-in-plan-core",
+          "number": 1,
+          "title": "Shared version-drift check in plan-core",
+          "checked": true
+        },
+        {
+          "id": "2ba53881-9d02-4c92-9fa1-88aef1999711-check-002-mcp-adds-one-line-when-installed-version-is-newer",
+          "number": 2,
+          "title": "MCP adds one line when installed version is newer",
+          "checked": true
+        },
+        {
+          "id": "2ba53881-9d02-4c92-9fa1-88aef1999711-check-003-tests",
+          "number": 3,
+          "title": "Tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T08:37:08.442Z",
+      "completedAt": "2026-09-28T08:38:04.319Z",
+      "createdAt": "2026-09-28T08:22:22.631Z",
+      "updatedAt": "2026-09-28T08:38:04.319Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T08:37:08.348Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f835ad8a-8763-456e-99a1-8b337f1abe38",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 438,
+      "shortId": "U8ZBY",
+      "priority": 0,
+      "shortName": "every-mcp-reply-carries-its-te",
+      "title": "Every MCP reply carries its text inside structuredContent",
+      "status": "done",
+      "description": "Verified 2026-09-28 in this Claude Code session: when an MCP tool result has `structuredContent`, Claude Code gives the agent only that JSON and drops `content[].text`. `planner-handoff-show P104(F005)` sends the 3,964-char archived body as text beside a JSON part; the agent received only hash/length/dates, no body. `planner-task-start` text (\"✅ Task started…\", phase context, advisories) is likewise invisible. The heca `planner-load` retry measured 79,266 chars, exactly the structuredContent size, confirming Claude Code sizes and shows structuredContent only.\n\nConsequence: every reply built with plan-core's text/structured split (T408 \"no field in both channels\", handoff-reply.ts) hides its text channel from Claude Code agents: handoff body, phase work map on show, task-start phase context, advisories.\n\nFix, in one place: the MCP reply helper(s) in packages/plan-mcp/src/index.ts (`text()`, `mcpHandoffContractFailure`, `handoffPreflightFailure`, `mcpDerivedStatusReadOnlyResult`, and any other `{ content, structuredContent }` literal) always put the text in `structuredContent.text` when a structured part exists. `content` keeps the text for clients that only read content. Where a structured field already repeats the text (load's `recap.text`), drop the duplicate. Pi is unaffected (its LLM sees content text; details are UI-only) — confirm.\n\nUpdate plan-core handoff-reply.ts comment on the two-channel rule: it holds for Pi but the MCP transport must fold text into the structured part. Tests: a plan-mcp test that every tool reply with structuredContent has `structuredContent.text` equal to the text content (walk registered tools on a fixture, or unit-test the helper plus a grep test that no reply literal bypasses it).\n\n---\n**Completion summary:**\nShipped: every MCP tool reply now carries its text inside structuredContent, because Claude Code shows the agent only structuredContent when one is present.\n\nEvidence it was broken: in this Claude Code session, planner-handoff-show P104(F005) returned only {phaseRef, archived, fullLength: 3964, hash, dates} — the 3,964-char body sent as text never arrived. planner-task-start's text (\"✅ Task started…\", phase context, advisories) likewise never arrived. heca's 79,266-char load refusal equals exactly its structuredContent size.\n\n- packages/plan-mcp/src/index.ts: `foldTextIntoStructured(result)` (exported) copies the joined text content into `structuredContent.text`; `server.registerTool` is wrapped once right after the server is created so every tool (current and future) passes through it. No handler changed. If a reply already uses `structuredContent.text` for something else it is left alone and the test guard fails.\n- test/helpers/mcp-fixture.mjs: `callTool` asserts on every call from every MCP test that structuredContent.text equals the reply text.\n- packages/plan-core/src/handoff-reply.ts: transport note on the two-channel rule.\n- packages/plan-mcp/test/mcp-harness.test.mjs: one exact-shape assertion now includes `text`.\n- Pi unaffected: its model receives `content`; `details` is UI/log only (AgentToolResult docs).\n\nVerification: plan-mcp 92/92 with the fix; with the wrapper stashed, 66/92 fail on the new guard (so almost every tool had invisible text). Recap duplication in planner-load is left to T435.",
+      "descriptionUpdatedAt": "2026-09-28T08:27:49.206Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f835ad8a-8763-456e-99a1-8b337f1abe38-check-001-planned-in-progress",
+          "date": "2026-09-28T08:24:50.498Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Temporary switch from Send each piece of the planner-load reply once."
+        },
+        {
+          "id": "f835ad8a-8763-456e-99a1-8b337f1abe38-check-002-in-progress-done",
+          "date": "2026-09-28T08:27:49.203Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: every MCP tool reply now carries its text inside structuredContent, because Claude Code shows the agent only structuredContent when one is present.\n\nEvidence it was broken: in this Claude Code session, planner-handoff-show P104(F005) returned only {phaseRef, archived, fullLength: 3964, hash, dates} — the 3,964-char body sent as text never arrived. planner-task-start's text (\"✅ Task started…\", phase context, advisories) likewise never arrived. heca's 79,266-char load refusal equals exactly its structuredContent size.\n\n- packages/plan-mcp/src/index.ts: `foldTextIntoStructured(result)` (exported) copies the joined text content into `structuredContent.text`; `server.registerTool` is wrapped once right after the server is created so every tool (current and future) passes through it. No handler changed. If a reply already uses `structuredContent.text` for something else it is left alone and the test guard fails.\n- test/helpers/mcp-fixture.mjs: `callTool` asserts on every call from every MCP test that structuredContent.text equals the reply text.\n- packages/plan-core/src/handoff-reply.ts: transport note on the two-channel rule.\n- packages/plan-mcp/test/mcp-harness.test.mjs: one exact-shape assertion now includes `text`.\n- Pi unaffected: its model receives `content`; `details` is UI/log only (AgentToolResult docs).\n\nVerification: plan-mcp 92/92 with the fix; with the wrapper stashed, 66/92 fail on the new guard (so almost every tool had invisible text). Recap duplication in planner-load is left to T435."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f835ad8a-8763-456e-99a1-8b337f1abe38-check-001-one-mcp-reply-helper-puts-the-text-in-structuredcontent",
+          "number": 1,
+          "title": "One MCP reply helper puts the text in structuredContent",
+          "checked": true
+        },
+        {
+          "id": "f835ad8a-8763-456e-99a1-8b337f1abe38-check-002-no-reply-literal-bypasses-the-helper",
+          "number": 2,
+          "title": "No reply literal bypasses the helper",
+          "checked": true
+        },
+        {
+          "id": "f835ad8a-8763-456e-99a1-8b337f1abe38-check-004-tests-helper-every-tool-check-on-a-fixture",
+          "number": 3,
+          "title": "Tests: helper + every-tool check on a fixture",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T08:24:50.498Z",
+      "completedAt": "2026-09-28T08:27:49.203Z",
+      "createdAt": "2026-09-28T08:24:37.415Z",
+      "updatedAt": "2026-09-28T08:27:49.203Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T08:24:50.440Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-28T08:22:01.112Z",
+  "updatedAt": "2026-09-28T08:38:04.319Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "198add5d-4a4f-49bd-a206-78069f79f0c1",
+      "date": "2026-09-28T08:22:29.333Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "cede66d7-2ee7-4eaf-a1d0-42cc9a2e1dcc",
+      "date": "2026-09-28T08:38:04.355Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+      "createdAt": "2026-09-28T08:37:08.348Z"
+    }
+  ]
+}
