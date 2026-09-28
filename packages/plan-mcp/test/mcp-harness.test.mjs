@@ -33,6 +33,7 @@ import {
   toolStructured,
   discoverTools,
 } from "../../../test/helpers/mcp-fixture.mjs";
+import { splitPlannerLoadText } from "../../../packages/plan-core/dist/index.js";
 import { createTempRoot, cleanupFixtures } from "../../../test/helpers/fixtures.mjs";
 import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
@@ -373,16 +374,14 @@ test("full reads, task start, and planner-load agentContext deliver canonical Ac
     assert.match(toolText(started), /P001\(F001\)\/T002 owns this remaining capability; do not duplicate it/);
 
     const loaded = await callTool(session, "planner-load", {});
-    const loadedText = toolText(loaded);
+    const { recap, agentContext } = splitPlannerLoadText(toolText(loaded));
     const loadedStructured = toolStructured(loaded);
-    assert.doesNotMatch(loadedText, /Project decision/, "Accepted Decision agentContext must not leak into the human recap");
-    assert.equal(loadedStructured.recap.text, loadedText, "structured clients receive the consolidated recap instead of only the skill payload");
+    assert.doesNotMatch(recap, /Project decision/, "Accepted Decisions must not leak into the human recap");
     assert.equal(loadedStructured.webUi.running, true);
     assert.match(loadedStructured.webUi.address, /^http:\/\//);
-    const decisionContext = loadedStructured.agentContext.acceptedDecisions;
-    assert.equal(decisionContext.truncated, false);
-    for (const title of targets.map((target) => target.title)) assert.match(decisionContext.content, new RegExp(title));
-    assert.match(decisionContext.content, /Implementation notes for Task decision/);
+    assert.equal(loadedStructured.scopedDecisions.truncated, false);
+    for (const title of targets.map((target) => target.title)) assert.match(agentContext, new RegExp(title));
+    assert.match(agentContext, /Implementation notes for Task decision/);
   } finally {
     await closeMcpFixture(session);
   }
@@ -405,20 +404,15 @@ test("planner-load delivers the complete attested project-level context; task-st
     const loadedStructured = toolStructured(loaded);
     assert.equal(loadedStructured.projectContext.loaded, true);
     assert.equal(loadedStructured.projectContext.contextComplete, true);
-    assert.equal(loadedStructured.projectContext.project.description, "Fixture project description");
-    assert.equal(loadedStructured.projectContext.project.goal, "Ship the fixture feature");
-    assert.deepEqual(loadedStructured.projectContext.project.scope, ["In-scope area"]);
-    assert.deepEqual(loadedStructured.projectContext.project.outOfScope, ["Out-of-scope area"]);
-    assert.deepEqual(loadedStructured.projectContext.project.technologies, ["TypeScript"]);
-    assert.deepEqual(loadedStructured.projectContext.project.tools, ["pnpm"]);
-    assert.equal(loadedStructured.projectContext.requirements.length, 1);
-    assert.equal(loadedStructured.projectContext.requirements[0].title, "Users can authenticate");
-    // The agent-only channel carries the same content, but it must never
-    // appear in the human-facing recap text (parity across result channels,
-    // without duplicating the Accepted Decision leak this mirrors).
-    assert.match(loadedStructured.agentContext.projectContext.text, /Fixture project description/);
-    assert.doesNotMatch(toolText(loaded), /Fixture project description/, "project context must not leak into the human recap");
-    assert.equal(loadedStructured.recap.text, toolText(loaded));
+    assert.equal(loadedStructured.projectContext.requirementCount, 1);
+    // The project context is sent once, in the agent-only part of the text,
+    // and never in the recap the user sees.
+    const { recap, agentContext } = splitPlannerLoadText(toolText(loaded));
+    for (const expected of [/Fixture project description/, /Ship the fixture feature/, /In-scope area/, /Out-of-scope area/, /TypeScript/, /pnpm/, /Users can authenticate/]) {
+      assert.match(agentContext, expected);
+    }
+    assert.doesNotMatch(recap, /Fixture project description/, "project context must not leak into the human recap");
+    assert.equal(toolText(loaded).split("Fixture project description").length - 1, 1, "project context is sent once");
 
     // A full, genuinely complete project-context read satisfies
     // REQUIREMENTS_READ_REQUIRED task-wide (P102(F005) accepted decision):
@@ -454,9 +448,11 @@ test("planner-load reports contextComplete:false and does not attest the read wh
     assert.equal(structured.projectContext.contextComplete, false);
     assert.ok(Array.isArray(structured.projectContext.nextActions) && structured.projectContext.nextActions.length > 0);
     assert.ok(structured.projectContext.serializedChars > 100);
-    // The human recap is untouched (still exactly the recap), and the
-    // over-bound content was never attested as read.
-    assert.equal(structured.recap.text, toolText(loaded));
+    // The recap is untouched, and the over-bound content was neither sent
+    // nor attested as read.
+    const { recap } = splitPlannerLoadText(toolText(loaded));
+    assert.doesNotMatch(recap, /xxxxxxxxxx/);
+    assert.doesNotMatch(toolText(loaded), /x{2000}/);
   } finally {
     await closeMcpFixture(session);
   }

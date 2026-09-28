@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -3087,7 +3087,7 @@ server.registerTool("planner-web", {
 });
 
 server.registerTool("planner-load", {
-  description: "Load/refresh the planner on explicit user request (NOT automatic): starts the web dashboard on LAN and returns a consolidated human-facing recap, plus agent-only structuredContent carrying the complete project-level context (description, goal, scope, out-of-scope, technologies, tools, language preferences, Project Guidelines, every Requirement, and every project Accepted Decision, in structuredContent.projectContext and structuredContent.agentContext.projectContext) and bounded canonical Accepted Decision agentContext for feature/phase/task scopes. This is the MCP equivalent of Pi /planner load. Call it ONLY when the user runs /planner load or /planner recap (or asks to load the planner). Present ONLY structuredContent.recap.text (equivalently, the text content) verbatim to the user, including its final prominent Web UI line — never quote projectContext or agentContext in the human-facing recap. If structuredContent.projectContext.contextComplete is false, the project-level context was NOT delivered this turn — follow structuredContent.projectContext.nextActions and retry before relying on it. A pending handoff is read-only context: NEVER call planner-handoff-show or planner-handoff-clear as part of load/recap. Archive it only when every phase task is done/canceled, when replacing it with a new handoff, or after an explicit user handoff-clear request. Do NOT start the planner/web or show the web URL unless the user explicitly asks (load/recap/web status).",
+  description: "Load/refresh the planner on explicit user request (NOT automatic): starts the web dashboard on LAN and returns one text with, in order: a recap under '## Recap — show this to the user verbatim', then agent-only context under '## Agent-only context' (the complete project-level context — description, goal, scope, out-of-scope, technologies, tools, language preferences, Project Guidelines, every Requirement, every project Accepted Decision — then Accepted Decisions of features, phases and tasks, then where the Agent Plan operating guide lives). Call it ONLY when the user runs /planner load or /planner recap (or asks to load the planner). Show the user ONLY the recap section, verbatim, including its final Web UI line; never quote the agent-only context. If structuredContent.projectContext.contextComplete is false, the project-level context was NOT delivered — follow structuredContent.projectContext.nextActions and retry before relying on it. A pending handoff is read-only context: NEVER call planner-handoff-show or planner-handoff-clear as part of load/recap. Archive it only when every phase task is done/canceled, when replacing it with a new handoff, or after an explicit user handoff-clear request. Do NOT start the planner/web or show the web URL unless the user explicitly asks (load/recap/web status).",
   inputSchema: {
     maxChars: z.number().int().positive().optional().describe(`Single-response bound (chars) for the project-context delivery. Default ${DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS}. Raise this and retry if a prior call returned projectContext.contextComplete=false.`),
   },
@@ -3110,21 +3110,10 @@ server.registerTool("planner-load", {
   const web = await ensureWebStarted();
   const recap = await buildRecap(st, web, { harness: "mcp" });
   const plan = await st.loadAll();
-  const acceptedDecisionContext = buildBoundedAcceptedDecisionContext([
-    { scope: "project", decisions: plan.project.acceptedDecisions },
-    ...plan.features.features.map((feature) => ({ scope: `feature ${formatFeatureRef(feature.number)}`, decisions: feature.acceptedDecisions })),
-    ...plan.phases.map((phase) => ({ scope: `phase ${formatPhaseRef(phase.number, featureNumberOfPhase(phase, plan.features.features))}`, decisions: phase.acceptedDecisions })),
-    ...plan.phases.flatMap((phase) => phase.tasks.map((task) => ({
-      scope: `task ${taskCompositeRef(task, phase, plan.features.features)}`,
-      decisions: task.acceptedDecisions,
-    }))),
-  ]);
 
   // Explicit planner load must deliver the complete project-level context
   // (P102(F005)/T404), attested through the same lossless contract used
   // everywhere else: loadProjectContextDelivery + recordProjectContextRead.
-  // buildProjectContextLoadReply is the single shared shaping for this reply
-  // (Pi's planner-load and /planner load use the identical builder).
   const boundedMaxChars = maxChars ?? DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS;
   const projectContextDelivery = await st.loadProjectContextDelivery(boundedMaxChars);
   const projectContextReply = buildProjectContextLoadReply(projectContextDelivery, boundedMaxChars);
@@ -3132,30 +3121,20 @@ server.registerTool("planner-load", {
     await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
   }
 
-  const visibleRecap = preparation.changed ? `${preparation.legacyProjectContext.summary}\n\n${recap}` : recap;
-  return {
-    // The project-context text (like the planner skill and Accepted Decision
-    // context below) is agent-only: read and retain it, but never quote it
-    // or the Accepted Decisions it contains in the human-facing recap.
-    content: [{ type: "text", text: visibleRecap }],
-    structuredContent: {
-      loaded: true,
-      recap: { text: visibleRecap },
-      projectContext: projectContextReply.structured,
-      webUi: plannerWebMetadata(web),
-      preparation: preparation.legacyProjectContext,
-      agentContext: {
-        kind: "planner-usage-skill",
-        content: plannerSkill.content,
-        status: plannerSkill.status,
-        customized: plannerSkill.customized,
-        message: plannerSkill.message,
-        instruction: "Read and retain this project-local planner usage skill, project context, and Accepted Decision context. Do not quote it, the project context, or the Accepted Decision context in the human-facing recap.",
-        projectContext: { text: projectContextReply.text },
-        acceptedDecisions: acceptedDecisionContext,
-      },
-    },
-  };
+  // One text, each piece once (shared with Pi via buildPlannerLoadReply).
+  // The guide body is not resent: the /planner command already carries it,
+  // and a bare planner-load call is pointed at the project-local copy.
+  const reply = buildPlannerLoadReply({
+    recap: preparation.changed ? `${preparation.legacyProjectContext.summary}\n\n${recap}` : recap,
+    projectContext: projectContextReply,
+    scopedDecisions: buildScopedDecisionContext(plan),
+    plannerGuide: { mode: "pointer", path: ".planner/SKILL.md", customized: plannerSkill.customized, message: plannerSkill.message },
+  });
+  return text(reply.text, {
+    ...reply.structured,
+    webUi: plannerWebMetadata(web),
+    preparation: preparation.legacyProjectContext,
+  });
 });
 
 server.registerTool("planner-disable", {

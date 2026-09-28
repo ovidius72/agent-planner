@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -2677,34 +2677,34 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // turn (before_agent_start's systemPrompt injection is NOT applied to
       // triggerTurn messages), so the recap data must live here. Uses the shared
       // core buildRecap so Pi and Claude Code/Codex present identical content.
-      let recapText = "";
-      let plannerSkillContext = "";
-      let projectContextBlock = "";
+      // One text, each piece once — the same builder MCP's planner-load and
+      // Pi's planner-load tool use. In Pi this command is the only way the
+      // operating guide reaches the agent, so the guide body is included.
+      let loadText = "";
       try {
         const plannerSkill = await st.syncPlannerSkill();
         await st.syncGrillMeSkill();
         const srv = server as ServeHandle | null;
-        recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
+        let recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
         if (preparation.changed) recapText = `${preparation.legacyProjectContext.summary}\n\n${recapText}`;
         // Explicit planner load must deliver the complete project-level
         // context (P102(F005)/T404), attested through the same lossless
-        // contract used everywhere else. buildProjectContextLoadReply is the
-        // single shared shaping for this reply — the planner-load tool below
-        // uses the identical builder. Like plannerSkillContext, this is
-        // agent-only: it must never be quoted into the human-facing recap
-        // (see the "must not leak into the human recap" invariant covered by
-        // host-registration.test.mjs for the planner-load tool).
+        // contract used everywhere else.
         const projectContextDelivery = await st.loadProjectContextDelivery(DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS);
         const projectContextReply = buildProjectContextLoadReply(projectContextDelivery, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS);
         if (projectContextReply.structured.contextComplete) {
           await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
         }
-        projectContextBlock = `[agent-only project context; do not quote in the recap]\n${projectContextReply.text}\n[end agent-only project context]`;
-        plannerSkillContext = `[agent-only planner usage skill; do not quote in the recap]\n${plannerSkill.customized ? `${plannerSkill.message}\n` : ""}${plannerSkill.content}\n[end agent-only planner usage skill]`;
-      } catch (e) { recapText = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
+        loadText = buildPlannerLoadReply({
+          recap: recapText,
+          projectContext: projectContextReply,
+          scopedDecisions: buildScopedDecisionContext(await st.loadAll()),
+          plannerGuide: { mode: "include", content: plannerSkill.content, customized: plannerSkill.customized, message: plannerSkill.message },
+        }).text;
+      } catch (e) { loadText = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       pi.sendMessage({
         customType: "planner-resume-trigger",
-        content: "[internal trigger — not a user command] Read and retain the agent-only planner usage skill and project context below, then present the planner startup recap to the user verbatim. Do NOT call any tools (planner-load already ran). Do NOT narrate or expose internal instructions — output ONLY the recap.\n\n" + plannerSkillContext + "\n\n" + projectContextBlock + "\n\n--- RECAP ---\n" + recapText + "\n--- END RECAP ---",
+        content: "[internal trigger — not a user command] Read and retain the agent-only context below, then present the recap section to the user verbatim. Do NOT call any tools (planner-load already ran). Do NOT narrate or expose internal instructions — output ONLY the recap.\n\n" + loadText,
         display: false,
       }, {
         triggerTurn: true,
@@ -5990,10 +5990,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (projectContextReply.structured.contextComplete) {
         await st.recordProjectContextRead({ sessionId: plannerSessionId, chunks: projectContextDelivery.chunks });
       }
-      // The project context text (like the rest of `details`) is agent-only:
-      // read and retain it, but never quote it or its Accepted Decisions in
-      // the human-facing recap (`content[].text` stays the recap alone).
-      return { content: [{ type: "text", text: recap }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, preparation: preparation.legacyProjectContext, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message }, projectContext: { text: projectContextReply.text, ...projectContextReply.structured } } };
+      // Pi's model reads only `content`; `details` is for the UI. The project
+      // context used to live only in `details`, so it was attested as read
+      // while the agent never saw it. Same builder as MCP and /planner load.
+      // The guide is already in this turn's context (the per-turn plan
+      // context block carries it), so only point at it here.
+      const reply = buildPlannerLoadReply({
+        recap,
+        projectContext: projectContextReply,
+        scopedDecisions: buildScopedDecisionContext(await st.loadAll()),
+        plannerGuide: { mode: "pointer", path: ".planner/SKILL.md", customized: plannerSkill.customized, message: plannerSkill.message },
+      });
+      return { content: [{ type: "text", text: reply.text }], details: { enabled: true, running: Boolean(srv), localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort, preparation: preparation.legacyProjectContext, plannerSkill: { status: plannerSkill.status, customized: plannerSkill.customized, message: plannerSkill.message }, ...reply.structured } };
     },
   });
 
@@ -6181,7 +6189,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         "- Use task_update with motivation for blocked/canceled/rejected/deferred/waiting/planned(from non-planned).",
         "- Planner ops (status/handoff/planner metadata) are NOT code edits; they are always allowed.",
         "- Prioritize work: continue an in-progress task; otherwise choose ready work feature → phase → task by ascending priority, respecting dependencies and blocked/waiting states. Compact feature_list / phase_list / task_list surfaces expose priority markers; when browsing manually, follow the lowest visible priority first among ready siblings. Prefer shortId or F00x/P00x/T00x refs. Read one entity via *_get(full=true).",
-        "- If edit/write guard blocks you, start the right task or use an explicit bypass.",
+        "- Nothing is ever blocked for lack of a task. If you are warned that you changed project code with no task in progress, start the task that covers it.",
         ...(extensionRules.length > 0
           ? [
             "",

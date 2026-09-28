@@ -133,10 +133,11 @@ describe("pi-adapter web lifecycle", () => {
       assert.match(notifyText, /Starting web server \(LAN\)/);
       const loadTriggers = host.sentMessages.filter((m) => m.message.customType === "planner-resume-trigger");
       assert.equal(loadTriggers.length, 1);
-      assert.match(loadTriggers[0].message.content, /\[agent-only planner usage skill/);
+      assert.match(loadTriggers[0].message.content, /## Agent-only context/);
       assert.doesNotMatch(loadTriggers[0].message.content, /Interview me relentlessly about every aspect/, "Pi command load must not inject grill-me before an Ideas workflow");
       assert.match(loadTriggers[0].message.content, /# Agent Plan operating guide/);
-      assert.match(loadTriggers[0].message.content, /--- RECAP ---/);
+      assert.match(loadTriggers[0].message.content, /## Recap — show this to the user verbatim/);
+      assert.match(loadTriggers[0].message.content, /## Handoff protocol/, "Pi's load command is the only place the guide reaches a triggered turn, so it carries the body");
       assert.match(loadTriggers[0].message.content, /Migrated legacy project context: 1 guideline/);
       let status = await host.runTool("planner-web", {});
       assert.equal(toolDetails(status).running, true);

@@ -23,7 +23,7 @@ import {
   toolStructured,
 } from "../../../test/helpers/mcp-fixture.mjs";
 import { createTempRoot, cleanupFixtures } from "../../../test/helpers/fixtures.mjs";
-import { createPhaseId, createTaskId } from "../../../packages/plan-core/dist/index.js";
+import { createPhaseId, createTaskId, splitPlannerLoadText } from "../../../packages/plan-core/dist/index.js";
 import { canonicalAuditedHandoff, completeHandoffAudit, completeHandoffColdStartInventory } from "../../../test/helpers/handoff-audit.mjs";
 
 after(async () => {
@@ -325,9 +325,8 @@ test("recap context and generated/export operations", async () => {
     // planner-load must start web and return a complete recap. The URL must be
     // its last non-empty line, which Codex can present verbatim.
     const loadResult = await callTool(session, "planner-load", {});
-    const loadText = toolText(loadResult);
+    const { recap: loadText, agentContext: loadAgentContext } = splitPlannerLoadText(toolText(loadResult));
     assert.equal(loadResult.structuredContent.loaded, true);
-    assert.equal(loadResult.structuredContent.recap.text, loadText, "structured MCP clients receive the same consolidated recap");
     assert.equal(loadResult.structuredContent.webUi.running, true);
     assert.match(loadResult.structuredContent.webUi.address, /^http:\/\//);
     assert.equal(typeof loadResult.structuredContent.webUi.host, "string");
@@ -339,13 +338,14 @@ test("recap context and generated/export operations", async () => {
     assert.match(loadText, /Use English in source code\. Run focused verification before claiming success\./);
     assert.doesNotMatch(loadText, /## Managed-copy policy/, "agent-only planner skill must not leak into the human recap text");
     assert.doesNotMatch(loadText, /Interview me relentlessly about every aspect/, "idea discussion skill must not leak into the human recap text");
-    assert.equal(loadResult.structuredContent.agentContext.kind, "planner-usage-skill");
-    assert.match(loadResult.structuredContent.agentContext.content, /# Agent Plan operating guide/);
-    assert.match(loadResult.structuredContent.agentContext.content, /## Handoff protocol/);
-    assert.match(loadResult.structuredContent.agentContext.instruction, /Do not quote it/);
+    // The guide is not resent (the /planner command carries it); the agent
+    // is pointed at the project-local copy instead.
+    assert.deepEqual(loadResult.structuredContent.plannerGuide, { mode: "pointer", path: ".planner/SKILL.md", customized: false });
+    assert.match(loadAgentContext, /read \.planner\/SKILL\.md/);
+    assert.doesNotMatch(loadAgentContext, /## Handoff protocol/, "the guide body is not resent on load");
     assert.match(await readFile(join(session.planRoot, "SKILL.md"), "utf8"), /^<!-- agent-plan-managed-skill sha256:/);
     assert.match(await readFile(join(session.planRoot, "skills", "grill-me", "SKILL.md"), "utf8"), /^<!-- agent-plan-managed-skill sha256:/);
-    assert.doesNotMatch(loadResult.structuredContent.agentContext.content, /Interview me relentlessly about every aspect/, "idea discussion skill must not load before an Ideas workflow requests it");
+    assert.doesNotMatch(loadAgentContext, /Interview me relentlessly about every aspect/, "idea discussion skill must not load before an Ideas workflow requests it");
     const loadLines = loadText.trim().split("\n");
     assert.match(loadLines.at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
     const phaseAfterLoad = (await session.store.loadAllPhases()).find((phase) => phase.number === 1);
@@ -355,7 +355,7 @@ test("recap context and generated/export operations", async () => {
     // Test that a later load works after an explicit stop.
     await callTool(session, "planner-web", { action: "stop" });
     const loadResult2 = await callTool(session, "planner-load", {});
-    const loadText2 = toolText(loadResult2);
+    const loadText2 = splitPlannerLoadText(toolText(loadResult2)).recap;
     assert.equal(loadResult2.structuredContent.preparation.migrated, false);
     assert.doesNotMatch(loadText2, /Migrated legacy project context/, "no-op loads remain quiet");
     assert.match(loadText2.trim().split("\n").at(-1), /^🌐 Web UI: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);

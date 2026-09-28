@@ -27,6 +27,7 @@ export * from "./feature-delete.js";
 export * from "./accepted-decision-guard.js";
 export * from "./project-context-migration.js";
 export * from "./project-context.js";
+export * from "./load-reply.js";
 export * from "./requirement-macro-tasks.js";
 export * from "./package-version.js";
 export * from "./runtime-diagnostics.js";
