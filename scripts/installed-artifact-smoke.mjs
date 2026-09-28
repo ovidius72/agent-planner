@@ -46,7 +46,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { PlanStore } from "@agent-plan/core";
+import { PlanStore, splitPlannerLoadText } from "@agent-plan/core";
 import * as serverPackage from "@agent-plan/server";
 import piAdapter from "@agent-plan/pi-adapter";
 
@@ -87,10 +87,17 @@ try {
   const result = await client.callTool({ name: "planner-load", arguments: {} });
   const text = (result.content ?? []).map((entry) => entry.text ?? "").join("\\n");
   const structured = result.structuredContent ?? {};
-  assert.match(text, /Installed artifact smoke/);
-  assert.match(text, /🌐 Web UI: http:\\/\\//);
+  // One text: the recap for the user, then agent-only context, each once.
+  // Claude Code shows only structuredContent, so it must carry the text too.
+  const { recap, agentContext } = splitPlannerLoadText(text);
+  assert.match(recap, /Installed artifact smoke/);
+  assert.match(recap, /🌐 Web UI: http:\\/\\//);
+  assert.doesNotMatch(recap, /Project context v1/, "agent-only context stays out of the recap");
+  assert.match(agentContext, /Project context v1/);
+  assert.equal(text.split("Project context v1").length - 1, 1, "project context is sent once");
+  assert.equal(structured.text, text, "structuredContent carries the reply text");
   assert.equal(structured.loaded, true);
-  assert.equal(structured.recap?.text, text);
+  assert.equal(structured.projectContext?.contextComplete, true);
   assert.equal(structured.webUi?.running, true);
   assert.match(structured.webUi?.address ?? "", /^http:\\/\\//);
   assert.equal(typeof structured.webUi?.host, "string");

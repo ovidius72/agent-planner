@@ -63,11 +63,11 @@
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "9e5b6cd2-92b9-4a66-aed6-cc66ea506b03",
-      "date": "2026-09-28T08:38:04.430Z",
+      "id": "1077bd1c-0c31-44e4-96ba-9c86a768c77b",
+      "date": "2026-09-28T08:54:00.671Z",
       "fromStatus": "planned",
-      "toStatus": "done",
-      "title": "planned → done",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
       "description": ""
     }
   ],

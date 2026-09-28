@@ -26,7 +26,9 @@
     "dff143a8-f6f2-4726-a85f-6b9bf79d513c",
     "137497ba-72ee-4341-89e6-2ca39b887ddb",
     "2ba53881-9d02-4c92-9fa1-88aef1999711",
-    "f835ad8a-8763-456e-99a1-8b337f1abe38"
+    "f835ad8a-8763-456e-99a1-8b337f1abe38",
+    "67f8419e-6b83-46cf-beb1-1b0f8f195d4c",
+    "3882a27e-a2d0-4f5a-ac42-69450999f501"
   ],
   "tasks": [
     {
@@ -345,10 +347,124 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 439,
+      "shortId": "4KE22",
+      "priority": 4,
+      "shortName": "surface-deferred-tasks-that-ma",
+      "title": "Surface deferred tasks that may be ready to resume before leaving a phase",
+      "status": "planned",
+      "description": "Reported 2026-09-28 from heca: after P082(F003)/T466 finished, P082 had 0 planned and 10 deferred tasks. planner-task-recommend jumped to P022(F003)/T083 (a phase not started, no spec). The deferred tasks carry reasons such as \"Resume once P097 lands\" / \"after P094's terminal work\"; P097 was fully done (8 done, 1 canceled), so T509, T510, T511, T514 had become workable. Nothing surfaced them; the user had to notice. The recommendation's claims listed handoffs but not deferred tasks.\n\nExpected: before the recommendation leaves a phase (or picks next work at all), the phase's on-hold tasks (deferred, waiting, blocked) are shown as \"check whether these can resume\", each with its reason (from the statusLog motivation), so the agent re-checks them instead of skipping.\n\nDesign points (decide during the task, record as a decision):\n- A reason that names phase/task refs (e.g. P097(F003), P094, T123) can be checked mechanically: when every named entity is done/canceled, flag the task \"ready to resume\". Free-text reasons are only shown.\n- One place in plan-core feeds both planner-task-recommend (MCP/Pi, recommendNextWork / buildRecommendationReply) and the load recap (buildRecap), so they cannot disagree.\n- Keep it bounded (a long phase must not flood the reply).\n\nEvidence: ~/projects/heca/.planner/phases/5464ff74-fa17-4412-abaa-95aa19810b33.json (P082); measure only on a mkdtemp copy.\n\nVerification: plan-core tests for ref extraction and readiness; recommend/recap tests with a fixture where a deferral names a finished phase; MCP and Pi suites.",
+      "descriptionUpdatedAt": "2026-09-28T08:53:45.757Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-001-collect-on-hold-tasks-and-their-reasons-in-plan-core",
+          "number": 1,
+          "title": "Collect on-hold tasks and their reasons in plan-core",
+          "checked": false
+        },
+        {
+          "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-002-mark-ready-to-resume-when-every-ref-named-in-the-reason-is-finished",
+          "number": 2,
+          "title": "Mark ready-to-resume when every ref named in the reason is finished",
+          "checked": false
+        },
+        {
+          "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-003-show-them-in-task-recommend-and-load-recap-from-the-same-place",
+          "number": 3,
+          "title": "Show them in task recommend and load recap from the same place",
+          "checked": false
+        },
+        {
+          "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-004-tests-and-a-check-on-a-heca-copy",
+          "number": 4,
+          "title": "Tests and a check on a heca copy",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-09-28T08:53:45.700Z",
+      "updatedAt": "2026-09-28T08:53:45.700Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "3882a27e-a2d0-4f5a-ac42-69450999f501",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 440,
+      "shortId": "NYMAR",
+      "priority": 5,
+      "shortName": "update-the-installed-artifact",
+      "title": "Update the installed-artifact smoke test to the new load layout",
+      "status": "done",
+      "description": "`pnpm verify:final` failed at \"Packed installation smoke\" (scripts/installed-artifact-smoke.mjs): it asserts the old planner-load reply shape (recap equal to the whole text / agentContext fields), which T435 replaced with one text (recap section then agent-only context) built by plan-core buildPlannerLoadReply. Update the smoke assertions to the new contract using splitPlannerLoadText semantics (recap section shows the Web UI line and no agent context; agent context carries the project context once; structuredContent.text carries the text, per T438). Do not weaken what it proves about a fresh install. Then run `pnpm verify:final` once for the phase close.\n\n---\n**Completion summary:**\nShipped: scripts/installed-artifact-smoke.mjs asserts the new planner-load contract on a fresh install from packed artifacts: recap section (via splitPlannerLoadText from the installed @agent-plan/core) has the project name and Web UI line and no agent-only context; the agent-only part has the project context exactly once; structuredContent.text equals the reply text (T438); projectContext.contextComplete is true. Replaced the old `structured.recap.text === text` check. Nothing the smoke proved before was dropped.\n\nVerification: `pnpm verify:final` passed once (fingerprint 00fc482b7d66): build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed installation smoke. Not committed (user asks for commits).",
+      "descriptionUpdatedAt": "2026-09-28T08:55:39.820Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3882a27e-a2d0-4f5a-ac42-69450999f501-check-001-planned-in-progress",
+          "date": "2026-09-28T08:54:00.573Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3882a27e-a2d0-4f5a-ac42-69450999f501-check-002-in-progress-done",
+          "date": "2026-09-28T08:55:39.818Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: scripts/installed-artifact-smoke.mjs asserts the new planner-load contract on a fresh install from packed artifacts: recap section (via splitPlannerLoadText from the installed @agent-plan/core) has the project name and Web UI line and no agent-only context; the agent-only part has the project context exactly once; structuredContent.text equals the reply text (T438); projectContext.contextComplete is true. Replaced the old `structured.recap.text === text` check. Nothing the smoke proved before was dropped.\n\nVerification: `pnpm verify:final` passed once (fingerprint 00fc482b7d66): build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed installation smoke. Not committed (user asks for commits)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3882a27e-a2d0-4f5a-ac42-69450999f501-check-001-update-smoke-assertions-to-the-new-load-contract",
+          "number": 1,
+          "title": "Update smoke assertions to the new load contract",
+          "checked": true
+        },
+        {
+          "id": "3882a27e-a2d0-4f5a-ac42-69450999f501-check-002-pnpm-verify-final-green-once",
+          "number": 2,
+          "title": "pnpm verify:final green once",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T08:54:00.573Z",
+      "completedAt": "2026-09-28T08:55:39.818Z",
+      "createdAt": "2026-09-28T08:53:51.324Z",
+      "updatedAt": "2026-09-28T08:55:39.818Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T08:54:00.474Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-28T08:22:01.112Z",
-  "updatedAt": "2026-09-28T08:38:04.319Z",
+  "updatedAt": "2026-09-28T08:55:39.818Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -370,12 +486,20 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "e22349df-fb37-461d-a361-8d70c443748d",
+      "date": "2026-09-28T08:54:00.597Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
-      "createdAt": "2026-09-28T08:37:08.348Z"
+      "createdAt": "2026-09-28T08:54:00.474Z"
     }
   ]
 }
