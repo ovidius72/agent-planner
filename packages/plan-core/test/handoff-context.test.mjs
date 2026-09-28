@@ -170,10 +170,11 @@ describe("durable handoff context refresh", () => {
     assert.match(audit.draftTemplate, /Planner-generated: Created at, Updated at, and structured Reason/);
     assert.match(audit.draftTemplate, /## How to resume/);
     assert.equal(audit.phaseWorkMap.total, 2);
-    assert.deepEqual(audit.phaseWorkMap.entries.map((entry) => entry.ref), ["P001(F001)/T001", "P001(F001)/T002"]);
-    assert.equal(audit.phaseWorkMap.entries[0].remainingCapabilityOwner, false);
-    assert.equal(audit.phaseWorkMap.entries[1].remainingCapabilityOwner, true);
-    assert.equal(audit.phaseWorkMap.entries[1].ref, "P001(F001)/T002");
+    // Open work first, then finished work.
+    assert.deepEqual(audit.phaseWorkMap.entries.map((entry) => entry.ref), ["P001(F001)/T002", "P001(F001)/T001"]);
+    assert.equal(audit.phaseWorkMap.entries[0].remainingCapabilityOwner, true);
+    assert.equal(audit.phaseWorkMap.entries[1].remainingCapabilityOwner, false);
+    assert.equal(audit.phaseWorkMap.entries[0].ref, "P001(F001)/T002");
     assert.equal(audit.coldStartSourceReviews.length, HANDOFF_COLD_START_SOURCE_REVIEWS.length);
     assert.equal(audit.coldStartInventoryCategories.length, HANDOFF_COLD_START_INVENTORY_CATEGORIES.length);
 
