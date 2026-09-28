@@ -56,13 +56,14 @@
     "6c6fae66-e267-4b15-9d2c-ee293147dfe3",
     "b2f169bf-cdf4-4d0b-a229-37ccd57e3c24",
     "8f778bbb-7bc5-43e5-8e6b-4ba5e081099f",
-    "dff7481a-5d80-4ef0-9409-5fe40b56fb94"
+    "dff7481a-5d80-4ef0-9409-5fe40b56fb94",
+    "9cd7433f-e878-4278-8f9a-2573471f351e"
   ],
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "a564be81-1b62-442e-b2aa-a5ef6347e813",
-      "date": "2026-09-24T10:44:08.982Z",
+      "id": "beadb931-895f-4578-9f16-de7a40c6392d",
+      "date": "2026-09-28T08:17:11.294Z",
       "fromStatus": "planned",
       "toStatus": "done",
       "title": "planned → done",
