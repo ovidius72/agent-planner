@@ -3,6 +3,7 @@ import { formatPhaseRef, formatTwoDigitNumber } from "./naming.js";
 import { buildPhaseWorkMap } from "./task-context.js";
 import { recommendNextTask } from "./task-selection.js";
 import { listOpenPhaseWork, openPhaseWorkLines } from "./stranded-phase.js";
+import { listOnHoldWork, renderOnHoldWork, startedOpenPhaseIds } from "./on-hold.js";
 
 /**
  * Web UI info for the recap (harness-agnostic — no module globals).
@@ -127,6 +128,11 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
       openPhaseWorkText,
     );
   }
+
+  // Parked work in phases already under way, with its reason and whether
+  // what it waits on has finished — the same list task_recommend shows.
+  const onHoldText = renderOnHoldWork(listOnHoldWork(feats, phases, startedOpenPhaseIds(phases)), 5);
+  if (onHoldText) lines.push("", onHoldText);
 
   if (activeTasks.length > 1) {
     const conflicts = activeTasks.map(({ phase, task }) => {

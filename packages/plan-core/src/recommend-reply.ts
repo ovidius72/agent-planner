@@ -22,6 +22,7 @@
 import type { Feature } from "./schema.js";
 import { featureNumberOfPhase, formatPhaseRef } from "./naming.js";
 import type { NextWorkRecommendation, TaskCandidate } from "./task-selection.js";
+import { renderOnHoldWork } from "./on-hold.js";
 
 export interface RecommendReply {
   text: string;
@@ -75,7 +76,13 @@ function renderClaimsText(claims: NextWorkRecommendation["claims"]): string {
  */
 export function buildRecommendationReply(result: NextWorkRecommendation, features: Feature[]): RecommendReply {
   const { selection } = result;
-  const claimsText = renderClaimsText(result.claims);
+  const onHoldBlock = renderOnHoldWork(result.onHold ?? []);
+  const claimsText = `${renderClaimsText(result.claims)}${onHoldBlock ? `\n\n${onHoldBlock}` : ""}`;
+  // Counts and refs only: the reasons are in the text.
+  const onHoldSummary = {
+    total: (result.onHold ?? []).length,
+    readyToResume: (result.onHold ?? []).filter((item) => item.readyToResume).map((item) => item.ref),
+  };
 
   if (!selection.candidate) {
     const activeCandidates = selection.activeCandidates ?? [];
@@ -90,6 +97,7 @@ export function buildRecommendationReply(result: NextWorkRecommendation, feature
         nextPhase: result.nextPhase,
         nextTask: result.nextTask,
         claims: result.claims,
+        onHold: onHoldSummary,
         selection: {
           kind: selection.kind,
           reason: selection.reason,
@@ -119,6 +127,7 @@ export function buildRecommendationReply(result: NextWorkRecommendation, feature
       nextPhase: result.nextPhase,
       nextTask: result.nextTask,
       claims: result.claims,
+      onHold: onHoldSummary,
       selection: {
         kind: selection.kind,
         reason: selection.reason,

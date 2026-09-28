@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AcceptedDecisionsList } from "../src/components/ui/accepted-decisions-list";
 import { Accordion } from "../src/components/ui/accordion";
@@ -100,7 +100,8 @@ describe("closed-by-default disclosures", () => {
     expect(detailsWithSummary(featureRender.container, "Planning notes").open).toBe(false);
     expect(featureHistory.open).toBe(false);
     expect(screen.queryByText("Description freshness")).not.toBeInTheDocument();
-    expect(document.title).toBe("Feature F001 · Example feature");
+    // The title is set by an effect that may run after the heading shows.
+    await waitFor(() => expect(document.title).toBe("Feature F001 · Example feature"));
     featureRender.unmount();
 
     const phaseRender = renderRoute([{ path: "/features/:featureId/phases/:phaseId", loader: () => ({ feature, phase }), element: <PhaseDetailRoute /> }], "/features/feature-1/phases/phase-1");
@@ -113,7 +114,8 @@ describe("closed-by-default disclosures", () => {
     expect(detailsWithSummary(phaseRender.container, "Accepted decisions").open).toBe(false);
     expect(detailsWithSummary(phaseRender.container, "Status history").open).toBe(false);
     expect(screen.queryByText("Description freshness")).not.toBeInTheDocument();
-    expect(document.title).toBe("Phase P001 · Example phase");
+    // The title is set by an effect that may run after the heading shows.
+    await waitFor(() => expect(document.title).toBe("Phase P001 · Example phase"));
     phaseRender.unmount();
 
     const taskRender = renderRoute([{ path: "/features/:featureId/phases/:phaseId/tasks/:taskId", loader: () => ({ feature, phase, task, pendingResume: false }), element: <TaskDetailRoute /> }], "/features/feature-1/phases/phase-1/tasks/task-1");
@@ -125,7 +127,8 @@ describe("closed-by-default disclosures", () => {
     expect(detailsWithSummary(taskRender.container, "Status history").open).toBe(false);
     expect(screen.queryByText("Description freshness")).not.toBeInTheDocument();
     expect(taskRender.container.querySelectorAll(".entity-path-seg--link").length).toBe(3);
-    expect(document.title).toBe("Task T001 · Example task");
+    // The title is set by an effect that may run after the heading shows.
+    await waitFor(() => expect(document.title).toBe("Task T001 · Example task"));
   });
 
   it("starts requirement and handoff list disclosures closed", async () => {
