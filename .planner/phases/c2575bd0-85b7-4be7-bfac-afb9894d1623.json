@@ -29,7 +29,8 @@
     "f835ad8a-8763-456e-99a1-8b337f1abe38",
     "67f8419e-6b83-46cf-beb1-1b0f8f195d4c",
     "3882a27e-a2d0-4f5a-ac42-69450999f501",
-    "f331eb7e-3100-4cc7-8e68-641b0ee37c43"
+    "f331eb7e-3100-4cc7-8e68-641b0ee37c43",
+    "6378f3e9-ee54-4121-8ebf-a540a55c7eeb"
   ],
   "tasks": [
     {
@@ -357,11 +358,28 @@
       "priority": 4,
       "shortName": "surface-deferred-tasks-that-ma",
       "title": "Surface deferred tasks that may be ready to resume before leaving a phase",
-      "status": "planned",
-      "description": "Reported 2026-09-28 from heca: after P082(F003)/T466 finished, P082 had 0 planned and 10 deferred tasks. planner-task-recommend jumped to P022(F003)/T083 (a phase not started, no spec). The deferred tasks carry reasons such as \"Resume once P097 lands\" / \"after P094's terminal work\"; P097 was fully done (8 done, 1 canceled), so T509, T510, T511, T514 had become workable. Nothing surfaced them; the user had to notice. The recommendation's claims listed handoffs but not deferred tasks.\n\nExpected: before the recommendation leaves a phase (or picks next work at all), the phase's on-hold tasks (deferred, waiting, blocked) are shown as \"check whether these can resume\", each with its reason (from the statusLog motivation), so the agent re-checks them instead of skipping.\n\nDesign points (decide during the task, record as a decision):\n- A reason that names phase/task refs (e.g. P097(F003), P094, T123) can be checked mechanically: when every named entity is done/canceled, flag the task \"ready to resume\". Free-text reasons are only shown.\n- One place in plan-core feeds both planner-task-recommend (MCP/Pi, recommendNextWork / buildRecommendationReply) and the load recap (buildRecap), so they cannot disagree.\n- Keep it bounded (a long phase must not flood the reply).\n\nEvidence: ~/projects/heca/.planner/phases/5464ff74-fa17-4412-abaa-95aa19810b33.json (P082); measure only on a mkdtemp copy.\n\nVerification: plan-core tests for ref extraction and readiness; recommend/recap tests with a fixture where a deferral names a finished phase; MCP and Pi suites.",
-      "descriptionUpdatedAt": "2026-09-28T08:53:45.757Z",
+      "status": "done",
+      "description": "Reported 2026-09-28 from heca: after P082(F003)/T466 finished, P082 had 0 planned and 10 deferred tasks. planner-task-recommend jumped to P022(F003)/T083 (a phase not started, no spec). The deferred tasks carry reasons such as \"Resume once P097 lands\" / \"after P094's terminal work\"; P097 was fully done (8 done, 1 canceled), so T509, T510, T511, T514 had become workable. Nothing surfaced them; the user had to notice. The recommendation's claims listed handoffs but not deferred tasks.\n\nExpected: before the recommendation leaves a phase (or picks next work at all), the phase's on-hold tasks (deferred, waiting, blocked) are shown as \"check whether these can resume\", each with its reason (from the statusLog motivation), so the agent re-checks them instead of skipping.\n\nDesign points (decide during the task, record as a decision):\n- A reason that names phase/task refs (e.g. P097(F003), P094, T123) can be checked mechanically: when every named entity is done/canceled, flag the task \"ready to resume\". Free-text reasons are only shown.\n- One place in plan-core feeds both planner-task-recommend (MCP/Pi, recommendNextWork / buildRecommendationReply) and the load recap (buildRecap), so they cannot disagree.\n- Keep it bounded (a long phase must not flood the reply).\n\nEvidence: ~/projects/heca/.planner/phases/5464ff74-fa17-4412-abaa-95aa19810b33.json (P082); measure only on a mkdtemp copy.\n\nVerification: plan-core tests for ref extraction and readiness; recommend/recap tests with a fixture where a deferral names a finished phase; MCP and Pi suites.\n\n---\n**Completion summary:**\nShipped: parked tasks (deferred, waiting, blocked) are listed with their reason in task recommend and in the load recap, and flagged \"may be ready\" when every planner ref their reason names is finished. Project decision \"Parked tasks are re-checked, never silently skipped\" records the design.\n\n- packages/plan-core/src/on-hold.ts (new): `refsNamedIn` (P097, P097(F003), F003/P097, P094(F011)/T449, P097/T501, T468; resolved by number only, never by title; wrong feature or unknown number → not found; the task's own ref ignored), `listOnHoldWork` (reason = motivation of the status change that parked it; may-be-ready first), `startedOpenPhaseIds` (phases with some finished or active work and something still open), `renderOnHoldWork` (bounded block, 160-char reason previews, \"N more\" line).\n- task-selection.ts: recommendNextWork adds `onHold` (started phases + the recommended phase) and \"on-hold\" advisory claims placed before other advisories so the claim limit never drops them; new claim source \"on-hold\".\n- recommend-reply.ts: renders the block after the claims; structured gets only `onHold: { total, readyToResume: refs }`.\n- recap.ts: same block (limit 5) after \"In-progress phases with work left\".\n\nOn a mkdtemp copy of heca: 14 on-hold tasks in started phases; 2 flagged (P084/T395, T400 — waiting on P082/T416, done); T468/T470/T471 correctly still waiting on P094; T343's \"F003/P001\" names a phase not under F003 → not found, not flagged.\n\nTests: plan-core 466/466 incl. new on-hold.test.mjs (ref spellings and no fuzzy match; flag only when every named ref is finished; free-text never flagged; sibling still parked → not flagged; recommendation keeps fresh priority work but adds the claim and block; unstarted phases excluded; block bounded); plan-mcp 92/92; pi-adapter 93/93; plan-server 59/59.\n\nNot done: `pnpm verify:final` failed on an unrelated Web UI timing test in the nested suite (T442 fixes it); nothing committed.",
+      "descriptionUpdatedAt": "2026-09-28T13:44:55.932Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-001-planned-in-progress",
+          "date": "2026-09-28T13:40:00.020Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-002-in-progress-done",
+          "date": "2026-09-28T13:44:55.929Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: parked tasks (deferred, waiting, blocked) are listed with their reason in task recommend and in the load recap, and flagged \"may be ready\" when every planner ref their reason names is finished. Project decision \"Parked tasks are re-checked, never silently skipped\" records the design.\n\n- packages/plan-core/src/on-hold.ts (new): `refsNamedIn` (P097, P097(F003), F003/P097, P094(F011)/T449, P097/T501, T468; resolved by number only, never by title; wrong feature or unknown number → not found; the task's own ref ignored), `listOnHoldWork` (reason = motivation of the status change that parked it; may-be-ready first), `startedOpenPhaseIds` (phases with some finished or active work and something still open), `renderOnHoldWork` (bounded block, 160-char reason previews, \"N more\" line).\n- task-selection.ts: recommendNextWork adds `onHold` (started phases + the recommended phase) and \"on-hold\" advisory claims placed before other advisories so the claim limit never drops them; new claim source \"on-hold\".\n- recommend-reply.ts: renders the block after the claims; structured gets only `onHold: { total, readyToResume: refs }`.\n- recap.ts: same block (limit 5) after \"In-progress phases with work left\".\n\nOn a mkdtemp copy of heca: 14 on-hold tasks in started phases; 2 flagged (P084/T395, T400 — waiting on P082/T416, done); T468/T470/T471 correctly still waiting on P094; T343's \"F003/P001\" names a phase not under F003 → not found, not flagged.\n\nTests: plan-core 466/466 incl. new on-hold.test.mjs (ref spellings and no fuzzy match; flag only when every named ref is finished; free-text never flagged; sibling still parked → not flagged; recommendation keeps fresh priority work but adds the claim and block; unstarted phases excluded; block bounded); plan-mcp 92/92; pi-adapter 93/93; plan-server 59/59.\n\nNot done: `pnpm verify:final` failed on an unrelated Web UI timing test in the nested suite (T442 fixes it); nothing committed."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -369,36 +387,41 @@
           "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-001-collect-on-hold-tasks-and-their-reasons-in-plan-core",
           "number": 1,
           "title": "Collect on-hold tasks and their reasons in plan-core",
-          "checked": false
+          "checked": true
         },
         {
           "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-002-mark-ready-to-resume-when-every-ref-named-in-the-reason-is-finished",
           "number": 2,
           "title": "Mark ready-to-resume when every ref named in the reason is finished",
-          "checked": false
+          "checked": true
         },
         {
           "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-003-show-them-in-task-recommend-and-load-recap-from-the-same-place",
           "number": 3,
           "title": "Show them in task recommend and load recap from the same place",
-          "checked": false
+          "checked": true
         },
         {
           "id": "67f8419e-6b83-46cf-beb1-1b0f8f195d4c-check-004-tests-and-a-check-on-a-heca-copy",
           "number": 4,
           "title": "Tests and a check on a heca copy",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-09-28T13:40:00.020Z",
+      "completedAt": "2026-09-28T13:44:55.929Z",
       "createdAt": "2026-09-28T08:53:45.700Z",
-      "updatedAt": "2026-09-28T08:53:45.700Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-09-28T13:44:55.929Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T13:39:59.916Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -524,10 +547,72 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "6378f3e9-ee54-4121-8ebf-a540a55c7eeb",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 442,
+      "shortId": "NARBD",
+      "priority": 7,
+      "shortName": "wait-for-the-page-title-in-the",
+      "title": "Wait for the page title in the Web UI disclosure test",
+      "status": "done",
+      "description": "`pnpm verify:final` (4769b547dc1d) failed in the nested unit run of test/report.test.mjs: packages/plan-web-ui/test/disclosure-defaults.test.tsx \"starts feature, phase, and task detail accordions closed\" expected document.title \"Feature F001 · Example feature\" and got '' (line 103; the same pattern at 116 and 128). The title is set in an effect (src/components/detail/entity-detail-identity.tsx:29-32; src/app/root.tsx also writes it), which can run after the heading is visible; under the load of the nested suite the synchronous read loses the race. Same class as T441. Fix: wrap the three title assertions in waitFor; no product change. Verify the file repeatedly, then pnpm verify:final.\n\n---\n**Completion summary:**\nShipped: packages/plan-web-ui/test/disclosure-defaults.test.tsx waits (waitFor) for document.title in its three title assertions (feature, phase, task detail) instead of reading it right after the heading appears; the title is set by an effect (entity-detail-identity.tsx), which under the load of report.test.mjs's nested suite ran after the read (got ''). No product change. Same class as T441: both flakes only appear in the nested run that report.test.mjs starts while the main suite is running.\n\nVerification: the file passed 3/3 runs; `pnpm verify:final` passed (1252d62078fc). Not committed.\n\nOpen follow-up (not done): the nested full-suite run in test/report.test.mjs is what exposes these timing races; other Web UI tests that read effect results synchronously can fail the same way. A sweep, or running that nested check on a smaller fixed set of tests, would remove the class.",
+      "descriptionUpdatedAt": "2026-09-28T13:46:45.245Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "6378f3e9-ee54-4121-8ebf-a540a55c7eeb-check-001-planned-in-progress",
+          "date": "2026-09-28T13:44:58.055Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "6378f3e9-ee54-4121-8ebf-a540a55c7eeb-check-002-in-progress-done",
+          "date": "2026-09-28T13:46:45.242Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: packages/plan-web-ui/test/disclosure-defaults.test.tsx waits (waitFor) for document.title in its three title assertions (feature, phase, task detail) instead of reading it right after the heading appears; the title is set by an effect (entity-detail-identity.tsx), which under the load of report.test.mjs's nested suite ran after the read (got ''). No product change. Same class as T441: both flakes only appear in the nested run that report.test.mjs starts while the main suite is running.\n\nVerification: the file passed 3/3 runs; `pnpm verify:final` passed (1252d62078fc). Not committed.\n\nOpen follow-up (not done): the nested full-suite run in test/report.test.mjs is what exposes these timing races; other Web UI tests that read effect results synchronously can fail the same way. A sweep, or running that nested check on a smaller fixed set of tests, would remove the class."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6378f3e9-ee54-4121-8ebf-a540a55c7eeb-check-001-wait-for-the-title-in-all-three-assertions",
+          "number": 1,
+          "title": "Wait for the title in all three assertions",
+          "checked": true
+        },
+        {
+          "id": "6378f3e9-ee54-4121-8ebf-a540a55c7eeb-check-002-focused-web-test-then-pnpm-verify-final",
+          "number": 2,
+          "title": "Focused web test, then pnpm verify:final",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T13:44:58.055Z",
+      "completedAt": "2026-09-28T13:46:45.242Z",
+      "createdAt": "2026-09-28T13:44:42.490Z",
+      "updatedAt": "2026-09-28T13:46:45.242Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T13:44:57.953Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-28T08:22:01.112Z",
-  "updatedAt": "2026-09-28T09:09:37.846Z",
+  "updatedAt": "2026-09-28T13:46:45.242Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -557,12 +642,20 @@
       "toStatus": "in-progress",
       "title": "done → in-progress",
       "description": ""
+    },
+    {
+      "id": "49a7cb44-7a8d-4190-8afb-47b3c3e73e51",
+      "date": "2026-09-28T13:46:45.269Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "sessionInfo": [
     {
       "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
-      "createdAt": "2026-09-28T09:07:51.595Z"
+      "createdAt": "2026-09-28T13:44:57.953Z"
     }
   ]
 }

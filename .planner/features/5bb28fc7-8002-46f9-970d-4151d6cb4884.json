@@ -63,20 +63,15 @@
   "dependsOn": [],
   "statusLog": [
     {
-      "id": "1077bd1c-0c31-44e4-96ba-9c86a768c77b",
-      "date": "2026-09-28T08:54:00.671Z",
+      "id": "f75ae613-f244-421a-8116-ca68c06e2491",
+      "date": "2026-09-28T13:46:45.341Z",
       "fromStatus": "planned",
-      "toStatus": "in-progress",
-      "title": "planned → in-progress",
+      "toStatus": "done",
+      "title": "planned → done",
       "description": ""
     }
   ],
   "createdAt": "2026-07-15T20:24:28.795Z",
   "updatedAt": "2026-07-27T12:01:51.734Z",
-  "sessionInfo": [
-    {
-      "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
-      "createdAt": "2026-09-28T09:07:51.595Z"
-    }
-  ]
+  "sessionInfo": []
 }
