@@ -1,7 +1,8 @@
 import type { Feature, Phase, Task, WorkDeviation } from "./schema.js";
+import { listOnHoldWork, startedOpenPhaseIds, type OnHoldTask } from "./on-hold.js";
 
 export type RecommendationClaimKind = "recommendation" | "advisory" | "conflict" | "insufficient";
-export type RecommendationClaimSource = "priority" | "active-task" | "resume-deviation" | "dependency-ready" | "handoff" | "archived-handoff";
+export type RecommendationClaimSource = "priority" | "active-task" | "resume-deviation" | "dependency-ready" | "handoff" | "archived-handoff" | "on-hold";
 
 export interface RecommendationClaim {
   kind: RecommendationClaimKind;
@@ -55,6 +56,8 @@ export interface NextWorkRecommendation {
   nextPhase: WorkSummary | null;
   nextTask: WorkSummary | null;
   claims: RecommendationClaim[];
+  /** On-hold tasks in started phases, ready-to-resume first (see on-hold.ts). */
+  onHold: OnHoldTask[];
 }
 
 export interface TaskRecommendation {
@@ -95,8 +98,20 @@ const buildRecommendationClaims = (
   selection: TaskRecommendation,
   evidence: RecommendationEvidence = {},
   dependencyReadyCandidates: TaskCandidate[] = [],
+  onHold: OnHoldTask[] = [],
 ): RecommendationClaim[] => {
   const claims: RecommendationClaim[] = [];
+  // Parked work whose every named blocker is finished competes with fresh
+  // work; listed before it so the claim limit never drops it.
+  const readyOnHold = onHold.filter((item) => item.readyToResume).map((item): RecommendationClaim => ({
+    kind: "advisory",
+    source: "on-hold",
+    ref: item.ref,
+    title: item.title,
+    reason: `On hold (${item.status}); everything its reason names is finished (${item.namedRefs.map((named) => named.ref).join(", ")}), so it may be ready. Re-check it and resume it if nothing else holds it.`,
+    taskId: item.taskId,
+    phaseId: item.phaseId,
+  }));
   if (selection.candidate) {
     claims.push({
       kind: selectionClaimKind(selection.kind),
@@ -109,6 +124,8 @@ const buildRecommendationClaims = (
       ...(selection.candidate.feature?.id ? { featureId: selection.candidate.feature.id } : {}),
     });
   }
+
+  claims.push(...readyOnHold);
 
   for (const candidate of dependencyReadyCandidates) {
     claims.push({
@@ -359,6 +376,11 @@ export function recommendNextWork(
       && !(feature && hardUnavailable.has(feature.status))
       && task.dependsOn.every((id) => taskById.get(id)?.status === "done"))
     .sort((left, right) => compare(left.feature ?? { priority: 0, number: 0 }, right.feature ?? { priority: 0, number: 0 }) || compare(left.phase, right.phase) || compare(left.task, right.task));
+  // On-hold work in phases already under way, plus the phase the
+  // recommendation is about to send the agent into.
+  const onHoldPhaseIds = startedOpenPhaseIds(phases);
+  if (selection.candidate) onHoldPhaseIds.add(selection.candidate.phase.id);
+  const onHold = listOnHoldWork(features, phases, onHoldPhaseIds);
   const activeTask = selection.kind === "active" && selection.candidate
     ? summarizeTask(selection.candidate.task)
     : null;
@@ -368,7 +390,8 @@ export function recommendNextWork(
     nextFeature: selection.candidate?.feature ? summarizeFeature(selection.candidate.feature) : null,
     nextPhase: selection.candidate ? summarizePhase(selection.candidate.phase) : null,
     nextTask: selection.candidate ? summarizeTask(selection.candidate.task) : null,
-    claims: buildRecommendationClaims(selection, evidence, dependencyReadyCandidates),
+    claims: buildRecommendationClaims(selection, evidence, dependencyReadyCandidates, onHold),
+    onHold,
   };
 }
 

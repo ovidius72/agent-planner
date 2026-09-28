@@ -77,7 +77,7 @@ The generated `.mcp.json` is:
 
 Project setup also does **not** initialize `.planner/`. Use `/planner init` when needed.
 
-Project setup also creates `.claude/settings.json` with a `PreToolUse` guard hook for `Edit|Write`. When `.planner/` exists and tasks exist, the hook blocks write tools unless at least one task is `in-progress`, or a temporary bypass has been authorized.
+Project setup also creates `.claude/settings.json` with a `PreToolUse` hook for `Edit|Write|NotebookEdit|Bash`. It never blocks or prompts: when a call changes project code (outside `.planner/`) while tasks exist and none is `in-progress`, it adds a warning to the agent's context. Planner changes and writes outside the project never warn; an authorized bypass silences the warning.
 
 ## Local development setup
 

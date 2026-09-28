@@ -1,29 +1,32 @@
 import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /**
- * Harness-agnostic decision logic for the "no task in progress" edit guard.
- * Any adapter (Claude Code PreToolUse hook, Pi's advisory guard, a future
- * harness) can feed it a parsed tool-use event plus already-fetched planner
- * state and get back the same decision. This never talks to the plan store
+ * Harness-agnostic logic for the "no task in progress" warning. The guard
+ * never blocks and never asks: every tool call proceeds, and a call that
+ * changes project code while no task is in progress only earns the agent a
+ * warning. Planner operations never need a task. Any adapter (Claude Code
+ * PreToolUse hook, Pi's tool_call handler, a future harness) feeds it a
+ * parsed tool-use event plus already-fetched planner state and gets back the
+ * same warning, or none. This never talks to the plan store
  * or stdin/stdout — callers own that I/O. It does read the filesystem in one
  * narrow way (see {@link canonicalize}): resolving symlinks so a path
  * comparison isn't fooled by one, which is cheap (a handful of stat calls,
  * not a plan load) and safe to call on paths that don't exist yet.
  */
 
-export type GuardPermissionDecision = "allow" | "ask" | "deny";
-
 /** The tool-use fields the decision needs, already pulled out of whatever
  * shape the harness's raw event uses (Claude Code's `tool_input.file_path`,
  * Pi's `event.input.path`, etc.). */
 export interface GuardEventInput {
+  /** Tool name in any case: Claude Code's `Edit`/`Bash` and Pi's `edit`/`bash` are the same tool. */
   toolName: string;
   /** Absolute (or resolvable) working directory used to resolve relative paths. */
   cwd: string;
   /** Absolute planner root, e.g. `join(cwd, ".planner")`. */
   plannerRoot: string;
-  /** Edit / Write target path. */
+  /** Edit / Write target path (Pi: `path`). */
   filePath?: string;
   /** NotebookEdit target path. */
   notebookPath?: string;
@@ -37,23 +40,23 @@ export interface GuardStateInput {
   totalTasks: number;
   hasInProgressTask: boolean;
   guardBypassed: boolean;
-  /** Human-readable "start this task" hint, or the generic fallback; empty allowed. */
-  startHint: string;
+  /** The task the warning suggests starting, when there is an obvious one. */
+  focusTask?: { id: string; title: string };
 }
 
 export interface GuardClassification {
-  /** Whether this tool call is one the guard evaluates at all. */
+  /** Whether this tool call may write project code, so the guard must look at task state. */
   guarded: boolean;
-  /** Best-effort candidate paths the call would write to (may be empty when unknown). */
+  /** The project paths outside `.planner/` the call would write to; empty when the target is unknown. */
   paths: string[];
 }
 
-export interface GuardDecision {
-  decision: GuardPermissionDecision;
-  reason?: string;
+export interface NoTaskWarning {
+  /** Text for the agent, present only when it should be warned. */
+  warning?: string;
 }
 
-const GUARDED_FILE_TOOLS = new Set(["Edit", "Write"]);
+const FILE_WRITE_TOOLS = new Set(["edit", "write"]);
 
 /** Strip fd-duplication idioms (`2>&1`, `>&2`, `1>&2`) before segmenting or
  * matching — they duplicate a stream, not a file, are extremely common in
@@ -63,11 +66,54 @@ function stripFdDuplication(command: string): string {
   return command.replace(/\d*>&\d+/g, " ");
 }
 
+/** Blank out shell operators (`>`, `<`, `|`, `;`, `&`, newlines) that sit
+ * inside single or double quotes. They are literal text there — a commit
+ * message's `<name@example.com>`, a `grep "a|b"` pattern — not redirects or
+ * separators. Quoted paths keep their characters, so `> "/tmp/x"` still
+ * reads as a redirect to `/tmp/x`. */
+function maskQuotedOperators(command: string): string {
+  let out = "";
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i]!;
+    if (quote === null) {
+      if (ch === "\\") {
+        out += ch + (command[i + 1] ?? "");
+        i += 1;
+        continue;
+      }
+      if (ch === "'" || ch === '"') quote = ch;
+      out += ch;
+      continue;
+    }
+    if (quote === '"' && ch === "\\") {
+      out += "__";
+      i += 1;
+      continue;
+    }
+    if (ch === quote) {
+      quote = null;
+      out += ch;
+      continue;
+    }
+    out += /[<>|;&\n]/.test(ch) ? "_" : ch;
+  }
+  return out;
+}
+
+/** The command line as write-detection reads it: quoted operators masked,
+ * then fd-duplication removed. Both detection and target extraction use
+ * this, so they always see the same text. */
+function normalizeBashCommand(command: string): string {
+  return stripFdDuplication(maskQuotedOperators(command));
+}
+
 /** Split a Bash command line into pipe/list segments so write-detection on
  * one segment (e.g. `sed -i` on the left of a pipe) doesn't get confused by
  * an unrelated flag on the other side (e.g. `grep -i` on the right). Best
- * effort only — quoting and nested subshells are not fully parsed. Callers
- * must strip fd-duplication first, or a bare `2>&1` splits on its `&`. */
+ * effort only — nested subshells are not parsed. Callers must pass the
+ * command through {@link normalizeBashCommand} first, or a bare `2>&1`
+ * splits on its `&` and a quoted `|` splits a string in two. */
 function bashSegments(command: string): string[] {
   return command
     .split(/(?:&&|\|\||[;&|\n])+/)
@@ -94,22 +140,22 @@ function isWriteShapedBashSegment(segment: string): boolean {
  * redirection, `tee`, in-place `sed`/`perl`, a file-creating `cp`/`mv`,
  * `rm`, or a `git` operation that rewrites tracked files. Deliberately
  * over-inclusive: `git`, build/test runners, `ls`, `cat`, `grep`, `find`
- * and friends must stay unmatched, but when in doubt this returns true — the
- * cost of a false positive here is one extra prompt, not a blocked
- * operation, so under-matching (missing a real edit) is the worse failure.
+ * and friends must stay unmatched, but when in doubt this returns true — a
+ * false positive costs one warning to the agent, never a blocked call or a
+ * prompt, so under-matching (missing a real edit) is the worse failure.
  */
 export function isWriteShapedBashCommand(command: string): boolean {
   if (!command || !command.trim()) return false;
-  return bashSegments(stripFdDuplication(command)).some(isWriteShapedBashSegment);
+  return bashSegments(normalizeBashCommand(command)).some(isWriteShapedBashSegment);
 }
 
 /**
  * Best-effort extraction of the file path(s) a write-shaped Bash segment
- * targets, so a command that only touches `.planner/` can still be
- * recognized and allowed. This cannot see through a heredoc whose target is
- * computed (a variable, command substitution, etc.) rather than written
- * literally in the command line — that case is expected to fall through to
- * the normal in-progress/bypass checks below, not to be silently allowed.
+ * targets, so a command that only touches `.planner/` or files outside the
+ * project earns no warning. This cannot see through a heredoc whose target
+ * is computed (a variable, command substitution, etc.) rather than written
+ * literally in the command line — that case still reaches the in-progress /
+ * bypass checks and can warn, rather than being silently treated as safe.
  *
  * A wider gap of the same kind: a command that writes through an
  * interpreter (`python3 - <<PY` then `open(path, "w")`, `node -e`, a script
@@ -135,7 +181,7 @@ export function isWriteShapedBashCommand(command: string): boolean {
  */
 export function extractBashWriteTargets(command: string): string[] {
   const targets: string[] = [];
-  for (const segment of bashSegments(stripFdDuplication(command))) {
+  for (const segment of bashSegments(normalizeBashCommand(command))) {
     const redirect = segment.match(/>{1,2}\s*([^\s;&|>]+)/);
     if (redirect?.[1]) targets.push(redirect[1]);
 
@@ -182,74 +228,98 @@ function canonicalize(path: string): string {
   }
 }
 
-/** Whether `candidate` resolves to a path inside `plannerRoot` (or is it exactly). */
-export function isPathInsidePlannerRoot(candidate: string, plannerRoot: string, cwd: string): boolean {
-  const resolvedRoot = canonicalize(resolve(plannerRoot));
-  const resolvedCandidate = canonicalize(resolve(cwd, candidate));
+/** Turn a path as written in a command line into one `resolve` understands:
+ * drop surrounding quotes and expand a leading `~` or `$HOME`. Anything else
+ * the shell would expand (other variables, command substitution) is left
+ * as-is, so it resolves inside the project and the agent is still warned. */
+function shellPathToFsPath(candidate: string): string {
+  const unquoted = candidate.replace(/^['"]|['"]$/g, "");
+  return unquoted.replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, homedir());
+}
+
+/** Whether `candidate` resolves to `root` itself or a path inside it. */
+function isPathInside(candidate: string, root: string, cwd: string): boolean {
+  const resolvedRoot = canonicalize(resolve(root));
+  const resolvedCandidate = canonicalize(resolve(cwd, shellPathToFsPath(candidate)));
   const rel = relative(resolvedRoot, resolvedCandidate);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-/** True only when every candidate path is inside the planner root, and there
- * is at least one candidate — an empty/unknown path list must never count as
- * "inside", or an unresolvable target would be silently allowed. Exported so
- * a hook harness can use the exact same check for its cheap early-allow path
- * without duplicating the rule. */
-export function isEntirelyInsidePlannerRoot(paths: string[], plannerRoot: string, cwd: string): boolean {
-  return paths.length > 0 && paths.every((path) => isPathInsidePlannerRoot(path, plannerRoot, cwd));
+/** Whether `candidate` resolves to a path inside `plannerRoot` (or is it exactly). */
+export function isPathInsidePlannerRoot(candidate: string, plannerRoot: string, cwd: string): boolean {
+  return isPathInside(candidate, plannerRoot, cwd);
+}
+
+/** Whether writing `candidate` changes the project's code: it is inside the
+ * project (the directory that owns `.planner/`) and not inside `.planner/`.
+ * `/dev/null`, `~/.claude/...`, temp dirs and other repositories are not. */
+export function isProjectCodePath(candidate: string, plannerRoot: string, cwd: string): boolean {
+  return isPathInside(candidate, dirname(plannerRoot), cwd) && !isPathInside(candidate, plannerRoot, cwd);
+}
+
+/** Which paths a covered tool call would write to, before any filtering;
+ * empty when the target cannot be read from the event. */
+function rawWriteTargets(event: GuardEventInput): { covered: boolean; paths: string[] } {
+  const tool = event.toolName.toLowerCase();
+  if (FILE_WRITE_TOOLS.has(tool)) {
+    return { covered: true, paths: event.filePath ? [event.filePath] : [] };
+  }
+  if (tool === "notebookedit") {
+    return { covered: true, paths: event.notebookPath ? [event.notebookPath] : [] };
+  }
+  if (tool === "bash") {
+    const command = event.command ?? "";
+    if (!isWriteShapedBashCommand(command)) return { covered: false, paths: [] };
+    return { covered: true, paths: extractBashWriteTargets(command) };
+  }
+  return { covered: false, paths: [] };
 }
 
 /**
- * Which tool calls the guard covers, and what path(s) they would write to.
- * Everything else (Read, Grep, WebFetch, MCP tools, read-only Bash, ...) is
- * unguarded and returns `{ guarded: false }` without touching the planner
- * store.
+ * Whether a tool call may change the project's code, and so needs the guard
+ * to look at task state. This is the one place that rule lives; the hook's
+ * cheap early exit and {@link noTaskWarning} both read `guarded`.
+ *
+ * - Tools that never write (Read, Grep, MCP tools, read-only Bash, ...) are
+ *   not guarded.
+ * - A write whose targets are all known and none is project code (inside
+ *   `.planner/`, `/dev/null`, `~/.claude/...`, a temp dir, another repo) is
+ *   not guarded: updating the planner or the user's own config never needs a
+ *   task.
+ * - A write with at least one project-code target is guarded, with `paths`
+ *   narrowed to those targets.
+ * - A write whose target is unknown (a computed heredoc, an Edit with no
+ *   path) is guarded with empty `paths` — never silently allowed.
  */
 export function classifyGuardedTool(event: GuardEventInput): GuardClassification {
-  if (GUARDED_FILE_TOOLS.has(event.toolName)) {
-    return { guarded: true, paths: event.filePath ? [event.filePath] : [] };
-  }
-  if (event.toolName === "NotebookEdit") {
-    return { guarded: true, paths: event.notebookPath ? [event.notebookPath] : [] };
-  }
-  if (event.toolName === "Bash") {
-    const command = event.command ?? "";
-    if (!isWriteShapedBashCommand(command)) return { guarded: false, paths: [] };
-    return { guarded: true, paths: extractBashWriteTargets(command) };
-  }
-  return { guarded: false, paths: [] };
+  const { covered, paths } = rawWriteTargets(event);
+  if (!covered) return { guarded: false, paths: [] };
+  if (paths.length === 0) return { guarded: true, paths: [] };
+  const projectPaths = paths.filter((path) => isProjectCodePath(path, event.plannerRoot, event.cwd));
+  return { guarded: projectPaths.length > 0, paths: projectPaths };
 }
 
 /**
- * The full "no task in progress" guard decision, as a pure function: given a
- * parsed tool-use event and planner state the caller already fetched, decide
- * allow or ask (deny is part of the type for a future genuinely-deny case,
- * but nothing here returns it today). No stdin/stdout and no plan-store
- * calls — the hook harness (or a Pi equivalent) does the reading and
- * printing around this; the only filesystem access is the cheap symlink
- * canonicalization in {@link isPathInsidePlannerRoot}.
+ * The warning for a tool call that changes project code while no task is in
+ * progress, or none. Never a block or a prompt: the adapter lets the call
+ * proceed either way and only passes the text to the agent. Pure apart from
+ * the cheap symlink canonicalization in {@link isPathInsidePlannerRoot}.
  *
- * Order matters and mirrors the cost of finding out: anything the guard
- * doesn't cover, and anything that resolves entirely inside the planner
- * root, is decided from the event alone (no planner state needed). Only a
- * real candidate for blocking reaches the state-based checks.
+ * Order mirrors the cost of finding out: anything that cannot change project
+ * code (see {@link classifyGuardedTool}) is settled from the event alone, so
+ * adapters can skip loading the plan for it.
  */
-export function decideGuardPreToolUse(event: GuardEventInput, state: GuardStateInput): GuardDecision {
+export function noTaskWarning(event: GuardEventInput, state: GuardStateInput): NoTaskWarning {
   const classification = classifyGuardedTool(event);
-  if (!classification.guarded) return { decision: "allow" };
+  if (!classification.guarded) return {};
+  if (!state.hasPlannerDir || state.totalTasks === 0) return {};
+  if (state.hasInProgressTask || state.guardBypassed) return {};
 
-  // Writing a handoff or recording task state is how an agent reports what
-  // it did, and it is most needed exactly when no task is in progress. Never
-  // block or ask for anything inside .planner/, regardless of task state.
-  if (isEntirelyInsidePlannerRoot(classification.paths, event.plannerRoot, event.cwd)) {
-    return { decision: "allow" };
-  }
-
-  if (!state.hasPlannerDir) return { decision: "allow" };
-  if (state.totalTasks === 0) return { decision: "allow" };
-  if (state.hasInProgressTask) return { decision: "allow" };
-  if (state.guardBypassed) return { decision: "allow" };
-
-  const reason = `Agent Plan guard: no task is in-progress, and this ${event.toolName} touches a file outside .planner/.${state.startHint} Or authorize a temporary bypass so this and further edits this session don't ask again (run /planner bypass, or call planner-authorize-bypass) — same bypass window an in-progress task already skips.`;
-  return { decision: "ask", reason };
+  const target = classification.paths.length > 0 ? classification.paths.join(", ") : "a project file";
+  const start = state.focusTask
+    ? `start the task that covers it (/planner task start ${state.focusTask.id} — ${state.focusTask.title}, or another one)`
+    : "start the task that covers it (/planner task start <task>)";
+  return {
+    warning: `Agent Plan: no task is in progress, and this call changes project code (${target}). It was not blocked. If this is planned work, ${start} so the plan stays accurate. Planner changes never need a task.`,
+  };
 }

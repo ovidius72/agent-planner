@@ -11,7 +11,7 @@ import {
 import { renderAcceptedDecisionsSection } from "./task-context.js";
 
 export const PROJECT_CONTEXT_DELIVERY_VERSION = 1;
-export const DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS = 16_000;
+export const DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS = 32_000;
 
 export const ProjectContextReadAttestationSchema = z.object({
   sessionId: z.string().min(1),
@@ -335,9 +335,11 @@ export function renderProjectContext(snapshot: ProjectContextSnapshot): string {
  * Every adapter (Pi, MCP, and any future harness) must deliver the same
  * complete project-level context, so the reply is shaped once here instead
  * of once per adapter — the same placement rule as handoff-reply.ts (AGENTS.md
- * rule 4). Both channels carry the full snapshot on a complete delivery:
- * some hosts surface only `text` to the agent, others only structuredContent
- * ("structuredContent-only host compatibility"), so neither is optional.
+ * rule 4). The snapshot is carried once, as rendered `text`; `structured`
+ * holds only the delivery status (complete or not, fingerprint, next
+ * actions). A host that shows the agent only structuredContent still gets
+ * the text: the MCP server folds every reply's text into its structured
+ * part (foldTextIntoStructured in plan-mcp).
  */
 export interface ProjectContextReply {
   text: string;
@@ -374,9 +376,8 @@ export function buildProjectContextLoadReply(delivery: CompleteProjectContextDel
     structured: {
       loaded: true,
       contextComplete: true,
-      project: delivery.snapshot.project,
-      requirements: delivery.snapshot.requirements,
       fingerprint: delivery.evidence.fingerprint,
+      requirementCount: delivery.snapshot.requirements.length,
     },
   };
 }

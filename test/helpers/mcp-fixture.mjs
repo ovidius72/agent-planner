@@ -110,6 +110,20 @@ export async function startMcpFixture({ name = "mcp", seed = "minimal", opts = {
 
 // ── Content extraction ─────────────────────────────────────────────────────
 
+/** Claude Code shows the agent only structuredContent when a result has
+ * one, so every reply's text must also be there. Checked on every call any
+ * MCP test makes, so a new tool cannot ship text the agent never sees. */
+function assertTextReachesStructured(name, args, result) {
+  if (!result?.structuredContent) return;
+  const replyText = (result.content ?? []).filter((entry) => entry.type === "text").map((entry) => entry.text ?? "").join("\n\n");
+  if (!replyText) return;
+  if (result.structuredContent.text !== replyText) {
+    throw new Error(diagnostic({ name, args, result }), {
+      cause: new Error("structuredContent.text must carry the reply text: Claude Code shows the agent only structuredContent"),
+    });
+  }
+}
+
 /** Concatenated text content of a tool result. */
 export function toolText(result) {
   return (result.content ?? []).map((entry) => entry.text ?? "").join("\n");
@@ -149,6 +163,7 @@ export async function callTool(session, name, args = {}, { expectError } = {}) {
       cause: new Error(`expected isError=${expectError}, got ${result.isError}`),
     });
   }
+  assertTextReachesStructured(name, args, result);
   return result;
 }
 

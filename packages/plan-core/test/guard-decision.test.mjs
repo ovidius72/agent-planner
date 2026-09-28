@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyGuardedTool,
-  decideGuardPreToolUse,
+  noTaskWarning,
   extractBashWriteTargets,
-  isEntirelyInsidePlannerRoot,
   isPathInsidePlannerRoot,
+  isProjectCodePath,
   isWriteShapedBashCommand,
 } from "../dist/index.js";
 
@@ -17,7 +17,7 @@ const baseState = {
   totalTasks: 3,
   hasInProgressTask: false,
   guardBypassed: false,
-  startHint: " Start a task with /planner task start T1 (Do the thing), OR",
+  focusTask: { id: "T1", title: "Do the thing" },
 };
 
 const event = (overrides = {}) => ({
@@ -27,58 +27,61 @@ const event = (overrides = {}) => ({
   ...overrides,
 });
 
-test("an Edit inside the planner root is allowed, even with no task in progress", () => {
-  const decision = decideGuardPreToolUse(
+test("an Edit inside the planner root does not warn, even with no task in progress", () => {
+  const decision = noTaskWarning(
     event({ filePath: "/repo/.planner/docs/handoff.md" }),
     baseState,
   );
-  assert.equal(decision.decision, "allow");
+  assert.equal(decision.warning, undefined);
 });
 
-test("an Edit outside the planner root asks, and names the concrete startHint task", () => {
-  const decision = decideGuardPreToolUse(
+test("an Edit to project code warns, and names the task to start", () => {
+  const decision = noTaskWarning(
     event({ filePath: "/repo/src/index.ts" }),
     baseState,
   );
-  assert.equal(decision.decision, "ask");
-  assert.match(decision.reason, /no task is in-progress/);
-  assert.match(decision.reason, /outside \.planner\//);
-  assert.match(decision.reason, /Start a task with \/planner task start T1 \(Do the thing\), OR/);
+  assert.equal(typeof decision.warning, "string");
+  assert.match(decision.warning, /no task is in progress/);
+  assert.match(decision.warning, /not blocked/);
+  assert.match(decision.warning, /\/repo\/src\/index\.ts/);
+  assert.match(decision.warning, /\/planner task start T1 — Do the thing/);
+  assert.match(decision.warning, /Planner changes never need a task/);
+  assert.doesNotMatch(decision.warning, /OR Or/i);
 });
 
-test("a task in-progress allows the edit outside the planner root", () => {
-  const decision = decideGuardPreToolUse(
+test("a task in-progress silences the warning for the edit outside the planner root", () => {
+  const decision = noTaskWarning(
     event({ filePath: "/repo/src/index.ts" }),
     { ...baseState, hasInProgressTask: true },
   );
-  assert.equal(decision.decision, "allow");
+  assert.equal(decision.warning, undefined);
 });
 
-test("an authorized bypass allows the edit outside the planner root", () => {
-  const decision = decideGuardPreToolUse(
+test("an authorized bypass silences the warning for the edit outside the planner root", () => {
+  const decision = noTaskWarning(
     event({ filePath: "/repo/src/index.ts" }),
     { ...baseState, guardBypassed: true },
   );
-  assert.equal(decision.decision, "allow");
+  assert.equal(decision.warning, undefined);
 });
 
-test("no planner directory allows immediately", () => {
-  const decision = decideGuardPreToolUse(
+test("no planner directory means no warning", () => {
+  const decision = noTaskWarning(
     event({ filePath: "/repo/src/index.ts" }),
     { ...baseState, hasPlannerDir: false },
   );
-  assert.equal(decision.decision, "allow");
+  assert.equal(decision.warning, undefined);
 });
 
-test("no tasks at all allows immediately", () => {
-  const decision = decideGuardPreToolUse(
+test("no tasks at all means no warning", () => {
+  const decision = noTaskWarning(
     event({ filePath: "/repo/src/index.ts" }),
     { ...baseState, totalTasks: 0 },
   );
-  assert.equal(decision.decision, "allow");
+  assert.equal(decision.warning, undefined);
 });
 
-test("read-only Bash (git status, build, ls, grep, find, cat) is allowed without touching planner state", () => {
+test("read-only Bash (git status, build, ls, grep, find, cat) does not warn without touching planner state", () => {
   const commands = [
     "git status",
     "git pull",
@@ -94,12 +97,12 @@ test("read-only Bash (git status, build, ls, grep, find, cat) is allowed without
   ];
   for (const command of commands) {
     assert.equal(isWriteShapedBashCommand(command), false, `expected "${command}" to be read-only`);
-    const decision = decideGuardPreToolUse(event({ toolName: "Bash", command }), baseState);
-    assert.equal(decision.decision, "allow", `expected "${command}" to be allowed`);
+    const decision = noTaskWarning(event({ toolName: "Bash", command }), baseState);
+    assert.equal(decision.warning, undefined, `expected "${command}" not to warn`);
   }
 });
 
-test("write-shaped Bash outside the planner root asks", () => {
+test("write-shaped Bash outside the planner root warns", () => {
   const commands = [
     "echo hi > /repo/src/out.txt",
     "echo hi >> /repo/src/out.txt",
@@ -114,52 +117,101 @@ test("write-shaped Bash outside the planner root asks", () => {
   ];
   for (const command of commands) {
     assert.equal(isWriteShapedBashCommand(command), true, `expected "${command}" to be write-shaped`);
-    const decision = decideGuardPreToolUse(event({ toolName: "Bash", command }), baseState);
-    assert.equal(decision.decision, "ask", `expected "${command}" to ask`);
+    const decision = noTaskWarning(event({ toolName: "Bash", command }), baseState);
+    assert.equal(typeof decision.warning, "string", `expected "${command}" to warn`);
   }
 });
 
-test("write-shaped Bash entirely inside the planner root is allowed", () => {
+test("write-shaped Bash entirely inside the planner root does not warn", () => {
   const commands = [
     "echo hi > /repo/.planner/docs/handoff.md",
     "sed -i 's/a/b/' /repo/.planner/docs/handoff.md",
     "cp /repo/.planner/docs/a.md /repo/.planner/docs/b.md",
   ];
   for (const command of commands) {
-    const decision = decideGuardPreToolUse(event({ toolName: "Bash", command }), baseState);
-    assert.equal(decision.decision, "allow", `expected "${command}" to be allowed`);
+    const decision = noTaskWarning(event({ toolName: "Bash", command }), baseState);
+    assert.equal(decision.warning, undefined, `expected "${command}" not to warn`);
   }
 });
 
-test("a Bash command touching both a planner and a non-planner path is not blanket-allowed", () => {
-  // A single redirect target can only resolve to one path, so exercise the
-  // extraction/allow check directly against a mixed pair.
-  const inside = isEntirelyInsidePlannerRoot(
-    ["/repo/.planner/docs/a.md", "/repo/src/b.ts"],
-    PLANNER_ROOT,
-    CWD,
-  );
-  assert.equal(inside, false);
+test("a Bash command touching both a planner and a project path warns, and reports only the project path", () => {
+  const command = "echo a > /repo/.planner/docs/a.md && echo b > /repo/src/b.ts";
+  assert.deepEqual(classifyGuardedTool(event({ toolName: "Bash", command })), { guarded: true, paths: ["/repo/src/b.ts"] });
+  assert.equal(noTaskWarning(event({ toolName: "Bash", command }), baseState).warning === undefined, false);
 });
 
-test("a NotebookEdit outside the planner root asks; inside it is allowed", () => {
-  const outside = decideGuardPreToolUse(
+test("writes that land outside the project never need a task", () => {
+  const commands = [
+    "grep -rn foo packages 2>/dev/null",
+    "ls ~/.claude/settings.json 2>/dev/null | head",
+    "pnpm test >/dev/null",
+    "pnpm test &>/dev/null",
+    "echo '{}' > ~/.claude/settings.json",
+    "echo x > $HOME/.config/tool.json",
+    "echo x > /tmp/scratch.txt",
+    "cp /repo/src/a.ts /tmp/a.ts",
+    "echo x > ../other-repo/file.txt",
+  ];
+  for (const command of commands) {
+    const decision = noTaskWarning(event({ toolName: "Bash", command }), baseState);
+    assert.equal(decision.warning, undefined, `expected "${command}" not to warn`);
+  }
+  for (const filePath of ["/tmp/x.ts", `${process.env.HOME}/.claude/settings.json`, "/etc/hosts"]) {
+    assert.equal(noTaskWarning(event({ filePath }), baseState).warning, undefined, `expected Edit ${filePath} not to warn`);
+  }
+});
+
+test("a project write mixed with /dev/null still warns", () => {
+  const decision = noTaskWarning(event({ toolName: "Bash", command: "echo x > src/a.ts 2>/dev/null" }), baseState);
+  assert.equal(typeof decision.warning, "string");
+});
+
+test("operators inside quotes are text, not redirects or separators", () => {
+  const commands = [
+    'git add .planner && git commit -q -m "chore: handoff\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nClaude-Session: x" && git push -q 2>&1 | tail -2; git status --short',
+    "git commit -m 'a -> b; c | d & e'",
+    'grep -rn "a|b" packages',
+    'echo "x > y"',
+  ];
+  for (const command of commands) {
+    assert.equal(isWriteShapedBashCommand(command), false, `expected "${command}" to be read-only`);
+    assert.equal(noTaskWarning(event({ toolName: "Bash", command }), baseState).warning, undefined);
+  }
+  // A quoted redirect target is still a redirect target.
+  assert.equal(noTaskWarning(event({ toolName: "Bash", command: 'echo x > "/repo/src/a.ts"' }), baseState).warning === undefined, false);
+  assert.equal(noTaskWarning(event({ toolName: "Bash", command: 'echo x > "/tmp/a.ts"' }), baseState).warning, undefined);
+});
+
+test("an unknown write target still warns", () => {
+  assert.equal(noTaskWarning(event({ toolName: "Edit" }), baseState).warning === undefined, false);
+  assert.equal(noTaskWarning(event({ toolName: "Bash", command: 'echo x > "$OUT_FILE"' }), baseState).warning === undefined, false);
+});
+
+test("isProjectCodePath is inside the project and outside .planner/", () => {
+  assert.equal(isProjectCodePath("src/a.ts", PLANNER_ROOT, CWD), true);
+  assert.equal(isProjectCodePath("/repo/.planner/x.json", PLANNER_ROOT, CWD), false);
+  assert.equal(isProjectCodePath("/dev/null", PLANNER_ROOT, CWD), false);
+  assert.equal(isProjectCodePath("~/.claude/settings.json", PLANNER_ROOT, CWD), false);
+});
+
+test("a NotebookEdit outside the planner root warns; inside it does not warn", () => {
+  const outside = noTaskWarning(
     event({ toolName: "NotebookEdit", notebookPath: "/repo/notebooks/a.ipynb" }),
     baseState,
   );
-  assert.equal(outside.decision, "ask");
+  assert.equal(outside.warning === undefined, false);
 
-  const inside = decideGuardPreToolUse(
+  const inside = noTaskWarning(
     event({ toolName: "NotebookEdit", notebookPath: "/repo/.planner/notebooks/a.ipynb" }),
     baseState,
   );
-  assert.equal(inside.decision, "allow");
+  assert.equal(inside.warning, undefined);
 });
 
-test("tools the guard does not cover (Read, Grep, MCP tools) are allowed without state", () => {
+test("tools the guard does not cover (Read, Grep, MCP tools) do not warn without state", () => {
   for (const toolName of ["Read", "Grep", "Glob", "WebFetch", "mcp__agent-plan__planner-task-show"]) {
-    const decision = decideGuardPreToolUse(event({ toolName, filePath: "/repo/src/index.ts" }), baseState);
-    assert.equal(decision.decision, "allow");
+    const decision = noTaskWarning(event({ toolName, filePath: "/repo/src/index.ts" }), baseState);
+    assert.equal(decision.warning, undefined);
   }
 });
 
@@ -186,5 +238,25 @@ test("extractBashWriteTargets is best-effort and a computed heredoc target is no
   // the planner root" purely because the literal redirect target is a shell
   // variable rather than a real path — that must fall through to the normal
   // in-progress/bypass checks, never a silent allow.
-  assert.equal(isEntirelyInsidePlannerRoot(targets, PLANNER_ROOT, CWD), false);
+  assert.equal(targets.length > 0 && targets.every((target) => isPathInsidePlannerRoot(target, PLANNER_ROOT, CWD)), false);
+  assert.equal(noTaskWarning(event({ toolName: "Bash", command }), baseState).warning === undefined, false);
+});
+
+test("the result is only ever a warning: never a permission decision", () => {
+  const warned = noTaskWarning(event({ filePath: "/repo/src/index.ts" }), baseState);
+  const silent = noTaskWarning(event({ filePath: "/repo/.planner/x.json" }), baseState);
+  assert.deepEqual(Object.keys(warned), ["warning"]);
+  assert.deepEqual(Object.keys(silent), []);
+});
+
+test("Pi's lowercase tool names follow the same rule", () => {
+  assert.equal(typeof noTaskWarning(event({ toolName: "edit", filePath: "/repo/src/a.ts" }), baseState).warning, "string");
+  assert.equal(typeof noTaskWarning(event({ toolName: "bash", command: "echo x > /repo/src/a.ts" }), baseState).warning, "string");
+  assert.equal(noTaskWarning(event({ toolName: "bash", command: "ls 2>/dev/null" }), baseState).warning, undefined);
+  assert.equal(noTaskWarning(event({ toolName: "write", filePath: "/repo/.planner/docs/a.md" }), baseState).warning, undefined);
+});
+
+test("without an obvious task the warning still says how to start one", () => {
+  const { focusTask, ...state } = baseState;
+  assert.match(noTaskWarning(event({ filePath: "/repo/src/a.ts" }), state).warning, /\/planner task start <task>/);
 });

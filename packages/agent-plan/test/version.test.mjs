@@ -1,6 +1,6 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -114,6 +114,22 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   assert.doesNotMatch(plannerCommand, /read the exact lineage in this order/);
   const claudeSettings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
   assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write|NotebookEdit|Bash"));
+});
+
+test("local setup saves the real CLI path, not the link it was started through", async () => {
+  // fnm and similar version managers start the CLI through a link in a
+  // per-shell temp folder; saving that link breaks the hook once it is gone.
+  const cwd = await mkdtemp(join(tmpdir(), "agent-plan-setup-link-"));
+  roots.push(cwd);
+  const link = join(cwd, "agent-plan-link.js");
+  symlinkSync(cliPath, link);
+  const result = spawnSync(process.execPath, [link, "setup", "claude-code", "--project", "--local"], { cwd, encoding: "utf-8" });
+  assert.equal(result.status, 0, result.stderr);
+  const settings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
+  const hook = settings.hooks.PreToolUse.flatMap((group) => group.hooks).find((entry) => entry.args?.includes("guard"));
+  assert.equal(hook.args[0], realpathSync(cliPath));
+  const mcp = JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf-8"));
+  assert.equal(mcp.mcpServers["agent-plan"].args[0], realpathSync(cliPath));
 });
 
 test("Claude guard ignores non-writing tools without requiring planner state", () => {

@@ -13,7 +13,7 @@
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { PlanStore } from "../../plan-core/dist/index.js";
+import { PlanStore, splitPlannerLoadText } from "../../plan-core/dist/index.js";
 import { createPiHost, closePiHost, cleanupPiHosts, toolText, toolDetails } from "./helpers/pi-host-fixture.mjs";
 
 after(async () => {
@@ -323,7 +323,8 @@ describe("pi-adapter host harness", () => {
       for (const title of targets.map((target) => target.title)) assert.match(toolText(started), new RegExp(title));
 
       const loaded = await host.runTool("planner-load", {});
-      assert.doesNotMatch(toolText(loaded), /Project decision/, "Accepted Decision agent context must not leak into the human recap");
+      assert.doesNotMatch(splitPlannerLoadText(toolText(loaded)).recap, /Project decision/, "Accepted Decision agent context must not leak into the human recap");
+      for (const title of targets.map((target) => target.title)) assert.match(splitPlannerLoadText(toolText(loaded)).agentContext, new RegExp(title));
       const before = await host.emit("before_agent_start", {
         type: "before_agent_start",
         prompt: "continue",
@@ -386,20 +387,15 @@ describe("pi-adapter host harness", () => {
       const details = toolDetails(loaded);
       assert.equal(details.projectContext.loaded, true);
       assert.equal(details.projectContext.contextComplete, true);
-      assert.equal(details.projectContext.project.description, "Fixture project description");
-      assert.equal(details.projectContext.project.goal, "Ship the fixture feature");
-      assert.deepEqual(details.projectContext.project.scope, ["In-scope area"]);
-      assert.deepEqual(details.projectContext.project.outOfScope, ["Out-of-scope area"]);
-      assert.deepEqual(details.projectContext.project.technologies, ["TypeScript"]);
-      assert.deepEqual(details.projectContext.project.tools, ["pnpm"]);
-      assert.equal(details.projectContext.requirements.length, 1);
-      assert.equal(details.projectContext.requirements[0].title, "Users can authenticate");
-      // The agent-only details channel carries the same content, but it must
-      // never appear in the human-facing recap text (parity with MCP's
-      // planner-load, and the same "must not leak" invariant as Accepted
-      // Decision agent context above).
-      assert.match(details.projectContext.text, /Fixture project description/);
-      assert.doesNotMatch(toolText(loaded), /Fixture project description/, "project context must not leak into the human recap");
+      assert.equal(details.projectContext.requirementCount, 1);
+      // Pi's model reads only the text, so the project context must be in it
+      // — once, in the agent-only part, never in the recap.
+      const { recap, agentContext } = splitPlannerLoadText(toolText(loaded));
+      for (const expected of [/Fixture project description/, /Ship the fixture feature/, /In-scope area/, /Out-of-scope area/, /TypeScript/, /pnpm/, /Users can authenticate/]) {
+        assert.match(agentContext, expected);
+      }
+      assert.doesNotMatch(recap, /Fixture project description/, "project context must not leak into the human recap");
+      assert.equal(toolText(loaded).split("Fixture project description").length - 1, 1, "project context is sent once");
 
       // A full, genuinely complete project-context read satisfies
       // REQUIREMENTS_READ_REQUIRED task-wide (P102(F005) accepted decision):

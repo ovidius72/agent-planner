@@ -51,7 +51,33 @@ test("buildPhaseWorkMap entries mirror the admitted content blocks", () => {
   assert.equal(mapped.truncated, true);
   assert.ok(mapped.entries.length < mapped.total, "budget-exceeding phase must withhold entries");
   assert.deepEqual(mapped.entries.map((entry) => entry.priority), mapped.entries.map((_, index) => index), "admitted entries stay in priority order");
-  assert.match(mapped.content, /truncated for transport safety: \d+ lower-priority entr(y|ies) withheld/);
+  assert.match(mapped.content, /truncated for transport safety: \d+ entr(y|ies) withheld, finished ones first/);
+});
+
+test("buildPhaseWorkMap lists open work first and cuts finished work before open work", () => {
+  // Finished tasks sort first by priority (they are the oldest), which used
+  // to fill the budget and cut open tasks off the end.
+  const tasks = [];
+  for (let i = 0; i < 60; i += 1) {
+    tasks.push({
+      id: `task-${i}`,
+      number: i + 1,
+      priority: i,
+      title: `Task ${i}`,
+      description: "x".repeat(200),
+      status: i < 50 ? "done" : "planned",
+      dependsOn: [],
+    });
+  }
+  const mapped = buildPhaseWorkMap({ ...phase, tasks }, feature.number);
+  const firstFinished = mapped.entries.findIndex((entry) => !entry.remainingCapabilityOwner);
+  const openAdmitted = mapped.entries.filter((entry) => entry.remainingCapabilityOwner);
+  assert.equal(openAdmitted.length, 10, "every open task is admitted");
+  assert.ok(firstFinished === -1 || mapped.entries.slice(firstFinished).every((entry) => !entry.remainingCapabilityOwner), "no open task after a finished one");
+  assert.match(mapped.content, /\(10 open, 50 finished; open first/);
+  assert.match(mapped.content, /Finished \(already built; do not redo\):\n- P007\(F003\)\/T001 — Task 0 \[done\]/);
+  // A finished task is one line: no goal, no ownership block.
+  assert.doesNotMatch(mapped.content.split("Finished (already built")[1] ?? "", /Goal:|Ownership:/);
 });
 
 test("buildPhaseWorkMap withholds a single entry larger than maxChars", () => {
