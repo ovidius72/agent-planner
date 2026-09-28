@@ -28,7 +28,8 @@
     "2ba53881-9d02-4c92-9fa1-88aef1999711",
     "f835ad8a-8763-456e-99a1-8b337f1abe38",
     "67f8419e-6b83-46cf-beb1-1b0f8f195d4c",
-    "3882a27e-a2d0-4f5a-ac42-69450999f501"
+    "3882a27e-a2d0-4f5a-ac42-69450999f501",
+    "f331eb7e-3100-4cc7-8e68-641b0ee37c43"
   ],
   "tasks": [
     {
@@ -461,10 +462,72 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "f331eb7e-3100-4cc7-8e68-641b0ee37c43",
+      "phaseId": "c2575bd0-85b7-4be7-bfac-afb9894d1623",
+      "number": 441,
+      "shortId": "YRB28",
+      "priority": 6,
+      "shortName": "fix-the-race-in-the-web-ui-liv",
+      "title": "Fix the race in the Web UI live-sync handoff test",
+      "status": "done",
+      "description": "CI run 36400694184 on PR #52 failed in packages/plan-web-ui/test/handoff-requirements.test.tsx \"refreshes the pending list when live-sync emits a handoff event\" (line ~49-59), inside the nested unit run of test/report.test.mjs; the same test passed in the outer run of the same job and locally. The test dispatches `agent-plan:ws-event` once, right after the first render is found; if the route's listener (attached in an effect) is not attached yet, the event is lost and findByText times out at 1s. Fix the test so the event is re-sent until the refresh shows (waitFor around dispatch + assertion), without changing product code. Verify: plan-web-ui vitest for that file, then `pnpm verify:final` once before any push.\n\n---\n**Completion summary:**\nShipped: packages/plan-web-ui/test/handoff-requirements.test.tsx \"refreshes the pending list when live-sync emits a handoff event\" now re-sends the agent-plan:ws-event inside waitFor until the refreshed text shows, instead of sending it once right after first render (an event sent before the route's effect subscribes was lost, and findByText timed out at 1s under CI load — CI run 36400694184, nested unit run). No product code changed.\n\nVerification: the file passed 3/3 runs locally; `pnpm verify:final` passed (886eb119a6e9) incl. typecheck, coverage, browser e2e, packed install smoke. Editor-only jest-dom type warnings on unchanged lines are pre-existing (typecheck gate green). Not committed yet — waiting for the user to ask.",
+      "descriptionUpdatedAt": "2026-09-28T09:09:37.848Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f331eb7e-3100-4cc7-8e68-641b0ee37c43-check-001-planned-in-progress",
+          "date": "2026-09-28T09:07:51.695Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f331eb7e-3100-4cc7-8e68-641b0ee37c43-check-002-in-progress-done",
+          "date": "2026-09-28T09:09:37.846Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: packages/plan-web-ui/test/handoff-requirements.test.tsx \"refreshes the pending list when live-sync emits a handoff event\" now re-sends the agent-plan:ws-event inside waitFor until the refreshed text shows, instead of sending it once right after first render (an event sent before the route's effect subscribes was lost, and findByText timed out at 1s under CI load — CI run 36400694184, nested unit run). No product code changed.\n\nVerification: the file passed 3/3 runs locally; `pnpm verify:final` passed (886eb119a6e9) incl. typecheck, coverage, browser e2e, packed install smoke. Editor-only jest-dom type warnings on unchanged lines are pre-existing (typecheck gate green). Not committed yet — waiting for the user to ask."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f331eb7e-3100-4cc7-8e68-641b0ee37c43-check-001-make-the-test-re-send-the-event-until-the-refresh-shows",
+          "number": 1,
+          "title": "Make the test re-send the event until the refresh shows",
+          "checked": true
+        },
+        {
+          "id": "f331eb7e-3100-4cc7-8e68-641b0ee37c43-check-002-focused-web-test-then-pnpm-verify-final-before-pushing",
+          "number": 2,
+          "title": "Focused web test, then pnpm verify:final before pushing",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T09:07:51.695Z",
+      "completedAt": "2026-09-28T09:09:37.846Z",
+      "createdAt": "2026-09-28T09:07:46.947Z",
+      "updatedAt": "2026-09-28T09:09:37.846Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T09:07:51.595Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-09-28T08:22:01.112Z",
-  "updatedAt": "2026-09-28T08:55:39.818Z",
+  "updatedAt": "2026-09-28T09:09:37.846Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -499,7 +562,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
-      "createdAt": "2026-09-28T08:54:00.474Z"
+      "createdAt": "2026-09-28T09:07:51.595Z"
     }
   ]
 }
