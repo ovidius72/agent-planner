@@ -212,6 +212,36 @@ const server = new McpServer({
   version: MCP_PACKAGE.version,
 });
 
+/**
+ * Claude Code gives the agent only `structuredContent` when a result has
+ * one, and drops `content[].text`. Anything a tool says in text — a handoff
+ * body, a phase work map, task-start context, an advisory — would never
+ * reach the agent. So every result with a structured part also carries its
+ * text there, as `text`. `content` keeps the text for clients that read
+ * only that. Applied once, to every tool, by the registerTool wrapper below;
+ * no handler needs to know.
+ */
+export function foldTextIntoStructured<T extends ToolResult>(result: T): T {
+  if (!result?.structuredContent) return result;
+  const replyText = result.content
+    .filter((part) => part.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("\n\n");
+  // A reply that already uses `text` for something else is left as it is;
+  // the MCP tests fail on that, so it never ships.
+  if (!replyText || "text" in result.structuredContent) return result;
+  return { ...result, structuredContent: { text: replyText, ...result.structuredContent } };
+}
+
+{
+  const registerToolUnwrapped = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
+  (server as unknown as { registerTool: (...args: unknown[]) => unknown }).registerTool = (...args: unknown[]) => {
+    const handler = args[args.length - 1] as (...handlerArgs: unknown[]) => Promise<ToolResult> | ToolResult;
+    const wrapped = async (...handlerArgs: unknown[]) => foldTextIntoStructured(await handler(...handlerArgs));
+    return registerToolUnwrapped(...args.slice(0, -1), wrapped);
+  };
+}
+
 // Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
 // UUID | title. A write target is always explicit; never guess from the
 // first in-progress phase or a stale resume pointer.

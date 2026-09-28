@@ -272,7 +272,7 @@ test("accepted decision tools preserve identity and acceptedAt across every owne
       title: "Must not report success",
     });
     assert.equal(missingTarget.isError, true);
-    assert.deepEqual(toolStructured(missingTarget), { created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" });
+    assert.deepEqual(toolStructured(missingTarget), { text: "Feature not found: F999", created: false, errorCode: "ACCEPTED_DECISION_TARGET_NOT_FOUND" });
 
     const missingDecision = await callTool(session, "planner-accepted-decision-update", {
       targetType: "project",
