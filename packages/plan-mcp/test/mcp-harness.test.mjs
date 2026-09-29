@@ -72,7 +72,7 @@ test("listTools exposes the full published tool set with actionable input schema
       "planner-phase-add", "planner-phase-show", "planner-phase-discuss",
       "planner-phase-update", "planner-phase-delete",
       "planner-task-add", "planner-task-show", "planner-task-discuss",
-      "planner-task-update", "planner-task-checklist-toggle",
+      "planner-task-update", "planner-task-move", "planner-task-checklist-toggle",
       "planner-task-checklist-add", "planner-task-checklist-remove",
       "planner-task-delete", "planner-task-recommend", "planner-task-deviation",
       "planner-task-pause", "planner-task-switch", "planner-task-start", "planner-task-reopen", "planner-task-dependency-add", "planner-task-dependency-delete", "planner-task-complete",

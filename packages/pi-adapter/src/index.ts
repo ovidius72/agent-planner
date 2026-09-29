@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -4943,7 +4943,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "task_dependency_add",
     label: "Task Dependency Add",
-    description: "Add a validated task dependency atomically; rejects self-dependencies, foreign tasks, and cycles.",
+    description: "Add a validated task dependency atomically. A task may depend on any task in any phase; the dependency is rejected only when the target does not exist, is the task itself, or would create a cycle.",
     parameters: Type.Object({ taskId: Type.String(), dependsOn: Type.String() }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx); if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
@@ -5140,6 +5140,35 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         readBackCommand: `task_get ${updatedTask.id}`,
       });
       return { content: [{ type: "text", text: taskUpdateReply.text }], details: taskUpdateReply.structured };
+    },
+  });
+
+  pi.registerTool({
+    name: "task_move",
+    label: "Task Move",
+    description: "Move one or more tasks to a different phase, atomically, without recreating them: id, number, shortId, status, statusLog, checklist, subtasks, acceptedDecisions, pause history, notes, description and dependsOn all survive — only the composite ref changes. Every other task's dependsOn keeps resolving (ids never change). An in-progress task may move. Refused into a terminal (done/canceled/rejected) target phase. Costs almost nothing regardless of task size: pass refs only, never task text; the reply echoes only old ref → new ref, id/shortId/title/status per task.",
+    parameters: Type.Object({
+      taskIds: Type.Array(Type.String(), { description: "Task refs to move. Accepts F00x/P00x/T00x composite, bare T00x (global), 5-char shortId, UUID, or title." }),
+      targetPhase: Type.String({ description: "Destination phase ref. Accepts F00x/P00x, bare P00x, 5-char shortId, UUID, or title." }),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
+      const phases = await st.loadAllPhases();
+      const features = (await st.loadFeatures()).features;
+      const target = findPhaseByRef(phases, features, params.targetPhase);
+      if (!target) return { content: [{ type: "text", text: `Target phase not found: ${params.targetPhase}` }], details: { moved: false, errorCode: "TARGET_PHASE_NOT_FOUND" }, isError: true };
+      const foundTasks: { phase: Phase; task: Task }[] = [];
+      for (const ref of params.taskIds) {
+        const found = findTaskByRef(phases, features, ref);
+        if (!found) return { content: [{ type: "text", text: `Task not found: ${ref}` }], details: { moved: false, errorCode: "TASK_NOT_FOUND" }, isError: true };
+        foundTasks.push(found);
+      }
+      const outcome = await moveTasks(st, foundTasks.map((entry) => entry.task.id), target.id);
+      if (!outcome.ok) return { content: [{ type: "text", text: `❌ ${outcome.error}` }], details: { moved: false, errorCode: outcome.errorCode }, isError: true };
+      const reply = buildTaskMoveReply(outcome.result, `phase_get ${outcome.result.targetPhaseRef} full=true`);
+      await st.writeGenerated();
+      return { content: [{ type: "text", text: reply.text }], details: reply.structured };
     },
   });
 

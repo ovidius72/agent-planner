@@ -86,6 +86,39 @@ test("parked work in a phase nobody has started stays out of the way", () => {
   assert.equal(listOnHoldWork(features, phases, started).some((item) => item.ref.endsWith("/T900")), false);
 });
 
+test("a parked task's dependsOn counts like a ref named in the reason, even when the reason names nothing", () => {
+  const { features, phases } = hecaLike();
+  const current = phases.find((p) => p.id === "p82");
+  const t514 = current.tasks.find((t) => t.number === 514); // reason: "Parked until someone needs it." — no refs
+  t514.dependsOn = ["t501"]; // t501 is done, in phase p97
+  const items = listOnHoldWork(features, phases);
+  const byRef = Object.fromEntries(items.map((item) => [item.ref.split("/").pop(), item]));
+  assert.deepEqual(byRef.T514.namedRefs.map((ref) => ref.ref), ["P097(F003)/T501"]);
+  assert.equal(byRef.T514.readyToResume, true, "a dependsOn edge alone, with no ref in the reason, still flags ready once it is finished");
+});
+
+test("a dependsOn edge already named in the reason is merged, not duplicated", () => {
+  const { features, phases } = hecaLike();
+  const current = phases.find((p) => p.id === "p82");
+  const t513 = current.tasks.find((t) => t.number === 513); // reason names P094(F011)/T449
+  t513.dependsOn = ["t449"]; // same task the reason already names
+  const items = listOnHoldWork(features, phases);
+  const byRef = Object.fromEntries(items.map((item) => [item.ref.split("/").pop(), item]));
+  assert.equal(byRef.T513.namedRefs.length, 1, "the dependency must not be listed twice");
+  assert.equal(byRef.T513.namedRefs[0].ref, "P094(F011)/T449");
+});
+
+test("readyToResume requires every dependsOn edge finished too, not just the refs named in the reason", () => {
+  const { features, phases } = hecaLike();
+  const current = phases.find((p) => p.id === "p82");
+  const t514 = current.tasks.find((t) => t.number === 514); // no refs in reason
+  t514.dependsOn = ["t501", "t083"]; // t501 done; t083 (phase p22) still planned
+  const items = listOnHoldWork(features, phases);
+  const byRef = Object.fromEntries(items.map((item) => [item.ref.split("/").pop(), item]));
+  assert.equal(byRef.T514.readyToResume, false, "not ready while one dependency is still open");
+  assert.equal(byRef.T514.namedRefs.find((ref) => ref.ref === "P022(F003)/T083")?.finished, false);
+});
+
 test("the on-hold block is bounded", () => {
   const features = [feature("f1", 1)];
   const tasks = [task("done", 1, "done"), ...Array.from({ length: 30 }, (_, index) => task(`t${index}`, index + 10, "deferred", "x".repeat(500)))];
