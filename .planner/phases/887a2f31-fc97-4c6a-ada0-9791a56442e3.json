@@ -1,0 +1,213 @@
+{
+  "id": "887a2f31-fc97-4c6a-ada0-9791a56442e3",
+  "featureId": "5bb28fc7-8002-46f9-970d-4151d6cb4884",
+  "number": 108,
+  "shortId": "WYLG6",
+  "priority": 40,
+  "slug": "move-tasks-between-phases-without-losing-them",
+  "title": "Move tasks between phases without losing them",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "A move command that keeps a task's id, history, checklist, decisions and dependencies; parked tasks also flagged when their dependencies are done.",
+  "description": "Requested 2026-09-28 by the heca user (via the heca session). Today a task cannot change phase: planner-task-update has no phase field and there is no move tool. Moving means recreating the task (heca: ~20k chars of description for 5 tasks) and deleting the old one, which loses its id, statusLog, hold reasons, checklist, accepted decisions and every dependsOn pointing at it. Concrete case: heca P082(F003)/T468, T470, T471, T472, T513 are on hold until P094(F011)/T449 and T457 are done; they belong in P094 as its closing steps, and P082 cannot close while they sit there.\n\nVerified in code 2026-09-28: cross-phase dependencies already work — PlanStore.addTaskDependency (packages/plan-core/src/plan-store.ts ~3498) looks the dependency up across all phases; recommendNextTask checks dependsOn across phases. But the MCP tool description of planner-task-dependency-add (\"rejects ... foreign tasks\", packages/plan-mcp/src/index.ts ~1651) reads as phase-local and misled the agent. And the on-hold listing added in T439 (packages/plan-core/src/on-hold.ts) only reads refs from the hold reason, not the task's dependsOn.\n\nGoal: move one or more tasks to another phase in one atomic, harness-agnostic core operation used by MCP and Pi; fix the dependency tool wording; flag a parked task \"may be ready\" when all its dependencies are done.",
+  "descriptionUpdatedAt": "2026-09-28T14:29:14.441Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "7ef8680f-d852-4b0c-af12-efe8d594297c",
+    "a5463b60-edb6-4b92-9309-ef71aa748006"
+  ],
+  "tasks": [
+    {
+      "id": "7ef8680f-d852-4b0c-af12-efe8d594297c",
+      "phaseId": "887a2f31-fc97-4c6a-ada0-9791a56442e3",
+      "number": 443,
+      "shortId": "HDLRY",
+      "priority": 1,
+      "shortName": "move-one-or-more-tasks-to-anot",
+      "title": "Move one or more tasks to another phase, keeping everything",
+      "status": "done",
+      "description": "Add a core operation in packages/plan-core (PlanStore, e.g. `moveTasks(taskIds, targetPhaseId)`) and expose it as MCP `planner-task-move` (packages/plan-mcp/src/index.ts, next to planner-task-update) and Pi `task_move` (packages/pi-adapter/src/index.ts, next to task_update), plus the Pi `/planner task move` command if the task commands have a natural place for it.\n\nMust keep, per task: id, number (task numbers are global, so T468 stays T468; only the composite ref P082(F003)/T468 → P094(F011)/T468 changes), shortId, status, statusLog, checklist, subtasks, acceptedDecisions, pauseSnapshot/pauseHistory, notes, description/descriptionRef, dependsOn, and every other task's dependsOn that points at it (ids are unchanged, so those survive by construction — assert it in a test).\n\nAtomic: both phase files change together or neither (use the store's existing write/lock pattern for multi-phase writes; look at how deleteFeatureCascade or phase relink writes several files). Validate: target phase exists; source != target; an in-progress task may move (say so in the reply) — decide and record; refuse moving into a terminal (done/canceled/rejected) phase unless there is an existing precedent. Record a statusLog entry on each moved task (\"moved from P082(F003) to P094(F011)\") without changing its status. Update phase rollups/derived statuses the way other task mutations do (syncStatuses / writeGenerated). Handoffs: a phase handoff that names the task is prose — do not rewrite it; mention in the reply that the source phase's handoff may reference the moved tasks.\n\nReply: built with the shared buildMutationReply; lists old ref → new ref for each task; read-back command.\n\nTests: plan-core unit tests (move keeps every field; dependents still resolve; atomic on failure; validation errors typed with errorCode); plan-mcp test through the real server fixture; pi-adapter test. Update the planner guide (packages/plan-core/planner-skill.md tool inventories and the task section) and run `pnpm plugins:sync` / `pnpm plugins:check` if generated copies change.\n\n---\n**Completion summary:**\nImplemented moveTasks in plan-core and wired it into both adapters.\n\nFiles:\n- packages/plan-core/src/task-move.ts (new): moveTasks(store, taskIds, targetPhaseId) — atomic multi-phase move (store.runBatch + surgical rollback of exact removed task objects on any failure, mirroring the task_switch pattern), typed errorCodes (TARGET_PHASE_NOT_FOUND, TASK_NOT_FOUND, SOURCE_EQUALS_TARGET, TARGET_PHASE_TERMINAL, NO_TASKS_GIVEN), syncTaskStatusRollup on every touched phase, persisted-verification read-back. Also buildTaskMoveReply — a small, ref-only reply (never buildMutationReply, which would echo full field values); flags any source phase with a pending handoff without rewriting it.\n- packages/plan-core/src/index.ts: export task-move.\n- packages/plan-mcp/src/index.ts: planner-task-move tool (next to planner-task-update).\n- packages/pi-adapter/src/index.ts: task_move tool (next to task_update). No interactive /planner task move command — pause/switch/dependency ops are likewise agent-tool-only, no existing precedent for an interactive move.\n- packages/plan-core/planner-skill.md (+ generated plugins/_shared/planner-skill.md.in, plugins/claude-code/skills/planner/SKILL.md via pnpm plugins:sync): both tool inventories list planner-task-move/task_move; Task execution section says to move instead of recreate.\n- packages/plan-mcp/test/mcp-harness.test.mjs, packages/pi-adapter/test/host-registration.test.mjs: tool-count/inventory assertions updated (70 Pi tools, planner-task-move in the MCP no-drift list).\n\nDecision recorded (planner-accepted-decision-create, targetType task, on this task): in-progress tasks MAY move (status untouched); a terminal (done/canceled/rejected) target phase is refused, no override.\n\nToken-cost requirement (added mid-task): input is refs only; reply/structuredContent carry only old ref → new ref, id/shortId/title/status per task, and a read-back command — never the task's description/checklist/statusLog. Verified with a 20k-char description test in both plan-mcp and pi-adapter (structured JSON asserted <1500 chars, description substring absent).\n\nTests (all passing):\n- packages/plan-core/test/task-move.test.mjs (4 tests): field preservation + dependent dependsOn still resolves; 4 validation errorCodes; atomicity (simulated failure after both source removals, before target write — mid-write monkeypatch of store.updatePhase — proves rollback); handoff notice surfaced without rewriting the handoff text.\n- packages/plan-mcp/test/task-move.test.mjs (3 tests, real server fixture): move + ref-only reply; unknown-target error; 20k-char description bounded-reply test.\n- packages/pi-adapter/test/task-move.test.mjs (3 tests, real pi host): same three, via task_move.\n- Full package suites green: plan-core 470/470, plan-mcp (task-move + mcp-harness) 18/18, pi-adapter 96/96.\n\nNothing left undone from the checklist. Not done: no interactive Pi command (deliberate, see above) and I did not touch REST server (packages/plan-server) — the task description named only MCP/Pi, and plan-server was not in scope.",
+      "descriptionUpdatedAt": "2026-09-29T07:10:42.217Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "7ef8680f-d852-4b0c-af12-efe8d594297c-check-001-planned-in-progress",
+          "date": "2026-09-28T14:30:10.095Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7ef8680f-d852-4b0c-af12-efe8d594297c-check-002-in-progress-done",
+          "date": "2026-09-29T07:10:42.214Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented moveTasks in plan-core and wired it into both adapters.\n\nFiles:\n- packages/plan-core/src/task-move.ts (new): moveTasks(store, taskIds, targetPhaseId) — atomic multi-phase move (store.runBatch + surgical rollback of exact removed task objects on any failure, mirroring the task_switch pattern), typed errorCodes (TARGET_PHASE_NOT_FOUND, TASK_NOT_FOUND, SOURCE_EQUALS_TARGET, TARGET_PHASE_TERMINAL, NO_TASKS_GIVEN), syncTaskStatusRollup on every touched phase, persisted-verification read-back. Also buildTaskMoveReply — a small, ref-only reply (never buildMutationReply, which would echo full field values); flags any source phase with a pending handoff without rewriting it.\n- packages/plan-core/src/index.ts: export task-move.\n- packages/plan-mcp/src/index.ts: planner-task-move tool (next to planner-task-update).\n- packages/pi-adapter/src/index.ts: task_move tool (next to task_update). No interactive /planner task move command — pause/switch/dependency ops are likewise agent-tool-only, no existing precedent for an interactive move.\n- packages/plan-core/planner-skill.md (+ generated plugins/_shared/planner-skill.md.in, plugins/claude-code/skills/planner/SKILL.md via pnpm plugins:sync): both tool inventories list planner-task-move/task_move; Task execution section says to move instead of recreate.\n- packages/plan-mcp/test/mcp-harness.test.mjs, packages/pi-adapter/test/host-registration.test.mjs: tool-count/inventory assertions updated (70 Pi tools, planner-task-move in the MCP no-drift list).\n\nDecision recorded (planner-accepted-decision-create, targetType task, on this task): in-progress tasks MAY move (status untouched); a terminal (done/canceled/rejected) target phase is refused, no override.\n\nToken-cost requirement (added mid-task): input is refs only; reply/structuredContent carry only old ref → new ref, id/shortId/title/status per task, and a read-back command — never the task's description/checklist/statusLog. Verified with a 20k-char description test in both plan-mcp and pi-adapter (structured JSON asserted <1500 chars, description substring absent).\n\nTests (all passing):\n- packages/plan-core/test/task-move.test.mjs (4 tests): field preservation + dependent dependsOn still resolves; 4 validation errorCodes; atomicity (simulated failure after both source removals, before target write — mid-write monkeypatch of store.updatePhase — proves rollback); handoff notice surfaced without rewriting the handoff text.\n- packages/plan-mcp/test/task-move.test.mjs (3 tests, real server fixture): move + ref-only reply; unknown-target error; 20k-char description bounded-reply test.\n- packages/pi-adapter/test/task-move.test.mjs (3 tests, real pi host): same three, via task_move.\n- Full package suites green: plan-core 470/470, plan-mcp (task-move + mcp-harness) 18/18, pi-adapter 96/96.\n\nNothing left undone from the checklist. Not done: no interactive Pi command (deliberate, see above) and I did not touch REST server (packages/plan-server) — the task description named only MCP/Pi, and plan-server was not in scope."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "147f5269-9c6c-4e44-aa1f-f2e7b85b73ad",
+          "title": "Task move: in-progress allowed, terminal target phase refused",
+          "decision": "moveTasks allows moving an in-progress task (the reply's status field shows it moved without changing status). moveTasks refuses to move any task into a phase whose derived status is terminal (done/canceled/rejected) — errorCode TARGET_PHASE_TERMINAL, no override flag.",
+          "rationale": "An in-progress task still has a valid owner/session and unfinished work; forcing it to pause or complete before a phase reassignment would lose in-flight context for no benefit, and its identity (id, statusLog, checklist) already survives the move intact. A terminal phase is closed by definition — silently reopening it by dropping new work in would contradict every other place terminal status is treated as final (handoff archiving, phase completion). There was no existing precedent for moving into a terminal phase, so the safer default (refuse) was chosen; unlink/reopen the target phase first if that is really the intent.",
+          "implementationNotes": "packages/plan-core/src/task-move.ts: TERMINAL_PHASE_STATUSES = done/canceled/rejected, checked before any write; no status guard on the moved tasks themselves.",
+          "acceptedAt": "2026-09-29T07:08:21.466Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "7ef8680f-d852-4b0c-af12-efe8d594297c-check-001-core-movetasks-atomic-keeps-every-task-field-validates-logs-the-move",
+          "number": 1,
+          "title": "Core moveTasks: atomic, keeps every task field, validates, logs the move",
+          "checked": true
+        },
+        {
+          "id": "7ef8680f-d852-4b0c-af12-efe8d594297c-check-002-mcp-planner-task-move-and-pi-task-move-using-the-core-op-and-shared-reply",
+          "number": 2,
+          "title": "MCP planner-task-move and Pi task_move using the core op and shared reply",
+          "checked": true
+        },
+        {
+          "id": "7ef8680f-d852-4b0c-af12-efe8d594297c-check-003-tests-in-plan-core-plan-mcp-pi-adapter",
+          "number": 3,
+          "title": "Tests in plan-core, plan-mcp, pi-adapter",
+          "checked": true
+        },
+        {
+          "id": "7ef8680f-d852-4b0c-af12-efe8d594297c-check-004-planner-guide-inventories-updated-plugins-sync-check",
+          "number": 4,
+          "title": "Planner guide inventories updated; plugins sync/check",
+          "checked": true
+        },
+        {
+          "id": "7ef8680f-d852-4b0c-af12-efe8d594297c-check-005-move-costs-almost-no-tokens-refs-in-old-new-refs-out-never-echo-task-text-test-a-20k-char-task-gives-a-small-reply",
+          "number": 5,
+          "title": "Move costs almost no tokens: refs in, old→new refs out; never echo task text; test a 20k-char task gives a small reply",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-28T14:30:10.095Z",
+      "completedAt": "2026-09-29T07:10:42.214Z",
+      "createdAt": "2026-09-28T14:29:25.821Z",
+      "updatedAt": "2026-09-29T07:10:42.214Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-28T14:30:09.999Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "a5463b60-edb6-4b92-9309-ef71aa748006",
+      "phaseId": "887a2f31-fc97-4c6a-ada0-9791a56442e3",
+      "number": 444,
+      "shortId": "J2JX5",
+      "priority": 2,
+      "shortName": "say-that-dependencies-work-acr",
+      "title": "Say that dependencies work across phases, and flag parked tasks whose dependencies are done",
+      "status": "done",
+      "description": "1. planner-task-dependency-add / -delete descriptions (packages/plan-mcp/src/index.ts ~1650-1665) and the Pi equivalents (task_dependency_add/delete in packages/pi-adapter/src/index.ts) say \"rejects ... foreign tasks\", which reads as phase-local. Core (PlanStore.addTaskDependency, packages/plan-core/src/plan-store.ts ~3498) accepts any existing task in any phase. Reword: a task may depend on any task in any phase; rejected only when the target does not exist, is the task itself, or would create a cycle. Add a test that proves a cross-phase dependency is accepted (core and MCP) if none exists.\n2. packages/plan-core/src/on-hold.ts (listOnHoldWork, from T439): a parked task (deferred/waiting/blocked) with dependsOn should count those dependencies like refs named in its reason: include them in namedRefs (by composite ref), and flag readyToResume when every named ref AND every dependency is finished. A parked task with dependencies but no refs in its reason is flagged when all dependencies are done. Keep refs by number only; keep the render bounded. Update packages/plan-core/test/on-hold.test.mjs.\n\n---\n**Completion summary:**\nBoth parts done.\n\n1. Cross-phase dependency wording:\n- packages/plan-mcp/src/index.ts: planner-task-dependency-add description reworded from \"rejects self-dependencies, foreign tasks, and cycles\" to \"A task may depend on any task in any phase; the dependency is rejected only when the target does not exist, is the task itself, or would create a cycle.\" (planner-task-dependency-delete's description never mentioned \"foreign tasks\", so it was left as-is.)\n- packages/pi-adapter/src/index.ts: task_dependency_add description reworded identically.\n- Tests: packages/plan-core/test/task-dependency-cross-phase.test.mjs (new, 1 test) proves PlanStore.addTaskDependency accepts a dependency between tasks in two different phases when none existed; packages/plan-mcp/test/task-dependency-cross-phase.test.mjs (new, 1 test) proves the same through the real MCP server (planner-task-dependency-add).\n\n2. On-hold + dependsOn:\n- packages/plan-core/src/on-hold.ts: added dependencyRefsFor(task, phases, features) resolving each dependsOn id to a composite ref with a finished flag (same FINISHED set as text-named refs). listOnHoldWork now merges dependency-derived refs into namedRefs (deduplicated by ref, so a dependency already named in the reason text is not double-counted), and readyToResume is unchanged in formula (namedRefs.length > 0 && every finished) — it now just also reflects dependencies. Updated JSDoc on OnHoldTask.namedRefs/readyToResume to state this.\n- packages/plan-core/test/on-hold.test.mjs: added 3 tests — a dependsOn edge alone (no ref in the reason text) flags ready once finished; a dependency already named in the reason is merged not duplicated; readyToResume stays false while any one dependency (or named ref) is still open. All 8 tests in the file pass (5 original + 3 new).\n\nVerification: plan-core full suite 474/474 (was 470 before T444's +4 new tests: 1 cross-phase-dependency + 3 on-hold). plan-mcp full suite 96/96. pi-adapter full suite 96/96. pnpm plugins:check confirms generated plugin copies are still in sync (no change needed — planner-skill.md never mentioned \"foreign tasks\").\n\nNothing left undone from the checklist.",
+      "descriptionUpdatedAt": "2026-09-29T07:14:22.065Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a5463b60-edb6-4b92-9309-ef71aa748006-check-001-planned-in-progress",
+          "date": "2026-09-29T07:10:44.864Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "a5463b60-edb6-4b92-9309-ef71aa748006-check-002-in-progress-done",
+          "date": "2026-09-29T07:14:22.062Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Both parts done.\n\n1. Cross-phase dependency wording:\n- packages/plan-mcp/src/index.ts: planner-task-dependency-add description reworded from \"rejects self-dependencies, foreign tasks, and cycles\" to \"A task may depend on any task in any phase; the dependency is rejected only when the target does not exist, is the task itself, or would create a cycle.\" (planner-task-dependency-delete's description never mentioned \"foreign tasks\", so it was left as-is.)\n- packages/pi-adapter/src/index.ts: task_dependency_add description reworded identically.\n- Tests: packages/plan-core/test/task-dependency-cross-phase.test.mjs (new, 1 test) proves PlanStore.addTaskDependency accepts a dependency between tasks in two different phases when none existed; packages/plan-mcp/test/task-dependency-cross-phase.test.mjs (new, 1 test) proves the same through the real MCP server (planner-task-dependency-add).\n\n2. On-hold + dependsOn:\n- packages/plan-core/src/on-hold.ts: added dependencyRefsFor(task, phases, features) resolving each dependsOn id to a composite ref with a finished flag (same FINISHED set as text-named refs). listOnHoldWork now merges dependency-derived refs into namedRefs (deduplicated by ref, so a dependency already named in the reason text is not double-counted), and readyToResume is unchanged in formula (namedRefs.length > 0 && every finished) — it now just also reflects dependencies. Updated JSDoc on OnHoldTask.namedRefs/readyToResume to state this.\n- packages/plan-core/test/on-hold.test.mjs: added 3 tests — a dependsOn edge alone (no ref in the reason text) flags ready once finished; a dependency already named in the reason is merged not duplicated; readyToResume stays false while any one dependency (or named ref) is still open. All 8 tests in the file pass (5 original + 3 new).\n\nVerification: plan-core full suite 474/474 (was 470 before T444's +4 new tests: 1 cross-phase-dependency + 3 on-hold). plan-mcp full suite 96/96. pi-adapter full suite 96/96. pnpm plugins:check confirms generated plugin copies are still in sync (no change needed — planner-skill.md never mentioned \"foreign tasks\").\n\nNothing left undone from the checklist."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a5463b60-edb6-4b92-9309-ef71aa748006-check-001-dependency-tool-descriptions-say-cross-phase-works-mcp-and-pi-test",
+          "number": 1,
+          "title": "Dependency tool descriptions say cross-phase works (MCP and Pi) + test",
+          "checked": true
+        },
+        {
+          "id": "a5463b60-edb6-4b92-9309-ef71aa748006-check-002-on-hold-check-counts-dependson-tests",
+          "number": 2,
+          "title": "On-hold check counts dependsOn + tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-29T07:10:44.864Z",
+      "completedAt": "2026-09-29T07:14:22.062Z",
+      "createdAt": "2026-09-28T14:29:31.149Z",
+      "updatedAt": "2026-09-29T07:14:22.062Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+          "createdAt": "2026-09-29T07:10:44.760Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-28T14:29:14.360Z",
+  "updatedAt": "2026-09-29T07:14:22.062Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "8461c745-7d33-4919-907c-b4df2fae212a",
+      "date": "2026-09-28T14:30:10.121Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "e84d166c-5385-4383-a2a5-95ff727a46f0",
+      "date": "2026-09-29T07:14:22.089Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:91940c2e-67bf-4c5a-9158-fc517f827b60",
+      "createdAt": "2026-09-29T07:10:44.760Z"
+    }
+  ]
+}
