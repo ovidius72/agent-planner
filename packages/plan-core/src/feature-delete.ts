@@ -78,6 +78,9 @@ export async function deleteFeatureCascade(
       doc.features = doc.features.filter((entry) => entry.id !== feature.id);
       return doc;
     });
+    // Persist a tombstone before touching child phases so a stale full-document
+    // writer cannot restore the feature while this composite delete continues.
+    await store.markFeatureDeleted(feature.id);
 
     const phaseResults: DeleteFeatureCascadePhase[] = [];
     for (const phase of phases) {

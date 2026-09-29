@@ -93,6 +93,23 @@ describe("deleteFeatureCascade", () => {
     assert.deepEqual(outcome.result.phases, []);
   });
 
+  test("rejects a stale full-document write that would resurrect a cascaded feature", async () => {
+    const { store, feature, now } = await setup();
+    const phase = await addPhase(store, feature, now);
+    const staleSnapshot = structuredClone(await store.loadFeatures());
+
+    const outcome = await deleteFeatureCascade(store, feature.id, { cascade: true });
+    assert.equal(outcome.ok, true);
+    await assert.rejects(
+      () => store.saveFeatures(staleSnapshot),
+      /PLAN_STALE_WRITE/,
+      "a stale snapshot must not restore a deleted feature",
+    );
+
+    assert.equal((await store.loadFeatures()).features.some((entry) => entry.id === feature.id), false);
+    await assert.rejects(() => store.loadPhase(phase.id), "the cascaded phase must remain deleted");
+  });
+
   test("the delete is verified: the feature is actually gone from a fresh read after the call", async () => {
     const { store, feature } = await setup();
     const outcome = await deleteFeatureCascade(store, feature.id, { cascade: false });

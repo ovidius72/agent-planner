@@ -22,6 +22,7 @@ import {
   type FeaturesDocument,
   type HandoffSupportingDocument,
   FeaturesDocumentSchema,
+  FeatureDeletionTombstonesSchema,
   ManifestSchema,
   type Manifest,
   PhaseSchema,
@@ -1352,6 +1353,9 @@ export class PlanStore {
   private featurePath(featureId: string): string {
     return join(this.featuresDir(), `${featureId}.json`);
   }
+  private featureDeletionTombstonesPath(): string {
+    return join(this.localRoot(), "feature-deletion-tombstones.json");
+  }
   private withFeaturesLock<T>(fn: () => Promise<T>): Promise<T> {
     // Root-scoped coordination prevents another process from interleaving a
     // feature collection transaction. The sentinel lock retains per-collection
@@ -1362,6 +1366,26 @@ export class PlanStore {
   /** Idempotent one-time migration: if a legacy features.json exists, split it
    *  into features/<id>.json (one per feature) and remove the legacy file.
    *  Must be called under withFeaturesLock. Crash-safe: re-run overwrites. */
+  private async loadFeatureDeletionTombstones(): Promise<{ deletions: Record<string, string> }> {
+    try {
+      await access(this.featureDeletionTombstonesPath());
+    } catch {
+      return { deletions: {} };
+    }
+    return readJson(this.featureDeletionTombstonesPath(), FeatureDeletionTombstonesSchema);
+  }
+
+  /** Record a deleted feature id so stale full-document writes cannot restore it. */
+  async markFeatureDeleted(featureId: string, deletedAt = nowISO()): Promise<void> {
+    await this.withFeaturesLock(async () => {
+      const tombstones = await this.loadFeatureDeletionTombstones();
+      if (tombstones.deletions[featureId]) return;
+      tombstones.deletions[featureId] = deletedAt;
+      await mkdir(this.localRoot(), { recursive: true });
+      await atomicWriteJson(this.featureDeletionTombstonesPath(), FeatureDeletionTombstonesSchema.parse(tombstones), this.root);
+    });
+  }
+
   private async migrateLegacy(): Promise<void> {
     let legacy: { features: RawFeature[] };
     try {
@@ -3080,10 +3104,21 @@ export class PlanStore {
       await this.migrateLegacy();
       const currentFeatures = await this.loadRawFeatures();
       const currentById = new Map(currentFeatures.map((feature) => [feature.id, feature]));
+      const tombstones = await this.loadFeatureDeletionTombstones();
       const timestamp = nowISO();
       await this.saveFeaturesRaw({
         features: features.features.map((feature) => {
           const current = currentById.get(feature.id);
+          const deletedAt = tombstones.deletions[feature.id];
+          if (!current && deletedAt) {
+            throw new PlanStaleWriteError({
+              errorCode: "PLAN_STALE_WRITE",
+              entity: "feature",
+              entityId: feature.id,
+              expectedUpdatedAt: feature.updatedAt,
+              actualUpdatedAt: deletedAt,
+            });
+          }
           if (current) assertSnapshotNotOlder("feature", feature.id, feature.updatedAt, current.updatedAt);
           const merged = current
             ? { ...feature, sessionInfo: mergeSessionInfo(current.sessionInfo, feature.sessionInfo) }
@@ -3124,6 +3159,19 @@ export class PlanStore {
     await this.withFeaturesLock(async () => {
       await this.migrateLegacy();
       const previous = await readJson(this.featurePath(feature.id), FeatureSchema).catch(() => null);
+      if (!previous) {
+        const tombstones = await this.loadFeatureDeletionTombstones();
+        const deletedAt = tombstones.deletions[feature.id];
+        if (deletedAt) {
+          throw new PlanStaleWriteError({
+            errorCode: "PLAN_STALE_WRITE",
+            entity: "feature",
+            entityId: feature.id,
+            expectedUpdatedAt: feature.updatedAt,
+            actualUpdatedAt: deletedAt,
+          });
+        }
+      }
       if (previous) assertSnapshotNotOlder("feature", feature.id, feature.updatedAt, previous.updatedAt);
       await mkdir(this.featuresDir(), { recursive: true });
       const merged = previous
