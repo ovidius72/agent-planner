@@ -24,6 +24,7 @@ export * from "./handoff-reply.js";
 export * from "./mutation-reply.js";
 export * from "./recommend-reply.js";
 export * from "./feature-delete.js";
+export * from "./task-move.js";
 export * from "./accepted-decision-guard.js";
 export * from "./project-context-migration.js";
 export * from "./project-context.js";

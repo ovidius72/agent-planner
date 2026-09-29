@@ -35,9 +35,13 @@ export interface OnHoldTask {
   /** Why it was put on hold: the motivation of the status change that parked it. */
   reason: string;
   heldSince: string;
-  /** Planner refs named in the reason, each checked against the plan. */
+  /** Planner refs the task is actually waiting on: refs named in the hold
+   *  reason, plus its own dependsOn edges (by composite ref) — deduplicated,
+   *  so a dependency already spelled out in the reason is not double-listed.
+   *  Each is checked against the plan. */
   namedRefs: OnHoldRef[];
-  /** True when the reason names at least one ref and every named ref is finished. */
+  /** True when there is at least one ref to wait on (named in the reason or
+   *  a dependsOn edge) and every one of them is finished. */
   readyToResume: boolean;
 }
 
@@ -88,6 +92,24 @@ export function refsNamedIn(text: string, phases: Phase[], features: Feature[], 
   return [...seen.values()];
 }
 
+/** Resolve a task's dependsOn edges to composite refs, checked against the
+ *  plan the same way refsNamedIn checks a ref found in text. A dependsOn id
+ *  always resolves (dependencies are validated at creation — see
+ *  PlanStore.addTaskDependency), but a defensive `found: false` covers a
+ *  dangling edge from an older plan rather than throwing. */
+function dependencyRefsFor(task: Task, phases: Phase[], features: Feature[]): OnHoldRef[] {
+  return (task.dependsOn ?? []).map((dependencyId) => {
+    for (const phase of phases) {
+      const dependency = phase.tasks.find((candidate) => candidate.id === dependencyId);
+      if (dependency) {
+        const ref = `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${pad(dependency.number)}`;
+        return { ref, found: true, finished: FINISHED.has(dependency.status) };
+      }
+    }
+    return { ref: dependencyId, found: false, finished: false };
+  });
+}
+
 /**
  * Every on-hold task, ready-to-resume ones first. Pass `phaseIds` to limit
  * the list to the phases a caller is about to act on.
@@ -100,7 +122,16 @@ export function listOnHoldWork(features: Feature[], phases: Phase[], phaseIds?: 
     for (const task of phase.tasks) {
       if (!ON_HOLD_STATUSES.has(task.status)) continue;
       const { reason, at } = holdEntry(task);
+      // A parked task waits on whatever its reason names AND whatever it
+      // depends on — merged by ref so a dependency already spelled out in
+      // the reason is not counted, or shown, twice.
       const namedRefs = refsNamedIn(reason, phases, features, task.id);
+      const seenRefs = new Set(namedRefs.map((named) => named.ref));
+      for (const dependencyRef of dependencyRefsFor(task, phases, features)) {
+        if (seenRefs.has(dependencyRef.ref)) continue;
+        seenRefs.add(dependencyRef.ref);
+        namedRefs.push(dependencyRef);
+      }
       items.push({
         taskId: task.id,
         ref: `${phaseRef}/T${pad(task.number)}`,
