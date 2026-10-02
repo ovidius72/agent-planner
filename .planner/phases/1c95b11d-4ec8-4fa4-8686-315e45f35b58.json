@@ -1,0 +1,158 @@
+{
+  "id": "1c95b11d-4ec8-4fa4-8686-315e45f35b58",
+  "featureId": "957f4acd-f885-4429-a191-89cbd9899ba2",
+  "number": 114,
+  "shortId": "JRUN8",
+  "priority": 2,
+  "slug": "codex-and-opencode-plugin-setup",
+  "title": "Codex and OpenCode plugin setup",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Add Codex/OpenCode setup commands and plugin bundles with planner routing.",
+  "description": "Implement current Codex and OpenCode harness setup/plugin support without coupling planner core to either harness. Current state: packages/agent-plan/src/index.ts has setup claude-code and a stale setup codex that writes .codex/mcp.json; plugins/codex/README.md is only a placeholder; plugins/claude-code/ and scripts/sync-plugins.cjs provide the existing shared skill/template pattern; docs/setup-codex.md and README.md describe older Codex behavior. Desired state: setup codex writes current Codex config.toml MCP configuration and installs/discovers the Agent Plan plugin/skill where supported; setup opencode creates project/user OpenCode config for @agent-plan/mcp and /planner command routing; plugin bundles under plugins/codex and plugins/opencode reuse the canonical planner guide. Preserve harness-agnostic core boundaries: do not move planner business logic out of @agent-plan/mcp/@agent-plan/core, and document any harness limitation such as Codex slash-command autosuggestion if not exposed by public APIs.",
+  "descriptionUpdatedAt": "2026-10-02T13:22:42.183Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "c74ee7ed-b300-4ea1-b5ca-76cbed59c6a4",
+      "title": "Codex uses MCP plus skill instead of custom slash command",
+      "decision": "Codex support ships as MCP configuration plus an agent-plan skill/plugin bundle. Agent Plan must not claim Codex has a native custom /planner slash command or nested autosuggestion until Codex exposes a public API for it.",
+      "rationale": "Current Codex CLI/plugin surfaces expose MCP servers, plugins, and skills, but no documented custom slash-command registration surface. Promising /planner in Codex would mislead users.",
+      "implementationNotes": "agent-plan setup codex writes .codex/config.toml and .codex/skills/agent-plan/SKILL.md. plugins/codex ships plugin.json, .codex-plugin/plugin.json, mcp.json/.mcp.json, and a generated skill.",
+      "acceptedAt": "2026-10-02T15:08:01.284Z"
+    },
+    {
+      "id": "545f0b4d-72b0-4cc1-b435-ade3d395672f",
+      "title": "OpenCode gets /planner plus flat autosuggest aliases",
+      "decision": "OpenCode support uses mcp.servers.agent-plan plus a commands.planner entry for /planner arguments, and installs flat shortcut commands for discoverability instead of pretending nested segment autosuggestion exists.",
+      "rationale": "OpenCode v2 command configuration supports a slash command name with a template; nested segment-level autosuggestion for every /planner subcommand is not exposed in the verified config/CLI surface.",
+      "implementationNotes": "agent-plan setup opencode writes opencode.json or ~/.config/opencode/opencode.json with commands.planner and shortcuts such as planner-load, planner-task-start, and planner-web-status.",
+      "acceptedAt": "2026-10-02T15:08:01.383Z"
+    }
+  ],
+  "completionCriteria": [],
+  "taskIds": [
+    "3f6ce891-86a9-40f4-bdfb-f7d86743f000"
+  ],
+  "tasks": [
+    {
+      "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000",
+      "phaseId": "1c95b11d-4ec8-4fa4-8686-315e45f35b58",
+      "number": 452,
+      "shortId": "Y3N65",
+      "priority": 1,
+      "shortName": "implement-codex-and-opencode-s",
+      "title": "Implement Codex and OpenCode setup/plugin routing",
+      "status": "done",
+      "description": "Implement the Codex and OpenCode integration slice. Code references: packages/agent-plan/src/index.ts currently has CLI setup helpers, setupCodex writes stale .codex/mcp.json, and plannerCommandTemplate generates Claude slash routing; plugins/codex/README.md is a placeholder; plugins/claude-code/skills/planner/SKILL.md and plugins/_shared/planner-skill.md.in carry the canonical planner operating guide; scripts/sync-plugins.cjs only mirrors Claude; docs/setup-codex.md and README.md need current setup guidance. Work: add agent-plan setup opencode with --user/--project/--force/--local parity; update setup codex to current config/plugin expectations; add Codex and OpenCode plugin bundle files that reuse @agent-plan/mcp instead of duplicating planner logic; provide /planner command routing where the harness supports it and document tested autosuggestion limitations; add focused tests for generated config and plugin sync. Edge cases: preserve existing unrelated config, --force overwrites only Agent Plan entries, --local stores the resolved built CLI path, and no setup command auto-starts the planner or dashboard.\n\n---\n**Completion summary:**\nImplemented Codex and OpenCode setup/plugin routing. Files changed include packages/agent-plan/src/index.ts, packages/agent-plan/test/version.test.mjs, scripts/sync-plugins.cjs, scripts/release.cjs, scripts/release-next.cjs, README.md, docs/setup-codex.md, docs/setup-opencode.md, plugins/README.md, plugins/DECISIONS.md, plugins/codex/*, and plugins/opencode/*. Codex setup now writes .codex/config.toml plus .codex/skills/agent-plan/SKILL.md and documents that public Codex plugin/config surfaces expose MCP+skills, not custom /planner slash-command autosuggestion. OpenCode setup writes mcp.servers.agent-plan plus commands.planner and flat autosuggest aliases such as planner-load and planner-task-start. Plugin sync now generates Codex/OpenCode skill files from the canonical planner skill with Codex-compatible description frontmatter. Release scripts now bump all versioned plugin manifests. Verification completed: built @agent-plan/core, @agent-plan/server, @agent-plan/mcp, and agent-plan; pnpm --filter agent-plan check passed; node --test packages/agent-plan/test/version.test.mjs passed 8/8; pnpm plugins:check passed; node --check passed for release.cjs, release-next.cjs, and sync-plugins.cjs; Codex plugin JSON files parse successfully. Remaining work: no full repository final gate was run, per bounded verification for this focused task.",
+      "descriptionUpdatedAt": "2026-10-02T18:02:47.522Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000-check-001-planned-in-progress",
+          "date": "2026-10-02T13:22:42.723Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000-check-002-in-progress-done",
+          "date": "2026-10-02T18:02:47.520Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented Codex and OpenCode setup/plugin routing. Files changed include packages/agent-plan/src/index.ts, packages/agent-plan/test/version.test.mjs, scripts/sync-plugins.cjs, scripts/release.cjs, scripts/release-next.cjs, README.md, docs/setup-codex.md, docs/setup-opencode.md, plugins/README.md, plugins/DECISIONS.md, plugins/codex/*, and plugins/opencode/*. Codex setup now writes .codex/config.toml plus .codex/skills/agent-plan/SKILL.md and documents that public Codex plugin/config surfaces expose MCP+skills, not custom /planner slash-command autosuggestion. OpenCode setup writes mcp.servers.agent-plan plus commands.planner and flat autosuggest aliases such as planner-load and planner-task-start. Plugin sync now generates Codex/OpenCode skill files from the canonical planner skill with Codex-compatible description frontmatter. Release scripts now bump all versioned plugin manifests. Verification completed: built @agent-plan/core, @agent-plan/server, @agent-plan/mcp, and agent-plan; pnpm --filter agent-plan check passed; node --test packages/agent-plan/test/version.test.mjs passed 8/8; pnpm plugins:check passed; node --check passed for release.cjs, release-next.cjs, and sync-plugins.cjs; Codex plugin JSON files parse successfully. Remaining work: no full repository final gate was run, per bounded verification for this focused task."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000-check-001-update-setup-codex-to-current-codex-config-plugin-behavior-while-preserving-force-and-local-semantics",
+          "number": 1,
+          "title": "Update setup codex to current Codex config/plugin behavior while preserving --force and --local semantics",
+          "checked": true
+        },
+        {
+          "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000-check-002-add-setup-opencode-with-project-user-config-mcp-registration-and-planner-routing-where-supported",
+          "number": 2,
+          "title": "Add setup opencode with project/user config, MCP registration, and /planner routing where supported",
+          "checked": true
+        },
+        {
+          "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000-check-003-add-codex-and-opencode-plugin-bundle-files-reusing-the-canonical-planner-guide",
+          "number": 3,
+          "title": "Add Codex and OpenCode plugin bundle files reusing the canonical planner guide",
+          "checked": true
+        },
+        {
+          "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000-check-004-update-plugin-sync-check-logic-and-docs-for-the-new-harness-bundles",
+          "number": 4,
+          "title": "Update plugin sync/check logic and docs for the new harness bundles",
+          "checked": true
+        },
+        {
+          "id": "3f6ce891-86a9-40f4-bdfb-f7d86743f000-check-005-add-focused-tests-and-run-bounded-verification",
+          "number": 5,
+          "title": "Add focused tests and run bounded verification",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-02T13:22:42.723Z",
+      "completedAt": "2026-10-02T18:02:47.520Z",
+      "createdAt": "2026-10-02T13:22:42.338Z",
+      "updatedAt": "2026-10-02T18:02:47.520Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:d5da5499-c0e5-4d04-addd-5044ced52d51",
+          "createdAt": "2026-10-02T13:22:42.652Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-02T13:22:42.129Z",
+  "updatedAt": "2026-10-02T18:02:47.520Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "e4035aec-1695-48ef-a564-ea2b6fef1a17",
+      "date": "2026-10-02T13:22:42.744Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "f4d7c217-3431-4f66-9717-5b57a4bf704c",
+      "date": "2026-10-02T18:02:47.540Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:d5da5499-c0e5-4d04-addd-5044ced52d51",
+      "createdAt": "2026-10-02T13:22:42.652Z"
+    }
+  ]
+}

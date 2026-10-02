@@ -10,7 +10,8 @@ libraries live in `packages/` and are published to npm; plugins reference them.
 | Plugin | Harness | Status | Install |
 |---|---|---|---|
 | `claude-code/` | Claude Code | ready | `/plugin marketplace add ovidius72/agent-planner` → `/plugin install agent-plan@agent-plan-marketplace` |
-| `codex/` | Codex | planned (TBD) | TBD — Codex extension API |
+| `codex/` | Codex | ready | Codex plugin marketplace/local install + `agent-plan setup codex` |
+| `opencode/` | OpenCode | ready | `agent-plan setup opencode` |
 | `_shared/` | — | shared templates | consumed by plugins at build/sync time |
 
 ## Distribution model
@@ -45,7 +46,15 @@ plugins/
 │   ├── hooks/hooks.json
 │   ├── scripts/notify-session-start.sh
 │   └── README.md
-├── codex/                         # Codex plugin (TBD)
+├── codex/                         # Codex plugin
+│   ├── plugin.json
+│   ├── .codex-plugin/plugin.json
+│   ├── mcp.json
+│   ├── .mcp.json
+│   ├── skills/agent-plan/SKILL.md
+│   └── README.md
+├── opencode/                      # OpenCode plugin/config bundle
+│   ├── skills/agent-plan/SKILL.md
 │   └── README.md
 └── _shared/                       # shared templates (single source of truth)
     ├── planner-skill.md.in
@@ -67,10 +76,10 @@ claude --plugin-dir ./plugins/claude-code --debug
 ## Syncing shared content
 
 `scripts/sync-plugins.cjs` regenerates each plugin's
-`skills/planner/SKILL.md`, `scripts/notify-session-start.sh`, and
-`scripts/guard-pre-tool-use.sh` from the templates in `_shared/`, so the
-`/planner` command routing, the SessionStart notification, and the PreToolUse
-guard have a single source of truth across harnesses.
+`skills/planner/SKILL.md` or `skills/agent-plan/SKILL.md`,
+`scripts/notify-session-start.sh`, and `scripts/guard-pre-tool-use.sh` from the
+templates in `_shared/`, so planner routing, the SessionStart notification, and
+the PreToolUse guard have a single source of truth across harnesses.
 
 ```
 pnpm plugins:sync     # regenerate derived files

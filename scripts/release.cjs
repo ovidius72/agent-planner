@@ -49,7 +49,11 @@ const PACKAGES = [
 // The release script bumps them by the same level so /plugin marketplace update
 // detects a new version. The marketplace.json lives at the repo root.
 const PLUGIN_FILES = {
-  manifest: path.join(root, "plugins", "claude-code", ".claude-plugin", "plugin.json"),
+  manifests: [
+    path.join(root, "plugins", "claude-code", ".claude-plugin", "plugin.json"),
+    path.join(root, "plugins", "codex", "plugin.json"),
+    path.join(root, "plugins", "codex", ".codex-plugin", "plugin.json"),
+  ],
   marketplace: path.join(root, ".claude-plugin", "marketplace.json"),
 };
 
@@ -72,13 +76,14 @@ function writeVersion(dir, version) {
   j.version = version;
   fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
 }
-function readPluginVersion() { return JSON.parse(fs.readFileSync(PLUGIN_FILES.manifest, "utf8")).version; }
+function readPluginVersion() { return JSON.parse(fs.readFileSync(PLUGIN_FILES.manifests[0], "utf8")).version; }
 function writePluginVersion(version) {
-  // plugin.json
-  const mp = PLUGIN_FILES.manifest;
-  const mj = JSON.parse(fs.readFileSync(mp, "utf8"));
-  mj.version = version;
-  fs.writeFileSync(mp, JSON.stringify(mj, null, 2) + "\n");
+  // plugin.json files
+  for (const mp of PLUGIN_FILES.manifests) {
+    const mj = JSON.parse(fs.readFileSync(mp, "utf8"));
+    mj.version = version;
+    fs.writeFileSync(mp, JSON.stringify(mj, null, 2) + "\n");
+  }
   // marketplace.json: plugins[0].version + top-level catalog version
   const mk = PLUGIN_FILES.marketplace;
   const mkj = JSON.parse(fs.readFileSync(mk, "utf8"));
@@ -156,7 +161,7 @@ if (compareStableVersions(pluginTarget, pluginCurrent) <= 0) {
   console.error(`✗ Plugin target ${pluginTarget} is not greater than current ${pluginCurrent}. Aborting (downgrade guard).`);
   process.exit(1);
 }
-console.log(`    ${"plugin (claude-code)".padEnd(26)} ${pluginCurrent} → ${pluginTarget}`);
+console.log(`    ${"plugins".padEnd(26)} ${pluginCurrent} → ${pluginTarget}`);
 
 if (dryRun) {
   console.log("\n[dry-run] Would: create release/v" + target + ", bump all packages to " + target + ", bump plugin to " + pluginTarget + ", install, run the canonical final verification gate, commit, push, open PR → main.");
@@ -190,7 +195,7 @@ sh('git add -A');
 execSync(`git commit -m "chore(release): v${target}
 
 Unified version bump for all packages (core, mcp, server, agent-plan, pi-adapter).
-Also bumps the Claude Code plugin manifest + marketplace version to ${pluginTarget}.
+Also bumps plugin manifests + marketplace version to ${pluginTarget}.
 Merge this PR into main to publish via .github/workflows/publish.yml."`, { cwd: root, stdio: "inherit" });
 
 // --- push ---
@@ -205,13 +210,13 @@ try { changelog = sh("git log --oneline origin/main..HEAD"); } catch {}
 const versionTable = PACKAGES.map((p) => `| ${p.name} | ${""} | ${target} |`).join("\n");
 const body = `## Release v${target}
 
-Unified version bump for all packages + Claude Code plugin manifest. Merge into \`main\` to publish via \`.github/workflows/publish.yml\`.
+Unified version bump for all packages + plugin manifests. Merge into \`main\` to publish via \`.github/workflows/publish.yml\`.
 
 ### Versions
 | Package | Before | After |
 |---|---|---|
 ${versionTable}
-| plugin (claude-code) | ${pluginCurrent} | ${pluginTarget} |
+| plugins | ${pluginCurrent} | ${pluginTarget} |
 
 ### Changelog (commits since origin/main)
 \`\`\`

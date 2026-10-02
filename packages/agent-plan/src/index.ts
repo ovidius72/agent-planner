@@ -29,6 +29,7 @@ function usage(): string {
     "  agent-plan init [project name] [--yes]",
     "  agent-plan setup claude-code [--user|--project] [--force] [--local]",
     "  agent-plan setup codex      [--user|--project] [--force] [--local]",
+    "  agent-plan setup opencode   [--user|--project] [--force] [--local]",
     "  agent-plan export [--full]",
     "",
     "Commands:",
@@ -36,7 +37,8 @@ function usage(): string {
     "  mcp                         Start the stdio MCP server.",
     "  init                        Initialize .planner/ in the current project.",
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
-    "  setup codex                 Add Agent Plan to Codex / Copilot CLI (project .codex/mcp.json by default, user scope with --user).",
+    "  setup codex                 Add Agent Plan to Codex (project .codex/config.toml by default, user scope with --user).",
+    "  setup opencode              Add Agent Plan to OpenCode (project opencode.json by default, user scope with --user).",
     "  guard pre-tool-use          Claude Code hook: warn the agent (never block or prompt) when a call changes project code while no task is in-progress. Planner changes and writes outside the project never warn.",
     "",
     "Options:",
@@ -44,7 +46,7 @@ function usage(): string {
     "  --yes, -y                   Accept defaults / initialize when needed.",
     "  --force                     Overwrite existing agent-plan MCP config entry.",
     "  --local                     Write config pointing to this built local CLI instead of npx agent-plan.",
-    "  --user                      Install MCP and /planner command at Claude Code or Codex user scope.",
+    "  --user                      Install MCP and planner routing at harness user scope.",
     "  --project                   Install MCP and /planner command in the current project (default).",
   ].join("\n");
 }
@@ -130,6 +132,11 @@ async function readJsonFile(path: string): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
+async function writeJsonFile(path: string, value: Record<string, unknown>): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
+}
+
 /** The CLI's own file, with links followed. Version managers such as fnm
  * start it through a link in a per-shell temp folder that disappears later,
  * so saving that link into a hook or MCP config breaks it. */
@@ -180,6 +187,25 @@ Use the Agent Plan MCP tools. Do not treat this as a shell command. Route the re
 ${skillBody}`;
 }
 
+async function codexSkillTemplate(): Promise<string> {
+  const canonicalSkill = await loadCanonicalPlannerSkill();
+  return canonicalSkill.replace(/^summary:/m, "description:");
+}
+
+async function opencodePlannerCommandTemplate(command = "$ARGUMENTS"): Promise<string> {
+  const canonicalSkill = await loadCanonicalPlannerSkill();
+  const skillBody = canonicalSkill.replace(/^---\n[\s\S]*?\n---\n/, "").trimStart();
+  return `Use the Agent Plan MCP tools to handle this planner command:
+
+\`\`\`
+/planner ${command}
+\`\`\`
+
+Do not treat this as a shell command. Route the requested operation through the exact MCP tool inventory in the canonical guide below. If the command is empty, call planner-show and suggest relevant next commands. Ask one concise clarification when required values are ambiguous.
+
+${skillBody}`;
+}
+
 async function writeClaudePlannerCommand(scope: "project" | "user"): Promise<string> {
   const commandDir = scope === "user"
     ? join(homedir(), ".claude", "commands")
@@ -190,12 +216,71 @@ async function writeClaudePlannerCommand(scope: "project" | "user"): Promise<str
   return commandPath;
 }
 
+async function writeCodexSkill(scope: "project" | "user"): Promise<string> {
+  const skillDir = scope === "user"
+    ? join(homedir(), ".codex", "skills", "agent-plan")
+    : join(process.cwd(), ".codex", "skills", "agent-plan");
+  await mkdir(skillDir, { recursive: true });
+  const skillPath = join(skillDir, "SKILL.md");
+  await writeFile(skillPath, await codexSkillTemplate(), "utf-8");
+  return skillPath;
+}
+
 function mcpCommandParts(flags: CliFlags): { command: string; args: string[] } {
   const config = defaultMcpConfig(flags);
   return {
     command: String(config.command),
     args: Array.isArray(config.args) ? config.args.map(String) : [],
   };
+}
+
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function tomlStringArray(values: string[]): string {
+  return `[${values.map(tomlString).join(", ")}]`;
+}
+
+function codexMcpTomlBlock(flags: CliFlags): string {
+  const { command, args } = mcpCommandParts(flags);
+  return [
+    "[mcp_servers.agent-plan]",
+    `command = ${tomlString(command)}`,
+    `args = ${tomlStringArray(args)}`,
+  ].join("\n");
+}
+
+async function readTextFile(path: string): Promise<string> {
+  if (!existsSync(path)) return "";
+  return readFile(path, "utf-8");
+}
+
+function upsertTomlTable(path: string, text: string, tableName: string, block: string, force: boolean): string {
+  const lines = text.split(/\r?\n/);
+  const header = `[${tableName}]`;
+  const start = lines.findIndex((line) => line.trim() === header);
+  if (start !== -1 && !force) {
+    throw new Error(`${path} already has ${header}. Re-run with --force to overwrite.`);
+  }
+  let nextHeader = lines.length;
+  if (start !== -1) {
+    for (let i = start + 1; i < lines.length; i += 1) {
+      if (/^\s*\[/.test(lines[i] ?? "")) {
+        nextHeader = i;
+        break;
+      }
+    }
+  }
+  const before = start === -1 ? lines : lines.slice(0, start);
+  const after = start === -1 ? [] : lines.slice(nextHeader);
+  const trimmedBefore = before.join("\n").trimEnd();
+  const trimmedAfter = after.join("\n").trimStart();
+  return [
+    trimmedBefore,
+    block,
+    trimmedAfter,
+  ].filter(Boolean).join("\n\n") + "\n";
 }
 
 function guardHookCommand(flags: CliFlags): { command: string; args: string[] } {
@@ -306,24 +391,85 @@ async function setupClaudeCode(flags: CliFlags): Promise<void> {
 async function setupCodex(flags: CliFlags): Promise<void> {
   const scope = flags.user ? "user" : "project";
   const baseDir = scope === "user" ? join(homedir(), ".codex") : join(process.cwd(), ".codex");
-  const settingsPath = join(baseDir, "mcp.json");
+  const settingsPath = join(baseDir, "config.toml");
   await mkdir(baseDir, { recursive: true });
 
-  const settings = await readJsonFile(settingsPath);
-  const currentMcpServers = settings.mcpServers;
-  const mcpServers: Record<string, unknown> =
-    currentMcpServers && typeof currentMcpServers === "object" && !Array.isArray(currentMcpServers)
-      ? { ...(currentMcpServers as Record<string, unknown>) }
-      : {};
+  const current = await readTextFile(settingsPath);
+  const next = upsertTomlTable(settingsPath, current, "mcp_servers.agent-plan", codexMcpTomlBlock(flags), flags.force);
+  await writeFile(settingsPath, next, "utf-8");
+  const skillPath = await writeCodexSkill(scope);
 
-  if (mcpServers["agent-plan"] && !flags.force) {
-    throw new Error(`Codex already has mcpServers.agent-plan in ${settingsPath}. Re-run with --force to overwrite.`);
+  console.log(`Configured Codex MCP server in ${settingsPath}`);
+  console.log(`Configured Codex Agent Plan skill in ${skillPath}`);
+  console.log("Codex currently exposes Agent Plan through MCP tools plus the agent-plan skill. Custom /planner slash-command registration is not part of the public Codex plugin/config surface.");
+  if (!existsSync(plannerRoot())) {
+    console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
+  }
+  console.log(flags.local ? "Mode: local built CLI" : "Mode: npx agent-plan mcp");
+}
+
+function opencodeConfigPath(scope: "project" | "user"): string {
+  return scope === "user"
+    ? join(homedir(), ".config", "opencode", "opencode.json")
+    : join(process.cwd(), "opencode.json");
+}
+
+const OPENCODE_PLANNER_ALIASES: Record<string, string> = {
+  "planner-load": "load",
+  "planner-stop": "stop",
+  "planner-show": "show",
+  "planner-feature-list": "feature list",
+  "planner-phase-list": "phase list",
+  "planner-task-recommend": "task recommend",
+  "planner-task-start": "task start $ARGUMENTS",
+  "planner-task-complete": "task complete $ARGUMENTS",
+  "planner-handoff-list": "handoff list",
+  "planner-web-start": "web start",
+  "planner-web-status": "web status",
+  "planner-web-stop": "web stop",
+};
+
+function isAgentPlanOpencodeConfigured(settings: Record<string, unknown>): boolean {
+  const mcp = isRecord(settings.mcp) ? settings.mcp : {};
+  const servers = isRecord(mcp.servers) ? mcp.servers : {};
+  const commands = isRecord(settings.commands) ? settings.commands : {};
+  return Boolean(servers["agent-plan"] || commands.planner);
+}
+
+async function setupOpencode(flags: CliFlags): Promise<void> {
+  const scope = flags.user ? "user" : "project";
+  const settingsPath = opencodeConfigPath(scope);
+  const settings = await readJsonFile(settingsPath);
+  if (isAgentPlanOpencodeConfigured(settings) && !flags.force) {
+    throw new Error(`OpenCode already has Agent Plan configuration in ${settingsPath}. Re-run with --force to overwrite.`);
   }
 
-  mcpServers["agent-plan"] = defaultMcpConfig(flags);
-  settings.mcpServers = mcpServers;
-  await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf-8");
-  console.log(`Configured Codex MCP server in ${settingsPath}`);
+  const mcp = isRecord(settings.mcp) ? { ...settings.mcp } : {};
+  const servers = isRecord(mcp.servers) ? { ...mcp.servers } : {};
+  const { command, args } = mcpCommandParts(flags);
+  servers["agent-plan"] = {
+    type: "local",
+    command: [command, ...args],
+  };
+  mcp.servers = servers;
+  settings.mcp = mcp;
+
+  const commands = isRecord(settings.commands) ? { ...settings.commands } : {};
+  commands.planner = {
+    description: "Route Agent Plan /planner commands through the configured MCP server.",
+    template: await opencodePlannerCommandTemplate(),
+  };
+  for (const [name, commandText] of Object.entries(OPENCODE_PLANNER_ALIASES)) {
+    commands[name] = {
+      description: `Agent Plan shortcut for /planner ${commandText.replace(" $ARGUMENTS", " ...")}.`,
+      template: await opencodePlannerCommandTemplate(commandText),
+    };
+  }
+  settings.commands = commands;
+
+  await writeJsonFile(settingsPath, settings);
+  console.log(`Configured OpenCode MCP server and /planner command in ${settingsPath}`);
+  console.log("OpenCode supports /planner with arguments through the planner command. Segment autosuggestion is provided as flat shortcut commands such as /planner-load and /planner-task-start.");
   if (!existsSync(plannerRoot())) {
     console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
   }
@@ -456,6 +602,11 @@ async function main(): Promise<void> {
 
   if (command === "setup" && subcommand === "codex") {
     await setupCodex(flags);
+    return;
+  }
+
+  if (command === "setup" && subcommand === "opencode") {
+    await setupOpencode(flags);
     return;
   }
 

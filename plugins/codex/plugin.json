@@ -1,0 +1,39 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agent-plan",
+  "version": "0.2.2",
+  "description": "Agent Plan — structured project planning for Codex. Manage features, phases, tasks, handoffs, and the planner web dashboard through MCP tools and an Agent Plan skill. Disabled by default; ask to load the planner explicitly.",
+  "author": {
+    "name": "Agent Plan"
+  },
+  "license": "MIT",
+  "keywords": [
+    "agent-plan",
+    "planner",
+    "mcp",
+    "codex",
+    "project-management"
+  ],
+  "extensions": {
+    "com.openai": {
+      "skills": "./skills/",
+      "mcpServers": "./mcp.json",
+      "interface": {
+        "displayName": "Agent Plan",
+        "shortDescription": "Structured planning for Codex",
+        "longDescription": "Use Agent Plan MCP tools and workflow guidance to manage a project-local .planner workspace with features, phases, tasks, handoffs, and an explicit planner load/stop lifecycle.",
+        "developerName": "Agent Plan",
+        "category": "Productivity",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "defaultPrompt": [
+          "Load Agent Plan for this project",
+          "Show the next recommended Agent Plan task",
+          "Write an Agent Plan handoff for the current phase"
+        ]
+      }
+    }
+  }
+}
