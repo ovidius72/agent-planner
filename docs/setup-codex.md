@@ -1,23 +1,8 @@
-# Codex setup — Agent Plan MCP
+# Codex setup — Agent Plan MCP and skill
 
-> Status: Codex support is in early alignment; this doc describes the intended integration using the same MCP stdio server that Claude Code uses.
-
-Agent Plan exposes a stdio MCP server (`agent-plan mcp`) that can be wired to any harness that supports the Model Context Protocol, including Codex once Codex MCP server configuration is available.
-
-## What is configured
-
-The MCP server provides atomic `planner-*` tools for reading and mutating the local `.planner/` workspace:
-
-- `planner-init`
-- `planner-show`
-- `planner-recap`
-- `planner-repair`
-- `planner-web` (status / start / stop, LAN-bound dynamic port)
-- `planner-feature-list`, `planner-feature-add`, `planner-feature-update`, `planner-feature-delete`
-- `planner-phase-list`, `planner-phase-add`, `planner-phase-update`, `planner-phase-delete`
-- `planner-task-list`, `planner-task-add`, `planner-task-update`, `planner-task-start`, `planner-task-complete`, `planner-task-delete`
-- `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-show`, `planner-handoff-clear`
-- `planner-authorize-bypass`, `planner-clear-bypass`
+Agent Plan works in Codex through the same stdio MCP server used by Claude Code
+and OpenCode. Codex sees atomic `planner-*` MCP tools plus an `agent-plan`
+skill that contains the planner operating guide.
 
 ## Install Agent Plan
 
@@ -25,47 +10,76 @@ The MCP server provides atomic `planner-*` tools for reading and mutating the lo
 npm install -g agent-plan
 ```
 
-## Codex MCP configuration (when supported)
+## Configure Codex
 
-Add the MCP server to Codex settings. The exact file path depends on the Codex release, but the server block is:
+Project scope:
 
-```json
-{
-  "mcpServers": {
-    "agent-plan": {
-      "command": "npx",
-      "args": ["agent-plan", "mcp"]
-    }
-  }
-}
+```bash
+agent-plan setup codex --project
 ```
 
-If Codex supports project-local MCP configuration, place the same block in the target project so it is automatically picked up when `codex` runs from that directory.
+User scope:
 
-## Per-project initialization
+```bash
+agent-plan setup codex --user
+```
 
-Agent Plan does **not** auto-initialize a planner. In a project where you want planning enabled, ask Codex to run:
+Local development from a built checkout:
+
+```bash
+agent-plan setup codex --project --force --local
+```
+
+The command writes:
+
+- `.codex/config.toml` for project scope, or `~/.codex/config.toml` for user
+  scope.
+- `.codex/skills/agent-plan/SKILL.md` for project scope, or
+  `~/.codex/skills/agent-plan/SKILL.md` for user scope.
+
+The MCP config block is:
+
+```toml
+[mcp_servers.agent-plan]
+command = "npx"
+args = ["agent-plan", "mcp"]
+```
+
+With `--local`, `command` becomes `node` and `args` point at the resolved built
+CLI path plus `mcp`.
+
+Agent Plan never auto-starts the planner or web dashboard. Ask Codex to load
+Agent Plan when you want planner context; this routes to `planner-load`.
+
+## Slash commands and autosuggestion
+
+Codex plugins/configuration currently expose Agent Plan through MCP tools and
+skills. The public Codex plugin/config surface does not register custom
+`/planner ...` slash commands with segment-level autosuggestion. Use the
+`agent-plan` skill or natural language prompts such as:
 
 ```text
-Run planner-init to set up Agent Plan for this project.
+Load Agent Plan for this project.
+Show the next recommended Agent Plan task.
+Start Agent Plan task P001(F001)/T001.
 ```
 
-This creates:
+Those prompts should route to the corresponding `planner-*` tools.
 
-```text
-my-project/
-  .planner/
-    manifest.json
-    project.json
-    features.json
-    requirements.json
-    phases/
-    resume.json
-```
+## Codex plugin bundle
+
+The repository also ships `plugins/codex/`:
+
+- `plugin.json` — portable Agent Plugins manifest.
+- `.codex-plugin/plugin.json` — Codex compatibility fallback.
+- `mcp.json` / `.mcp.json` — Agent Plan MCP server wiring through
+  `npx -y @agent-plan/mcp`.
+- `skills/agent-plan/SKILL.md` — generated Agent Plan operating guide.
 
 ## Planner root resolution
 
-By default the MCP server uses `.planner/` in the process current working directory. For testing or advanced use:
+By default the MCP server uses `.planner/` in the process current working
+directory. For testing or advanced use:
 
 ```bash
 AGENT_PLAN_ROOT=/absolute/path/to/.planner agent-plan mcp
@@ -73,18 +87,20 @@ AGENT_PLAN_ROOT=/absolute/path/to/.planner agent-plan mcp
 
 ## Task guard model
 
-Codex MCP hooks are not standardized yet. When Codex exposes a pre-tool-use hook, the same guard script used by Claude Code can be reused:
+Codex does not currently expose the same project-level `PreToolUse` hook that
+Claude Code uses. The Agent Plan guard remains available as:
 
 ```bash
 agent-plan guard pre-tool-use
 ```
 
-The guard never blocks: when a call changes project code while no task is `in-progress` (and no bypass is authorized), it only warns the agent. Until Codex exposes such a hook, the warning must come from project policy or custom Codex configuration.
+The guard never blocks: when a call changes project code while no task is
+`in-progress` and no bypass is authorized, it only warns the agent.
 
 ## Public references
 
 - Planner JSON schema: [`planner-schema.json`](./planner-schema.json)
 - Claude Code setup: [`setup-claude-code.md`](./setup-claude-code.md)
-- Zed setup: [`setup-zed.md`](./setup-zed.md)
+- OpenCode setup: [`setup-opencode.md`](./setup-opencode.md)
 - Core package: `@agent-plan/core`
 - MCP package: `@agent-plan/mcp`

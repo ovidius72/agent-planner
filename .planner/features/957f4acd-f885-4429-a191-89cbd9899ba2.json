@@ -16,11 +16,34 @@
   "acceptedDecisions": [],
   "phaseIds": [
     "440cfc4a-4e1d-4449-a3a2-b25c7342c04a",
-    "d070f000-3354-4210-bd53-4d5eeb86349f"
+    "d070f000-3354-4210-bd53-4d5eeb86349f",
+    "1c95b11d-4ec8-4fa4-8686-315e45f35b58"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "722c2835-d9ca-4a8f-aff0-b384ca6fbcc0",
+      "date": "2026-10-02T13:22:42.793Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "ca8bf313-3bf5-4999-a962-33b38ef4eaba",
+      "date": "2026-10-02T18:02:47.591Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-08-06T11:35:50.127Z",
   "updatedAt": "2026-08-06T16:30:23.411Z",
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:d5da5499-c0e5-4d04-addd-5044ced52d51",
+      "createdAt": "2026-10-02T13:22:42.652Z"
+    }
+  ]
 }

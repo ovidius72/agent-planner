@@ -72,7 +72,8 @@ The core planning model lives outside Pi, Claude Code, or any other harness. Ada
 ## Documentation
 
 - [`docs/setup-claude-code.md`](./docs/setup-claude-code.md) — Claude Code MCP + slash-command setup.
-- [`docs/setup-codex.md`](./docs/setup-codex.md) — Codex MCP alignment and public planner schema.
+- [`docs/setup-codex.md`](./docs/setup-codex.md) — Codex MCP + skill setup.
+- [`docs/setup-opencode.md`](./docs/setup-opencode.md) — OpenCode MCP + `/planner` command setup.
 - [`docs/setup-zed.md`](./docs/setup-zed.md) — Zed MCP setup (custom context server, no extension required).
 - [`docs/planner-schema.json`](./docs/planner-schema.json) — public JSON schema for the `.planner/` workspace (generated from `@agent-plan/core` Zod schemas).
 - [`AGENTS.md`](./AGENTS.md) — operational rules for agents working on Agent Plan itself.
@@ -83,7 +84,7 @@ Agent Plan is distributed to AI coding harnesses through a **self-hosted plugin 
 
 ### How plugins work
 
-A plugin does **not** reimplement planning logic. It wires a harness to the shared planning core (`@agent-plan/mcp`, the MCP stdio server, backed by `@agent-plan/core`) and provides harness-specific integration: a slash-command router, a non-blocking session-start notification, and the MCP server declaration.
+A plugin does **not** reimplement planning logic. It wires a harness to the shared planning core (`@agent-plan/mcp`, the MCP stdio server, backed by `@agent-plan/core`) and provides harness-specific integration: command/skill routing where the harness supports it, lifecycle notifications where available, and the MCP server declaration.
 
 ```text
 plugins/
@@ -93,20 +94,28 @@ plugins/
     skills/planner/SKILL.md       /planner routing (derived from _shared/)
     hooks/hooks.json              SessionStart non-blocking notify
     scripts/notify-session-start.sh
-  codex/                      Codex plugin (planned)
+  codex/                      Codex plugin (ready: MCP + skill)
+    plugin.json                 portable Agent Plugins manifest
+    .codex-plugin/plugin.json   Codex compatibility manifest
+    mcp.json / .mcp.json        @agent-plan/mcp stdio server (npx)
+    skills/agent-plan/SKILL.md  Agent Plan skill (derived)
+  opencode/                   OpenCode bundle (ready: MCP + commands)
+    skills/agent-plan/SKILL.md  Agent Plan skill/guide (derived)
   _shared/                    single-source-of-truth templates
     planner-skill.md.in
     notify-session-start.sh.in
 .claude-plugin/marketplace.json   marketplace catalog (repo root, per Claude Code spec)
 ```
 
-Per-harness behavior (consistent across harnesses):
+Per-harness behavior:
 
 - The planner is **disabled by default**; nothing auto-starts.
 - `/planner load` — enable the planner, start the web dashboard (LAN-bound, dynamic port), emit a recap (status + handoff + Web UI address).
 - `/planner stop` (alias `/planner disable`) — disable the planner and stop the web.
 - The Web UI address is shown **only** on the `load` recap or via `/planner web status` — never appended to every message.
 - Planner operations (handoff, plan CRUD) are **not** code edits and are always allowed regardless of task state.
+- Claude Code and OpenCode support `/planner` routing. OpenCode also installs flat autosuggest shortcuts such as `/planner-load` and `/planner-task-start`.
+- Codex currently exposes Agent Plan through MCP tools and the `agent-plan` skill; custom `/planner ...` slash-command registration is not part of the public Codex plugin/config surface.
 
 ### Install (Claude Code, self-hosted marketplace — no approval required)
 
@@ -144,7 +153,7 @@ Or add the repo itself as a local marketplace:
 
 ### Scaffolding a new harness plugin
 
-1. Add a subdirectory under `plugins/<harness>/` with `.claude-plugin/plugin.json`, `.mcp.json`, `skills/`, `hooks/`.
+1. Add a subdirectory under `plugins/<harness>/` with the harness manifest/config files, MCP wiring, and `skills/`.
 2. Add an entry to the `HARNESSES` table in `scripts/sync-plugins.cjs`.
 3. Edit the templates in `plugins/_shared/` (never edit derived files directly).
 4. Run `pnpm plugins:sync` to regenerate derived files (`pnpm plugins:check` for the CI drift guard).
@@ -281,7 +290,7 @@ Claude Code supports a slash command `/planner ...` that routes natural command 
 
 ## Agent tools (MCP)
 
-The MCP server exposes public tools using the `planner-*` namespace. These tools are called **by AI agents** (Claude Code, Codex, Zed), not by humans. Human users should use the `/planner ...` slash commands instead.
+The MCP server exposes public tools using the `planner-*` namespace. These tools are called **by AI agents** (Claude Code, Codex, Zed, OpenCode), not by humans. Human users should use `/planner ...` where the harness supports custom commands (Claude Code and OpenCode), or the `agent-plan` skill / natural-language planner requests in Codex.
 
 Current Phase 1 tools include:
 
@@ -404,11 +413,62 @@ Example `.mcp.json`:
 
 Project-local setup also does not initialize `.planner/`. Run `/planner init` when you want planning enabled in that repo.
 
-### Local development setup
+## Recommended Codex setup
 
-Before npm publication, use the built local CLI:
+Install Agent Plan globally from npm:
 
 ```bash
+npm install -g agent-plan
+```
+
+Then configure Codex once at user scope:
+
+```bash
+agent-plan setup codex --user --force
+```
+
+For a single project, run this inside that project instead:
+
+```bash
+agent-plan setup codex --project --force
+```
+
+This writes Codex MCP configuration to `.codex/config.toml` or
+`~/.codex/config.toml` and installs the `agent-plan` skill. Use `--local` only
+when testing an unpublished checkout build.
+
+## Recommended OpenCode setup
+
+Install Agent Plan globally from npm:
+
+```bash
+npm install -g agent-plan
+```
+
+Then configure OpenCode once at user scope:
+
+```bash
+agent-plan setup opencode --user --force
+```
+
+For a single project, run this inside that project instead:
+
+```bash
+agent-plan setup opencode --project --force
+```
+
+This writes OpenCode MCP configuration plus `/planner` command routing.
+OpenCode also gets flat command aliases such as `/planner-load` and
+`/planner-task-start` for command-list discovery. Use `--local` only when
+testing an unpublished checkout build.
+
+### Local development setup
+
+For unpublished local changes, use the built local CLI:
+
+```bash
+pnpm --filter @agent-plan/core build
+pnpm --filter @agent-plan/server build
 pnpm --filter @agent-plan/mcp build
 pnpm --filter agent-plan build
 ```
@@ -417,12 +477,16 @@ Project-local local setup:
 
 ```bash
 node /Users/antonio/projects/agent-plan/packages/agent-plan/dist/index.js setup claude-code --project --local
+node /Users/antonio/projects/agent-plan/packages/agent-plan/dist/index.js setup codex --project --local
+node /Users/antonio/projects/agent-plan/packages/agent-plan/dist/index.js setup opencode --project --local
 ```
 
 User-scope local setup:
 
 ```bash
 node /Users/antonio/projects/agent-plan/packages/agent-plan/dist/index.js setup claude-code --user --local
+node /Users/antonio/projects/agent-plan/packages/agent-plan/dist/index.js setup codex --user --local
+node /Users/antonio/projects/agent-plan/packages/agent-plan/dist/index.js setup opencode --user --local
 ```
 
 ---
@@ -818,7 +882,8 @@ packages/
   pi-adapter/      Pi extension adapter
 plugins/
   claude-code/     Claude Code plugin (marketplace bundle)
-  codex/           Codex plugin (planned)
+  codex/           Codex plugin bundle (MCP + skill)
+  opencode/        OpenCode setup/plugin bundle (MCP + commands)
   _shared/         single-source-of-truth templates for plugins
 .claude-plugin/marketplace.json   self-hosted marketplace catalog (repo root)
 scripts/
@@ -957,7 +1022,7 @@ This repository is a pnpm workspace. Only some packages are published to npm.
 - `@agent-plan/core` — schemas, persistence, ordering, status rollups, rendering
 - `@agent-plan/mcp` — MCP stdio server
 - `@agent-plan/server` — local HTTP/WebSocket server
-- `agent-plan` — CLI (`init`, `mcp`, `setup claude-code`, `export`, `guard pre-tool-use`)
+- `agent-plan` — CLI (`init`, `mcp`, `setup claude-code`, `setup codex`, `setup opencode`, `export`, `guard pre-tool-use`)
 - `@agent-plan/pi-adapter` — Pi extension adapter
 
 **Private (not published)**:

@@ -8,6 +8,8 @@ CLI package for Agent Plan.
 - `agent-plan mcp`
 - `agent-plan export`
 - `agent-plan setup claude-code`
+- `agent-plan setup codex`
+- `agent-plan setup opencode`
 - `agent-plan guard pre-tool-use`
 
 See the repository root README for full documentation:

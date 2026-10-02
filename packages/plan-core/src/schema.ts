@@ -432,6 +432,13 @@ export const FeaturesDocumentSchema = z.object({
   features: z.array(FeatureSchema),
 });
 
+/** Durable tombstones for feature ids that must never be resurrected by a stale snapshot. */
+export const FeatureDeletionTombstonesSchema = z.object({
+  deletions: z.record(TimestampSchema).default({}),
+});
+
+export type FeatureDeletionTombstones = z.infer<typeof FeatureDeletionTombstonesSchema>;
+
 export const MacroTaskSchema = z.object({
   id: z.string().regex(/^MT-\d{3}$/),
   title: z.string().min(1),

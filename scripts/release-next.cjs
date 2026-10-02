@@ -35,16 +35,21 @@ function writeVer(dir, v) { const p = pkgPath(dir); const j = JSON.parse(fs.read
 // Bump them on every `next` push so /plugin marketplace update detects a new
 // version and refreshes the plugin files (matching release.cjs's stable behavior).
 const PLUGIN_FILES = {
-  manifest: path.join(root, "plugins", "claude-code", ".claude-plugin", "plugin.json"),
+  manifests: [
+    path.join(root, "plugins", "claude-code", ".claude-plugin", "plugin.json"),
+    path.join(root, "plugins", "codex", "plugin.json"),
+    path.join(root, "plugins", "codex", ".codex-plugin", "plugin.json"),
+  ],
   marketplace: path.join(root, ".claude-plugin", "marketplace.json"),
 };
-function readPluginVersion() { return JSON.parse(fs.readFileSync(PLUGIN_FILES.manifest, "utf8")).version; }
+function readPluginVersion() { return JSON.parse(fs.readFileSync(PLUGIN_FILES.manifests[0], "utf8")).version; }
 function bumpPatch(v) { const [M, m, p] = v.split(".").map(Number); return `${M}.${m}.${p + 1}`; }
 function writePluginVersion(version) {
-  const mp = PLUGIN_FILES.manifest;
-  const mj = JSON.parse(fs.readFileSync(mp, "utf8"));
-  mj.version = version;
-  fs.writeFileSync(mp, JSON.stringify(mj, null, 2) + "\n");
+  for (const mp of PLUGIN_FILES.manifests) {
+    const mj = JSON.parse(fs.readFileSync(mp, "utf8"));
+    mj.version = version;
+    fs.writeFileSync(mp, JSON.stringify(mj, null, 2) + "\n");
+  }
   const mk = PLUGIN_FILES.marketplace;
   const mkj = JSON.parse(fs.readFileSync(mk, "utf8"));
   mkj.version = version;
@@ -77,7 +82,7 @@ const pluginCur = readPluginVersion();
 const pluginTarget = bumpPatch(pluginCur);
 console.log(`\n› Prerelease bump: ${cur} → ${target}  (${dryRun ? "DRY-RUN" : "LIVE"})`);
 for (const p of PACKAGES) console.log(`    ${p.name.padEnd(26)} ${readVer(p.dir)} → ${target}`);
-console.log(`    ${"plugin (claude-code)".padEnd(26)} ${pluginCur} → ${pluginTarget}`);
+console.log(`    ${"plugins".padEnd(26)} ${pluginCur} → ${pluginTarget}`);
 
 if (dryRun) { console.log(`\n[dry-run] Would: bump all to ${target}, plugin to ${pluginTarget}, run the canonical final verification gate, commit, push (triggers publish.yml → @next).`); process.exit(0); }
 

@@ -1,0 +1,144 @@
+{
+  "id": "bbfd191e-2a98-49df-96fb-47f043853246",
+  "featureId": "d7f44a33-ddc5-4d43-ab51-a7d0afed5633",
+  "number": 109,
+  "shortId": "K852D",
+  "priority": 1,
+  "slug": "harden-deletion-persistence-and-add-concurrency-regression-coverage",
+  "title": "Harden deletion persistence and add concurrency regression coverage",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Make feature deletion durable against stale full-document writes and prove it with focused tests.",
+  "description": "Implement and verify stale-write protection for feature deletion. Current state: `packages/plan-core/src/feature-delete.ts` performs locked cascade/unlink deletion and a post-write fresh-read check; `packages/plan-core/src/plan-store.ts` stores features per file, supports legacy migration, and still permits a stale `saveFeatures` document to reintroduce a previously deleted feature ID. Work includes selecting the smallest compatible persistence guard, updating the central deletion/storage path without breaking migration or legitimate feature creation, and adding a temporary-fixture regression that models a stale feature snapshot saved after cascade deletion. Preserve phase deletion cleanup, feature backup/recovery semantics, generated view updates, lock re-entrancy, and all existing adapter/API contracts. Verification should use the affected plan-core tests first and avoid broad gates until the phase is ready to close.",
+  "descriptionUpdatedAt": "2026-09-29T19:42:03.944Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "24eaf055-4e8a-4c58-9174-f2e6f884af86"
+  ],
+  "tasks": [
+    {
+      "id": "24eaf055-4e8a-4c58-9174-f2e6f884af86",
+      "phaseId": "bbfd191e-2a98-49df-96fb-47f043853246",
+      "number": 445,
+      "shortId": "VQW6U",
+      "priority": 1,
+      "shortName": "stale-delete-guard",
+      "title": "Prevent stale saveFeatures from resurrecting cascade-deleted features",
+      "status": "done",
+      "description": "Fix the persistence race where a stale full feature document can restore a feature after `deleteFeatureCascade` has removed it. Relevant code: `packages/plan-core/src/feature-delete.ts` owns locked cascade/unlink deletion and fresh-read verification; `packages/plan-core/src/plan-store.ts` owns `saveFeatures`, `saveFeaturesRaw`, per-feature files, legacy fallback/migration, writer locking, and backup handling; existing regression coverage is in `packages/plan-core/test/feature-delete.test.mjs` and `packages/plan-core/test/per-feature-storage.test.mjs`. First map every saveFeatures caller and distinguish maintenance/migration replacement from normal writes. Implement a durable stale-write guard that preserves legitimate migrations and new features while rejecting or ignoring deleted IDs from stale snapshots. Add a focused temporary-fixture test that loads a stale snapshot, cascade-deletes the feature and phase, attempts the stale save, and asserts both remain absent; retain tests for zero-phase, unlink, missing-feature, generated-output, and backup behavior. Run only the smallest affected plan-core test targets during implementation, and record any compatibility decision in the task.\n\n---\n**Completion summary:**\nImplemented stale-write protection for cascade-deleted features. Added `FeatureDeletionTombstonesSchema` in `packages/plan-core/src/schema.ts`; `PlanStore` now persists deletion timestamps in `.planner/.local/feature-deletion-tombstones.json`, rejects stale `saveFeatures`/`saveFeature` attempts for tombstoned IDs with `PLAN_STALE_WRITE`, and fails closed on malformed tombstone data. `deleteFeatureCascade` records the tombstone immediately after removing the feature and before child-phase work. Added regression coverage in `packages/plan-core/test/feature-delete.test.mjs` proving a stale snapshot cannot restore a deleted feature while its phase remains deleted. Verification: `pnpm --filter @agent-plan/core build` passed; focused `feature-delete.test.mjs` and `per-feature-storage.test.mjs` passed (14/14); a separate temporary cross-PlanStore probe also confirmed rejection and zero remaining features; `git diff --check` passed. Existing migration, orphan-reconcile, cascade, unlink, zero-phase, missing-feature, and generated-readback tests remain green. No commit or push performed. No known remaining work for this task; broader workspace verification remains intentionally pending for phase closure.",
+      "descriptionUpdatedAt": "2026-09-29T20:07:27.110Z",
+      "notes": "Implemented durable deletion tombstones in `packages/plan-core/src/schema.ts` and `packages/plan-core/src/plan-store.ts`; `saveFeatures` and `saveFeature` now reject stale writes for deleted IDs with PLAN_STALE_WRITE. `packages/plan-core/src/feature-delete.ts` records the tombstone before child-phase work. Added stale snapshot regression to `packages/plan-core/test/feature-delete.test.mjs`. Focused build/tests pass, including a cross-PlanStore temporary-fixture probe.",
+      "statusLog": [
+        {
+          "id": "24eaf055-4e8a-4c58-9174-f2e6f884af86-check-001-planned-in-progress",
+          "date": "2026-09-29T19:42:28.524Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "24eaf055-4e8a-4c58-9174-f2e6f884af86-check-002-in-progress-done",
+          "date": "2026-09-29T20:07:27.108Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Implemented stale-write protection for cascade-deleted features. Added `FeatureDeletionTombstonesSchema` in `packages/plan-core/src/schema.ts`; `PlanStore` now persists deletion timestamps in `.planner/.local/feature-deletion-tombstones.json`, rejects stale `saveFeatures`/`saveFeature` attempts for tombstoned IDs with `PLAN_STALE_WRITE`, and fails closed on malformed tombstone data. `deleteFeatureCascade` records the tombstone immediately after removing the feature and before child-phase work. Added regression coverage in `packages/plan-core/test/feature-delete.test.mjs` proving a stale snapshot cannot restore a deleted feature while its phase remains deleted. Verification: `pnpm --filter @agent-plan/core build` passed; focused `feature-delete.test.mjs` and `per-feature-storage.test.mjs` passed (14/14); a separate temporary cross-PlanStore probe also confirmed rejection and zero remaining features; `git diff --check` passed. Existing migration, orphan-reconcile, cascade, unlink, zero-phase, missing-feature, and generated-readback tests remain green. No commit or push performed. No known remaining work for this task; broader workspace verification remains intentionally pending for phase closure."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [
+        {
+          "id": "c07af0f0-8f8e-4cd8-ae8b-51e6d954791d",
+          "title": "Persist deletion tombstones for stale feature writes",
+          "decision": "Record deleted feature IDs with deletion timestamps under `.planner/.local/feature-deletion-tombstones.json`; full-document and granular feature saves reject writes for tombstoned IDs that are no longer present.",
+          "rationale": "A stale full feature snapshot can otherwise reinsert a deleted feature after the cascade has removed its phases. A durable per-ID tombstone protects concurrent processes and restarts without changing the intentional omission semantics of saveFeatures or migration replacement flows.",
+          "implementationNotes": "`deleteFeatureCascade` marks the tombstone immediately after removing the feature and before child-phase work. Existing IDs continue to use optimistic updatedAt checks; new IDs remain writable. The tombstone file is transient/ignored with `.local/` and malformed tombstones fail closed rather than silently disabling protection.",
+          "acceptedAt": "2026-09-29T20:06:53.844Z"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "24eaf055-4e8a-4c58-9174-f2e6f884af86-check-001-map-savefeatures-savefeaturesraw-callers-and-identify-the-compatibility-boundary-for-stale-write-protection",
+          "number": 1,
+          "title": "Map saveFeatures/saveFeaturesRaw callers and identify the compatibility boundary for stale-write protection",
+          "checked": true
+        },
+        {
+          "id": "24eaf055-4e8a-4c58-9174-f2e6f884af86-check-002-implement-the-persistence-guard-in-plan-core-without-weakening-migration-or-creation-flows",
+          "number": 2,
+          "title": "Implement the persistence guard in plan-core without weakening migration or creation flows",
+          "checked": true
+        },
+        {
+          "id": "24eaf055-4e8a-4c58-9174-f2e6f884af86-check-003-add-regression-coverage-for-stale-snapshot-resurrection-and-preserve-existing-deletion-cases",
+          "number": 3,
+          "title": "Add regression coverage for stale snapshot resurrection and preserve existing deletion cases",
+          "checked": true
+        },
+        {
+          "id": "24eaf055-4e8a-4c58-9174-f2e6f884af86-check-004-run-focused-plan-core-tests-and-inspect-the-final-diff-for-unintended-api-or-storage-changes",
+          "number": 4,
+          "title": "Run focused plan-core tests and inspect the final diff for unintended API or storage changes",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-29T19:42:28.524Z",
+      "completedAt": "2026-09-29T20:07:27.108Z",
+      "createdAt": "2026-09-29T19:42:13.255Z",
+      "updatedAt": "2026-09-29T20:07:27.108Z",
+      "sessionInfo": [
+        {
+          "sessionId": "pi:01a0eea5-cc28-7637-93c1-a3e29049b988",
+          "createdAt": "2026-09-29T19:42:28.425Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:42:03.944Z",
+  "updatedAt": "2026-09-29T20:07:27.108Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "8656f9f8-fbcd-4fb8-af47-31f80b7f64db",
+      "date": "2026-09-29T19:42:28.550Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "673f6a9b-b4ff-4cf5-b0b1-c30fddba2153",
+      "date": "2026-09-29T20:07:27.141Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0eea5-cc28-7637-93c1-a3e29049b988",
+      "createdAt": "2026-09-29T19:42:28.425Z"
+    }
+  ]
+}

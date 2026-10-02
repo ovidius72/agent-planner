@@ -38,6 +38,24 @@ const HARNESSES = [
       { from: "guard-pre-tool-use.sh.in", to: "scripts/guard-pre-tool-use.sh", mode: 0o755 },
     ],
   },
+  {
+    name: "codex",
+    dir: path.join(pluginsDir, "codex"),
+    HARNESS: "Codex",
+    LOAD_COMMAND: "ask Codex to load Agent Plan",
+    targets: [
+      { from: "../../packages/plan-core/planner-skill.md", to: "skills/agent-plan/SKILL.md", mode: 0o644, frontmatterDescription: true },
+    ],
+  },
+  {
+    name: "opencode",
+    dir: path.join(pluginsDir, "opencode"),
+    HARNESS: "OpenCode",
+    LOAD_COMMAND: "/planner load",
+    targets: [
+      { from: "../../packages/plan-core/planner-skill.md", to: "skills/agent-plan/SKILL.md", mode: 0o644, frontmatterDescription: true },
+    ],
+  },
 ];
 
 function substitute(text, vars) {
@@ -46,6 +64,14 @@ function substitute(text, vars) {
     out = out.split(`{{${key}}}`).join(value);
   }
   return out;
+}
+
+function renderTemplate(text, vars, target) {
+  const rendered = substitute(text, vars);
+  if (target.frontmatterDescription) {
+    return rendered.replace(/^summary:/m, "description:");
+  }
+  return rendered;
 }
 
 function read(p) {
@@ -69,7 +95,7 @@ for (const h of HARNESSES) {
       process.exitCode = 1;
       continue;
     }
-    const rendered = substitute(read(fromPath), { HARNESS: h.HARNESS, LOAD_COMMAND: h.LOAD_COMMAND });
+    const rendered = renderTemplate(read(fromPath), { HARNESS: h.HARNESS, LOAD_COMMAND: h.LOAD_COMMAND }, t);
     const relTo = path.relative(root, toPath);
     if (fs.existsSync(toPath)) {
       const current = read(toPath);

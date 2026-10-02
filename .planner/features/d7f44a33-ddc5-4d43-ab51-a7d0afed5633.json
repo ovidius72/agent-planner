@@ -1,0 +1,47 @@
+{
+  "id": "d7f44a33-ddc5-4d43-ab51-a7d0afed5633",
+  "number": 22,
+  "shortId": "6293H",
+  "priority": 21,
+  "name": "Prevent stale feature resurrection after cascade deletion",
+  "description": "Regression hardening for feature deletion under concurrent or stale full-document writes. Current implementation: `packages/plan-core/src/feature-delete.ts` centralizes `deleteFeatureCascade`, acquires the batch writer lock, deletes or unlinks owned phases, writes generated views, and verifies that the feature is absent from a fresh read. `packages/plan-core/src/plan-store.ts` exposes full-document `saveFeatures`/`saveFeaturesRaw` paths used by maintenance and migration flows; a stale snapshot can currently reinsert a feature ID that `deleteFeatureCascade` already removed, while the phase remains deleted. Goals: preserve atomic deletion semantics across concurrent writers, prevent deleted feature IDs from being resurrected by stale snapshots, keep legitimate migration/creation flows working, and add focused regression coverage for the exact feature-present/phase-absent symptom. Preserve existing cascade and unlink behavior, canonical feature references, generated-output synchronization, and cross-harness callers.",
+  "descriptionUpdatedAt": "2026-09-29T19:41:57.088Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "bbfd191e-2a98-49df-96fb-47f043853246"
+  ],
+  "dependsOn": [],
+  "statusLog": [
+    {
+      "id": "062a3c09-906f-4ad5-8db1-c3de714f9ff1",
+      "date": "2026-09-29T19:42:28.622Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "240a2800-8c34-4fd0-9c11-8237fd972f11",
+      "date": "2026-09-29T20:07:27.227Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-09-29T19:41:56.950Z",
+  "updatedAt": "2026-09-29T19:41:56.950Z",
+  "sessionInfo": [
+    {
+      "sessionId": "pi:01a0eea5-cc28-7637-93c1-a3e29049b988",
+      "createdAt": "2026-09-29T19:42:28.425Z"
+    }
+  ]
+}

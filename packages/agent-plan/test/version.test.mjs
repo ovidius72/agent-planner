@@ -76,15 +76,19 @@ test("CLI init and export operate on an isolated workspace", async () => {
   assert.equal(existsSync(join(cwd, ".planner", "EXPORT.md")), true);
 });
 
-test("Claude and Codex setup preserve manifest-based version routing", async () => {
+test("Claude, Codex, and OpenCode setup preserve manifest-based version routing", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "agent-plan-setup-version-"));
   roots.push(cwd);
 
   const codex = runCli(["setup", "codex", "--project", "--local"], { cwd });
   assert.equal(codex.status, 0, codex.stderr);
-  const codexConfig = JSON.parse(readFileSync(join(cwd, ".codex", "mcp.json"), "utf-8"));
-  assert.equal(codexConfig.mcpServers["agent-plan"].command, "node");
-  assert.deepEqual(codexConfig.mcpServers["agent-plan"].args.slice(-1), ["mcp"]);
+  const codexConfig = readFileSync(join(cwd, ".codex", "config.toml"), "utf-8");
+  assert.match(codexConfig, /\[mcp_servers\.agent-plan\]/);
+  assert.match(codexConfig, /command = "node"/);
+  assert.match(codexConfig, /args = \[".*index\.js", "mcp"\]/);
+  const codexSkill = readFileSync(join(cwd, ".codex", "skills", "agent-plan", "SKILL.md"), "utf-8");
+  assert.match(codexSkill, /# Agent Plan operating guide/);
+  assert.match(codexSkill, /^description:/m);
 
   const claude = runCli(["setup", "claude-code", "--project", "--local"], { cwd });
   assert.equal(claude.status, 0, claude.stderr);
@@ -114,6 +118,16 @@ test("Claude and Codex setup preserve manifest-based version routing", async () 
   assert.doesNotMatch(plannerCommand, /read the exact lineage in this order/);
   const claudeSettings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
   assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write|NotebookEdit|Bash"));
+
+  const opencode = runCli(["setup", "opencode", "--project", "--local"], { cwd });
+  assert.equal(opencode.status, 0, opencode.stderr);
+  const opencodeConfig = JSON.parse(readFileSync(join(cwd, "opencode.json"), "utf-8"));
+  assert.deepEqual(opencodeConfig.mcp.servers["agent-plan"].command.slice(-1), ["mcp"]);
+  assert.equal(opencodeConfig.mcp.servers["agent-plan"].command[0], "node");
+  assert.match(opencodeConfig.commands.planner.template, /# Agent Plan operating guide/);
+  assert.match(opencodeConfig.commands.planner.template, /\/planner \$ARGUMENTS/);
+  assert.match(opencodeConfig.commands["planner-load"].template, /\/planner load/);
+  assert.match(opencodeConfig.commands["planner-task-start"].template, /\/planner task start \$ARGUMENTS/);
 });
 
 test("local setup saves the real CLI path, not the link it was started through", async () => {
