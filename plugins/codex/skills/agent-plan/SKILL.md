@@ -1,7 +1,6 @@
-<!-- agent-plan-managed-skill sha256:6631c2a0a8b5d84b28c7896d6fad94e01a673760c0fe48d6239cc1b6a433ed0e -->
 ---
 name: agent-plan
-summary: Cross-harness operating guide for Agent Plan projects.
+description: Cross-harness operating guide for Agent Plan projects.
 ---
 
 # Agent Plan operating guide

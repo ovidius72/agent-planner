@@ -167,3 +167,35 @@ shapes mirror `@agent-plan/mcp` for cross-harness parity. Bumped
 | 1. Direct install | none | selective | `claude --plugin-dir ./plugins/claude-code` or `/plugin install <git-url>` |
 | 2. Self-hosted marketplace | none | opt-in | `/plugin marketplace add ovidius72/agent-planner` (chosen now) |
 | 3. Official directory | yes (automated review) | all users | Anthropic submission form (optional future) |
+
+---
+
+## F011/P114 — Codex and OpenCode Plugin Setup
+
+### D11 — Codex uses MCP plus skill instead of a custom slash command
+**Decision.** Codex support ships as MCP configuration plus an `agent-plan`
+skill/plugin bundle. Agent Plan must not claim Codex has a native custom
+`/planner ...` slash command or nested autosuggestion until Codex exposes a
+public API for it.
+
+**Rationale.** The current Codex CLI/plugin surfaces expose MCP servers,
+plugins, and skills, but no documented custom slash-command registration
+surface. Promising `/planner` in Codex would mislead users.
+
+**Implementation.** `agent-plan setup codex` writes `.codex/config.toml` and
+`.codex/skills/agent-plan/SKILL.md`. `plugins/codex/` ships `plugin.json`,
+`.codex-plugin/plugin.json`, `mcp.json` / `.mcp.json`, and a generated skill.
+
+### D12 — OpenCode gets /planner plus flat autosuggest aliases
+**Decision.** OpenCode support uses `mcp.servers.agent-plan` plus a
+`commands.planner` entry for `/planner` arguments, and installs flat shortcut
+commands for discovery instead of pretending nested segment autosuggestion
+exists.
+
+**Rationale.** OpenCode v2 command configuration supports a slash command name
+with a template; nested segment-level autosuggestion for every `/planner`
+subcommand is not exposed in the verified config/CLI surface.
+
+**Implementation.** `agent-plan setup opencode` writes `opencode.json` or
+`~/.config/opencode/opencode.json` with `commands.planner` and shortcuts such
+as `planner-load`, `planner-task-start`, and `planner-web-status`.
