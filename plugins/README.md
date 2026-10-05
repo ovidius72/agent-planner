@@ -10,13 +10,15 @@ libraries live in `packages/` and are published to npm; plugins reference them.
 | Plugin | Harness | Status | Install |
 |---|---|---|---|
 | `claude-code/` | Claude Code | ready | `/plugin marketplace add ovidius72/agent-planner` → `/plugin install agent-plan@agent-plan-marketplace` |
-| `codex/` | Codex | ready | Codex plugin marketplace/local install + `agent-plan setup codex` |
+| `codex/` | Codex | ready | `agent-plan setup codex --user --force` or `codex plugin add agent-plan@agent-plan` |
 | `opencode/` | OpenCode | ready | `agent-plan setup opencode` |
 | `_shared/` | — | shared templates | consumed by plugins at build/sync time |
 
 ## Distribution model
 
-We use a **self-hosted marketplace** (no Anthropic approval required):
+We use self-hosted marketplaces:
+
+### Claude Code
 
 1. `.claude-plugin/marketplace.json` (at the **repo root**) lists the
    `agent-plan` plugin and points to its source at `./plugins/claude-code`.
@@ -28,6 +30,19 @@ We use a **self-hosted marketplace** (no Anthropic approval required):
 
 > Note: per the Claude Code plugin spec, `marketplace.json` must live at the
 > repo root in `.claude-plugin/`, not inside the plugin directory.
+
+### Codex
+
+1. `.agents/plugins/marketplace.json` (at the **repo root**) lists the
+   `agent-plan` plugin and points to its source at `./plugins/codex`.
+2. `agent-plan setup codex --user --force` registers and installs the Codex
+   marketplace plugin when the `codex` CLI is available.
+3. Manual equivalent:
+
+```bash
+codex plugin marketplace add https://github.com/ovidius72/agent-planner --ref main --sparse .agents/plugins --sparse plugins/codex
+codex plugin add agent-plan@agent-plan
+```
 
 Optional future step: submit to the official `claude-plugins-official`
 directory via the Anthropic submission form for maximum reach (requires public
@@ -65,6 +80,7 @@ The **marketplace** lives at the repo root (not under `plugins/`):
 
 ```
 .claude-plugin/marketplace.json   # lists the agent-plan plugin → ./plugins/claude-code
+.agents/plugins/marketplace.json  # lists the agent-plan plugin → ./plugins/codex
 ```
 
 ## Development / local testing

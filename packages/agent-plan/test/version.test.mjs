@@ -1,7 +1,7 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, realpathSync, symlinkSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmodSync, existsSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,10 +124,46 @@ test("Claude, Codex, and OpenCode setup preserve manifest-based version routing"
   const opencodeConfig = JSON.parse(readFileSync(join(cwd, "opencode.json"), "utf-8"));
   assert.deepEqual(opencodeConfig.mcp.servers["agent-plan"].command.slice(-1), ["mcp"]);
   assert.equal(opencodeConfig.mcp.servers["agent-plan"].command[0], "node");
-  assert.match(opencodeConfig.commands.planner.template, /# Agent Plan operating guide/);
-  assert.match(opencodeConfig.commands.planner.template, /\/planner \$ARGUMENTS/);
-  assert.match(opencodeConfig.commands["planner-load"].template, /\/planner load/);
-  assert.match(opencodeConfig.commands["planner-task-start"].template, /\/planner task start \$ARGUMENTS/);
+  assert.equal(opencodeConfig.commands, undefined);
+  assert.match(opencodeConfig.command.planner.template, /# Agent Plan operating guide/);
+  assert.match(opencodeConfig.command.planner.template, /\/planner \$ARGUMENTS/);
+  assert.match(opencodeConfig.command["planner-load"].template, /\/planner load/);
+  assert.match(opencodeConfig.command["planner-task-start"].template, /\/planner task start \$ARGUMENTS/);
+});
+
+test("Codex user setup installs the Agent Plan plugin through a Codex marketplace", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "agent-plan-codex-plugin-"));
+  roots.push(cwd);
+  const bin = join(cwd, "bin");
+  const log = join(cwd, "codex-args.log");
+  writeFileSync(log, "");
+  await mkdir(bin, { recursive: true });
+  const codexShim = join(bin, "codex");
+  writeFileSync(codexShim, `#!/usr/bin/env node
+const fs = require("node:fs");
+fs.appendFileSync(process.env.CODEX_ARGS_LOG, process.argv.slice(2).join(" ") + "\\n");
+process.exit(0);
+`);
+  chmodSync(codexShim, 0o755);
+
+  const result = runCli(["setup", "codex", "--user", "--force", "--local"], {
+    cwd,
+    env: {
+      ...process.env,
+      HOME: cwd,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      CODEX_ARGS_LOG: log,
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Installed Codex Agent Plan plugin/);
+  assert.equal(existsSync(join(cwd, ".codex", "config.toml")), true);
+  const codexCalls = readFileSync(log, "utf-8");
+  assert.match(codexCalls, /^--version$/m);
+  assert.match(codexCalls, /^plugin marketplace remove agent-plan --json$/m);
+  assert.match(codexCalls, /^plugin marketplace add .* --json$/m);
+  assert.match(codexCalls, /^plugin add agent-plan@agent-plan --json$/m);
 });
 
 test("local setup saves the real CLI path, not the link it was started through", async () => {

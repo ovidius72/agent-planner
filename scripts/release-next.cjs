@@ -40,7 +40,10 @@ const PLUGIN_FILES = {
     path.join(root, "plugins", "codex", "plugin.json"),
     path.join(root, "plugins", "codex", ".codex-plugin", "plugin.json"),
   ],
-  marketplace: path.join(root, ".claude-plugin", "marketplace.json"),
+  marketplaces: [
+    path.join(root, ".claude-plugin", "marketplace.json"),
+    path.join(root, ".agents", "plugins", "marketplace.json"),
+  ],
 };
 function readPluginVersion() { return JSON.parse(fs.readFileSync(PLUGIN_FILES.manifests[0], "utf8")).version; }
 function bumpPatch(v) { const [M, m, p] = v.split(".").map(Number); return `${M}.${m}.${p + 1}`; }
@@ -50,11 +53,12 @@ function writePluginVersion(version) {
     mj.version = version;
     fs.writeFileSync(mp, JSON.stringify(mj, null, 2) + "\n");
   }
-  const mk = PLUGIN_FILES.marketplace;
-  const mkj = JSON.parse(fs.readFileSync(mk, "utf8"));
-  mkj.version = version;
-  if (Array.isArray(mkj.plugins) && mkj.plugins[0]) mkj.plugins[0].version = version;
-  fs.writeFileSync(mk, JSON.stringify(mkj, null, 2) + "\n");
+  for (const mk of PLUGIN_FILES.marketplaces) {
+    const mkj = JSON.parse(fs.readFileSync(mk, "utf8"));
+    mkj.version = version;
+    if (Array.isArray(mkj.plugins) && mkj.plugins[0]) mkj.plugins[0].version = version;
+    fs.writeFileSync(mk, JSON.stringify(mkj, null, 2) + "\n");
+  }
 }
 
 const args = process.argv.slice(2);
