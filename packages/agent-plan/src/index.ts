@@ -398,10 +398,14 @@ async function setupCodex(flags: CliFlags): Promise<void> {
   const next = upsertTomlTable(settingsPath, current, "mcp_servers.agent-plan", codexMcpTomlBlock(flags), flags.force);
   await writeFile(settingsPath, next, "utf-8");
   const skillPath = await writeCodexSkill(scope);
+  const pluginStatus = scope === "user"
+    ? setupCodexMarketplacePlugin(flags)
+    : "Codex plugin marketplace installation is user-scoped; run `agent-plan setup codex --user --force` to install the plugin.";
 
   console.log(`Configured Codex MCP server in ${settingsPath}`);
   console.log(`Configured Codex Agent Plan skill in ${skillPath}`);
-  console.log("Codex currently exposes Agent Plan through MCP tools plus the agent-plan skill. Custom /planner slash-command registration is not part of the public Codex plugin/config surface.");
+  console.log(pluginStatus);
+  console.log("Codex exposes Agent Plan through MCP tools plus the agent-plan plugin skill. Custom /planner slash-command registration is not part of the public Codex plugin/config surface.");
   if (!existsSync(plannerRoot())) {
     console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
   }
@@ -429,11 +433,89 @@ const OPENCODE_PLANNER_ALIASES: Record<string, string> = {
   "planner-web-stop": "web stop",
 };
 
+const CODEX_PLUGIN_MARKETPLACE = "agent-plan";
+const CODEX_PLUGIN_SELECTOR = "agent-plan@agent-plan";
+const CODEX_PLUGIN_GIT_SOURCE = "https://github.com/ovidius72/agent-planner";
+
+function findAncestorContaining(start: string, relativePath: string): string | undefined {
+  let dir = start;
+  while (true) {
+    if (existsSync(join(dir, relativePath))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+function codexMarketplaceAddArgs(flags: CliFlags): string[] {
+  if (flags.local) {
+    const root = findAncestorContaining(dirname(localCliPath()), join(".agents", "plugins", "marketplace.json"));
+    if (!root) {
+      throw new Error("Could not locate the local Agent Plan Codex marketplace. Build from a repository checkout or omit --local.");
+    }
+    return ["plugin", "marketplace", "add", root, "--json"];
+  }
+  return [
+    "plugin",
+    "marketplace",
+    "add",
+    CODEX_PLUGIN_GIT_SOURCE,
+    "--ref",
+    "main",
+    "--sparse",
+    ".agents/plugins",
+    "--sparse",
+    "plugins/codex",
+    "--json",
+  ];
+}
+
+function runCodex(args: string[], options: { ignoreFailure?: boolean } = {}): { ok: boolean; detail: string } {
+  const result = spawnSync("codex", args, { encoding: "utf-8" });
+  if (result.error) return { ok: false, detail: result.error.message };
+  if (result.status !== 0 && !options.ignoreFailure) {
+    return { ok: false, detail: `${result.stderr || result.stdout || `exit ${result.status}`}`.trim() };
+  }
+  return { ok: true, detail: `${result.stdout || result.stderr || ""}`.trim() };
+}
+
+function setupCodexMarketplacePlugin(flags: CliFlags): string {
+  const available = runCodex(["--version"]);
+  if (!available.ok) return `Codex plugin marketplace install skipped: codex CLI not found (${available.detail}).`;
+
+  if (flags.force) {
+    runCodex(["plugin", "remove", CODEX_PLUGIN_SELECTOR, "--json"], { ignoreFailure: true });
+    runCodex(["plugin", "marketplace", "remove", CODEX_PLUGIN_MARKETPLACE, "--json"], { ignoreFailure: true });
+  }
+
+  const addArgs = codexMarketplaceAddArgs(flags);
+  const add = runCodex(addArgs);
+  if (!add.ok) {
+    return [
+      "Codex plugin marketplace install skipped: marketplace registration failed.",
+      `Run manually: codex ${addArgs.filter((arg) => arg !== "--json").join(" ")}`,
+      add.detail ? `Detail: ${add.detail}` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  const install = runCodex(["plugin", "add", CODEX_PLUGIN_SELECTOR, "--json"]);
+  if (!install.ok) {
+    return [
+      "Codex plugin marketplace registered, but plugin installation failed.",
+      `Run manually: codex plugin add ${CODEX_PLUGIN_SELECTOR}`,
+      install.detail ? `Detail: ${install.detail}` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  return `Installed Codex Agent Plan plugin from marketplace ${CODEX_PLUGIN_MARKETPLACE} (${CODEX_PLUGIN_SELECTOR}).`;
+}
+
 function isAgentPlanOpencodeConfigured(settings: Record<string, unknown>): boolean {
   const mcp = isRecord(settings.mcp) ? settings.mcp : {};
   const servers = isRecord(mcp.servers) ? mcp.servers : {};
-  const commands = isRecord(settings.commands) ? settings.commands : {};
-  return Boolean(servers["agent-plan"] || commands.planner);
+  const command = isRecord(settings.command) ? settings.command : {};
+  const legacyCommands = isRecord(settings.commands) ? settings.commands : {};
+  return Boolean(servers["agent-plan"] || command.planner || legacyCommands.planner);
 }
 
 async function setupOpencode(flags: CliFlags): Promise<void> {
@@ -454,18 +536,26 @@ async function setupOpencode(flags: CliFlags): Promise<void> {
   mcp.servers = servers;
   settings.mcp = mcp;
 
-  const commands = isRecord(settings.commands) ? { ...settings.commands } : {};
-  commands.planner = {
+  const commandConfig = isRecord(settings.command) ? { ...settings.command } : {};
+  commandConfig.planner = {
     description: "Route Agent Plan /planner commands through the configured MCP server.",
     template: await opencodePlannerCommandTemplate(),
   };
   for (const [name, commandText] of Object.entries(OPENCODE_PLANNER_ALIASES)) {
-    commands[name] = {
+    commandConfig[name] = {
       description: `Agent Plan shortcut for /planner ${commandText.replace(" $ARGUMENTS", " ...")}.`,
       template: await opencodePlannerCommandTemplate(commandText),
     };
   }
-  settings.commands = commands;
+  settings.command = commandConfig;
+
+  if (isRecord(settings.commands)) {
+    const legacyCommands = { ...settings.commands };
+    delete legacyCommands.planner;
+    for (const name of Object.keys(OPENCODE_PLANNER_ALIASES)) delete legacyCommands[name];
+    if (Object.keys(legacyCommands).length > 0) settings.commands = legacyCommands;
+    else delete settings.commands;
+  }
 
   await writeJsonFile(settingsPath, settings);
   console.log(`Configured OpenCode MCP server and /planner command in ${settingsPath}`);

@@ -36,6 +36,8 @@ The command writes:
   scope.
 - `.codex/skills/agent-plan/SKILL.md` for project scope, or
   `~/.codex/skills/agent-plan/SKILL.md` for user scope.
+- For user scope, the Codex marketplace plugin is also registered and installed
+  when the `codex` CLI is available.
 
 The MCP config block is:
 
@@ -46,7 +48,8 @@ args = ["agent-plan", "mcp"]
 ```
 
 With `--local`, `command` becomes `node` and `args` point at the resolved built
-CLI path plus `mcp`.
+CLI path plus `mcp`; the Codex marketplace source is the local repository
+checkout.
 
 Agent Plan never auto-starts the planner or web dashboard. Ask Codex to load
 Agent Plan when you want planner context; this routes to `planner-load`.
@@ -75,6 +78,26 @@ The repository also ships `plugins/codex/`:
 - `mcp.json` / `.mcp.json` — Agent Plan MCP server wiring through
   `npx -y @agent-plan/mcp`.
 - `skills/agent-plan/SKILL.md` — generated Agent Plan operating guide.
+
+Codex discovers that bundle through the repo-root marketplace catalog:
+
+```text
+.agents/plugins/marketplace.json
+```
+
+Manual install equivalent:
+
+```bash
+codex plugin marketplace add https://github.com/ovidius72/agent-planner --ref main --sparse .agents/plugins --sparse plugins/codex
+codex plugin add agent-plan@agent-plan
+```
+
+For local development from this repository:
+
+```bash
+codex plugin marketplace add .
+codex plugin add agent-plan@agent-plan
+```
 
 ## Planner root resolution
 

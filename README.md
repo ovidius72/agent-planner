@@ -105,6 +105,7 @@ plugins/
     planner-skill.md.in
     notify-session-start.sh.in
 .claude-plugin/marketplace.json   marketplace catalog (repo root, per Claude Code spec)
+.agents/plugins/marketplace.json  Codex marketplace catalog (repo root)
 ```
 
 Per-harness behavior:
@@ -124,9 +125,19 @@ Per-harness behavior:
 /plugin install agent-plan@agent-plan-marketplace
 ```
 
+### Install (Codex marketplace)
+
+The CLI setup below installs the Codex marketplace plugin automatically at user
+scope when the `codex` CLI is available. Manual equivalent:
+
+```bash
+codex plugin marketplace add https://github.com/ovidius72/agent-planner --ref main --sparse .agents/plugins --sparse plugins/codex
+codex plugin add agent-plan@agent-plan
+```
+
 ### Update
 
-The plugin version is bumped by the release scripts together with the npm packages — `pnpm release` for the stable channel and `pnpm release:next` for the `next` prerelease channel (the plugin has its own version track, independent from the npm package versions). Both `plugins/claude-code/.claude-plugin/plugin.json` and the repo-root `.claude-plugin/marketplace.json` are updated, so `/plugin marketplace update` detects the new version and refreshes the plugin files. The MCP server auto-updates independently because `.mcp.json` runs `npx -y @agent-plan/mcp`, which fetches the latest published `@agent-plan/mcp` from npm.
+The plugin version is bumped by the release scripts together with the npm packages — `pnpm release` for the stable channel and `pnpm release:next` for the `next` prerelease channel (the plugin has its own version track, independent from the npm package versions). The Claude Code plugin manifests, Codex plugin manifests, `.claude-plugin/marketplace.json`, and `.agents/plugins/marketplace.json` are updated, so marketplace clients detect the new version and refresh the plugin files. The MCP server auto-updates independently because plugin MCP declarations run `npx -y @agent-plan/mcp`, which fetches the latest published `@agent-plan/mcp` from npm.
 
 **As a user** — after a new release is merged to `main`, refresh in Claude Code:
 
@@ -136,7 +147,7 @@ The plugin version is bumped by the release scripts together with the npm packag
 
 Then restart Claude Code in the project so the MCP server re-launches with the new `@agent-plan/mcp`.
 
-**As a maintainer** — run the release script for the target channel (`pnpm release` for stable, `pnpm release:next` for `next`). It bumps the plugin version in `plugins/claude-code/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` so `/plugin marketplace update` detects the new version and refreshes the plugin files. Do not edit the `version` fields by hand: the scripts own them, and an unchanged pinned version makes Claude Code report "already at the latest" and skip the refresh (see anthropics/claude-code#79950).
+**As a maintainer** — run the release script for the target channel (`pnpm release` for stable, `pnpm release:next` for `next`). It bumps the plugin versions in the Claude Code and Codex plugin manifests plus both marketplace catalogs. Do not edit the `version` fields by hand: the scripts own them, and an unchanged pinned version can make marketplace clients report "already at the latest" and skip the refresh.
 
 ### Local development / testing
 
@@ -434,8 +445,10 @@ agent-plan setup codex --project --force
 ```
 
 This writes Codex MCP configuration to `.codex/config.toml` or
-`~/.codex/config.toml` and installs the `agent-plan` skill. Use `--local` only
-when testing an unpublished checkout build.
+`~/.codex/config.toml`, installs the `agent-plan` skill, and for user scope
+registers/installs the Codex marketplace plugin when the `codex` CLI is
+available. Use `--local` only when testing an unpublished checkout build; in
+that mode the Codex marketplace source is the local repository checkout.
 
 ## Recommended OpenCode setup
 
@@ -457,7 +470,8 @@ For a single project, run this inside that project instead:
 agent-plan setup opencode --project --force
 ```
 
-This writes OpenCode MCP configuration plus `/planner` command routing.
+This writes OpenCode MCP configuration plus `/planner` command routing under
+OpenCode's `command` configuration key.
 OpenCode also gets flat command aliases such as `/planner-load` and
 `/planner-task-start` for command-list discovery. Use `--local` only when
 testing an unpublished checkout build.
@@ -1139,8 +1153,9 @@ current branch and pushes; `publish.yml` publishes the result to npm with the
 npm i @agent-plan/core@next
 ```
 
-The plugin (`plugins/claude-code/.claude-plugin/plugin.json` and
-`.claude-plugin/marketplace.json`) has its own version track but is bumped by
+The plugins (`plugins/claude-code/.claude-plugin/plugin.json`,
+`plugins/codex/plugin.json`, `plugins/codex/.codex-plugin/plugin.json`, and the
+repo-root marketplace catalogs) have their own version track but are bumped by
 both release scripts so marketplace clients can detect refreshed plugin files
 on either channel. Stable Git tags always use the unified npm package version,
 not the independent plugin version.

@@ -26,21 +26,22 @@
       "title": "Codex uses MCP plus skill instead of custom slash command",
       "decision": "Codex support ships as MCP configuration plus an agent-plan skill/plugin bundle. Agent Plan must not claim Codex has a native custom /planner slash command or nested autosuggestion until Codex exposes a public API for it.",
       "rationale": "Current Codex CLI/plugin surfaces expose MCP servers, plugins, and skills, but no documented custom slash-command registration surface. Promising /planner in Codex would mislead users.",
-      "implementationNotes": "agent-plan setup codex writes .codex/config.toml and .codex/skills/agent-plan/SKILL.md. plugins/codex ships plugin.json, .codex-plugin/plugin.json, mcp.json/.mcp.json, and a generated skill.",
+      "implementationNotes": "agent-plan setup codex writes .codex/config.toml and .codex/skills/agent-plan/SKILL.md. For user scope it also registers and installs the Codex marketplace plugin when the codex CLI is available. plugins/codex ships plugin.json, .codex-plugin/plugin.json, mcp.json/.mcp.json, and a generated skill; the repo-root .agents/plugins/marketplace.json exposes it to codex plugin marketplace.",
       "acceptedAt": "2026-10-02T15:08:01.284Z"
     },
     {
       "id": "545f0b4d-72b0-4cc1-b435-ade3d395672f",
       "title": "OpenCode gets /planner plus flat autosuggest aliases",
-      "decision": "OpenCode support uses mcp.servers.agent-plan plus a commands.planner entry for /planner arguments, and installs flat shortcut commands for discoverability instead of pretending nested segment autosuggestion exists.",
+      "decision": "OpenCode support uses mcp.servers.agent-plan plus a command.planner entry for /planner arguments, and installs flat shortcut commands for discoverability instead of pretending nested segment autosuggestion exists.",
       "rationale": "OpenCode v2 command configuration supports a slash command name with a template; nested segment-level autosuggestion for every /planner subcommand is not exposed in the verified config/CLI surface.",
-      "implementationNotes": "agent-plan setup opencode writes opencode.json or ~/.config/opencode/opencode.json with commands.planner and shortcuts such as planner-load, planner-task-start, and planner-web-status.",
+      "implementationNotes": "agent-plan setup opencode writes opencode.json or ~/.config/opencode/opencode.json with command.planner and shortcuts such as planner-load, planner-task-start, and planner-web-status. --force removes obsolete Agent Plan entries from the legacy commands key while preserving unrelated user commands.",
       "acceptedAt": "2026-10-02T15:08:01.383Z"
     }
   ],
   "completionCriteria": [],
   "taskIds": [
-    "3f6ce891-86a9-40f4-bdfb-f7d86743f000"
+    "3f6ce891-86a9-40f4-bdfb-f7d86743f000",
+    "049a1aa0-821d-4c28-a149-d681993e6801"
   ],
   "tasks": [
     {
@@ -122,10 +123,78 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "049a1aa0-821d-4c28-a149-d681993e6801",
+      "phaseId": "1c95b11d-4ec8-4fa4-8686-315e45f35b58",
+      "number": 453,
+      "shortId": "Z9MKT",
+      "priority": 2,
+      "shortName": "fix-codex-marketplace-opencode-command",
+      "title": "Fix Codex marketplace install and OpenCode command registration",
+      "status": "done",
+      "description": "Correct the Codex/OpenCode setup slice after real harness verification found two user-visible gaps. Codex setup must make the Agent Plan plugin visible through the Codex plugin marketplace instead of only copying a skill file. OpenCode setup must write slash commands under the documented singular command key, not the ignored legacy commands key. Preserve MCP registration, --force, --local, user/project scope behavior, and the Codex limitation that no custom /planner slash command is exposed by the public plugin/config surface.\n\n---\n**Completion summary:**\nImplemented the corrective setup pass. Added .agents/plugins/marketplace.json so Codex can discover plugins/codex as a marketplace plugin. Updated agent-plan setup codex so user-scope setup registers and installs agent-plan@agent-plan through codex plugin marketplace, with local checkout support for --local and manual fallback text on failure. Updated agent-plan setup opencode to write command.planner plus flat aliases under OpenCode's documented command key and remove stale Agent Plan entries from legacy commands on --force. Updated release scripts to bump the Codex marketplace catalog version alongside plugin manifests. Updated README, setup docs, plugin docs, and decisions. Verification: built @agent-plan/core, @agent-plan/server, @agent-plan/mcp, and agent-plan; pnpm --filter agent-plan check passed; node --test packages/agent-plan/test/version.test.mjs passed 9/9; pnpm plugins:check passed; node --check passed for release.cjs, release-next.cjs, and sync-plugins.cjs; Codex marketplace local smoke passed with a temporary HOME and did not touch the user's ~/.codex.",
+      "descriptionUpdatedAt": "2026-10-05T14:31:45.000Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "049a1aa0-821d-4c28-a149-d681993e6801-check-001-planned-in-progress",
+          "date": "2026-10-05T14:31:45.000Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": "Correcting Codex plugin marketplace install and OpenCode command registration after real harness verification showed the prior implementation was not visible in Codex plugin list and used the wrong OpenCode config key."
+        },
+        {
+          "id": "049a1aa0-821d-4c28-a149-d681993e6801-check-002-in-progress-done",
+          "date": "2026-10-05T14:31:45.000Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Added the Codex marketplace catalog and setup install path, switched OpenCode from commands to command, updated release version bumping and docs, and verified the focused setup/plugin path."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "049a1aa0-821d-4c28-a149-d681993e6801-check-001-add-codex-marketplace-catalog-and-install-path",
+          "number": 1,
+          "title": "Add Codex marketplace catalog and install path",
+          "checked": true
+        },
+        {
+          "id": "049a1aa0-821d-4c28-a149-d681993e6801-check-002-switch-opencode-to-command-key",
+          "number": 2,
+          "title": "Switch OpenCode setup to the documented command key",
+          "checked": true
+        },
+        {
+          "id": "049a1aa0-821d-4c28-a149-d681993e6801-check-003-update-docs-release-scripts-and-tests",
+          "number": 3,
+          "title": "Update docs, release scripts, and focused tests",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-05T14:31:45.000Z",
+      "completedAt": "2026-10-05T14:31:45.000Z",
+      "createdAt": "2026-10-05T14:31:45.000Z",
+      "updatedAt": "2026-10-05T14:31:45.000Z",
+      "sessionInfo": [
+        {
+          "sessionId": "codex-cli:fix-codex-opencode-plugin-install",
+          "createdAt": "2026-10-05T14:31:45.000Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-02T13:22:42.129Z",
-  "updatedAt": "2026-10-02T18:02:47.520Z",
+  "updatedAt": "2026-10-05T14:31:45.000Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
