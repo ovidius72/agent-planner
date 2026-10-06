@@ -76,6 +76,7 @@ The core planning model lives outside Pi, Claude Code, or any other harness. Ada
 - [`docs/setup-opencode.md`](./docs/setup-opencode.md) — OpenCode MCP + `/planner` command setup.
 - [`docs/setup-zed.md`](./docs/setup-zed.md) — Zed MCP setup (custom context server, no extension required).
 - [`docs/planner-schema.json`](./docs/planner-schema.json) — public JSON schema for the `.planner/` workspace (generated from `@agent-plan/core` Zod schemas).
+- [`docs/api-v1.md`](./docs/api-v1.md) — stable, versioned read API and live `entity-changed` events for programs outside Agent Plan.
 - [`AGENTS.md`](./AGENTS.md) — operational rules for agents working on Agent Plan itself.
 
 ## Plugins
@@ -513,7 +514,9 @@ The CLI package is `agent-plan`.
 agent-plan help
 agent-plan --version       # alias: -v
 agent-plan mcp
-agent-plan init
+agent-plan init [name] [--description <text>] [--goal <text>] [--json]
+agent-plan serve [--root <.planner dir>] [--port <n>] [--host <h>] [--reuse] [--json]
+agent-plan stop [--root <.planner dir>] [--json]
 agent-plan export [--full]
 agent-plan setup claude-code --user
 agent-plan setup claude-code --project
@@ -562,6 +565,29 @@ agent-plan init
 ```
 
 This is equivalent in intent to running `/planner init` from an agent UI.
+
+For programs, `--description` and `--goal` set the project fields when the planner is created, and `--json` prints one line: `{"status":"created"|"exists","root":...,"name":...}`. With `--json` the command never prompts (the folder name is the default name). An existing planner is never changed: it reports `"exists"` with exit code 0.
+
+### `agent-plan serve`
+
+Starts the planner web server for a `.planner/` folder and prints its address. It runs until stopped (Ctrl-C or SIGTERM).
+
+```bash
+agent-plan serve                       # ./.planner on 127.0.0.1:3030
+agent-plan serve --port 0 --json       # any free port; one JSON line on stdout
+agent-plan serve --root /path/to/.planner --host 0.0.0.0
+```
+
+`--json` prints `{"url","localUrl","lanUrl","host","port","root","reused"}` (with the real port when `--port 0`). A missing `.planner/` or an invalid port exits with code 1 and a message on stderr.
+
+While a server runs it writes `.planner/.local/server.json` (pid, address, root, start time, version, `kind`) and removes it when it stops. The file is git-ignored, and a record whose process is gone or whose address no longer answers `/health` is ignored. Every server writes it, whether it was started by `agent-plan serve`, by `planner-web` / `planner-load`, or by the Pi adapter. When two servers run for one folder, the first keeps the record.
+
+```bash
+agent-plan serve --reuse --json   # a server is already running for this folder: print its address (reused: true) and exit
+agent-plan stop                   # stop the server that `agent-plan serve` started for this folder
+```
+
+`serve --reuse` starts a server only when none is running. `stop` only stops a server started by `agent-plan serve` (`kind: "standalone"`). A server running inside another program (an agent's MCP server, the Pi adapter) is `kind: "embedded"`: `stop` refuses (exit 1) because signalling it would end that program; stop it from there (`planner-web` stop, `/planner stop`). `stop` exits 0 when nothing is running.
 
 ### `agent-plan export`
 

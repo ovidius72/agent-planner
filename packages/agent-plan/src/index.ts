@@ -16,6 +16,20 @@ interface CliFlags {
   user: boolean;
   full: boolean;
   version: boolean;
+  json: boolean;
+  reuse: boolean;
+  root?: string;
+  port?: string;
+  host?: string;
+  description?: string;
+  goal?: string;
+}
+
+const VALUE_FLAGS = ["root", "port", "host", "description", "goal"] as const;
+type ValueFlag = typeof VALUE_FLAGS[number];
+
+function isValueFlag(name: string): name is ValueFlag {
+  return (VALUE_FLAGS as readonly string[]).includes(name);
 }
 
 function usage(): string {
@@ -26,11 +40,13 @@ function usage(): string {
     "  agent-plan --version | -v",
     "  agent-plan version",
     "  agent-plan mcp",
-    "  agent-plan init [project name] [--yes]",
+    "  agent-plan init [project name] [--yes] [--description <text>] [--goal <text>] [--json]",
     "  agent-plan setup claude-code [--user|--project] [--force] [--local]",
     "  agent-plan setup codex      [--user|--project] [--force] [--local]",
     "  agent-plan setup opencode   [--user|--project] [--force] [--local]",
     "  agent-plan export [--full]",
+    "  agent-plan serve [--root <.planner dir>] [--port <n>] [--host <h>] [--reuse] [--json]",
+    "  agent-plan stop [--root <.planner dir>] [--json]",
     "",
     "Commands:",
     "  version                     Print loaded package provenance and compatibility capabilities.",
@@ -39,6 +55,8 @@ function usage(): string {
     "  setup claude-code           Add Agent Plan to Claude Code (project .mcp.json by default, user scope with --user).",
     "  setup codex                 Add Agent Plan to Codex (project .codex/config.toml by default, user scope with --user).",
     "  setup opencode              Add Agent Plan to OpenCode (project opencode.json by default, user scope with --user).",
+    "  serve                       Start the planner web server for a .planner/ folder and print its address (port 0 = any free port).",
+    "  stop                        Stop the server started by `agent-plan serve` for this planner folder.",
     "  guard pre-tool-use          Claude Code hook: warn the agent (never block or prompt) when a call changes project code while no task is in-progress. Planner changes and writes outside the project never warn.",
     "",
     "Options:",
@@ -47,6 +65,12 @@ function usage(): string {
     "  --force                     Overwrite existing agent-plan MCP config entry.",
     "  --local                     Write config pointing to this built local CLI instead of npx agent-plan.",
     "  --user                      Install MCP and planner routing at harness user scope.",
+    "  --json                      Print one machine-readable JSON line instead of text (serve, init).",
+    "  --description <text>        Project description to set when init creates a new planner.",
+    "  --goal <text>               Project goal to set when init creates a new planner.",
+    "  --reuse                     serve: if a server is already running for the folder, print its address and exit instead of starting another.",
+    "  --root <dir>                Planner folder to serve or stop (default ./.planner).",
+    "  --port <n>, --host <h>      Server port (default 3030) and bind host (default 127.0.0.1).",
     "  --project                   Install MCP and /planner command in the current project (default).",
   ].join("\n");
 }
@@ -69,9 +93,10 @@ function cliRuntimeDiagnosticsText(): string {
 }
 
 function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
-  const flags: CliFlags = { yes: false, force: false, local: false, user: false, full: false, version: false };
+  const flags: CliFlags = { yes: false, force: false, local: false, user: false, full: false, version: false, json: false, reuse: false };
   const positional: string[] = [];
-  for (const arg of args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
     if (arg === "--version" || arg === "-v") flags.version = true;
     else if (arg === "--yes" || arg === "-y") flags.yes = true;
     else if (arg === "--force") flags.force = true;
@@ -79,7 +104,15 @@ function parseFlags(args: string[]): { positional: string[]; flags: CliFlags } {
     else if (arg === "--user") flags.user = true;
     else if (arg === "--project") flags.user = false;
     else if (arg === "--full") flags.full = true;
-    else positional.push(arg);
+    else if (arg === "--json") flags.json = true;
+    else if (arg === "--reuse") flags.reuse = true;
+    else if (arg.startsWith("--") && isValueFlag(arg.split("=")[0]!.slice(2))) {
+      const [rawName, inlineValue] = arg.split(/=(.*)/s);
+      const name = rawName!.slice(2) as ValueFlag;
+      const value = inlineValue ?? args[++index];
+      if (value === undefined) throw new Error(`--${name} needs a value.`);
+      flags[name] = value;
+    } else positional.push(arg);
   }
   return { positional, flags };
 }
@@ -106,19 +139,30 @@ async function initPlanner(projectNameArg: string | undefined, flags: CliFlags):
   const st = new PlanStore(root);
   st.enableAutoSync(true);
   if (await st.exists()) {
-    console.log(`.planner/ already exists at ${root}`);
+    // Never overwrite an existing planner, even when --description/--goal are given.
+    if (flags.json) console.log(JSON.stringify({ status: "exists", root, name: (await st.loadProject()).name }));
+    else console.log(`.planner/ already exists at ${root}`);
     return;
   }
 
   let projectName = projectNameArg?.trim();
   if (!projectName) {
-    projectName = flags.yes ? basename(process.cwd()) : await prompt(`Project name [${basename(process.cwd())}]: `);
+    // A program reading --json output cannot answer a prompt.
+    projectName = flags.yes || flags.json ? basename(process.cwd()) : await prompt(`Project name [${basename(process.cwd())}]: `);
   }
   if (!projectName) projectName = basename(process.cwd());
 
   await st.init(projectName);
+  if (flags.description !== undefined || flags.goal !== undefined) {
+    await st.updateProject((project) => ({
+      ...project,
+      ...(flags.description !== undefined ? { description: flags.description } : {}),
+      ...(flags.goal !== undefined ? { goal: flags.goal } : {}),
+    }));
+  }
   await st.writeGenerated();
-  console.log(`Initialized .planner/ for "${projectName}" at ${root}`);
+  if (flags.json) console.log(JSON.stringify({ status: "created", root, name: projectName }));
+  else console.log(`Initialized .planner/ for "${projectName}" at ${root}`);
 }
 
 async function readJsonFile(path: string): Promise<Record<string, unknown>> {
@@ -630,6 +674,100 @@ async function guardPreToolUse(): Promise<void> {
   }));
 }
 
+/** Parse a TCP port for `serve`: an integer from 0 (any free port) to 65535. */
+function parsePort(value: string | undefined): number {
+  if (value === undefined) return 3030;
+  if (!/^\d+$/.test(value) || Number(value) > 65535) throw new Error(`Invalid --port: ${value}. Use a number from 0 to 65535.`);
+  return Number(value);
+}
+
+interface ServerInfo {
+  url: string;
+  localUrl: string;
+  lanUrl: string | null;
+  host: string;
+  port: number;
+  root: string;
+}
+
+/** One output for a fresh start and for a reused server, so a caller parses one shape. */
+function printServerInfo(info: ServerInfo, reused: boolean, flags: CliFlags): void {
+  if (flags.json) {
+    console.log(JSON.stringify({ ...info, reused }));
+    return;
+  }
+  console.log(`${reused ? "Agent Plan server already running at" : "Agent Plan server running at"} ${info.url}`);
+  if (info.lanUrl) console.log(`LAN: ${info.lanUrl}`);
+  console.log(`Planner: ${info.root}`);
+}
+
+async function serveCommand(flags: CliFlags): Promise<void> {
+  const root = resolve(flags.root ?? plannerRoot());
+  const port = parsePort(flags.port);
+  const host = flags.host ?? "127.0.0.1";
+  if (!(await new PlanStore(root).exists())) {
+    throw new Error(`No .planner/ found at ${root}. Run agent-plan init first.`);
+  }
+  // Loaded only here so the other commands do not pay for the web server.
+  const { serve, readLiveServerRecord } = await import("@agent-plan/server");
+  if (flags.reuse) {
+    const running = await readLiveServerRecord(root);
+    if (running) {
+      printServerInfo({ url: running.url, localUrl: running.localUrl, lanUrl: running.lanUrl, host: running.host, port: running.port, root }, true, flags);
+      return;
+    }
+  }
+  const handle = await serve({ port, planRoot: root, host, quiet: true, serverKind: "standalone" });
+  const actualPort = new URL(handle.localUrl).port ? Number(new URL(handle.localUrl).port) : port;
+  printServerInfo({ url: handle.url, localUrl: handle.localUrl, lanUrl: handle.lanUrl ?? null, host: handle.bindHost, port: actualPort, root }, false, flags);
+  const stop = () => {
+    void handle.close().finally(() => process.exit(0));
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Stop the server that `agent-plan serve` started for this folder. Never signals a server embedded in another program. */
+async function stopCommand(flags: CliFlags): Promise<void> {
+  const root = resolve(flags.root ?? plannerRoot());
+  const report = (result: Record<string, unknown>, text: string, exitCode = 0) => {
+    if (flags.json) console.log(JSON.stringify({ root, ...result }));
+    else console.log(text);
+    if (exitCode !== 0) process.exitCode = exitCode;
+  };
+  const { readLiveServerRecord } = await import("@agent-plan/server");
+  const running = await readLiveServerRecord(root);
+  if (!running) {
+    report({ stopped: false, reason: "not-running" }, `No planner server is running for ${root}.`);
+    return;
+  }
+  if (running.kind !== "standalone") {
+    report(
+      { stopped: false, reason: "embedded", pid: running.pid, url: running.url },
+      `The server at ${running.url} runs inside another program (pid ${running.pid}). Stop it there (planner-web stop or /planner stop); signalling it would end that program.`,
+      1,
+    );
+    return;
+  }
+  process.kill(running.pid, "SIGTERM");
+  const deadline = Date.now() + 5000;
+  while (processIsRunning(running.pid) && Date.now() < deadline) await new Promise((done) => setTimeout(done, 50));
+  if (processIsRunning(running.pid)) {
+    report({ stopped: false, reason: "timeout", pid: running.pid }, `The server (pid ${running.pid}) did not stop within 5 seconds.`, 1);
+    return;
+  }
+  report({ stopped: true, pid: running.pid }, `Stopped the planner server (pid ${running.pid}) at ${running.url}.`);
+}
+
 async function main(): Promise<void> {
   const { positional, flags } = parseFlags(process.argv.slice(2));
   const [command, subcommand, ...rest] = positional;
@@ -677,6 +815,16 @@ async function main(): Promise<void> {
 
     console.log(markdown);
     console.log(`\nExport saved to ${join(root, "EXPORT.md")}`);
+    return;
+  }
+
+  if (command === "serve") {
+    await serveCommand(flags);
+    return;
+  }
+
+  if (command === "stop") {
+    await stopCommand(flags);
     return;
   }
 

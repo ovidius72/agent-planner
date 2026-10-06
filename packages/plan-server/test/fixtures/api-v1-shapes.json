@@ -1,0 +1,314 @@
+{
+  "index": {
+    "apiVersion": "string",
+    "data": {
+      "apiVersion": "string",
+      "links": {
+        "decisions": "string",
+        "features": "string",
+        "handoffs": "string",
+        "ideas": "string",
+        "phases": "string",
+        "project": "string",
+        "tasks": "string"
+      }
+    }
+  },
+  "project": {
+    "apiVersion": "string",
+    "data": {
+      "chatLanguage": "string",
+      "contentLanguage": "string",
+      "description": "string",
+      "goal": "string",
+      "guidelines": "string",
+      "guidelinesUpdatedAt": "string",
+      "name": "string",
+      "outOfScope": [
+        "string"
+      ],
+      "scope": [
+        "string"
+      ],
+      "technologies": [
+        "string"
+      ],
+      "tools": [
+        "string"
+      ]
+    }
+  },
+  "features": {
+    "apiVersion": "string",
+    "data": [
+      {
+        "createdAt": "string",
+        "dependsOn": [
+          "string"
+        ],
+        "description": "string",
+        "endDate": "string",
+        "id": "string",
+        "name": "string",
+        "number": "number",
+        "phaseRefs": [
+          "string"
+        ],
+        "priority": "number",
+        "ref": "string",
+        "shortId": "string",
+        "startDate": "string",
+        "status": "string",
+        "updatedAt": "string",
+        "workDone": "string",
+        "workRemaining": "string"
+      }
+    ]
+  },
+  "feature": {
+    "apiVersion": "string",
+    "data": {
+      "createdAt": "string",
+      "dependsOn": [
+        "string"
+      ],
+      "description": "string",
+      "endDate": "string",
+      "id": "string",
+      "name": "string",
+      "number": "number",
+      "phaseRefs": [
+        "string"
+      ],
+      "priority": "number",
+      "ref": "string",
+      "shortId": "string",
+      "startDate": "string",
+      "status": "string",
+      "updatedAt": "string",
+      "workDone": "string",
+      "workRemaining": "string"
+    }
+  },
+  "phases": {
+    "apiVersion": "string",
+    "data": [
+      {
+        "createdAt": "string",
+        "dependsOn": [
+          "string"
+        ],
+        "description": "string",
+        "featureRef": "null|string",
+        "goals": [
+          "string"
+        ],
+        "hasHandoff": "boolean",
+        "id": "string",
+        "number": "number",
+        "priority": "number",
+        "ref": "string",
+        "shortId": "string",
+        "status": "string",
+        "summary": "string",
+        "taskRefs": [
+          "string"
+        ],
+        "title": "string",
+        "updatedAt": "string"
+      }
+    ]
+  },
+  "phase": {
+    "apiVersion": "string",
+    "data": {
+      "createdAt": "string",
+      "dependsOn": [
+        "string"
+      ],
+      "description": "string",
+      "featureRef": "string",
+      "goals": [
+        "string"
+      ],
+      "hasHandoff": "boolean",
+      "id": "string",
+      "number": "number",
+      "priority": "number",
+      "ref": "string",
+      "shortId": "string",
+      "status": "string",
+      "summary": "string",
+      "taskRefs": [
+        "string"
+      ],
+      "title": "string",
+      "updatedAt": "string"
+    }
+  },
+  "tasks": {
+    "apiVersion": "string",
+    "data": [
+      {
+        "checklist": [
+          {
+            "checked": "boolean",
+            "id": "string",
+            "number": "number",
+            "title": "string"
+          }
+        ],
+        "completedAt": "string",
+        "createdAt": "string",
+        "dependsOn": [
+          "string"
+        ],
+        "description": "string",
+        "featureRef": "null|string",
+        "id": "string",
+        "number": "number",
+        "pause": {
+          "$nullable": {
+            "pausedAt": "string",
+            "reason": "string",
+            "resumeLocation": "string"
+          }
+        },
+        "phaseRef": "string",
+        "priority": "number",
+        "ref": "string",
+        "shortId": "string",
+        "startedAt": "string",
+        "status": "string",
+        "title": "string",
+        "updatedAt": "string"
+      }
+    ]
+  },
+  "task": {
+    "apiVersion": "string",
+    "data": {
+      "checklist": [
+        {
+          "checked": "boolean",
+          "id": "string",
+          "number": "number",
+          "title": "string"
+        }
+      ],
+      "completedAt": "string",
+      "createdAt": "string",
+      "dependsOn": [
+        "string"
+      ],
+      "description": "string",
+      "featureRef": "string",
+      "id": "string",
+      "number": "number",
+      "pause": {
+        "pausedAt": "string",
+        "reason": "string",
+        "resumeLocation": "string"
+      },
+      "phaseRef": "string",
+      "priority": "number",
+      "ref": "string",
+      "shortId": "string",
+      "startedAt": "string",
+      "status": "string",
+      "title": "string",
+      "updatedAt": "string"
+    }
+  },
+  "decisions": {
+    "apiVersion": "string",
+    "data": [
+      {
+        "acceptedAt": "string",
+        "decision": "string",
+        "id": "string",
+        "implementationNotes": "string",
+        "owner": {
+          "kind": "string",
+          "ref": "null|string"
+        },
+        "rationale": "string",
+        "ref": "string",
+        "title": "string"
+      }
+    ]
+  },
+  "handoffs": {
+    "apiVersion": "string",
+    "data": [
+      {
+        "content": "string",
+        "phaseRef": "string",
+        "resumeReady": "boolean",
+        "resumeReadyAt": "string",
+        "updatedAt": "string"
+      }
+    ]
+  },
+  "handoff": {
+    "apiVersion": "string",
+    "data": {
+      "content": "string",
+      "phaseRef": "string",
+      "resumeReady": "boolean",
+      "resumeReadyAt": "string",
+      "updatedAt": "string"
+    }
+  },
+  "ideas": {
+    "apiVersion": "string",
+    "data": [
+      {
+        "createdAt": "string",
+        "description": "string",
+        "id": "string",
+        "number": "number",
+        "promotion": "null",
+        "ref": "string",
+        "shortId": "string",
+        "title": "string",
+        "updatedAt": "string"
+      }
+    ]
+  },
+  "idea": {
+    "apiVersion": "string",
+    "data": {
+      "createdAt": "string",
+      "description": "string",
+      "id": "string",
+      "number": "number",
+      "promotion": "null",
+      "ref": "string",
+      "shortId": "string",
+      "title": "string",
+      "updatedAt": "string"
+    }
+  },
+  "error": {
+    "apiVersion": "string",
+    "error": {
+      "code": "string",
+      "message": "string"
+    }
+  },
+  "entity-changed": {
+    "data": {
+      "apiVersion": "string",
+      "id": "string",
+      "kind": "string",
+      "op": "string",
+      "parents": {
+        "featureRef": "string",
+        "phaseRef": "string"
+      },
+      "ref": "string"
+    },
+    "type": "string"
+  }
+}

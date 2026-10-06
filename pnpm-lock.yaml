@@ -29,6 +29,9 @@ importers:
       '@agent-plan/mcp':
         specifier: workspace:*
         version: link:../plan-mcp
+      '@agent-plan/server':
+        specifier: workspace:*
+        version: link:../plan-server
 
   packages/pi-adapter:
     dependencies:
