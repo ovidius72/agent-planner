@@ -193,17 +193,17 @@ exposes it to `codex plugin marketplace`.
 
 ### D12 — OpenCode gets /planner plus slash-path autosuggest aliases
 **Decision.** OpenCode support uses `mcp.servers.agent-plan` plus a
-`command.planner` entry for `/planner` arguments, and installs nested
-slash-path shortcut commands plus compatibility flat aliases for discovery.
+`command.planner` entry for `/planner` arguments, and installs flat shortcut
+commands for discovery.
 
 **Rationale.** OpenCode v2 command configuration supports a slash command name
-with a template and discovers command names. Slash-path names such as
-`planner/web/start` give practical command-list discovery without injecting
-the full guide on every command.
+with a template and discovers command names. Flat names such as
+`planner-web-start` give practical command-list discovery without injecting the
+full guide on every command.
 
 **Implementation.** `agent-plan setup opencode` writes `opencode.json` or
-`~/.config/opencode/opencode.json` with `command.planner`, slash-path aliases
-such as `planner/load`, `planner/task/start`, and `planner/web/status`, and
-compatibility aliases such as `planner-load`, `planner-task-start`, and
-`planner-web-status`. The command templates stay compact and do not inline the
-full Agent Plan operating guide.
+`~/.config/opencode/opencode.json` with `command.planner` and flat aliases such
+as `planner-load`, `planner-task-start`, and `planner-web-status`. Setup removes
+older slash-path aliases such as `planner/load` to avoid duplicate suggestions.
+The command templates stay compact and do not inline the full Agent Plan
+operating guide.
