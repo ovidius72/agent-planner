@@ -24,7 +24,7 @@
 //
 // Prereqs: git, pnpm, gh (GitHub CLI) installed and authenticated.
 
-const { execSync } = require("node:child_process");
+const { execFileSync, execSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -70,6 +70,14 @@ function sh(cmd, opts = {}) {
 }
 function run(cmd) {
   execSync(cmd, { cwd: root, stdio: "inherit" });
+}
+function gitRefExists(ref) {
+  try {
+    execFileSync("git", ["show-ref", "--verify", "--quiet", ref], { cwd: root, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 function pkgPath(dir) { return path.join(root, "packages", dir, "package.json"); }
 function readVersion(dir) { return JSON.parse(fs.readFileSync(pkgPath(dir), "utf8")).version; }
@@ -174,8 +182,14 @@ if (dryRun) {
 
 // --- create release branch ---
 const branchName = `release/v${target}`;
-try { sh(`git rev-parse --verify refs/heads/${branchName}`); console.error(`✗ Branch ${branchName} already exists.`); process.exit(1); } catch {}
-try { sh(`git rev-parse --verify refs/remotes/origin/${branchName}`); console.error(`✗ Remote branch ${branchName} already exists.`); process.exit(1); } catch {}
+if (gitRefExists(`refs/heads/${branchName}`)) {
+  console.error(`✗ Branch ${branchName} already exists.`);
+  process.exit(1);
+}
+if (gitRefExists(`refs/remotes/origin/${branchName}`)) {
+  console.error(`✗ Remote branch ${branchName} already exists.`);
+  process.exit(1);
+}
 console.log(`\n› Creating branch ${branchName}...`);
 sh(`git switch -c ${branchName}`);
 

@@ -51,6 +51,9 @@ test("repository governance routes broad verification through the canonical runn
   assert.match(ci, /pnpm verify:final -- --ci/);
   assert.doesNotMatch(ci, /run: pnpm test:coverage/);
   assert.match(release, /pnpm verify:final -- --force/);
+  assert.match(release, /function gitRefExists/);
+  assert.doesNotMatch(release, /sh\(`git rev-parse --verify refs\/heads/);
+  assert.doesNotMatch(release, /sh\(`git rev-parse --verify refs\/remotes\/origin/);
   assert.match(releaseNext, /pnpm verify:final -- --force/);
   assert.match(smoke, /mkdtemp/);
   assert.match(smoke, /planner-load/);
