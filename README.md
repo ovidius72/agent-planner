@@ -67,6 +67,16 @@ Requirements currently exist as internal/project seed data and are not exposed a
 
 The core planning model lives outside Pi, Claude Code, or any other harness. Adapters should call shared planning logic rather than owning business rules.
 
+### Several agents on one planner
+
+Each agent session (a Claude Code or Codex MCP connection, a Pi session) keeps its own focus:
+
+- **Tasks:** a task in progress belongs to the session that started it.
+- **Side tasks:** when a session switches to a temporary task (`task_switch`, `task_deviation`), the task to return to is recorded for that session only. Another session's recommendation never says `RESUME REQUIRED` for it and never offers the set-aside task, so one agent's detour does not become another agent's order.
+- **Resume focus:** each session has its own current phase, in-progress tasks, next steps and notes (`.planner/.local/resume-sessions.json`, the 20 most recent sessions are kept). A session that has none yet starts from the project-level focus. The guard bypass stays project-wide.
+
+A caller with no session (the web UI, scripts) sees the whole project, as before. Work recorded before sessions were tracked is shown to every session. A checkpointed task that no live side task points at is still offered to every session, so paused work is not lost.
+
 ---
 
 ## Documentation
@@ -76,6 +86,7 @@ The core planning model lives outside Pi, Claude Code, or any other harness. Ada
 - [`docs/setup-opencode.md`](./docs/setup-opencode.md) — OpenCode MCP + `/planner` command setup.
 - [`docs/setup-zed.md`](./docs/setup-zed.md) — Zed MCP setup (custom context server, no extension required).
 - [`docs/planner-schema.json`](./docs/planner-schema.json) — public JSON schema for the `.planner/` workspace (generated from `@agent-plan/core` Zod schemas).
+- [`docs/api-v1.md`](./docs/api-v1.md) — stable, versioned read API and live `entity-changed` events for programs outside Agent Plan.
 - [`AGENTS.md`](./AGENTS.md) — operational rules for agents working on Agent Plan itself.
 
 ## Plugins
@@ -99,6 +110,7 @@ plugins/
     .codex-plugin/plugin.json   Codex compatibility manifest
     mcp.json / .mcp.json        @agent-plan/mcp stdio server (npx)
     skills/agent-plan/SKILL.md  Agent Plan skill (derived)
+    skills/planner/SKILL.md     $planner alias skill (derived)
   opencode/                   OpenCode bundle (ready: MCP + commands)
     skills/agent-plan/SKILL.md  Agent Plan skill/guide (derived)
   _shared/                    single-source-of-truth templates
@@ -115,8 +127,8 @@ Per-harness behavior:
 - `/planner stop` (alias `/planner disable`) — disable the planner and stop the web.
 - The Web UI address is shown **only** on the `load` recap or via `/planner web status` — never appended to every message.
 - Planner operations (handoff, plan CRUD) are **not** code edits and are always allowed regardless of task state.
-- Claude Code and OpenCode support `/planner` routing. OpenCode also installs flat autosuggest shortcuts such as `/planner-load` and `/planner-task-start`.
-- Codex currently exposes Agent Plan through MCP tools and the `agent-plan` skill; custom `/planner ...` slash-command registration is not part of the public Codex plugin/config surface.
+- Claude Code and OpenCode support `/planner` routing. OpenCode also installs nested autosuggest shortcuts such as `/planner/load` and `/planner/task/start`, plus compatibility aliases such as `/planner-load`.
+- Codex currently exposes Agent Plan through MCP tools and the `agent-plan` / `planner` skills (`$planner` appears in the Codex skill picker); custom `/planner ...` slash-command registration is not part of the public Codex plugin/config surface.
 
 ### Install (Claude Code, self-hosted marketplace — no approval required)
 
@@ -445,8 +457,8 @@ agent-plan setup codex --project --force
 ```
 
 This writes Codex MCP configuration to `.codex/config.toml` or
-`~/.codex/config.toml`, installs the `agent-plan` skill, and for user scope
-registers/installs the Codex marketplace plugin when the `codex` CLI is
+`~/.codex/config.toml`, installs the `agent-plan` and `planner` skills, and for
+user scope registers/installs the Codex marketplace plugin when the `codex` CLI is
 available. Use `--local` only when testing an unpublished checkout build; in
 that mode the Codex marketplace source is the local repository checkout.
 
@@ -472,9 +484,11 @@ agent-plan setup opencode --project --force
 
 This writes OpenCode MCP configuration plus `/planner` command routing under
 OpenCode's `command` configuration key.
-OpenCode also gets flat command aliases such as `/planner-load` and
-`/planner-task-start` for command-list discovery. Use `--local` only when
-testing an unpublished checkout build.
+OpenCode also gets nested slash aliases such as `/planner/load`,
+`/planner/task/start`, and `/planner/web/start` for command-list discovery,
+plus compatibility aliases such as `/planner-load`. The generated command
+templates are compact and do not paste the full planner guide on every
+invocation. Use `--local` only when testing an unpublished checkout build.
 
 ### Local development setup
 
@@ -513,7 +527,9 @@ The CLI package is `agent-plan`.
 agent-plan help
 agent-plan --version       # alias: -v
 agent-plan mcp
-agent-plan init
+agent-plan init [name] [--description <text>] [--goal <text>] [--json]
+agent-plan serve [--root <.planner dir>] [--port <n>] [--host <h>] [--reuse] [--json]
+agent-plan stop [--root <.planner dir>] [--json]
 agent-plan export [--full]
 agent-plan setup claude-code --user
 agent-plan setup claude-code --project
@@ -562,6 +578,29 @@ agent-plan init
 ```
 
 This is equivalent in intent to running `/planner init` from an agent UI.
+
+For programs, `--description` and `--goal` set the project fields when the planner is created, and `--json` prints one line: `{"status":"created"|"exists","root":...,"name":...}`. With `--json` the command never prompts (the folder name is the default name). An existing planner is never changed: it reports `"exists"` with exit code 0.
+
+### `agent-plan serve`
+
+Starts the planner web server for a `.planner/` folder and prints its address. It runs until stopped (Ctrl-C or SIGTERM).
+
+```bash
+agent-plan serve                       # ./.planner on 127.0.0.1:3030
+agent-plan serve --port 0 --json       # any free port; one JSON line on stdout
+agent-plan serve --root /path/to/.planner --host 0.0.0.0
+```
+
+`--json` prints `{"url","localUrl","lanUrl","host","port","root","reused"}` (with the real port when `--port 0`). A missing `.planner/` or an invalid port exits with code 1 and a message on stderr.
+
+While a server runs it writes `.planner/.local/server.json` (pid, address, root, start time, version, `kind`) and removes it when it stops. The file is git-ignored, and a record whose process is gone or whose address no longer answers `/health` is ignored. Every server writes it, whether it was started by `agent-plan serve`, by `planner-web` / `planner-load`, or by the Pi adapter. When two servers run for one folder, the first keeps the record.
+
+```bash
+agent-plan serve --reuse --json   # a server is already running for this folder: print its address (reused: true) and exit
+agent-plan stop                   # stop the server that `agent-plan serve` started for this folder
+```
+
+`serve --reuse` starts a server only when none is running. `stop` only stops a server started by `agent-plan serve` (`kind: "standalone"`). A server running inside another program (an agent's MCP server, the Pi adapter) is `kind: "embedded"`: `stop` refuses (exit 1) because signalling it would end that program; stop it from there (`planner-web` stop, `/planner stop`). `stop` exits 0 when nothing is running.
 
 ### `agent-plan export`
 

@@ -1,0 +1,360 @@
+{
+  "id": "187902a4-2ee3-4aed-8205-fdeb9877e2cb",
+  "featureId": "6f43bbe9-b28f-4c82-aef9-dcff542d0e8c",
+  "number": 111,
+  "shortId": "ZC2ZR",
+  "priority": 2,
+  "slug": "versioned-read-api-api-v1-and-entity-changed-events",
+  "title": "Versioned read API /api/v1 and entity-changed events",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Documented read-only outside API with shared types, pinned-shape test, precise change events",
+  "description": "Current state: web UI routes in packages/plan-server/src/serve.ts (features :579, phases :694, tasks :984-1325, handoffs :1484, ideas :472, accepted decisions :332) are unversioned; ws-hub.ts:12-19 sends whole-collection events, a task change arrives as its phase.\n\nWork: new module (not inline in serve.ts) mounting read-only /api/v1: project (description, goal, guidelines), features, phases, tasks (status, checklist, dependencies), accepted decisions, handoffs, ideas. Response types live in plan-core and are exported for plan-server; every response carries apiVersion. Write docs/api-v1.md and a test that pins response shapes so a breaking change fails CI. Add WS event `entity-changed` {apiVersion, kind, ref, id, op: created|updated|deleted, parent refs}; the client refetches that one entity via /api/v1. Keep existing events for the web UI.\n\nPreserve: web UI routes and X-Planner-Source behaviour untouched; harness-agnostic core.",
+  "descriptionUpdatedAt": "2026-09-29T20:14:09.655Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "684d12aa-ce1f-4e2c-b06a-4e19258800a3",
+    "57f76f5c-507d-4c15-af75-d68327005a15",
+    "b36aae89-8b0b-40cc-8450-079240906dca",
+    "acfcae44-ac76-4859-8b44-6fcade5e9bab"
+  ],
+  "tasks": [
+    {
+      "id": "684d12aa-ce1f-4e2c-b06a-4e19258800a3",
+      "phaseId": "187902a4-2ee3-4aed-8205-fdeb9877e2cb",
+      "number": 448,
+      "shortId": "HAQM2",
+      "priority": 1,
+      "shortName": "api-v1-contract-shared-types-a",
+      "title": "API v1 contract: shared types and mappers in plan-core",
+      "status": "done",
+      "description": "New module packages/plan-core/src/api-v1.ts (exported from index.ts) defining the outside contract, separate from the stored schemas in schema.ts. Export API_V1_VERSION (\"1\"), view types (ApiV1Project, ApiV1Feature, ApiV1Phase, ApiV1Task with status/checklist/dependsOn, ApiV1AcceptedDecision, ApiV1Handoff, ApiV1Idea, ApiV1Envelope<T> = {apiVersion, data}) and pure mappers toApiV1Project/Feature/Phase/Task/Decision/Handoff/Idea(stored entity, refs context) -> view. Each mapper picks fields explicitly (no object spread) so a stored-schema change never leaks into the contract. Every entity view carries id, ref (F00x, P00x(F00x), P00x(F00x)/T00x via refs.ts/formatFeatureRef), title/name, status, updatedAt. Project view: name, description, goal, guidelines content, language prefs, technologies. Decisions carry id/title/decision/rationale/implementationNotes/acceptedAt plus owner ref. Handoff view: phase ref, content, updatedAt, resumeReady. Use existing Schema types (schema.ts:145 ProjectSchema, :247 TaskSchema, :343 PhaseSchema, :400 FeatureSchema, :476 IdeaSchema, :85 AcceptedDecisionSchema). Harness-agnostic, no server or Pi imports. Unit tests in packages/plan-core/test for each mapper (field list, refs, derived status).\n\n---\n**Completion summary:**\nShipped packages/plan-core/src/api-v1.ts (exported from index.ts): API_V1_VERSION \"1\", envelope/error helpers, view types for project, feature, phase, task (checklist, dependsOn as refs, pause), accepted decision (with owner and unique ref like F001#D1), handoff (only while the phase is open), idea; explicit-field mappers; buildApiV1Model(source) that turns a loaded planner into all views with composite refs; listApiV1Entities(model) giving one entry per entity with kind/key/ref/parents for the change detector (T451) and route indexes (T449). Unresolvable dependency ids are kept as stored instead of dropped. Read-tracking sessionInfo is never exposed. Verified: packages/plan-core/test/api-v1.test.mjs, 10 tests pass; plan-core builds. Not verified: full repository gate (at phase close). Remaining in P111: T449 routes, T450 docs and shape pin, T451 events.",
+      "descriptionUpdatedAt": "2026-09-30T08:19:49.331Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "684d12aa-ce1f-4e2c-b06a-4e19258800a3-check-001-planned-in-progress",
+          "date": "2026-09-30T08:18:06.855Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "684d12aa-ce1f-4e2c-b06a-4e19258800a3-check-002-in-progress-done",
+          "date": "2026-09-30T08:19:49.328Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped packages/plan-core/src/api-v1.ts (exported from index.ts): API_V1_VERSION \"1\", envelope/error helpers, view types for project, feature, phase, task (checklist, dependsOn as refs, pause), accepted decision (with owner and unique ref like F001#D1), handoff (only while the phase is open), idea; explicit-field mappers; buildApiV1Model(source) that turns a loaded planner into all views with composite refs; listApiV1Entities(model) giving one entry per entity with kind/key/ref/parents for the change detector (T451) and route indexes (T449). Unresolvable dependency ids are kept as stored instead of dropped. Read-tracking sessionInfo is never exposed. Verified: packages/plan-core/test/api-v1.test.mjs, 10 tests pass; plan-core builds. Not verified: full repository gate (at phase close). Remaining in P111: T449 routes, T450 docs and shape pin, T451 events."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "684d12aa-ce1f-4e2c-b06a-4e19258800a3-check-001-define-api-v1-version-envelope-and-view-types",
+          "number": 1,
+          "title": "Define API_V1_VERSION, envelope and view types",
+          "checked": true
+        },
+        {
+          "id": "684d12aa-ce1f-4e2c-b06a-4e19258800a3-check-002-write-explicit-field-mappers-for-project-feature-phase-task-decision-handoff-idea",
+          "number": 2,
+          "title": "Write explicit-field mappers for project, feature, phase, task, decision, handoff, idea",
+          "checked": true
+        },
+        {
+          "id": "684d12aa-ce1f-4e2c-b06a-4e19258800a3-check-003-export-from-plan-core-index",
+          "number": 3,
+          "title": "Export from plan-core index",
+          "checked": true
+        },
+        {
+          "id": "684d12aa-ce1f-4e2c-b06a-4e19258800a3-check-004-unit-tests-for-mappers",
+          "number": 4,
+          "title": "Unit tests for mappers",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-30T08:18:06.855Z",
+      "completedAt": "2026-09-30T08:19:49.328Z",
+      "createdAt": "2026-09-30T08:17:47.728Z",
+      "updatedAt": "2026-09-30T08:19:49.328Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-09-30T08:18:06.756Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "57f76f5c-507d-4c15-af75-d68327005a15",
+      "phaseId": "187902a4-2ee3-4aed-8205-fdeb9877e2cb",
+      "number": 449,
+      "shortId": "L2TPS",
+      "priority": 2,
+      "shortName": "read-only-api-v1-routes-module",
+      "title": "Read-only /api/v1 routes module in plan-server",
+      "status": "done",
+      "description": "New module packages/plan-server/src/api-v1.ts (not more code in serve.ts, 1600+ lines) exporting createApiV1App(store), mounted from createApiApp (serve.ts:188) at /api/v1 in both static and API-only modes, after the busy middleware (serve.ts:229) so a read never sees half-written files. GET only, every reply is the T448 envelope {apiVersion, data}; use the plan-core mappers, never raw store objects. Routes: /api/v1 (index with apiVersion and links), /project, /features, /features/:ref, /phases?feature=, /phases/:ref, /tasks?phase=, /tasks/:ref, /decisions?owner=, /handoffs, /handoffs/:phaseRef, /ideas. Refs accept composite refs (F001, P001(F001), P001(F001)/T001), short ids or UUIDs via refs.ts resolvers. Non-GET methods return 405 with an error body; unknown ref returns 404 {apiVersion, error:{code,message}}; errors use the same envelope shape. Do not touch the web UI routes or X-Planner-Source handling. Include the apiVersion in /health too (serve.ts:1557). Integration tests with the real server fixture (test/helpers/server-fixture.mjs): each route, 404, 405, composite refs.\n\n---\n**Completion summary:**\nShipped packages/plan-server/src/api-v1.ts: createApiV1App(store, isBusy) with relative routes, mounted in serve.ts createApiApp at API_V1_BASE_PATH (/api/v1) in both static and API-only modes. Read-only GET routes: / (index), /project, /features[/ref], /phases[/ref] (?feature, ?status), /tasks[/ref] (?phase, ?status), /decisions (?owner), /handoffs[/phaseRef], /ideas[/ref]; ?compact=true drops long text fields. Refs resolve exactly (id, composite ref, ref without feature, short id, bare T005); no title/fuzzy matching. Non-GET returns 405 with Allow: GET; unknown ref/route 404; busy or internal errors use the {apiVersion, error:{code,message}} envelope. Deviation from the task text: mounted BEFORE the web UI busy middleware (serve.ts ~232) because v1 does its own busy check (503 PLAN_BUSY envelope), so the UI's non-envelope busy reply never reaches v1. /health now includes apiVersion. Web UI routes untouched. Verified: packages/plan-server/test/api-v1.test.mjs (10 tests) and all 69 plan-server tests pass; plan-server builds. Not verified: full repository gate (phase close); no pagination (lists return everything; compact keeps them small).",
+      "descriptionUpdatedAt": "2026-09-30T08:23:57.289Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "57f76f5c-507d-4c15-af75-d68327005a15-check-001-planned-in-progress",
+          "date": "2026-09-30T08:20:21.729Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "57f76f5c-507d-4c15-af75-d68327005a15-check-002-in-progress-done",
+          "date": "2026-09-30T08:23:57.287Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped packages/plan-server/src/api-v1.ts: createApiV1App(store, isBusy) with relative routes, mounted in serve.ts createApiApp at API_V1_BASE_PATH (/api/v1) in both static and API-only modes. Read-only GET routes: / (index), /project, /features[/ref], /phases[/ref] (?feature, ?status), /tasks[/ref] (?phase, ?status), /decisions (?owner), /handoffs[/phaseRef], /ideas[/ref]; ?compact=true drops long text fields. Refs resolve exactly (id, composite ref, ref without feature, short id, bare T005); no title/fuzzy matching. Non-GET returns 405 with Allow: GET; unknown ref/route 404; busy or internal errors use the {apiVersion, error:{code,message}} envelope. Deviation from the task text: mounted BEFORE the web UI busy middleware (serve.ts ~232) because v1 does its own busy check (503 PLAN_BUSY envelope), so the UI's non-envelope busy reply never reaches v1. /health now includes apiVersion. Web UI routes untouched. Verified: packages/plan-server/test/api-v1.test.mjs (10 tests) and all 69 plan-server tests pass; plan-server builds. Not verified: full repository gate (phase close); no pagination (lists return everything; compact keeps them small)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "57f76f5c-507d-4c15-af75-d68327005a15-check-001-createapiv1app-module-with-all-read-routes",
+          "number": 1,
+          "title": "createApiV1App module with all read routes",
+          "checked": true
+        },
+        {
+          "id": "57f76f5c-507d-4c15-af75-d68327005a15-check-002-mount-in-createapiapp-for-static-and-api-only-modes",
+          "number": 2,
+          "title": "Mount in createApiApp for static and API-only modes",
+          "checked": true
+        },
+        {
+          "id": "57f76f5c-507d-4c15-af75-d68327005a15-check-003-error-envelope-404-and-405-handling",
+          "number": 3,
+          "title": "Error envelope, 404 and 405 handling",
+          "checked": true
+        },
+        {
+          "id": "57f76f5c-507d-4c15-af75-d68327005a15-check-004-apiversion-in-health",
+          "number": 4,
+          "title": "apiVersion in /health",
+          "checked": true
+        },
+        {
+          "id": "57f76f5c-507d-4c15-af75-d68327005a15-check-005-integration-tests-with-server-fixture",
+          "number": 5,
+          "title": "Integration tests with server fixture",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-30T08:20:21.729Z",
+      "completedAt": "2026-09-30T08:23:57.287Z",
+      "createdAt": "2026-09-30T08:17:51.917Z",
+      "updatedAt": "2026-09-30T08:23:57.287Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-09-30T08:20:21.625Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "b36aae89-8b0b-40cc-8450-079240906dca",
+      "phaseId": "187902a4-2ee3-4aed-8205-fdeb9877e2cb",
+      "number": 450,
+      "shortId": "4ZSSC",
+      "priority": 3,
+      "shortName": "document-api-v1-and-pin-respon",
+      "title": "Document API v1 and pin response shapes in CI",
+      "status": "done",
+      "description": "Write docs/api-v1.md: versioning promise (additive changes keep apiVersion \"1\"; removing or renaming a field, or changing meaning, needs \"2\"), base URL, envelope, each route with query parameters, each view with field meanings, error envelope, and the entity-changed event (T451). Add packages/plan-server/test/api-v1-contract.test.mjs that builds a fixture planner with one of every entity and compares each route's response key set and value types to a committed expected-shape file (packages/plan-server/test/fixtures/api-v1-shapes.json). The test fails with a clear message naming the route and field when a shape changes, and the message says to bump apiVersion for breaking changes. Shapes compare keys and types only, never ids or timestamps. Link the doc from README.md.\n\n---\n**Completion summary:**\nShipped docs/api-v1.md (versioning promise, serve usage, reply/error envelopes, refs, routes and query parameters, every view with fields, entity-changed event semantics) and linked it from README.md Documentation. Added packages/plan-server/test/api-v1-contract.test.mjs plus committed packages/plan-server/test/fixtures/api-v1-shapes.json: builds a planner with one of every entity (nullable, list and nested fields all populated; the test fails if any list is empty so item shapes stay pinned), records the key/type shape of each route reply, the error envelope and the entity-changed message, and fails with a message naming the reply and telling the reader to bump API_V1_VERSION for breaking changes or regenerate with UPDATE_API_V1_SHAPES=1 for additions. Checked by hand that adding an unknown key to the expected file fails the test. Not verified: full repository gate (run at phase close, next).",
+      "descriptionUpdatedAt": "2026-09-30T08:27:20.131Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "b36aae89-8b0b-40cc-8450-079240906dca-check-001-planned-in-progress",
+          "date": "2026-09-30T08:25:40.837Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "b36aae89-8b0b-40cc-8450-079240906dca-check-002-in-progress-done",
+          "date": "2026-09-30T08:27:20.128Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped docs/api-v1.md (versioning promise, serve usage, reply/error envelopes, refs, routes and query parameters, every view with fields, entity-changed event semantics) and linked it from README.md Documentation. Added packages/plan-server/test/api-v1-contract.test.mjs plus committed packages/plan-server/test/fixtures/api-v1-shapes.json: builds a planner with one of every entity (nullable, list and nested fields all populated; the test fails if any list is empty so item shapes stay pinned), records the key/type shape of each route reply, the error envelope and the entity-changed message, and fails with a message naming the reply and telling the reader to bump API_V1_VERSION for breaking changes or regenerate with UPDATE_API_V1_SHAPES=1 for additions. Checked by hand that adding an unknown key to the expected file fails the test. Not verified: full repository gate (run at phase close, next)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "b36aae89-8b0b-40cc-8450-079240906dca-check-001-write-docs-api-v1-md-with-the-versioning-promise",
+          "number": 1,
+          "title": "Write docs/api-v1.md with the versioning promise",
+          "checked": true
+        },
+        {
+          "id": "b36aae89-8b0b-40cc-8450-079240906dca-check-002-pinned-shape-test-and-shapes-fixture",
+          "number": 2,
+          "title": "Pinned-shape test and shapes fixture",
+          "checked": true
+        },
+        {
+          "id": "b36aae89-8b0b-40cc-8450-079240906dca-check-003-link-from-readme-md",
+          "number": 3,
+          "title": "Link from README.md",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-30T08:25:40.837Z",
+      "completedAt": "2026-09-30T08:27:20.128Z",
+      "createdAt": "2026-09-30T08:17:54.985Z",
+      "updatedAt": "2026-09-30T08:27:20.128Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-09-30T08:25:40.732Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "acfcae44-ac76-4859-8b44-6fcade5e9bab",
+      "phaseId": "187902a4-2ee3-4aed-8205-fdeb9877e2cb",
+      "number": 451,
+      "shortId": "5FBUC",
+      "priority": 4,
+      "shortName": "entity-changed-events-from-a-c",
+      "title": "entity-changed events from a change detector",
+      "status": "done",
+      "description": "Agents write through the MCP in another process, so route-handler broadcasts (serve.ts:300-329) never see those writes; only the folder watcher (serve.ts:139, file-changed with a filename) and /internal/notify (serve.ts:223) do. Events must therefore come from a detector, not from route handlers. New module packages/plan-server/src/entity-events.ts: keeps a snapshot Map of \"kind:id\" to a hash of the T448 view (features, phases, tasks, decisions, handoffs, ideas, project), built at server start. On each watcher or notify signal (debounced ~100ms, reusing startWatcher) it reloads the plan, rebuilds views, diffs, updates the snapshot and broadcasts one `entity-changed` per difference: {type:\"entity-changed\", data:{apiVersion, kind, ref, id, op:\"created\"|\"updated\"|\"deleted\", parents:{featureRef?, phaseRef?}}}. Add the variant to WsEvent (ws-hub.ts:12-19). Existing events stay unchanged for the web UI. Load errors during a busy write are skipped and retried on the next signal. Tests in packages/plan-server/test/entity-events.test.mjs with a real WebSocket: a task status change made through a second PlanStore instance (simulating MCP) yields one entity-changed for that task, not its phase; create and delete; unrelated files produce nothing; a burst of writes produces one event per changed entity.\n\n---\n**Completion summary:**\nShipped the entity-changed live event. New packages/plan-server/src/entity-events.ts: EntityEventDetector keeps a fingerprint (sha1 of the JSON view) of every API v1 entity, reloads the plan on each signal (debounced 100ms, retry 300ms up to 10 times when the plan cannot be read mid-write), and broadcasts one {type:\"entity-changed\", data:{apiVersion, kind, ref, id, op: created|updated|deleted, parents:{featureRef?, phaseRef?}}} per difference; pure diffSnapshots/snapshotOf exported for tests. Signals come from the folder watcher and /internal/notify, so writes by other processes (MCP) are caught; the first successful pass after a failed prime only records. Wired in serve.ts (detector created and primed before listen; closed on server close); WsEvent in ws-hub.ts gained the variant; existing events unchanged. Side fix found on the way: startWatcher used a module-global abort controller, so a second server in the same process stopped the first server's watcher; it now returns its own stop function. Verified: packages/plan-server/test/entity-events.test.mjs (7 tests: update by a second PlanStore, create/delete, project, noise file, burst, legacy events, diff) passed 4 consecutive runs; all 76 plan-server tests pass. Known behaviour: events for one entity coalesce only within the 100ms window, so a slow sequence of writes reports the entity once per pass; a task change also reports its phase/feature when their own view (status, updatedAt) changes. Not verified: full repository gate (phase close).",
+      "descriptionUpdatedAt": "2026-09-30T08:25:40.492Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "acfcae44-ac76-4859-8b44-6fcade5e9bab-check-001-planned-in-progress",
+          "date": "2026-09-30T08:24:15.937Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "acfcae44-ac76-4859-8b44-6fcade5e9bab-check-002-in-progress-done",
+          "date": "2026-09-30T08:25:40.489Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped the entity-changed live event. New packages/plan-server/src/entity-events.ts: EntityEventDetector keeps a fingerprint (sha1 of the JSON view) of every API v1 entity, reloads the plan on each signal (debounced 100ms, retry 300ms up to 10 times when the plan cannot be read mid-write), and broadcasts one {type:\"entity-changed\", data:{apiVersion, kind, ref, id, op: created|updated|deleted, parents:{featureRef?, phaseRef?}}} per difference; pure diffSnapshots/snapshotOf exported for tests. Signals come from the folder watcher and /internal/notify, so writes by other processes (MCP) are caught; the first successful pass after a failed prime only records. Wired in serve.ts (detector created and primed before listen; closed on server close); WsEvent in ws-hub.ts gained the variant; existing events unchanged. Side fix found on the way: startWatcher used a module-global abort controller, so a second server in the same process stopped the first server's watcher; it now returns its own stop function. Verified: packages/plan-server/test/entity-events.test.mjs (7 tests: update by a second PlanStore, create/delete, project, noise file, burst, legacy events, diff) passed 4 consecutive runs; all 76 plan-server tests pass. Known behaviour: events for one entity coalesce only within the 100ms window, so a slow sequence of writes reports the entity once per pass; a task change also reports its phase/feature when their own view (status, updatedAt) changes. Not verified: full repository gate (phase close)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "acfcae44-ac76-4859-8b44-6fcade5e9bab-check-001-snapshot-and-diff-module-over-api-v1-views",
+          "number": 1,
+          "title": "Snapshot and diff module over API v1 views",
+          "checked": true
+        },
+        {
+          "id": "acfcae44-ac76-4859-8b44-6fcade5e9bab-check-002-hook-to-watcher-and-internal-notify-with-debounce",
+          "number": 2,
+          "title": "Hook to watcher and /internal/notify with debounce",
+          "checked": true
+        },
+        {
+          "id": "acfcae44-ac76-4859-8b44-6fcade5e9bab-check-003-add-entity-changed-to-wsevent",
+          "number": 3,
+          "title": "Add entity-changed to WsEvent",
+          "checked": true
+        },
+        {
+          "id": "acfcae44-ac76-4859-8b44-6fcade5e9bab-check-004-tests-with-real-websocket-and-a-second-planstore-writer",
+          "number": 4,
+          "title": "Tests with real WebSocket and a second PlanStore writer",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-30T08:24:15.937Z",
+      "completedAt": "2026-09-30T08:25:40.489Z",
+      "createdAt": "2026-09-30T08:17:59.315Z",
+      "updatedAt": "2026-09-30T08:25:40.489Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-09-30T08:24:15.836Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T20:14:09.588Z",
+  "updatedAt": "2026-09-30T08:27:20.128Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "6063a1d4-fc6d-401e-a557-17f3844c8064",
+      "date": "2026-09-30T08:18:06.881Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "802129cf-b157-428a-887b-72ccef657f3b",
+      "date": "2026-09-30T08:27:20.160Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+      "createdAt": "2026-09-30T08:25:40.732Z"
+    }
+  ]
+}

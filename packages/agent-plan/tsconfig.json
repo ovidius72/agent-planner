@@ -11,6 +11,7 @@
   "include": ["src"],
   "references": [
     { "path": "../plan-core" },
-    { "path": "../plan-mcp" }
+    { "path": "../plan-mcp" },
+    { "path": "../plan-server" }
   ]
 }

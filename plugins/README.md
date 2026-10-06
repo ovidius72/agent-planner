@@ -67,6 +67,7 @@ plugins/
 │   ├── mcp.json
 │   ├── .mcp.json
 │   ├── skills/agent-plan/SKILL.md
+│   ├── skills/planner/SKILL.md
 │   └── README.md
 ├── opencode/                      # OpenCode plugin/config bundle
 │   ├── skills/agent-plan/SKILL.md

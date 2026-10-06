@@ -45,6 +45,7 @@ const HARNESSES = [
     LOAD_COMMAND: "ask Codex to load Agent Plan",
     targets: [
       { from: "../../packages/plan-core/planner-skill.md", to: "skills/agent-plan/SKILL.md", mode: 0o644, frontmatterDescription: true },
+      { from: "../../packages/plan-core/planner-skill.md", to: "skills/planner/SKILL.md", mode: 0o644, frontmatterDescription: true, frontmatterName: "planner" },
     ],
   },
   {
@@ -67,7 +68,10 @@ function substitute(text, vars) {
 }
 
 function renderTemplate(text, vars, target) {
-  const rendered = substitute(text, vars);
+  let rendered = substitute(text, vars);
+  if (target.frontmatterName) {
+    rendered = rendered.replace(/^name: .+$/m, `name: ${target.frontmatterName}`);
+  }
   if (target.frontmatterDescription) {
     return rendered.replace(/^summary:/m, "description:");
   }

@@ -1,8 +1,8 @@
 # Codex setup — Agent Plan MCP and skill
 
 Agent Plan works in Codex through the same stdio MCP server used by Claude Code
-and OpenCode. Codex sees atomic `planner-*` MCP tools plus an `agent-plan`
-skill that contains the planner operating guide.
+and OpenCode. Codex sees atomic `planner-*` MCP tools plus `agent-plan` and
+`planner` skills that contain the planner operating guide.
 
 ## Install Agent Plan
 
@@ -34,8 +34,8 @@ The command writes:
 
 - `.codex/config.toml` for project scope, or `~/.codex/config.toml` for user
   scope.
-- `.codex/skills/agent-plan/SKILL.md` for project scope, or
-  `~/.codex/skills/agent-plan/SKILL.md` for user scope.
+- `.codex/skills/agent-plan/SKILL.md` and `.codex/skills/planner/SKILL.md` for
+  project scope, or the same paths under `~/.codex/skills/` for user scope.
 - For user scope, the Codex marketplace plugin is also registered and installed
   when the `codex` CLI is available.
 
@@ -58,8 +58,8 @@ Agent Plan when you want planner context; this routes to `planner-load`.
 
 Codex plugins/configuration currently expose Agent Plan through MCP tools and
 skills. The public Codex plugin/config surface does not register custom
-`/planner ...` slash commands with segment-level autosuggestion. Use the
-`agent-plan` skill or natural language prompts such as:
+`/planner ...` slash commands with segment-level autosuggestion. Use `$planner`
+or `$agent-plan` in the skill picker, or natural language prompts such as:
 
 ```text
 Load Agent Plan for this project.
@@ -78,6 +78,7 @@ The repository also ships `plugins/codex/`:
 - `mcp.json` / `.mcp.json` — Agent Plan MCP server wiring through
   `npx -y @agent-plan/mcp`.
 - `skills/agent-plan/SKILL.md` — generated Agent Plan operating guide.
+- `skills/planner/SKILL.md` — generated alias guide for `$planner`.
 
 Codex discovers that bundle through the repo-root marketplace catalog:
 

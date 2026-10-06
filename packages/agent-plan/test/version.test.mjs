@@ -89,6 +89,10 @@ test("Claude, Codex, and OpenCode setup preserve manifest-based version routing"
   const codexSkill = readFileSync(join(cwd, ".codex", "skills", "agent-plan", "SKILL.md"), "utf-8");
   assert.match(codexSkill, /# Agent Plan operating guide/);
   assert.match(codexSkill, /^description:/m);
+  const plannerSkill = readFileSync(join(cwd, ".codex", "skills", "planner", "SKILL.md"), "utf-8");
+  assert.match(plannerSkill, /^name: planner$/m);
+  assert.match(plannerSkill, /^description:/m);
+  assert.match(codex.stdout, /Configured Codex Agent Plan skills/);
 
   const claude = runCli(["setup", "claude-code", "--project", "--local"], { cwd });
   assert.equal(claude.status, 0, claude.stderr);
@@ -125,8 +129,12 @@ test("Claude, Codex, and OpenCode setup preserve manifest-based version routing"
   assert.deepEqual(opencodeConfig.mcp.servers["agent-plan"].command.slice(-1), ["mcp"]);
   assert.equal(opencodeConfig.mcp.servers["agent-plan"].command[0], "node");
   assert.equal(opencodeConfig.commands, undefined);
-  assert.match(opencodeConfig.command.planner.template, /# Agent Plan operating guide/);
   assert.match(opencodeConfig.command.planner.template, /\/planner \$ARGUMENTS/);
+  assert.doesNotMatch(opencodeConfig.command.planner.template, /# Agent Plan operating guide/);
+  assert.match(opencodeConfig.command.planner.template, /Use the installed Agent Plan skill or the project-local \.planner\/SKILL\.md only when you need deeper routing rules/);
+  assert.match(opencodeConfig.command["planner/load"].template, /\/planner load/);
+  assert.match(opencodeConfig.command["planner/task/start"].template, /\/planner task start \$ARGUMENTS/);
+  assert.match(opencodeConfig.command["planner/web/start"].template, /\/planner web start/);
   assert.match(opencodeConfig.command["planner-load"].template, /\/planner load/);
   assert.match(opencodeConfig.command["planner-task-start"].template, /\/planner task start \$ARGUMENTS/);
 });
@@ -159,6 +167,8 @@ process.exit(0);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Installed Codex Agent Plan plugin/);
   assert.equal(existsSync(join(cwd, ".codex", "config.toml")), true);
+  assert.equal(existsSync(join(cwd, ".codex", "skills", "agent-plan", "SKILL.md")), true);
+  assert.equal(existsSync(join(cwd, ".codex", "skills", "planner", "SKILL.md")), true);
   const codexCalls = readFileSync(log, "utf-8");
   assert.match(codexCalls, /^--version$/m);
   assert.match(codexCalls, /^plugin marketplace remove agent-plan --json$/m);

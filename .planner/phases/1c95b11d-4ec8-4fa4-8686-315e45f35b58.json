@@ -26,22 +26,24 @@
       "title": "Codex uses MCP plus skill instead of custom slash command",
       "decision": "Codex support ships as MCP configuration plus an agent-plan skill/plugin bundle. Agent Plan must not claim Codex has a native custom /planner slash command or nested autosuggestion until Codex exposes a public API for it.",
       "rationale": "Current Codex CLI/plugin surfaces expose MCP servers, plugins, and skills, but no documented custom slash-command registration surface. Promising /planner in Codex would mislead users.",
-      "implementationNotes": "agent-plan setup codex writes .codex/config.toml and .codex/skills/agent-plan/SKILL.md. For user scope it also registers and installs the Codex marketplace plugin when the codex CLI is available. plugins/codex ships plugin.json, .codex-plugin/plugin.json, mcp.json/.mcp.json, and a generated skill; the repo-root .agents/plugins/marketplace.json exposes it to codex plugin marketplace.",
+      "implementationNotes": "agent-plan setup codex writes .codex/config.toml, .codex/skills/agent-plan/SKILL.md, and .codex/skills/planner/SKILL.md. For user scope it also registers and installs the Codex marketplace plugin when the codex CLI is available. plugins/codex ships plugin.json, .codex-plugin/plugin.json, mcp.json/.mcp.json, the generated agent-plan skill, and a generated planner alias skill; the repo-root .agents/plugins/marketplace.json exposes it to codex plugin marketplace. Handoff reads keep the persisted capsule in tool text and also expose bounded structured content for hosts that rely on structuredContent.",
       "acceptedAt": "2026-10-02T15:08:01.284Z"
     },
     {
       "id": "545f0b4d-72b0-4cc1-b435-ade3d395672f",
-      "title": "OpenCode gets /planner plus flat autosuggest aliases",
-      "decision": "OpenCode support uses mcp.servers.agent-plan plus a command.planner entry for /planner arguments, and installs flat shortcut commands for discoverability instead of pretending nested segment autosuggestion exists.",
-      "rationale": "OpenCode v2 command configuration supports a slash command name with a template; nested segment-level autosuggestion for every /planner subcommand is not exposed in the verified config/CLI surface.",
-      "implementationNotes": "agent-plan setup opencode writes opencode.json or ~/.config/opencode/opencode.json with command.planner and shortcuts such as planner-load, planner-task-start, and planner-web-status. --force removes obsolete Agent Plan entries from the legacy commands key while preserving unrelated user commands.",
+      "title": "OpenCode gets compact /planner plus slash-path autosuggest aliases",
+      "decision": "OpenCode support uses mcp.servers.agent-plan plus a compact command.planner entry for /planner arguments. Setup also installs slash-path aliases such as planner/web/start for command-list autosuggestion, with hyphenated aliases preserved only for compatibility.",
+      "rationale": "OpenCode v2 command configuration accepts named command templates and shows command names in autocomplete, but does not expose documented space-separated segment completion for a single /planner command. Slash-path command names match OpenCode nested command discovery while avoiding a long planner guide prompt on every invocation.",
+      "implementationNotes": "agent-plan setup opencode writes opencode.json or ~/.config/opencode/opencode.json with command.planner, nested aliases such as planner/load, planner/task/start, and planner/web/status, and compatibility aliases such as planner-load. The generated templates route to MCP tools and reference the installed skill or .planner/SKILL.md only when deeper routing context is needed; they no longer embed the full canonical guide on every command.",
       "acceptedAt": "2026-10-02T15:08:01.383Z"
     }
   ],
   "completionCriteria": [],
   "taskIds": [
     "3f6ce891-86a9-40f4-bdfb-f7d86743f000",
-    "049a1aa0-821d-4c28-a149-d681993e6801"
+    "049a1aa0-821d-4c28-a149-d681993e6801",
+    "6db9bce6-0c4c-4aa2-a1fc-08c0c80f2f61",
+    "1d936f40-c235-4e2f-81f7-a58fb9dc94b32"
   ],
   "tasks": [
     {
@@ -191,10 +193,142 @@
         }
       ],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "6db9bce6-0c4c-4aa2-a1fc-08c0c80f2f61",
+      "phaseId": "1c95b11d-4ec8-4fa4-8686-315e45f35b58",
+      "number": 454,
+      "shortId": "OCFIX",
+      "priority": 3,
+      "shortName": "fix-opencode-compact-commands",
+      "title": "Fix OpenCode compact command prompts and slash-path autosuggestion",
+      "status": "done",
+      "description": "Post-release correction for the OpenCode setup after real usage showed two problems: /planner was suggested but space-separated subcommands were not discoverable, and every invocation injected the full Agent Plan operating guide. The fix keeps /planner routing, adds slash-path aliases such as /planner/web/start and /planner/task/start for OpenCode command-list autocomplete, preserves hyphenated aliases for compatibility, and makes command templates compact by referencing the installed skill or .planner/SKILL.md only when deeper routing context is needed.",
+      "descriptionUpdatedAt": "2026-10-06T07:45:00.000Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "6db9bce6-0c4c-4aa2-a1fc-08c0c80f2f61-check-001-planned-in-progress",
+          "date": "2026-10-06T07:45:00.000Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned -> in-progress",
+          "description": "Fixing OpenCode command setup after user verification found missing useful autosuggestion and repeated guide injection."
+        },
+        {
+          "id": "6db9bce6-0c4c-4aa2-a1fc-08c0c80f2f61-check-002-in-progress-done",
+          "date": "2026-10-06T07:45:00.000Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress -> done",
+          "description": "Updated OpenCode setup to keep compact templates, add slash-path aliases for autocomplete, preserve compatibility aliases, update docs/tests, and correct the persisted phase decision."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6db9bce6-0c4c-4aa2-a1fc-08c0c80f2f61-check-001-remove-full-guide-from-opencode-command-template",
+          "number": 1,
+          "title": "Remove full guide injection from the OpenCode command template",
+          "checked": true
+        },
+        {
+          "id": "6db9bce6-0c4c-4aa2-a1fc-08c0c80f2f61-check-002-add-slash-path-aliases-for-opencode-autosuggestion",
+          "number": 2,
+          "title": "Add slash-path aliases for OpenCode autosuggestion",
+          "checked": true
+        },
+        {
+          "id": "6db9bce6-0c4c-4aa2-a1fc-08c0c80f2f61-check-003-update-tests-docs-and-planner-decision",
+          "number": 3,
+          "title": "Update tests, docs, and planner decision",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-06T07:45:00.000Z",
+      "completedAt": "2026-10-06T07:45:00.000Z",
+      "createdAt": "2026-10-06T07:45:00.000Z",
+      "updatedAt": "2026-10-06T07:45:00.000Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "1d936f40-c235-4e2f-81f7-a58fb9dc94b32",
+      "phaseId": "1c95b11d-4ec8-4fa4-8686-315e45f35b58",
+      "number": 455,
+      "shortId": "HOFIX",
+      "priority": 3,
+      "shortName": "fix-codex-handoff-body-routing",
+      "title": "Fix Codex handoff body routing and planner skill alias",
+      "status": "done",
+      "description": "Post-release correction after Codex usage in heca-pro showed an agent misread planner-handoff-show as returning only phase identifiers. Reproduced the real MCP response: SDK clients receive content text and structured text; Codex CLI exposes the full text body but only minimal structured keys. The fix keeps the handoff body in tool text, adds bounded structured content for structuredContent-only hosts, clarifies the skill instructions to read text first and use raw storage only as an explicit diagnostic fallback, and installs a planner skill alias so $planner appears in Codex suggestions.",
+      "descriptionUpdatedAt": "2026-10-06T08:35:00.000Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "1d936f40-c235-4e2f-81f7-a58fb9dc94b32-check-001-planned-in-progress",
+          "date": "2026-10-06T08:35:00.000Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned -> in-progress",
+          "description": "Investigating Codex handoff read behavior and plugin skill discoverability after user verification."
+        },
+        {
+          "id": "1d936f40-c235-4e2f-81f7-a58fb9dc94b32-check-002-in-progress-done",
+          "date": "2026-10-06T08:35:00.000Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress -> done",
+          "description": "Reproduced planner-handoff-show through SDK and Codex CLI, updated handoff reply structured content, clarified fallback guidance, added $planner alias skill, and covered the behavior with targeted tests."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1d936f40-c235-4e2f-81f7-a58fb9dc94b32-check-001-reproduce-codex-handoff-envelope",
+          "number": 1,
+          "title": "Reproduce the handoff result through SDK and Codex CLI",
+          "checked": true
+        },
+        {
+          "id": "1d936f40-c235-4e2f-81f7-a58fb9dc94b32-check-002-add-structured-handoff-content",
+          "number": 2,
+          "title": "Expose bounded handoff body in structured content as well as text",
+          "checked": true
+        },
+        {
+          "id": "1d936f40-c235-4e2f-81f7-a58fb9dc94b32-check-003-clarify-skill-routing-and-fallback",
+          "number": 3,
+          "title": "Clarify skill routing and diagnostic fallback behavior",
+          "checked": true
+        },
+        {
+          "id": "1d936f40-c235-4e2f-81f7-a58fb9dc94b32-check-004-add-codex-planner-skill-alias",
+          "number": 4,
+          "title": "Add Codex $planner alias skill",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-06T08:35:00.000Z",
+      "completedAt": "2026-10-06T08:35:00.000Z",
+      "createdAt": "2026-10-06T08:35:00.000Z",
+      "updatedAt": "2026-10-06T08:35:00.000Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-02T13:22:42.129Z",
-  "updatedAt": "2026-10-05T14:31:45.000Z",
+  "updatedAt": "2026-10-06T08:35:00.000Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

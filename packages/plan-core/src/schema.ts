@@ -120,6 +120,8 @@ export const WorkDeviationSchema = z.object({
   snapshot: TaskPauseSnapshotSchema.nullable().default(null),
   requestedBy: z.enum(["agent", "user"]).default("agent"),
   approvedBy: z.string().default("user"),
+  /** Session that made the switch. "" = unowned (legacy data, or a sessionless caller such as the web UI). */
+  ownerSession: z.string().default(""),
   state: z.enum(["approved", "active", "resume-required", "resolved", "resumed", "canceled"]).default("approved"),
   createdAt: TimestampSchema,
   activatedAt: z.string().default(""),
@@ -130,6 +132,9 @@ export const WorkDeviationSchema = z.object({
   /** When the preserved resume target was actually started again. */
   resumedAt: z.string().default(""),
 });
+
+/** Per-session resume focus, keyed by session id (.local/resume-sessions.json). */
+export const ResumeSessionsSchema = z.record(z.string().min(1), ResumeFocusSchema);
 
 export const ProjectGuidelinesSchema = z.object({
   content: z.string().default(""),
@@ -507,6 +512,7 @@ export type AmbientFacts = z.infer<typeof AmbientFactsSchema>;
 export type ActivityEntry = z.infer<typeof ActivityEntrySchema>;
 export type ActivityLog = z.infer<typeof ActivityLogSchema>;
 export type ResumeFocus = z.infer<typeof ResumeFocusSchema>;
+export type ResumeSessions = z.infer<typeof ResumeSessionsSchema>;
 export type FeatureStatus = z.infer<typeof FeatureStatusSchema>;
 export type Feature = z.infer<typeof FeatureSchema> & { status: FeatureStatus };
 export type FeaturesDocument = { features: Feature[] };

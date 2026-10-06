@@ -1,4 +1,5 @@
 import type { Feature, Phase, Task, WorkDeviation } from "./schema.js";
+import { deviationsForSession } from "./session-focus.js";
 import { listOnHoldWork, startedOpenPhaseIds, type OnHoldTask } from "./on-hold.js";
 
 export type RecommendationClaimKind = "recommendation" | "advisory" | "conflict" | "insufficient";
@@ -279,7 +280,7 @@ export function recommendNextTask(
   // explicit instead of two bare string literals that look like an
   // accidental inclusion of a "closed" state in an "open" list.
   const returnRequiredStates = new Set(["resume-required", "resolved"]);
-  const liveDeviations = deviations
+  const liveDeviations = deviationsForSession(deviations, sessionId)
     .filter((deviation) => deviation.state === "approved"
       || deviation.state === "active"
       || returnRequiredStates.has(deviation.state))
@@ -301,10 +302,21 @@ export function recommendNextTask(
     }
   }
 
+  // Tasks another session set aside on purpose (its live side task still points back at
+  // them). They are that session's to return to: never offer them to this one.
+  const heldByOtherSessions = new Set(
+    sessionId
+      ? deviations
+        .filter((deviation) => deviation.ownerSession !== "" && deviation.ownerSession !== sessionId
+          && (deviation.state === "approved" || deviation.state === "active" || returnRequiredStates.has(deviation.state)))
+        .map((deviation) => deviation.resumeTaskId)
+      : [],
+  );
+
   // A saved checkpoint without a surviving deviation must never disappear
   // behind new priority work. Select the most recent checkpoint (LIFO).
   const checkpointed = candidates
-    .filter(({ task }) => task.status === "planned" && task.pauseSnapshot)
+    .filter(({ task }) => task.status === "planned" && task.pauseSnapshot && !heldByOtherSessions.has(task.id))
     .sort((left, right) => right.task.pauseSnapshot!.pausedAt.localeCompare(left.task.pauseSnapshot!.pausedAt));
   if (checkpointed[0]) {
     return {
@@ -316,6 +328,7 @@ export function recommendNextTask(
 
   const ready = candidates.filter(({ feature, phase, task }) => {
     if (task.status !== "planned") return false;
+    if (heldByOtherSessions.has(task.id)) return false;
     if (hardUnavailable.has(phase.status) || (feature && hardUnavailable.has(feature.status))) return false;
     return task.dependsOn.every((id) => byTaskId.get(id)?.task.status === "done");
   });
