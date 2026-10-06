@@ -63,6 +63,11 @@ let server: ServeHandle | null = null;
 let lastKnownWebPort: number | null = null;
 let plannerSessionId = "pi:uninitialized";
 
+/** The planner session id of a Pi host context. One place, so every handler derives it the same way. */
+function piSessionIdOf(ctx: ExtensionContext): string {
+  return `pi:${ctx.sessionManager.getSessionId()}`;
+}
+
 // True while the agent is mutating .planner/ files. The web server returns 503-busy
 // during this window so the UI doesn't render inconsistent data.
 let planBusy = false;
@@ -360,7 +365,7 @@ async function buildHandoffMarkdown(
 ): Promise<string> {
   const [plan, resume, activity] = await Promise.all([
     st.loadAll(),
- st.refreshResume(),
+ st.refreshResume(undefined, undefined, plannerSessionId),
     st.loadActivityLog(),
   ]);
 
@@ -849,7 +854,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
 
   // ── Restore on session start/reload ─────────────────────────────────
   pi.on("session_start", async (_event, ctx) => {
-    plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+    plannerSessionId = piSessionIdOf(ctx);
     invalidateReads(plannerSessionId);
     startReadSession(plannerSessionId);
     try {
@@ -2245,15 +2250,14 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         // task_recommend tool, so a person at the command line and an agent
         // calling the tool see identical reasoning, just a compact few-line
         // notify instead of a structured payload.
-        const [features, phases, project, resume, handoffs, archivedHandoffs] = await Promise.all([
+        const [features, phases, resume, handoffs, archivedHandoffs] = await Promise.all([
           st.loadFeatures(),
           st.loadAllPhases(),
-          st.loadProject(),
-          st.loadResume(),
+          st.loadResume(plannerSessionId),
           st.listHandoffs(),
           st.listArchivedHandoffs(),
         ]);
-        const result = recommendNextWork(features.features, phases, project.workDeviations, resume?.currentPhaseId, "", {
+        const result = recommendNextWork(features.features, phases, await st.listAllWorkDeviations(), resume?.currentPhaseId, plannerSessionId, {
           handoffs: handoffs.map((handoff) => ({
             compositeRef: handoff.compositeRef,
             firstLine: handoff.firstLine,
@@ -2685,7 +2689,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const plannerSkill = await st.syncPlannerSkill();
         await st.syncGrillMeSkill();
         const srv = server as ServeHandle | null;
-        let recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" });
+        let recapText = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi", sessionId: plannerSessionId });
         if (preparation.changed) recapText = `${preparation.legacyProjectContext.summary}\n\n${recapText}`;
         // Explicit planner load must deliver the complete project-level
         // context (P102(F005)/T404), attested through the same lossless
@@ -3037,7 +3041,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
-      const plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+      const plannerSessionId = piSessionIdOf(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const requirements = await st.loadRequirements();
       if (!params.phaseRef?.trim()) {
@@ -3858,7 +3862,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
         const st = await requirePlan(ctx);
-      const plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+      const plannerSessionId = piSessionIdOf(ctx);
         if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
         const features = (await st.loadFeatures()).features;
         const ref = params.featureId.trim();
@@ -4194,7 +4198,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
         const st = await requirePlan(ctx);
-      const plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+      const plannerSessionId = piSessionIdOf(ctx);
         if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
         const features = (await st.loadFeatures()).features;
         const phase = findPhaseByRef(await st.loadAllPhases(), features, params.phaseId.trim());
@@ -4750,7 +4754,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       }),
       async execute(_id, params, _signal, _onUpdate, ctx) {
         const st = await requirePlan(ctx);
-      const plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+      const plannerSessionId = piSessionIdOf(ctx);
         if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
         const features = (await st.loadFeatures()).features;
         const allPhases = await st.loadAllPhases();
@@ -4758,7 +4762,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: {} };
         const summary = `${found.task.title} — ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(found.task.number)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status})`;
         if (!params.full) return { content: [{ type: "text", text: summary }], details: {} };
-        const project = await st.loadProject();
+        const project = await st.loadProject(plannerSessionId);
         const pendingDeviation = found.task.status === "done" || found.task.status === "canceled" || found.task.status === "rejected"
           ? undefined
           : project.workDeviations
@@ -5204,17 +5208,17 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     description: "Return the next-work chain: active task if present, otherwise the lowest-priority ready feature → phase → task, plus bounded typed claims. Only persisted resume-ready handoffs are actionable; Markdown prose and terminal archives are not authority. Never blocks an explicit user choice.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [features, phases, project, resume, handoffs, archivedHandoffs] = await Promise.all([
+      const [features, phases, resume, handoffs, archivedHandoffs] = await Promise.all([
         st.loadFeatures(),
         st.loadAllPhases(),
-        st.loadProject(),
-        st.loadResume(),
+        st.loadResume(plannerSessionId),
         st.listHandoffs(),
         st.listArchivedHandoffs(),
       ]);
-      const result = recommendNextWork(features.features, phases, project.workDeviations, resume?.currentPhaseId, "", {
+      const result = recommendNextWork(features.features, phases, await st.listAllWorkDeviations(), resume?.currentPhaseId, plannerSessionId, {
         handoffs: handoffs.map((handoff) => ({
           compositeRef: handoff.compositeRef,
           firstLine: handoff.firstLine,
@@ -5240,12 +5244,13 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       reason: Type.String({ description: "Why this approved temporary deviation is needed" }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [features, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
+      const [features, phases, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadResume(plannerSessionId)]);
       const temporary = findTaskByRef(phases, features.features, params.temporary_task.trim());
       if (!temporary) return { content: [{ type: "text", text: `Task not found: ${params.temporary_task}` }], details: {} };
-      const selected = recommendNextTask(features.features, phases, project.workDeviations, focus?.currentPhaseId);
+      const selected = recommendNextTask(features.features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
       const resume = params.resume_task ? findTaskByRef(phases, features.features, params.resume_task.trim()) : selected.candidate;
       if (!resume) return { content: [{ type: "text", text: `No resume task is available. Provide resume_task explicitly. ${selected.reason}` }], details: selected };
       if (temporary.task.id === resume.task.id) return { content: [{ type: "text", text: "A temporary task must differ from its resume target." }], details: {} };
@@ -5257,7 +5262,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         requestedBy: "user" as const, approvedBy: "user", state: "approved" as const,
         createdAt: timestamp, activatedAt: "", resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
       };
-      await st.addWorkDeviation(record);
+      await st.addWorkDeviation(record, plannerSessionId);
       await st.writeGenerated();
       const tempRef = `${formatPhaseRef(temporary.phase.number, featureNumberOfPhase(temporary.phase, features.features))}/T${String(temporary.task.number).padStart(3, "0")}`;
       const resumeRef = `${formatPhaseRef(resume.phase.number, featureNumberOfPhase(resume.phase, features.features))}/T${String(resume.task.number).padStart(3, "0")}`;
@@ -5278,6 +5283,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       paused_by: Type.Optional(Type.String({ description: "Agent/session identifier" })),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -5292,7 +5298,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       invalidateReads(plannerSessionId);
       const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
       await st.syncTaskStatusRollup(found.phase.id);
-      const activeDeviation = (await st.loadProject()).workDeviations
+      const activeDeviation = (await st.loadProject(plannerSessionId)).workDeviations
         .filter((deviation) => (deviation.state === "approved" || deviation.state === "active")
           && deviation.temporaryTaskId === found.task.id)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
@@ -5334,9 +5340,9 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
-      const plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+      const plannerSessionId = piSessionIdOf(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
-      const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
+      const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(plannerSessionId), st.loadResume(plannerSessionId)]);
       const features = featuresDoc.features;
       const source = findTaskByRef(phases, features, params.from_task.trim());
       const target = findTaskByRef(phases, features, params.to_task.trim());
@@ -5412,7 +5418,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         resumeLocation: params.resume_location.trim(), howToResume: params.how_to_resume.trim(),
         relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: params.switched_by?.trim() ?? "",
       };
-      const selection = (recommendNextTask as any)(features, phases, project.workDeviations, focus?.currentPhaseId, plannerSessionId);
+      const selection = (recommendNextTask as any)(features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
       const record = {
         id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
         temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason: snapshot.reason, snapshot,
@@ -5458,7 +5464,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           });
         }
         targetStarted = true;
-        await st.addWorkDeviation(record);
+        await st.addWorkDeviation(record, plannerSessionId);
         if (target.task.pauseSnapshot) {
           const resumedDeviation = project.workDeviations
             .filter((deviation) => deviation.resumeTaskId === target.task.id
@@ -5513,7 +5519,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const found = findTaskByRef(await st.loadAllPhases(), features, params.taskId.trim());
       if (!found) return { content: [{ type: "text", text: `Task not found: ${params.taskId}` }], details: { reopened: false, errorCode: "TASK_NOT_FOUND" }, isError: true };
       try {
-        const reopened = await st.reopenTask(found.phase.id, found.task.id, { confirmed: params.confirmed, ownerSessionId: `pi:${ctx.sessionManager.getSessionId()}` });
+        const reopened = await st.reopenTask(found.phase.id, found.task.id, { confirmed: params.confirmed, ownerSessionId: piSessionIdOf(ctx) });
         await st.syncTaskStatusRollup(found.phase.id);
         await st.writeGenerated();
         return { content: [{ type: "text", text: `✅ Task reopened: ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${pad(reopened.number)} — ${reopened.title} (in-progress)` }], details: { reopened: true, task: reopened } };
@@ -5533,7 +5539,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const st = await requirePlan(ctx);
-      const plannerSessionId = `pi:${ctx.sessionManager.getSessionId()}`;
+      const plannerSessionId = piSessionIdOf(ctx);
       if (!st) return taskStartFailure(taskStartDenied("PLAN_NOT_FOUND", "No .planner/ found.", ["Initialize or load the planner, then retry task_start."]));
       return st.runBatch(async () => {
       const features = (await st.loadFeatures()).features;
@@ -5551,7 +5557,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         [`Use task_reopen with taskId=${taskRef} and confirmed=true after explicit user confirmation.`, `Retry task_start ${taskRef} only if reopening is not the intended operation.`],
         { taskId: task.id },
       ));
-      const project = await st.loadProject();
+      const project = await st.loadProject(plannerSessionId);
       // Targeted stale-context refresh (P102(F005)/T404): task_start delivery
       // stays scoped to feature/phase/task context, but a session that
       // already did a full planner-load gets a non-blocking advisory when
@@ -5631,7 +5637,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
         return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}` }], details: { ...task, ...outcome, task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase } };
       }
-      const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume()]);
+      const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume(plannerSessionId)]);
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
       if (!eligibility.eligible) return taskStartFailure(taskStartDenied(
         "START_NOT_ALLOWED",
@@ -5639,7 +5645,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ["Resolve the reported task readiness condition, then retry task_start."],
         { taskId: task.id },
       ), { eligibility });
-      const selection = (recommendNextTask as any)(features, phases, project.workDeviations, focus?.currentPhaseId, plannerSessionId);
+      const selection = (recommendNextTask as any)(features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
       if (selection.kind === "conflict") {
         return taskStartFailure(taskStartDenied(
           "ACTIVE_TASK_CONFLICT",
@@ -5765,6 +5771,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       description_update: Type.String({ minLength: 10, description: "Required evidence: shipped work, verification level including partial verification, remaining/unverified work, files, decisions, and updated code references." }),
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
+      const plannerSessionId = piSessionIdOf(ctx);
       const st = await requirePlan(ctx);
       if (!st) return { content: [{ type: "text", text: "No .planner/ found." }], details: {} };
       const features = (await st.loadFeatures()).features;
@@ -5808,7 +5815,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         return phase;
       });
       const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
-      const completedDeviation = (await st.loadProject()).workDeviations
+      const completedDeviation = (await st.loadProject(plannerSessionId)).workDeviations
         .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === task.id)
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
       if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resume-required", now);
@@ -6006,7 +6013,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       contextBlockDirty = true;
       const srv = server as ServeHandle | null;
       let recap = "";
-      try { recap = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi" }); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
+      try { recap = await buildRecap(st, { localUrl: srv?.localUrl, lanUrl: srv?.lanUrl, port: lastKnownWebPort ?? undefined }, { harness: "pi", sessionId: plannerSessionId }); } catch (e) { recap = `(recap unavailable: ${e instanceof Error ? e.message : String(e)})`; }
       if (preparation.changed) recap = `${preparation.legacyProjectContext.summary}\n\n${recap}`;
 
       // Explicit planner load must deliver the complete project-level context
@@ -6058,7 +6065,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       // Session initialization must not mutate canonical planner entities.
       // Migrations/backfills/repairs are explicit tools; resume is `.local`.
       if (!plannerHeavyInitDone) {
-        await st.refreshResume();
+        await st.refreshResume(undefined, undefined, plannerSessionId);
         plannerHeavyInitDone = true;
       }
 
@@ -6088,7 +6095,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       const plan = await st.loadAll();
       const project = plan.project;
       const profile = await st.loadCodebaseProfile();
-      const resume = await st.loadResume().catch(() => null) ?? await st.refreshResume();
+      const resume = await st.loadResume(plannerSessionId).catch(() => null) ?? await st.refreshResume(undefined, undefined, plannerSessionId);
       const activity = await st.loadActivityLog();
       const recentActivity = activity.entries.slice(-3).reverse();
       const handoffs = await st.listHandoffs();

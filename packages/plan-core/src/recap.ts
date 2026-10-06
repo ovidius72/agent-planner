@@ -2,6 +2,7 @@ import type { PlanStore } from "./plan-store.js";
 import { formatPhaseRef, formatTwoDigitNumber } from "./naming.js";
 import { buildPhaseWorkMap } from "./task-context.js";
 import { recommendNextTask } from "./task-selection.js";
+import { deviationsForSession } from "./session-focus.js";
 import { listOpenPhaseWork, openPhaseWorkLines } from "./stranded-phase.js";
 import { listOnHoldWork, renderOnHoldWork, startedOpenPhaseIds } from "./on-hold.js";
 
@@ -21,6 +22,8 @@ export type RecapHarness = "pi" | "mcp";
 
 export interface RecapOptions {
   harness?: RecapHarness;
+  /** The caller's session: its own side tasks and resume focus are shown, not other sessions'. Omit for the whole project. */
+  sessionId?: string;
 }
 
 const fref = (n: number) => `F${formatTwoDigitNumber(n)}`;
@@ -43,7 +46,7 @@ const tref = (n: number) => `T${formatTwoDigitNumber(n)}`;
 export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: RecapOptions = {}): Promise<string> {
   const [plan, resume, handoffs] = await Promise.all([
     st.loadAll(),
-    st.loadResume().catch(() => null),
+    st.loadResume(opts.sessionId).catch(() => null),
     st.listHandoffs(),
   ]);
 
@@ -63,7 +66,8 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
   const activeT = activeTasks.length;
   const checkpointedTasks = allTasks.filter(({ task }) => !["done", "canceled", "rejected"].includes(task.status) && task.pauseSnapshot);
   const checkpointedT = checkpointedTasks.length;
-  const pendingDeviation = [...plan.project.workDeviations]
+  const sessionDeviations = deviationsForSession(plan.project.workDeviations, opts.sessionId);
+  const pendingDeviation = [...sessionDeviations]
     .filter((deviation) => deviation.state === "resume-required" || deviation.state === "resolved")
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .find((deviation) => allTasks.some(({ task }) => task.id === deviation.resumeTaskId
@@ -244,7 +248,7 @@ export async function buildRecap(st: PlanStore, web: RecapWebInfo = {}, opts: Re
     // concrete ref to act on, but this, the ordinary case, previously fell
     // through with no "Next step" line at all — the reader had to go call
     // task_recommend to learn what the recap already knew (P104(F005)/T421).
-    const recommendation = recommendNextTask(feats, phases, plan.project.workDeviations);
+    const recommendation = recommendNextTask(feats, phases, sessionDeviations, "", opts.sessionId ?? "");
     if (recommendation.kind === "priority" && recommendation.candidate) {
       const { candidate } = recommendation;
       const candidateFeature = feats.find((entry) => entry.id === candidate.phase.featureId);

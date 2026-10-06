@@ -1,5 +1,6 @@
 export * from "./naming.js";
 export * from "./api-v1.js";
+export * from "./session-focus.js";
 export * from "./refs.js";
 export * from "./render-utils.js";
 export * from "./pagination.js";

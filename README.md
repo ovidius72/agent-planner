@@ -67,6 +67,16 @@ Requirements currently exist as internal/project seed data and are not exposed a
 
 The core planning model lives outside Pi, Claude Code, or any other harness. Adapters should call shared planning logic rather than owning business rules.
 
+### Several agents on one planner
+
+Each agent session (a Claude Code or Codex MCP connection, a Pi session) keeps its own focus:
+
+- **Tasks:** a task in progress belongs to the session that started it.
+- **Side tasks:** when a session switches to a temporary task (`task_switch`, `task_deviation`), the task to return to is recorded for that session only. Another session's recommendation never says `RESUME REQUIRED` for it and never offers the set-aside task, so one agent's detour does not become another agent's order.
+- **Resume focus:** each session has its own current phase, in-progress tasks, next steps and notes (`.planner/.local/resume-sessions.json`, the 20 most recent sessions are kept). A session that has none yet starts from the project-level focus. The guard bypass stays project-wide.
+
+A caller with no session (the web UI, scripts) sees the whole project, as before. Work recorded before sessions were tracked is shown to every session. A checkpointed task that no live side task points at is still offered to every session, so paused work is not lost.
+
 ---
 
 ## Documentation

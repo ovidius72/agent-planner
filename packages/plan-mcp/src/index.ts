@@ -1483,7 +1483,7 @@ server.registerTool("planner-task-show", {
   if (!found) return text(`Task not found: ${ref}`);
     const summary = `${found.task.title} — ${taskCompositeRef(found.task, found.phase, features)}${found.task.shortId ? ` · ${found.task.shortId}` : ""} (${found.task.status}; phase ${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))})`;
     if (!full) return text(summary);
-    const project = await st.loadProject();
+    const project = await st.loadProject(plannerSessionId);
     const pendingDeviation = found.task.status === "done" || found.task.status === "canceled" || found.task.status === "rejected"
       ? undefined
       : project.workDeviations
@@ -1683,7 +1683,8 @@ server.registerTool("planner-task-update", {
     checklist: z.array(z.string()).optional().describe("Replace the task checklist (implementation steps, plain strings). Ticks carry over by exact title match, and by position when the new list is the same length (so renaming an item keeps its tick); an item that cannot be matched loses its tick and that loss is reported. Agents should tick steps via planner-task-checklist-toggle, not write DONE in titles, and use planner-task-checklist-add/remove for granular edits."),
     subtasks: z.array(z.object({ id: z.string().optional(), title: z.string().min(1), description: z.string().optional(), status: z.enum(STATUS_VALUES).optional() })).optional().describe("Replace subtasks; existing IDs must belong to this task and omitted IDs are planner-generated."),
   },
-}, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks }) => {
+}, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -1788,7 +1789,7 @@ server.registerTool("planner-task-update", {
   let resumeNotice = "";
   let resumeRequired: Record<string, unknown> | undefined;
   if (status && status !== "in-progress" && status !== found.task.status) {
-    const deviation = (await st.loadProject()).workDeviations
+    const deviation = (await st.loadProject(plannerSessionId)).workDeviations
       .filter((entry) => (entry.state === "approved" || entry.state === "active") && entry.temporaryTaskId === found.task.id)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
     if (deviation) {
@@ -1952,17 +1953,17 @@ server.registerTool("planner-task-delete", {
 server.registerTool("planner-task-recommend", {
   description: "Return the harness-agnostic next-work chain: active task if present, otherwise the lowest-priority ready feature → phase → task, plus bounded typed claims. Only persisted resume-ready handoffs are actionable; Markdown prose and terminal archives are not authority. Does not start or block work.",
   inputSchema: {},
-}, async () => {
+}, async (_args, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const [features, phases, project, resume, handoffs, archivedHandoffs] = await Promise.all([
+  const [features, phases, resume, handoffs, archivedHandoffs] = await Promise.all([
     st.loadFeatures(),
     st.loadAllPhases(),
-    st.loadProject(),
-    st.loadResume(),
+    st.loadResume(plannerSessionId),
     st.listHandoffs(),
     st.listArchivedHandoffs(),
   ]);
-  const result = recommendNextWork(features.features, phases, project.workDeviations, resume?.currentPhaseId, "", {
+  const result = recommendNextWork(features.features, phases, await st.listAllWorkDeviations(), resume?.currentPhaseId, plannerSessionId, {
     handoffs: handoffs.map((handoff) => ({
       compositeRef: handoff.compositeRef,
       firstLine: handoff.firstLine,
@@ -1977,12 +1978,13 @@ server.registerTool("planner-task-recommend", {
 server.registerTool("planner-task-deviation", {
   description: "Record a user-approved temporary task deviation. It preserves the recommended/resume task and never starts, pauses, or blocks work; use normal lifecycle tools for those transitions.",
   inputSchema: { temporary_task: z.string().min(1), resume_task: z.string().min(1).optional(), reason: z.string().min(1) },
-}, async ({ temporary_task, resume_task, reason }) => {
+}, async ({ temporary_task, resume_task, reason }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const [features, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
+  const [features, phases, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadResume(plannerSessionId)]);
   const temporary = findTaskByRef(phases, features.features, temporary_task);
   if (!temporary) return text(`Task not found: ${temporary_task}`);
-  const selected = recommendNextTask(features.features, phases, project.workDeviations, focus?.currentPhaseId);
+  const selected = recommendNextTask(features.features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
   const resume = resume_task ? findTaskByRef(phases, features.features, resume_task) : selected.candidate;
   if (!resume) return text(`No resume task is available. Provide resume_task explicitly. ${selected.reason}`);
   if (temporary.task.id === resume.task.id) return text("A temporary task must differ from its resume target.");
@@ -1994,7 +1996,7 @@ server.registerTool("planner-task-deviation", {
     requestedBy: "user" as const, approvedBy: "user", state: "approved" as const,
     createdAt: timestamp, activatedAt: "", resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
   };
-  await st.addWorkDeviation(record);
+  await st.addWorkDeviation(record, plannerSessionId);
   return writeAndSummarize(st, `✅ Approved deviation: ${taskCompositeRef(temporary.task, temporary.phase, features.features)} temporarily overrides ${taskCompositeRef(resume.task, resume.phase, features.features)}. Resume target retained.`, { deviation: record });
 });
 
@@ -2023,7 +2025,7 @@ server.registerTool("planner-task-pause", {
   invalidateReads(plannerSessionId);
   const checkpointed = await st.pauseTask(found.phase.id, found.task.id, snapshot);
   await st.syncTaskStatusRollup(found.phase.id);
-  const activeDeviation = (await st.loadProject()).workDeviations
+  const activeDeviation = (await st.loadProject(plannerSessionId)).workDeviations
     .filter((deviation) => (deviation.state === "approved" || deviation.state === "active")
       && deviation.temporaryTaskId === found.task.id)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
@@ -2057,7 +2059,7 @@ server.registerTool("planner-task-switch", {
 }, async ({ from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume, switched_by }, extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(), st.loadResume()]);
+  const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(plannerSessionId), st.loadResume(plannerSessionId)]);
   const features = featuresDoc.features;
   const source = findTaskByRef(phases, features, from_task);
   const target = findTaskByRef(phases, features, to_task);
@@ -2130,7 +2132,7 @@ server.registerTool("planner-task-switch", {
     resumeLocation: resume_location, howToResume: how_to_resume,
     relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: switched_by?.trim() ?? "",
   };
-  const selection = (recommendNextTask as any)(features, phases, project.workDeviations, focus?.currentPhaseId, plannerSessionId);
+  const selection = (recommendNextTask as any)(features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
   const record = {
     id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
     temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason, snapshot,
@@ -2177,7 +2179,7 @@ server.registerTool("planner-task-switch", {
       });
     }
     targetStarted = true;
-    await st.addWorkDeviation(record);
+    await st.addWorkDeviation(record, plannerSessionId);
     if (target.task.pauseSnapshot) {
       const resumedDeviation = project.workDeviations
         .filter((deviation) => deviation.resumeTaskId === target.task.id
@@ -2259,7 +2261,7 @@ server.registerTool("planner-task-start", {
     [`Use planner-task-reopen with task=${taskRef} and confirmed=true after explicit user confirmation.`, `Retry planner-task-start ${taskRef} only if reopening is not the intended operation.`],
     { taskId: found.task.id },
   ));
-  const project = await st.loadProject();
+  const project = await st.loadProject(plannerSessionId);
   // Targeted stale-context refresh (P102(F005)/T404): task-start delivery
   // stays scoped to feature/phase/task context, but a session that already
   // did a full planner-load gets a non-blocking advisory when project-level
@@ -2328,7 +2330,7 @@ server.registerTool("planner-task-start", {
     const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
     return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}`, { ...outcome, task: found.task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase });
   }
-  const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume()]);
+  const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume(plannerSessionId)]);
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
   if (!eligibility.eligible) return taskStartError(taskStartDenied(
     "START_NOT_ALLOWED",
@@ -2336,7 +2338,7 @@ server.registerTool("planner-task-start", {
     ["Resolve the reported task readiness condition, then retry planner-task-start."],
     { taskId: found.task.id },
   ), { eligibility });
-  const selection = (recommendNextTask as any)(features, phases, project.workDeviations, focus?.currentPhaseId, plannerSessionId);
+  const selection = (recommendNextTask as any)(features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
   if (selection.kind === "conflict") {
     return taskStartError(taskStartDenied(
       "ACTIVE_TASK_CONFLICT",
@@ -2471,7 +2473,8 @@ server.registerTool("planner-task-complete", {
     motivation: z.string().optional().describe("Required when force=true overrides unchecked checklist items: why the checklist no longer matches the work."),
     description_update: z.string().min(10).describe("Required evidence: shipped work, verification level including partial verification, remaining/unverified work, files, decisions, and updated code references."),
   },
-}, async ({ task: ref, force, motivation, description_update }) => {
+}, async ({ task: ref, force, motivation, description_update }, extra) => {
+  const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
   const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
   if (!found) return text(`Task not found: ${ref}`);
@@ -2513,7 +2516,7 @@ server.registerTool("planner-task-complete", {
     return phase;
   });
   const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
-  const completedDeviation = (await st.loadProject()).workDeviations
+  const completedDeviation = (await st.loadProject(plannerSessionId)).workDeviations
     .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === found.task.id)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resume-required", timestamp);
@@ -3141,7 +3144,7 @@ server.registerTool("planner-load", {
   const plannerSkill = await st.syncPlannerSkill();
   await st.syncGrillMeSkill();
   const web = await ensureWebStarted();
-  const recap = await buildRecap(st, web, { harness: "mcp" });
+  const recap = await buildRecap(st, web, { harness: "mcp", sessionId: plannerSessionId });
   const plan = await st.loadAll();
 
   // Explicit planner load must deliver the complete project-level context
