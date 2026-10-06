@@ -4,7 +4,8 @@ CLI package for Agent Plan.
 
 ## What it provides
 - `agent-plan --version` / `agent-plan -v`
-- `agent-plan init`
+- `agent-plan init` (`--description`, `--goal`, `--json`)
+- `agent-plan serve` (`--root`, `--port`, `--host`, `--json`)
 - `agent-plan mcp`
 - `agent-plan export`
 - `agent-plan setup claude-code`

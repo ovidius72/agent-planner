@@ -7,6 +7,7 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "node:http";
+import type { EntityChangedData } from "./entity-events.js";
 
 export type WsEvent =
   | { type: "file-changed"; data: { filename: string } }
@@ -16,7 +17,8 @@ export type WsEvent =
   | { type: "phases-updated"; data: unknown }
   | { type: "plan-rendered"; data: unknown }
   | { type: "handoffUpdated"; data: { phaseId: string } }
-  | { type: "handoffCleared"; data: { phaseId: string } };
+  | { type: "handoffCleared"; data: { phaseId: string } }
+  | { type: "entity-changed"; data: EntityChangedData };
 
 export class WsHub {
   private wss: WebSocketServer;

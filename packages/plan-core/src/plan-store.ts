@@ -56,7 +56,10 @@ import {
   type ResumeFocus,
   type WorkDeviation,
   WorkDeviationSchema,
+  ResumeSessionsSchema,
+  type ResumeSessions,
 } from "./schema.js";
+import { deviationsForSession, pruneResumeSessions } from "./session-focus.js";
 import { createFeatureId, createIdeaId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatFeatureRef, formatIdeaRef, formatPhaseRef, formatThreeDigitNumber, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
 import { buildHierarchicalDescriptionFreshness, type HierarchicalDescriptionFreshness } from "./description-freshness.js";
@@ -1414,6 +1417,9 @@ export class PlanStore {
   private resumePath(): string {
     return join(this.localRoot(), "resume.json");
   }
+  private resumeSessionsPath(): string {
+    return join(this.localRoot(), "resume-sessions.json");
+  }
   private activityPath(): string {
     return join(this.localRoot(), "activity.json");
   }
@@ -1711,7 +1717,8 @@ export class PlanStore {
     return timestamp ? { ...manifest, updatedAt: timestamp.updatedAt } : manifest;
   }
 
-  async loadProject(): Promise<Project> {
+  /** With a session id, `workDeviations` holds only that session's side tasks (plus unowned legacy ones); without, all of them. */
+  async loadProject(sessionId?: string): Promise<Project> {
     const project = await readJson(this.projectPath(), ProjectSchema);
     // One-time migration (T299): move runtime workDeviations from the shared
     // project.json into worktree-local .local/deviations.json, then clear them
@@ -1724,7 +1731,7 @@ export class PlanStore {
     // Read-view merge: readers keep using `project.workDeviations`, but the
     // values now come from worktree-local storage.
     const deviations = await this.loadWorkDeviations();
-    return { ...project, workDeviations: deviations };
+    return { ...project, workDeviations: deviationsForSession(deviations, sessionId) };
   }
 
   /**
@@ -1869,7 +1876,8 @@ export class PlanStore {
     await this.touchTimestamp();
   }
 
-  async loadResume(): Promise<ResumeFocus | null> {
+  /** The project-level resume focus (the one a sessionless caller sees). */
+  private async loadProjectResume(): Promise<ResumeFocus | null> {
     await this.migrateLegacyLocalFile(join(this.root, "resume.json"), this.resumePath());
     try {
       return await readJson(this.resumePath(), ResumeFocusSchema);
@@ -1878,11 +1886,43 @@ export class PlanStore {
     }
   }
 
-  async saveResume(resume: ResumeFocus): Promise<void> {
+  private async loadResumeSessions(): Promise<ResumeSessions> {
+    try {
+      return await readJson(this.resumeSessionsPath(), ResumeSessionsSchema);
+    } catch {
+      return {};
+    }
+  }
+
+  /** Read-modify-write of the per-session entries under the planner's write lock. */
+  private async updateResumeSessions(updater: (sessions: ResumeSessions) => ResumeSessions): Promise<void> {
+    await mkdir(this.localRoot(), { recursive: true });
+    try {
+      // Exclusive create: two sessions starting together must not overwrite each other's entry.
+      await writeFile(this.resumeSessionsPath(), "{}", { encoding: "utf-8", flag: "wx" });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    await atomicUpdateJson(this.resumeSessionsPath(), ResumeSessionsSchema, (current) => pruneResumeSessions(updater(current)), this.root);
+  }
+
+  /**
+   * The resume focus. With a session id, that session's own entry; a session that has
+   * none yet inherits the project-level focus for reading. Without one, the project-level focus.
+   */
+  async loadResume(sessionId?: string): Promise<ResumeFocus | null> {
+    if (sessionId) {
+      const own = (await this.loadResumeSessions())[sessionId];
+      if (own) return own;
+    }
+    return this.loadProjectResume();
+  }
+
+  async saveResume(resume: ResumeFocus, sessionId?: string): Promise<void> {
     // Track when `nextSteps` actually change (free-text can go stale; the recap
     // surfaces nextStepsUpdatedAt so staleness is visible). Preserved when
     // refreshResume keeps existing nextSteps; bumped only on a real change.
-    const existing = await this.loadResume().catch(() => null);
+    const existing = await this.loadResume(sessionId).catch(() => null);
     const nextStepsChanged = JSON.stringify(existing?.nextSteps ?? []) !== JSON.stringify(resume.nextSteps ?? []);
     const withTs: ResumeFocus = {
       ...resume,
@@ -1891,7 +1931,12 @@ export class PlanStore {
         : (resume.nextStepsUpdatedAt || existing?.nextStepsUpdatedAt || nowISO()),
     };
     const parsed = ResumeFocusSchema.parse(withTs);
-    await atomicWriteJson(this.resumePath(), parsed, this.root);
+    if (sessionId) {
+      // The guard bypass is a project-wide setting, not focus: it never lives in a session entry.
+      await this.updateResumeSessions((sessions) => ({ ...sessions, [sessionId]: { ...parsed, guardBypassUntil: "" } }));
+    } else {
+      await atomicWriteJson(this.resumePath(), parsed, this.root);
+    }
     await this.touchTimestamp();
   }
 
@@ -1961,25 +2006,28 @@ export class PlanStore {
 
 
   /** Derive an up-to-date resume focus from the current workspace state. */
-  async refreshResume(notes?: string, lastSessionSummary?: string): Promise<ResumeFocus> {
+  async refreshResume(notes?: string, lastSessionSummary?: string, sessionId?: string): Promise<ResumeFocus> {
     const workspace = await this.loadAll();
     const inProgressPhases = workspace.phases.filter((p) => p.status === "in-progress");
-    const activePhase = workspace.phases.find((phase) => phase.tasks.some((task) => task.status === "in-progress"));
-    const inProgressTasks = workspace.phases.flatMap((p) => p.tasks.filter((t) => t.status === "in-progress"));
+    // A session's focus is the work it owns; the project-level focus is everyone's.
+    const ownsTask = (task: { status: string; activeOwnerSession?: string | undefined }) =>
+      task.status === "in-progress" && (!sessionId || task.activeOwnerSession === sessionId);
+    const activePhase = workspace.phases.find((phase) => phase.tasks.some(ownsTask));
+    const inProgressTasks = workspace.phases.flatMap((p) => p.tasks.filter(ownsTask));
     const blockedTasks = workspace.phases.flatMap((p) => p.tasks.filter((t) => t.status === "blocked"));
-    const existing = await this.loadResume();
+    const existing = await this.loadResume(sessionId);
     const resume: ResumeFocus = {
       updatedAt: nowISO(),
-      currentPhaseId: activePhase?.id ?? (existing?.currentPhaseId || inProgressPhases[0]?.id || ""),
+      currentPhaseId: activePhase?.id ?? (existing?.currentPhaseId || (sessionId ? "" : inProgressPhases[0]?.id) || ""),
       inProgressTaskIds: inProgressTasks.map((t) => t.id),
       nextSteps: existing?.nextSteps ?? [],
       nextStepsUpdatedAt: existing?.nextStepsUpdatedAt ?? "",
       blockers: blockedTasks.map((t) => `${t.id}: ${t.title}`),
       notes: notes ?? existing?.notes ?? "",
       lastSessionSummary: lastSessionSummary ?? existing?.lastSessionSummary ?? "",
-      guardBypassUntil: existing?.guardBypassUntil ?? "",
+      guardBypassUntil: sessionId ? "" : existing?.guardBypassUntil ?? "",
     };
-    await this.saveResume(resume);
+    await this.saveResume(resume, sessionId);
     return resume;
   }
 
@@ -2630,9 +2678,16 @@ export class PlanStore {
     return { applied: true, preview: expected.preview, project: persisted };
   }
 
+  /** Every session's side tasks. Selection needs them all: recommendNextTask hides other sessions' on its own. */
+  async listAllWorkDeviations(): Promise<WorkDeviation[]> {
+    return this.loadWorkDeviations();
+  }
+
   /** Persist an explicitly approved work deviation without coupling it to a harness. */
-  async addWorkDeviation(deviation: WorkDeviation): Promise<Project> {
-    const deviations = [...(await this.loadWorkDeviations()), deviation];
+  async addWorkDeviation(deviation: Omit<WorkDeviation, "ownerSession"> & { ownerSession?: string }, sessionId?: string): Promise<Project> {
+    // The switch belongs to the session that made it, unless the caller already said otherwise.
+    const owned: WorkDeviation = { ...deviation, ownerSession: deviation.ownerSession || sessionId || "" };
+    const deviations = [...(await this.loadWorkDeviations()), owned];
     await this.saveWorkDeviations(deviations);
     return this.loadProject();
   }

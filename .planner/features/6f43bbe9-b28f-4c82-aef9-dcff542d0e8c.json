@@ -1,0 +1,50 @@
+{
+  "id": "6f43bbe9-b28f-4c82-aef9-dcff542d0e8c",
+  "number": 23,
+  "shortId": "HR4BM",
+  "priority": 22,
+  "name": "Outside-app integration (heca-pro): serve CLI, v1 read API, entity events, per-session focus",
+  "description": "Request from heca-pro (~/projects/heca-pro/docs/agent-plan-work.md), agreed with the user 2026-09-29. heca-pro bundles agent-plan and drives it from a Node helper; it shows a read-only planner view and links to the web UI for editing. Agents write through MCP. Assignment/roles stay out of agent-plan.\n\nCurrent state: the agent-plan CLI (packages/agent-plan/src/index.ts) has init/mcp/guard/export but no serve; plan-server starts only from code or env vars PLAN_PORT/PLAN_HOST/PLAN_ROOT (packages/plan-server/src/cli.ts). The ~60 routes in packages/plan-server/src/serve.ts are the web UI's own backend, unversioned. /ws (packages/plan-server/src/ws-hub.ts:12-19) sends whole-collection events (features-updated, phases-updated). The deviation stack (packages/plan-core/src/schema.ts:168) and resume focus are per project; task ownership is already per session (activeOwnerSession, task-selection.ts:263). `agent-plan init <name> --yes` (index.ts:102) sets only the name and exits silently if a planner exists.\n\nGoals: (1) `agent-plan serve` with root/port/host options, prints address, --json. (2) Separate read-only /api/v1 with documented contract, apiVersion in responses, shared response types in plan-core AND a pinned-shape test; web UI routes untouched; new module, not more code in serve.ts. (3) `entity-changed` WS event {apiVersion, kind, ref, id, op, parent refs}; old events stay for the web UI. (4) Deviation stack and resume focus keyed per session; sessionless callers keep project-wide behaviour. (5) init gains --description, --goal, --json and a distinct documented already-exists result.\n\nAlready done, not part of this feature: heca-pro's cascade feature-delete bug (feature survived a delete) is fixed by commit 840db0c with its own test; it reaches heca-pro in the next release (they run 0.3.2).\n\nBehaviours to preserve: the web UI backend and its X-Planner-Source rules; existing /ws events; planner disabled by default (heca-pro never starts the server on its own); harness-agnostic core (AGENTS.md rule 4). Contract types live in plan-core and are also exported for plan-server.\n\nOrder: phase P110 (serve + init), then P111 (read API + events), then P112 (per-session focus).",
+  "descriptionUpdatedAt": "2026-09-29T20:16:49.153Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "98e7f52a-3b13-4750-9beb-79b325155f9e",
+    "187902a4-2ee3-4aed-8205-fdeb9877e2cb",
+    "8a429228-b236-4c81-82b3-e9c1883b8c2e",
+    "d21f1ad4-1f92-43c5-88a4-ce5d9d20520a"
+  ],
+  "dependsOn": [],
+  "statusLog": [
+    {
+      "id": "f99efddc-dbbd-4c47-9918-28852ff0c087",
+      "date": "2026-09-29T20:17:28.331Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "c8c1e19d-d5b8-443c-a338-30d01e75df19",
+      "date": "2026-10-06T08:00:20.815Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-09-29T20:14:01.410Z",
+  "updatedAt": "2026-09-29T20:16:49.153Z",
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+      "createdAt": "2026-10-06T07:46:24.445Z"
+    }
+  ]
+}

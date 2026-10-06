@@ -40,7 +40,8 @@
   ],
   "dependencies": {
     "@agent-plan/core": "workspace:*",
-    "@agent-plan/mcp": "workspace:*"
+    "@agent-plan/mcp": "workspace:*",
+    "@agent-plan/server": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

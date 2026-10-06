@@ -1,0 +1,210 @@
+{
+  "id": "98e7f52a-3b13-4750-9beb-79b325155f9e",
+  "featureId": "6f43bbe9-b28f-4c82-aef9-dcff542d0e8c",
+  "number": 110,
+  "shortId": "EUE4N",
+  "priority": 1,
+  "slug": "cli-for-outside-programs-agent-plan-serve-and-init-options",
+  "title": "CLI for outside programs: agent-plan serve and init options",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "serve command, init --description/--goal/--json",
+  "description": "Current state: packages/agent-plan/src/index.ts has no `serve`; plan-server starts from packages/plan-server/src/cli.ts via PLAN_PORT/PLAN_HOST/PLAN_ROOT and serve() in serve.ts. initPlanner (index.ts:102) sets only the name and returns silently when .planner/ exists.\n\nWork: add `agent-plan serve [--root --port --host --json]` reusing serve() (port 0 = OS-assigned, prints address; --json prints one JSON line {url, host, port, root}). Extend `agent-plan init` with --description, --goal, --json and a distinct machine-readable already-exists result. Use mkdtemp fixtures only.\n\nNot in scope: the cascade feature-delete bug reported by heca-pro is already fixed by commit 840db0c (tombstone in packages/plan-core/src/feature-delete.ts, test in packages/plan-core/test/feature-delete.test.mjs); it ships in the next release.\n\nPreserve: existing init behaviour and prompts without flags; env-var start path of plan-server; planner disabled by default. All source text in English.",
+  "descriptionUpdatedAt": "2026-09-29T20:16:45.400Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "22bdb64e-a4f1-4586-b425-83c073b94566",
+    "ef7ad158-4624-4714-b17a-c2f120ac87d3"
+  ],
+  "tasks": [
+    {
+      "id": "22bdb64e-a4f1-4586-b425-83c073b94566",
+      "phaseId": "98e7f52a-3b13-4750-9beb-79b325155f9e",
+      "number": 446,
+      "shortId": "5A7SE",
+      "priority": 1,
+      "shortName": "agent-plan-serve-command",
+      "title": "agent-plan serve command",
+      "status": "done",
+      "description": "Add `agent-plan serve [--root <dir>] [--port <n>] [--host <h>] [--json]` to packages/agent-plan/src/index.ts (usage() at :20, parseFlags :75, main :396). It calls serve() from @agent-plan/server (packages/plan-server/src/serve.ts:1661; options port/planRoot/host/quiet, handle has url/localUrl/lanUrl/mode/bindHost/close). Today plan-server starts only from packages/plan-server/src/cli.ts through PLAN_PORT/PLAN_HOST/PLAN_ROOT. Defaults: root = ./.planner (plannerRoot()), host 127.0.0.1, port 3030; port 0 lets the OS pick. Print the address; with --json print exactly one JSON line {url, localUrl, lanUrl, host, port, root} and nothing else on stdout. Keep the process running until SIGINT/SIGTERM, then close() cleanly. Errors (missing .planner/, port in use) go to stderr with exit code 1. Add @agent-plan/server as a workspace dependency of the agent-plan package (check there is no dependency cycle). Test with mkdtemp fixture and port 0 in packages/agent-plan/test. Edge cases: --port not a number, unknown flags, root without planner.\n\n---\n**Completion summary:**\nShipped `agent-plan serve [--root <.planner dir>] [--port n] [--host h] [--json]` in packages/agent-plan/src/index.ts (serveCommand, parsePort, parseFlags now handles value flags incl. --name=value). It loads @agent-plan/server lazily, prints the address (or one JSON line {url, localUrl, lanUrl, host, port, root} with the real port when --port 0), stops cleanly on SIGINT/SIGTERM, and exits 1 with a stderr message for a missing planner or a bad port. Added @agent-plan/server as workspace dependency (package.json, tsconfig reference, pnpm-lock.yaml; no cycle: server depends only on core). Verified: new packages/agent-plan/test/serve.test.mjs (4 tests, mkdtemp fixtures, port 0) plus all existing agent-plan CLI tests: 20/20 pass; package builds. Not verified: full repository gate (reserved for phase close). Value flags --description/--goal are already parsed and used by T447. Note: --root is the .planner folder itself, same as AGENT_PLAN_ROOT.",
+      "descriptionUpdatedAt": "2026-09-29T20:18:28.373Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "22bdb64e-a4f1-4586-b425-83c073b94566-check-001-planned-in-progress",
+          "date": "2026-09-29T20:17:28.224Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "22bdb64e-a4f1-4586-b425-83c073b94566-check-002-in-progress-done",
+          "date": "2026-09-29T20:18:28.365Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped `agent-plan serve [--root <.planner dir>] [--port n] [--host h] [--json]` in packages/agent-plan/src/index.ts (serveCommand, parsePort, parseFlags now handles value flags incl. --name=value). It loads @agent-plan/server lazily, prints the address (or one JSON line {url, localUrl, lanUrl, host, port, root} with the real port when --port 0), stops cleanly on SIGINT/SIGTERM, and exits 1 with a stderr message for a missing planner or a bad port. Added @agent-plan/server as workspace dependency (package.json, tsconfig reference, pnpm-lock.yaml; no cycle: server depends only on core). Verified: new packages/agent-plan/test/serve.test.mjs (4 tests, mkdtemp fixtures, port 0) plus all existing agent-plan CLI tests: 20/20 pass; package builds. Not verified: full repository gate (reserved for phase close). Value flags --description/--goal are already parsed and used by T447. Note: --root is the .planner folder itself, same as AGENT_PLAN_ROOT."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "22bdb64e-a4f1-4586-b425-83c073b94566-check-001-add-agent-plan-server-dependency-no-cycle",
+          "number": 1,
+          "title": "Add @agent-plan/server dependency (no cycle)",
+          "checked": true
+        },
+        {
+          "id": "22bdb64e-a4f1-4586-b425-83c073b94566-check-002-parse-root-port-host-json-and-add-serve-command-usage-text",
+          "number": 2,
+          "title": "Parse --root/--port/--host/--json and add serve command + usage text",
+          "checked": true
+        },
+        {
+          "id": "22bdb64e-a4f1-4586-b425-83c073b94566-check-003-print-address-json-prints-one-json-line-clean-shutdown-on-signals",
+          "number": 3,
+          "title": "Print address; --json prints one JSON line; clean shutdown on signals",
+          "checked": true
+        },
+        {
+          "id": "22bdb64e-a4f1-4586-b425-83c073b94566-check-004-focused-test-with-mkdtemp-and-port-0",
+          "number": 4,
+          "title": "Focused test with mkdtemp and port 0",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-29T20:17:28.224Z",
+      "completedAt": "2026-09-29T20:18:28.365Z",
+      "createdAt": "2026-09-29T20:17:16.084Z",
+      "updatedAt": "2026-09-29T20:18:28.365Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-09-29T20:17:28.121Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "ef7ad158-4624-4714-b17a-c2f120ac87d3",
+      "phaseId": "98e7f52a-3b13-4750-9beb-79b325155f9e",
+      "number": 447,
+      "shortId": "MNG59",
+      "priority": 2,
+      "shortName": "agent-plan-init-description-go",
+      "title": "agent-plan init: --description, --goal, --json, already-exists result",
+      "status": "done",
+      "description": "Extend initPlanner (packages/agent-plan/src/index.ts:102). Today it sets only the project name (PlanStore.init, plan-core/src/plan-store.ts:1512) and, when .planner/ exists, prints a message and returns with exit code 0 — indistinguishable from success. Add --description <text> and --goal <text> (Project has goal and description fields, plan-core/src/schema.ts:145-146; set them through PlanStore.updateProject at plan-store.ts:2575 after init), and --json. With --json print one JSON line: {status: \"created\"|\"exists\", root, name}. When the planner already exists, --json reports status \"exists\" and exit code stays 0 but the status field tells the caller; without --json keep the current message. Flags --description/--goal on an existing planner must not overwrite anything (report exists). Parse flags with values in parseFlags (:75), which today only handles booleans. Keep the prompts and behaviour without flags unchanged. Test with mkdtemp fixtures: created with description/goal, exists, no flags.\n\n---\n**Completion summary:**\nShipped `agent-plan init` options in packages/agent-plan/src/index.ts (initPlanner): --description and --goal set Project fields via PlanStore.updateProject right after creation; --json prints one line {status: \"created\"|\"exists\", root, name}; with --json (or --yes) it never prompts and defaults the name to the folder name. An existing planner is never modified (reports \"exists\", exit 0; text output unchanged). A value flag without a value exits 1. Documented in README.md (CLI section, init and serve) and packages/agent-plan/README.md. Verified: new packages/agent-plan/test/init-options.test.mjs (5 tests, mkdtemp fixtures) plus serve, version and guard tests: 17/17 pass; package builds. Not verified: full repository gate (reserved for phase close); no installed-artifact smoke test yet.",
+      "descriptionUpdatedAt": "2026-09-29T20:19:05.049Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "ef7ad158-4624-4714-b17a-c2f120ac87d3-check-001-planned-in-progress",
+          "date": "2026-09-29T20:18:30.799Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "ef7ad158-4624-4714-b17a-c2f120ac87d3-check-002-in-progress-done",
+          "date": "2026-09-29T20:19:05.046Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped `agent-plan init` options in packages/agent-plan/src/index.ts (initPlanner): --description and --goal set Project fields via PlanStore.updateProject right after creation; --json prints one line {status: \"created\"|\"exists\", root, name}; with --json (or --yes) it never prompts and defaults the name to the folder name. An existing planner is never modified (reports \"exists\", exit 0; text output unchanged). A value flag without a value exits 1. Documented in README.md (CLI section, init and serve) and packages/agent-plan/README.md. Verified: new packages/agent-plan/test/init-options.test.mjs (5 tests, mkdtemp fixtures) plus serve, version and guard tests: 17/17 pass; package builds. Not verified: full repository gate (reserved for phase close); no installed-artifact smoke test yet."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "ef7ad158-4624-4714-b17a-c2f120ac87d3-check-001-value-flags-parsing-description-goal-root-if-needed",
+          "number": 1,
+          "title": "Value flags parsing (--description, --goal, --root if needed)",
+          "checked": true
+        },
+        {
+          "id": "ef7ad158-4624-4714-b17a-c2f120ac87d3-check-002-set-description-goal-after-init-via-updateproject",
+          "number": 2,
+          "title": "Set description/goal after init via updateProject",
+          "checked": true
+        },
+        {
+          "id": "ef7ad158-4624-4714-b17a-c2f120ac87d3-check-003-json-result-with-created-exists-status",
+          "number": 3,
+          "title": "--json result with created/exists status",
+          "checked": true
+        },
+        {
+          "id": "ef7ad158-4624-4714-b17a-c2f120ac87d3-check-004-focused-tests-with-mkdtemp",
+          "number": 4,
+          "title": "Focused tests with mkdtemp",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-09-29T20:18:30.799Z",
+      "completedAt": "2026-09-29T20:19:05.046Z",
+      "createdAt": "2026-09-29T20:17:19.661Z",
+      "updatedAt": "2026-09-29T20:19:05.046Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-09-29T20:18:30.692Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-29T20:14:06.474Z",
+  "updatedAt": "2026-09-29T20:19:05.046Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "4cfd3172-ef93-4b24-aafa-551af64e5b94",
+      "date": "2026-09-29T20:17:28.257Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "f80b11f0-adc3-432b-9b33-fb767d53ca61",
+      "date": "2026-09-29T20:19:05.075Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+      "createdAt": "2026-09-29T20:18:30.692Z"
+    }
+  ]
+}

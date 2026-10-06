@@ -1,0 +1,216 @@
+{
+  "id": "d21f1ad4-1f92-43c5-88a4-ce5d9d20520a",
+  "featureId": "6f43bbe9-b28f-4c82-aef9-dcff542d0e8c",
+  "number": 113,
+  "shortId": "SQCKG",
+  "priority": 4,
+  "slug": "server-discovery-for-long-running-owners-server-json-serve-reuse-agent-plan-stop-richer-health",
+  "title": "Server discovery for long-running owners: server.json, serve --reuse, agent-plan stop, richer /health",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "One shared record of the running server per planner folder, reuse, clean stop, health details",
+  "description": "Requested by heca-pro-e6, agreed with the user 2026-09-30. heca-pro runs one `agent-plan serve --root <project>/.planner --port 0 --json` per project shared by all its sessions; it must never start a second server for a folder that already has one (started by the MCP planner-web, planner-load, or the user).\n\nCurrent state: nothing records a running server. planner-web and planner-load keep an in-process handle only (packages/plan-mcp/src/index.ts ~135, 3079-3119); the Pi adapter has its own (packages/pi-adapter/src/index.ts ~150). `agent-plan serve` (packages/agent-plan/src/index.ts serveCommand) prints an address and runs until a signal. /health (packages/plan-server/src/serve.ts ~1557) returns only {status, root}. Two servers on one folder are safe: writes use cross-process file locks (plan-store.ts ~563) and each server watches the folder itself.\n\nWork: (1) One shared helper in plan-server (used by serve, planner-web, planner-load and the Pi adapter, so there is one place) that writes `.planner/.local/server.json` {pid, url, localUrl, lanUrl, host, port, root, startedAt, version} when a server starts and removes it on clean close. A record whose pid is dead or whose /health does not answer is stale and is ignored and replaced. (2) `agent-plan serve --reuse [--json]`: if a live server exists, print its address (same --json line as a fresh start) and exit 0; otherwise start one. (3) `agent-plan stop [--root]`: read server.json and signal only that pid; exit 0 if nothing runs. (4) /health adds pid, version and apiVersion so a client can confirm it is the right server. (5) In --json mode stdout is one JSON line, logs go to stderr. Document in README.md and docs/api-v1.md.\n\nPreserve: planner disabled by default (nothing starts on its own); behaviour of planner-web/planner-load for users who ignore the record; web UI routes; serve without --reuse keeps starting a new server.",
+  "descriptionUpdatedAt": "2026-09-30T08:19:54.483Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c",
+    "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2"
+  ],
+  "tasks": [
+    {
+      "id": "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c",
+      "phaseId": "d21f1ad4-1f92-43c5-88a4-ce5d9d20520a",
+      "number": 453,
+      "shortId": "FGQ2L",
+      "priority": 1,
+      "shortName": "server-record-in-serve-server",
+      "title": "Server record in serve(): server.json, richer /health",
+      "status": "done",
+      "description": "One place, so every server gets it: serve() in packages/plan-server/src/serve.ts is called by the CLI serve command, planner-web/planner-load (packages/plan-mcp/src/index.ts:180 and :3098) and the Pi adapter (packages/pi-adapter/src/index.ts:763). New module packages/plan-server/src/server-record.ts exporting serverRecordPath(planRoot) = <planRoot>/.local/server.json, writeServerRecord, readLiveServerRecord(planRoot), removeServerRecord(planRoot, pid). Record: {pid, url, localUrl, lanUrl, host, port, root, startedAt, version, apiVersion}. serve() writes it after listen and removes it in close() only when the stored pid is its own. A record is live only when its pid exists (process.kill(pid, 0)) and GET <localUrl>/health answers within ~1s with the same root; a stale record is deleted and treated as absent. If a live record from another pid already exists, serve() does not overwrite it (the first live server owns the record). Never let a record failure (read-only folder, race) stop the server: swallow and continue. /health (serve.ts ~1562) adds pid, version (SERVER_PACKAGE.version) and keeps apiVersion. Add a ServeOptions flag recordServer (default true) so tests can turn it off. Tests in packages/plan-server/test/server-record.test.mjs with mkdtemp fixtures: written on start and removed on close; stale record (dead pid) ignored and replaced; second server does not overwrite a live record and does not remove it on close; /health fields; corrupt json ignored.\n\n---\n**Completion summary:**\nShipped the server record. New packages/plan-server/src/server-record.ts: serverRecordPath (<planner>/.local/server.json, already git-ignored via .planner/.gitignore), writeServerRecord (atomic tmp+rename, never throws, does not overwrite a live record of a different address: first live server owns it), readLiveServerRecord (live = pid exists AND GET <localUrl>/health answers within 1s with the same root; a stale or corrupt record is deleted and treated as absent), removeServerRecord (only when pid and address are this server's own). serve() in serve.ts writes it after listen (before resolving) and removes it in close(); one integration point, so the CLI, MCP planner-web/planner-load and the Pi adapter all get it; ServeOptions.recordServer (default true) turns it off. Comparison is by address, not pid, since one process can run several servers. /health now returns {status, root, apiVersion, pid, version}. plan-server index exports readLiveServerRecord, serverRecordPath, ServerRecord. Verified: packages/plan-server/test/server-record.test.mjs (8 tests: write/remove, health fields, stale pid, dead address, first-owner rule, corrupt file, flag off, unwritable folder); all 85 plan-server tests pass on 4 consecutive parallel runs. Also fixed flaky entity-events tests: they now write only after a warm-up proves the folder watcher is live (macOS can miss writes made right after the watcher starts when busy); the noise and legacy-event tests now wait for a new file-changed rather than any. Not verified: full repository gate (phase close); the Pi adapter and MCP paths use serve() unchanged but have no dedicated server.json test.",
+      "descriptionUpdatedAt": "2026-10-06T07:16:08.064Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c-check-001-planned-in-progress",
+          "date": "2026-10-06T07:10:41.366Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c-check-002-in-progress-done",
+          "date": "2026-10-06T07:16:08.061Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped the server record. New packages/plan-server/src/server-record.ts: serverRecordPath (<planner>/.local/server.json, already git-ignored via .planner/.gitignore), writeServerRecord (atomic tmp+rename, never throws, does not overwrite a live record of a different address: first live server owns it), readLiveServerRecord (live = pid exists AND GET <localUrl>/health answers within 1s with the same root; a stale or corrupt record is deleted and treated as absent), removeServerRecord (only when pid and address are this server's own). serve() in serve.ts writes it after listen (before resolving) and removes it in close(); one integration point, so the CLI, MCP planner-web/planner-load and the Pi adapter all get it; ServeOptions.recordServer (default true) turns it off. Comparison is by address, not pid, since one process can run several servers. /health now returns {status, root, apiVersion, pid, version}. plan-server index exports readLiveServerRecord, serverRecordPath, ServerRecord. Verified: packages/plan-server/test/server-record.test.mjs (8 tests: write/remove, health fields, stale pid, dead address, first-owner rule, corrupt file, flag off, unwritable folder); all 85 plan-server tests pass on 4 consecutive parallel runs. Also fixed flaky entity-events tests: they now write only after a warm-up proves the folder watcher is live (macOS can miss writes made right after the watcher starts when busy); the noise and legacy-event tests now wait for a new file-changed rather than any. Not verified: full repository gate (phase close); the Pi adapter and MCP paths use serve() unchanged but have no dedicated server.json test."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c-check-001-server-record-ts-helper-write-read-live-remove",
+          "number": 1,
+          "title": "server-record.ts helper (write, read live, remove)",
+          "checked": true
+        },
+        {
+          "id": "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c-check-002-use-it-in-serve-with-recordserver-option-first-live-server-owns-the-record",
+          "number": 2,
+          "title": "Use it in serve() with recordServer option; first live server owns the record",
+          "checked": true
+        },
+        {
+          "id": "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c-check-003-health-adds-pid-and-version",
+          "number": 3,
+          "title": "/health adds pid and version",
+          "checked": true
+        },
+        {
+          "id": "1b7e78d6-10c3-43f9-8cdc-1afeb2e95e0c-check-004-tests-with-mkdtemp-fixtures",
+          "number": 4,
+          "title": "Tests with mkdtemp fixtures",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-06T07:10:41.366Z",
+      "completedAt": "2026-10-06T07:16:08.061Z",
+      "createdAt": "2026-10-06T07:10:19.962Z",
+      "updatedAt": "2026-10-06T07:16:08.061Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-10-06T07:10:41.262Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2",
+      "phaseId": "d21f1ad4-1f92-43c5-88a4-ce5d9d20520a",
+      "number": 454,
+      "shortId": "QE47R",
+      "priority": 2,
+      "shortName": "agent-plan-serve-reuse-and-age",
+      "title": "agent-plan serve --reuse and agent-plan stop",
+      "status": "done",
+      "description": "Builds on the server record (previous task). In packages/agent-plan/src/index.ts (serveCommand, parseFlags, usage(), main) add: (1) `--reuse` flag on serve: call readLiveServerRecord(root); if live, print the same output as a fresh start (the --json line {url, localUrl, lanUrl, host, port, root} or the text lines) and exit 0 without starting a server; otherwise start one as today. (2) `agent-plan stop [--root <.planner dir>] [--json]`: read the live record, send SIGTERM to its pid, wait up to 5s for the process to exit, exit 0 and report {stopped: true, pid} (or {stopped: false} text/JSON when nothing runs); exit 1 if the process does not exit in time. Only signal the pid in a live record; never guess pids. Export readLiveServerRecord from @agent-plan/server index.ts (currently exports serve, WsHub only). In --json mode stdout stays exactly one JSON line and logs go to stderr. Document serve --reuse, stop, server.json and /health in README.md (CLI section) and docs/api-v1.md. Tests in packages/agent-plan/test with mkdtemp and port 0: --reuse prints the running server's address and starts nothing; --reuse starts a server when none runs; stop ends a running serve and removes the record; stop with nothing running exits 0.\n\n---\n**Completion summary:**\nShipped `agent-plan serve --reuse` and `agent-plan stop` in packages/agent-plan/src/index.ts. serve --reuse reads the live server record and, if a server runs for the folder, prints the same output as a fresh start (text, or the --json line with an added `reused` boolean) and exits 0 without starting anything; otherwise it starts one. stop [--root] [--json] signals the pid of a live record with SIGTERM and waits up to 5s; exit 0 when stopped or nothing runs; exit 1 on timeout. SAFETY DECISION (added during the task): the record has a `kind` (\"standalone\" for `agent-plan serve`, \"embedded\" for servers started from code, e.g. MCP planner-web/planner-load or the Pi adapter; ServeOptions.serverKind, default embedded) and stop refuses to signal an embedded server (exit 1, reason \"embedded\") because that pid is the host program, e.g. an agent's MCP server. BUG FOUND by the real-process tests: with the web UI bundled the API sits under /api and /health fell through to the UI page, so the liveness check never succeeded and --reuse never found the server; /health now also answers at the root (serve.ts createApiApp). Shared printServerInfo keeps fresh and reused output identical. Tests: packages/agent-plan/test/serve-discovery.test.mjs (7 tests) with shared helpers in test/helpers/cli-process.mjs (also used by serve.test.mjs): reuse finds the server, reuse starts when none, ignores a killed server's record, stop ends serve and removes the record, stop with nothing running, stop refuses an embedded server, --root from another folder. All 32 agent-plan CLI tests pass on 3 consecutive runs. Docs: README.md CLI section and docs/api-v1.md (server.json, /health, reuse, stop). Not verified: full repository gate (next); no test of the MCP/Pi processes writing server.json end to end.",
+      "descriptionUpdatedAt": "2026-10-06T07:20:13.487Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2-check-001-planned-in-progress",
+          "date": "2026-10-06T07:16:17.667Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2-check-002-in-progress-done",
+          "date": "2026-10-06T07:20:13.485Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped `agent-plan serve --reuse` and `agent-plan stop` in packages/agent-plan/src/index.ts. serve --reuse reads the live server record and, if a server runs for the folder, prints the same output as a fresh start (text, or the --json line with an added `reused` boolean) and exits 0 without starting anything; otherwise it starts one. stop [--root] [--json] signals the pid of a live record with SIGTERM and waits up to 5s; exit 0 when stopped or nothing runs; exit 1 on timeout. SAFETY DECISION (added during the task): the record has a `kind` (\"standalone\" for `agent-plan serve`, \"embedded\" for servers started from code, e.g. MCP planner-web/planner-load or the Pi adapter; ServeOptions.serverKind, default embedded) and stop refuses to signal an embedded server (exit 1, reason \"embedded\") because that pid is the host program, e.g. an agent's MCP server. BUG FOUND by the real-process tests: with the web UI bundled the API sits under /api and /health fell through to the UI page, so the liveness check never succeeded and --reuse never found the server; /health now also answers at the root (serve.ts createApiApp). Shared printServerInfo keeps fresh and reused output identical. Tests: packages/agent-plan/test/serve-discovery.test.mjs (7 tests) with shared helpers in test/helpers/cli-process.mjs (also used by serve.test.mjs): reuse finds the server, reuse starts when none, ignores a killed server's record, stop ends serve and removes the record, stop with nothing running, stop refuses an embedded server, --root from another folder. All 32 agent-plan CLI tests pass on 3 consecutive runs. Docs: README.md CLI section and docs/api-v1.md (server.json, /health, reuse, stop). Not verified: full repository gate (next); no test of the MCP/Pi processes writing server.json end to end."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2-check-001-export-readliveserverrecord-from-plan-server-index",
+          "number": 1,
+          "title": "Export readLiveServerRecord from plan-server index",
+          "checked": true
+        },
+        {
+          "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2-check-002-serve-reuse-text-and-json",
+          "number": 2,
+          "title": "serve --reuse (text and --json)",
+          "checked": true
+        },
+        {
+          "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2-check-003-agent-plan-stop-root-json",
+          "number": 3,
+          "title": "agent-plan stop [--root] [--json]",
+          "checked": true
+        },
+        {
+          "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2-check-004-docs-in-readme-and-api-v1-md",
+          "number": 4,
+          "title": "Docs in README and api-v1.md",
+          "checked": true
+        },
+        {
+          "id": "8bf27d67-5bb8-4b1c-8fea-1ee49b337df2-check-005-tests-with-mkdtemp-and-port-0",
+          "number": 5,
+          "title": "Tests with mkdtemp and port 0",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-06T07:16:17.667Z",
+      "completedAt": "2026-10-06T07:20:13.485Z",
+      "createdAt": "2026-10-06T07:10:30.474Z",
+      "updatedAt": "2026-10-06T07:20:13.485Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-10-06T07:16:17.564Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-09-30T08:19:54.414Z",
+  "updatedAt": "2026-10-06T07:20:13.485Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "1b57131b-b260-4a03-a525-7e78b692f403",
+      "date": "2026-10-06T07:10:41.398Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "29f61ab0-b54f-4c09-a5ef-2db328be1cea",
+      "date": "2026-10-06T07:20:13.515Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+      "createdAt": "2026-10-06T07:16:17.564Z"
+    }
+  ]
+}

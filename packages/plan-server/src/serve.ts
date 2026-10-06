@@ -8,13 +8,14 @@ import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
-import { ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
+import { API_V1_VERSION, ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
+import { API_V1_BASE_PATH, createApiV1App } from "./api-v1.js";
+import { EntityEventDetector } from "./entity-events.js";
+import { removeServerRecord, writeServerRecord, type ServerKind } from "./server-record.js";
 
 // ─── Watcher ────────────────────────────────────────────────────────────
-
-let watcherAbort: AbortController | null = null;
 
 const SERVER_PACKAGE = packageVersionFromModule(import.meta.url, "@agent-plan/server");
 
@@ -136,17 +137,17 @@ function fromWebUi(c: Context): boolean {
   return c.req.header("X-Planner-Source") === "web-ui";
 }
 
-function startWatcher(planRoot: string, hubRef: { current: WsHub | null }): void {
-  stopWatcher();
-  if (!existsSync(planRoot)) return;
+/** Watch the planner folder. Returns a function that stops this watcher only, so several servers in one process never stop each other's. */
+function startWatcher(planRoot: string, hubRef: { current: WsHub | null }, onChange: () => void): () => void {
+  if (!existsSync(planRoot)) return () => {};
 
   const ac = new AbortController();
-  watcherAbort = ac;
 
   try {
     const watcher = watch(planRoot, { recursive: true, signal: ac.signal }, (_event: string, filename: string | null) => {
       if (filename && !filename.includes(".tmp.")) {
         hubRef.current?.broadcast({ type: "file-changed", data: { filename } });
+        onChange();
       }
     });
     watcher.on("error", () => {
@@ -156,11 +157,7 @@ function startWatcher(planRoot: string, hubRef: { current: WsHub | null }): void
   } catch {
     // recursive watch may fail on some systems
   }
-}
-
-function stopWatcher() {
-  watcherAbort?.abort();
-  watcherAbort = null;
+  return () => ac.abort();
 }
 
 export interface ShortcutConfigSpec {
@@ -185,7 +182,7 @@ export interface UiConfig {
   server?: ServerUiConfig | undefined;
 }
 
-function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPrefix = "", uiConfig?: UiConfig, isBusy?: () => boolean) {
+function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPrefix = "", uiConfig?: UiConfig, isBusy?: () => boolean, onExternalChange?: () => void) {
   const hub = () => hubRef.current;
   const route = (path: string) => `${apiPrefix}${path}`;
 
@@ -223,8 +220,13 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.post(route("/internal/notify"), (c) => {
     hub()?.broadcast({ type: "plan-rendered", data: {} });
     hub()?.broadcast({ type: "file-changed", data: { filename: "external-notify" } });
+    onExternalChange?.();
     return c.json({ ok: true });
   });
+
+  // The outside API has its own versioned contract and its own busy/error replies,
+  // so it is mounted before the web UI's busy middleware below.
+  app.route(API_V1_BASE_PATH, createApiV1App(store, isBusy));
 
   // While the agent is mutating .planner/ files, avoid serving possibly-inconsistent data.
   // GET requests get a 503 busy signal the UI retries; mutations are rejected.
@@ -1554,7 +1556,11 @@ app.put(route("/docs/save"), async (c) => {
   });
 
   // ── Health ───────────────────────────────────────────────────────
-  app.get(route("/health"), (c) => c.json({ status: "ok", root: store.root }));
+  const health = (c: Context) => c.json({ status: "ok", root: store.root, apiVersion: API_V1_VERSION, pid: process.pid, version: SERVER_PACKAGE.version });
+  app.get(route("/health"), health);
+  // With the web UI bundled the API sits under /api and unknown paths fall through to the UI,
+  // so a program probing the server must also find /health at the root.
+  if (apiPrefix) app.get("/health", health);
   app.get(route("/ui-config"), (c) => c.json(uiConfig ?? {}));
 
   return app;
@@ -1562,8 +1568,8 @@ app.put(route("/docs/save"), async (c) => {
 
 // ─── Serve static files (SPA) ────────────────────────────────────────────
 
-function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, staticDir?: string, uiConfig?: UiConfig, isBusy?: () => boolean) {
-  const app = createApiApp(store, hubRef, staticDir ? "/api" : "", uiConfig, isBusy);
+function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, staticDir?: string, uiConfig?: UiConfig, isBusy?: () => boolean, onExternalChange?: () => void) {
+  const app = createApiApp(store, hubRef, staticDir ? "/api" : "", uiConfig, isBusy, onExternalChange);
 
   if (!staticDir) {
     return app;
@@ -1646,6 +1652,10 @@ export interface ServeOptions {
   quiet?: boolean;
   uiConfig?: UiConfig | undefined;
   isBusy?: (() => boolean) | undefined;
+  /** Write `.planner/.local/server.json` so other programs can find this server. Default true. */
+  recordServer?: boolean;
+  /** `standalone` only for `agent-plan serve`, where the process exists just to run this server. Default `embedded`. */
+  serverKind?: ServerKind;
 }
 
 export interface ServeHandle {
@@ -1659,7 +1669,7 @@ export interface ServeHandle {
 }
 
 export async function serve(options: ServeOptions): Promise<ServeHandle> {
-  const { port = 3030, planRoot, host = "127.0.0.1" } = options;
+  const { port = 3030, planRoot, host = "127.0.0.1", recordServer = true, serverKind = "embedded" } = options;
 
   const store = new PlanStore(planRoot);
   const runtimeUiConfig: UiConfig = { ...(options.uiConfig ?? {}) };
@@ -1676,7 +1686,10 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
   // Default to the bundled web UI when the caller doesn't pass staticDir. Pass
   // an empty string ("") to force API-only even when the bundle is present.
   const staticDir = options.staticDir ?? resolveBundledStaticDir();
-  const app = createSpaApp(store, hubRef, staticDir, runtimeUiConfig, options.isBusy);
+  // Detects exactly which entities changed, including writes by other processes (MCP).
+  const detector = new EntityEventDetector(store, (change) => hubRef.current?.broadcast({ type: "entity-changed", data: change }));
+  await detector.prime();
+  const app = createSpaApp(store, hubRef, staticDir, runtimeUiConfig, options.isBusy, () => detector.signal());
 
   return new Promise((resolve, reject) => {
     // Create the Node HTTP server without listening yet
@@ -1711,9 +1724,9 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
         if (lanUrl) console.log(`[plan-server] lan url: ${lanUrl}`);
       }
 
-      startWatcher(planRoot, hubRef);
+      const stopWatcher = startWatcher(planRoot, hubRef, () => detector.signal());
 
-      resolve({
+      const handle: ServeHandle = {
         url: localUrl,
         localUrl,
         lanUrl,
@@ -1722,6 +1735,8 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
         hub,
         close: async () => {
           stopWatcher();
+          detector.close();
+          if (recordServer) await removeServerRecord(store.root, { pid: process.pid, localUrl });
           hub.close();
           // Force-close any lingering sockets (browser WebSocket / keep-alive),
           // otherwise server.close() hangs until the kernel times them out.
@@ -1732,7 +1747,24 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
           anyServer.closeAllConnections?.();
           await new Promise<void>((r) => anyServer.close(() => r()));
         },
-      });
+      };
+      if (!recordServer) {
+        resolve(handle);
+        return;
+      }
+      void writeServerRecord(store.root, {
+        kind: serverKind,
+        pid: process.pid,
+        url: handle.url,
+        localUrl: handle.localUrl,
+        lanUrl: handle.lanUrl ?? null,
+        host: handle.bindHost,
+        port: actualPort,
+        root: store.root,
+        startedAt: new Date().toISOString(),
+        version: SERVER_PACKAGE.version,
+        apiVersion: API_V1_VERSION,
+      }).finally(() => resolve(handle));
     });
   });
 }
