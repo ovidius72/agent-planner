@@ -1,13 +1,13 @@
 {
   "name": "agent-plan",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "interface": {
     "displayName": "Agent Plan"
   },
   "plugins": [
     {
       "name": "agent-plan",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "source": {
         "source": "local",
         "path": "./plugins/codex"
