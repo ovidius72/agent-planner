@@ -3,9 +3,10 @@
  *
  * Every adapter (MCP, Pi, and any future harness) calls the same builders
  * here instead of assembling its own text/structuredContent pair. Each
- * builder returns exactly one copy of every piece of information: the
- * human-readable channel (`text`) and the machine-readable channel
- * (`structured`) never both carry the same field. Which channel is
+ * builder returns one canonical structured shape plus human-readable text.
+ * Most large fields still live in only one channel, but the handoff body is
+ * deliberately duplicated in `structured.content` for hosts that expose only
+ * structuredContent to the agent. Which channel is
  * canonical for a given piece of content is decided per field below, based
  * on what a structuredContent-only host needs in order to act (see the
  * per-field comments) rather than by a single blanket rule — see AGENTS.md
@@ -178,13 +179,11 @@ export type HandoffShowReplyInput =
  * empty, archived, and active branches through one shared shape so no
  * surface keeps its own construction.
  *
- * Placement: the resume capsule body is prose meant to be read, and every
- * existing consumer reads it from `text` (never from `structured`), so
- * `text` is its one home; `structured` carries only `fullLength`/
- * `truncated` flags plus the identifiers, hash, and verification flags a
- * structuredContent-only host needs to drive the candidate-then-verify
- * contract (call verify with the right hash) without needing the prose
- * itself.
+ * Placement: the resume capsule body is prose that must be read by the
+ * agent before verify/resume. It is intentionally present in both `text` and
+ * `structured.content`; some hosts surface only structuredContent, and a
+ * phase ref plus hash is not enough to resume safely. `fullLength` and
+ * `truncated` describe the bounded body in both channels.
  */
 export function buildHandoffShowReply(input: HandoffShowReplyInput): HandoffReply {
   if (input.kind === "empty") {
@@ -222,6 +221,7 @@ export function buildHandoffShowReply(input: HandoffShowReplyInput): HandoffRepl
         archiveFile: input.archiveFile,
         fullLength: bounded.fullLength,
         truncated: bounded.truncated,
+        content: bounded.content,
         supportingDocuments,
         empty: false,
         resumeReady: false,
@@ -249,6 +249,7 @@ export function buildHandoffShowReply(input: HandoffShowReplyInput): HandoffRepl
       phaseWorkMap: workMapForTransport(phaseWorkMap, false),
       fullLength: bounded.fullLength,
       truncated: bounded.truncated,
+      content: bounded.content,
       contentHash,
       persistenceVerified,
       resumeReady,

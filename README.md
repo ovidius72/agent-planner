@@ -99,6 +99,7 @@ plugins/
     .codex-plugin/plugin.json   Codex compatibility manifest
     mcp.json / .mcp.json        @agent-plan/mcp stdio server (npx)
     skills/agent-plan/SKILL.md  Agent Plan skill (derived)
+    skills/planner/SKILL.md     $planner alias skill (derived)
   opencode/                   OpenCode bundle (ready: MCP + commands)
     skills/agent-plan/SKILL.md  Agent Plan skill/guide (derived)
   _shared/                    single-source-of-truth templates
@@ -115,8 +116,8 @@ Per-harness behavior:
 - `/planner stop` (alias `/planner disable`) — disable the planner and stop the web.
 - The Web UI address is shown **only** on the `load` recap or via `/planner web status` — never appended to every message.
 - Planner operations (handoff, plan CRUD) are **not** code edits and are always allowed regardless of task state.
-- Claude Code and OpenCode support `/planner` routing. OpenCode also installs flat autosuggest shortcuts such as `/planner-load` and `/planner-task-start`.
-- Codex currently exposes Agent Plan through MCP tools and the `agent-plan` skill; custom `/planner ...` slash-command registration is not part of the public Codex plugin/config surface.
+- Claude Code and OpenCode support `/planner` routing. OpenCode also installs nested autosuggest shortcuts such as `/planner/load` and `/planner/task/start`, plus compatibility aliases such as `/planner-load`.
+- Codex currently exposes Agent Plan through MCP tools and the `agent-plan` / `planner` skills (`$planner` appears in the Codex skill picker); custom `/planner ...` slash-command registration is not part of the public Codex plugin/config surface.
 
 ### Install (Claude Code, self-hosted marketplace — no approval required)
 
@@ -445,8 +446,8 @@ agent-plan setup codex --project --force
 ```
 
 This writes Codex MCP configuration to `.codex/config.toml` or
-`~/.codex/config.toml`, installs the `agent-plan` skill, and for user scope
-registers/installs the Codex marketplace plugin when the `codex` CLI is
+`~/.codex/config.toml`, installs the `agent-plan` and `planner` skills, and for
+user scope registers/installs the Codex marketplace plugin when the `codex` CLI is
 available. Use `--local` only when testing an unpublished checkout build; in
 that mode the Codex marketplace source is the local repository checkout.
 
@@ -472,9 +473,11 @@ agent-plan setup opencode --project --force
 
 This writes OpenCode MCP configuration plus `/planner` command routing under
 OpenCode's `command` configuration key.
-OpenCode also gets flat command aliases such as `/planner-load` and
-`/planner-task-start` for command-list discovery. Use `--local` only when
-testing an unpublished checkout build.
+OpenCode also gets nested slash aliases such as `/planner/load`,
+`/planner/task/start`, and `/planner/web/start` for command-list discovery,
+plus compatibility aliases such as `/planner-load`. The generated command
+templates are compact and do not paste the full planner guide on every
+invocation. Use `--local` only when testing an unpublished checkout build.
 
 ### Local development setup
 

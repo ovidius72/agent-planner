@@ -287,6 +287,7 @@ test("planner-handoff-write persists a candidate that requires separate read-bac
     assert.equal(showRes.structuredContent.persistenceVerified, true);
     assert.equal(showRes.structuredContent.resumeReady, false);
     assert.equal(showRes.structuredContent.phaseWorkMap.total, 1);
+    assert.match(showRes.structuredContent.content, /This is a test handoff for T238/);
     assert.match(showText, /Before proposing new work, reread the canonical phase and relevant sibling task full view/);
     const contentHash = showRes.structuredContent.contentHash;
 
@@ -412,11 +413,11 @@ test("planner-handoff-show keeps oversized legacy handoffs readable but transpor
     const phase = (await session.store.loadAllPhases())[0];
     await session.store.setPhaseHandoff(phase.id, `# Legacy oversized handoff\n\n${"x".repeat(30_000)}`);
     const shown = await callTool(session, "planner-handoff-show", { phaseRef: "P001" });
-    // The capsule body is readable prose and travels in the text channel only;
-    // structuredContent keeps the machine-readable evidence about it (T408).
+    // The capsule body is readable prose and also travels as bounded
+    // structured content for structuredContent-only hosts.
     assert.equal(shown.structuredContent.truncated, true);
     assert.equal(shown.structuredContent.fullLength > 24_000, true);
-    assert.equal(Object.hasOwn(shown.structuredContent, "content"), false, "the body must not travel in both channels");
+    assert.match(shown.structuredContent.content, /# Legacy oversized handoff/);
     assert.match(toolText(shown), /Legacy handoff truncated for transport safety/);
     assert.match(toolText(shown), /# Legacy oversized handoff/);
     assert.equal(typeof shown.structuredContent.contentHash, "string");

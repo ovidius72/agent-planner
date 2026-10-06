@@ -187,23 +187,23 @@ Use the Agent Plan MCP tools. Do not treat this as a shell command. Route the re
 ${skillBody}`;
 }
 
-async function codexSkillTemplate(): Promise<string> {
+async function codexSkillTemplate(skillName = "agent-plan"): Promise<string> {
   const canonicalSkill = await loadCanonicalPlannerSkill();
-  return canonicalSkill.replace(/^summary:/m, "description:");
+  return canonicalSkill
+    .replace(/^name: .+$/m, `name: ${skillName}`)
+    .replace(/^summary:/m, "description:");
 }
 
 async function opencodePlannerCommandTemplate(command = "$ARGUMENTS"): Promise<string> {
-  const canonicalSkill = await loadCanonicalPlannerSkill();
-  const skillBody = canonicalSkill.replace(/^---\n[\s\S]*?\n---\n/, "").trimStart();
   return `Use the Agent Plan MCP tools to handle this planner command:
 
 \`\`\`
 /planner ${command}
 \`\`\`
 
-Do not treat this as a shell command. Route the requested operation through the exact MCP tool inventory in the canonical guide below. If the command is empty, call planner-show and suggest relevant next commands. Ask one concise clarification when required values are ambiguous.
+Do not treat this as a shell command. Route the requested operation through the installed Agent Plan MCP tools. If the command is empty, call planner-show and suggest relevant next commands. Ask one concise clarification when required values are ambiguous.
 
-${skillBody}`;
+Use the installed Agent Plan skill or the project-local .planner/SKILL.md only when you need deeper routing rules; do not paste or recap that guide in the response.`;
 }
 
 async function writeClaudePlannerCommand(scope: "project" | "user"): Promise<string> {
@@ -216,14 +216,19 @@ async function writeClaudePlannerCommand(scope: "project" | "user"): Promise<str
   return commandPath;
 }
 
-async function writeCodexSkill(scope: "project" | "user"): Promise<string> {
-  const skillDir = scope === "user"
-    ? join(homedir(), ".codex", "skills", "agent-plan")
-    : join(process.cwd(), ".codex", "skills", "agent-plan");
-  await mkdir(skillDir, { recursive: true });
-  const skillPath = join(skillDir, "SKILL.md");
-  await writeFile(skillPath, await codexSkillTemplate(), "utf-8");
-  return skillPath;
+async function writeCodexSkills(scope: "project" | "user"): Promise<string[]> {
+  const skillsRoot = scope === "user"
+    ? join(homedir(), ".codex", "skills")
+    : join(process.cwd(), ".codex", "skills");
+  const written: string[] = [];
+  for (const skillName of ["agent-plan", "planner"]) {
+    const skillDir = join(skillsRoot, skillName);
+    await mkdir(skillDir, { recursive: true });
+    const skillPath = join(skillDir, "SKILL.md");
+    await writeFile(skillPath, await codexSkillTemplate(skillName), "utf-8");
+    written.push(skillPath);
+  }
+  return written;
 }
 
 function mcpCommandParts(flags: CliFlags): { command: string; args: string[] } {
@@ -397,15 +402,15 @@ async function setupCodex(flags: CliFlags): Promise<void> {
   const current = await readTextFile(settingsPath);
   const next = upsertTomlTable(settingsPath, current, "mcp_servers.agent-plan", codexMcpTomlBlock(flags), flags.force);
   await writeFile(settingsPath, next, "utf-8");
-  const skillPath = await writeCodexSkill(scope);
+  const skillPaths = await writeCodexSkills(scope);
   const pluginStatus = scope === "user"
     ? setupCodexMarketplacePlugin(flags)
     : "Codex plugin marketplace installation is user-scoped; run `agent-plan setup codex --user --force` to install the plugin.";
 
   console.log(`Configured Codex MCP server in ${settingsPath}`);
-  console.log(`Configured Codex Agent Plan skill in ${skillPath}`);
+  console.log(`Configured Codex Agent Plan skills in ${skillPaths.join(", ")}`);
   console.log(pluginStatus);
-  console.log("Codex exposes Agent Plan through MCP tools plus the agent-plan plugin skill. Custom /planner slash-command registration is not part of the public Codex plugin/config surface.");
+  console.log("Codex exposes Agent Plan through MCP tools plus the agent-plan/planner plugin skills. Custom /planner slash-command registration is not part of the public Codex plugin/config surface.");
   if (!existsSync(plannerRoot())) {
     console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
   }
@@ -419,6 +424,18 @@ function opencodeConfigPath(scope: "project" | "user"): string {
 }
 
 const OPENCODE_PLANNER_ALIASES: Record<string, string> = {
+  "planner/load": "load",
+  "planner/stop": "stop",
+  "planner/show": "show",
+  "planner/feature/list": "feature list",
+  "planner/phase/list": "phase list",
+  "planner/task/recommend": "task recommend",
+  "planner/task/start": "task start $ARGUMENTS",
+  "planner/task/complete": "task complete $ARGUMENTS",
+  "planner/handoff/list": "handoff list",
+  "planner/web/start": "web start",
+  "planner/web/status": "web status",
+  "planner/web/stop": "web stop",
   "planner-load": "load",
   "planner-stop": "stop",
   "planner-show": "show",
@@ -553,13 +570,14 @@ async function setupOpencode(flags: CliFlags): Promise<void> {
     const legacyCommands = { ...settings.commands };
     delete legacyCommands.planner;
     for (const name of Object.keys(OPENCODE_PLANNER_ALIASES)) delete legacyCommands[name];
+    for (const name of Object.keys(OPENCODE_PLANNER_ALIASES)) delete legacyCommands[name.replaceAll("/", "-")];
     if (Object.keys(legacyCommands).length > 0) settings.commands = legacyCommands;
     else delete settings.commands;
   }
 
   await writeJsonFile(settingsPath, settings);
   console.log(`Configured OpenCode MCP server and /planner command in ${settingsPath}`);
-  console.log("OpenCode supports /planner with arguments through the planner command. Segment autosuggestion is provided as flat shortcut commands such as /planner-load and /planner-task-start.");
+  console.log("OpenCode supports /planner with arguments through the planner command. Autosuggestion is provided through nested slash aliases such as /planner/web/start and compatibility aliases such as /planner-web-start.");
   if (!existsSync(plannerRoot())) {
     console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
   }

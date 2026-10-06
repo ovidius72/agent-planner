@@ -34,8 +34,10 @@ The command writes OpenCode config:
 
 - `mcp.servers.agent-plan` with a local stdio command.
 - `command.planner`, which routes `/planner ...` text to Agent Plan MCP tools.
-- Flat shortcut commands such as `/planner-load`, `/planner-task-start`, and
-  `/planner-web-status` for OpenCode command autosuggestion.
+- Nested slash aliases such as `/planner/load`, `/planner/task/start`, and
+  `/planner/web/status` for OpenCode command autosuggestion.
+- Compatibility shortcut commands such as `/planner-load`, `/planner-task-start`,
+  and `/planner-web-status`.
 
 Agent Plan never auto-starts the planner or web dashboard. Run `/planner load`
 when you want the planner context and dashboard.
@@ -53,7 +55,15 @@ arguments. Agent Plan therefore supports:
 
 OpenCode does not currently expose nested segment autosuggestion for every
 space-separated `/planner` subcommand. To improve discovery, setup also creates
-flat aliases:
+nested slash aliases:
+
+```text
+/planner/load
+/planner/task/start
+/planner/web/status
+```
+
+Compatibility aliases are also installed for older setups:
 
 ```text
 /planner-load
@@ -62,6 +72,11 @@ flat aliases:
 ```
 
 These aliases route to the same planner MCP tools.
+
+The generated command templates are intentionally short. They do not embed the
+full Agent Plan operating guide on every command invocation; the agent should
+read the installed skill or `.planner/SKILL.md` only when deeper routing context
+is needed.
 
 ## Manual MCP configuration
 
