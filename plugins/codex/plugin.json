@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "agent-plan",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Agent Plan — structured project planning for Codex. Manage features, phases, tasks, handoffs, and the planner web dashboard through MCP tools and an Agent Plan skill. Disabled by default; ask to load the planner explicitly.",
   "author": {
     "name": "Agent Plan"
