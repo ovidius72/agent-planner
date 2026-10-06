@@ -183,12 +183,15 @@ plugins, and skills, but no documented custom slash-command registration
 surface. Promising `/planner` in Codex would mislead users.
 
 **Implementation.** `agent-plan setup codex` writes `.codex/config.toml` and
-`.codex/skills/agent-plan/SKILL.md`. `plugins/codex/` ships `plugin.json`,
-`.codex-plugin/plugin.json`, `mcp.json` / `.mcp.json`, and a generated skill.
+`.codex/skills/agent-plan/SKILL.md`. For user scope it also registers and
+installs the Codex marketplace plugin when the `codex` CLI is available.
+`plugins/codex/` ships `plugin.json`, `.codex-plugin/plugin.json`,
+`mcp.json` / `.mcp.json`, and a generated skill; the repo-root
+`.agents/plugins/marketplace.json` exposes it to `codex plugin marketplace`.
 
 ### D12 — OpenCode gets /planner plus flat autosuggest aliases
 **Decision.** OpenCode support uses `mcp.servers.agent-plan` plus a
-`commands.planner` entry for `/planner` arguments, and installs flat shortcut
+`command.planner` entry for `/planner` arguments, and installs flat shortcut
 commands for discovery instead of pretending nested segment autosuggestion
 exists.
 
@@ -197,5 +200,5 @@ with a template; nested segment-level autosuggestion for every `/planner`
 subcommand is not exposed in the verified config/CLI surface.
 
 **Implementation.** `agent-plan setup opencode` writes `opencode.json` or
-`~/.config/opencode/opencode.json` with `commands.planner` and shortcuts such
+`~/.config/opencode/opencode.json` with `command.planner` and shortcuts such
 as `planner-load`, `planner-task-start`, and `planner-web-status`.

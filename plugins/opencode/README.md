@@ -13,7 +13,7 @@ The setup command writes:
 
 - `mcp.servers.agent-plan` using the same stdio MCP server as Claude Code and
   Codex.
-- `commands.planner`, so `/planner load`, `/planner task start ...`, and the
+- `command.planner`, so `/planner load`, `/planner task start ...`, and the
   rest of the planner command text route to Agent Plan MCP tools.
 - Flat discovery shortcuts such as `/planner-load`, `/planner-task-start`, and
   `/planner-web-status` for OpenCode command autosuggestion.

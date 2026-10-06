@@ -54,7 +54,10 @@ const PLUGIN_FILES = {
     path.join(root, "plugins", "codex", "plugin.json"),
     path.join(root, "plugins", "codex", ".codex-plugin", "plugin.json"),
   ],
-  marketplace: path.join(root, ".claude-plugin", "marketplace.json"),
+  marketplaces: [
+    path.join(root, ".claude-plugin", "marketplace.json"),
+    path.join(root, ".agents", "plugins", "marketplace.json"),
+  ],
 };
 
 function sh(cmd, opts = {}) {
@@ -84,12 +87,13 @@ function writePluginVersion(version) {
     mj.version = version;
     fs.writeFileSync(mp, JSON.stringify(mj, null, 2) + "\n");
   }
-  // marketplace.json: plugins[0].version + top-level catalog version
-  const mk = PLUGIN_FILES.marketplace;
-  const mkj = JSON.parse(fs.readFileSync(mk, "utf8"));
-  mkj.version = version;
-  if (Array.isArray(mkj.plugins) && mkj.plugins[0]) mkj.plugins[0].version = version;
-  fs.writeFileSync(mk, JSON.stringify(mkj, null, 2) + "\n");
+  // marketplace.json files: plugins[0].version + top-level catalog version when present.
+  for (const mk of PLUGIN_FILES.marketplaces) {
+    const mkj = JSON.parse(fs.readFileSync(mk, "utf8"));
+    mkj.version = version;
+    if (Array.isArray(mkj.plugins) && mkj.plugins[0]) mkj.plugins[0].version = version;
+    fs.writeFileSync(mk, JSON.stringify(mkj, null, 2) + "\n");
+  }
 }
 
 // --- parse args ---

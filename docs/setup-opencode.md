@@ -33,7 +33,7 @@ agent-plan setup opencode --project --force --local
 The command writes OpenCode config:
 
 - `mcp.servers.agent-plan` with a local stdio command.
-- `commands.planner`, which routes `/planner ...` text to Agent Plan MCP tools.
+- `command.planner`, which routes `/planner ...` text to Agent Plan MCP tools.
 - Flat shortcut commands such as `/planner-load`, `/planner-task-start`, and
   `/planner-web-status` for OpenCode command autosuggestion.
 
