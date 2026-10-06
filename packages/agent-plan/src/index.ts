@@ -468,18 +468,6 @@ function opencodeConfigPath(scope: "project" | "user"): string {
 }
 
 const OPENCODE_PLANNER_ALIASES: Record<string, string> = {
-  "planner/load": "load",
-  "planner/stop": "stop",
-  "planner/show": "show",
-  "planner/feature/list": "feature list",
-  "planner/phase/list": "phase list",
-  "planner/task/recommend": "task recommend",
-  "planner/task/start": "task start $ARGUMENTS",
-  "planner/task/complete": "task complete $ARGUMENTS",
-  "planner/handoff/list": "handoff list",
-  "planner/web/start": "web start",
-  "planner/web/status": "web status",
-  "planner/web/stop": "web stop",
   "planner-load": "load",
   "planner-stop": "stop",
   "planner-show": "show",
@@ -493,6 +481,21 @@ const OPENCODE_PLANNER_ALIASES: Record<string, string> = {
   "planner-web-status": "web status",
   "planner-web-stop": "web stop",
 };
+
+const OPENCODE_OBSOLETE_PLANNER_ALIASES = [
+  "planner/load",
+  "planner/stop",
+  "planner/show",
+  "planner/feature/list",
+  "planner/phase/list",
+  "planner/task/recommend",
+  "planner/task/start",
+  "planner/task/complete",
+  "planner/handoff/list",
+  "planner/web/start",
+  "planner/web/status",
+  "planner/web/stop",
+];
 
 const CODEX_PLUGIN_MARKETPLACE = "agent-plan";
 const CODEX_PLUGIN_SELECTOR = "agent-plan@agent-plan";
@@ -598,6 +601,8 @@ async function setupOpencode(flags: CliFlags): Promise<void> {
   settings.mcp = mcp;
 
   const commandConfig = isRecord(settings.command) ? { ...settings.command } : {};
+  for (const name of Object.keys(OPENCODE_PLANNER_ALIASES)) delete commandConfig[name];
+  for (const name of OPENCODE_OBSOLETE_PLANNER_ALIASES) delete commandConfig[name];
   commandConfig.planner = {
     description: "Route Agent Plan /planner commands through the configured MCP server.",
     template: await opencodePlannerCommandTemplate(),
@@ -614,14 +619,14 @@ async function setupOpencode(flags: CliFlags): Promise<void> {
     const legacyCommands = { ...settings.commands };
     delete legacyCommands.planner;
     for (const name of Object.keys(OPENCODE_PLANNER_ALIASES)) delete legacyCommands[name];
-    for (const name of Object.keys(OPENCODE_PLANNER_ALIASES)) delete legacyCommands[name.replaceAll("/", "-")];
+    for (const name of OPENCODE_OBSOLETE_PLANNER_ALIASES) delete legacyCommands[name];
     if (Object.keys(legacyCommands).length > 0) settings.commands = legacyCommands;
     else delete settings.commands;
   }
 
   await writeJsonFile(settingsPath, settings);
   console.log(`Configured OpenCode MCP server and /planner command in ${settingsPath}`);
-  console.log("OpenCode supports /planner with arguments through the planner command. Autosuggestion is provided through nested slash aliases such as /planner/web/start and compatibility aliases such as /planner-web-start.");
+  console.log("OpenCode supports /planner with arguments through the planner command. Autosuggestion is provided through flat shortcut aliases such as /planner-web-start.");
   if (!existsSync(plannerRoot())) {
     console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
   }
