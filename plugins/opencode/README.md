@@ -15,13 +15,19 @@ The setup command writes:
   Codex.
 - `command.planner`, so `/planner load`, `/planner task start ...`, and the
   rest of the planner command text route to Agent Plan MCP tools.
-- Flat discovery shortcuts such as `/planner-load`, `/planner-task-start`, and
-  `/planner-web-status` for OpenCode command autosuggestion.
+- Nested discovery shortcuts such as `/planner/load`, `/planner/task/start`,
+  and `/planner/web/status` for OpenCode command autosuggestion.
+- Compatibility aliases such as `/planner-load`, `/planner-task-start`, and
+  `/planner-web-status`.
 
 OpenCode's v2 command API registers a single slash command name with prompt
 arguments. It does not expose nested segment-level autosuggestion for a command
-shape like `/planner task start <ref>`, so Agent Plan provides flat aliases for
-the common planner paths.
+shape like `/planner task start <ref>`, so Agent Plan provides slash-path aliases
+for the common planner paths.
+
+The generated command templates stay compact and do not paste the full planner
+guide into every command prompt. The agent can read the installed skill or
+project-local `.planner/SKILL.md` only when deeper routing context is needed.
 
 The generated `skills/agent-plan/SKILL.md` mirrors the canonical planner guide
 for users or plugin package maintainers who want to include the workflow guide

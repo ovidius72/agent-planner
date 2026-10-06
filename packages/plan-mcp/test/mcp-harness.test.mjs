@@ -725,6 +725,7 @@ test("handoff write (confirmed) + show return structured phase identifiers", asy
     assert.match(toolText(shown), /Handoff body for the harness\./);
     const shownStructured = toolStructured(shown);
     assert.equal(shownStructured.phaseId, writtenStructured.phaseId, "show returns the same phaseId");
+    assert.match(shownStructured.content, /Handoff body for the harness\./, "structured body is available to structuredContent-only hosts");
 
     const listed = await callTool(session, "planner-handoff-list", {});
     assert.match(toolText(listed), /P001\(F001\) — T236 — confirmed handoff/);

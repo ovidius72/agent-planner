@@ -1,6 +1,6 @@
 ---
-name: agent-plan
-summary: Cross-harness operating guide for Agent Plan projects.
+name: planner
+description: Cross-harness operating guide for Agent Plan projects.
 ---
 
 # Agent Plan operating guide

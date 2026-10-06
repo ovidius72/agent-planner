@@ -29,11 +29,12 @@ const NOW = "2026-01-01T00:00:00.000Z";
 
 /**
  * Measured on heca P082 (56 tasks, 5,634-character handoff) after T411:
- * show structured 850 chars, prepare structured 10,890. These ceilings are
- * roughly double the fixture's own figures, so an ordinary wording edit
- * passes and a reappearing array does not.
+ * show structured now intentionally carries the bounded handoff content for
+ * structuredContent-only hosts; prepare structured was 10,890 chars after
+ * T411. These ceilings leave room for wording edits while still catching a
+ * reappearing work-map or evidence array.
  */
-const SHOW_STRUCTURED_CEILING = 2_000;
+const SHOW_STRUCTURED_CEILING = 9_000;
 const PREPARE_STRUCTURED_CEILING = 24_000;
 
 /** A phase whose task list runs well past the 8,000-character work-map budget. */
@@ -98,9 +99,10 @@ function auditFixture(content) {
  * The shared invariant check. Every reply runs through this, so a future
  * third reply inherits it instead of needing its own copy.
  */
-function assertNoChannelDuplication(reply, label) {
+function assertNoChannelDuplication(reply, label, { allowedDuplicatePaths = [] } = {}) {
   const walk = (value, path) => {
     if (typeof value === "string") {
+      if (allowedDuplicatePaths.includes(path)) return;
       // Short scalars (ids, hashes, timestamps, flags) legitimately appear in
       // both channels; only substantial prose is duplicated payload.
       if (value.length >= 200 && reply.text.includes(value)) {
@@ -125,10 +127,11 @@ test("handoff show carries no field in both channels and stays small", () => {
   const workMap = buildPhaseWorkMap(phase, feature.number);
   const reply = buildHandoffShowReply({ kind: "active", phaseRef: "P082(F005)", phase, phaseWorkMap: workMap });
 
-  assertNoChannelDuplication(reply, "show");
+  assertNoChannelDuplication(reply, "show", { allowedDuplicatePaths: ["content"] });
 
-  // The body is prose and belongs to the text channel alone.
-  assert.equal(Object.hasOwn(reply.structured, "content"), false);
+  // The body must be readable even when a host exposes only structuredContent.
+  assert.equal(reply.structured.content.includes("Detail line that a cold agent needs."), true);
+  assert.equal(reply.structured.fullLength, body.length);
   assert.ok(reply.text.includes("Detail line that a cold agent needs."));
 
   // The work map's JSON twin never travels; the rendered map is in the text.
@@ -284,9 +287,10 @@ test("handoff show empty and archived branches shed the same evidence", () => {
     kind: "archived", phaseRef: "P082(F005)", phaseId: "phase-id", content: body,
     archiveReason: "phase-done", archivedAt: NOW, archiveFile: "archive.md", handoffAudit: audit,
   });
-  assertNoChannelDuplication(archived, "show/archived");
+  assertNoChannelDuplication(archived, "show/archived", { allowedDuplicatePaths: ["content"] });
   assert.equal(Object.hasOwn(archived.structured.handoffAudit, "entries"), false);
   assert.ok(archived.text.includes("Closed out at the terminal outcome."));
+  assert.ok(archived.structured.content.includes("Closed out at the terminal outcome."));
 });
 
 test("a null audit stays null rather than becoming empty fields", () => {
