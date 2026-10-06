@@ -123,20 +123,34 @@ test("Claude, Codex, and OpenCode setup preserve manifest-based version routing"
   const claudeSettings = JSON.parse(readFileSync(join(cwd, ".claude", "settings.json"), "utf-8"));
   assert.ok(claudeSettings.hooks.PreToolUse.some((group) => group.matcher === "Edit|Write|NotebookEdit|Bash"));
 
+  writeFileSync(join(cwd, "opencode.json"), `${JSON.stringify({
+    command: {
+      "planner/load": { template: "obsolete slash alias" },
+      "planner/web/start": { template: "obsolete slash alias" },
+      unrelated: { template: "keep me" },
+    },
+    commands: {
+      "planner/task/start": { template: "obsolete slash alias" },
+      unrelatedLegacy: { template: "keep me too" },
+    },
+  }, null, 2)}\n`);
   const opencode = runCli(["setup", "opencode", "--project", "--local"], { cwd });
   assert.equal(opencode.status, 0, opencode.stderr);
   const opencodeConfig = JSON.parse(readFileSync(join(cwd, "opencode.json"), "utf-8"));
   assert.deepEqual(opencodeConfig.mcp.servers["agent-plan"].command.slice(-1), ["mcp"]);
   assert.equal(opencodeConfig.mcp.servers["agent-plan"].command[0], "node");
-  assert.equal(opencodeConfig.commands, undefined);
+  assert.equal(opencodeConfig.command.unrelated.template, "keep me");
+  assert.equal(opencodeConfig.commands.unrelatedLegacy.template, "keep me too");
+  assert.equal(opencodeConfig.commands["planner/task/start"], undefined);
   assert.match(opencodeConfig.command.planner.template, /\/planner \$ARGUMENTS/);
   assert.doesNotMatch(opencodeConfig.command.planner.template, /# Agent Plan operating guide/);
   assert.match(opencodeConfig.command.planner.template, /Use the installed Agent Plan skill or the project-local \.planner\/SKILL\.md only when you need deeper routing rules/);
-  assert.match(opencodeConfig.command["planner/load"].template, /\/planner load/);
-  assert.match(opencodeConfig.command["planner/task/start"].template, /\/planner task start \$ARGUMENTS/);
-  assert.match(opencodeConfig.command["planner/web/start"].template, /\/planner web start/);
   assert.match(opencodeConfig.command["planner-load"].template, /\/planner load/);
   assert.match(opencodeConfig.command["planner-task-start"].template, /\/planner task start \$ARGUMENTS/);
+  assert.match(opencodeConfig.command["planner-web-start"].template, /\/planner web start/);
+  assert.equal(opencodeConfig.command["planner/load"], undefined);
+  assert.equal(opencodeConfig.command["planner/task/start"], undefined);
+  assert.equal(opencodeConfig.command["planner/web/start"], undefined);
 });
 
 test("Codex user setup installs the Agent Plan plugin through a Codex marketplace", async () => {

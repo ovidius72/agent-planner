@@ -127,7 +127,7 @@ Per-harness behavior:
 - `/planner stop` (alias `/planner disable`) — disable the planner and stop the web.
 - The Web UI address is shown **only** on the `load` recap or via `/planner web status` — never appended to every message.
 - Planner operations (handoff, plan CRUD) are **not** code edits and are always allowed regardless of task state.
-- Claude Code and OpenCode support `/planner` routing. OpenCode also installs nested autosuggest shortcuts such as `/planner/load` and `/planner/task/start`, plus compatibility aliases such as `/planner-load`.
+- Claude Code and OpenCode support `/planner` routing. OpenCode also installs flat autosuggest shortcuts such as `/planner-load` and `/planner-task-start`.
 - Codex currently exposes Agent Plan through MCP tools and the `agent-plan` / `planner` skills (`$planner` appears in the Codex skill picker); custom `/planner ...` slash-command registration is not part of the public Codex plugin/config surface.
 
 ### Install (Claude Code, self-hosted marketplace — no approval required)
@@ -143,7 +143,10 @@ The CLI setup below installs the Codex marketplace plugin automatically at user
 scope when the `codex` CLI is available. Manual equivalent:
 
 ```bash
-codex plugin marketplace add https://github.com/ovidius72/agent-planner --ref main --sparse .agents/plugins --sparse plugins/codex
+codex plugin marketplace add https://github.com/ovidius72/agent-planner \
+  --ref main \
+  --sparse .agents/plugins \
+  --sparse plugins/codex
 codex plugin add agent-plan@agent-plan
 ```
 
@@ -484,11 +487,11 @@ agent-plan setup opencode --project --force
 
 This writes OpenCode MCP configuration plus `/planner` command routing under
 OpenCode's `command` configuration key.
-OpenCode also gets nested slash aliases such as `/planner/load`,
-`/planner/task/start`, and `/planner/web/start` for command-list discovery,
-plus compatibility aliases such as `/planner-load`. The generated command
-templates are compact and do not paste the full planner guide on every
-invocation. Use `--local` only when testing an unpublished checkout build.
+OpenCode also gets flat shortcut aliases such as `/planner-load`,
+`/planner-task-start`, and `/planner-web-start` for command-list discovery.
+The generated command templates are compact and do not paste the full planner
+guide on every invocation. Use `--local` only when testing an unpublished
+checkout build.
 
 ### Local development setup
 
