@@ -22,15 +22,263 @@
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [],
-  "taskIds": [],
-  "tasks": [],
+  "taskIds": [
+    "88f96646-edb0-4dc8-9dab-f7d893afad10",
+    "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1",
+    "a3f9209e-0085-45da-a186-696e3c7baefd"
+  ],
+  "tasks": [
+    {
+      "id": "88f96646-edb0-4dc8-9dab-f7d893afad10",
+      "phaseId": "8a429228-b236-4c81-82b3-e9c1883b8c2e",
+      "number": 455,
+      "shortId": "FT7B6",
+      "priority": 1,
+      "shortName": "core-per-session-deviation-own",
+      "title": "Core: per-session deviation ownership and per-session resume focus",
+      "status": "done",
+      "description": "Today every session of one planner shares two things. (1) The approved side-task stack: WorkDeviation (packages/plan-core/src/schema.ts:~108) records recommended/temporary/resume task ids but not WHO made the switch; the list lives in .planner/.local/deviations.json (plan-store.ts:1435 loadWorkDeviations, :2634 addWorkDeviation, :2641 setWorkDeviationState), so when agent A switches to a temporary task the return target is recorded for agent B as well. (2) The resume focus: one ResumeFocus (schema.ts:44) in .local/resume.json (plan-store.ts:1872 loadResume, :1881 saveResume, :1964 refreshResume), with inProgressTaskIds taken from EVERY in-progress task and one set of nextSteps/notes/lastSessionSummary. Task ownership is already per session (Task.activeOwnerSession, task-selection.ts:263). Work: add `ownerSession` (string, default \"\") to WorkDeviationSchema; new pure helper `deviationsForSession(deviations, sessionId)` in a plan-core module: empty sessionId returns all (today's behaviour), a session id returns its own plus unowned legacy ones; addWorkDeviation stamps the caller's session. Resume: keep resume.json as the project-level default (guardBypassUntil stays project-wide, it is not focus) and add per-session focus entries in .local/resume-sessions.json keyed by session id, bounded (keep the 20 most recently updated); loadResume/saveResume/refreshResume take an optional sessionId; a session's inProgressTaskIds are the tasks it owns (activeOwnerSession === sessionId). Sessionless callers get today's results exactly. No data migration needed (new fields default). Unit tests in packages/plan-core/test: helper filtering (own, other, legacy, sessionless), stamping on add, per-session resume isolation and pruning, sessionless unchanged.\n\n---\n**Completion summary:**\nShipped the core of per-session focus in plan-core. schema.ts: WorkDeviationSchema gains ownerSession (default \"\", so old stored data reads as unowned); ResumeSessionsSchema (record of session id to ResumeFocus). New packages/plan-core/src/session-focus.ts (exported from index.ts): deviationsForSession(deviations, sessionId) (own + unowned legacy visible, other sessions hidden, empty session id returns everything), pruneResumeSessions and RESUME_SESSION_LIMIT (20, most recently updated kept). plan-store.ts: addWorkDeviation(deviation, sessionId?) stamps the session unless the deviation already has an owner; loadResume/saveResume/refreshResume take an optional sessionId; per-session entries live in .planner/.local/resume-sessions.json (exclusive-create then atomicUpdateJson under the write lock, so concurrent sessions do not lose entries; pruned to the limit); a session with no entry yet inherits the project-level focus for READING; a session's inProgressTaskIds/currentPhaseId come only from tasks it owns (activeOwnerSession); guardBypassUntil stays project-level (never copied into a session entry; authorizeGuardBypass/isGuardBypassed untouched). Sessionless callers get exactly the previous results. Verified: packages/plan-core/test/session-focus.test.mjs, 15 tests (filtering, stamping, isolation, inheritance, ownership, bypass untouched, sessionless unchanged, concurrent saves, pruning); full plan-core suite 500/500 pass; builds. NOT done here (next task T456): nothing calls these with a session id yet, so behaviour in MCP/Pi/server is unchanged until T456/T457; recommendNextTask and recap still read all deviations. Not verified: full repository gate (phase close).",
+      "descriptionUpdatedAt": "2026-10-06T07:44:55.077Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "88f96646-edb0-4dc8-9dab-f7d893afad10-check-001-planned-in-progress",
+          "date": "2026-10-06T07:43:04.628Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "88f96646-edb0-4dc8-9dab-f7d893afad10-check-002-in-progress-done",
+          "date": "2026-10-06T07:44:55.074Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped the core of per-session focus in plan-core. schema.ts: WorkDeviationSchema gains ownerSession (default \"\", so old stored data reads as unowned); ResumeSessionsSchema (record of session id to ResumeFocus). New packages/plan-core/src/session-focus.ts (exported from index.ts): deviationsForSession(deviations, sessionId) (own + unowned legacy visible, other sessions hidden, empty session id returns everything), pruneResumeSessions and RESUME_SESSION_LIMIT (20, most recently updated kept). plan-store.ts: addWorkDeviation(deviation, sessionId?) stamps the session unless the deviation already has an owner; loadResume/saveResume/refreshResume take an optional sessionId; per-session entries live in .planner/.local/resume-sessions.json (exclusive-create then atomicUpdateJson under the write lock, so concurrent sessions do not lose entries; pruned to the limit); a session with no entry yet inherits the project-level focus for READING; a session's inProgressTaskIds/currentPhaseId come only from tasks it owns (activeOwnerSession); guardBypassUntil stays project-level (never copied into a session entry; authorizeGuardBypass/isGuardBypassed untouched). Sessionless callers get exactly the previous results. Verified: packages/plan-core/test/session-focus.test.mjs, 15 tests (filtering, stamping, isolation, inheritance, ownership, bypass untouched, sessionless unchanged, concurrent saves, pruning); full plan-core suite 500/500 pass; builds. NOT done here (next task T456): nothing calls these with a session id yet, so behaviour in MCP/Pi/server is unchanged until T456/T457; recommendNextTask and recap still read all deviations. Not verified: full repository gate (phase close)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "88f96646-edb0-4dc8-9dab-f7d893afad10-check-001-ownersession-on-workdeviationschema-and-deviationsforsession-helper",
+          "number": 1,
+          "title": "ownerSession on WorkDeviationSchema and deviationsForSession helper",
+          "checked": true
+        },
+        {
+          "id": "88f96646-edb0-4dc8-9dab-f7d893afad10-check-002-addworkdeviation-stamps-the-caller-s-session",
+          "number": 2,
+          "title": "addWorkDeviation stamps the caller's session",
+          "checked": true
+        },
+        {
+          "id": "88f96646-edb0-4dc8-9dab-f7d893afad10-check-003-per-session-resume-store-local-resume-sessions-json-with-pruning",
+          "number": 3,
+          "title": "Per-session resume store (.local/resume-sessions.json) with pruning",
+          "checked": true
+        },
+        {
+          "id": "88f96646-edb0-4dc8-9dab-f7d893afad10-check-004-loadresume-saveresume-refreshresume-accept-optional-sessionid-sessionless-unchanged",
+          "number": 4,
+          "title": "loadResume/saveResume/refreshResume accept optional sessionId; sessionless unchanged",
+          "checked": true
+        },
+        {
+          "id": "88f96646-edb0-4dc8-9dab-f7d893afad10-check-005-unit-tests-in-plan-core",
+          "number": 5,
+          "title": "Unit tests in plan-core",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-06T07:43:04.628Z",
+      "completedAt": "2026-10-06T07:44:55.074Z",
+      "createdAt": "2026-10-06T07:42:27.838Z",
+      "updatedAt": "2026-10-06T07:44:55.074Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-10-06T07:43:04.531Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1",
+      "phaseId": "8a429228-b236-4c81-82b3-e9c1883b8c2e",
+      "number": 456,
+      "shortId": "HYJEV",
+      "priority": 2,
+      "shortName": "use-the-caller-s-session-in-se",
+      "title": "Use the caller's session in selection, switch, recap, MCP and server",
+      "status": "done",
+      "description": "Builds on the core task (ownerSession + deviationsForSession + per-session resume). Every place that reads or writes deviations or resume focus must pass the caller's session so one agent's side task never becomes another agent's return target. Core: recommendNextTask/recommendNextWork (task-selection.ts:256-263, :362) and recap (recap.ts:66 pendingDeviation from plan.project.workDeviations, :247 recommendNextTask) filter with deviationsForSession; the load recap and planner-show use the session's own resume focus. MCP (packages/plan-mcp/src/index.ts): task_switch, task_deviation, task_complete (RESUME REQUIRED), task_start and task_recommend pass plannerSessionId (index.ts:17-26) and stamp new deviations with it; recap/planner-load/planner-show pass it. Server (packages/plan-server/src/serve.ts, 9 call sites of loadResume/saveResume/workDeviations): the web UI is sessionless and keeps project-wide behaviour; the /api/v1 and entity events are unchanged. LIFO return semantics per session, the RESUME REQUIRED notice, on-hold claims and recommendation claims must behave exactly as today for a single session. Tests: packages/plan-core and packages/plan-mcp (MCP through a real client where the existing MCP tests do), covering: two sessions switch and return independently; session B's recommendation does not show A's RESUME REQUIRED; a sessionless web UI call still sees all.\n\n---\n**Completion summary:**\nMade selection, recap and the MCP use the caller's session. plan-core: PlanStore.loadProject(sessionId?) returns only that session's (plus unowned) workDeviations; recommendNextTask filters deviations by session itself AND hides tasks another session set aside (a live deviation owned by another session points back at them) from both the checkpoint fallback and priority selection, so session B is never sent to, or forced to resume, session A's preserved task; addWorkDeviation accepts a deviation without ownerSession and stamps the session; buildRecap takes RecapOptions.sessionId (own resume focus, own pending deviation, session-aware next step). plan-mcp: task show/update/pause/switch/start/complete read loadProject(plannerSessionId); recommend/deviation/switch/start pass plannerSessionId to recommendNextTask/recommendNextWork with ALL deviations (new allWorkDeviations helper) because the selector does the hiding; switch and deviation stamp new deviations with the session; load recap passes the session. Server: unchanged on purpose, the web UI is sessionless and keeps project-wide behaviour. Found by the test: filtering the list before selection hid other sessions' checkpoints so B was still told to resume A's task; fixed in the selector. Verified: packages/plan-mcp/test/mcp-sessions.test.mjs (3 tests through real MCP servers: A returns, B not forced, single agent unchanged), plan-core session-focus tests 18/18 incl. selector cases, all 99 plan-mcp tests, all 500 plan-core tests, all 85 plan-server tests pass. Not verified: Pi adapter (next task T457), full repository gate (phase close). Known limit: a task that no live deviation points at but has a checkpoint is still offered to every session (shared checkpoint rule).",
+      "descriptionUpdatedAt": "2026-10-06T07:52:58.936Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1-check-001-planned-in-progress",
+          "date": "2026-10-06T07:46:24.549Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1-check-002-in-progress-done",
+          "date": "2026-10-06T07:52:58.933Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Made selection, recap and the MCP use the caller's session. plan-core: PlanStore.loadProject(sessionId?) returns only that session's (plus unowned) workDeviations; recommendNextTask filters deviations by session itself AND hides tasks another session set aside (a live deviation owned by another session points back at them) from both the checkpoint fallback and priority selection, so session B is never sent to, or forced to resume, session A's preserved task; addWorkDeviation accepts a deviation without ownerSession and stamps the session; buildRecap takes RecapOptions.sessionId (own resume focus, own pending deviation, session-aware next step). plan-mcp: task show/update/pause/switch/start/complete read loadProject(plannerSessionId); recommend/deviation/switch/start pass plannerSessionId to recommendNextTask/recommendNextWork with ALL deviations (new allWorkDeviations helper) because the selector does the hiding; switch and deviation stamp new deviations with the session; load recap passes the session. Server: unchanged on purpose, the web UI is sessionless and keeps project-wide behaviour. Found by the test: filtering the list before selection hid other sessions' checkpoints so B was still told to resume A's task; fixed in the selector. Verified: packages/plan-mcp/test/mcp-sessions.test.mjs (3 tests through real MCP servers: A returns, B not forced, single agent unchanged), plan-core session-focus tests 18/18 incl. selector cases, all 99 plan-mcp tests, all 500 plan-core tests, all 85 plan-server tests pass. Not verified: Pi adapter (next task T457), full repository gate (phase close). Known limit: a task that no live deviation points at but has a checkpoint is still offered to every session (shared checkpoint rule)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1-check-001-selection-and-recommendation-filter-by-session-task-selection-ts",
+          "number": 1,
+          "title": "Selection and recommendation filter by session (task-selection.ts)",
+          "checked": true
+        },
+        {
+          "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1-check-002-recap-and-resume-focus-use-the-caller-s-session-recap-ts",
+          "number": 2,
+          "title": "Recap and resume focus use the caller's session (recap.ts)",
+          "checked": true
+        },
+        {
+          "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1-check-003-mcp-switch-deviation-complete-start-recommend-load-show-pass-plannersessionid",
+          "number": 3,
+          "title": "MCP switch/deviation/complete/start/recommend/load/show pass plannerSessionId",
+          "checked": true
+        },
+        {
+          "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1-check-004-server-keeps-sessionless-project-wide-behaviour",
+          "number": 4,
+          "title": "Server keeps sessionless project-wide behaviour",
+          "checked": true
+        },
+        {
+          "id": "f7b8b25c-aecd-4e3a-8b03-d68b0c3917f1-check-005-tests-two-sessions-independent-single-session-unchanged",
+          "number": 5,
+          "title": "Tests: two sessions independent; single session unchanged",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-06T07:46:24.549Z",
+      "completedAt": "2026-10-06T07:52:58.933Z",
+      "createdAt": "2026-10-06T07:42:32.929Z",
+      "updatedAt": "2026-10-06T07:52:58.933Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+          "createdAt": "2026-10-06T07:46:24.445Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "a3f9209e-0085-45da-a186-696e3c7baefd",
+      "phaseId": "8a429228-b236-4c81-82b3-e9c1883b8c2e",
+      "number": 457,
+      "shortId": "YCX54",
+      "priority": 3,
+      "shortName": "pi-adapter-per-session-focus-c",
+      "title": "Pi adapter per-session focus, cross-adapter proof and docs",
+      "status": "done",
+      "description": "Builds on the two previous tasks. The Pi adapter (packages/pi-adapter/src/index.ts, 30 call sites of loadResume/saveResume/refreshResume/addWorkDeviation/setWorkDeviationState) has its own session ids (pi:...); pass them wherever the MCP now passes plannerSessionId so Pi and MCP agents on one planner each get their own side-task stack and resume focus. Add a parity test in the shared cross-harness matrix (see requirement Cross-harness semantic parity and the scenario helpers under test/) showing the same two-session scenario gives equivalent normalized outcomes through MCP and Pi. Document the behaviour: README.md (planner concepts) and the operating guide source (packages/plan-core/src/planner-skill.ts and .planner/SKILL.md managed copy if the canonical text changes; follow the managed-copy policy), stating that focus is per session, sessionless callers see project-wide state, and how heca-pro agents get isolation. Check that docs/api-v1.md needs no change (read API exposes no focus). Run the full gate once at the end of the phase.\n\n---\n**Completion summary:**\nPi adapter now uses per-session focus and the phase is verified. packages/pi-adapter/src/index.ts: every loadResume/refreshResume/loadProject lookup, addWorkDeviation, recommendNextTask/recommendNextWork and buildRecap call passes the Pi session id; the repeated expression `pi:${ctx.sessionManager.getSessionId()}` (9 places) now goes through one helper piSessionIdOf(ctx) and the recommend/deviation/pause/complete handlers derive the id from ctx instead of relying on the module-level variable. Centralization fix from the gate: the 'allWorkDeviations' helper existed in both mcp and pi (repo invariant: no function declared in more than one of mcp, pi-adapter, plan-server); replaced by PlanStore.listAllWorkDeviations() in plan-core used by both. Tests: packages/pi-adapter/test/pi-sessions.test.mjs (Pi: A's detour stamped pi:session-A, A told to return, session B not told nor offered T002, sessionless reader sees it); mirrors packages/plan-mcp/test/mcp-sessions.test.mjs. DEVIATION from the task text: the shared scenario matrix (test/scenario-matrix.mjs) was NOT extended; it has no switch scenarios at all and adding them needs runner step mappings per harness, so parity is pinned by the two mirrored adapter tests, the same way task-start-phase-order is. Docs: README.md section 'Several agents on one planner' (per-session tasks, side tasks, resume focus, sessionless view, legacy data, shared checkpoint rule); the canonical operating guide (planner-skill.ts / .planner/SKILL.md) was NOT changed to avoid a managed-copy and plugin-sync change; docs/api-v1.md needs no change (read API exposes no focus). Verified: full gate passed (build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed install smoke) after one fix round; plan-core 503, plan-mcp 99, pi-adapter 97, plan-server 85 tests pass. Not verified: two real Pi and MCP sessions at the same time in one process (Pi keeps module state, so the Pi test runs sessions one after the other).",
+      "descriptionUpdatedAt": "2026-10-06T08:00:20.714Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "a3f9209e-0085-45da-a186-696e3c7baefd-check-001-planned-done",
+          "date": "2026-10-06T08:00:20.711Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Pi adapter now uses per-session focus and the phase is verified. packages/pi-adapter/src/index.ts: every loadResume/refreshResume/loadProject lookup, addWorkDeviation, recommendNextTask/recommendNextWork and buildRecap call passes the Pi session id; the repeated expression `pi:${ctx.sessionManager.getSessionId()}` (9 places) now goes through one helper piSessionIdOf(ctx) and the recommend/deviation/pause/complete handlers derive the id from ctx instead of relying on the module-level variable. Centralization fix from the gate: the 'allWorkDeviations' helper existed in both mcp and pi (repo invariant: no function declared in more than one of mcp, pi-adapter, plan-server); replaced by PlanStore.listAllWorkDeviations() in plan-core used by both. Tests: packages/pi-adapter/test/pi-sessions.test.mjs (Pi: A's detour stamped pi:session-A, A told to return, session B not told nor offered T002, sessionless reader sees it); mirrors packages/plan-mcp/test/mcp-sessions.test.mjs. DEVIATION from the task text: the shared scenario matrix (test/scenario-matrix.mjs) was NOT extended; it has no switch scenarios at all and adding them needs runner step mappings per harness, so parity is pinned by the two mirrored adapter tests, the same way task-start-phase-order is. Docs: README.md section 'Several agents on one planner' (per-session tasks, side tasks, resume focus, sessionless view, legacy data, shared checkpoint rule); the canonical operating guide (planner-skill.ts / .planner/SKILL.md) was NOT changed to avoid a managed-copy and plugin-sync change; docs/api-v1.md needs no change (read API exposes no focus). Verified: full gate passed (build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed install smoke) after one fix round; plan-core 503, plan-mcp 99, pi-adapter 97, plan-server 85 tests pass. Not verified: two real Pi and MCP sessions at the same time in one process (Pi keeps module state, so the Pi test runs sessions one after the other)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a3f9209e-0085-45da-a186-696e3c7baefd-check-001-pi-adapter-passes-its-session-id-to-deviations-and-resume-focus",
+          "number": 1,
+          "title": "Pi adapter passes its session id to deviations and resume focus",
+          "checked": true
+        },
+        {
+          "id": "a3f9209e-0085-45da-a186-696e3c7baefd-check-002-cross-harness-parity-test-for-the-two-session-scenario",
+          "number": 2,
+          "title": "Cross-harness parity test for the two-session scenario",
+          "checked": true
+        },
+        {
+          "id": "a3f9209e-0085-45da-a186-696e3c7baefd-check-003-docs-readme-and-operating-guide-text",
+          "number": 3,
+          "title": "Docs: README and operating guide text",
+          "checked": true
+        },
+        {
+          "id": "a3f9209e-0085-45da-a186-696e3c7baefd-check-004-full-verification-gate-at-phase-close",
+          "number": 4,
+          "title": "Full verification gate at phase close",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-06T08:00:20.711Z",
+      "completedAt": "2026-10-06T08:00:20.711Z",
+      "createdAt": "2026-10-06T07:42:36.964Z",
+      "updatedAt": "2026-10-06T08:00:20.711Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
   "createdAt": "2026-09-29T20:14:12.132Z",
-  "updatedAt": "2026-09-29T20:14:12.132Z",
+  "updatedAt": "2026-10-06T08:00:20.711Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": [],
-  "sessionInfo": []
+  "statusLog": [
+    {
+      "id": "89436a2d-f60e-43bf-a838-04c5d159dca2",
+      "date": "2026-10-06T07:43:04.655Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "1aea317d-9273-4cf0-9735-374b781fc9ec",
+      "date": "2026-10-06T08:00:20.742Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
+      "createdAt": "2026-10-06T07:46:24.445Z"
+    }
+  ]
 }
