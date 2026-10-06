@@ -772,10 +772,10 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       assert.equal(toolDetails(list).page, 1);
       assert.equal(Object.hasOwn(toolDetails(list).handoffs[0], "content"), false, "compact list must not embed full bodies");
       const shown = await host.runTool("handoff_show", { phaseRef: "P001" });
-      // The capsule body is readable prose and travels in the text channel only;
-      // the structured details keep the machine-readable evidence about it (T408).
+      // The capsule body is readable prose and also travels as bounded
+      // structured details for hosts that expose only structured data.
       assert.match(toolText(shown), /Body of the handoff\./);
-      assert.equal(Object.hasOwn(toolDetails(shown), "content"), false, "the body must not travel in both channels");
+      assert.match(toolDetails(shown).content, /Body of the handoff\./);
       assert.equal(typeof toolDetails(shown).contentHash, "string");
       assert.equal(toolDetails(shown).truncated, false);
       assert.equal(toolDetails(shown).handoffAudit.version, 1);
