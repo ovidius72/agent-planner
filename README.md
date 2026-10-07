@@ -1106,6 +1106,15 @@ pnpm build
 pnpm check
 ```
 
+### The Web UI bundle (`web-ui-dist/`) is committed on purpose
+
+`packages/plan-server/web-ui-dist/` and `packages/pi-adapter/web-ui-dist/` contain the built dashboard (a copy of the Vite build of `packages/plan-web-ui`). They are tracked in git by design, so please do not delete, untrack or git-ignore them:
+
+- The published `@agent-plan/server` and `@agent-plan/pi-adapter` packages ship them, and a plain checkout serves the dashboard without building it.
+- `scripts/copy-web-ui.sh` finds where to copy the build by looking for these folders. Without them, `pnpm build` fails on a fresh clone and in CI.
+
+Never edit them by hand. `pnpm build` regenerates both copies. When you change `packages/plan-web-ui/src`, commit the regenerated bundle in the same PR as the UI change. If `web-ui-dist/` shows up as modified and you did not change the UI, someone has an uncommitted UI change: ask before touching it.
+
 ### Inspect the published tarballs
 
 Before publishing, inspect what would actually be packaged:
