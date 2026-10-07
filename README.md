@@ -162,6 +162,16 @@ The plugin version is bumped by the release scripts together with the npm packag
 
 Then restart Claude Code in the project so the MCP server re-launches with the new `@agent-plan/mcp`.
 
+For Codex, run:
+
+```bash
+agent-plan setup codex --user --force
+```
+
+Then restart Codex and verify with `planner-version`. If the planner web UI is
+missing recently released dashboard sections, the active MCP process is usually
+stale; `planner-version` shows the version Codex actually loaded.
+
 **As a maintainer** — run the release script for the target channel (`pnpm release` for stable, `pnpm release:next` for `next`). It bumps the plugin versions in the Claude Code and Codex plugin manifests plus both marketplace catalogs. Do not edit the `version` fields by hand: the scripts own them, and an unchanged pinned version can make marketplace clients report "already at the latest" and skip the refresh.
 
 ### Local development / testing
@@ -453,6 +463,11 @@ Then configure Codex once at user scope:
 agent-plan setup codex --user --force
 ```
 
+Use `--force` when repairing an existing Codex install. It rewrites the
+`agent-plan` MCP entry and removes legacy per-tool approval tables such as
+`[mcp_servers.agent-plan.tools.planner-task-recommend]`, which can otherwise
+make Codex ask for permission on every planner tool call.
+
 For a single project, run this inside that project instead:
 
 ```bash
@@ -464,6 +479,9 @@ This writes Codex MCP configuration to `.codex/config.toml` or
 user scope registers/installs the Codex marketplace plugin when the `codex` CLI is
 available. Use `--local` only when testing an unpublished checkout build; in
 that mode the Codex marketplace source is the local repository checkout.
+Restart Codex after setup so already-running sessions reload the Agent Plan MCP
+process. Verify the runtime from inside Codex with `planner-version`; the loaded
+`@agent-plan/mcp` version should match the released npm version you expect.
 
 ## Recommended OpenCode setup
 

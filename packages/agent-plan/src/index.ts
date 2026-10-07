@@ -305,31 +305,54 @@ async function readTextFile(path: string): Promise<string> {
   return readFile(path, "utf-8");
 }
 
+function tomlTableHeader(line: string): string | undefined {
+  const match = line.trim().match(/^\[([^\[\]]+)\]$/);
+  return match?.[1];
+}
+
+function isTomlTableOrChild(name: string, tableName: string): boolean {
+  return name === tableName || name.startsWith(`${tableName}.`);
+}
+
 function upsertTomlTable(path: string, text: string, tableName: string, block: string, force: boolean): string {
   const lines = text.split(/\r?\n/);
-  const header = `[${tableName}]`;
-  const start = lines.findIndex((line) => line.trim() === header);
-  if (start !== -1 && !force) {
-    throw new Error(`${path} already has ${header}. Re-run with --force to overwrite.`);
+  const matchingHeaders = lines
+    .map((line) => tomlTableHeader(line))
+    .filter((name): name is string => typeof name === "string" && isTomlTableOrChild(name, tableName));
+  if (matchingHeaders.length > 0 && !force) {
+    const legacyChild = matchingHeaders.some((name) => name !== tableName);
+    const childHint = legacyChild ? " or legacy child tool approval tables" : "";
+    throw new Error(`${path} already has [${tableName}]${childHint}. Re-run with --force to overwrite and repair it.`);
   }
-  let nextHeader = lines.length;
-  if (start !== -1) {
-    for (let i = start + 1; i < lines.length; i += 1) {
-      if (/^\s*\[/.test(lines[i] ?? "")) {
-        nextHeader = i;
-        break;
+
+  const output: string[] = [];
+  let inserted = false;
+  for (let i = 0; i < lines.length;) {
+    const table = tomlTableHeader(lines[i] ?? "");
+    if (table && isTomlTableOrChild(table, tableName)) {
+      if (!inserted) {
+        output.push(...block.split("\n"));
+        inserted = true;
       }
+      i += 1;
+      while (i < lines.length && tomlTableHeader(lines[i] ?? "") === undefined) {
+        i += 1;
+      }
+      continue;
     }
+    output.push(lines[i] ?? "");
+    i += 1;
   }
-  const before = start === -1 ? lines : lines.slice(0, start);
-  const after = start === -1 ? [] : lines.slice(nextHeader);
-  const trimmedBefore = before.join("\n").trimEnd();
-  const trimmedAfter = after.join("\n").trimStart();
-  return [
-    trimmedBefore,
-    block,
-    trimmedAfter,
-  ].filter(Boolean).join("\n\n") + "\n";
+
+  if (!inserted) {
+    const trimmedBefore = lines.join("\n").trimEnd();
+    return [
+      trimmedBefore,
+      block,
+    ].filter(Boolean).join("\n\n") + "\n";
+  }
+
+  return `${output.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
 }
 
 function guardHookCommand(flags: CliFlags): { command: string; args: string[] } {
@@ -555,11 +578,16 @@ function setupCodexMarketplacePlugin(flags: CliFlags): string {
   const addArgs = codexMarketplaceAddArgs(flags);
   const add = runCodex(addArgs);
   if (!add.ok) {
-    return [
-      "Codex plugin marketplace install skipped: marketplace registration failed.",
-      `Run manually: codex ${addArgs.filter((arg) => arg !== "--json").join(" ")}`,
-      add.detail ? `Detail: ${add.detail}` : "",
-    ].filter(Boolean).join("\n");
+    const upgrade = runCodex(["plugin", "marketplace", "upgrade", CODEX_PLUGIN_MARKETPLACE, "--json"]);
+    if (!upgrade.ok) {
+      return [
+        "Codex plugin marketplace install skipped: marketplace registration/upgrade failed.",
+        `Run manually: codex ${addArgs.filter((arg) => arg !== "--json").join(" ")}`,
+        `Or refresh manually: codex plugin marketplace upgrade ${CODEX_PLUGIN_MARKETPLACE}`,
+        add.detail ? `Add detail: ${add.detail}` : "",
+        upgrade.detail ? `Upgrade detail: ${upgrade.detail}` : "",
+      ].filter(Boolean).join("\n");
+    }
   }
 
   const install = runCodex(["plugin", "add", CODEX_PLUGIN_SELECTOR, "--json"]);
@@ -571,7 +599,10 @@ function setupCodexMarketplacePlugin(flags: CliFlags): string {
     ].filter(Boolean).join("\n");
   }
 
-  return `Installed Codex Agent Plan plugin from marketplace ${CODEX_PLUGIN_MARKETPLACE} (${CODEX_PLUGIN_SELECTOR}).`;
+  return [
+    `Installed Codex Agent Plan plugin from marketplace ${CODEX_PLUGIN_MARKETPLACE} (${CODEX_PLUGIN_SELECTOR}).`,
+    "Restart Codex after setup so existing sessions reload the Agent Plan MCP runtime. Verify inside Codex with planner-version.",
+  ].join("\n");
 }
 
 function isAgentPlanOpencodeConfigured(settings: Record<string, unknown>): boolean {
