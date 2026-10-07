@@ -21,6 +21,10 @@ Preferred setup from a published npm install:
 agent-plan setup codex --user --force
 ```
 
+`--force` also repairs existing installs by removing legacy
+`mcp_servers.agent-plan.tools.*` approval tables from Codex config. Restart
+Codex after setup and verify the loaded MCP runtime with `planner-version`.
+
 Manual marketplace install:
 
 ```bash
