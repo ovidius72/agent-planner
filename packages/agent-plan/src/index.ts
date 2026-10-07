@@ -626,10 +626,6 @@ async function setupOpencode(flags: CliFlags): Promise<void> {
 
   await writeJsonFile(settingsPath, settings);
   console.log(`Configured OpenCode MCP server and /planner command in ${settingsPath}`);
-  console.log("OpenCode supports /planner with arguments through the planner command. Autosuggestion is provided through flat shortcut aliases such as /planner-web-start.");
-  if (!existsSync(plannerRoot())) {
-    console.log("Note: .planner/ is not initialized yet. Run `agent-plan init` when you want to enable planning for this project.");
-  }
   console.log(flags.local ? "Mode: local built CLI" : "Mode: npx agent-plan mcp");
 }
 
