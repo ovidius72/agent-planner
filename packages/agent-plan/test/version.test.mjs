@@ -136,6 +136,10 @@ test("Claude, Codex, and OpenCode setup preserve manifest-based version routing"
   }, null, 2)}\n`);
   const opencode = runCli(["setup", "opencode", "--project", "--local"], { cwd });
   assert.equal(opencode.status, 0, opencode.stderr);
+  assert.match(opencode.stdout, /Configured OpenCode MCP server and \/planner command/);
+  assert.match(opencode.stdout, /Mode: local built CLI/);
+  assert.doesNotMatch(opencode.stdout, /Autosuggestion/);
+  assert.doesNotMatch(opencode.stdout, /\.planner\/ is not initialized/);
   const opencodeConfig = JSON.parse(readFileSync(join(cwd, "opencode.json"), "utf-8"));
   assert.deepEqual(opencodeConfig.mcp.servers["agent-plan"].command.slice(-1), ["mcp"]);
   assert.equal(opencodeConfig.mcp.servers["agent-plan"].command[0], "node");
