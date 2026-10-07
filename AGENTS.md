@@ -110,6 +110,23 @@ Non-negotiable operating rules:
 - Temporary installs and planner fixtures must use `mkdtemp`; never run verification against another real project or its `.planner/` directory.
 - Excessive verification runtime, repeated broad audits, and unbounded command output are quality defects, not harmless overhead.
 
+### 18. `web-ui-dist/` is tracked on purpose
+
+`packages/plan-server/web-ui-dist/` and `packages/pi-adapter/web-ui-dist/` hold the built Web UI (a vendored copy of the Vite build of `packages/plan-web-ui`). They are committed to git by design. They are not stray build output.
+
+Why:
+
+- A plain checkout, and the published `@agent-plan/server` and `@agent-plan/pi-adapter` packages (`files` includes `web-ui-dist`), serve the dashboard without a build step.
+- `scripts/copy-web-ui.sh` finds where to copy the build by looking for existing `packages/*/web-ui-dist/` folders. If they are deleted or git-ignored, `pnpm build` fails on a fresh clone and in CI ("No web-ui-dist consumers found").
+
+Non-negotiable rules:
+
+- Never delete, untrack, git-ignore, or "clean up" a `web-ui-dist/` folder. Never revert its changes as build noise.
+- Never edit it by hand. Regenerate it with `pnpm build` (or `pnpm build:web-ui && bash scripts/copy-web-ui.sh`). Both consumers must stay identical.
+- When `packages/plan-web-ui/src` changes, commit the regenerated bundle together with that UI change, in the same PR.
+- A modified `web-ui-dist/` in the working tree usually means someone has an uncommitted UI change. Find out whose before touching it. If there is no UI source change behind it, regenerate it, do not delete it.
+- Changing this policy needs an explicit user decision.
+
 ## Comportamento atteso dagli agenti
 
 Quando lavori sullo sviluppo di agent-plan:
