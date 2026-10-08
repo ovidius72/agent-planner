@@ -184,6 +184,7 @@ process.exit(0);
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Installed Codex Agent Plan plugin/);
+  assert.match(result.stdout, /Restart Codex after setup/);
   assert.equal(existsSync(join(cwd, ".codex", "config.toml")), true);
   assert.equal(existsSync(join(cwd, ".codex", "skills", "agent-plan", "SKILL.md")), true);
   assert.equal(existsSync(join(cwd, ".codex", "skills", "planner", "SKILL.md")), true);
@@ -192,6 +193,43 @@ process.exit(0);
   assert.match(codexCalls, /^plugin marketplace remove agent-plan --json$/m);
   assert.match(codexCalls, /^plugin marketplace add .* --json$/m);
   assert.match(codexCalls, /^plugin add agent-plan@agent-plan --json$/m);
+});
+
+test("Codex setup force repairs legacy per-tool approval tables", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "agent-plan-codex-approval-repair-"));
+  roots.push(cwd);
+  await mkdir(join(cwd, ".codex"), { recursive: true });
+  writeFileSync(join(cwd, ".codex", "config.toml"), [
+    'model = "gpt-6"',
+    "",
+    "[mcp_servers.agent-plan]",
+    'command = "npx"',
+    'args = ["agent-plan", "mcp"]',
+    "",
+    "[mcp_servers.agent-plan.tools.planner-task-recommend]",
+    'approval_mode = "approve"',
+    "",
+    "[mcp_servers.agent-plan.tools.planner-web]",
+    'approval_mode = "approve"',
+    "",
+    "[mcp_servers.other]",
+    'command = "other"',
+    "",
+  ].join("\n"));
+
+  const blocked = runCli(["setup", "codex", "--project", "--local"], { cwd });
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /legacy child tool approval tables/);
+
+  const repaired = runCli(["setup", "codex", "--project", "--local", "--force"], { cwd });
+  assert.equal(repaired.status, 0, repaired.stderr);
+  const config = readFileSync(join(cwd, ".codex", "config.toml"), "utf-8");
+  assert.match(config, /model = "gpt-6"/);
+  assert.match(config, /\[mcp_servers\.agent-plan\]/);
+  assert.match(config, /command = "node"/);
+  assert.match(config, /\[mcp_servers\.other\]/);
+  assert.doesNotMatch(config, /\[mcp_servers\.agent-plan\.tools\./);
+  assert.doesNotMatch(config, /approval_mode = "approve"/);
 });
 
 test("local setup saves the real CLI path, not the link it was started through", async () => {

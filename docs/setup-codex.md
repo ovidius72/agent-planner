@@ -21,7 +21,7 @@ agent-plan setup codex --project
 User scope:
 
 ```bash
-agent-plan setup codex --user
+agent-plan setup codex --user --force
 ```
 
 Local development from a built checkout:
@@ -38,6 +38,13 @@ The command writes:
   project scope, or the same paths under `~/.codex/skills/` for user scope.
 - For user scope, the Codex marketplace plugin is also registered and installed
   when the `codex` CLI is available.
+
+Use `--force` to repair an existing Codex install. It rewrites the Agent Plan
+MCP entry and removes legacy per-tool approval tables under
+`[mcp_servers.agent-plan.tools.*]` that can make Codex ask for permission on
+every planner tool call. Restart Codex after setup; existing sessions keep their
+already-started MCP process. Verify the loaded runtime from inside Codex with
+`planner-version`.
 
 The MCP config block is:
 
