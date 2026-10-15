@@ -30,6 +30,22 @@
 
 /** @type {import("./helpers/runner.mjs").Scenario[]} */
 export const scenarios = [
+  {
+    id: "lifecycle.session-ownership-recovery",
+    title: "Caller focus persists, claims are atomic, and restart recovery preserves returns",
+    group: "lifecycle",
+    category: "persistence",
+    harnesses: ["core", "mcp", "pi"],
+    fixture: "minimal",
+    surfaces: ["core.claimTask", "core.registerSession", "core.recoverSessionForTask", "core.refreshResume", "mcp.taskStart", "mcp.sessionRecover", "mcp.load", "pi.tool.taskStart", "pi.tool.sessionRecover"],
+    steps: [
+      "Run packages/plan-core/test/session-focus.test.mjs for atomic claims, held checkpoints, recovery confirmation/conflicts and rollback.",
+      "Run packages/plan-mcp/test/mcp-sessions.test.mjs with independent stdio processes for caller focus, foreign ownership, concurrent starts and nested restart recovery.",
+      "Run packages/pi-adapter/test/pi-sessions.test.mjs for foreign ownership refusal, idempotency, focus and live-owner recovery refusal.",
+      "Repeat the critical ownership/recovery contracts using freshly packed installed artifacts.",
+    ],
+    expects: { ok: true },
+  },
   // ════════════════════════════════════════════════════════════════════
   // GROUP: bootstrap
   // ════════════════════════════════════════════════════════════════════
