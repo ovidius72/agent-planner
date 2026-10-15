@@ -17,7 +17,7 @@ import {
   pruneResumeSessions,
   recommendNextTask,
 } from "../dist/index.js";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -52,6 +52,69 @@ const deviation = (id, ownerSession) =>
     id, recommendedTaskId: "r", temporaryTaskId: "t", resumeTaskId: "x", createdAt: now,
     ...(ownerSession === undefined ? {} : { ownerSession }),
   });
+
+describe("atomic ownership and explicit recovery", () => {
+  test("independent stores claim one owner, while independent tasks remain available", async () => {
+    const { store, phase } = await setup({ tasks: [{}, {}] });
+    const other = new PlanStore(store.root);
+    const results = await Promise.allSettled([store.claimTask(phase.id, phase.tasks[0].id, "A"), other.claimTask(phase.id, phase.tasks[0].id, "B")]);
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(results.find((result) => result.status === "rejected").reason.details.errorCode, "TASK_OWNED_BY_ANOTHER_SESSION");
+    const task = (await store.loadPhase(phase.id)).tasks[0];
+    const winner = task.activeOwnerSession;
+    const loser = winner === "A" ? "B" : "A";
+    assert.equal((await other.claimTask(phase.id, task.id, winner)).alreadyStarted, true);
+    assert.equal((await store.loadPhase(phase.id)).tasks[0].statusLog.length, 1);
+    await assert.rejects(store.claimTask(phase.id, phase.tasks[1].id, winner), (error) => error.details.errorCode === "ACTIVE_TASK_CONFLICT");
+    await other.claimTask(phase.id, phase.tasks[1].id, loser);
+  });
+
+  test("a paused return task cannot be claimed by another session", async () => {
+    const { store, phase } = await setup({ tasks: [{}, {}] });
+    await store.addWorkDeviation({ ...deviation("held", "A"), resumeTaskId: phase.tasks[0].id, temporaryTaskId: phase.tasks[1].id }, "A");
+    await assert.rejects(store.claimTask(phase.id, phase.tasks[0].id, "B"), (error) => error.details.errorCode === "TASK_OWNED_BY_ANOTHER_SESSION");
+    assert.equal((await store.loadPhase(phase.id)).tasks[0].status, "planned");
+  });
+
+  test("legacy pending returns recover explicitly without changing their checkpoints", async () => {
+    const { store, phase } = await setup({ tasks: [{}, {}] });
+    const snapshot = { id: "checkpoint", reason: "Detour", whatWasBeingDone: "Source work", resumeLocation: "src/a.ts:1", howToResume: "Continue", relatedTaskId: phase.tasks[1].id, pausedAt: now, pausedBy: "A" };
+    await store.updateTask(phase.id, phase.tasks[0].id, (task) => ({ ...task, pauseSnapshot: snapshot, pauseHistory: [snapshot] }));
+    await store.addWorkDeviation({ ...deviation("pending", "old"), resumeTaskId: phase.tasks[0].id, temporaryTaskId: phase.tasks[1].id, state: "resume-required", snapshot }, "old");
+    await store.refreshResume("Old notes", "Return needed", "old");
+    await assert.rejects(store.recoverSessionForTask(phase.id, phase.tasks[0].id, "new", false), (error) => error.details.errorCode === "SESSION_RECOVERY_CONFIRMATION_REQUIRED");
+    await store.recoverSessionForTask(phase.id, phase.tasks[0].id, "new", true);
+    assert.equal((await store.loadProject("new")).workDeviations[0].state, "resume-required");
+    assert.equal((await store.loadProject("old")).workDeviations.length, 0);
+    assert.equal((await store.loadResume("new")).notes, "Old notes");
+    assert.deepEqual((await store.loadPhase(phase.id)).tasks[0].pauseSnapshot, snapshot);
+    await store.claimTask(phase.id, phase.tasks[0].id, "new");
+    assert.deepEqual((await store.loadPhase(phase.id)).tasks[0].pauseHistory, [snapshot]);
+  });
+
+  test("registered live owners and occupied destination sessions cannot be recovered", async () => {
+    const { store, phase } = await setup({ tasks: [{ status: "in-progress", activeOwnerSession: "old" }, { status: "in-progress", activeOwnerSession: "occupied" }] });
+    await store.registerSession("old");
+    await assert.rejects(store.recoverSessionForTask(phase.id, phase.tasks[0].id, "new", true), (error) => error.details.errorCode === "SESSION_OWNER_ACTIVE");
+    await assert.rejects(store.recoverSessionForTask(phase.id, phase.tasks[1].id, "old", true), (error) => error.details.errorCode === "SESSION_RECOVERY_CONFLICT");
+    assert.equal((await store.loadPhase(phase.id)).tasks[0].activeOwnerSession, "old");
+  });
+
+  test("unreadable process evidence fails closed and recovery rollback preserves canonical data", async () => {
+    const { store, phase } = await setup({ tasks: [{ status: "in-progress", activeOwnerSession: "old" }] });
+    await store.registerSession("old");
+    const path = join(store.root, ".local/sessions", `${Buffer.from("old").toString("base64url")}.json`);
+    await writeFile(path, "broken");
+    await assert.rejects(store.recoverSessionForTask(phase.id, phase.tasks[0].id, "new", true));
+    await rm(path);
+    const before = await store.loadPhase(phase.id);
+    const original = store.saveWorkDeviations.bind(store);
+    let fail = true;
+    store.saveWorkDeviations = async (...args) => { if (fail) { fail = false; throw new Error("Injected disk failure"); } return original(...args); };
+    await assert.rejects(store.recoverSessionForTask(phase.id, phase.tasks[0].id, "new", true), /Injected disk failure/);
+    assert.deepEqual((await store.loadPhase(phase.id)).tasks, before.tasks);
+  });
+});
 
 describe("deviationsForSession", () => {
   const all = [deviation("mine", "A"), deviation("theirs", "B"), deviation("legacy")];

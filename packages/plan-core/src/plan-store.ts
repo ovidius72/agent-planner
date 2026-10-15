@@ -1,6 +1,7 @@
 import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
 import { z, ZodError } from "zod";
 
 /** Canonical `.planner/.gitignore` content (P042 spec): ignore the `.local/`
@@ -59,7 +60,7 @@ import {
   ResumeSessionsSchema,
   type ResumeSessions,
 } from "./schema.js";
-import { deviationsForSession, pruneResumeSessions } from "./session-focus.js";
+import { deviationsForSession, pruneResumeSessions, taskOwnershipConflict } from "./session-focus.js";
 import { createFeatureId, createIdeaId, createPhaseId, createRequirementId, createShortId, createStatusLogEntryId, createTaskId, formatFeatureRef, formatIdeaRef, formatPhaseRef, formatThreeDigitNumber, isLegacyPhaseId } from "./naming.js";
 import { deriveParentDisplay, fromCanonicalStatus, type ParentDisplay, type WorkflowStatus } from "./display-status.js";
 import { buildHierarchicalDescriptionFreshness, type HierarchicalDescriptionFreshness } from "./description-freshness.js";
@@ -3489,6 +3490,117 @@ export class PlanStore {
     return deleted!;
   }
 
+  /** Record the local process behind an opaque harness session for explicit recovery. */
+  async registerSession(sessionId: string): Promise<void> {
+    if (!sessionId.trim()) throw new PlanStoreError("Session identity must not be empty.");
+    const path = join(this.localRoot(), "sessions", `${Buffer.from(sessionId).toString("base64url")}.json`);
+    await mkdir(dirname(path), { recursive: true });
+    await atomicWriteJson(path, { pid: process.pid, hostname: hostname() }, this.root);
+  }
+
+  /** Claim/start against canonical state under the root lock, never overwrite another owner. */
+  async claimTask(phaseId: string, taskId: string, ownerSessionId: string, timestamp = nowISO()): Promise<{ task: Task; alreadyStarted: boolean }> {
+    return this.runBatch(async () => {
+      const phases = await this.loadAllPhases();
+      const task = phases.find((phase) => phase.id === phaseId)?.tasks.find((entry) => entry.id === taskId);
+      if (!task) throw new PlanStoreError("Task not found.", undefined, { errorCode: "TASK_NOT_FOUND", taskId });
+      const owner = ownerSessionId.trim();
+      if (taskOwnershipConflict(task, await this.listAllWorkDeviations(), owner)) {
+        throw new PlanStoreError("Task belongs to another session. Use explicit session recovery after its owner has stopped.", undefined, { errorCode: "TASK_OWNED_BY_ANOTHER_SESSION", taskId });
+      }
+      const anotherActive = phases.flatMap((phase) => phase.tasks).find((entry) =>
+        entry.id !== taskId && entry.status === "in-progress" && (!owner || entry.activeOwnerSession === owner));
+      if (anotherActive) throw new PlanStoreError("This session already owns another active task.", undefined, { errorCode: "ACTIVE_TASK_CONFLICT", taskId });
+      if (task.status === "done" || task.status === "canceled" || task.status === "rejected") {
+        throw new PlanStoreError(`Task cannot be started from ${task.status}.`, undefined, { errorCode: task.status === "done" ? "TASK_DONE" : "START_NOT_ALLOWED", taskId });
+      }
+      const alreadyStarted = task.status === "in-progress";
+      if (alreadyStarted && task.activeOwnerSession === owner) return { task, alreadyStarted };
+      let claimed: Task;
+      if (task.pauseSnapshot) {
+        claimed = await this.resumeTask(phaseId, taskId, timestamp, owner);
+      } else {
+        claimed = (await this.updateTask(phaseId, taskId, (current) => ({
+          ...current, status: "in-progress", activeOwnerSession: owner,
+          startedAt: current.startedAt || timestamp, updatedAt: timestamp,
+          statusLog: alreadyStarted ? current.statusLog : [...current.statusLog, {
+            id: createStatusLogEntryId(), date: timestamp, fromStatus: current.status, toStatus: "in-progress",
+            title: `${current.status} → in-progress`, description: "",
+          }],
+        }))).task;
+      }
+      const persisted = (await this.loadPhase(phaseId)).tasks.find((entry) => entry.id === taskId);
+      if (persisted?.status !== "in-progress" || persisted.activeOwnerSession !== owner) {
+        throw new PlanStoreError("Task ownership persistence verification failed.", undefined, { errorCode: "PERSISTENCE_VERIFICATION_FAILED", taskId });
+      }
+      return { task: claimed, alreadyStarted };
+    });
+  }
+
+  /** Explicitly transfer a stopped caller's whole focus/return stack without changing lifecycle state. */
+  async recoverSessionForTask(phaseId: string, taskId: string, sessionId: string, confirmed: boolean): Promise<{ taskIds: string[]; deviationIds: string[] }> {
+    if (!confirmed) throw new PlanStoreError("Confirm that the previous caller has stopped before recovering its work.", undefined, { errorCode: "SESSION_RECOVERY_CONFIRMATION_REQUIRED" });
+    if (!sessionId.trim()) throw new PlanStoreError("Recovery requires a caller session.");
+    return this.runBatch(async () => {
+      const phases = await this.loadAllPhases();
+      const task = phases.find((phase) => phase.id === phaseId)?.tasks.find((entry) => entry.id === taskId);
+      if (!task) throw new PlanStoreError("Task not found.", undefined, { errorCode: "TASK_NOT_FOUND" });
+      const deviations = await this.listAllWorkDeviations();
+      const pending = deviations.filter((entry) => entry.state !== "resumed" && entry.state !== "canceled");
+      const owners = new Set([task.activeOwnerSession, ...pending
+        .filter((entry) => entry.resumeTaskId === taskId || entry.temporaryTaskId === taskId)
+        .map((entry) => entry.ownerSession)].filter(Boolean));
+      if (owners.size !== 1) throw new PlanStoreError("The task does not identify one recoverable session.", undefined, { errorCode: "SESSION_RECOVERY_AMBIGUOUS" });
+      const previous = [...owners][0]!;
+      if (previous === sessionId) return { taskIds: [], deviationIds: [] };
+      const ownerPath = join(this.localRoot(), "sessions", `${Buffer.from(previous).toString("base64url")}.json`);
+      let ownerRecord: { pid: number; hostname: string } | undefined;
+      try { ownerRecord = await readJson(ownerPath, z.object({ pid: z.number().int().positive(), hostname: z.string().min(1) })); }
+      catch (error) {
+        if (!(error instanceof PlanStoreError) || (error.cause as NodeJS.ErrnoException | undefined)?.code !== "ENOENT") throw error;
+      }
+      if (ownerRecord) {
+        if (ownerRecord.hostname !== hostname()) throw new PlanStoreError("The previous process is on another host; its exit cannot be verified.", undefined, { errorCode: "SESSION_OWNER_UNVERIFIED" });
+        let alive = true;
+        try { process.kill(ownerRecord.pid, 0); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") alive = false; }
+        if (alive) throw new PlanStoreError("The previous session process is still active.", undefined, { errorCode: "SESSION_OWNER_ACTIVE" });
+      }
+      if (phases.some((phase) => phase.tasks.some((entry) => entry.activeOwnerSession === sessionId))
+        || pending.some((entry) => entry.ownerSession === sessionId)) {
+        throw new PlanStoreError("The caller already has work; recover into a fresh connection.", undefined, { errorCode: "SESSION_RECOVERY_CONFLICT" });
+      }
+      const oldSessions = await this.loadResumeSessions();
+      const previousFocus = oldSessions[previous] ?? await this.loadResume(previous);
+      const taskIds = phases.flatMap((phase) => phase.tasks.filter((entry) => entry.activeOwnerSession === previous).map((entry) => entry.id));
+      const deviationIds = deviations.filter((entry) => entry.ownerSession === previous).map((entry) => entry.id);
+      const changedPhases = phases.filter((phase) => phase.tasks.some((entry) => entry.activeOwnerSession === previous));
+      try {
+        for (const phase of changedPhases) await this.updatePhase(phase.id, (current) => ({ ...current, tasks: current.tasks.map((entry) => entry.activeOwnerSession === previous ? { ...entry, activeOwnerSession: sessionId } : entry) }));
+        await this.saveWorkDeviations(deviations.map((entry) => entry.ownerSession === previous ? { ...entry, ownerSession: sessionId } : entry));
+        await this.updateResumeSessions((sessions) => {
+          const next = { ...sessions };
+          delete next[previous];
+          if (previousFocus) next[sessionId] = { ...previousFocus, guardBypassUntil: "" };
+          return next;
+        });
+        await this.refreshResume(undefined, undefined, sessionId);
+        const recoveredTasks = (await this.loadAllPhases()).flatMap((phase) => phase.tasks);
+        const recoveredDeviations = await this.listAllWorkDeviations();
+        if (taskIds.some((id) => recoveredTasks.find((entry) => entry.id === id)?.activeOwnerSession !== sessionId)
+          || deviationIds.some((id) => recoveredDeviations.find((entry) => entry.id === id)?.ownerSession !== sessionId)) {
+          throw new PlanStoreError("Session recovery persistence verification failed.", undefined, { errorCode: "SESSION_RECOVERY_VERIFICATION_FAILED" });
+        }
+      } catch (error) {
+        for (const phase of changedPhases) await this.updatePhase(phase.id, () => phase);
+        await this.saveWorkDeviations(deviations);
+        await this.updateResumeSessions(() => oldSessions);
+        throw error;
+      }
+      return { taskIds, deviationIds };
+    });
+  }
+
   /** Save a durable resume checkpoint without introducing a separate canonical task status. */
   async pauseTask(phaseId: string, taskId: string, input: TaskPauseSnapshot): Promise<Task> {
     const snapshot = TaskPauseSnapshotSchema.parse(input);
@@ -3538,6 +3650,9 @@ export class PlanStore {
       }
       if (task.status === "done" || task.status === "canceled" || task.status === "rejected") {
         throw new PlanStoreError(`Task ${taskId} cannot be resumed from ${task.status}.`);
+      }
+      if (task.activeOwnerSession && ownerSessionId.trim() !== task.activeOwnerSession) {
+        throw new PlanStoreError("Task belongs to another session.", undefined, { errorCode: "TASK_OWNED_BY_ANOTHER_SESSION", taskId });
       }
       const snapshot = task.pauseSnapshot;
       resumed = {

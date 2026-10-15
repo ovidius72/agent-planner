@@ -5,7 +5,7 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
@@ -243,10 +243,35 @@ function withStaleServerNotice<T extends ToolResult>(result: T): T {
 }
 
 {
+  const sessionOperations = new Set(["planner-load", "planner-task-start", "planner-task-switch", "planner-task-pause", "planner-task-complete", "planner-task-reopen", "planner-task-update", "planner-task-deviation", "planner-session-recover"]);
+  const registeredSessions = new Set<string>();
   const registerToolUnwrapped = server.registerTool.bind(server) as (...args: unknown[]) => unknown;
   (server as unknown as { registerTool: (...args: unknown[]) => unknown }).registerTool = (...args: unknown[]) => {
     const handler = args[args.length - 1] as (...handlerArgs: unknown[]) => Promise<ToolResult> | ToolResult;
-    const wrapped = async (...handlerArgs: unknown[]) => foldTextIntoStructured(withStaleServerNotice(await handler(...handlerArgs)));
+    const wrapped = async (...handlerArgs: unknown[]) => {
+      const invoke = async () => foldTextIntoStructured(withStaleServerNotice(await handler(...handlerArgs)));
+      if (!sessionOperations.has(args[0] as string)) return invoke();
+      const st = store();
+      if (!(await st.exists())) return invoke();
+      const sessionId = plannerSessionIdFor(handlerArgs[1] as McpRequestExtra | undefined);
+      const prepare = async () => {
+        if (!registeredSessions.has(sessionId)) {
+          await st.registerSession(sessionId);
+          registeredSessions.add(sessionId);
+        }
+      };
+      // Server/watchers must be created outside a write transaction's async context.
+      if (args[0] === "planner-load") {
+        await st.runBatch(prepare);
+        return invoke();
+      }
+      return st.runBatch(async () => {
+        await prepare();
+        const result = await invoke();
+        if (!result.isError) await st.refreshResume(undefined, undefined, sessionId);
+        return result;
+      });
+    };
     return registerToolUnwrapped(...args.slice(0, -1), wrapped);
   };
 }
@@ -2066,6 +2091,10 @@ server.registerTool("planner-task-switch", {
   if (!source) return text(`Task not found: ${from_task}`);
   if (!target) return text(`Task not found: ${to_task}`);
   if (source.task.id === target.task.id) return text("Source and temporary task must differ.");
+  const allDeviations = await st.listAllWorkDeviations();
+  if ([source.task, target.task].some((task) => taskOwnershipConflict(task, allDeviations, plannerSessionId))) {
+    return { ...text("Task switch denied: source or target belongs to another session.", { started: false, errorCode: "TASK_OWNED_BY_ANOTHER_SESSION" }), isError: true };
+  }
   if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
     return text(`Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.`);
   }
@@ -2159,25 +2188,7 @@ server.registerTool("planner-task-switch", {
       });
     }
     sourceCheckpointed = true;
-    if (target.task.pauseSnapshot) {
-      await st.resumeTask(target.phase.id, target.task.id, timestamp, plannerSessionId);
-    } else {
-      await st.updatePhase(target.phase.id, (phase) => {
-        const task = phase.tasks.find((entry) => entry.id === target.task.id);
-        if (!task) throw new Error(`Temporary task disappeared: ${to_task}`);
-        const previousStatus = task.status;
-        applyTaskLifecycleDates(task, "in-progress", timestamp);
-        (task as any).activeOwnerSession = plannerSessionId;
-        task.statusLog = [...task.statusLog, {
-          id: createChecklistItemId(task.id, task.statusLog.length + 1, `${previousStatus}-in-progress`),
-          date: timestamp, fromStatus: previousStatus, toStatus: "in-progress",
-          title: `${previousStatus} → in-progress`, description: `Temporary switch from ${source.task.title}.`,
-        }];
-        task.updatedAt = timestamp;
-        phase.updatedAt = timestamp;
-        return phase;
-      });
-    }
+    await st.claimTask(target.phase.id, target.task.id, plannerSessionId, timestamp);
     targetStarted = true;
     await st.addWorkDeviation(record, plannerSessionId);
     if (target.task.pauseSnapshot) {
@@ -2231,6 +2242,21 @@ server.registerTool("planner-task-reopen", {
   } catch (error) {
     const details = error instanceof PlanStoreError ? error.details : undefined;
     return { ...text(`Task reopen denied: ${error instanceof Error ? error.message : "unknown error"}`, { reopened: false, errorCode: details?.errorCode ?? "TASK_REOPEN_FAILED" }), isError: true };
+  }
+});
+
+server.registerTool("planner-session-recover", {
+  description: "Explicitly recover a stopped caller's task ownership, complete return stack and resume focus into this fresh connection. Identify the old session by an active task or a pending return task, without client-side session-ID mapping. Requires confirmed=true after confirming the previous caller has stopped; refuses a registered live process and a caller that already owns work. Task statuses, checkpoints and context-read gates are preserved. Then read the task context and use planner-task-start normally.",
+  inputSchema: { task: z.string().min(1), confirmed: z.boolean() },
+}, async ({ task: ref, confirmed }, extra) => {
+  const st = await requireStore();
+  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
+  if (!found) return { ...text(`Task not found: ${ref}`, { recovered: false, errorCode: "TASK_NOT_FOUND" }), isError: true };
+  try {
+    const result = await st.recoverSessionForTask(found.phase.id, found.task.id, plannerSessionIdFor(extra), confirmed);
+    return text("Session recovered. Existing tasks, checkpoints and return stack are preserved; read the task context before continuing.", { recovered: true, ...result });
+  } catch (error) {
+    return { ...text(`Session recovery denied: ${error instanceof Error ? error.message : String(error)}`, { recovered: false, errorCode: error instanceof PlanStoreError ? error.details?.errorCode ?? "SESSION_RECOVERY_FAILED" : "SESSION_RECOVERY_FAILED" }), isError: true };
   }
 });
 
@@ -2325,10 +2351,17 @@ server.registerTool("planner-task-start", {
     await st.recordContextRead({ sessionId: plannerSessionId, phaseId: found.phase.id, taskId: found.task.id, ...(found.phase.featureId ? { featureId: found.phase.featureId } : {}), requirementIds: linkedRequirementIds });
   }
   if (found.task.status === "in-progress") {
+    let claimed;
+    try { claimed = await st.claimTask(found.phase.id, found.task.id, plannerSessionId); }
+    catch (error) {
+      if (!(error instanceof PlanStoreError)) throw error;
+      return taskStartError(taskStartDenied(error.details?.errorCode as Parameters<typeof taskStartDenied>[0], error.message,
+        ["Continue with the owning caller, or use planner-session-recover after confirming it has stopped."], { taskId: found.task.id }));
+    }
     const outcome = taskStartSucceeded(found.task.id, true);
     const higherPriorityPhase = findHigherPriorityOpenPhase(initialPhases, features, found.phase.id, found.phase.priority ?? found.phase.number);
     const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
-    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}`, { ...outcome, task: found.task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase });
+    return text(`✅ Task already started: ${taskRef} — ${found.task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}`, { ...outcome, task: claimed.task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase });
   }
   const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume(plannerSessionId)]);
   const eligibility = checkExplicitTaskStart(features, phases, found.task.id, project.workDeviations);
@@ -2408,29 +2441,12 @@ server.registerTool("planner-task-start", {
   const timestamp = nowISO();
 
   let updatedTask: Task | undefined;
-  if (found.task.pauseSnapshot) {
-    updatedTask = await st.resumeTask(found.phase.id, found.task.id, timestamp, plannerSessionId);
-  } else {
-    await st.updatePhase(found.phase.id, (phase) => {
-      const task = phase.tasks.find((entry) => entry.id === found.task.id);
-      if (!task) return phase;
-      const previousStatus = task.status;
-      applyTaskLifecycleDates(task, "in-progress", timestamp);
-      const entry: StatusLogEntry = {
-        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${previousStatus}-in-progress`),
-        date: timestamp,
-        fromStatus: previousStatus,
-        toStatus: "in-progress",
-        title: `${previousStatus} → in-progress`,
-        description: "",
-      };
-      (task as any).activeOwnerSession = plannerSessionId;
-      task.statusLog = [...(task.statusLog ?? []), entry];
-      task.updatedAt = timestamp;
-      phase.updatedAt = timestamp;
-      updatedTask = task;
-      return phase;
-    });
+  try {
+    updatedTask = (await st.claimTask(found.phase.id, found.task.id, plannerSessionId, timestamp)).task;
+  } catch (error) {
+    if (!(error instanceof PlanStoreError)) throw error;
+    return taskStartError(taskStartDenied(error.details?.errorCode as Parameters<typeof taskStartDenied>[0], error.message,
+      ["Re-read the task and reconcile its owner before retrying."], { taskId: found.task.id }));
   }
   await st.syncTaskStatusRollup(found.phase.id);
   const approvedDeviation = project.workDeviations.find((deviation) =>
@@ -2444,7 +2460,7 @@ server.registerTool("planner-task-start", {
   if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
   await st.writeGenerated();
   const persistedTask = (await st.loadPhase(found.phase.id)).tasks.find((candidate) => candidate.id === found.task.id);
-  if (!updatedTask || persistedTask?.status !== "in-progress") {
+  if (!updatedTask || persistedTask?.status !== "in-progress" || persistedTask.activeOwnerSession !== plannerSessionId) {
     return taskStartError(taskStartDenied(
       "PERSISTENCE_VERIFICATION_FAILED",
       `The lifecycle write could not be verified as in-progress for ${taskRef}.`,
@@ -3138,6 +3154,7 @@ server.registerTool("planner-load", {
     return text(`Planner load aborted: ${error instanceof Error ? error.message : String(error)}`, { errorCode: "PLANNER_SESSION_PREPARATION_FAILED", loaded: false });
   }
   const project = preparation.project;
+  await st.runBatch(() => st.refreshResume(undefined, undefined, plannerSessionId));
   if (project.projectGuidelines.content.trim()) {
     await st.recordProjectGuidelinesRead({ sessionId: plannerSessionId });
   }

@@ -78,6 +78,9 @@ A decision has exactly one owner: the project when it is project-wide, a feature
 
 ## Task execution
 
+- Task start claims ownership atomically; `started: true` for already-active work applies only to the owning caller. Another caller receives `TASK_OWNED_BY_ANOTHER_SESSION`.
+- A stdio MCP restart creates a fresh caller. After explicitly confirming the old caller has stopped, use `planner-session-recover` (`task`, `confirmed=true`) or Pi `session_recover` (`taskId`, `confirmed=true`) with its old active task or a pending return task. This transfers the complete owned work, return stack and focus without changing task statuses/checkpoints. Registered live processes and callers already owning work are refused; older sessions without process records rely on that explicit confirmation. Then reread context and start normally. Never invent client-side owner-ID mappings or recover another live caller.
+
 - Create rich feature, phase, and task descriptions with current state, concrete goals, relevant systems, file/symbol references, behaviors to preserve, and edge cases.
 - Use one task with checklist items for implementation steps. Do not create child tasks merely to scatter the same execution context.
 - Add, remove, and toggle checklist items granularly. Do not encode completion by adding `DONE` to checklist titles.
@@ -211,6 +214,8 @@ Pause, switch, deviation, requirement, and decision operations are available thr
 
 ## MCP tool inventory
 
+- Session recovery: `planner-session-recover`.
+
 The MCP adapter publishes these tools:
 
 - Core: `planner-version`, `planner-init`, `planner-show`, `planner-description-freshness`, `planner-repair`, `planner-cleanup-orphan-phases`, `planner-export`, `planner-authorize-bypass`, `planner-clear-bypass`, `planner-load`, `planner-disable`, `planner-web`.
@@ -222,6 +227,8 @@ The MCP adapter publishes these tools:
 - Handoffs: `planner-handoff-list`, `planner-handoff-show`, `planner-handoff-prepare`, `planner-handoff-write`, `planner-handoff-verify`, `planner-handoff-clear`.
 
 ## Pi tool inventory
+
+- Session recovery: `session_recover`.
 
 The Pi adapter registers these tools:
 
