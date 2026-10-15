@@ -4,8 +4,8 @@
   "shortId": "HR4BM",
   "priority": 22,
   "name": "Outside-app integration (heca-pro): serve CLI, v1 read API, entity events, per-session focus",
-  "description": "Request from heca-pro (~/projects/heca-pro/docs/agent-plan-work.md), agreed with the user 2026-09-29. heca-pro bundles agent-plan and drives it from a Node helper; it shows a read-only planner view and links to the web UI for editing. Agents write through MCP. Assignment/roles stay out of agent-plan.\n\nCurrent state: the agent-plan CLI (packages/agent-plan/src/index.ts) has init/mcp/guard/export but no serve; plan-server starts only from code or env vars PLAN_PORT/PLAN_HOST/PLAN_ROOT (packages/plan-server/src/cli.ts). The ~60 routes in packages/plan-server/src/serve.ts are the web UI's own backend, unversioned. /ws (packages/plan-server/src/ws-hub.ts:12-19) sends whole-collection events (features-updated, phases-updated). The deviation stack (packages/plan-core/src/schema.ts:168) and resume focus are per project; task ownership is already per session (activeOwnerSession, task-selection.ts:263). `agent-plan init <name> --yes` (index.ts:102) sets only the name and exits silently if a planner exists.\n\nGoals: (1) `agent-plan serve` with root/port/host options, prints address, --json. (2) Separate read-only /api/v1 with documented contract, apiVersion in responses, shared response types in plan-core AND a pinned-shape test; web UI routes untouched; new module, not more code in serve.ts. (3) `entity-changed` WS event {apiVersion, kind, ref, id, op, parent refs}; old events stay for the web UI. (4) Deviation stack and resume focus keyed per session; sessionless callers keep project-wide behaviour. (5) init gains --description, --goal, --json and a distinct documented already-exists result.\n\nAlready done, not part of this feature: heca-pro's cascade feature-delete bug (feature survived a delete) is fixed by commit 840db0c with its own test; it reaches heca-pro in the next release (they run 0.3.2).\n\nBehaviours to preserve: the web UI backend and its X-Planner-Source rules; existing /ws events; planner disabled by default (heca-pro never starts the server on its own); harness-agnostic core (AGENTS.md rule 4). Contract types live in plan-core and are also exported for plan-server.\n\nOrder: phase P110 (serve + init), then P111 (read API + events), then P112 (per-session focus).",
-  "descriptionUpdatedAt": "2026-09-29T20:16:49.153Z",
+  "description": "Outside-app integration requested by heca-pro (docs/agent-plan-work.md), agreed with the user 2026-09-29. heca-pro drives the bundled agent-plan CLI from a Node helper, shows a read-only planner view and links to the web UI for editing; agents write through MCP. Assignment and roles remain outside agent-plan.\n\nThe original feature delivered serve/init CLI contracts (P110), versioned read-only /api/v1 and entity-changed events (P111), per-caller deviation stacks/resume focus (P112), and server discovery/reuse/stop/health (P113). Code ownership: packages/agent-plan/src/index.ts; packages/plan-server/src/api-v1.ts and serve.ts; packages/plan-core/src/session-focus.ts, task-selection.ts and plan-store.ts; packages/plan-mcp/src/index.ts; packages/pi-adapter/src/index.ts. API types remain in the harness-agnostic core and the Web UI's existing backend/event contracts are preserved.\n\nP112 now has follow-up P112(F023)/T458 for four failures exposed by heca-pro P010(F003)/T031 on published 0.4.7: missing MCP focus entries, foreign-owner false success, concurrent starts both reporting success and restart retaining hidden old ownership. The implementation on wip/planner-session-ownership centralizes atomic claims and explicit task-referenced recovery in the core, persists MCP/Pi caller focus and preserves complete LIFO returns/checkpoints during recovery. T458 is completed locally. Focused real stdio MCP, core and Pi regressions pass, and the canonical final gate passed for fingerprint 51e94d842c96 with 910/910 Node tests, browser end-to-end and freshly packed installed ownership/focus/nested-return-recovery smoke. The implementation is committed as cf131dc and integrated into develop via PR #77, with passing feature CI. Stable release preparation targets release/v0.4.8 (all five packages 0.4.8, plugins 0.3.8) through the canonical script; merging the release PR to main remains the separate publication decision. Publication and the downstream published-package recheck are separate release steps requiring explicit approval.\n\nPreserve CLI JSON contracts, versioned read-only API with hidden internal session IDs, entity-changed notifications and old Web UI events, existing Web UI source rules, independent caller tasks, per-caller focus/LIFO/RESUME REQUIRED, sessionless project-wide behavior, legacy data and planner/dashboard activation only after an explicit user request. No assignment/role enforcement or automatic stealing of live task ownership is introduced.\n\nRelease preparation completed on 2026-10-15: release/v0.4.8, commit 821f4a7, PR #78 to main (https://github.com/ovidius72/agent-planner/pull/78). All five packages are 0.4.8 and plugins 0.3.8. The canonical release gate passed all seven steps for fingerprint 45990b26665f, including freshly packed ownership/focus/nested-return recovery smoke. Publication and heca-pro's published-version recheck follow the release PR merge.",
+  "descriptionUpdatedAt": "2026-10-15T09:06:09.877Z",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -37,11 +37,31 @@
       "toStatus": "done",
       "title": "in-progress → done",
       "description": ""
+    },
+    {
+      "id": "bb2a34df-6034-4ef3-807c-dca4fbd96606",
+      "date": "2026-10-14T16:01:16.875Z",
+      "fromStatus": "done",
+      "toStatus": "in-progress",
+      "title": "done → in-progress",
+      "description": ""
+    },
+    {
+      "id": "a17740b2-ce9f-4f31-98a0-b774fda97947",
+      "date": "2026-10-14T16:23:00.438Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
     }
   ],
   "createdAt": "2026-09-29T20:14:01.410Z",
-  "updatedAt": "2026-09-29T20:16:49.153Z",
+  "updatedAt": "2026-10-15T09:06:09.878Z",
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
+      "createdAt": "2026-10-14T16:01:16.667Z"
+    },
     {
       "sessionId": "mcp-process:81f0dea4-a45d-46e9-9b09-4f3700303125",
       "createdAt": "2026-10-06T07:46:24.445Z"

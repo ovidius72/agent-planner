@@ -62,3 +62,29 @@ test("Pi: agent A's finished detour makes A return to its task, but not agent B"
     else await closePiHost(a).catch(() => {});
   }
 });
+
+test("Pi denies a foreign active task and persists the owning session's focus", async () => {
+  const a = await createPiHost({ name: "pi-ownership", seed: "minimal", sessionId: "owner", keepRootOnClose: true });
+  let b;
+  try {
+    await readContext(a, "T001");
+    assert.equal(toolDetails(await a.runTool("task_start", { taskId: "T001" })).started, true);
+    const before = (await a.store.loadAllPhases())[0].tasks[0];
+    assert.deepEqual((await a.store.loadResume("pi:owner")).inProgressTaskIds, [before.id]);
+    const again = await a.runTool("task_start", { taskId: "T001" });
+    assert.equal(toolDetails(again).alreadyStarted, true);
+    const root = a.root;
+    await closePiHost(a);
+    b = await createPiHost({ name: "pi-ownership", seed: "empty", root, sessionId: "other" });
+    await readContext(b, "T001");
+    const denied = await b.runTool("task_start", { taskId: "T001" }, { expectError: true });
+    assert.equal(toolDetails(denied).started, false);
+    assert.equal(toolDetails(denied).errorCode, "TASK_OWNED_BY_ANOTHER_SESSION");
+    assert.deepEqual((await b.store.loadAllPhases())[0].tasks[0].statusLog, before.statusLog);
+    const recovered = await b.runTool("session_recover", { taskId: "T001", confirmed: true }, { expectError: true });
+    assert.equal(toolDetails(recovered).errorCode, "SESSION_OWNER_ACTIVE");
+  } finally {
+    if (b) await closePiHost(b);
+    else await closePiHost(a).catch(() => {});
+  }
+});

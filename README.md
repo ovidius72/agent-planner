@@ -77,6 +77,22 @@ Each agent session (a Claude Code or Codex MCP connection, a Pi session) keeps i
 
 A caller with no session (the web UI, scripts) sees the whole project, as before. Work recorded before sessions were tracked is shown to every session. A checkpointed task that no live side task points at is still offered to every session, so paused work is not lost.
 
+Task starts claim ownership atomically. Repeating a start succeeds only for the
+owning caller; another caller gets `started: false` with
+`TASK_OWNED_BY_ANOTHER_SESSION`. A stdio MCP restart creates a new caller identity.
+After confirming the previous caller has stopped, use `planner-session-recover`
+with `{ task: "P001(F001)/T001", confirmed: true }` (Pi: `session_recover` with
+`taskId`). The task can be the old active task or a pending return task. Recovery
+transfers the old caller's owned tasks, complete deviation stack and saved focus
+into the fresh caller without changing task statuses or checkpoints. Read context
+and call task-start normally afterward. No client-side owner-ID mapping is needed.
+
+Recovery refuses a registered process that is still alive, a process on another
+host whose exit cannot be checked, or a destination caller that already owns work.
+Older releases have no process record; for those sessions, explicit confirmation
+is the operator's assertion that the old caller has stopped. This operation is
+available through MCP/Pi and the core; the read-only `/api/v1` remains unchanged.
+
 ---
 
 ## Documentation

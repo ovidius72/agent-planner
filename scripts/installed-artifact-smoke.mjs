@@ -119,6 +119,71 @@ try {
   assert.match(archivedText, /Archived terminal-phase handoff/);
   assert.match(archivedText, /.planner\\/docs\\/p001-closeout\\.md/);
   assert.equal(archived.structuredContent?.archived, true);
+
+  // Real independent installed MCP processes exercise ownership, focus and recovery.
+  const callers = [];
+  async function openCaller(name) {
+    const nextClient = new Client({ name, version: "1.0.0" }, { capabilities: {} });
+    const nextTransport = new StdioClientTransport({ command: process.execPath, args: [mcpEntry], cwd: projectRoot, env: { ...process.env, AGENT_PLAN_ROOT: planRoot }, stderr: "pipe" });
+    callers.push(nextTransport);
+    await nextClient.connect(nextTransport);
+    return nextClient;
+  }
+  async function readContext(caller, ref) {
+    await caller.callTool({ name: "planner-task-show", arguments: { task: ref, full: true } });
+    await caller.callTool({ name: "planner-phase-show", arguments: { phase: "P001", full: true } });
+    await caller.callTool({ name: "planner-feature-show", arguments: { feature: "F001", full: true } });
+    await caller.callTool({ name: "planner-requirement-list", arguments: { phaseRef: "P001" } });
+  }
+  try {
+    for (const title of ["Owned task", "Independent task", "First detour", "Nested detour", "Contended task"]) {
+      await client.callTool({ name: "planner-task-add", arguments: { feature: "F001", phase: "P001", title, description: longDescription } });
+    }
+    const independent = await openCaller("independent-owner");
+    const restarted = await openCaller("restart-owner");
+    await readContext(client, "T002");
+    await readContext(independent, "T003");
+    await readContext(restarted, "T002");
+    assert.equal((await client.callTool({ name: "planner-task-start", arguments: { task: "T002" } })).structuredContent.started, true);
+    assert.equal((await independent.callTool({ name: "planner-task-start", arguments: { task: "T003" } })).structuredContent.started, true);
+    const denied = await restarted.callTool({ name: "planner-task-start", arguments: { task: "T002" } });
+    assert.equal(denied.isError, true);
+    assert.equal(denied.structuredContent.started, false);
+    assert.equal(denied.structuredContent.errorCode, "TASK_OWNED_BY_ANOTHER_SESSION");
+    for (const [from_task, to_task] of [["T002", "T004"], ["T004", "T005"]]) {
+      await readContext(client, to_task);
+      const switched = await client.callTool({ name: "planner-task-switch", arguments: { from_task, to_task, reason: "Installed nested detour", what_was_being_done: "Source work", resume_location: "src/smoke.ts:1", how_to_resume: "Continue source" } });
+      assert.notEqual(switched.isError, true);
+    }
+    const beforeRecovery = (await store.loadAllPhases())[0].tasks;
+    const oldOwner = beforeRecovery[4].activeOwnerSession;
+    assert.deepEqual((await store.loadResume(oldOwner)).inProgressTaskIds, [beforeRecovery[4].id]);
+    const live = await restarted.callTool({ name: "planner-session-recover", arguments: { task: "T005", confirmed: true } });
+    assert.equal(live.structuredContent.errorCode, "SESSION_OWNER_ACTIVE");
+    await transport.close();
+    const recovered = await restarted.callTool({ name: "planner-session-recover", arguments: { task: "T005", confirmed: true } });
+    assert.equal(recovered.structuredContent.recovered, true);
+    const afterRecovery = (await store.loadAllPhases())[0].tasks;
+    assert.notEqual(afterRecovery[4].activeOwnerSession, oldOwner);
+    assert.deepEqual(afterRecovery[2], beforeRecovery[2], "other installed caller retains ownership");
+    for (const index of [1, 3]) assert.deepEqual(afterRecovery[index].pauseSnapshot, beforeRecovery[index].pauseSnapshot);
+    for (const [completed, resume] of [["T005", "T004"], ["T004", "T002"]]) {
+      await readContext(restarted, completed);
+      assert.equal((await restarted.callTool({ name: "planner-task-start", arguments: { task: completed } })).structuredContent.started, true);
+      const finished = await restarted.callTool({ name: "planner-task-complete", arguments: { task: completed, description_update: "Installed nested detour verified and completed." } });
+      assert.match(finished.structuredContent.text, new RegExp("RESUME REQUIRED:.*" + resume));
+      await readContext(restarted, resume);
+      assert.equal((await restarted.callTool({ name: "planner-task-start", arguments: { task: resume } })).structuredContent.started, true);
+    }
+    const contenders = await Promise.all([openCaller("claim-a"), openCaller("claim-b")]);
+    await Promise.all(contenders.map((caller) => readContext(caller, "T006")));
+    const claims = await Promise.all(contenders.map((caller) => caller.callTool({ name: "planner-task-start", arguments: { task: "T006" } })));
+    assert.equal(claims.filter((reply) => reply.structuredContent.started).length, 1);
+    assert.equal(claims.filter((reply) => reply.isError && reply.structuredContent.started === false).length, 1);
+    console.log("installed session ownership, focus and nested restart recovery passed");
+  } finally {
+    await Promise.all(callers.map((caller) => caller.close()));
+  }
 } finally {
   await transport.close();
 }

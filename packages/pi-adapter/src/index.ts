@@ -12,7 +12,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { paginatedSelect, paginatedNotify } from "./ui/paginate.js";
-import { ExportService, PlanStore, PlanStoreError, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { ExportService, PlanStore, PlanStoreError, taskOwnershipConflict, setWriteBusyHook, setWriteNotifyHook, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, classifyGuardedTool, loadNoTaskGuardState, noTaskWarning, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_SOURCE_REVIEWS, HANDOFF_COLD_START_INVENTORY_CATEGORIES, handoffContentHash, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, ACCEPTED_DECISION_OWNERSHIP_RULE, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildDecisionRecordRedirectReply, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, statusIcon, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
 import type { CodebaseProfile, Feature, FeaturesDocument, MacroTaskStatus, Phase, Project, Requirement, StatusLogEntry, Subtask, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
@@ -851,6 +851,34 @@ async function stopServer(): Promise<void> {
 
 export default function planPiExtension(pi: ExtensionAPI): void {
   capturedPi = pi;
+  const registerSessionTool = pi.registerTool.bind(pi);
+  const sessionTools = new Set(["planner-load", "task_start", "task_switch", "task_pause", "task_complete", "task_reopen", "task_update", "task_deviation", "session_recover"]);
+  const registeredSessions = new Set<string>();
+  pi.registerTool = (definition) => {
+    if (!sessionTools.has(definition.name)) return registerSessionTool(definition);
+    const execute = definition.execute;
+    registerSessionTool({ ...definition, async execute(id, params, signal, onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return execute(id, params, signal, onUpdate, ctx);
+      const sessionId = piSessionIdOf(ctx);
+      const prepare = async () => {
+        if (!registeredSessions.has(sessionId)) {
+          await st.registerSession(sessionId);
+          registeredSessions.add(sessionId);
+        }
+      };
+      if (definition.name === "planner-load") {
+        await st.runBatch(prepare);
+        return execute(id, params, signal, onUpdate, ctx);
+      }
+      return st.runBatch(async () => {
+        await prepare();
+        const result = await execute(id, params, signal, onUpdate, ctx);
+        if (!(result as typeof result & { isError?: boolean }).isError) await st.refreshResume(undefined, undefined, sessionId);
+        return result;
+      });
+    } });
+  };
 
   // ── Restore on session start/reload ─────────────────────────────────
   pi.on("session_start", async (_event, ctx) => {
@@ -5349,6 +5377,10 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (!source) return { content: [{ type: "text", text: `Task not found: ${params.from_task}` }], details: {} };
       if (!target) return { content: [{ type: "text", text: `Task not found: ${params.to_task}` }], details: {} };
       if (source.task.id === target.task.id) return { content: [{ type: "text", text: "Source and temporary task must differ." }], details: {} };
+      const allDeviations = await st.listAllWorkDeviations();
+      if ([source.task, target.task].some((task) => taskOwnershipConflict(task, allDeviations, plannerSessionId))) {
+        return { content: [{ type: "text", text: "Task switch denied: source or target belongs to another session." }], details: { started: false, errorCode: "TASK_OWNED_BY_ANOTHER_SESSION" }, isError: true };
+      }
       if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
         return { content: [{ type: "text", text: `Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.` }], details: {} };
       }
@@ -5444,25 +5476,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
           });
         }
         sourceCheckpointed = true;
-        if (target.task.pauseSnapshot) {
-          await st.resumeTask(target.phase.id, target.task.id, timestamp, plannerSessionId);
-        } else {
-          await st.updatePhase(target.phase.id, (phase) => {
-            const task = phase.tasks.find((entry) => entry.id === target.task.id);
-            if (!task) throw new Error(`Temporary task disappeared: ${params.to_task}`);
-            const previousStatus = task.status;
-            applyTaskLifecycleDates(task, "in-progress", timestamp);
-            (task as any).activeOwnerSession = plannerSessionId;
-            task.statusLog = [...task.statusLog, {
-              id: createChecklistItemId(task.id, task.statusLog.length + 1, `${previousStatus}-in-progress`),
-              date: timestamp, fromStatus: previousStatus, toStatus: "in-progress",
-              title: `${previousStatus} → in-progress`, description: `Temporary switch from ${source.task.title}.`,
-            }];
-            task.updatedAt = timestamp;
-            phase.updatedAt = timestamp;
-            return phase;
-          });
-        }
+        await st.claimTask(target.phase.id, target.task.id, plannerSessionId, timestamp);
         targetStarted = true;
         await st.addWorkDeviation(record, plannerSessionId);
         if (target.task.pauseSnapshot) {
@@ -5526,6 +5540,25 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       } catch (error) {
         const details = error instanceof PlanStoreError ? error.details : undefined;
         return { content: [{ type: "text", text: `Task reopen denied: ${error instanceof Error ? error.message : "unknown error"}` }], details: { reopened: false, errorCode: details?.errorCode ?? "TASK_REOPEN_FAILED" }, isError: true };
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "session_recover",
+    label: "Session Recover",
+    description: "Explicitly recover a stopped caller's complete task ownership, return stack and focus into this fresh session. Confirm that the previous caller has stopped. Registered live processes and callers that already own work are refused. Then read context and use task_start normally.",
+    parameters: Type.Object({ taskId: Type.String(), confirmed: Type.Boolean() }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const st = await requirePlan(ctx);
+      if (!st) return { content: [{ type: "text", text: "No planner found." }], details: { recovered: false, errorCode: "PLAN_NOT_FOUND" }, isError: true };
+      const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, params.taskId);
+      if (!found) return { content: [{ type: "text", text: "Task not found." }], details: { recovered: false, errorCode: "TASK_NOT_FOUND" }, isError: true };
+      try {
+        const recovered = await st.recoverSessionForTask(found.phase.id, found.task.id, piSessionIdOf(ctx), params.confirmed);
+        return { content: [{ type: "text", text: "Session recovered; tasks, checkpoints and return stack are preserved. Read task context before continuing." }], details: { recovered: true, ...recovered } };
+      } catch (error) {
+        return { content: [{ type: "text", text: `Session recovery denied: ${error instanceof Error ? error.message : String(error)}` }], details: { recovered: false, errorCode: error instanceof PlanStoreError ? error.details?.errorCode ?? "SESSION_RECOVERY_FAILED" : "SESSION_RECOVERY_FAILED" }, isError: true };
       }
     },
   });
@@ -5632,10 +5665,18 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         });
       }
       if (task.status === "in-progress") {
+        let claimed;
+        try { claimed = await st.claimTask(found.phase.id, task.id, plannerSessionId); }
+        catch (error) {
+          if (!(error instanceof PlanStoreError)) throw error;
+          return taskStartFailure(taskStartDenied(error.details?.errorCode as Parameters<typeof taskStartDenied>[0], error.message,
+            ["Continue with the owning caller, or explicitly recover its session after it has stopped."], { taskId: task.id }));
+        }
+        await st.refreshResume(undefined, undefined, plannerSessionId);
         const outcome = taskStartSucceeded(task.id, true);
         const higherPriorityPhase = findHigherPriorityOpenPhase(initialPhases, features, found.phase.id, found.phase.priority ?? found.phase.number);
         const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
-        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}` }], details: { ...task, ...outcome, task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase } };
+        return { content: [{ type: "text", text: `✅ Task already started: ${taskRef} — ${task.title} (in-progress)\nstarted: true${projectContextAdvisory}${phaseOrderAdvisory}` }], details: { ...claimed.task, ...outcome, task: claimed.task, projectContextStale: projectContextReadState === "stale", higherPriorityOpenPhase: higherPriorityPhase } };
       }
       const [phases, focus] = await Promise.all([st.loadAllPhases(), st.loadResume(plannerSessionId)]);
       const eligibility = checkExplicitTaskStart(features, phases, task.id, project.workDeviations);
@@ -5708,25 +5749,12 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         : "";
       const now = nowISO();
       let startedTask: Task | undefined;
-      if (task.pauseSnapshot) {
-        startedTask = await st.resumeTask(found.phase.id, found.task.id, now, plannerSessionId);
-      } else {
-        await st.updatePhase(found.phase.id, (phase) => {
-          const t = phase.tasks.find((x) => x.id === found.task.id);
-          if (!t) return phase;
-          const previousStatus = t.status;
-          applyTaskLifecycleDates(t, "in-progress", now);
-          (t as any).activeOwnerSession = plannerSessionId;
-          t.statusLog = [...t.statusLog, {
-            id: createChecklistItemId(t.id, t.statusLog.length + 1, `${previousStatus}-in-progress`),
-            date: now, fromStatus: previousStatus, toStatus: "in-progress",
-            title: `${previousStatus} → in-progress`, description: "",
-          }];
-          t.updatedAt = now;
-          phase.updatedAt = now;
-          startedTask = t;
-          return phase;
-        });
+      try {
+        startedTask = (await st.claimTask(found.phase.id, found.task.id, plannerSessionId, now)).task;
+      } catch (error) {
+        if (!(error instanceof PlanStoreError)) throw error;
+        return taskStartFailure(taskStartDenied(error.details?.errorCode as Parameters<typeof taskStartDenied>[0], error.message,
+          ["Re-read the task and reconcile its owner before retrying."], { taskId: task.id }));
       }
       await st.syncTaskStatusRollup(found.phase.id);
       const approvedDeviation = project.workDeviations.find((deviation) =>
@@ -5740,7 +5768,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", now);
       await st.writeGenerated();
       const persistedTask = (await st.loadPhase(found.phase.id)).tasks.find((candidate) => candidate.id === task.id);
-      if (!startedTask || persistedTask?.status !== "in-progress") {
+      if (!startedTask || persistedTask?.status !== "in-progress" || persistedTask.activeOwnerSession !== plannerSessionId) {
         return taskStartFailure(taskStartDenied(
           "PERSISTENCE_VERIFICATION_FAILED",
           `The lifecycle write could not be verified as in-progress for ${taskRef}.`,
@@ -5749,6 +5777,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
         ));
       }
       const outcome = taskStartSucceeded(persistedTask.id);
+      await st.refreshResume(undefined, undefined, plannerSessionId);
       const higherPriorityPhase = findHigherPriorityOpenPhase(phases, features, found.phase.id, found.phase.priority ?? found.phase.number);
       const phaseOrderAdvisory = higherPriorityOpenPhaseAdvisory(higherPriorityPhase);
       return {
@@ -6000,6 +6029,7 @@ export default function planPiExtension(pi: ExtensionAPI): void {
       } catch (error) {
         return { content: [{ type: "text", text: `Planner load aborted: ${error instanceof Error ? error.message : String(error)}` }], details: { errorCode: "PLANNER_SESSION_PREPARATION_FAILED", enabled: false, running: false } };
       }
+      await st.runBatch(() => st.refreshResume(undefined, undefined, piSessionIdOf(ctx)));
       enablePlannerSession();
       if (!server) {
         await startServer(ctx, undefined, "lan").catch(() => {});

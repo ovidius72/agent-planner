@@ -12,7 +12,15 @@
  * before.
  */
 
-import type { ResumeSessions, WorkDeviation } from "./schema.js";
+import type { ResumeSessions, WorkDeviation, Task } from "./schema.js";
+
+/** Ownership includes a live return-stack reservation, even while a task is paused. */
+export function taskOwnershipConflict(task: Pick<Task, "id" | "activeOwnerSession">, deviations: readonly WorkDeviation[], sessionId: string): boolean {
+  return Boolean(task.activeOwnerSession && task.activeOwnerSession !== sessionId)
+    || deviations.some((entry) => entry.ownerSession !== "" && entry.ownerSession !== sessionId
+      && entry.state !== "resumed" && entry.state !== "canceled"
+      && (entry.resumeTaskId === task.id || entry.temporaryTaskId === task.id));
+}
 
 /** How many per-session resume entries are kept; the least recently updated are dropped. */
 export const RESUME_SESSION_LIMIT = 20;

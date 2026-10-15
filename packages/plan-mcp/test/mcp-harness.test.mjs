@@ -78,7 +78,7 @@ test("listTools exposes the full published tool set with actionable input schema
       "planner-task-pause", "planner-task-switch", "planner-task-start", "planner-task-reopen", "planner-task-dependency-add", "planner-task-dependency-delete", "planner-task-complete",
       "planner-handoff-list", "planner-handoff-show", "planner-handoff-write",
       "planner-handoff-prepare", "planner-handoff-verify", "planner-handoff-clear",
-      "planner-web", "planner-load", "planner-disable",
+      "planner-web", "planner-load", "planner-disable", "planner-session-recover",
     ];
     for (const toolName of expected) {
       assert.ok(names.includes(toolName), `published tool set must include ${toolName}`);
@@ -90,6 +90,7 @@ test("listTools exposes the full published tool set with actionable input schema
 
     const byName = (toolName) => tools.find((tool) => tool.name === toolName);
     const schema = (toolName) => byName(toolName).inputSchema;
+    assert.deepEqual(schema("planner-session-recover").required.sort(), ["confirmed", "task"]);
 
     // Ideas are both discoverable and actionable through their published schemas.
     const ideaCreate = schema("planner-idea-create");
