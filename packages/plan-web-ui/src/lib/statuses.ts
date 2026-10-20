@@ -47,3 +47,26 @@ export const macroTaskStatuses: Array<{ value: MacroTaskStatus; label: string }>
   { value: "deferred", label: "Deferred" },
   { value: "waiting", label: "Waiting" },
 ];
+
+/**
+ * Statuses a task can be started from. This mirrors `isStartableTaskStatus` in
+ * @agent-plan/core, which is what the server enforces: planned work, and parked
+ * work (waiting, blocked, deferred). canceled and rejected were deliberate
+ * decisions, and done work is reopened, so none of those has a Start control.
+ */
+export function canStartTask(status: TaskStatus): boolean {
+  return status === "planned" || status === "waiting" || status === "blocked" || status === "deferred";
+}
+
+/**
+ * Checkpointed work resumes through Start so its checkpoint is preserved, so
+ * the status control stays locked. canceled and rejected tasks have no Start,
+ * so their status must stay editable or they would be stuck.
+ */
+export function isStatusLockedByCheckpoint(task: { status: TaskStatus; pauseSnapshot?: unknown }): boolean {
+  if (!task.pauseSnapshot) return false;
+  return task.status !== "canceled" && task.status !== "rejected";
+}
+
+export const CHECKPOINT_STATUS_LOCK_TITLE = "This task has a saved checkpoint. Use Start to resume it so the checkpoint is preserved.";
+
