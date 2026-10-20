@@ -1,0 +1,47 @@
+{
+  "id": "c1391f2b-8375-402f-9818-116bd28aeffe",
+  "number": 24,
+  "shortId": "7DK2R",
+  "priority": 23,
+  "name": "Resuming parked tasks: waiting, blocked, deferred (and canceled/rejected)",
+  "description": "Reported by heca-dev2 and the user 2026-10-20: a task in status `waiting` cannot be moved to in-progress by any agent tool, nor from the Web UI. Example: heca P104(F012)/T525, parked `planned -> waiting` on 2026-10-15 with a saved checkpoint, dependency done.\n\nCurrent rules (read in the code):\n- Start: checkExplicitTaskStart (packages/plan-core/src/task-selection.ts:216-245) accepts status `planned` only, or `waiting` when the task is the temporary task of an approved/active deviation (added in 7c4b04b \"honor explicit ready task starts\"). Every other status returns \"Task is not startable from <status>.\". Used by MCP planner-task-start/switch (plan-mcp/src/index.ts), Pi task_start/task_switch, and the server route POST /tasks/:id/start (plan-server/src/serve.ts ~1093).\n- Update: planner-task-update, Pi task_update and server PUT /tasks/:id refuse `status=in-progress` (\"Task start/resume transitions require planner-task-start\", plan-mcp/src/index.ts ~1718; serve.ts ~1259).\n- Reopen: PlanStore.reopenTask (plan-store.ts ~3683) only accepts `done`.\n- Result: waiting, blocked, deferred, canceled and rejected tasks have no direct path to in-progress. The only way out is a two-step workaround: update to `planned` with a motivation (needsMotivation, plan-core/src/schema.ts:220), then start. That works but is undiscoverable: the start error does not say it.\n- The planner already treats waiting/blocked/deferred as \"on hold\" work to re-check (on-hold.ts, accepted decision \"Parked tasks are re-checked, never silently skipped\"; recommendation flags them \"may be ready\"), but then refuses to start them.\n- Web UI: the task detail page shows a Start button for planned AND waiting (packages/plan-web-ui/src/routes/task-detail/route.tsx:66) but the server denies waiting, so the button always fails. The status dropdown (task-edit-modal.route.tsx, components/tasks/task-row.tsx) is disabled whenever the task has a checkpoint (pauseSnapshot) and never offers in-progress, so a checkpointed waiting/canceled task is stuck in the Web UI.\n\nGoals: parked statuses (waiting, blocked, deferred) can be started directly through the normal start gates (reads, dependencies, hard blocks, active-task conflict, checkpoint resume notice). canceled and rejected stay a deliberate decision: not startable directly, but every refusal says the exact way out (set to planned with a motivation, then start; done -> planner-task-reopen). The Web UI Start button appears only for statuses that the server accepts, and a checkpointed canceled/rejected task can be moved back to planned from the UI.\n\nBehaviours to preserve: one in-progress task per session and the switch/checkpoint rules; session ownership (taskOwnershipConflict); the temporary-override path; completion needs planner-task-complete; reopen needs confirmation; AGENTS.md rule 18 (web-ui-dist is tracked: rebuild and commit the bundle with the UI change).",
+  "descriptionUpdatedAt": "2026-10-20T07:30:44.668Z",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "",
+  "workRemaining": "",
+  "acceptedDecisions": [],
+  "phaseIds": [
+    "2d049d52-c5ed-4072-b35b-c6be422f8e1c"
+  ],
+  "dependsOn": [],
+  "statusLog": [
+    {
+      "id": "2d0b8cd3-0923-48d4-9d7a-c6653cac186b",
+      "date": "2026-10-20T07:31:20.235Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
+    },
+    {
+      "id": "32950746-59ae-46cb-b919-3a1179ed53a6",
+      "date": "2026-10-20T07:36:58.621Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "createdAt": "2026-10-20T07:30:44.507Z",
+  "updatedAt": "2026-10-20T07:30:44.507Z",
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:81bc76af-e1ff-4eff-b9b6-b31a619aa922",
+      "createdAt": "2026-10-20T07:34:10.988Z"
+    }
+  ]
+}
