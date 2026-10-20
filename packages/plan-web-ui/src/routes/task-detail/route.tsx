@@ -16,6 +16,7 @@ import { StatusCardStepper } from "../../components/ui/status-card-stepper";
 import { StatusHistoryAccordion } from "../../components/ui/status-history-accordion";
 import { ResumeSnapshot } from "../../components/task/resume-snapshot";
 import { useShortcut } from "../../lib/shortcuts";
+import { canStartTask } from "../../lib/statuses";
 import type { Feature, Phase, Task, ChecklistItem } from "../../lib/types";
 
 function ChecklistItemToggle({
@@ -63,7 +64,7 @@ function ChecklistItemToggle({
 
 export function TaskDetailRoute() {
   const { feature, phase, task, pendingResume } = useLoaderData() as { feature: Feature; phase: Phase; task: Task; pendingResume: boolean };
-  const canStart = task.status === "planned" || task.status === "waiting";
+  const canStart = canStartTask(task.status);
   const taskDecisions = task.decisions ?? [];
   const acceptedDecisions = task.acceptedDecisions ?? [];
   const checklist = task.checklist ?? [];

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkExplicitTaskStart, recommendNextTask, recommendNextWork } from "../dist/index.js";
+import { checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork } from "../dist/index.js";
 
 const NOW = "2026-08-10T00:00:00.000Z";
 const feature = (number, priority = 10, status = "planned") => ({ id: `feature-${number}`, number, priority, status });
@@ -169,7 +169,7 @@ test("explicit starts preserve readiness gates but do not enforce priority or si
   assert.equal(checkExplicitTaskStart(features, phases, "checkpointed").eligible, true, "a planned task with a checkpoint is resumable");
   phases[0].tasks.find((item) => item.id === "priority").status = "in-progress";
   assert.equal(checkExplicitTaskStart(features, phases, "explicit").eligible, true, "an explicit task remains valid with another active task");
-  assert.equal(checkExplicitTaskStart(features, phases, "blocked").eligible, false, "blocked work stays unavailable");
+  assert.equal(checkExplicitTaskStart(features, phases, "blocked").eligible, true, "parked blocked work can be started directly");
   assert.equal(checkExplicitTaskStart(features, phases, "dependent").eligible, false, "unfinished dependencies still block an explicit start");
 });
 
@@ -181,12 +181,55 @@ test("waiting parents do not block planned sibling starts", () => {
   assert.equal(recommendNextTask(features, phases).candidate.task.id, "planned-sibling", "priority selection can continue planned sibling work under a waiting parent");
 });
 
-test("waiting tasks still need an approved deviation", () => {
+test("waiting tasks with unfinished dependencies need an approved deviation", () => {
   const features = [feature(1, 10, "waiting")];
   const phases = [phase("p", "feature-1", 1, 1, [task("resume", 1), task("temporary", 2, 2, "waiting", ["unfinished"])], "waiting")];
 
-  assert.equal(checkExplicitTaskStart(features, phases, "temporary").eligible, false, "the waiting task itself is not startable without an override");
-  assert.equal(checkExplicitTaskStart(features, phases, "temporary", [deviation("temporary", "resume")]).eligible, true, "approved deviations preserve their waiting-task exception");
+  const refused = checkExplicitTaskStart(features, phases, "temporary");
+  assert.equal(refused.eligible, false, "the waiting task is not startable while its dependencies are unfinished");
+  assert.match(refused.reason, /dependencies/i);
+  assert.equal(checkExplicitTaskStart(features, phases, "temporary", [deviation("temporary", "resume")]).eligible, true, "approved deviations skip the dependency check");
+});
+
+test("parked tasks (waiting, blocked, deferred) start directly once their dependencies are done", () => {
+  for (const status of ["waiting", "blocked", "deferred"]) {
+    const features = [feature(1)];
+    const phases = [phase("p", "feature-1", 1, 1, [task("dep", 1, 1, "done"), task("parked", 2, 2, status, ["dep"], snapshot(NOW))], "in-progress")];
+    assert.equal(checkExplicitTaskStart(features, phases, "parked").eligible, true, `${status} task with a checkpoint and finished dependencies is startable`);
+    phases[0].tasks[0].status = "planned";
+    assert.equal(checkExplicitTaskStart(features, phases, "parked").eligible, false, `${status} task still honours unfinished dependencies`);
+  }
+});
+
+test("a phase that derives blocked or deferred from its parked tasks does not stop them from starting", () => {
+  for (const status of ["blocked", "deferred"]) {
+    const features = [feature(1, 10, status)];
+    const phases = [phase("p", "feature-1", 1, 1, [task("only", 1, 1, status)], status)];
+    assert.equal(checkExplicitTaskStart(features, phases, "only").eligible, true, `the only open task is ${status}, so its parent derives ${status}, yet it can start`);
+  }
+  const canceledParent = [phase("p", "feature-1", 1, 1, [task("only", 1, 1, "waiting")], "canceled")];
+  assert.equal(checkExplicitTaskStart([feature(1)], canceledParent, "only").eligible, false, "a canceled parent still blocks");
+});
+
+test("every refusal names the way out", () => {
+  const features = [feature(1)];
+  const phases = [phase("p", "feature-1", 1, 1, [task("done", 1, 1, "done"), task("canceled", 2, 2, "canceled"), task("rejected", 3, 3, "rejected")], "in-progress")];
+
+  assert.match(checkExplicitTaskStart(features, phases, "done").reason, /planner-task-reopen/);
+  for (const id of ["canceled", "rejected"]) {
+    const result = checkExplicitTaskStart(features, phases, id);
+    assert.equal(result.eligible, false);
+    assert.match(result.reason, new RegExp(id));
+    assert.match(result.reason, /planned with a motivation/);
+    assert.match(result.reason, /then start it/);
+  }
+});
+
+test("isStartableTaskStatus names the statuses a task can be started from", () => {
+  const startable = ["planned", "waiting", "blocked", "deferred"];
+  const refused = ["in-progress", "done", "canceled", "rejected"];
+  for (const status of startable) assert.equal(isStartableTaskStatus(status), true, status);
+  for (const status of refused) assert.equal(isStartableTaskStatus(status), false, status);
 });
 
 test("hard parent statuses still block explicit starts", () => {
