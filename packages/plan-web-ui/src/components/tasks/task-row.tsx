@@ -1,6 +1,6 @@
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Link, useFetcher } from "react-router-dom";
-import { taskTransitionStatuses } from "../../lib/statuses";
+import { CHECKPOINT_STATUS_LOCK_TITLE, isStatusLockedByCheckpoint, taskTransitionStatuses } from "../../lib/statuses";
 import { formatStatusSummary, summarizeSubtaskStatuses } from "../../lib/status-summary";
 import { toDisplayStatus } from "../../lib/display-status-tokens";
 import type { Task } from "../../lib/types";
@@ -63,7 +63,7 @@ export function TaskRow({ featureId, featureNum, phaseId, phaseNum, task }: { fe
 
         <statusFetcher.Form method="post" action={`/features/${featureId}/phases/${phaseId}/tasks/${task.id}/status`} className="w-full lg:w-auto">
           <div className="relative">
-            <select name="status" value={status} disabled={isUpdatingStatus || isDeleting || Boolean(task.pauseSnapshot)} aria-busy={isUpdatingStatus} title={task.pauseSnapshot ? "Resume checkpointed work through task_start so its checkpoint is preserved." : undefined} className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]" onChange={(event) => statusFetcher.submit(event.currentTarget.form)}>
+            <select name="status" value={status} disabled={isUpdatingStatus || isDeleting || isStatusLockedByCheckpoint(task)} aria-busy={isUpdatingStatus} title={isStatusLockedByCheckpoint(task) ? CHECKPOINT_STATUS_LOCK_TITLE : undefined} className="field-control min-h-8 appearance-none py-1 pr-8 text-[11px]" onChange={(event) => statusFetcher.submit(event.currentTarget.form)}>
               {taskTransitionStatuses.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}

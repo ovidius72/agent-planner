@@ -1,0 +1,222 @@
+{
+  "id": "2d049d52-c5ed-4072-b35b-c6be422f8e1c",
+  "featureId": "c1391f2b-8375-402f-9818-116bd28aeffe",
+  "number": 115,
+  "shortId": "VAQCW",
+  "priority": 1,
+  "slug": "start-accepts-parked-tasks-and-every-refusal-names-the-way-out",
+  "title": "Start accepts parked tasks and every refusal names the way out",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Core rule, MCP/Pi/server wording, Web UI Start button and checkpointed dropdown",
+  "description": "See F024. Two tasks: (1) core start rule plus tests, and the refusal wording in MCP, Pi and the server; (2) Web UI. Run the full verification gate once at phase close (rebuilt web-ui-dist is committed with the UI change, AGENTS.md rule 18).\n\nStatus matrix after the fix, for \"can I get to in-progress\":\n- planned: start (unchanged).\n- waiting, blocked, deferred: start directly (new), subject to dependencies done, no hard-blocked phase/feature, active-task conflict and the checkpoint resume notice.\n- canceled, rejected: not directly. Refusal text: set it to planned with a motivation (planner-task-update), then start.\n- done: planner-task-reopen with confirmation (unchanged); the refusal says so.\n- in-progress: already started.\n\nPreserve: temporary-override behaviour (waiting + approved deviation skips the dependency check); switch targets use the same rule.",
+  "descriptionUpdatedAt": "2026-10-20T07:30:49.586Z",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "7fcc3eed-47e6-456d-8a25-819acb09db54",
+    "e2096c2e-53f5-444b-94b8-82c49fb81ffa"
+  ],
+  "tasks": [
+    {
+      "id": "7fcc3eed-47e6-456d-8a25-819acb09db54",
+      "phaseId": "2d049d52-c5ed-4072-b35b-c6be422f8e1c",
+      "number": 459,
+      "shortId": "T3FCL",
+      "priority": 1,
+      "shortName": "core-start-rule-for-parked-tas",
+      "title": "Core start rule for parked tasks and clear refusal wording",
+      "status": "done",
+      "description": "In packages/plan-core/src/task-selection.ts checkExplicitTaskStart (:216-245): replace `planned || (waiting && isTemporaryOverride)` with a named rule. startable = planned, or a parked status (waiting, blocked, deferred), or waiting as an approved temporary override as today. The existing dependency check (skipped only for a temporary override) and hard-block check stay. For canceled, rejected and done return a reason that names the way out: canceled/rejected \"set it to planned with a motivation (planner-task-update), then start it\"; done \"reopen it with planner-task-reopen\". Add a shared helper in plan-core (one place) that builds the refusal text so MCP, Pi and the server do not each word it. Also check the other places that special-case status on the start path: task-selection.ts:272 (return-to-source resumable = planned|waiting) and the temporary-task check `status !== \"planned\"` in plan-mcp/src/index.ts:2016 and pi-adapter/src/index.ts:5285 (task_deviation / switch target): decide whether a parked task may be a temporary target and keep behaviour consistent. The server route POST /tasks/:id/start (plan-server/src/serve.ts ~1093) and MCP/Pi start and switch use checkExplicitTaskStart, so they follow. Make sure the status log entry written by start records the real previous status (waiting -> in-progress). Tests: packages/plan-core/test/task-selection.test.mjs (every status), packages/plan-mcp/test/mcp-crud.test.mjs and packages/pi-adapter/test/mutations.test.mjs (start from waiting/blocked/deferred works and keeps the checkpoint notice; canceled/rejected/done refuse with the way out; dependencies not done still refuse), packages/plan-server/test (POST /tasks/:id/start).\n\n---\n**Completion summary:**\nCore start rule fixed. packages/plan-core/src/task-selection.ts: new isStartableTaskStatus (planned, waiting, blocked, deferred) used by checkExplicitTaskStart; refusal wording lives once in startRefusalReason: done -> 'Reopen it with planner-task-reopen (explicit confirmation)', canceled/rejected -> 'deliberate decision; set it to planned with a motivation (planner-task-update status=planned), then start it'. All adapters already print eligibility.reason, so MCP, Pi and the server show it without their own copies (the 'shared helper' is this one core function). Found while testing: a phase/feature derives blocked or deferred from its own parked children, and the unavailable-parent check then refused to start the very task causing it (single-open-task phases were a second dead end); the parent check now ignores blocked/deferred parents when the candidate is itself parked (canceled/rejected parents still block; a planned task in a blocked parent is still refused). Dependencies stay mandatory unless the task is an approved temporary override. The deviation temporary-target check in plan-mcp and pi-adapter now uses isStartableTaskStatus too; the return-to-source 'resumable' check (planned|waiting) was left unchanged on purpose. Status log already records the real previous status (claimTask/resumeTask use current.status). Existing core tests that encoded the old rule were updated (blocked startable; waiting needs deps done). Tests: core 25 in task-selection (every status, parked with checkpoint, parent derived blocked/deferred, refusal wording), MCP mcp-parked-start.test.mjs (7), Pi pi-parked-start.test.mjs (6), server parked-start.test.mjs (6). Full suites pass: plan-core 512, plan-mcp 111, pi-adapter 104, plan-server 91. Not verified: full repository gate (phase close); Web UI is T460.",
+      "descriptionUpdatedAt": "2026-10-20T07:34:01.021Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "308358a0-65e1-4e15-b756-7275d3985196",
+          "date": "2026-10-20T07:31:20.114Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7fcc3eed-47e6-456d-8a25-819acb09db54-check-002-in-progress-done",
+          "date": "2026-10-20T07:34:01.019Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Core start rule fixed. packages/plan-core/src/task-selection.ts: new isStartableTaskStatus (planned, waiting, blocked, deferred) used by checkExplicitTaskStart; refusal wording lives once in startRefusalReason: done -> 'Reopen it with planner-task-reopen (explicit confirmation)', canceled/rejected -> 'deliberate decision; set it to planned with a motivation (planner-task-update status=planned), then start it'. All adapters already print eligibility.reason, so MCP, Pi and the server show it without their own copies (the 'shared helper' is this one core function). Found while testing: a phase/feature derives blocked or deferred from its own parked children, and the unavailable-parent check then refused to start the very task causing it (single-open-task phases were a second dead end); the parent check now ignores blocked/deferred parents when the candidate is itself parked (canceled/rejected parents still block; a planned task in a blocked parent is still refused). Dependencies stay mandatory unless the task is an approved temporary override. The deviation temporary-target check in plan-mcp and pi-adapter now uses isStartableTaskStatus too; the return-to-source 'resumable' check (planned|waiting) was left unchanged on purpose. Status log already records the real previous status (claimTask/resumeTask use current.status). Existing core tests that encoded the old rule were updated (blocked startable; waiting needs deps done). Tests: core 25 in task-selection (every status, parked with checkpoint, parent derived blocked/deferred, refusal wording), MCP mcp-parked-start.test.mjs (7), Pi pi-parked-start.test.mjs (6), server parked-start.test.mjs (6). Full suites pass: plan-core 512, plan-mcp 111, pi-adapter 104, plan-server 91. Not verified: full repository gate (phase close); Web UI is T460."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7fcc3eed-47e6-456d-8a25-819acb09db54-check-001-checkexplicittaskstart-accepts-waiting-blocked-deferred-refusals-name-the-way-out",
+          "number": 1,
+          "title": "checkExplicitTaskStart accepts waiting, blocked, deferred; refusals name the way out",
+          "checked": true
+        },
+        {
+          "id": "7fcc3eed-47e6-456d-8a25-819acb09db54-check-002-one-shared-refusal-text-helper-in-plan-core-used-by-mcp-pi-and-server",
+          "number": 2,
+          "title": "One shared refusal-text helper in plan-core used by MCP, Pi and server",
+          "checked": true
+        },
+        {
+          "id": "7fcc3eed-47e6-456d-8a25-819acb09db54-check-003-check-temporary-target-and-return-to-source-status-rules-for-consistency",
+          "number": 3,
+          "title": "Check temporary-target and return-to-source status rules for consistency",
+          "checked": true
+        },
+        {
+          "id": "7fcc3eed-47e6-456d-8a25-819acb09db54-check-004-tests-core-mcp-pi-server-for-every-status",
+          "number": 4,
+          "title": "Tests: core, MCP, Pi, server for every status",
+          "checked": true
+        },
+        {
+          "id": "7fcc3eed-47e6-456d-8a25-819acb09db54-check-005-status-log-records-the-real-previous-status",
+          "number": 5,
+          "title": "Status log records the real previous status",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-20T07:31:20.114Z",
+      "completedAt": "2026-10-20T07:34:01.019Z",
+      "createdAt": "2026-10-20T07:31:06.189Z",
+      "updatedAt": "2026-10-20T07:34:01.019Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81bc76af-e1ff-4eff-b9b6-b31a619aa922",
+          "createdAt": "2026-10-20T07:31:20.017Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "e2096c2e-53f5-444b-94b8-82c49fb81ffa",
+      "phaseId": "2d049d52-c5ed-4072-b35b-c6be422f8e1c",
+      "number": 460,
+      "shortId": "62423",
+      "priority": 2,
+      "shortName": "web-ui-start-for-parked-tasks",
+      "title": "Web UI: Start for parked tasks and unstuck checkpointed canceled/rejected",
+      "status": "done",
+      "description": "packages/plan-web-ui/src/routes/task-detail/route.tsx:66 `canStart = planned || waiting` must match the server rule from the core task (planned, waiting, blocked, deferred), defined once in a small helper in packages/plan-web-ui/src/lib (statuses.ts) and used by every Start control. Show the server's refusal message in the UI if a start is denied (check taskStartAction in the router and lib/api.ts:408). The status dropdown in task-edit-modal.route.tsx and components/tasks/task-row.tsx is disabled whenever task.pauseSnapshot exists, so a checkpointed canceled/rejected task cannot be moved back to planned from the UI: enable the dropdown for canceled and rejected even with a checkpoint (the checkpoint is kept when the status goes to planned), keep it disabled for planned/in-progress checkpointed work where the checkpoint must be preserved through start, and make the disabled tooltip say what to do (\"Use Start to resume\"). The dropdown still never offers in-progress for a task that is not already in-progress. Unit tests for the helper and the components (project guidelines: every component tested, small and reusable), plus the Playwright scenario if one covers the task detail page. Rebuild web-ui-dist with `pnpm build` and commit it with the UI change (AGENTS.md rule 18).\n\n---\n**Completion summary:**\nWeb UI fixed. packages/plan-web-ui/src/lib/statuses.ts: canStartTask (planned, waiting, blocked, deferred; mirrors core isStartableTaskStatus), isStatusLockedByCheckpoint (a checkpointed task keeps its status locked so Start preserves the checkpoint, except canceled/rejected which have no Start) and CHECKPOINT_STATUS_LOCK_TITLE ('Use Start to resume it'). routes/task-detail/route.tsx: Start button uses canStartTask (waiting now works, blocked/deferred get it too, canceled/rejected/done do not). components/tasks/task-row.tsx and routes/task-edit-modal.route.tsx: dropdown lock and tooltip come from the helpers, so a checkpointed canceled/rejected task can go back to planned from the UI; the dropdown still never offers in-progress for a non-active task. Denial messages: the existing root error boundary already shows the server's refusal text (now with the way out), so no new UI was added. Tests: test/task-start-controls.test.tsx (6: helpers and TaskRow lock/unlock); web-ui suite 111 pass. Rebuilt with pnpm build; plan-server and pi-adapter web-ui-dist are identical and ready to commit with this change (AGENTS.md rule 18). Phase close: pnpm verify:final passed (build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed install smoke). Not verified: clicking Start on a waiting task in a real browser (no Playwright scenario covers the task detail page).",
+      "descriptionUpdatedAt": "2026-10-20T07:36:58.497Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "9e52e20c-5af4-4d0b-8ac8-667710bd4373",
+          "date": "2026-10-20T07:34:11.090Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "e2096c2e-53f5-444b-94b8-82c49fb81ffa-check-002-in-progress-done",
+          "date": "2026-10-20T07:36:58.494Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Web UI fixed. packages/plan-web-ui/src/lib/statuses.ts: canStartTask (planned, waiting, blocked, deferred; mirrors core isStartableTaskStatus), isStatusLockedByCheckpoint (a checkpointed task keeps its status locked so Start preserves the checkpoint, except canceled/rejected which have no Start) and CHECKPOINT_STATUS_LOCK_TITLE ('Use Start to resume it'). routes/task-detail/route.tsx: Start button uses canStartTask (waiting now works, blocked/deferred get it too, canceled/rejected/done do not). components/tasks/task-row.tsx and routes/task-edit-modal.route.tsx: dropdown lock and tooltip come from the helpers, so a checkpointed canceled/rejected task can go back to planned from the UI; the dropdown still never offers in-progress for a non-active task. Denial messages: the existing root error boundary already shows the server's refusal text (now with the way out), so no new UI was added. Tests: test/task-start-controls.test.tsx (6: helpers and TaskRow lock/unlock); web-ui suite 111 pass. Rebuilt with pnpm build; plan-server and pi-adapter web-ui-dist are identical and ready to commit with this change (AGENTS.md rule 18). Phase close: pnpm verify:final passed (build, typecheck, coverage, plugin sync, capability audit, browser e2e, packed install smoke). Not verified: clicking Start on a waiting task in a real browser (no Playwright scenario covers the task detail page)."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e2096c2e-53f5-444b-94b8-82c49fb81ffa-check-001-one-status-helper-for-start-controls-matching-the-server-rule",
+          "number": 1,
+          "title": "One status helper for Start controls, matching the server rule",
+          "checked": true
+        },
+        {
+          "id": "e2096c2e-53f5-444b-94b8-82c49fb81ffa-check-002-task-detail-start-button-for-planned-waiting-blocked-deferred-denial-message-shown",
+          "number": 2,
+          "title": "Task detail Start button for planned, waiting, blocked, deferred; denial message shown",
+          "checked": true
+        },
+        {
+          "id": "e2096c2e-53f5-444b-94b8-82c49fb81ffa-check-003-dropdown-enabled-for-canceled-rejected-with-a-checkpoint-clearer-tooltip",
+          "number": 3,
+          "title": "Dropdown enabled for canceled/rejected with a checkpoint; clearer tooltip",
+          "checked": true
+        },
+        {
+          "id": "e2096c2e-53f5-444b-94b8-82c49fb81ffa-check-004-component-and-helper-unit-tests",
+          "number": 4,
+          "title": "Component and helper unit tests",
+          "checked": true
+        },
+        {
+          "id": "e2096c2e-53f5-444b-94b8-82c49fb81ffa-check-005-rebuild-and-commit-web-ui-dist-with-the-change",
+          "number": 5,
+          "title": "Rebuild and commit web-ui-dist with the change",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-20T07:34:11.090Z",
+      "completedAt": "2026-10-20T07:36:58.494Z",
+      "createdAt": "2026-10-20T07:31:09.194Z",
+      "updatedAt": "2026-10-20T07:36:58.494Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:81bc76af-e1ff-4eff-b9b6-b31a619aa922",
+          "createdAt": "2026-10-20T07:34:10.988Z"
+        }
+      ],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T07:30:49.513Z",
+  "updatedAt": "2026-10-20T07:36:58.494Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "7ed15b1a-141a-4bb6-bed5-ee284114025c",
+      "date": "2026-10-20T07:31:20.163Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "dce42fac-d5de-4f35-9278-e35dadd7e216",
+      "date": "2026-10-20T07:36:58.531Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:81bc76af-e1ff-4eff-b9b6-b31a619aa922",
+      "createdAt": "2026-10-20T07:34:10.988Z"
+    }
+  ]
+}

@@ -209,6 +209,32 @@ const buildRecommendationClaims = (
 };
 
 /**
+ * Statuses a task can be started from directly. `planned` is ordinary work.
+ * `waiting`, `blocked` and `deferred` are parked work: the planner already
+ * tracks it as on hold and flags it "may be ready" (on-hold.ts), so starting it
+ * must be possible without first editing its status.
+ */
+const PARKED_TASK_STATUSES: ReadonlySet<string> = new Set(["waiting", "blocked", "deferred"]);
+
+export function isStartableTaskStatus(status: string): boolean {
+  return status === "planned" || PARKED_TASK_STATUSES.has(status);
+}
+
+/**
+ * Why a task in this status cannot be started, and the exact way out. Every
+ * adapter shows this text, so it is worded once, here.
+ */
+function startRefusalReason(status: string): string {
+  if (status === "done") {
+    return "Task is done. Reopen it with planner-task-reopen (explicit confirmation) to work on it again.";
+  }
+  if (status === "canceled" || status === "rejected") {
+    return `Task is ${status}, which was a deliberate decision. To work on it again, set it to planned with a motivation (planner-task-update status=planned), then start it.`;
+  }
+  return `Task is not startable from ${status}.`;
+}
+
+/**
  * Validate an explicitly requested task start. Priority and existing active
  * work remain advisory for explicit user choices; availability and dependency
  * invariants remain mandatory.
@@ -228,11 +254,16 @@ export function checkExplicitTaskStart(
     (deviation.state === "approved" || deviation.state === "active")
     && deviation.temporaryTaskId === taskId,
   );
-  const startableStatus = candidate.task.status === "planned"
-    || (candidate.task.status === "waiting" && isTemporaryOverride);
-  if (!startableStatus) return { eligible: false, reason: `Task is not startable from ${candidate.task.status}.` };
-  const parentHasHardBlock = hardUnavailable.has(candidate.phase.status)
-    || (candidate.feature && hardUnavailable.has(candidate.feature.status));
+  if (!isStartableTaskStatus(candidate.task.status)) return { eligible: false, reason: startRefusalReason(candidate.task.status) };
+  // A phase or feature status is derived from its children. When every open task is
+  // parked, the parent derives blocked or deferred from those very tasks, so it must not
+  // refuse to start one of them (that would make parked work impossible to resume).
+  // canceled and rejected parents cannot be derived while a parked child is open.
+  const isParkedCandidate = PARKED_TASK_STATUSES.has(candidate.task.status);
+  const blocksStart = (parentStatus: string) => hardUnavailable.has(parentStatus)
+    && !(isParkedCandidate && (parentStatus === "blocked" || parentStatus === "deferred"));
+  const parentHasHardBlock = blocksStart(candidate.phase.status)
+    || (candidate.feature && blocksStart(candidate.feature.status));
   if (parentHasHardBlock) {
     return { eligible: false, reason: "Task belongs to an unavailable phase or feature." };
   }
