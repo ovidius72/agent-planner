@@ -1,0 +1,97 @@
+{
+  "kind": "agent-brain-editor-expansion-registration",
+  "status": "registered-and-read-back",
+  "featureRef": "F025",
+  "phases": {
+    "J": {
+      "ref": "P125(F025)",
+      "id": "66eda762-171f-4435-9b64-b80bd0766f5b",
+      "number": 125
+    },
+    "K": {
+      "ref": "P126(F025)",
+      "id": "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+      "number": 126
+    },
+    "L": {
+      "ref": "P127(F025)",
+      "id": "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+      "number": 127
+    }
+  },
+  "tasks": {
+    "J1": {
+      "ref": "P125(F025)/T483",
+      "number": 483,
+      "phaseKey": "J",
+      "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00"
+    },
+    "K1": {
+      "ref": "P126(F025)/T484",
+      "number": 484,
+      "phaseKey": "K",
+      "id": "e73006a1-5106-432f-8018-932b88e15e58"
+    },
+    "K2": {
+      "ref": "P126(F025)/T485",
+      "number": 485,
+      "phaseKey": "K",
+      "id": "38dbf040-f73d-4759-b624-097b57c84307"
+    },
+    "L1": {
+      "ref": "P127(F025)/T486",
+      "number": 486,
+      "phaseKey": "L",
+      "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87"
+    },
+    "L2": {
+      "ref": "P127(F025)/T487",
+      "number": 487,
+      "phaseKey": "L",
+      "id": "7cf90abc-befd-4393-a615-4434801f1c20"
+    },
+    "L3": {
+      "ref": "P127(F025)/T488",
+      "number": 488,
+      "phaseKey": "L",
+      "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c"
+    }
+  },
+  "requirements": {
+    "BR18": {
+      "id": "093c4972-01bd-48f5-90bc-c4ee1d80d44b",
+      "title": "Persistent project identity in browser navigation"
+    },
+    "BR19": {
+      "id": "2ccf30ea-82a4-4be8-94b0-efcd66be41c6",
+      "title": "Editable source workspace connected to project knowledge"
+    },
+    "BR20": {
+      "id": "c6e678e1-2ca3-4c61-ab03-69b9f6db8f5a",
+      "title": "One compatible analysis runtime for agents and the Web UI"
+    },
+    "BR21": {
+      "id": "f5ca2816-e3be-4bd6-b86d-58ad1057a854",
+      "title": "Open resolved source in a preferred external editor"
+    }
+  },
+  "decisions": {
+    "AD11": {
+      "id": "40e3f375-ebc5-46f9-a240-fabe6d9d1c92",
+      "title": "Use Monaco for the desktop source-code workspace",
+      "owner": "F025"
+    },
+    "AD12": {
+      "id": "5433fe9d-13e0-4304-b043-bcf82fc0f796",
+      "title": "Share analysis through one compatible runtime owner",
+      "owner": "F025"
+    },
+    "AD13": {
+      "id": "39763032-8785-4e6b-99ce-00ea142ae074",
+      "title": "Put project identity first in browser page titles",
+      "owner": "F025"
+    }
+  },
+  "dependenciesAdded": 12,
+  "implementationStarted": false
+}

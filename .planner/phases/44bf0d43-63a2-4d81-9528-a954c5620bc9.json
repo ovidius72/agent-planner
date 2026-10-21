@@ -1,0 +1,324 @@
+{
+  "id": "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 120,
+  "shortId": "VUVG6",
+  "priority": 5,
+  "slug": "code-links-task-changesets-and-decision-history",
+  "title": "Code links, task changesets and decision history",
+  "discussedAt": "2026-10-20T16:40:34.497Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Connect existing planner knowledge to code with current resolution and recoverable historical evidence.",
+  "description": "Connect existing planner knowledge to code with current resolution and recoverable historical evidence.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows D and owns only the outcomes below.\n\nOutcomes:\n- Implement language-independent link, baseline, resolution and changeset contracts.\n- Preserve scoped rationale across unrelated tasks and large implementations.\n\nTasks and boundaries:\n- E1: Implement snapshot-bound code links and safe reference resolution. Canonical links and recoverable historical anchors, separate from rebuildable per-checkout resolutions and review state.\n- E2: Capture large-task changesets and scoped code ownership. Automatic task/session changeset capture at baseline, checkpoints and closeout, with module-level summaries and explicit uncertain attribution.\n- E3: Version durable decisions and resolve their applicability to code. Versioned canonical decision history and explicit code applicability, with origins and supersession distinct from the current implementation.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- packages/plan-core/src/description-freshness.ts:1 — (module)\n- packages/plan-core/src/plan-store.ts:3502 — async claimTask\n\nAcceptance: Line shifts preserve destinations; rename, copy, deletion and homonyms never silently retarget a decision. Current location and semantic/prose review status remain separate. Baseline source can actually be retrieved; stale or foreign-worktree indexes cannot assert current results. A large task with new and modified modules is traceable without manual per-symbol annotation. Pre-existing dirty or foreign changes are not automatically assigned to the current task. Missing observation or attribution is visible instead of replaced by a fabricated history. Task completion or phase closure does not hide applicable durable decisions. A newer task or changed body does not implicitly supersede a decision. Current and historical explanations are distinguishable and source changes invalidate prior review evidence.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR07, BR08, BR09, BR11, BR12, BR14, BR16, BR17.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nShared-planner expansion approved 21 October 2026:\nCode anchors and changesets reuse explicit workspace/source and N1/N2 execution/integration identity. E2 retains automatic changeset ownership, preserving foreign/dirty attribution limits; historical integration never certifies current semantics. Do not derive code paths from central planRoot.\nAdditional outcome coverage: BR23, BR24, BR25. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.\n\nPrerequisite reconciliation: T470 additionally requires P128(F025)/T496 so code-link mutations reuse affected-context reconciliation before graph evolution.",
+  "descriptionRef": ".planner/docs/agent-brain-plan.md",
+  "descriptionUpdatedAt": "2026-10-21T15:00:45.467Z",
+  "notes": "",
+  "goals": [
+    "Implement language-independent link, baseline, resolution and changeset contracts.",
+    "Preserve scoped rationale across unrelated tasks and large implementations."
+  ],
+  "nonGoals": [
+    "No file:line identity, automatic semantic-continuity claim or per-function manual journal.",
+    "No rewriting approved decisions to match a drifting implementation."
+  ],
+  "dependencies": [
+    "P119(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Symbol names/provider IDs change during refactors.",
+    "Dirty and concurrently edited work cannot always be attributed to one task.",
+    "A hash is not recoverable historical source content."
+  ],
+  "openQuestions": [
+    "Finalize canonical persistence layout and migration version within existing runtime boundaries."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Line shifts preserve destinations; rename, copy, deletion and homonyms never silently retarget a decision.",
+    "Current location and semantic/prose review status remain separate.",
+    "Baseline source can actually be retrieved; stale or foreign-worktree indexes cannot assert current results.",
+    "A large task with new and modified modules is traceable without manual per-symbol annotation.",
+    "Pre-existing dirty or foreign changes are not automatically assigned to the current task.",
+    "Missing observation or attribution is visible instead of replaced by a fabricated history.",
+    "Task completion or phase closure does not hide applicable durable decisions.",
+    "A newer task or changed body does not implicitly supersede a decision.",
+    "Current and historical explanations are distinguishable and source changes invalidate prior review evidence.",
+    "Shared-planner acceptance: Code anchors and changesets reuse explicit workspace/source and N1/N2 execution/integration identity. E2 retains automatic changeset ownership, preserving foreign/dirty attribution limits; historical integration never certifies current semantics. Do not derive code paths from central planRoot.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "852485e2-b28a-4957-863a-f7ac7fba6d6b",
+    "6aae9520-37ca-41fd-9dc8-fef611155e89",
+    "f799ee62-6e04-4d08-aceb-3894230940c6"
+  ],
+  "tasks": [
+    {
+      "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b",
+      "phaseId": "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+      "number": 470,
+      "shortId": "QCXY5",
+      "priority": 1,
+      "shortName": "implement-snapshot-bound-code",
+      "title": "Implement snapshot-bound code links and safe reference resolution",
+      "status": "planned",
+      "description": "Outcome: Canonical links and recoverable historical anchors, separate from rebuildable per-checkout resolutions and review state.\n\nExisting state: Current task descriptions contain prose code references; there is no typed link to a module/symbol with recoverable baseline and snapshot-bound current resolution. The earlier 11-case TypeScript experiment is not production implementation.\n\nImplementation responsibility:\n- Add validated links from existing entity/decision IDs to module, file, region or symbol anchors with provenance.\n- Define snapshot identity including dirty content, relevant configuration and repository/worktree identity.\n- Implement text/file fallback first and provider-independent resolution states: resolved, changed, candidate, ambiguous, absent, unknown/stale.\n- Treat external rename/move as candidates requiring verified continuity; preserve uncertainty for parse/provider failures.\n- Migrate legacy prose references only as unverified candidates; maintain compatibility and granular atomic mutation.\n\nAcceptance and evidence:\n- Line shifts preserve destinations; rename, copy, deletion and homonyms never silently retarget a decision.\n- Current location and semantic/prose review status remain separate.\n- Baseline source can actually be retrieved; stale or foreign-worktree indexes cannot assert current results.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-core/src/description-freshness.ts:1 — (module)\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P119(F025)/T469, P128(F025)/T496. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Keep CodeLink (canonical entity relation), CodeAnchor (recoverable historical destination/source/configuration evidence) and AnchorResolution (derived result for one current checkout) separate.\n- Snapshot identity includes dirty source/configuration and repository/worktree context; current line ranges, names and provider IDs are not permanent semantic identity. Hashes require recoverable historical content.\n- Validate expected snapshots on creation/relink. Resolve uniquely when supported; compare declaration/context/binding/configuration/dependency evidence; external rename/move yields candidates requiring verified continuity, and copies can remain ambiguous.\n- Keep current-location status separate from meaning/prose review. Unknown/unsupported/parse-incomplete analysis is not a deletion or zero usages; legacy prose references become unverified candidates only.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nBind every anchor/resolution to the explicit source workspace or recoverable historical snapshot, independently of planRoot. Execution/integration IDs are provenance, not proof of current semantic equivalence. A global canonical link resolves differently or as unavailable in different checkouts; never infer the code root from the shared store path.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T14:59:41.975Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-001-add-validated-links-from-existing-entity-decision-ids-to-module-file-region-or-symbol-anchors-with-provenance",
+          "number": 1,
+          "title": "Add validated links from existing entity/decision IDs to module, file, region or symbol anchors with provenance.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-002-define-snapshot-identity-including-dirty-content-relevant-configuration-and-repository-worktree-identity",
+          "number": 2,
+          "title": "Define snapshot identity including dirty content, relevant configuration and repository/worktree identity.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-003-implement-text-file-fallback-first-and-provider-independent-resolution-states-resolved-changed-candidate-ambiguous-absent-unknown-stale",
+          "number": 3,
+          "title": "Implement text/file fallback first and provider-independent resolution states: resolved, changed, candidate, ambiguous, absent, unknown/stale.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-004-treat-external-rename-move-as-candidates-requiring-verified-continuity-preserve-uncertainty-for-parse-provider-failures",
+          "number": 4,
+          "title": "Treat external rename/move as candidates requiring verified continuity; preserve uncertainty for parse/provider failures.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-005-migrate-legacy-prose-references-only-as-unverified-candidates-maintain-compatibility-and-granular-atomic-mutation",
+          "number": 5,
+          "title": "Migrate legacy prose references only as unverified candidates; maintain compatibility and granular atomic mutation.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-006-verify-line-shifts-preserve-destinations-rename-copy-deletion-and-homonyms-never-silently-retarget-a-decision",
+          "number": 6,
+          "title": "Verify: Line shifts preserve destinations; rename, copy, deletion and homonyms never silently retarget a decision.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-007-verify-current-location-and-semantic-prose-review-status-remain-separate",
+          "number": 7,
+          "title": "Verify: Current location and semantic/prose review status remain separate.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-008-verify-baseline-source-can-actually-be-retrieved-stale-or-foreign-worktree-indexes-cannot-assert-current-results",
+          "number": 8,
+          "title": "Verify: Baseline source can actually be retrieved; stale or foreign-worktree indexes cannot assert current results.",
+          "checked": false
+        },
+        {
+          "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b-check-009-resolve-the-same-canonical-link-in-two-worktrees-and-a-historical-result-without-cross-checkout-retargeting",
+          "number": 9,
+          "title": "Resolve the same canonical link in two worktrees and a historical result without cross-checkout retargeting.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "f1f1c950-e967-45d3-b7b6-55e478c6c9e2",
+        "e1111601-64ad-49d5-9805-df48e9dd4b70"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:16.736Z",
+      "updatedAt": "2026-10-21T14:59:41.971Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "6aae9520-37ca-41fd-9dc8-fef611155e89",
+      "phaseId": "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+      "number": 471,
+      "shortId": "Y95TF",
+      "priority": 2,
+      "shortName": "capture-large-task-changesets",
+      "title": "Capture large-task changesets and scoped code ownership",
+      "status": "planned",
+      "description": "Outcome: Automatic task/session changeset capture at baseline, checkpoints and closeout, with module-level summaries and explicit uncertain attribution.\n\nExisting state: Tasks can describe large developments across many files. File differences reveal modifications but not necessarily task attribution or rationale.\n\nImplementation responsibility:\n- Capture initial dirty state separately from changes introduced during the task.\n- Associate observed before/after changes with the owning session/task and affected modules; derive symbol involvement when providers exist.\n- Preserve checkpoints across interruption and collect significant rationale without requiring a note for every line/function.\n- Handle overlapping sessions/shared worktrees explicitly; use isolation or observed writes where available and mark ambiguous attribution.\n- Maintain task ↔ changed-code relations so later tasks can discover prior work without task-to-task links.\n\nAcceptance and evidence:\n- A large task with new and modified modules is traceable without manual per-symbol annotation.\n- Pre-existing dirty or foreign changes are not automatically assigned to the current task.\n- Missing observation or attribution is visible instead of replaced by a fabricated history.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-core/src/session-focus.ts:1 — (module)\n- packages/plan-core/src/plan-store.ts:3502 — async claimTask\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P120(F025)/T470. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Track the task changeset automatically at baseline, checkpoints and closeout, then record significant module/interface/function rationale rather than manually explaining every function.\n- Separate pre-existing dirty state from observed current-task changes; a final aggregate diff or file watcher alone cannot reliably attribute overlapping tasks/sessions or infer intent.\n- Use task/session/repository/worktree, before/after snapshots, observation source, affected areas and explicit uncertain attribution. A commit is not necessarily one task and a task can span commits.\n- Connect tasks through shared code areas so later unrelated tasks can retrieve earlier work; maintain progress/rationale through interruption without turning code relationships into artificial scheduling dependencies.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nReuse N1 execution identities and N2 integration records. E2 remains the changeset-capture owner; avoid another competing change ledger. A large task can span attempts/commits and target integrations, preserving foreign dirty work, observation limits and recoverable snapshots. Historical changes remain visible after worktree deletion or a target revert.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:05:00.953Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-001-capture-initial-dirty-state-separately-from-changes-introduced-during-the-task",
+          "number": 1,
+          "title": "Capture initial dirty state separately from changes introduced during the task.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-002-associate-observed-before-after-changes-with-the-owning-session-task-and-affected-modules-derive-symbol-involvement-when-providers-exist",
+          "number": 2,
+          "title": "Associate observed before/after changes with the owning session/task and affected modules; derive symbol involvement when providers exist.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-003-preserve-checkpoints-across-interruption-and-collect-significant-rationale-without-requiring-a-note-for-every-line-function",
+          "number": 3,
+          "title": "Preserve checkpoints across interruption and collect significant rationale without requiring a note for every line/function.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-004-handle-overlapping-sessions-shared-worktrees-explicitly-use-isolation-or-observed-writes-where-available-and-mark-ambiguous-attribution",
+          "number": 4,
+          "title": "Handle overlapping sessions/shared worktrees explicitly; use isolation or observed writes where available and mark ambiguous attribution.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-005-maintain-task-changed-code-relations-so-later-tasks-can-discover-prior-work-without-task-to-task-links",
+          "number": 5,
+          "title": "Maintain task ↔ changed-code relations so later tasks can discover prior work without task-to-task links.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-006-verify-a-large-task-with-new-and-modified-modules-is-traceable-without-manual-per-symbol-annotation",
+          "number": 6,
+          "title": "Verify: A large task with new and modified modules is traceable without manual per-symbol annotation.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-007-verify-pre-existing-dirty-or-foreign-changes-are-not-automatically-assigned-to-the-current-task",
+          "number": 7,
+          "title": "Verify: Pre-existing dirty or foreign changes are not automatically assigned to the current task.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-008-verify-missing-observation-or-attribution-is-visible-instead-of-replaced-by-a-fabricated-history",
+          "number": 8,
+          "title": "Verify: Missing observation or attribution is visible instead of replaced by a fabricated history.",
+          "checked": false
+        },
+        {
+          "id": "6aae9520-37ca-41fd-9dc8-fef611155e89-check-009-attribute-large-task-changesets-per-execution-and-keep-work-results-separate-from-target-delivery",
+          "number": 9,
+          "title": "Attribute large-task changesets per execution and keep work results separate from target delivery.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "852485e2-b28a-4957-863a-f7ac7fba6d6b"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:17.660Z",
+      "updatedAt": "2026-10-21T10:05:01.313Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f799ee62-6e04-4d08-aceb-3894230940c6",
+      "phaseId": "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+      "number": 472,
+      "shortId": "ZJX3B",
+      "priority": 3,
+      "shortName": "version-durable-decisions-and",
+      "title": "Version durable decisions and resolve their applicability to code",
+      "status": "planned",
+      "description": "Outcome: Versioned canonical decision history and explicit code applicability, with origins and supersession distinct from the current implementation.\n\nExisting state: Accepted Decisions have single-owner CRUD and project/feature/phase/task scope, but updates replace fields in place and there is no code-scope applicability/history lookup.\n\nImplementation responsibility:\n- Extend existing Accepted Decisions rather than introducing another decision authority; preserve old IDs and approved content.\n- Record revisions, provenance, valid applicability and explicit replacement/exception relationships with granular atomic operations.\n- Keep project coding standards in Guidelines; link function/module-specific architectural decisions to a durable existing owner.\n- Implement the T002 → T010 → T020 scenario across unrelated phases: prior parameter rationale, current signature and active slim/functional constraints.\n- Provide cautious legacy backfill from recorded tasks/handoffs/Git as candidates; never infer missing user intent as fact.\n\nAcceptance and evidence:\n- Task completion or phase closure does not hide applicable durable decisions.\n- A newer task or changed body does not implicitly supersede a decision.\n- Current and historical explanations are distinguishable and source changes invalidate prior review evidence.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-core/src/project-context.ts:357 — export function buildProjectContextLoadReply\n- packages/plan-core/src/description-freshness.ts:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nPlan dependencies: E2. Product requirement coverage: BR07, BR08, BR09, BR11, BR12, BR14, BR16, BR17. Supporting design: .planner/docs/agent-brain-plan.md.\n\nDetailed discussion contract:\n- Extend the existing single-owner Accepted Decision model with recoverable revisions and explicit code applicability, not a separate mutable decision authority.\n- General coding standards stay in Guidelines; a durable local design choice belongs to an appropriate owner that outlives its originating task and links to the code area.\n- For T002/T010/T020 preserve original slim/functional constraints, T010 parameter purpose and current source; continuity across changed signatures needs evidence.\n- A newer task or implementation does not supersede a decision. Missing recorded rationale remains unknown; legacy text/Git backfill produces candidates, not invented user intent.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.",
+      "descriptionUpdatedAt": "2026-10-20T16:41:18.479Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-001-extend-existing-accepted-decisions-rather-than-introducing-another-decision-authority-preserve-old-ids-and-approved-content",
+          "number": 1,
+          "title": "Extend existing Accepted Decisions rather than introducing another decision authority; preserve old IDs and approved content.",
+          "checked": false
+        },
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-002-record-revisions-provenance-valid-applicability-and-explicit-replacement-exception-relationships-with-granular-atomic-operations",
+          "number": 2,
+          "title": "Record revisions, provenance, valid applicability and explicit replacement/exception relationships with granular atomic operations.",
+          "checked": false
+        },
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-003-keep-project-coding-standards-in-guidelines-link-function-module-specific-architectural-decisions-to-a-durable-existing-owner",
+          "number": 3,
+          "title": "Keep project coding standards in Guidelines; link function/module-specific architectural decisions to a durable existing owner.",
+          "checked": false
+        },
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-004-implement-the-t002-t010-t020-scenario-across-unrelated-phases-prior-parameter-rationale-current-signature-and-active-slim-functional-constraints",
+          "number": 4,
+          "title": "Implement the T002 → T010 → T020 scenario across unrelated phases: prior parameter rationale, current signature and active slim/functional constraints.",
+          "checked": false
+        },
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-005-provide-cautious-legacy-backfill-from-recorded-tasks-handoffs-git-as-candidates-never-infer-missing-user-intent-as-fact",
+          "number": 5,
+          "title": "Provide cautious legacy backfill from recorded tasks/handoffs/Git as candidates; never infer missing user intent as fact.",
+          "checked": false
+        },
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-006-verify-task-completion-or-phase-closure-does-not-hide-applicable-durable-decisions",
+          "number": 6,
+          "title": "Verify: Task completion or phase closure does not hide applicable durable decisions.",
+          "checked": false
+        },
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-007-verify-a-newer-task-or-changed-body-does-not-implicitly-supersede-a-decision",
+          "number": 7,
+          "title": "Verify: A newer task or changed body does not implicitly supersede a decision.",
+          "checked": false
+        },
+        {
+          "id": "f799ee62-6e04-4d08-aceb-3894230940c6-check-008-verify-current-and-historical-explanations-are-distinguishable-and-source-changes-invalidate-prior-review-evidence",
+          "number": 8,
+          "title": "Verify: Current and historical explanations are distinguishable and source changes invalidate prior review evidence.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "6aae9520-37ca-41fd-9dc8-fef611155e89"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:18.404Z",
+      "updatedAt": "2026-10-20T16:42:21.365Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T16:40:34.015Z",
+  "updatedAt": "2026-10-21T15:00:45.467Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "27fc984d-c6cb-4ca7-b5ac-767753814ad3",
+      "date": "2026-10-21T10:05:00.519Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

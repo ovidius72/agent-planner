@@ -1,0 +1,57 @@
+{
+  "kind": "agent-brain-editor-expansion-verification",
+  "verifiedAt": "2026-10-21T09:33:36.774998+00:00",
+  "featureRef": "F025",
+  "assertionsPassed": 258,
+  "scope": "Planner registration/read-back and supporting document integrity only.",
+  "counts": {
+    "phases": 12,
+    "tasks": 28,
+    "requirements": 21,
+    "decisions": 13,
+    "dependencyEdges": 33,
+    "uncheckedChecklistItems": 229
+  },
+  "newPhases": [
+    "P125(F025)",
+    "P126(F025)",
+    "P127(F025)"
+  ],
+  "newTasks": [
+    "P125(F025)/T483",
+    "P126(F025)/T484",
+    "P126(F025)/T485",
+    "P127(F025)/T486",
+    "P127(F025)/T487",
+    "P127(F025)/T488"
+  ],
+  "invariants": {
+    "oldEntityIdsNumbersShortIdsAndStatusesPreserved": true,
+    "oldDecisionRecordsPreserved": true,
+    "oldChecklistIdsAndTicksPreserved": true,
+    "unaffectedCanonicalFieldsPreserved": true,
+    "dependencyTargetsExistAndGraphIsAcyclic": true,
+    "allTasksPlanned": true,
+    "newPhaseDiscussionReady": true,
+    "affectedParentDescriptionsReconciled": true,
+    "historicalSourceCopiesPreserved": true,
+    "inspectedProductSourcesUnchanged": true
+  },
+  "publicReadBack": [
+    "feature_show full",
+    "phase_list",
+    "task_list",
+    "phase_show full for changed/new phases",
+    "task_show full for changed/new tasks",
+    "requirement_list",
+    "description_freshness"
+  ],
+  "implementationStarted": false,
+  "dependenciesInstalled": false,
+  "productTestsRun": false,
+  "limitations": [
+    "Source-level causes and implementation contracts were inspected, not reproduced as running product behavior.",
+    "Previous registration/amendment verification reports remain historical snapshots.",
+    "Unrelated pre-existing freshness diagnostics were not rewritten."
+  ]
+}

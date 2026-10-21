@@ -1,0 +1,190 @@
+{
+  "purpose": "Document/evidence provenance and transfer coverage; not an operational planner or proof of agent comprehension.",
+  "revision": "2026-10-21-shared-authority-executions-integrations-affected-context-and-bounded-cost",
+  "sourceCopies": [
+    {
+      "source": "/Users/antonio/Documents/Codex/2026-10-20/referenced-chatgpt-conversation-this-is-an/outputs/agent-brain-stabilization-and-code-graph-scope.md",
+      "copy": ".planner/docs/agent-brain-discussion-scope.md",
+      "sha256": "20262314d1aa156053506bbfb53a281147b53824bd83ee30d1521472c3f333d7",
+      "identical": true
+    },
+    {
+      "source": "/Users/antonio/Documents/Codex/2026-10-20/referenced-chatgpt-conversation-this-is-an/outputs/agent-brain-code-links-design.md",
+      "copy": ".planner/docs/agent-brain-code-links-design.md",
+      "sha256": "cb88653fc2e093e7e7c079fa9f334e61d8ab97ff805e2621f196ac7f0cbb6011",
+      "identical": true
+    },
+    {
+      "source": "/Users/antonio/Documents/Codex/2026-10-20/referenced-chatgpt-conversation-this-is-an/outputs/code-anchor-proof-results.json",
+      "copy": ".planner/docs/agent-brain-anchor-proof-results.json",
+      "sha256": "356cb46239e1d50c9e9e05f181e03f24198bce1053a1f5fc3259c15cba2237b7",
+      "identical": true
+    },
+    {
+      "source": "/Users/antonio/Documents/Codex/2026-10-20/referenced-chatgpt-conversation-this-is-an/outputs/code-anchor-proof.mjs",
+      "copy": ".planner/docs/agent-brain-anchor-proof.mjs",
+      "sha256": "740e7f9c999e7256d8b852e24080cdcc35d95f42fb8e3e4fed32a3f7522226df",
+      "identical": true
+    }
+  ],
+  "expected": {
+    "phases": 15,
+    "tasks": 36,
+    "requirements": 29,
+    "decisions": 19,
+    "dependencyEdges": 49,
+    "uncheckedChecklistItems": 334
+  },
+  "files": [
+    {
+      "file": ".planner/docs/agent-brain-registration-handoff.md",
+      "sha256": "3203b652d95200a3734f7c14c19518032f26b2bcd77f49c0d70ec335bb3e5639",
+      "previousRevisionSha256": "3367bd3d86def2cfc4bdadf7587479da167f7545cf0406e1605f6d204cf71596"
+    },
+    {
+      "file": ".planner/docs/agent-brain-plan.md",
+      "sha256": "a5275648dd91621071c81a6acfdf6f61912cc8f6dbd7cc6d65ee839990b94176",
+      "preparedSha256": "ae831fec10c2c8d0181a1542e3f399e2dc7b00c9b3893503eb7266d99067ec20",
+      "previousRevisionSha256": "3c3b5cd59a1ec7e94967a998d49f78ba57324230130c8183acdb99910614cada"
+    },
+    {
+      "file": ".planner/docs/agent-brain-discussion-scope.md",
+      "sha256": "20262314d1aa156053506bbfb53a281147b53824bd83ee30d1521472c3f333d7"
+    },
+    {
+      "file": ".planner/docs/agent-brain-code-links-design.md",
+      "sha256": "cb88653fc2e093e7e7c079fa9f334e61d8ab97ff805e2621f196ac7f0cbb6011"
+    },
+    {
+      "file": ".planner/docs/agent-brain-anchor-proof-results.json",
+      "sha256": "356cb46239e1d50c9e9e05f181e03f24198bce1053a1f5fc3259c15cba2237b7"
+    },
+    {
+      "file": ".planner/docs/agent-brain-anchor-proof.mjs",
+      "sha256": "740e7f9c999e7256d8b852e24080cdcc35d95f42fb8e3e4fed32a3f7522226df"
+    },
+    {
+      "file": ".planner/docs/agent-brain-planner-import.json",
+      "sha256": "fd2f966769f4f3d694606ef59f3bf1b46c19050bbd50f4df51ca8af22ba53b06",
+      "previousRevisionSha256": "31c5b0750418ae792629f47f7c3c149046fd6757867cc960419bcd9f87e68630"
+    },
+    {
+      "file": ".planner/docs/agent-brain-registration.json",
+      "sha256": "e757ad9e908fc0ddda93de63ce1abb6adb7c6b788d2aa3cabd0c9fa05ee5c370",
+      "previousRevisionSha256": "4be719c71fc5d8715e127b24f8f45a74ae3a85d8d3aeb606a75d455c6a9ebe95"
+    },
+    {
+      "file": ".planner/docs/agent-brain-registration-verification.json",
+      "sha256": "38cd7962c536b21bbbfad4637953cfcf2ffcc76b9cf1681663fef06d967b2d5d"
+    },
+    {
+      "file": ".planner/docs/agent-brain-amendment-verification.json",
+      "sha256": "67d38db6e9a97cbc3fda3dc379972f5f191d356d615cb3c8cabe8e3f157f7362"
+    },
+    {
+      "file": ".planner/docs/agent-brain-editor-and-project-identity.md",
+      "sha256": "e3bfdd9331c9cf4f5fff4ca4478f1364b9732615850dfe00e5b7f619026eeab0"
+    },
+    {
+      "file": ".planner/docs/agent-brain-editor-expansion-registration.json",
+      "sha256": "0efc22f1dd2bc340cfc73f9057e6747e94000504bcea51e9e2a3a72d9ad6999e"
+    },
+    {
+      "file": ".planner/docs/agent-brain-editor-expansion-verification.json",
+      "sha256": "4f758837d4ca38ec1cf6328f67322d90cb5735a82917c1f2f9daf6abc59f18d9"
+    },
+    {
+      "file": ".planner/docs/agent-brain-shared-planner-and-execution.md",
+      "sha256": "99a4da440b55fc6da79a2b371d59d7901212e7f23ac39bee8c24d8871bf6c4eb"
+    },
+    {
+      "file": ".planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md",
+      "sha256": "fb4877f6386b0a3d0ad782080d15b5006b9aa35f7194519e444fb1bcab8a09a0"
+    },
+    {
+      "file": ".planner/docs/agent-brain-shared-planner-registration.json",
+      "sha256": "d1f31195c5b2b696808acb2d126fe10b5361bf8fbfb01e9af3a1384751f939e2"
+    },
+    {
+      "file": ".planner/docs/agent-brain-shared-planner-verification.json",
+      "sha256": "959d529542595cabf56d90ca697290d3e12a8f1f5b30d309c99719c4a0f0a468"
+    }
+  ],
+  "status": "F025 shared-planner/execution/integration and affected-context/bounded-cost expansion registered and publicly read back; planning only.",
+  "validation": {
+    "all22TaskDescriptionsCarryDiscussionContracts": true,
+    "taskDescriptionsWithinTransportBounds": true,
+    "allHandoffAttachmentsPresent": true,
+    "sourceCopiesIdentical": true,
+    "dependenciesAcyclic": true,
+    "countsUnchanged": false,
+    "productTestsRun": false,
+    "canonicalRegistrationReadBack": true,
+    "existingCanonicalEntitiesPreserved": true,
+    "sourceCatalogMatchesCurrentCheckout": true,
+    "countsChangedByExplicitUserRequest": true,
+    "all28TaskDescriptionsCarryDiscussionContracts": true,
+    "all36TaskDescriptionsCarryDiscussionContracts": true,
+    "currentExpansionVerificationReport": ".planner/docs/agent-brain-shared-planner-verification.json",
+    "parentAndProjectScopeReconciled": true,
+    "currentExpansionIntegrityPassed": true,
+    "currentExpansionAssertions": 2397
+  },
+  "preparedStatus": "Prepared and enriched; verify canonical entities before registration. No implementation or current product tests were run.",
+  "registration": {
+    "featureRef": "F025",
+    "evidenceMap": ".planner/docs/agent-brain-registration.json",
+    "verificationReport": ".planner/docs/agent-brain-shared-planner-verification.json",
+    "phases": 15,
+    "tasks": 36,
+    "dependencyEdges": 49,
+    "requirements": 29,
+    "projectDecisions": 1,
+    "featureDecisions": 18,
+    "uncheckedChecklistItems": 334,
+    "firstReadyTask": "P116(F025)/T461",
+    "previousScopeCounts": {
+      "phases": 9,
+      "tasks": 22,
+      "dependencyEdges": 21,
+      "requirements": 17,
+      "projectDecisions": 1,
+      "featureDecisions": 9,
+      "uncheckedChecklistItems": 171
+    }
+  },
+  "amendment": {
+    "date": "2026-10-21",
+    "verificationReport": ".planner/docs/agent-brain-amendment-verification.json",
+    "countsUnchanged": true,
+    "publicReadBackVerified": true,
+    "implementationStarted": false
+  },
+  "editorExpansion": {
+    "document": ".planner/docs/agent-brain-editor-and-project-identity.md",
+    "registrationMap": ".planner/docs/agent-brain-editor-expansion-registration.json",
+    "verificationReport": ".planner/docs/agent-brain-editor-expansion-verification.json",
+    "publicReadBackVerified": true,
+    "implementationStarted": false
+  },
+  "sharedPlannerExpansion": {
+    "date": "2026-10-21",
+    "kind": "shared-planner-execution-integration-impact-and-bounded-context",
+    "registrationMap": ".planner/docs/agent-brain-shared-planner-registration.json",
+    "documents": [
+      ".planner/docs/agent-brain-shared-planner-and-execution.md",
+      ".planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md"
+    ],
+    "verificationReport": ".planner/docs/agent-brain-shared-planner-verification.json",
+    "currentCounts": {
+      "phases": 15,
+      "tasks": 36,
+      "requirements": 29,
+      "decisions": 19,
+      "dependencyEdges": 49,
+      "uncheckedChecklistItems": 334
+    },
+    "implementationStarted": false,
+    "realMigrationExecuted": false
+  }
+}

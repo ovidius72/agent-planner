@@ -1,0 +1,146 @@
+{
+  "id": "66eda762-171f-4435-9b64-b80bd0766f5b",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 125,
+  "shortId": "TC38A",
+  "priority": 1,
+  "slug": "project-identity-and-browser-page-titles",
+  "title": "Project identity and browser page titles",
+  "discussedAt": "2026-10-21T09:25:09.333Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Keep the project recognizable in browser tabs and detail navigation.",
+  "description": "Keep the project recognizable in browser tabs and detail navigation.\n\nCurrent state: packages/plan-web-ui/index.html:6 has a static Agent Plan title. RootRoute in packages/plan-web-ui/src/app/root.tsx:25 already derives a project title, while RootErrorBoundary:86 resets it. EntityDetailIdentity in packages/plan-web-ui/src/components/detail/entity-detail-identity.tsx:28 overwrites it with type/reference/title and later restores a captured prior title. The user reports an always-generic overview title and project-less detail titles; runtime reproduction is still required.\n\nGoals:\n- Keep the actual project name in overview and detail-page browser titles.\n- Remove competing title effects while preserving visible page identity and live navigation.\n\nResponsibilities:\n- P125(F025)/T483: Preserve project identity in overview and detail page titles. Reliable project-aware browser titles on overview, list and detail routes, without losing project context during navigation or updates.\n\nBoundaries:\n- Do not rebuild code analysis or introduce editor dependencies for this fix.\n\nRisks:\n- Root and detail effects currently compete; a cleanup can restore an obsolete title.\n- The reported installed behavior may differ from current source and must be reproduced.\n\nAcceptance:\n- Two initialized projects have distinguishable browser tabs on overview and detail routes.\n- A task displays e.g. My Project - T1000 [Refactor parameter handling]; F/P detail follows the same project-first rule.\n- Navigation, live renames, loading/errors with known project context and effect cleanup do not drop or restore stale project identity.\n\nUse .planner/docs/agent-brain-editor-and-project-identity.md and exact child task contracts. Existing source references are named above; revalidate before editing.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nRegistered scope: P125(F025)/T483. All tasks remain planned; implementation has not started.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
+  "descriptionRef": ".planner/docs/agent-brain-editor-and-project-identity.md",
+  "descriptionUpdatedAt": "2026-10-21T14:58:52.279Z",
+  "notes": "",
+  "goals": [
+    "Keep the actual project name in overview and detail-page browser titles.",
+    "Remove competing title effects while preserving visible page identity and live navigation."
+  ],
+  "nonGoals": [
+    "Do not rebuild code analysis or introduce editor dependencies for this fix."
+  ],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [
+    "Root and detail effects currently compete; a cleanup can restore an obsolete title.",
+    "The reported installed behavior may differ from current source and must be reproduced."
+  ],
+  "openQuestions": [
+    "Choose the smallest central route-title integration that follows current React Router data patterns; exact module names are implementation choices."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Two initialized projects have distinguishable browser tabs on overview and detail routes.",
+    "A task displays e.g. My Project - T1000 [Refactor parameter handling]; F/P detail follows the same project-first rule.",
+    "Navigation, live renames, loading/errors with known project context and effect cleanup do not drop or restore stale project identity.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00"
+  ],
+  "tasks": [
+    {
+      "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00",
+      "phaseId": "66eda762-171f-4435-9b64-b80bd0766f5b",
+      "number": 483,
+      "shortId": "GH5JR",
+      "priority": 1,
+      "shortName": "preserve-project-identity-in-o",
+      "title": "Preserve project identity in overview and detail page titles",
+      "status": "planned",
+      "description": "Outcome: Reliable project-aware browser titles on overview, list and detail routes, without losing project context during navigation or updates.\n\nExisting state: packages/plan-web-ui/index.html:6 has a static Agent Plan title. RootRoute in packages/plan-web-ui/src/app/root.tsx:25 already derives a project title, while RootErrorBoundary:86 resets it. EntityDetailIdentity in packages/plan-web-ui/src/components/detail/entity-detail-identity.tsx:28 overwrites it with type/reference/title and later restores a captured prior title. The user reports an always-generic overview title and project-less detail titles; runtime reproduction is still required.\n\nImplementation responsibility:\n- Reproduce overview and direct detail navigation using current runtime/artifact fingerprints; distinguish missing metadata from competing effects and stale bundles.\n- Implement one route-aware title owner using canonical project.name and resolved entity identity; remove competing child assignment/cleanup behavior.\n- Use ProjectName on the overview and ProjectName - TaskID [Short task title] on task detail; use the same project-first convention for feature and phase detail and contextual list/document/source pages.\n- Interpret the bracketed description as the short entity title, not the full task description; support references longer than three/four digits without truncating their identity.\n- Handle deep links, reload, back/forward, detail-to-detail navigation, modals, live project/entity renames and errors/loading without restoring the previous project's title. Retain the last known correct project name where available; a pre-project bootstrap fallback must not persist after resolution.\n- Preserve the existing visible AppShell project identity, accessible entity headings and settings; add focused title regressions and regenerate both tracked web-ui-dist consumers with the UI change.\n\nAcceptance and evidence:\n- Two initialized projects have distinguishable browser tabs on overview and detail routes.\n- A task displays e.g. My Project - T1000 [Refactor parameter handling]; F/P detail follows the same project-first rule.\n- Navigation, live renames, loading/errors with known project context and effect cleanup do not drop or restore stale project identity.\n\nRead before editing:\n- packages/plan-web-ui/index.html:6\n- packages/plan-web-ui/src/app/root.tsx:25\n- packages/plan-web-ui/src/components/detail/entity-detail-identity.tsx:28\n- packages/plan-web-ui/src/components/layout/app-shell.tsx:118\n- packages/plan-web-ui/src/app/router.tsx:51\n\nDetailed discussion contract:\n- The generic overview report is not proof that RootRoute lacks project-name code; reproduce the actual source and installed artifact path before fixing.\n- Project context belongs in the browser title even when a detail heading describes a task. Keep short page identity separate from the full textual description.\n- This early independent reliability fix can follow baseline A at the same phase priority; it does not wait for the code graph or Monaco.\n\nExecution dependencies: none. Requirement aliases: BR18, BR15, BR16. Full design: .planner/docs/agent-brain-editor-and-project-identity.md.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.",
+      "descriptionUpdatedAt": "2026-10-21T09:26:31.840Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-001-reproduce-overview-and-direct-detail-navigation-using-current-runtime-artifact-fingerprints-distinguish-missing-metadata-from-competing-effects-and-stale-bundles",
+          "number": 1,
+          "title": "Reproduce overview and direct detail navigation using current runtime/artifact fingerprints; distinguish missing metadata from competing effects and stale bundles.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-002-implement-one-route-aware-title-owner-using-canonical-project-name-and-resolved-entity-identity-remove-competing-child-assignment-cleanup-behavior",
+          "number": 2,
+          "title": "Implement one route-aware title owner using canonical project.name and resolved entity identity; remove competing child assignment/cleanup behavior.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-003-use-projectname-on-the-overview-and-projectname-taskid-short-task-title-on-task-detail-use-the-same-project-first-convention-for-feature-and-phase-detail-and-contextual-list-document-source-pages",
+          "number": 3,
+          "title": "Use ProjectName on the overview and ProjectName - TaskID [Short task title] on task detail; use the same project-first convention for feature and phase detail and contextual list/document/source pages.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-004-interpret-the-bracketed-description-as-the-short-entity-title-not-the-full-task-description-support-references-longer-than-three-four-digits-without-truncating-their-identity",
+          "number": 4,
+          "title": "Interpret the bracketed description as the short entity title, not the full task description; support references longer than three/four digits without truncating their identity.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-005-handle-deep-links-reload-back-forward-detail-to-detail-navigation-modals-live-project-entity-renames-and-errors-loading-without-restoring-the-previous-project-s-title-retain-the-last-known-correct-project-name-where-available-a-pre-project-bootstrap-fallback-must-not-persist-after-resolution",
+          "number": 5,
+          "title": "Handle deep links, reload, back/forward, detail-to-detail navigation, modals, live project/entity renames and errors/loading without restoring the previous project's title. Retain the last known correct project name where available; a pre-project bootstrap fallback must not persist after resolution.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-006-preserve-the-existing-visible-appshell-project-identity-accessible-entity-headings-and-settings-add-focused-title-regressions-and-regenerate-both-tracked-web-ui-dist-consumers-with-the-ui-change",
+          "number": 6,
+          "title": "Preserve the existing visible AppShell project identity, accessible entity headings and settings; add focused title regressions and regenerate both tracked web-ui-dist consumers with the UI change.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-007-verify-two-initialized-projects-have-distinguishable-browser-tabs-on-overview-and-detail-routes",
+          "number": 7,
+          "title": "Verify: Two initialized projects have distinguishable browser tabs on overview and detail routes.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-008-verify-a-task-displays-e-g-my-project-t1000-refactor-parameter-handling-f-p-detail-follows-the-same-project-first-rule",
+          "number": 8,
+          "title": "Verify: A task displays e.g. My Project - T1000 [Refactor parameter handling]; F/P detail follows the same project-first rule.",
+          "checked": false
+        },
+        {
+          "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00-check-009-verify-navigation-live-renames-loading-errors-with-known-project-context-and-effect-cleanup-do-not-drop-or-restore-stale-project-identity",
+          "number": 9,
+          "title": "Verify: Navigation, live renames, loading/errors with known project context and effect cleanup do not drop or restore stale project identity.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T09:20:10.215Z",
+      "updatedAt": "2026-10-21T09:26:31.838Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-21T09:17:17.731Z",
+  "updatedAt": "2026-10-21T14:58:52.279Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "bf4b4f7f-3064-4f9c-82f2-d85717d8f1b0",
+      "date": "2026-10-21T09:26:31.871Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

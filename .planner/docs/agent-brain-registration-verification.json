@@ -1,0 +1,32 @@
+{
+  "kind": "agent-brain-registration-integrity",
+  "featureRef": "F025",
+  "successfulAssertions": 842,
+  "counts": {
+    "phases": 9,
+    "tasks": 22,
+    "dependencies": 21,
+    "requirements": 17,
+    "projectDecisions": 1,
+    "featureDecisions": 9,
+    "uncheckedChecklistItems": 171
+  },
+  "checks": {
+    "fullDescriptionsAndDiscussionContracts": true,
+    "containmentAndPriorities": true,
+    "requirementsAndDecisionOwnership": true,
+    "dependencyTargetsAndAcyclicity": true,
+    "existingCanonicalEntitiesUnchanged": true,
+    "existingProjectSettingsGuidelinesRequirementsDecisionsPreserved": true,
+    "sourceCatalogUnchanged": true,
+    "registeredDocumentReferences": true,
+    "noTasksStarted": true
+  },
+  "firstReadyTask": "P116(F025)/T461",
+  "sourceCatalogEntriesVerified": 30,
+  "productImplementationTestsRun": false,
+  "historicalPrototypeRerun": false,
+  "limitations": [
+    "This verifies planner registration and persisted content. Agent Brain implementation, language-provider support, product workflows and installed artifacts remain planned and unverified."
+  ]
+}

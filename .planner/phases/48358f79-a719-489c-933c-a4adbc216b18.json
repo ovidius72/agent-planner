@@ -1,0 +1,316 @@
+{
+  "id": "48358f79-a719-489c-933c-a4adbc216b18",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 119,
+  "shortId": "QRD2E",
+  "priority": 4,
+  "slug": "application-of-existing-standards-and-planning-discipline",
+  "title": "Application of existing standards and planning discipline",
+  "discussedAt": "2026-10-20T16:40:32.958Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Make existing instructions actionable and reviewable before and after implementation.",
+  "description": "Make existing instructions actionable and reviewable before and after implementation.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows C and owns only the outcomes below.\n\nOutcomes:\n- Require relevant source analysis and conformity evidence without duplicating existing guidelines.\n- Distribute a consistent protocol across supported agents and limit unnecessary task creation.\n\nTasks and boundaries:\n- D1: Add evidence-backed source analysis and conformity review to existing workflow. An auditable pre-implementation analysis and post-implementation conformity report on the existing task, usable without semantic providers.\n- D2: Synchronize the operating protocol across harnesses and context-loss events. One portable operational protocol with explicit adapter capabilities, renewed context and consistent instruction delivery.\n- D3: Prevent duplicate capability ownership and unnecessary task creation. A creation workflow that surfaces existing open/completed ownership and keeps implementation steps within the current task.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-core/planner-skill.md:42 — ## Lifecycle-first context protocol\n- packages/plan-core/src/planner-rules.ts:20 — const PROJECT_GUIDELINES_RULE\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-core/src/guard-decision.ts:312 — export function noTaskWarning\n- packages/plan-core/src/task-completion-gate.ts:58 — export function evaluateTaskCompletionGate\n- scripts/sync-plugins.cjs:1 — (module)\n\nAcceptance: A new agent produces a component consistent with the correct architectural precedents. A functionally passing implementation with duplicated infrastructure or wrong responsibility fails the conformity review. Legacy conflicts and greenfield projects are explicit; no fabricated standards or false proof of understanding. No extra permission prompt is introduced for already authorized routine work. Generated skill copies and tool descriptions express one consistent workflow. Every supported harness has a documented tested coverage level and explicit fallback. Loss of model context leads to restoration rather than reuse of a historical timestamp alone. Already owned work reuses its owner; an implementation detail becomes a checklist item. Independent outcomes can still create justified tasks. No arbitrary task-count cap, automatic merges/deletions or one-task-per-stale-link behavior.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR04, BR05, BR06, BR13, BR15, BR16, BR17.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nShared-planner compatibility approved 21 October 2026: standards/conformity evidence must identify the actual execution, source workspace and revision even when project knowledge is shared. The baseline requirement to inspect and follow existing code, the warning-only no-task guard and checklist-based task discipline remain unchanged. Reuse the context/identity contracts in P128-P130; no alternate skill authority or extra task per observation is introduced. Full contract: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
+  "descriptionRef": ".planner/docs/agent-brain-plan.md",
+  "descriptionUpdatedAt": "2026-10-21T14:58:51.018Z",
+  "notes": "",
+  "goals": [
+    "Require relevant source analysis and conformity evidence without duplicating existing guidelines.",
+    "Distribute a consistent protocol across supported agents and limit unnecessary task creation."
+  ],
+  "nonGoals": [
+    "No implicit change to the warning-only no-task guard.",
+    "No blind import of Claude-specific rules or arbitrary numerical definitions of slim."
+  ],
+  "dependencies": [
+    "P118(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "A checked box or a file path does not prove content delivery or conformity.",
+    "Legacy code may conflict with current approved instructions."
+  ],
+  "openQuestions": [
+    "Select the supported analysis-evidence operations and their coverage; a new write-denial policy remains an explicit decision, not an assumed requirement."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "A new agent produces a component consistent with the correct architectural precedents.",
+    "A functionally passing implementation with duplicated infrastructure or wrong responsibility fails the conformity review.",
+    "Legacy conflicts and greenfield projects are explicit; no fabricated standards or false proof of understanding.",
+    "No extra permission prompt is introduced for already authorized routine work.",
+    "Generated skill copies and tool descriptions express one consistent workflow.",
+    "Every supported harness has a documented tested coverage level and explicit fallback.",
+    "Loss of model context leads to restoration rather than reuse of a historical timestamp alone.",
+    "Already owned work reuses its owner; an implementation detail becomes a checklist item.",
+    "Independent outcomes can still create justified tasks.",
+    "No arbitrary task-count cap, automatic merges/deletions or one-task-per-stale-link behavior.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "14de4875-9d79-482a-9207-74a459fd07b5",
+    "dfb6349b-63f5-4e68-810e-917de0d096de",
+    "f1f1c950-e967-45d3-b7b6-55e478c6c9e2"
+  ],
+  "tasks": [
+    {
+      "id": "14de4875-9d79-482a-9207-74a459fd07b5",
+      "phaseId": "48358f79-a719-489c-933c-a4adbc216b18",
+      "number": 467,
+      "shortId": "2EPSV",
+      "priority": 1,
+      "shortName": "add-evidence-backed-source-ana",
+      "title": "Add evidence-backed source analysis and conformity review to existing workflow",
+      "status": "planned",
+      "description": "Outcome: An auditable pre-implementation analysis and post-implementation conformity report on the existing task, usable without semantic providers.\n\nExisting state: The skill and guidelines already require context and coding standards. Read tracking covers planner entities rather than analogous source implementations; completion checks checklist/evidence rather than architectural conformity.\n\nImplementation responsibility:\n- Select and deliver applicable rules, approved decisions, module responsibilities and genuinely analogous implementations/tests.\n- Record source revisions, pertinence, inferred versus explicit conventions, intended reuse, integration and verification on the current task.\n- Detect missing/stale evidence on supported paths; document interception limits and preserve the accepted warning-only guard.\n- Refresh relevant evidence on area/source/context changes; do not demand an unchanged full rescan.\n- Compare final diff with selected precedents and rules; automate checkable constraints and record qualitative review separately.\n\nAcceptance and evidence:\n- A new agent produces a component consistent with the correct architectural precedents.\n- A functionally passing implementation with duplicated infrastructure or wrong responsibility fails the conformity review.\n- Legacy conflicts and greenfield projects are explicit; no fabricated standards or false proof of understanding.\n- No extra permission prompt is introduced for already authorized routine work.\n\nRead before editing:\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-core/planner-skill.md:42 — ## Lifecycle-first context protocol\n- packages/plan-core/src/planner-rules.ts:20 — const PROJECT_GUIDELINES_RULE\n- packages/plan-core/src/guard-decision.ts:312 — export function noTaskWarning\n- packages/plan-core/src/task-completion-gate.ts:58 — export function evaluateTaskCompletionGate\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nPlan dependencies: C2. Product requirement coverage: BR04, BR05, BR06, BR13, BR15, BR16, BR17. Supporting design: .planner/docs/agent-brain-plan.md.\n\nDetailed discussion contract:\n- Read applicable rules and correct architectural precedents, their interfaces/tests and integration points before implementation. Record source/version, relevance, reuse and ownership on the existing task.\n- Distinguish approved rules from empirical code conventions; legacy or similarly named components in the wrong layer are not authoritative examples.\n- At closeout compare the actual diff with rules/precedents. Automate explicit checkable constraints and record qualitative architectural conformity separately. A receipt/tick/build does not prove comprehension or conformity.\n- Make missing/stale analysis observable where integrations allow it. Preserve the warning-only guard and disclose interception gaps; a universal source-write block is not already authorized.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.",
+      "descriptionUpdatedAt": "2026-10-20T16:41:14.406Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-001-select-and-deliver-applicable-rules-approved-decisions-module-responsibilities-and-genuinely-analogous-implementations-tests",
+          "number": 1,
+          "title": "Select and deliver applicable rules, approved decisions, module responsibilities and genuinely analogous implementations/tests.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-002-record-source-revisions-pertinence-inferred-versus-explicit-conventions-intended-reuse-integration-and-verification-on-the-current-task",
+          "number": 2,
+          "title": "Record source revisions, pertinence, inferred versus explicit conventions, intended reuse, integration and verification on the current task.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-003-detect-missing-stale-evidence-on-supported-paths-document-interception-limits-and-preserve-the-accepted-warning-only-guard",
+          "number": 3,
+          "title": "Detect missing/stale evidence on supported paths; document interception limits and preserve the accepted warning-only guard.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-004-refresh-relevant-evidence-on-area-source-context-changes-do-not-demand-an-unchanged-full-rescan",
+          "number": 4,
+          "title": "Refresh relevant evidence on area/source/context changes; do not demand an unchanged full rescan.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-005-compare-final-diff-with-selected-precedents-and-rules-automate-checkable-constraints-and-record-qualitative-review-separately",
+          "number": 5,
+          "title": "Compare final diff with selected precedents and rules; automate checkable constraints and record qualitative review separately.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-006-verify-a-new-agent-produces-a-component-consistent-with-the-correct-architectural-precedents",
+          "number": 6,
+          "title": "Verify: A new agent produces a component consistent with the correct architectural precedents.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-007-verify-a-functionally-passing-implementation-with-duplicated-infrastructure-or-wrong-responsibility-fails-the-conformity-review",
+          "number": 7,
+          "title": "Verify: A functionally passing implementation with duplicated infrastructure or wrong responsibility fails the conformity review.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-008-verify-legacy-conflicts-and-greenfield-projects-are-explicit-no-fabricated-standards-or-false-proof-of-understanding",
+          "number": 8,
+          "title": "Verify: Legacy conflicts and greenfield projects are explicit; no fabricated standards or false proof of understanding.",
+          "checked": false
+        },
+        {
+          "id": "14de4875-9d79-482a-9207-74a459fd07b5-check-009-verify-no-extra-permission-prompt-is-introduced-for-already-authorized-routine-work",
+          "number": 9,
+          "title": "Verify: No extra permission prompt is introduced for already authorized routine work.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "a5214a66-5563-4e32-bf39-0d9b0797fcc1"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:14.324Z",
+      "updatedAt": "2026-10-20T16:42:18.055Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "dfb6349b-63f5-4e68-810e-917de0d096de",
+      "phaseId": "48358f79-a719-489c-933c-a4adbc216b18",
+      "number": 468,
+      "shortId": "2SFUJ",
+      "priority": 2,
+      "shortName": "synchronize-the-operating-prot",
+      "title": "Synchronize the operating protocol across harnesses and context-loss events",
+      "status": "planned",
+      "description": "Outcome: One portable operational protocol with explicit adapter capabilities, renewed context and consistent instruction delivery.\n\nExisting state: The canonical core skill is already distributed to shared and harness-specific surfaces. Existing prompt/rule/tool wording disagrees and external Everything Claude Code material is primarily harness-specific.\n\nImplementation responsibility:\n- Extend the existing canonical skill and sync pipeline; keep domain policy in core.\n- Adapt useful skill/rule/hook separation from the referenced external project while filtering conflicting recommendations.\n- Integrate D1 evidence with supported MCP/Pi and Claude Code/Codex/OpenCode routes; distinguish guidance, observed reads and actual interception.\n- Exercise new session, compaction, changed guidelines and harness switch without claiming unsupported hook coverage.\n\nAcceptance and evidence:\n- Generated skill copies and tool descriptions express one consistent workflow.\n- Every supported harness has a documented tested coverage level and explicit fallback.\n- Loss of model context leads to restoration rather than reuse of a historical timestamp alone.\n\nRead before editing:\n- packages/plan-core/planner-skill.md:42 — ## Lifecycle-first context protocol\n- packages/plan-core/src/planner-rules.ts:20 — const PROJECT_GUIDELINES_RULE\n- scripts/sync-plugins.cjs:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-core/src/project-context.ts:357 — export function buildProjectContextLoadReply\n- packages/plan-core/src/guard-decision.ts:312 — export function noTaskWarning\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nPlan dependencies: D1. Product requirement coverage: BR04, BR05, BR06, BR13, BR15, BR16, BR17. Supporting design: .planner/docs/agent-brain-plan.md.\n\nDetailed discussion contract:\n- Extend the existing canonical core/shared skill distribution and reconcile contradictory tool/rule/prompt wording, rather than creating a Claude-only authority.\n- Adapt useful rule/skill/hook patterns from the referenced external project without importing conflicting mandates or claiming a hook reconstructs full context.\n- Declare actual delivery/read/write/compaction capabilities per harness; provide explicit restoration where hooks are unavailable.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nDistribute the M3 mutation -> affected-impact -> reconcile/explicit-pending protocol to all supported skills/adapters. Existing hierarchical-freshness instructions already exist: extend their enforceable observable postconditions, do not merely repeat them. Use compact receipts and truthful per-harness coverage.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionUpdatedAt": "2026-10-21T14:57:51.065Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-001-extend-the-existing-canonical-skill-and-sync-pipeline-keep-domain-policy-in-core",
+          "number": 1,
+          "title": "Extend the existing canonical skill and sync pipeline; keep domain policy in core.",
+          "checked": false
+        },
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-002-adapt-useful-skill-rule-hook-separation-from-the-referenced-external-project-while-filtering-conflicting-recommendations",
+          "number": 2,
+          "title": "Adapt useful skill/rule/hook separation from the referenced external project while filtering conflicting recommendations.",
+          "checked": false
+        },
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-003-integrate-d1-evidence-with-supported-mcp-pi-and-claude-code-codex-opencode-routes-distinguish-guidance-observed-reads-and-actual-interception",
+          "number": 3,
+          "title": "Integrate D1 evidence with supported MCP/Pi and Claude Code/Codex/OpenCode routes; distinguish guidance, observed reads and actual interception.",
+          "checked": false
+        },
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-004-exercise-new-session-compaction-changed-guidelines-and-harness-switch-without-claiming-unsupported-hook-coverage",
+          "number": 4,
+          "title": "Exercise new session, compaction, changed guidelines and harness switch without claiming unsupported hook coverage.",
+          "checked": false
+        },
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-005-verify-generated-skill-copies-and-tool-descriptions-express-one-consistent-workflow",
+          "number": 5,
+          "title": "Verify: Generated skill copies and tool descriptions express one consistent workflow.",
+          "checked": false
+        },
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-006-verify-every-supported-harness-has-a-documented-tested-coverage-level-and-explicit-fallback",
+          "number": 6,
+          "title": "Verify: Every supported harness has a documented tested coverage level and explicit fallback.",
+          "checked": false
+        },
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-007-verify-loss-of-model-context-leads-to-restoration-rather-than-reuse-of-a-historical-timestamp-alone",
+          "number": 7,
+          "title": "Verify: Loss of model context leads to restoration rather than reuse of a historical timestamp alone.",
+          "checked": false
+        },
+        {
+          "id": "dfb6349b-63f5-4e68-810e-917de0d096de-check-008-verify-portable-skills-follow-affected-parent-dependency-reconciliation-without-full-plan-context-reloads",
+          "number": 8,
+          "title": "Verify portable skills follow affected-parent/dependency reconciliation without full-plan context reloads.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "14de4875-9d79-482a-9207-74a459fd07b5"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:15.146Z",
+      "updatedAt": "2026-10-21T14:57:51.062Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2",
+      "phaseId": "48358f79-a719-489c-933c-a4adbc216b18",
+      "number": 469,
+      "shortId": "WAPUN",
+      "priority": 3,
+      "shortName": "prevent-duplicate-capability-o",
+      "title": "Prevent duplicate capability ownership and unnecessary task creation",
+      "status": "planned",
+      "description": "Outcome: A creation workflow that surfaces existing open/completed ownership and keeps implementation steps within the current task.\n\nExisting state: The skill and phase work map already advise checklist reuse and sibling review; new tasks can still be created without an evidence-backed comparison.\n\nImplementation responsibility:\n- Compare requested outcome against relevant canonical tasks, including completed capabilities and cross-phase candidates.\n- Use similarity as a discovery hint, never an automatic proof or destructive deduplication.\n- Require a distinct outcome and rationale for a new task; otherwise update current checklist/description or capture an out-of-scope idea.\n- Keep initialization and legitimate large-feature planning possible; show useful ownership information in current UI.\n\nAcceptance and evidence:\n- Already owned work reuses its owner; an implementation detail becomes a checklist item.\n- Independent outcomes can still create justified tasks.\n- No arbitrary task-count cap, automatic merges/deletions or one-task-per-stale-link behavior.\n\nRead before editing:\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nPlan dependencies: D2. Product requirement coverage: BR04, BR05, BR06, BR13, BR15, BR16, BR17. Supporting design: .planner/docs/agent-brain-plan.md.\n\nDetailed discussion contract:\n- Discover open and completed capability ownership before new task creation; use the existing task checklist for implementation steps and the inbox for unrelated ideas.\n- Similarity offers candidates, not proof of duplication. Preserve legitimate independent results and initial planning without arbitrary task quotas.\n- No automatic destructive merge/delete or new task for each invalidated code/explanation link.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nA justified new task must also trigger M3 affected-parent/dependency review, keeping phase/feature/project scope current where material. Preserve legitimate creation and checklist reuse; an impact review must not generate new tasks automatically or repeat unrelated full descriptions.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionUpdatedAt": "2026-10-21T14:57:51.381Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-001-compare-requested-outcome-against-relevant-canonical-tasks-including-completed-capabilities-and-cross-phase-candidates",
+          "number": 1,
+          "title": "Compare requested outcome against relevant canonical tasks, including completed capabilities and cross-phase candidates.",
+          "checked": false
+        },
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-002-use-similarity-as-a-discovery-hint-never-an-automatic-proof-or-destructive-deduplication",
+          "number": 2,
+          "title": "Use similarity as a discovery hint, never an automatic proof or destructive deduplication.",
+          "checked": false
+        },
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-003-require-a-distinct-outcome-and-rationale-for-a-new-task-otherwise-update-current-checklist-description-or-capture-an-out-of-scope-idea",
+          "number": 3,
+          "title": "Require a distinct outcome and rationale for a new task; otherwise update current checklist/description or capture an out-of-scope idea.",
+          "checked": false
+        },
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-004-keep-initialization-and-legitimate-large-feature-planning-possible-show-useful-ownership-information-in-current-ui",
+          "number": 4,
+          "title": "Keep initialization and legitimate large-feature planning possible; show useful ownership information in current UI.",
+          "checked": false
+        },
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-005-verify-already-owned-work-reuses-its-owner-an-implementation-detail-becomes-a-checklist-item",
+          "number": 5,
+          "title": "Verify: Already owned work reuses its owner; an implementation detail becomes a checklist item.",
+          "checked": false
+        },
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-006-verify-independent-outcomes-can-still-create-justified-tasks",
+          "number": 6,
+          "title": "Verify: Independent outcomes can still create justified tasks.",
+          "checked": false
+        },
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-007-verify-no-arbitrary-task-count-cap-automatic-merges-deletions-or-one-task-per-stale-link-behavior",
+          "number": 7,
+          "title": "Verify: No arbitrary task-count cap, automatic merges/deletions or one-task-per-stale-link behavior.",
+          "checked": false
+        },
+        {
+          "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2-check-008-verify-new-task-admission-also-reconciles-affected-parent-scope-and-relationships",
+          "number": 8,
+          "title": "Verify new-task admission also reconciles affected parent scope and relationships.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "dfb6349b-63f5-4e68-810e-917de0d096de"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:16.020Z",
+      "updatedAt": "2026-10-21T14:57:51.379Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T16:40:32.423Z",
+  "updatedAt": "2026-10-21T14:58:51.018Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "e611d902-3adc-4634-b3f8-e5a51408b890",
+      "date": "2026-10-21T14:53:50.560Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

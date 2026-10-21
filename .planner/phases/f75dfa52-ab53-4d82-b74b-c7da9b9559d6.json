@@ -1,0 +1,318 @@
+{
+  "id": "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 121,
+  "shortId": "8YPSM",
+  "priority": 6,
+  "slug": "project-setup-and-multilingual-code-intelligence",
+  "title": "Project setup and multilingual code intelligence",
+  "discussedAt": "2026-10-20T16:40:36.076Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Start from an idea or existing repository and dynamically resolve, configure and validate compatible analysis providers for its actual languages.",
+  "description": "Start from an idea or existing repository and dynamically resolve, configure and validate compatible analysis providers for its actual languages.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows E and owns only the outcomes below.\n\nOutcomes:\n- Support empty folders and undecided stacks.\n- Support an open, provider-driven language set through extensible metadata/configuration and shared adapters, with per-area/per-operation coverage made explicit.\n\nTasks and boundaries:\n- F1: Implement capability-based setup for empty and existing projects. A shared setup manager using declared stack decisions and detected actual configuration, with reusable managed tools and clear readiness states.\n- F2: Discover and configure analysis providers through shared adapters. Usable language-independent provider adapters with discovery, configuration and normalized analysis driven by compatible provider metadata and actual capabilities.\n- F3: Verify dynamic provider coverage and mixed-language boundaries. Reproducible provider extensibility and mixed-project coverage, including real configuration requirements, partial support and explicitly unresolved cross-language boundaries.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/agent-plan/src/index.ts:1 — (module)\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n\nAcceptance: Idea → stack discussion → scaffold/configuration → analysis activation works without guessing a language. One shared project configuration resolves compatible providers locally across agents/machines; adding a language to an existing adapter needs provider metadata/configuration rather than a planner-core code change. Unavailable analysis never blocks planning and is never reported as zero references. Real tools from at least two unrelated language families pass the same applicable link/query contract; the selected fixture languages are examples, not a product whitelist. A compatible provider for an additional language can be registered/configured without modifying planner-core language dispatch; stale tool/configuration/source snapshots are rejected or explicitly refreshed. Only verified provider operations are advertised; syntax parsing is not semantic reference resolution, and no provider implies a complete runtime graph or silent refactor continuity. Provider support claims identify exact tested tool/version/configuration and source-area coverage; a language outside the initial fixture set is enabled through the existing adapter contract. A partly supported repository remains usable with per-area and per-operation coverage; a syntax-only provider never advertises semantic usages. Missing providers or build prerequisites yield unknown/incomplete analysis and text/planning fallback, never a false absence of usage or automatic FFI/JNI/service edges.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR07, BR10, BR11, BR13, BR14, BR16.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nShared-runtime extension: P126(F025) extends these provider adapters with revision-aware source access and one compatible multi-consumer analysis runtime. Provider discovery, language extensibility and conformance remain in T473-T475. Monaco does not create another language-server process by default. See .planner/docs/agent-brain-editor-and-project-identity.md.\n\nShared-planner expansion approved 21 October 2026:\nEmpty/non-Git setup resolves planner and source roots independently before any stack/tool inference. The existing extensible provider/capability design remains unchanged; never detect languages from the central planner storage directory or install tools merely because the plan is shared.\nAdditional outcome coverage: BR23. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
+  "descriptionRef": ".planner/docs/agent-brain-plan.md",
+  "descriptionUpdatedAt": "2026-10-21T14:58:51.428Z",
+  "notes": "",
+  "goals": [
+    "Support empty folders and undecided stacks.",
+    "Support an open, provider-driven language set through extensible metadata/configuration and shared adapters, with per-area/per-operation coverage made explicit."
+  ],
+  "nonGoals": [
+    "No universal TypeScript compiler analysis.",
+    "No mandatory installation of Tree-sitter, LSP servers and every SCIP indexer together.",
+    "No closed list of project languages or automatic claim that every tool/provider is discoverable, installable or verified."
+  ],
+  "dependencies": [
+    "P120(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "IDE-installed servers may not be accessible as compatible executables.",
+    "Build flags, classpaths, Cargo features and generated sources change analysis coverage."
+  ],
+  "openQuestions": [
+    "Select extensible provider manifest/registry format, initial tested entries, versions/platform support and preparation/update policy after reproducible probes; fixture languages do not limit product eligibility.",
+    "Validate SCIP ingestion versus native provider APIs; LSP and syntax parsing remain optional complementary capabilities."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Idea → stack discussion → scaffold/configuration → analysis activation works without guessing a language.",
+    "One shared project configuration resolves compatible providers locally across agents/machines; adding a language to an existing adapter needs provider metadata/configuration rather than a planner-core code change.",
+    "Unavailable analysis never blocks planning and is never reported as zero references.",
+    "Real tools from at least two unrelated language families pass the same applicable link/query contract; the selected fixture languages are examples, not a product whitelist.",
+    "A compatible provider for an additional language can be registered/configured without modifying planner-core language dispatch; stale tool/configuration/source snapshots are rejected or explicitly refreshed.",
+    "Only verified provider operations are advertised; syntax parsing is not semantic reference resolution, and no provider implies a complete runtime graph or silent refactor continuity.",
+    "Provider support claims identify exact tested tool/version/configuration and source-area coverage; a language outside the initial fixture set is enabled through the existing adapter contract.",
+    "A partly supported repository remains usable with per-area and per-operation coverage; a syntax-only provider never advertises semantic usages.",
+    "Missing providers or build prerequisites yield unknown/incomplete analysis and text/planning fallback, never a false absence of usage or automatic FFI/JNI/service edges.",
+    "Shared-planner acceptance: Empty/non-Git setup resolves planner and source roots independently before any stack/tool inference. The existing extensible provider/capability design remains unchanged; never detect languages from the central planner storage directory or install tools merely because the plan is shared.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43",
+    "8e90b4cf-6845-4f28-8282-b2861e1cfaf4",
+    "06f9b034-30be-45a3-997e-7dfbf14a00be"
+  ],
+  "tasks": [
+    {
+      "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43",
+      "phaseId": "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+      "number": 473,
+      "shortId": "C993V",
+      "priority": 1,
+      "shortName": "implement-capability-based-set",
+      "title": "Implement capability-based setup for empty and existing projects",
+      "status": "planned",
+      "description": "Outcome: A shared setup manager using declared stack decisions and detected actual configuration, with reusable managed tools and clear readiness states.\n\nExisting state: The current init initializes the planner and setup connects a harness. Neither orchestrates multilingual code-analysis tools.\n\nImplementation responsibility:\n- Keep an empty project in stack-undecided or stack-declared state; allow planning without code.\n- Read technologies/tools and accepted stack decisions, then compare manifests when they exist.\n- Implement an extensible versioned provider catalog and configured-provider entries, match the declared/detected stack, and produce a concrete reuse/preparation/configuration plan with compatibility probes.\n- Separate shared desired configuration, local executable paths/tool caches and per-checkout indexes; do not inject analyzer dependencies into the user application.\n- Select only requested capabilities from compatible providers; preserve planner/text fallback and explain missing prerequisites, unsupported operations and usable results rather than binary presence.\n\nAcceptance and evidence:\n- Idea → stack discussion → scaffold/configuration → analysis activation works without guessing a language.\n- One shared project configuration resolves compatible providers locally across agents/machines; adding a language to an existing adapter needs provider metadata/configuration rather than a planner-core code change.\n- Unavailable analysis never blocks planning and is never reported as zero references.\n\nRead before editing:\n- packages/agent-plan/src/index.ts:1 — (module)\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/plan-server/src/serve.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P120(F025)/T472. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Start from idea/requisites and a declared or undecided stack in an empty folder. Use existing technologies/tools and project decisions; later manifests validate rather than silently choose the stack.\n- The extensible manifest/catalog contract describes provider identity, language selectors/versions, platform, interface, capabilities, prerequisites, preparation and probe diagnostics. Inspect configured tools and registered provider metadata; protocols alone cannot enumerate or install every server/indexer in existence. Never reject a language because it is absent from a core enum.\n- Separate shared desired configuration, local executable/tool caches and per-checkout index state. Avoid injecting analyzer dependencies into the user application.\n- Planning/text/structural/semantic options activate only needed tools. A binary or IDE extension is insufficient: validate actual configuration and results before marking analysis ready.\n- Persist the selected provider and desired capabilities in shared configuration; keep local executable paths and indexes separate. Re-probe after tool/configuration changes. The agent explains and invokes a deterministic setup result instead of inventing installation commands or silently selecting the project language.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nResolve a project binding separately from code workspace and optional stack declaration, including empty/non-Git folders. Existing language/provider choices remain dynamic; moving to a shared plan cannot trigger automatic tool installation or infer a stack from the central storage directory.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:05:01.458Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-001-keep-an-empty-project-in-stack-undecided-or-stack-declared-state-allow-planning-without-code",
+          "number": 1,
+          "title": "Keep an empty project in stack-undecided or stack-declared state; allow planning without code.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-002-read-technologies-tools-and-accepted-stack-decisions-then-compare-manifests-when-they-exist",
+          "number": 2,
+          "title": "Read technologies/tools and accepted stack decisions, then compare manifests when they exist.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-003-implement-an-extensible-versioned-provider-catalog-and-configured-provider-entries-match-the-declared-detected-stack-and-produce-a-concrete-reuse-preparation-configuration-plan-with-compatibility-probes",
+          "number": 3,
+          "title": "Implement an extensible versioned provider catalog and configured-provider entries, match the declared/detected stack, and produce a concrete reuse/preparation/configuration plan with compatibility probes.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-004-separate-shared-desired-configuration-local-executable-paths-tool-caches-and-per-checkout-indexes-do-not-inject-analyzer-dependencies-into-the-user-application",
+          "number": 4,
+          "title": "Separate shared desired configuration, local executable paths/tool caches and per-checkout indexes; do not inject analyzer dependencies into the user application.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-005-select-only-requested-capabilities-from-compatible-providers-preserve-planner-text-fallback-and-explain-missing-prerequisites-unsupported-operations-and-usable-results-rather-than-binary-presence",
+          "number": 5,
+          "title": "Select only requested capabilities from compatible providers; preserve planner/text fallback and explain missing prerequisites, unsupported operations and usable results rather than binary presence.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-006-verify-idea-stack-discussion-scaffold-configuration-analysis-activation-works-without-guessing-a-language",
+          "number": 6,
+          "title": "Verify: Idea → stack discussion → scaffold/configuration → analysis activation works without guessing a language.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-007-verify-one-shared-project-configuration-resolves-compatible-providers-locally-across-agents-machines-adding-a-language-to-an-existing-adapter-needs-provider-metadata-configuration-rather-than-a-planner-core-code-change",
+          "number": 7,
+          "title": "Verify: One shared project configuration resolves compatible providers locally across agents/machines; adding a language to an existing adapter needs provider metadata/configuration rather than a planner-core code change.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-008-verify-unavailable-analysis-never-blocks-planning-and-is-never-reported-as-zero-references",
+          "number": 8,
+          "title": "Verify: Unavailable analysis never blocks planning and is never reported as zero references.",
+          "checked": false
+        },
+        {
+          "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43-check-009-verify-empty-folder-non-git-setup-and-explicit-worktree-binding-before-provider-discovery",
+          "number": 9,
+          "title": "Verify empty-folder/non-Git setup and explicit worktree binding before provider discovery.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "f799ee62-6e04-4d08-aceb-3894230940c6"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:19.295Z",
+      "updatedAt": "2026-10-21T10:05:01.800Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4",
+      "phaseId": "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+      "number": 474,
+      "shortId": "4LDQW",
+      "priority": 2,
+      "shortName": "implement-and-verify-rust-and",
+      "title": "Discover and configure analysis providers through shared adapters",
+      "status": "planned",
+      "description": "Outcome: Usable language-independent provider adapters with discovery, configuration and normalized analysis driven by compatible provider metadata and actual capabilities.\n\nExisting state: The previous TypeScript anchor proof is local historical evidence only. SCIP needs a language-aware indexer, LSP a compatible server, and syntax parsing a grammar; none provides universal language discovery or semantic coverage.\n\nImplementation responsibility:\n- Implement provider lifecycle, cancellation, diagnostics, capability negotiation and source/configuration fingerprints behind a shared adapter contract.\n- Implement compatible SCIP ingestion, LSP queries and optional syntax integration as separate capabilities selected through provider manifests/configuration; do not hardcode a language whitelist in core.\n- Normalize origin/version/root, snapshot, coordinate encoding, definitions, occurrences and available relationships without assuming universal stable symbol IDs.\n- Resolve a newly configured compatible provider using its metadata and effective workspace/build configuration; verify useful source-backed results before activation.\n- Report unsupported operations, incomplete/dynamic/generated/external coverage and configuration failures explicitly; a new protocol can require an adapter but a new language on an existing adapter does not require core changes.\n\nAcceptance and evidence:\n- Real tools from at least two unrelated language families pass the same applicable link/query contract; the selected fixture languages are examples, not a product whitelist.\n- A compatible provider for an additional language can be registered/configured without modifying planner-core language dispatch; stale tool/configuration/source snapshots are rejected or explicitly refreshed.\n- Only verified provider operations are advertised; syntax parsing is not semantic reference resolution, and no provider implies a complete runtime graph or silent refactor continuity.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/plan-server/src/serve.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nPlan dependencies: F1. Product requirement coverage: BR07, BR10, BR11, BR13, BR14, BR16. Supporting design: .planner/docs/agent-brain-plan.md.\n\nDetailed discussion contract:\n- Discovery uses extensible registered manifests plus configured compatible tools and probe results. Each entry declares languages/versions, interface, capabilities and prerequisites; the catalog is data, not an exhaustive language enum compiled into the planner domain.\n- Separate adapters for index ingestion, live queries and syntax normalize common evidence while retaining their different capabilities. An LSP executable or SCIP file is not proof of every operation being available.\n- Persist provider/configuration/snapshot provenance and coordinate encoding with results. A TypeScript host can invoke a provider for any compatible language; its compiler does not analyze that language.\n- A fixture must add a language/provider entry after initial setup using the existing adapter contract and obtain real results without changing core. Unknown metadata/protocol and missing prerequisites yield explicit diagnostics rather than invented preparation commands.\n- The earlier 11-case TypeScript proof is historical local evidence only and does not certify this provider contract or other languages.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nMonaco/shared-runtime integration: P126(F025)/T485 owns one compatible analysis runtime serving editor and agent consumers, including cross-process startup, broker-owned LSP initialization, document revisions and lifecycle. This task retains provider/adaptor ownership and must expose the capabilities and versioned query contracts that the broker reuses. The editor does not imply a second provider process. See .planner/docs/agent-brain-editor-and-project-identity.md.",
+      "descriptionUpdatedAt": "2026-10-21T09:26:53.495Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-001-implement-provider-lifecycle-cancellation-diagnostics-capability-negotiation-and-source-configuration-fingerprints-behind-a-shared-adapter-contract",
+          "number": 1,
+          "title": "Implement provider lifecycle, cancellation, diagnostics, capability negotiation and source/configuration fingerprints behind a shared adapter contract.",
+          "checked": false
+        },
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-002-implement-compatible-scip-ingestion-lsp-queries-and-optional-syntax-integration-as-separate-capabilities-selected-through-provider-manifests-configuration-do-not-hardcode-a-language-whitelist-in-core",
+          "number": 2,
+          "title": "Implement compatible SCIP ingestion, LSP queries and optional syntax integration as separate capabilities selected through provider manifests/configuration; do not hardcode a language whitelist in core.",
+          "checked": false
+        },
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-003-normalize-origin-version-root-snapshot-coordinate-encoding-definitions-occurrences-and-available-relationships-without-assuming-universal-stable-symbol-ids",
+          "number": 3,
+          "title": "Normalize origin/version/root, snapshot, coordinate encoding, definitions, occurrences and available relationships without assuming universal stable symbol IDs.",
+          "checked": false
+        },
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-004-resolve-a-newly-configured-compatible-provider-using-its-metadata-and-effective-workspace-build-configuration-verify-useful-source-backed-results-before-activation",
+          "number": 4,
+          "title": "Resolve a newly configured compatible provider using its metadata and effective workspace/build configuration; verify useful source-backed results before activation.",
+          "checked": false
+        },
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-005-report-unsupported-operations-incomplete-dynamic-generated-external-coverage-and-configuration-failures-explicitly-a-new-protocol-can-require-an-adapter-but-a-new-language-on-an-existing-adapter-does-not-require-core-changes",
+          "number": 5,
+          "title": "Report unsupported operations, incomplete/dynamic/generated/external coverage and configuration failures explicitly; a new protocol can require an adapter but a new language on an existing adapter does not require core changes.",
+          "checked": false
+        },
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-006-verify-real-tools-from-at-least-two-unrelated-language-families-pass-the-same-applicable-link-query-contract-the-selected-fixture-languages-are-examples-not-a-product-whitelist",
+          "number": 6,
+          "title": "Verify: Real tools from at least two unrelated language families pass the same applicable link/query contract; the selected fixture languages are examples, not a product whitelist.",
+          "checked": false
+        },
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-007-verify-a-compatible-provider-for-an-additional-language-can-be-registered-configured-without-modifying-planner-core-language-dispatch-stale-tool-configuration-source-snapshots-are-rejected-or-explicitly-refreshed",
+          "number": 7,
+          "title": "Verify: A compatible provider for an additional language can be registered/configured without modifying planner-core language dispatch; stale tool/configuration/source snapshots are rejected or explicitly refreshed.",
+          "checked": false
+        },
+        {
+          "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4-check-008-verify-only-verified-provider-operations-are-advertised-syntax-parsing-is-not-semantic-reference-resolution-and-no-provider-implies-a-complete-runtime-graph-or-silent-refactor-continuity",
+          "number": 8,
+          "title": "Verify: Only verified provider operations are advertised; syntax parsing is not semantic reference resolution, and no provider implies a complete runtime graph or silent refactor continuity.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:20.060Z",
+      "updatedAt": "2026-10-21T09:26:53.492Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "06f9b034-30be-45a3-997e-7dfbf14a00be",
+      "phaseId": "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+      "number": 475,
+      "shortId": "SB86G",
+      "priority": 3,
+      "shortName": "add-c-c-and-java-providers-and",
+      "title": "Verify dynamic provider coverage and mixed-language boundaries",
+      "status": "planned",
+      "description": "Outcome: Reproducible provider extensibility and mixed-project coverage, including real configuration requirements, partial support and explicitly unresolved cross-language boundaries.\n\nExisting state: Available operations depend on provider, version and actual project/build configuration. Combining separate language indexes does not establish cross-language runtime relationships.\n\nImplementation responsibility:\n- Build diverse real fixture projects chosen by available compatible tools and demonstrate a further language enabled through metadata/configuration rather than planner-core changes.\n- Verify provider-specific workspace/build prerequisites, such as compile commands/includes/defines, classpath/JDK or target/features/macros, only where applicable; named languages are examples.\n- Exercise absent tools, incompatible versions, missing configuration, unsupported operations and mixed supported/unsupported source areas.\n- Keep FFI, JNI, generated-code and network relations declared or inferred with provenance rather than asserting that separate indexes prove those edges.\n- Verify capability-specific fallback, configuration/tool changes, local reuse and useful diagnostics on the actual tested platforms; document the evidence instead of claiming all catalog entries have been tested.\n\nAcceptance and evidence:\n- Provider support claims identify exact tested tool/version/configuration and source-area coverage; a language outside the initial fixture set is enabled through the existing adapter contract.\n- A partly supported repository remains usable with per-area and per-operation coverage; a syntax-only provider never advertises semantic usages.\n- Missing providers or build prerequisites yield unknown/incomplete analysis and text/planning fallback, never a false absence of usage or automatic FFI/JNI/service edges.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/plan-server/src/serve.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nPlan dependencies: F2. Product requirement coverage: BR07, BR10, BR11, BR13, BR14, BR16. Supporting design: .planner/docs/agent-brain-plan.md.\n\nDetailed discussion contract:\n- Validate provider configuration and usable output rather than executable presence. Rust, Java, C/C++, JavaScript, TypeScript and other languages are illustrative fixtures, not a closed rollout sequence or whitelist.\n- Use real tools from unrelated families and an extension fixture for a newly configured language. Capture normalized definitions/references only when supplied; record structural-only or unavailable capabilities separately.\n- Use separate providers for mixed source areas and retain per-area/per-operation coverage. Combining graphs does not create FFI/JNI/network/generated-code edges.\n- Unsupported or incomplete analysis retains planning/text retrieval and explicit source links. Agent-proposed relationships are labeled inference, not compiler-resolved facts. Adding a genuinely new protocol adapter is distinct from configuring another language on an existing adapter.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.",
+      "descriptionUpdatedAt": "2026-10-21T08:31:14.373Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-001-build-diverse-real-fixture-projects-chosen-by-available-compatible-tools-and-demonstrate-a-further-language-enabled-through-metadata-configuration-rather-than-planner-core-changes",
+          "number": 1,
+          "title": "Build diverse real fixture projects chosen by available compatible tools and demonstrate a further language enabled through metadata/configuration rather than planner-core changes.",
+          "checked": false
+        },
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-002-verify-provider-specific-workspace-build-prerequisites-such-as-compile-commands-includes-defines-classpath-jdk-or-target-features-macros-only-where-applicable-named-languages-are-examples",
+          "number": 2,
+          "title": "Verify provider-specific workspace/build prerequisites, such as compile commands/includes/defines, classpath/JDK or target/features/macros, only where applicable; named languages are examples.",
+          "checked": false
+        },
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-003-exercise-absent-tools-incompatible-versions-missing-configuration-unsupported-operations-and-mixed-supported-unsupported-source-areas",
+          "number": 3,
+          "title": "Exercise absent tools, incompatible versions, missing configuration, unsupported operations and mixed supported/unsupported source areas.",
+          "checked": false
+        },
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-004-keep-ffi-jni-generated-code-and-network-relations-declared-or-inferred-with-provenance-rather-than-asserting-that-separate-indexes-prove-those-edges",
+          "number": 4,
+          "title": "Keep FFI, JNI, generated-code and network relations declared or inferred with provenance rather than asserting that separate indexes prove those edges.",
+          "checked": false
+        },
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-005-verify-capability-specific-fallback-configuration-tool-changes-local-reuse-and-useful-diagnostics-on-the-actual-tested-platforms-document-the-evidence-instead-of-claiming-all-catalog-entries-have-been-tested",
+          "number": 5,
+          "title": "Verify capability-specific fallback, configuration/tool changes, local reuse and useful diagnostics on the actual tested platforms; document the evidence instead of claiming all catalog entries have been tested.",
+          "checked": false
+        },
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-006-verify-provider-support-claims-identify-exact-tested-tool-version-configuration-and-source-area-coverage-a-language-outside-the-initial-fixture-set-is-enabled-through-the-existing-adapter-contract",
+          "number": 6,
+          "title": "Verify: Provider support claims identify exact tested tool/version/configuration and source-area coverage; a language outside the initial fixture set is enabled through the existing adapter contract.",
+          "checked": false
+        },
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-007-verify-a-partly-supported-repository-remains-usable-with-per-area-and-per-operation-coverage-a-syntax-only-provider-never-advertises-semantic-usages",
+          "number": 7,
+          "title": "Verify: A partly supported repository remains usable with per-area and per-operation coverage; a syntax-only provider never advertises semantic usages.",
+          "checked": false
+        },
+        {
+          "id": "06f9b034-30be-45a3-997e-7dfbf14a00be-check-008-verify-missing-providers-or-build-prerequisites-yield-unknown-incomplete-analysis-and-text-planning-fallback-never-a-false-absence-of-usage-or-automatic-ffi-jni-service-edges",
+          "number": 8,
+          "title": "Verify: Missing providers or build prerequisites yield unknown/incomplete analysis and text/planning fallback, never a false absence of usage or automatic FFI/JNI/service edges.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "8e90b4cf-6845-4f28-8282-b2861e1cfaf4"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:21.019Z",
+      "updatedAt": "2026-10-21T08:31:14.371Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T16:40:35.597Z",
+  "updatedAt": "2026-10-21T14:58:51.428Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "1b7990bc-df05-4124-9d20-ea714161f319",
+      "date": "2026-10-21T08:31:13.752Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

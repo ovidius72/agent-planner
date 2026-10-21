@@ -1,0 +1,361 @@
+{
+  "id": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 128,
+  "shortId": "FK645",
+  "priority": 1,
+  "slug": "shared-planner-authority-and-workspace-isolation",
+  "title": "Shared planner authority and workspace isolation",
+  "discussedAt": "2026-10-21T10:04:02.613Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Give every local worktree one planner authority and an explicit independent code/runtime binding.",
+  "description": "Give every local worktree one planner authority and an explicit independent code/runtime binding.\n\nCurrent state: MCP, Pi and CLI default to cwd/.planner. PlanStore already discovers git-common-dir for allocation only; serve.ts derives code root with dirname(store.root). PlanStore.localRoot also houses focus, resumes and session data.\n\nGoals:\n- Separate canonical plan identity from workspace/source and caller runtime identity.\n- Reuse one coordinated local authority across all supported harnesses.\n\nResponsibilities:\n- P128(F025)/T489: Separate planner storage, code workspace and runtime identities. One harness-agnostic resolved binding identifies the canonical plan independently of the selected code checkout and caller runtime.\n- P128(F025)/T490: Route all clients through one coordinated local planner authority. Supported MCP, Pi, CLI, server and Web UI consumers use the same local planner authority while keeping code and caller state correctly scoped.\n\nBoundaries:\n- No product migration or automatic Git action during planning registration.\n- No mandatory cloud service, database or language-specific setup.\n\nRisks:\n- Blindly centralizing .local would mix focus, returns and source caches.\n- A branch/path locator can change and must not become durable identity.\n\nAcceptance:\n- Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.\n- Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.\n- Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.\n- Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.\n- Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.\n- Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.\n\nRead before editing:\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n- packages/plan-mcp/src/index.ts:118 — planRoot / AGENT_PLAN_ROOT\n- packages/pi-adapter/src/index.ts:275 — planRootForCwd / resolvePlanRoot / ensureStore\n- packages/agent-plan/src/index.ts:124 — plannerRoot\n- packages/plan-server/src/serve.ts:258 — GET /project derives projectRoot from dirname(store.root)\n- packages/plan-core/src/write-coordination.ts:95 — writer lock path and transaction coordination\n\nDependencies: P116(F025). Requirements: BR22, BR23, BR03, BR04, BR10, BR16, BR20. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.\n\nSource positions above are dated navigation evidence from 21 October 2026, not permanent anchors; revalidate against the current checkout.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Foundational task order is T489 (identity), T496 (impact/reconciliation), then T490 (shared authority); T490 reuses T496 primitives. T496 is stable execution task identity moved from its initial draft placement, not a recreated task.\n\nPrerequisite reconciliation: Current prerequisite contract: T489 -> T496 -> T490; T490 also retains its direct T489 dependency. The shared authority consumes the impact primitives rather than requiring a later standards phase.",
+  "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
+  "descriptionUpdatedAt": "2026-10-21T15:00:46.057Z",
+  "notes": "",
+  "goals": [
+    "Separate canonical plan identity from workspace/source and caller runtime identity.",
+    "Reuse one coordinated local authority across all supported harnesses."
+  ],
+  "nonGoals": [
+    "No product migration or automatic Git action during planning registration.",
+    "No mandatory cloud service, database or language-specific setup."
+  ],
+  "dependencies": [
+    "P116(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Blindly centralizing .local would mix focus, returns and source caches.",
+    "A branch/path locator can change and must not become durable identity."
+  ],
+  "openQuestions": [
+    "Choose compatible local discovery/transport and binding versioning after inspecting existing transaction/server precedents."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.",
+    "Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.",
+    "Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.",
+    "Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.",
+    "Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.",
+    "Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4",
+    "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f",
+    "e1111601-64ad-49d5-9805-df48e9dd4b70"
+  ],
+  "tasks": [
+    {
+      "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4",
+      "phaseId": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+      "number": 489,
+      "shortId": "BAF48",
+      "priority": 1,
+      "shortName": "separate-planner-storage-code",
+      "title": "Separate planner storage, code workspace and runtime identities",
+      "status": "planned",
+      "description": "Outcome: One harness-agnostic resolved binding identifies the canonical plan independently of the selected code checkout and caller runtime.\n\nExisting state: MCP, Pi and CLI default to cwd/.planner. PlanStore already discovers git-common-dir for allocation only; serve.ts derives code root with dirname(store.root). PlanStore.localRoot also houses focus, resumes and session data.\n\nImplementation responsibility:\n- Define projectId, repository-instance identity, stable workspaceId, current path and source revision/dirty identity; paths and branch names are mutable locators, not durable execution identities.\n- Define explicit planRoot, workspaceRoot and runtimeRoot and a shared resolver. For local worktrees discover the same git-common-dir/projectId authority; support explicit standalone/non-Git roots and empty folders without guessing a language.\n- Define a descriptor/binding format, precedence for explicit overrides, compatibility/version diagnostics and repository containment. Do not infer workspaceRoot from the planner directory or follow a binding to an unrelated repository silently.\n- Inventory every PlanStore/root consumer and classify shared canonical knowledge, shared coordination, workspace-scoped caches and caller-scoped focus/read/return state; define move/delete/re-register and clone boundaries.\n\nAcceptance and evidence:\n- Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.\n- Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.\n- Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.\n\nRead before editing:\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n- packages/plan-mcp/src/index.ts:118 — planRoot / AGENT_PLAN_ROOT\n- packages/pi-adapter/src/index.ts:275 — planRootForCwd / resolvePlanRoot / ensureStore\n- packages/agent-plan/src/index.ts:124 — plannerRoot\n- packages/plan-server/src/serve.ts:258 — GET /project derives projectRoot from dirname(store.root)\n- packages/plan-core/docs/runtime-boundaries.md:1 — current versioned plan and worktree-local runtime policy\n\nDetailed discussion contract:\n- The intended local default is <git-common-dir>/agent-plan/<projectId>/ with canonical plan, coordination, workspace runtime and history areas. Exact filenames and transport are implementation choices; the independent identities and one authority are binding decisions.\n- git-common-dir is shared by worktrees of one local clone. An independent clone or another machine does not inherit these custom files through git push/clone. An explicit service/synchronization boundary may support those later; do not promise it implicitly.\n- The public descriptor must be safely inspectable without leaking unnecessary local paths into portable exports. Do not edit AGENTS.md as an incidental architecture task.\n\nExecution dependencies: P116(F025)/T462. Requirement aliases: BR22, BR23, BR10, BR16. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.",
+      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
+      "descriptionUpdatedAt": "2026-10-21T10:04:01.485Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "number": 1,
+          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "checked": false
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-002-define-projectid-repository-instance-identity-stable-workspaceid-current-path-and-source-revision-dirty-identity-paths-and-branch-names-are-mutable-locators-not-durable-execution-identities",
+          "number": 2,
+          "title": "Define projectId, repository-instance identity, stable workspaceId, current path and source revision/dirty identity; paths and branch names are mutable locators, not durable execution identities.",
+          "checked": false
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-003-define-explicit-planroot-workspaceroot-and-runtimeroot-and-a-shared-resolver-for-local-worktrees-discover-the-same-git-common-dir-projectid-authority-support-explicit-standalone-non-git-roots-and-empty-folders-without-guessing-a-language",
+          "number": 3,
+          "title": "Define explicit planRoot, workspaceRoot and runtimeRoot and a shared resolver. For local worktrees discover the same git-common-dir/projectId authority; support explicit standalone/non-Git roots and empty folders without guessing a language.",
+          "checked": false
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-004-define-a-descriptor-binding-format-precedence-for-explicit-overrides-compatibility-version-diagnostics-and-repository-containment-do-not-infer-workspaceroot-from-the-planner-directory-or-follow-a-binding-to-an-unrelated-repository-silently",
+          "number": 4,
+          "title": "Define a descriptor/binding format, precedence for explicit overrides, compatibility/version diagnostics and repository containment. Do not infer workspaceRoot from the planner directory or follow a binding to an unrelated repository silently.",
+          "checked": false
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-005-inventory-every-planstore-root-consumer-and-classify-shared-canonical-knowledge-shared-coordination-workspace-scoped-caches-and-caller-scoped-focus-read-return-state-define-move-delete-re-register-and-clone-boundaries",
+          "number": 5,
+          "title": "Inventory every PlanStore/root consumer and classify shared canonical knowledge, shared coordination, workspace-scoped caches and caller-scoped focus/read/return state; define move/delete/re-register and clone boundaries.",
+          "checked": false
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-006-verify-on-isolated-mkdtemp-fixtures-two-local-worktrees-resolve-one-project-planner-and-distinct-code-runtime-contexts-standalone-initialization-remains-usable",
+          "number": 6,
+          "title": "Verify on isolated mkdtemp fixtures: Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.",
+          "checked": false
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-007-verify-on-isolated-mkdtemp-fixtures-moving-a-worktree-or-renaming-a-branch-preserves-stable-identity-and-history-missing-deleted-paths-give-explicit-unavailability",
+          "number": 7,
+          "title": "Verify on isolated mkdtemp fixtures: Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.",
+          "checked": false
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-008-verify-on-isolated-mkdtemp-fixtures-nested-repositories-submodules-and-foreign-overrides-cannot-silently-mix-source-provenance-no-language-provider-installation-is-required-for-planning",
+          "number": 8,
+          "title": "Verify on isolated mkdtemp fixtures: Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "f4ac8204-3e0c-429d-9354-4c75061d7600"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T10:03:10.913Z",
+      "updatedAt": "2026-10-21T10:04:01.880Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f",
+      "phaseId": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+      "number": 490,
+      "shortId": "VPWAV",
+      "priority": 3,
+      "shortName": "route-all-clients-through-one",
+      "title": "Route all clients through one coordinated local planner authority",
+      "status": "planned",
+      "description": "Outcome: Supported MCP, Pi, CLI, server and Web UI consumers use the same local planner authority while keeping code and caller state correctly scoped.\n\nExisting state: Each host can construct its own PlanStore and per-root writer lock. Existing claims/recovery protect a task only when callers reach the same physical state; server-record discovery is advisory rather than atomic startup exclusion.\n\nImplementation responsibility:\n- Implement the resolved binding from M1 and the shared authority/service lifecycle, including atomic startup ownership, compatible discovery, reconnect and typed dead/incompatible/unavailable outcomes.\n- Reuse existing transactions and atomic claims; serialize conflicting operations with expected entity revisions, idempotency keys and actor/execution provenance. Independent code work remains parallel; a slow/dead client cannot leave an indefinite write lock.\n- Keep global task claims and coordinator ownership shared, but namespace focus, return chains, read/context evidence, source indexes and analysis caches by their explicit workspace/session/revision keys.\n- Update all host entry points and source-root consumers, including GET /project; normal planner operations must not fall back to silently creating a fresh cwd/.planner when the bound authority is unavailable.\n- Expose stable domain/service APIs and events for later source and provider brokers. K2 still owns language-server lifecycle and document overlays; sharing planner authority must not launch the dashboard or duplicate the provider broker.\n\nAcceptance and evidence:\n- Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.\n- Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.\n- Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.\n\nRead before editing:\n- packages/plan-core/src/write-coordination.ts:95 — writer lock path and transaction coordination\n- packages/plan-core/src/plan-store.ts:3493 — registerSession / claimTask / recoverSessionForTask\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n- packages/plan-server/src/server-record.ts:1 — advisory server discovery record\n- packages/plan-mcp/src/index.ts:118 — planRoot / AGENT_PLAN_ROOT\n- packages/pi-adapter/src/index.ts:275 — planRootForCwd / resolvePlanRoot / ensureStore\n- packages/agent-plan/src/index.ts:124 — plannerRoot\n- packages/plan-server/src/serve.ts:258 — GET /project derives projectRoot from dirname(store.root)\n\nDetailed discussion contract:\n- Use a single coordination boundary for planner mutations, with short operation-scoped locks and a recoverable owner. JSON may remain the durable format; this decision does not mandate a database, event-sourcing framework or cloud service.\n- A public read must not claim that an arbitrary stored attestation proves the model retained context. Shared storage does not make caller context interchangeable.\n- A .planner symlink or AGENT_PLAN_ROOT override alone cannot meet this task: source-root inference, runtime scoping, startup races, incompatible clients and failures must be handled.\n\nExecution dependencies: P128(F025)/T489, P128(F025)/T496. Requirement coverage and earlier responsibilities are preserved.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nShared mutations carry M3 affected-revision and reconciliation receipts; coordinate compact indexed impact calculation with existing transactions. Bounded metadata serialization must not become repeated full-plan reads/writes or leak caller context.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
+      "descriptionUpdatedAt": "2026-10-21T14:59:41.574Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "number": 1,
+          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-002-implement-the-resolved-binding-from-m1-and-the-shared-authority-service-lifecycle-including-atomic-startup-ownership-compatible-discovery-reconnect-and-typed-dead-incompatible-unavailable-outcomes",
+          "number": 2,
+          "title": "Implement the resolved binding from M1 and the shared authority/service lifecycle, including atomic startup ownership, compatible discovery, reconnect and typed dead/incompatible/unavailable outcomes.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-003-reuse-existing-transactions-and-atomic-claims-serialize-conflicting-operations-with-expected-entity-revisions-idempotency-keys-and-actor-execution-provenance-independent-code-work-remains-parallel-a-slow-dead-client-cannot-leave-an-indefinite-write-lock",
+          "number": 3,
+          "title": "Reuse existing transactions and atomic claims; serialize conflicting operations with expected entity revisions, idempotency keys and actor/execution provenance. Independent code work remains parallel; a slow/dead client cannot leave an indefinite write lock.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-004-keep-global-task-claims-and-coordinator-ownership-shared-but-namespace-focus-return-chains-read-context-evidence-source-indexes-and-analysis-caches-by-their-explicit-workspace-session-revision-keys",
+          "number": 4,
+          "title": "Keep global task claims and coordinator ownership shared, but namespace focus, return chains, read/context evidence, source indexes and analysis caches by their explicit workspace/session/revision keys.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-005-update-all-host-entry-points-and-source-root-consumers-including-get-project-normal-planner-operations-must-not-fall-back-to-silently-creating-a-fresh-cwd-planner-when-the-bound-authority-is-unavailable",
+          "number": 5,
+          "title": "Update all host entry points and source-root consumers, including GET /project; normal planner operations must not fall back to silently creating a fresh cwd/.planner when the bound authority is unavailable.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-006-expose-stable-domain-service-apis-and-events-for-later-source-and-provider-brokers-k2-still-owns-language-server-lifecycle-and-document-overlays-sharing-planner-authority-must-not-launch-the-dashboard-or-duplicate-the-provider-broker",
+          "number": 6,
+          "title": "Expose stable domain/service APIs and events for later source and provider brokers. K2 still owns language-server lifecycle and document overlays; sharing planner authority must not launch the dashboard or duplicate the provider broker.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-007-verify-on-isolated-mkdtemp-fixtures-concurrent-supported-host-processes-observe-the-same-task-decision-changes-and-cannot-both-successfully-claim-one-task",
+          "number": 7,
+          "title": "Verify on isolated mkdtemp fixtures: Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-008-verify-on-isolated-mkdtemp-fixtures-separate-worktrees-retain-independent-focus-resumes-and-source-caches-crash-restart-does-not-transfer-a-live-foreign-claim-or-discard-pending-returns",
+          "number": 8,
+          "title": "Verify on isolated mkdtemp fixtures: Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-009-verify-on-isolated-mkdtemp-fixtures-stale-revisions-repeated-requests-incompatible-clients-and-unavailable-authority-return-explicit-non-success-without-duplicate-writes-or-parallel-planners",
+          "number": 9,
+          "title": "Verify on isolated mkdtemp fixtures: Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.",
+          "checked": false
+        },
+        {
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-010-verify-shared-authority-mutation-receipts-and-scoped-invalidation-without-whole-plan-agent-payloads",
+          "number": 10,
+          "title": "Verify shared authority mutation receipts and scoped invalidation without whole-plan agent payloads.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4",
+        "e1111601-64ad-49d5-9805-df48e9dd4b70"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T10:03:11.170Z",
+      "updatedAt": "2026-10-21T14:59:41.571Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "e1111601-64ad-49d5-9805-df48e9dd4b70",
+      "phaseId": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+      "number": 496,
+      "shortId": "M6ZCH",
+      "priority": 2,
+      "shortName": "reconcile-affected-hierarchy-a",
+      "title": "Reconcile affected hierarchy and dependencies with bounded context cost",
+      "status": "planned",
+      "description": "Outcome: Every planner mutation keeps affected hierarchy and dependency context consistent through one explicit postcondition protocol, with measured bounded agent-context cost.\n\nExisting state: packages/plan-core/src/description-freshness.ts:94 computes timestamp-based phase/feature prose freshness; it does not cover project prose, dependency-impact semantics or an enforced mutation/reconciliation lifecycle. packages/plan-core/planner-skill.md:131 already tells agents to reconcile parents, but the user reports it is not reliably followed. PlanStore.runBatch at packages/plan-core/src/plan-store.ts:1077 and write coordination are existing extension points; do not recreate a parallel planner.\n\nImplementation responsibility:\n- Extend the existing description-freshness, transaction and rule/skill contracts; classify each create/update/move/status/priority/dependency/requirement/decision change by actual semantic impact, not generic updatedAt.\n- Compute a bounded affected set from maintained parent/reverse-dependency/link indexes: owning phase/feature/project, old and new parents on moves, incoming/outgoing dependencies and affected readiness/context projections. Do not scan or reload unrelated project content on every write.\n- Recompute structural relations and derived rollups within the coordinated mutation; reject dangling references, parent mismatches and dependency cycles with typed diagnostics, without inventing dependencies or cascading task-status changes.\n- Assess parent prose and linked/dependent descriptions against changed facts. Apply a minimal factual update through the canonical owner only where necessary; preserve decisions, rationale, user prose and unrelated content. Otherwise record a version-bound no-change-needed assessment, not a cosmetic rewrite.\n- Return a compact change-impact receipt containing changed IDs/revisions, relevant before/after facts, affected parents/dependencies and reconciliation outcomes. If semantic review needs an agent/user, persist a durable bounded obligation and return reconciliation_required; do not claim the full operation is reconciled merely because the leaf write persisted.\n- Provide expected-revision/idempotent reconcile operations and paginated impact continuation. Concurrent changes invalidate stale assessments, interrupted clients resume obligations, and phase/feature closeout verifies required reconciliation or an explicit recorded unresolved blocker.\n- Expose the same domain postconditions through supported MCP/Pi/CLI/server/UI surfaces and D2 portable skills; normal reads are non-mutating, no-task behavior remains warning-only, and a missing agent hook cannot be advertised as enforced interception.\n- Measure A2-defined per-flow payload/token and tool-call budgets using fixed fixtures. Reuse already delivered unchanged mandatory context, return affected deltas by default and request full content only on cache/context loss or explicit drill-down; large impact uses bounded continuation without hiding required context.\n\nAcceptance and evidence:\n- Creating/updating/moving a task or changing an edge leaves all affected structural parents/dependencies consistent, with a factual prose update or explicit revision-bound reviewed-unchanged/pending result.\n- Task -> phase -> feature -> project scope changes reconcile only affected meaning; a new task cannot silently leave contradictory parent descriptions. Edge removal, cross-phase links, deletion/move and concurrent edits are covered.\n- A local mutation has bounded incremental response/tool overhead independent of unrelated plan growth; high-fan-out changes paginate explicitly and cached no-op operations do not reload full ancestors/graph.\n- Required rules/requirements/decisions remain available after compaction or workspace change; token economy never relies on a stored timestamp as proof of effective model context or silently drops mandatory content.\n\nDetailed contract: structural updates and semantic review are distinct. A write may be persisted while reconciliation remains required; the response must say so and preserve the obligation. Do not blindly rewrite every ancestor, auto-change Accepted Decisions, infer new work dependencies from graph/code links or block unrelated tasks for a local edit. Assess old/new parents and both directions of actual dependency effects. A reviewed-unchanged receipt must name the source/parent revisions and cannot be satisfied by merely touching a timestamp. The no-task guard remains warning-only; this is a planner consistency postcondition, not a newly authorized source-write denial policy.\n\nOwnership: this task owns mutation-impact and reconciliation contracts. G3 reuses them for source/context freshness; B1 consumes updated readiness; C2 owns context delivery/reuse; D2 owns portable skill distribution; I1/I2 own complete and fresh-installed closeout. Exact field/tool names and numeric per-flow budgets are selected from measured A2 baselines, not fabricated promises. All F025 improvements, including shared planner, graph and editor, must meet the common bounded-cost contract.\n\nRead before editing: packages/plan-core/src/description-freshness.ts:94; packages/plan-core/src/plan-store.ts:1036; packages/plan-core/src/write-coordination.ts:95; packages/plan-core/src/planner-rules.ts:20; packages/plan-core/planner-skill.md:131; packages/plan-core/src/api-v1.ts:343. These are dated navigation entry points inspected on 21 October 2026, never durable code identities; revalidate current sources and hashes in the handoff.\n\nDependencies: P128(F025)/T489. Requirement aliases: BR28, BR29, BR02, BR04, BR06, BR14, BR16. Full approved contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Preserve canonical IDs, derived statuses, phase handoffs, single-owner decisions, source/runtime isolation, global priority and existing project Guidelines. Use this checklist rather than new tasks per implementation step. Planning only; no product implementation or Git action is authorized here.",
+      "descriptionRef": ".planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md",
+      "descriptionUpdatedAt": "2026-10-21T14:57:53.244Z",
+      "notes": "",
+      "statusLog": [
+        {
+          "id": "4fcdd2a7-aa2b-497d-aa11-78e513449243",
+          "date": "2026-10-21T14:57:47.277Z",
+          "fromStatus": "planned",
+          "toStatus": "planned",
+          "title": "moved P119(F025)/T496 → P128(F025)/T496",
+          "description": "Moved from P119(F025)/T496 to P128(F025)/T496; status unchanged."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-001-inspect-existing-freshness-transaction-rule-precedents-and-record-applicable-guidelines",
+          "number": 1,
+          "title": "Inspect existing freshness/transaction/rule precedents and record applicable Guidelines.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-002-extend-the-existing-description-freshness-transaction-and-rule-skill-contracts-classify-each-create-update-move-status-priority-dependency-requirement-decision-change-by-actual-semantic-impact-not-generic-updatedat",
+          "number": 2,
+          "title": "Extend the existing description-freshness, transaction and rule/skill contracts; classify each create/update/move/status/priority/dependency/requirement/decision change by actual semantic impact, not generic updatedAt.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-003-compute-a-bounded-affected-set-from-maintained-parent-reverse-dependency-link-indexes-owning-phase-feature-project-old-and-new-parents-on-moves-incoming-outgoing-dependencies-and-affected-readiness-context-projections-do-not-scan-or-reload-unrelated-project-content-on-every-write",
+          "number": 3,
+          "title": "Compute a bounded affected set from maintained parent/reverse-dependency/link indexes: owning phase/feature/project, old and new parents on moves, incoming/outgoing dependencies and affected readiness/context projections. Do not scan or reload unrelated project content on every write.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-004-recompute-structural-relations-and-derived-rollups-within-the-coordinated-mutation-reject-dangling-references-parent-mismatches-and-dependency-cycles-with-typed-diagnostics-without-inventing-dependencies-or-cascading-task-status-changes",
+          "number": 4,
+          "title": "Recompute structural relations and derived rollups within the coordinated mutation; reject dangling references, parent mismatches and dependency cycles with typed diagnostics, without inventing dependencies or cascading task-status changes.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-005-assess-parent-prose-and-linked-dependent-descriptions-against-changed-facts-apply-a-minimal-factual-update-through-the-canonical-owner-only-where-necessary-preserve-decisions-rationale-user-prose-and-unrelated-content-otherwise-record-a-version-bound-no-change-needed-assessment-not-a-cosmetic-rewrite",
+          "number": 5,
+          "title": "Assess parent prose and linked/dependent descriptions against changed facts. Apply a minimal factual update through the canonical owner only where necessary; preserve decisions, rationale, user prose and unrelated content. Otherwise record a version-bound no-change-needed assessment, not a cosmetic rewrite.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-006-return-a-compact-change-impact-receipt-containing-changed-ids-revisions-relevant-before-after-facts-affected-parents-dependencies-and-reconciliation-outcomes-if-semantic-review-needs-an-agent-user-persist-a-durable-bounded-obligation-and-return-reconciliation-required-do-not-claim-the-full-operation-is-reconciled-merely-because-the-leaf-write-persisted",
+          "number": 6,
+          "title": "Return a compact change-impact receipt containing changed IDs/revisions, relevant before/after facts, affected parents/dependencies and reconciliation outcomes. If semantic review needs an agent/user, persist a durable bounded obligation and return reconciliation_required; do not claim the full operation is reconciled merely because the leaf write persisted.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-007-provide-expected-revision-idempotent-reconcile-operations-and-paginated-impact-continuation-concurrent-changes-invalidate-stale-assessments-interrupted-clients-resume-obligations-and-phase-feature-closeout-verifies-required-reconciliation-or-an-explicit-recorded-unresolved-blocker",
+          "number": 7,
+          "title": "Provide expected-revision/idempotent reconcile operations and paginated impact continuation. Concurrent changes invalidate stale assessments, interrupted clients resume obligations, and phase/feature closeout verifies required reconciliation or an explicit recorded unresolved blocker.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-008-expose-the-same-domain-postconditions-through-supported-mcp-pi-cli-server-ui-surfaces-and-d2-portable-skills-normal-reads-are-non-mutating-no-task-behavior-remains-warning-only-and-a-missing-agent-hook-cannot-be-advertised-as-enforced-interception",
+          "number": 8,
+          "title": "Expose the same domain postconditions through supported MCP/Pi/CLI/server/UI surfaces and D2 portable skills; normal reads are non-mutating, no-task behavior remains warning-only, and a missing agent hook cannot be advertised as enforced interception.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-009-measure-a2-defined-per-flow-payload-token-and-tool-call-budgets-using-fixed-fixtures-reuse-already-delivered-unchanged-mandatory-context-return-affected-deltas-by-default-and-request-full-content-only-on-cache-context-loss-or-explicit-drill-down-large-impact-uses-bounded-continuation-without-hiding-required-context",
+          "number": 9,
+          "title": "Measure A2-defined per-flow payload/token and tool-call budgets using fixed fixtures. Reuse already delivered unchanged mandatory context, return affected deltas by default and request full content only on cache/context loss or explicit drill-down; large impact uses bounded continuation without hiding required context.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-010-verify-on-isolated-fixtures-creating-updating-moving-a-task-or-changing-an-edge-leaves-all-affected-structural-parents-dependencies-consistent-with-a-factual-prose-update-or-explicit-revision-bound-reviewed-unchanged-pending-result",
+          "number": 10,
+          "title": "Verify on isolated fixtures: Creating/updating/moving a task or changing an edge leaves all affected structural parents/dependencies consistent, with a factual prose update or explicit revision-bound reviewed-unchanged/pending result.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-011-verify-on-isolated-fixtures-task-phase-feature-project-scope-changes-reconcile-only-affected-meaning-a-new-task-cannot-silently-leave-contradictory-parent-descriptions-edge-removal-cross-phase-links-deletion-move-and-concurrent-edits-are-covered",
+          "number": 11,
+          "title": "Verify on isolated fixtures: Task -> phase -> feature -> project scope changes reconcile only affected meaning; a new task cannot silently leave contradictory parent descriptions. Edge removal, cross-phase links, deletion/move and concurrent edits are covered.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-012-verify-on-isolated-fixtures-a-local-mutation-has-bounded-incremental-response-tool-overhead-independent-of-unrelated-plan-growth-high-fan-out-changes-paginate-explicitly-and-cached-no-op-operations-do-not-reload-full-ancestors-graph",
+          "number": 12,
+          "title": "Verify on isolated fixtures: A local mutation has bounded incremental response/tool overhead independent of unrelated plan growth; high-fan-out changes paginate explicitly and cached no-op operations do not reload full ancestors/graph.",
+          "checked": false
+        },
+        {
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-013-verify-on-isolated-fixtures-required-rules-requirements-decisions-remain-available-after-compaction-or-workspace-change-token-economy-never-relies-on-a-stored-timestamp-as-proof-of-effective-model-context-or-silently-drops-mandatory-content",
+          "number": 13,
+          "title": "Verify on isolated fixtures: Required rules/requirements/decisions remain available after compaction or workspace change; token economy never relies on a stored timestamp as proof of effective model context or silently drops mandatory content.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T14:52:52.874Z",
+      "updatedAt": "2026-10-21T14:57:53.242Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-21T10:02:59.058Z",
+  "updatedAt": "2026-10-21T15:00:46.057Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "0eb21323-55e8-4e22-8f11-c7459263a277",
+      "date": "2026-10-21T10:04:01.522Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

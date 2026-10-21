@@ -1,0 +1,61 @@
+{
+  "kind": "agent-brain-planning-amendment-verification",
+  "verifiedAt": "2026-10-21T08:35:03.700694+00:00",
+  "featureRef": "F025",
+  "scope": "Planning records only: dynamic providers and variable-width F/P/T references.",
+  "assertionsPassed": 193,
+  "publicReadBack": {
+    "method": "planner feature/phase/task show, task list, requirement list and description freshness",
+    "assertionsPassed": 26,
+    "affectedParentsReconciled": [
+      "P117(F025)",
+      "P121(F025)",
+      "P124(F025)",
+      "F025"
+    ]
+  },
+  "changedTasks": [
+    "P117(F025)/T464",
+    "P121(F025)/T473",
+    "P121(F025)/T474",
+    "P121(F025)/T475",
+    "P124(F025)/T481"
+  ],
+  "changedRequirements": [
+    "76f16dea-217c-41f4-897c-59ee12fc7536",
+    "9114fe33-eea0-41d1-87e5-75e5870dabf8"
+  ],
+  "changedDecisions": [
+    "f0378909-27b7-4492-94e8-26eee735742f",
+    "62a8ef95-33e0-4a36-95da-9c959f2bd030"
+  ],
+  "invariants": {
+    "phases": 9,
+    "tasks": 22,
+    "requirements": 17,
+    "decisions": 10,
+    "dependencyEdges": 21,
+    "uncheckedChecklistItems": 171,
+    "canonicalEntityIdsPreserved": true,
+    "unchangedChecklistIdsPreserved": true,
+    "checklistPositionsAndTicksPreserved": true,
+    "renamedChecklistItemsRekeyedByPublicPlannerUpdate": 23,
+    "publicPhaseUpdatesAppendedPlanningHistoryEntries": 3,
+    "unaffectedCanonicalFieldsPreserved": true,
+    "allTasksPlanned": true,
+    "historicalSourceCopiesPreserved": true
+  },
+  "sourceInspection": {
+    "numberFormatting": "naming.ts: formatThreeDigitNumber uses minimum-width padding",
+    "primaryResolution": "refs.ts accepts one or more digits",
+    "concreteLimitToCorrect": "on-hold.ts REF_IN_TEXT restricts prose recognition to 1–4 digits; assigned to T464",
+    "productBoundaryTestsRun": false
+  },
+  "implementationStarted": false,
+  "productTestsRun": false,
+  "limits": [
+    "This verifies persisted planning changes, not implemented provider behavior or long-reference correctness.",
+    "The original 20 October registration verification is historical and was not rerun.",
+    "Unrelated pre-existing description freshness diagnostics were not rewritten."
+  ]
+}

@@ -1,0 +1,238 @@
+{
+  "id": "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 118,
+  "shortId": "24556",
+  "priority": 3,
+  "slug": "useful-orientation-and-efficient-context-restoration",
+  "title": "Useful orientation and efficient context restoration",
+  "discussedAt": "2026-10-20T16:40:31.279Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Explain where to resume and deliver complete required context without avoidable repetition.",
+  "description": "Explain where to resume and deliver complete required context without avoidable repetition.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows B and owns only the outcomes below.\n\nOutcomes:\n- Make multiple handoffs understandable after a long absence.\n- Restore necessary context across sessions, compaction, task switches and source changes.\n\nTasks and boundaries:\n- C1: Replace handoff choice lists with an actionable resume overview. A bounded overview of purpose, current/partial state, remaining work, blockers, return obligations and a recommendation justified by the shared selector.\n- C2: Coordinate complete context delivery and freshness-aware reuse. A coordinated context protocol that restores mandatory rules, requirements and decisions, reuses genuinely available unchanged content, and reports incomplete delivery.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-core/src/recap.ts:46 — export async function buildRecap\n- packages/plan-core/src/handoff-context.ts:1 — (module)\n- packages/plan-core/src/project-context.ts:357 — export function buildProjectContextLoadReply\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n\nAcceptance: A returning user can understand several alternatives without remembering old task numbers. Dates and prose do not independently create priority or actionable resume claims. The proposed next work matches B1/B2. No required rule, requirement or decision is silently omitted to meet a budget. Persistent attestations alone never prove retained model context. Equivalent scenarios demonstrate avoided duplication without an unverified performance promise.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR01, BR03, BR04, BR13, BR14, BR15, BR16.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nShared-planner expansion approved 21 October 2026:\nPhase handoffs remain phase-scoped and point to exact execution/workspace/source. Global orientation distinguishes work verified in a feature branch from current availability in the selected target. Context/read receipts cannot leak between callers or checkouts merely because planner knowledge is shared.\nAdditional outcome coverage: BR23, BR24, BR25. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
+  "descriptionRef": ".planner/docs/agent-brain-plan.md",
+  "descriptionUpdatedAt": "2026-10-21T14:58:50.807Z",
+  "notes": "",
+  "goals": [
+    "Make multiple handoffs understandable after a long absence.",
+    "Restore necessary context across sessions, compaction, task switches and source changes."
+  ],
+  "nonGoals": [
+    "Do not load every handoff body for a recap.",
+    "Do not promise complete codebase understanding or a token reduction percentage."
+  ],
+  "dependencies": [
+    "P117(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Transport truncation can be mistaken for a full read.",
+    "A retained session ID can survive loss of the model context."
+  ],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "A returning user can understand several alternatives without remembering old task numbers.",
+    "Dates and prose do not independently create priority or actionable resume claims.",
+    "The proposed next work matches B1/B2.",
+    "No required rule, requirement or decision is silently omitted to meet a budget.",
+    "Persistent attestations alone never prove retained model context.",
+    "Equivalent scenarios demonstrate avoided duplication without an unverified performance promise.",
+    "Shared-planner acceptance: Phase handoffs remain phase-scoped and point to exact execution/workspace/source. Global orientation distinguishes work verified in a feature branch from current availability in the selected target. Context/read receipts cannot leak between callers or checkouts merely because planner knowledge is shared.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "2e110463-05b8-48c3-9407-9c1b6b98dfc5",
+    "a5214a66-5563-4e32-bf39-0d9b0797fcc1"
+  ],
+  "tasks": [
+    {
+      "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5",
+      "phaseId": "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+      "number": 465,
+      "shortId": "NSWL4",
+      "priority": 1,
+      "shortName": "replace-handoff-choice-lists-w",
+      "title": "Replace handoff choice lists with an actionable resume overview",
+      "status": "planned",
+      "description": "Outcome: A bounded overview of purpose, current/partial state, remaining work, blockers, return obligations and a recommendation justified by the shared selector.\n\nExisting state: Recap already lists phase handoffs and phase work, but references and first lines often do not explain what a returning user should resume.\n\nImplementation responsibility:\n- Use phase-scoped handoff metadata and canonical current task state to build a compact orientation.\n- Show feature/phase names and intent, not only identifiers and dates.\n- Distinguish operational resume-ready handoffs from stale or terminal history.\n- Use the same explanation in MCP/Pi recap and the existing supervisor UI; preserve explicit dashboard activation.\n\nAcceptance and evidence:\n- A returning user can understand several alternatives without remembering old task numbers.\n- Dates and prose do not independently create priority or actionable resume claims.\n- The proposed next work matches B1/B2.\n\nRead before editing:\n- packages/plan-core/src/recap.ts:46 — export async function buildRecap\n- packages/plan-core/src/handoff-context.ts:1 — (module)\n- packages/plan-core/src/task-selection.ts:283 — export function recommendNextTask\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P117(F025)/T464. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Present phase purpose, current and partial state, remaining work, reason for stopping, blockers and practical next action; old refs and first lines do not orient a returning user.\n- Bound the overview using reliable metadata/source-backed summaries; full handoff bodies are available on demand rather than all read for every recap.\n- Historical/terminal prose and dates do not create actionable claims; recommendation comes from the shared selection result.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nResume orientation identifies execution, workspace and current source availability for each phase handoff. Explain verified-in-branch versus integrated/currently available status so a returning user can understand alternatives without remembering worktrees; preserve phase-scoped handoffs and the shared selector result.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:04:59.428Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-001-use-phase-scoped-handoff-metadata-and-canonical-current-task-state-to-build-a-compact-orientation",
+          "number": 1,
+          "title": "Use phase-scoped handoff metadata and canonical current task state to build a compact orientation.",
+          "checked": false
+        },
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-002-show-feature-phase-names-and-intent-not-only-identifiers-and-dates",
+          "number": 2,
+          "title": "Show feature/phase names and intent, not only identifiers and dates.",
+          "checked": false
+        },
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-003-distinguish-operational-resume-ready-handoffs-from-stale-or-terminal-history",
+          "number": 3,
+          "title": "Distinguish operational resume-ready handoffs from stale or terminal history.",
+          "checked": false
+        },
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-004-use-the-same-explanation-in-mcp-pi-recap-and-the-existing-supervisor-ui-preserve-explicit-dashboard-activation",
+          "number": 4,
+          "title": "Use the same explanation in MCP/Pi recap and the existing supervisor UI; preserve explicit dashboard activation.",
+          "checked": false
+        },
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-005-verify-a-returning-user-can-understand-several-alternatives-without-remembering-old-task-numbers",
+          "number": 5,
+          "title": "Verify: A returning user can understand several alternatives without remembering old task numbers.",
+          "checked": false
+        },
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-006-verify-dates-and-prose-do-not-independently-create-priority-or-actionable-resume-claims",
+          "number": 6,
+          "title": "Verify: Dates and prose do not independently create priority or actionable resume claims.",
+          "checked": false
+        },
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-007-verify-the-proposed-next-work-matches-b1-b2",
+          "number": 7,
+          "title": "Verify: The proposed next work matches B1/B2.",
+          "checked": false
+        },
+        {
+          "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5-check-008-explain-multi-worktree-handoffs-with-exact-execution-identity-and-separate-pending-integration",
+          "number": 8,
+          "title": "Explain multi-worktree handoffs with exact execution identity and separate pending integration.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:12.797Z",
+      "updatedAt": "2026-10-21T10:04:59.746Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1",
+      "phaseId": "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+      "number": 466,
+      "shortId": "ZFZNX",
+      "priority": 2,
+      "shortName": "coordinate-complete-context-de",
+      "title": "Coordinate complete context delivery and freshness-aware reuse",
+      "status": "planned",
+      "description": "Outcome: A coordinated context protocol that restores mandatory rules, requirements and decisions, reuses genuinely available unchanged content, and reports incomplete delivery.\n\nExisting state: Project context delivery, full-read attestations and phase/task context already exist, with overlapping payloads and contradictory instructions across surfaces.\n\nImplementation responsibility:\n- Measure actual bytes/characters and tokens separately on equivalent resume scenarios.\n- Reconcile skill, core rules, tool descriptions and injected prompts around one read-before-work protocol.\n- Refresh context after supported compaction/reset events; provide an explicit restoration path for harnesses without those events.\n- Invalidate only affected reads when source revisions change and distinguish delivery from understanding.\n- Preserve bounded transport, explicit continuation and typed incomplete/non-success results.\n\nAcceptance and evidence:\n- No required rule, requirement or decision is silently omitted to meet a budget.\n- Persistent attestations alone never prove retained model context.\n- Equivalent scenarios demonstrate avoided duplication without an unverified performance promise.\n\nRead before editing:\n- packages/plan-core/src/project-context.ts:357 — export function buildProjectContextLoadReply\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-core/src/planner-rules.ts:20 — const PROJECT_GUIDELINES_RULE\n- packages/plan-core/planner-skill.md:42 — ## Lifecycle-first context protocol\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- scripts/sync-plugins.cjs:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P118(F025)/T465. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- A persisted session ID/read timestamp can survive loss of model context; add explicit restoration and supported lifecycle/compaction refresh rather than relying on that timestamp.\n- Reuse only content that is unchanged AND still available in effective model context. Do not drop required rules/requirements/decisions to meet a budget.\n- Report partial/truncated/continued delivery and measure characters/bytes/tokens honestly on comparable flows; no percentage saving is established.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nContext reuse keys include explicit workspace/source and execution/target revision, as well as planner versions. Read/context receipts are caller-scoped even when canonical knowledge is shared. Workspace switch, source drift, integration/revert and authority rebinding invalidate affected evidence; a stored receipt never proves retained model content.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nUse M3 impact receipts and effective-context hashes to deliver relevant deltas. Avoid unconditional full task/phase/feature/project reload after each mutation; restore actual missing mandatory context after compaction and paginate genuinely large impact. Validate A2 flow budgets for resume, repeated mutations, graph/context and source/editor events.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionUpdatedAt": "2026-10-21T14:57:50.754Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-001-measure-actual-bytes-characters-and-tokens-separately-on-equivalent-resume-scenarios",
+          "number": 1,
+          "title": "Measure actual bytes/characters and tokens separately on equivalent resume scenarios.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-002-reconcile-skill-core-rules-tool-descriptions-and-injected-prompts-around-one-read-before-work-protocol",
+          "number": 2,
+          "title": "Reconcile skill, core rules, tool descriptions and injected prompts around one read-before-work protocol.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-003-refresh-context-after-supported-compaction-reset-events-provide-an-explicit-restoration-path-for-harnesses-without-those-events",
+          "number": 3,
+          "title": "Refresh context after supported compaction/reset events; provide an explicit restoration path for harnesses without those events.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-004-invalidate-only-affected-reads-when-source-revisions-change-and-distinguish-delivery-from-understanding",
+          "number": 4,
+          "title": "Invalidate only affected reads when source revisions change and distinguish delivery from understanding.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-005-preserve-bounded-transport-explicit-continuation-and-typed-incomplete-non-success-results",
+          "number": 5,
+          "title": "Preserve bounded transport, explicit continuation and typed incomplete/non-success results.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-006-verify-no-required-rule-requirement-or-decision-is-silently-omitted-to-meet-a-budget",
+          "number": 6,
+          "title": "Verify: No required rule, requirement or decision is silently omitted to meet a budget.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-007-verify-persistent-attestations-alone-never-prove-retained-model-context",
+          "number": 7,
+          "title": "Verify: Persistent attestations alone never prove retained model context.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-008-verify-equivalent-scenarios-demonstrate-avoided-duplication-without-an-unverified-performance-promise",
+          "number": 8,
+          "title": "Verify: Equivalent scenarios demonstrate avoided duplication without an unverified performance promise.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-009-verify-cross-worktree-and-target-switch-context-invalidation-with-no-leaked-read-attestations",
+          "number": 9,
+          "title": "Verify cross-worktree and target-switch context invalidation with no leaked read attestations.",
+          "checked": false
+        },
+        {
+          "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1-check-010-measure-incremental-update-resume-context-and-tool-cost-while-preserving-complete-mandatory-content",
+          "number": 10,
+          "title": "Measure incremental update/resume context and tool cost while preserving complete mandatory content.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "2e110463-05b8-48c3-9407-9c1b6b98dfc5"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:13.558Z",
+      "updatedAt": "2026-10-21T14:57:50.752Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T16:40:30.710Z",
+  "updatedAt": "2026-10-21T14:58:50.807Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "addc3943-99fb-4f36-bbc7-ddd879350ea1",
+      "date": "2026-10-21T10:04:59.455Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

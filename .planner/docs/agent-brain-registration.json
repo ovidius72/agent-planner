@@ -1,0 +1,562 @@
+{
+  "kind": "agent-brain-registration-evidence",
+  "description": "Allocated canonical references for the prepared Agent Brain import. This evidence map is not another operational planner; canonical entities remain authoritative.",
+  "feature": {
+    "ref": "F025",
+    "id": "87552320-99ec-42a3-beb5-04d29997b0f5"
+  },
+  "phases": {
+    "A": {
+      "ref": "P116(F025)",
+      "number": 116,
+      "id": "1587a79c-750c-4ada-9ac5-e2e751f17301"
+    },
+    "B": {
+      "ref": "P117(F025)",
+      "number": 117,
+      "id": "908fd902-6482-422d-9e09-ed0ed6ae6cd4"
+    },
+    "C": {
+      "ref": "P118(F025)",
+      "number": 118,
+      "id": "845336f6-f90e-4012-99c9-2c6b3a066e0a"
+    },
+    "D": {
+      "ref": "P119(F025)",
+      "number": 119,
+      "id": "48358f79-a719-489c-933c-a4adbc216b18"
+    },
+    "E": {
+      "ref": "P120(F025)",
+      "number": 120,
+      "id": "44bf0d43-63a2-4d81-9528-a954c5620bc9"
+    },
+    "F": {
+      "ref": "P121(F025)",
+      "number": 121,
+      "id": "f75dfa52-ab53-4d82-b74b-c7da9b9559d6"
+    },
+    "G": {
+      "ref": "P122(F025)",
+      "number": 122,
+      "id": "4caf249f-6eaa-4a54-9425-4b3966eccd0b"
+    },
+    "H": {
+      "ref": "P123(F025)",
+      "number": 123,
+      "id": "504854c9-242d-4f20-a3fc-27c6e58c2eff"
+    },
+    "I": {
+      "ref": "P124(F025)",
+      "number": 124,
+      "id": "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+    },
+    "J": {
+      "ref": "P125(F025)",
+      "id": "66eda762-171f-4435-9b64-b80bd0766f5b",
+      "number": 125
+    },
+    "K": {
+      "ref": "P126(F025)",
+      "id": "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+      "number": 126
+    },
+    "L": {
+      "ref": "P127(F025)",
+      "id": "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+      "number": 127
+    },
+    "M": {
+      "ref": "P128(F025)",
+      "id": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+      "number": 128
+    },
+    "N": {
+      "ref": "P129(F025)",
+      "id": "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+      "number": 129
+    },
+    "O": {
+      "ref": "P130(F025)",
+      "id": "81aa922c-06ef-4bd5-9dba-070a6b622416",
+      "number": 130
+    }
+  },
+  "tasks": {
+    "A1": {
+      "ref": "P116(F025)/T461",
+      "number": 461,
+      "phaseKey": "A",
+      "id": "446c443d-97d5-487d-a997-7fbacf0fd972"
+    },
+    "A2": {
+      "ref": "P116(F025)/T462",
+      "number": 462,
+      "phaseKey": "A",
+      "id": "f4ac8204-3e0c-429d-9354-4c75061d7600"
+    },
+    "B1": {
+      "ref": "P117(F025)/T463",
+      "number": 463,
+      "phaseKey": "B",
+      "id": "77ea877f-6320-4776-a19f-90d2b05f9900"
+    },
+    "B2": {
+      "ref": "P117(F025)/T464",
+      "number": 464,
+      "phaseKey": "B",
+      "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e"
+    },
+    "C1": {
+      "ref": "P118(F025)/T465",
+      "number": 465,
+      "phaseKey": "C",
+      "id": "2e110463-05b8-48c3-9407-9c1b6b98dfc5"
+    },
+    "C2": {
+      "ref": "P118(F025)/T466",
+      "number": 466,
+      "phaseKey": "C",
+      "id": "a5214a66-5563-4e32-bf39-0d9b0797fcc1"
+    },
+    "D1": {
+      "ref": "P119(F025)/T467",
+      "number": 467,
+      "phaseKey": "D",
+      "id": "14de4875-9d79-482a-9207-74a459fd07b5"
+    },
+    "D2": {
+      "ref": "P119(F025)/T468",
+      "number": 468,
+      "phaseKey": "D",
+      "id": "dfb6349b-63f5-4e68-810e-917de0d096de"
+    },
+    "D3": {
+      "ref": "P119(F025)/T469",
+      "number": 469,
+      "phaseKey": "D",
+      "id": "f1f1c950-e967-45d3-b7b6-55e478c6c9e2"
+    },
+    "E1": {
+      "ref": "P120(F025)/T470",
+      "number": 470,
+      "phaseKey": "E",
+      "id": "852485e2-b28a-4957-863a-f7ac7fba6d6b"
+    },
+    "E2": {
+      "ref": "P120(F025)/T471",
+      "number": 471,
+      "phaseKey": "E",
+      "id": "6aae9520-37ca-41fd-9dc8-fef611155e89"
+    },
+    "E3": {
+      "ref": "P120(F025)/T472",
+      "number": 472,
+      "phaseKey": "E",
+      "id": "f799ee62-6e04-4d08-aceb-3894230940c6"
+    },
+    "F1": {
+      "ref": "P121(F025)/T473",
+      "number": 473,
+      "phaseKey": "F",
+      "id": "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43"
+    },
+    "F2": {
+      "ref": "P121(F025)/T474",
+      "number": 474,
+      "phaseKey": "F",
+      "id": "8e90b4cf-6845-4f28-8282-b2861e1cfaf4"
+    },
+    "F3": {
+      "ref": "P121(F025)/T475",
+      "number": 475,
+      "phaseKey": "F",
+      "id": "06f9b034-30be-45a3-997e-7dfbf14a00be"
+    },
+    "G1": {
+      "ref": "P122(F025)/T476",
+      "number": 476,
+      "phaseKey": "G",
+      "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3"
+    },
+    "G2": {
+      "ref": "P122(F025)/T477",
+      "number": 477,
+      "phaseKey": "G",
+      "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd"
+    },
+    "G3": {
+      "ref": "P122(F025)/T478",
+      "number": 478,
+      "phaseKey": "G",
+      "id": "841f4cab-4916-4fef-a977-689fab3e6514"
+    },
+    "H1": {
+      "ref": "P123(F025)/T479",
+      "number": 479,
+      "phaseKey": "H",
+      "id": "3c2a6e59-c267-475b-9949-132b24241dfc"
+    },
+    "H2": {
+      "ref": "P123(F025)/T480",
+      "number": 480,
+      "phaseKey": "H",
+      "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7"
+    },
+    "I1": {
+      "ref": "P124(F025)/T481",
+      "number": 481,
+      "phaseKey": "I",
+      "id": "9f374b0e-d369-4b72-a82f-c31680e11996"
+    },
+    "I2": {
+      "ref": "P124(F025)/T482",
+      "number": 482,
+      "phaseKey": "I",
+      "id": "759349d0-a71b-4983-951b-00d3de6edba7"
+    },
+    "J1": {
+      "ref": "P125(F025)/T483",
+      "number": 483,
+      "phaseKey": "J",
+      "id": "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00"
+    },
+    "K1": {
+      "ref": "P126(F025)/T484",
+      "number": 484,
+      "phaseKey": "K",
+      "id": "e73006a1-5106-432f-8018-932b88e15e58"
+    },
+    "K2": {
+      "ref": "P126(F025)/T485",
+      "number": 485,
+      "phaseKey": "K",
+      "id": "38dbf040-f73d-4759-b624-097b57c84307"
+    },
+    "L1": {
+      "ref": "P127(F025)/T486",
+      "number": 486,
+      "phaseKey": "L",
+      "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87"
+    },
+    "L2": {
+      "ref": "P127(F025)/T487",
+      "number": 487,
+      "phaseKey": "L",
+      "id": "7cf90abc-befd-4393-a615-4434801f1c20"
+    },
+    "L3": {
+      "ref": "P127(F025)/T488",
+      "number": 488,
+      "phaseKey": "L",
+      "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c"
+    },
+    "M1": {
+      "ref": "P128(F025)/T489",
+      "phaseKey": "M",
+      "number": 489,
+      "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4"
+    },
+    "M2": {
+      "ref": "P128(F025)/T490",
+      "phaseKey": "M",
+      "number": 490,
+      "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f"
+    },
+    "N1": {
+      "ref": "P129(F025)/T491",
+      "phaseKey": "N",
+      "number": 491,
+      "id": "281720b5-1617-42bd-809d-42b76c8bba4b"
+    },
+    "N2": {
+      "ref": "P129(F025)/T492",
+      "phaseKey": "N",
+      "number": 492,
+      "id": "f9af06a6-3897-4184-9eea-b7b02e16d052"
+    },
+    "N3": {
+      "ref": "P129(F025)/T493",
+      "phaseKey": "N",
+      "number": 493,
+      "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6"
+    },
+    "O1": {
+      "ref": "P130(F025)/T494",
+      "phaseKey": "O",
+      "number": 494,
+      "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2"
+    },
+    "O2": {
+      "ref": "P130(F025)/T495",
+      "phaseKey": "O",
+      "number": 495,
+      "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062"
+    },
+    "M3": {
+      "id": "e1111601-64ad-49d5-9805-df48e9dd4b70",
+      "ref": "P128(F025)/T496",
+      "number": 496,
+      "phaseKey": "M"
+    }
+  },
+  "requirements": {
+    "BR01": {
+      "title": "Actionable orientation after a long pause",
+      "id": "d611ded8-d3f4-4bf3-af67-3da59764fddd"
+    },
+    "BR02": {
+      "id": "822c864c-9249-4c4f-b7b7-a20b93101665",
+      "title": "One explainable global next-work order"
+    },
+    "BR03": {
+      "id": "f18e8fa8-d7af-4321-bf18-900691d243a7",
+      "title": "Durable return to interrupted work"
+    },
+    "BR04": {
+      "id": "36dff4f1-6225-41f1-8d9b-ced7505ede93",
+      "title": "Complete context restoration with bounded delivery"
+    },
+    "BR05": {
+      "id": "0e815483-2113-47d5-b640-c939326c6d46",
+      "title": "Inspectable application of project conventions"
+    },
+    "BR06": {
+      "id": "6f9cb695-1055-4262-bfba-729a55061284",
+      "title": "Proportionate work planning and capability ownership"
+    },
+    "BR07": {
+      "id": "f89bfadc-54e7-4545-92ad-2a8a72b7c768",
+      "title": "Reliable current and historical code references"
+    },
+    "BR08": {
+      "id": "0a2f991e-389c-4a6c-98f4-79f5dffff5ce",
+      "title": "Traceability for large developments and unrelated tasks"
+    },
+    "BR09": {
+      "id": "73385e38-dbfe-4be5-8dee-5663039d8e1a",
+      "title": "Durable scoped rationale and decision history"
+    },
+    "BR10": {
+      "id": "eec900fa-b1a7-4c1a-9e4a-dd6d53399a07",
+      "title": "Onboarding before code or language selection"
+    },
+    "BR11": {
+      "id": "76f16dea-217c-41f4-897c-59ee12fc7536",
+      "title": "Dynamic language support with explicit capability coverage"
+    },
+    "BR12": {
+      "id": "eb77140f-28ef-4ea6-a42c-18b0b7d58639",
+      "title": "Queryable planner and code relationships"
+    },
+    "BR13": {
+      "id": "7f92265b-2ac5-4891-8b2c-2006f655feba",
+      "title": "Global orientation and impact-scoped deep context"
+    },
+    "BR14": {
+      "id": "4190d1b2-d094-4157-8da7-60e8be5c0bd7",
+      "title": "Visible freshness and explicit review obligations"
+    },
+    "BR15": {
+      "id": "d3ef32e8-98bc-464c-99fb-fd2536228305",
+      "title": "Coherent human supervision"
+    },
+    "BR16": {
+      "id": "9114fe33-eea0-41d1-87e5-75e5870dabf8",
+      "title": "Compatible behavior across supported agent surfaces"
+    },
+    "BR17": {
+      "id": "c51365d4-2ee1-493b-a63e-4550b7552bc9",
+      "title": "Revision-bound verification evidence"
+    },
+    "BR18": {
+      "id": "093c4972-01bd-48f5-90bc-c4ee1d80d44b",
+      "title": "Persistent project identity in browser navigation"
+    },
+    "BR19": {
+      "id": "2ccf30ea-82a4-4be8-94b0-efcd66be41c6",
+      "title": "Editable source workspace connected to project knowledge"
+    },
+    "BR20": {
+      "id": "c6e678e1-2ca3-4c61-ab03-69b9f6db8f5a",
+      "title": "One compatible analysis runtime for agents and the Web UI"
+    },
+    "BR21": {
+      "id": "f5ca2816-e3be-4bd6-b86d-58ad1057a854",
+      "title": "Open resolved source in a preferred external editor"
+    },
+    "BR22": {
+      "id": "928952db-43da-47a8-9f35-4be21642515c",
+      "title": "One authoritative project planner across local worktrees"
+    },
+    "BR23": {
+      "id": "cee61282-68ce-4527-859b-02330c40ef62",
+      "title": "Independent workspace and caller context within a shared project"
+    },
+    "BR24": {
+      "id": "04bab928-4cb7-44bc-aca8-224201cd1469",
+      "title": "Attributable task executions separate from delivery"
+    },
+    "BR25": {
+      "id": "01ea923c-dc4c-4245-8fbe-e4a5c0eb3e35",
+      "title": "Revision-aware target availability and delivery views"
+    },
+    "BR26": {
+      "id": "727790c3-7272-4fa2-875f-a6392a298ab5",
+      "title": "Lossless adoption of a shared planner from existing copies"
+    },
+    "BR27": {
+      "id": "6b845a9a-6a93-4389-a6ed-76a0f15a2ccd",
+      "title": "Planner history and recovery independent of code commits"
+    },
+    "BR28": {
+      "id": "50386239-aaca-458c-8de4-8570234979d1",
+      "title": "Consistent affected hierarchy and dependency context after every change"
+    },
+    "BR29": {
+      "id": "5ee3730d-a439-42c8-a080-a97c437c9d38",
+      "title": "Bounded context cost across all Agent Brain workflows"
+    }
+  },
+  "decisions": {
+    "AD01": {
+      "title": "Ready work follows global feature → phase → task priority",
+      "owner": "project",
+      "id": "2959bd95-4c71-4c7f-8c60-ca582ab8d652"
+    },
+    "AD02": {
+      "id": "6fa41591-873e-4562-9242-7b3a2d4c13a5",
+      "title": "Evolve Agent Plan and stabilize existing workflows first",
+      "owner": "F025"
+    },
+    "AD03": {
+      "id": "f0378909-27b7-4492-94e8-26eee735742f",
+      "title": "Code intelligence targets the user project and is language independent",
+      "owner": "F025"
+    },
+    "AD04": {
+      "id": "ee0d014f-c328-45bd-8d85-116175256d2c",
+      "title": "Code links distinguish historical evidence, current location and meaning review",
+      "owner": "F025"
+    },
+    "AD05": {
+      "id": "29a40d65-10fc-4cf9-bc53-6dea6c09d6b8",
+      "title": "Trace large work through changesets and scoped rationale",
+      "owner": "F025"
+    },
+    "AD06": {
+      "id": "97abeef9-dc61-42dc-9a3a-c437c5b9c978",
+      "title": "Provide global orientation and relevant deep context",
+      "owner": "F025"
+    },
+    "AD07": {
+      "id": "62a8ef95-33e0-4a36-95da-9c959f2bd030",
+      "title": "Begin setup from discussion and declared stack, not assumed source detection",
+      "owner": "F025"
+    },
+    "AD08": {
+      "id": "32b72689-6216-4cb5-a852-b0d8e1bc2d5c",
+      "title": "Extend existing standards workflow with evidence rather than repeated instructions",
+      "owner": "F025"
+    },
+    "AD09": {
+      "id": "237d92fa-5887-4c02-bd61-4453c431b553",
+      "title": "Keep skills portable and canonical knowledge authoritative",
+      "owner": "F025"
+    },
+    "AD10": {
+      "id": "a8241ba5-25db-4a6c-883c-d2f63ae6ad92",
+      "title": "Keep standalone AgentTest outside this feature",
+      "owner": "F025"
+    },
+    "AD11": {
+      "id": "40e3f375-ebc5-46f9-a240-fabe6d9d1c92",
+      "title": "Use Monaco for the desktop source-code workspace",
+      "owner": "F025"
+    },
+    "AD12": {
+      "id": "5433fe9d-13e0-4304-b043-bcf82fc0f796",
+      "title": "Share analysis through one compatible runtime owner",
+      "owner": "F025"
+    },
+    "AD13": {
+      "id": "39763032-8785-4e6b-99ce-00ea142ae074",
+      "title": "Put project identity first in browser page titles",
+      "owner": "F025"
+    },
+    "AD14": {
+      "id": "5dae712b-c508-4092-8bd9-d2791a7245df",
+      "title": "One shared planner authority outside code branch copies",
+      "owner": "F025"
+    },
+    "AD15": {
+      "id": "bbd8efbc-cb1e-4ab4-a802-6135f802f071",
+      "title": "Planner, code workspace and caller runtime have separate identities",
+      "owner": "F025"
+    },
+    "AD16": {
+      "id": "93edfefc-3050-4cad-87b8-8df026e2bb3b",
+      "title": "A logical task has executions and independent target integrations",
+      "owner": "F025"
+    },
+    "AD17": {
+      "id": "ec31ded3-8ebd-41f7-af71-db765c5da28d",
+      "title": "Current code availability differs from work progress and historical merges",
+      "owner": "F025"
+    },
+    "AD18": {
+      "id": "066fd680-a8e1-4525-bd8c-eaee29720bd9",
+      "title": "Shared-planner adoption requires lossless migration and independent recovery",
+      "owner": "F025"
+    },
+    "AD19": {
+      "id": "f350e492-9fee-419f-a17e-1950b88f0911",
+      "title": "Every mutation reconciles affected context through bounded deltas",
+      "owner": "F025"
+    }
+  },
+  "firstReadyTask": "P116(F025)/T461",
+  "implementationStarted": false,
+  "amendments": [
+    {
+      "date": "2026-10-21",
+      "scope": "Dynamic provider discovery/configuration and variable-width F/P/T references. Existing canonical IDs and counts unchanged.",
+      "verificationReport": ".planner/docs/agent-brain-amendment-verification.json",
+      "implementationStarted": false
+    },
+    {
+      "date": "2026-10-21",
+      "scope": "Monaco editor, project-title fixes, source access/shared runtime and preferred external editor. Added 3 phases, 6 tasks, 4 requirements and 3 decisions.",
+      "verificationReport": ".planner/docs/agent-brain-editor-expansion-verification.json",
+      "implementationStarted": false
+    },
+    {
+      "date": "2026-10-21",
+      "kind": "shared-planner-execution-integration-impact-and-bounded-context",
+      "registrationMap": ".planner/docs/agent-brain-shared-planner-registration.json",
+      "documents": [
+        ".planner/docs/agent-brain-shared-planner-and-execution.md",
+        ".planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md"
+      ],
+      "verificationReport": ".planner/docs/agent-brain-shared-planner-verification.json",
+      "currentCounts": {
+        "phases": 15,
+        "tasks": 36,
+        "requirements": 29,
+        "decisions": 19,
+        "dependencyEdges": 49,
+        "uncheckedChecklistItems": 334
+      },
+      "implementationStarted": false,
+      "realMigrationExecuted": false
+    }
+  ],
+  "currentCounts": {
+    "phases": 15,
+    "tasks": 36,
+    "requirements": 29,
+    "decisions": 19,
+    "dependencyEdges": 49,
+    "uncheckedChecklistItems": 334
+  }
+}

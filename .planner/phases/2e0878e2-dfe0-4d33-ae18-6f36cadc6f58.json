@@ -1,0 +1,359 @@
+{
+  "id": "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 127,
+  "shortId": "N2JR7",
+  "priority": 8,
+  "slug": "integrated-monaco-workspace-and-external-editor-navigation",
+  "title": "Integrated Monaco workspace and external-editor navigation",
+  "discussedAt": "2026-10-21T09:25:10.151Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Provide editable project files, semantic navigation and code-to-planner context in the desktop Web UI.",
+  "description": "Provide editable project files, semantic navigation and code-to-planner context in the desktop Web UI.\n\nCurrent state: packages/plan-web-ui/src/app/router.tsx:51 defines planner routes, packages/plan-web-ui/src/routes/doc-viewer.route.tsx:1 provides a Markdown textarea, and packages/plan-web-ui/package.json:1 has no code editor dependency. T385 deliberately kept the Markdown baseline lightweight; the new source-code workspace is a separately loaded capability.\n\nP123/T479 owns graph and reverse code-to-rationale navigation, P120 owns anchors/history, P122 owns projections/retrieval, and K2 owns provider sessions. This task binds those existing contracts to the editor; it does not recreate any of them.\n\nThe current Web UI has no discovered preferred-editor launcher. packages/plan-server/src/serve.ts:1564 exposes existing UI configuration and AppShell receives local server context; runtime settings must stay local rather than becoming shared project policy.\n\nGoals:\n- Provide a file explorer, Monaco editing, diff and safe saves integrated with planner identity.\n- Use shared analysis and canonical code links for semantic navigation, and open the selected file in a preferred external editor.\n\nResponsibilities:\n- P127(F025)/T486: Build a lazy-loaded Monaco file explorer and editable workspace. A desktop code workspace provides a project file tree, file tabs, Monaco editing, syntax coloring, change comparison and conflict-aware saving.\n- P127(F025)/T487: Connect Monaco navigation to shared analysis and planner rationale. Selecting code exposes verified semantic navigation and relevant prior tasks, decisions, rules and evidence beside the current or historical source.\n- P127(F025)/T488: Open source locations in the preferred external editor. A user can open the current file or resolved symbol in a locally configured external editor, including line/column when supported.\n\nBoundaries:\n- Do not introduce a second planner, debugger, terminal, extension marketplace or general autonomous IDE platform.\n- Mobile code editing is not an acceptance gate for choosing Monaco; preserve existing planner responsiveness and document actual source-view limits.\n\nRisks:\n- Editor workers/assets or mixed Monaco integration versions can fail in freshly packaged/offline deployments.\n- A browser-local editor opener and a server-host launch target are different machines in LAN/remote use.\n\nAcceptance:\n- A user opens project files from the tree, edits, compares and saves them; navigation or external edits do not discard drafts silently.\n- The same code workspace supports newly configured language assets without a core language whitelist; syntax availability is distinct from LSP readiness.\n- Monaco works from freshly packed local artifacts with correctly resolved workers/assets, and opening ordinary planner pages does not eagerly load the code editor.\n- Definition/reference navigation and context panels reuse the same provider and canonical identities seen by agents.\n- The worked T002/T010/T020 case is navigable from both planner and code without inventing missing rationale.\n- Unavailable/stale/partial analysis is explicit; historical source and draft context cannot be mistaken for current verified results.\n- A configured editor opens the correct project/worktree file at the resolved location; launch arguments preserve literal paths.\n- Preferences remain machine-local and the user can configure a compatible editor without changing core.\n- Remote/LAN use and unsaved drafts never silently open or present the wrong machine/file version as current.\n\nUse .planner/docs/agent-brain-editor-and-project-identity.md and exact child task contracts. Existing source references are named above; revalidate before editing.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nRegistered scope: P127(F025)/T486, P127(F025)/T487, P127(F025)/T488. All tasks remain planned; implementation has not started.\n\nShared-planner expansion approved 21 October 2026:\nMonaco tabs, graph bindings, saves/diff and preferred-editor navigation use explicit selected workspace/source revision independently of central plan location. Global/target views distinguish present/historical/absent/unknown code; a supervisor view change never redirects an active execution or loses an unsaved draft.\nAdditional outcome coverage: BR23, BR25. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
+  "descriptionRef": ".planner/docs/agent-brain-editor-and-project-identity.md",
+  "descriptionUpdatedAt": "2026-10-21T14:58:52.702Z",
+  "notes": "",
+  "goals": [
+    "Provide a file explorer, Monaco editing, diff and safe saves integrated with planner identity.",
+    "Use shared analysis and canonical code links for semantic navigation, and open the selected file in a preferred external editor."
+  ],
+  "nonGoals": [
+    "Do not introduce a second planner, debugger, terminal, extension marketplace or general autonomous IDE platform.",
+    "Mobile code editing is not an acceptance gate for choosing Monaco; preserve existing planner responsiveness and document actual source-view limits."
+  ],
+  "dependencies": [
+    "P126(F025)",
+    "P123(F025)",
+    "P125(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Editor workers/assets or mixed Monaco integration versions can fail in freshly packaged/offline deployments.",
+    "A browser-local editor opener and a server-host launch target are different machines in LAN/remote use."
+  ],
+  "openQuestions": [
+    "Select compatible pinned Monaco/integration versions and measure bundle/runtime impact; React wrapper is optional and no dependency is approved for installation by this planning task.",
+    "Choose the existing UI-aligned explorer/pane/tab layout and accessible keyboard contract before implementation; preserve current routes and settings."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "A user opens project files from the tree, edits, compares and saves them; navigation or external edits do not discard drafts silently.",
+    "The same code workspace supports newly configured language assets without a core language whitelist; syntax availability is distinct from LSP readiness.",
+    "Monaco works from freshly packed local artifacts with correctly resolved workers/assets, and opening ordinary planner pages does not eagerly load the code editor.",
+    "Definition/reference navigation and context panels reuse the same provider and canonical identities seen by agents.",
+    "The worked T002/T010/T020 case is navigable from both planner and code without inventing missing rationale.",
+    "Unavailable/stale/partial analysis is explicit; historical source and draft context cannot be mistaken for current verified results.",
+    "A configured editor opens the correct project/worktree file at the resolved location; launch arguments preserve literal paths.",
+    "Preferences remain machine-local and the user can configure a compatible editor without changing core.",
+    "Remote/LAN use and unsaved drafts never silently open or present the wrong machine/file version as current.",
+    "Shared-planner acceptance: Monaco tabs, graph bindings, saves/diff and preferred-editor navigation use explicit selected workspace/source revision independently of central plan location. Global/target views distinguish present/historical/absent/unknown code; a supervisor view change never redirects an active execution or loses an unsaved draft.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "48007cac-64f6-4ec0-af25-5d54a5ce7b87",
+    "7cf90abc-befd-4393-a615-4434801f1c20",
+    "7cc6f4bb-5666-46b7-bc30-2866ca3da77c"
+  ],
+  "tasks": [
+    {
+      "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87",
+      "phaseId": "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+      "number": 486,
+      "shortId": "LXJND",
+      "priority": 1,
+      "shortName": "build-a-lazy-loaded-monaco-fil",
+      "title": "Build a lazy-loaded Monaco file explorer and editable workspace",
+      "status": "planned",
+      "description": "Outcome: A desktop code workspace provides a project file tree, file tabs, Monaco editing, syntax coloring, change comparison and conflict-aware saving.\n\nExisting state: packages/plan-web-ui/src/app/router.tsx:51 defines planner routes, packages/plan-web-ui/src/routes/doc-viewer.route.tsx:1 provides a Markdown textarea, and packages/plan-web-ui/package.json:1 has no code editor dependency. T385 deliberately kept the Markdown baseline lightweight; the new source-code workspace is a separately loaded capability.\n\nImplementation responsibility:\n- Use Monaco Editor as the selected source-code component; resolve compatible ESM/worker/React integration versions and measure startup, memory and bundle cost before choosing any optional wrapper.\n- Lazy-load the workspace, editor workers and needed language assets; ship assets locally in both tracked Web UI bundles rather than depending on a public CDN or assuming VS Code extensions can be installed.\n- Implement the explorer, keyboard-accessible tabs/panes, file opening, search within a document, dirty indicators, explicit save/discard and safe close/navigation behavior using current routing/UI patterns.\n- Bind models to project/worktree/file identity with versioned saved baselines; preserve separate drafts, undo history and selections across supported tab navigation, and dispose unused models/listeners deliberately.\n- Connect K1 file APIs for saving and external-change notices; show base/draft/current conflicts and use the Monaco diff view without silently losing unsaved work.\n- Load syntax support from an extensible language/asset registry independently of semantic providers; show explicit plain-text mode if a grammar/tokenizer is unavailable.\n- Keep the Markdown document editor and existing planner pages lightweight; apply J1 project-first titles to source routes, regenerate both web-ui-dist consumers and verify fresh packaged desktop loading.\n\nAcceptance and evidence:\n- A user opens project files from the tree, edits, compares and saves them; navigation or external edits do not discard drafts silently.\n- The same code workspace supports newly configured language assets without a core language whitelist; syntax availability is distinct from LSP readiness.\n- Monaco works from freshly packed local artifacts with correctly resolved workers/assets, and opening ordinary planner pages does not eagerly load the code editor.\n\nRead before editing:\n- packages/plan-web-ui/src/app/router.tsx:51\n- packages/plan-web-ui/src/routes/doc-viewer.route.tsx:1\n- packages/plan-web-ui/src/components/layout/app-shell.tsx:118\n- packages/plan-web-ui/package.json:1\n- scripts/copy-web-ui.sh:1\n\nDetailed discussion contract:\n- The user chose the file-explorer/edit/highlight/open-external experience. Source editing and saving are included, not deferred behind a read-only-only first delivery.\n- Monaco is selected for the desktop workflow after the user clarified that mobile code editing should not determine the editor choice. CodeMirror was evaluated, not accepted as the implementation choice.\n- Do not mix incompatible Monaco wrappers and LSP stacks. No client-side language server is started by default; semantic operations use K2. Exact dependency versions are implementation choices verified against current primary docs and the installed bundle.\n\nExecution dependencies: P126(F025)/T484, P125(F025)/T483, P123(F025)/T480. Requirement coverage and earlier responsibilities are preserved.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nShared-planner expansion approved 21 October 2026:\nTabs, edits and diffs carry the chosen workspace and exact source revision. A supervisor target/history view cannot silently save into another active execution. Shared planner location is never the explorer root; switching workspace preserves unsaved drafts and explicit conflicts.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:05:06.802Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-001-use-monaco-editor-as-the-selected-source-code-component-resolve-compatible-esm-worker-react-integration-versions-and-measure-startup-memory-and-bundle-cost-before-choosing-any-optional-wrapper",
+          "number": 1,
+          "title": "Use Monaco Editor as the selected source-code component; resolve compatible ESM/worker/React integration versions and measure startup, memory and bundle cost before choosing any optional wrapper.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-002-lazy-load-the-workspace-editor-workers-and-needed-language-assets-ship-assets-locally-in-both-tracked-web-ui-bundles-rather-than-depending-on-a-public-cdn-or-assuming-vs-code-extensions-can-be-installed",
+          "number": 2,
+          "title": "Lazy-load the workspace, editor workers and needed language assets; ship assets locally in both tracked Web UI bundles rather than depending on a public CDN or assuming VS Code extensions can be installed.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-003-implement-the-explorer-keyboard-accessible-tabs-panes-file-opening-search-within-a-document-dirty-indicators-explicit-save-discard-and-safe-close-navigation-behavior-using-current-routing-ui-patterns",
+          "number": 3,
+          "title": "Implement the explorer, keyboard-accessible tabs/panes, file opening, search within a document, dirty indicators, explicit save/discard and safe close/navigation behavior using current routing/UI patterns.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-004-bind-models-to-project-worktree-file-identity-with-versioned-saved-baselines-preserve-separate-drafts-undo-history-and-selections-across-supported-tab-navigation-and-dispose-unused-models-listeners-deliberately",
+          "number": 4,
+          "title": "Bind models to project/worktree/file identity with versioned saved baselines; preserve separate drafts, undo history and selections across supported tab navigation, and dispose unused models/listeners deliberately.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-005-connect-k1-file-apis-for-saving-and-external-change-notices-show-base-draft-current-conflicts-and-use-the-monaco-diff-view-without-silently-losing-unsaved-work",
+          "number": 5,
+          "title": "Connect K1 file APIs for saving and external-change notices; show base/draft/current conflicts and use the Monaco diff view without silently losing unsaved work.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-006-load-syntax-support-from-an-extensible-language-asset-registry-independently-of-semantic-providers-show-explicit-plain-text-mode-if-a-grammar-tokenizer-is-unavailable",
+          "number": 6,
+          "title": "Load syntax support from an extensible language/asset registry independently of semantic providers; show explicit plain-text mode if a grammar/tokenizer is unavailable.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-007-keep-the-markdown-document-editor-and-existing-planner-pages-lightweight-apply-j1-project-first-titles-to-source-routes-regenerate-both-web-ui-dist-consumers-and-verify-fresh-packaged-desktop-loading",
+          "number": 7,
+          "title": "Keep the Markdown document editor and existing planner pages lightweight; apply J1 project-first titles to source routes, regenerate both web-ui-dist consumers and verify fresh packaged desktop loading.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-008-verify-a-user-opens-project-files-from-the-tree-edits-compares-and-saves-them-navigation-or-external-edits-do-not-discard-drafts-silently",
+          "number": 8,
+          "title": "Verify: A user opens project files from the tree, edits, compares and saves them; navigation or external edits do not discard drafts silently.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-009-verify-the-same-code-workspace-supports-newly-configured-language-assets-without-a-core-language-whitelist-syntax-availability-is-distinct-from-lsp-readiness",
+          "number": 9,
+          "title": "Verify: The same code workspace supports newly configured language assets without a core language whitelist; syntax availability is distinct from LSP readiness.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-010-verify-monaco-works-from-freshly-packed-local-artifacts-with-correctly-resolved-workers-assets-and-opening-ordinary-planner-pages-does-not-eagerly-load-the-code-editor",
+          "number": 10,
+          "title": "Verify: Monaco works from freshly packed local artifacts with correctly resolved workers/assets, and opening ordinary planner pages does not eagerly load the code editor.",
+          "checked": false
+        },
+        {
+          "id": "48007cac-64f6-4ec0-af25-5d54a5ce7b87-check-011-verify-explorer-tab-save-identity-when-the-shared-project-switches-workspaces-or-historical-views",
+          "number": 11,
+          "title": "Verify explorer/tab/save identity when the shared project switches workspaces or historical views.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "e73006a1-5106-432f-8018-932b88e15e58",
+        "1ee3b0bf-7cd9-4369-a7e3-314cfa45bb00",
+        "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T09:21:46.606Z",
+      "updatedAt": "2026-10-21T10:05:07.142Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "7cf90abc-befd-4393-a615-4434801f1c20",
+      "phaseId": "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+      "number": 487,
+      "shortId": "JETU7",
+      "priority": 2,
+      "shortName": "connect-monaco-navigation-to-s",
+      "title": "Connect Monaco navigation to shared analysis and planner rationale",
+      "status": "planned",
+      "description": "Outcome: Selecting code exposes verified semantic navigation and relevant prior tasks, decisions, rules and evidence beside the current or historical source.\n\nExisting state: P123/T479 owns graph and reverse code-to-rationale navigation, P120 owns anchors/history, P122 owns projections/retrieval, and K2 owns provider sessions. This task binds those existing contracts to the editor; it does not recreate any of them.\n\nImplementation responsibility:\n- Register Monaco provider hooks for available hover, definitions, references, signatures and diagnostics through K2 APIs; gate each operation on verified capability and document version.\n- Resolve graph/task/decision CodeLinks through E1 when opening the editor; display ambiguous or stale candidates instead of assuming old file:line locations remain valid.\n- Connect the editor selection and source range to the graph/context API and T479 inspection surface, exposing prior tasks, accepted decisions, requirements/rules and verification provenance.\n- Support the T002/T010/T020 case: current signature, prior parameter purpose and the recorded slim/functional constraint appear through the shared code target even when tasks lack direct links.\n- Keep current disk, unsaved draft and historical baseline contexts visibly distinct; do not query a live provider on old text and present the response as historical evidence.\n- Verify degraded/no-provider operation, coordinate conversion, cancellation, large-reference pagination and stale-result rejection; preserve existing graph/hierarchy routes and accessible focus behavior.\n\nAcceptance and evidence:\n- Definition/reference navigation and context panels reuse the same provider and canonical identities seen by agents.\n- The worked T002/T010/T020 case is navigable from both planner and code without inventing missing rationale.\n- Unavailable/stale/partial analysis is explicit; historical source and draft context cannot be mistaken for current verified results.\n\nRead before editing:\n- packages/plan-web-ui/src/routes/task-detail/route.tsx:108\n- packages/plan-core/src/api-v1.ts:343\n- packages/plan-server/src/entity-events.ts:1\n- packages/plan-server/src/serve.ts:185\n\nDetailed discussion contract:\n- The differentiator is code plus project intent: LSP contributes technical results while approved decisions and conventions come from canonical planner knowledge.\n- T479 remains the owner of graph inspection; this task owns editor bindings and cross-navigation. A selected code region can be shown with relevant evidence without asserting that the model understood the whole project.\n\nExecution dependencies: P127(F025)/T486, P126(F025)/T485, P123(F025)/T479. Requirement coverage and earlier responsibilities are preserved.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nShared-planner expansion approved 21 October 2026:\nReuse N3 source context and current availability for code/graph navigation. A link to code produced by another execution must show whether it exists locally, historically or only in that other worktree; do not substitute target source with live provider results from a different checkout.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:05:07.299Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-001-register-monaco-provider-hooks-for-available-hover-definitions-references-signatures-and-diagnostics-through-k2-apis-gate-each-operation-on-verified-capability-and-document-version",
+          "number": 1,
+          "title": "Register Monaco provider hooks for available hover, definitions, references, signatures and diagnostics through K2 APIs; gate each operation on verified capability and document version.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-002-resolve-graph-task-decision-codelinks-through-e1-when-opening-the-editor-display-ambiguous-or-stale-candidates-instead-of-assuming-old-file-line-locations-remain-valid",
+          "number": 2,
+          "title": "Resolve graph/task/decision CodeLinks through E1 when opening the editor; display ambiguous or stale candidates instead of assuming old file:line locations remain valid.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-003-connect-the-editor-selection-and-source-range-to-the-graph-context-api-and-t479-inspection-surface-exposing-prior-tasks-accepted-decisions-requirements-rules-and-verification-provenance",
+          "number": 3,
+          "title": "Connect the editor selection and source range to the graph/context API and T479 inspection surface, exposing prior tasks, accepted decisions, requirements/rules and verification provenance.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-004-support-the-t002-t010-t020-case-current-signature-prior-parameter-purpose-and-the-recorded-slim-functional-constraint-appear-through-the-shared-code-target-even-when-tasks-lack-direct-links",
+          "number": 4,
+          "title": "Support the T002/T010/T020 case: current signature, prior parameter purpose and the recorded slim/functional constraint appear through the shared code target even when tasks lack direct links.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-005-keep-current-disk-unsaved-draft-and-historical-baseline-contexts-visibly-distinct-do-not-query-a-live-provider-on-old-text-and-present-the-response-as-historical-evidence",
+          "number": 5,
+          "title": "Keep current disk, unsaved draft and historical baseline contexts visibly distinct; do not query a live provider on old text and present the response as historical evidence.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-006-verify-degraded-no-provider-operation-coordinate-conversion-cancellation-large-reference-pagination-and-stale-result-rejection-preserve-existing-graph-hierarchy-routes-and-accessible-focus-behavior",
+          "number": 6,
+          "title": "Verify degraded/no-provider operation, coordinate conversion, cancellation, large-reference pagination and stale-result rejection; preserve existing graph/hierarchy routes and accessible focus behavior.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-007-verify-definition-reference-navigation-and-context-panels-reuse-the-same-provider-and-canonical-identities-seen-by-agents",
+          "number": 7,
+          "title": "Verify: Definition/reference navigation and context panels reuse the same provider and canonical identities seen by agents.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-008-verify-the-worked-t002-t010-t020-case-is-navigable-from-both-planner-and-code-without-inventing-missing-rationale",
+          "number": 8,
+          "title": "Verify: The worked T002/T010/T020 case is navigable from both planner and code without inventing missing rationale.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-009-verify-unavailable-stale-partial-analysis-is-explicit-historical-source-and-draft-context-cannot-be-mistaken-for-current-verified-results",
+          "number": 9,
+          "title": "Verify: Unavailable/stale/partial analysis is explicit; historical source and draft context cannot be mistaken for current verified results.",
+          "checked": false
+        },
+        {
+          "id": "7cf90abc-befd-4393-a615-4434801f1c20-check-010-bind-editor-navigation-and-prior-rationale-to-the-selected-workspace-target-with-explicit-absent-unknown-outcomes",
+          "number": 10,
+          "title": "Bind editor navigation and prior rationale to the selected workspace/target with explicit absent/unknown outcomes.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "48007cac-64f6-4ec0-af25-5d54a5ce7b87",
+        "38dbf040-f73d-4759-b624-097b57c84307",
+        "3c2a6e59-c267-475b-9949-132b24241dfc"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T09:21:46.860Z",
+      "updatedAt": "2026-10-21T10:05:07.660Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c",
+      "phaseId": "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+      "number": 488,
+      "shortId": "9SC2T",
+      "priority": 3,
+      "shortName": "open-source-locations-in-the-p",
+      "title": "Open source locations in the preferred external editor",
+      "status": "planned",
+      "description": "Outcome: A user can open the current file or resolved symbol in a locally configured external editor, including line/column when supported.\n\nExisting state: The current Web UI has no discovered preferred-editor launcher. packages/plan-server/src/serve.ts:1564 exposes existing UI configuration and AppShell receives local server context; runtime settings must stay local rather than becoming shared project policy.\n\nImplementation responsibility:\n- Add a local user/machine editor preference and extensible launcher definitions with executable/argument templates or supported URI mechanisms; do not restrict the product to a fixed editor list.\n- Resolve the current CodeLink/file/worktree and location before launch; pass structured arguments through a validated launcher without evaluating browser-provided shell commands.\n- Provide Open in preferred editor from the workspace and relevant source links, with actionable missing-launcher or unsupported-position diagnostics.\n- Make the target machine explicit: a server-host launcher opens on that host, while browser-device opening requires an explicitly supported local handler and path mapping; never claim a remote path is automatically local.\n- Detect dirty editor drafts before opening the disk file and make save/open behavior explicit; observe later external edits through K1 without silently overwriting the browser draft.\n- Verify path escaping, spaces, Unicode, long refs resolved to locations, unsupported OS/editor configuration and host mismatch with stubbed launchers in temporary fixtures; retain project identity and current human controls.\n\nAcceptance and evidence:\n- A configured editor opens the correct project/worktree file at the resolved location; launch arguments preserve literal paths.\n- Preferences remain machine-local and the user can configure a compatible editor without changing core.\n- Remote/LAN use and unsaved drafts never silently open or present the wrong machine/file version as current.\n\nRead before editing:\n- packages/plan-server/src/serve.ts:1564\n- packages/plan-server/src/server-record.ts:1\n- packages/plan-web-ui/src/lib/api.ts:1\n- packages/plan-core/docs/runtime-boundaries.md:1\n\nDetailed discussion contract:\n- Opening an editor is an explicit human action. An editor preference is not a project-wide Accepted Decision and must not leak machine-specific paths into canonical configuration.\n- File:line is a launch position only; durable source identity is resolved before constructing the launch request. This planning task does not install or launch any editor.\n\nExecution dependencies: P127(F025)/T486. Requirement coverage and earlier responsibilities are preserved.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nShared-planner expansion approved 21 October 2026:\nResolve the source file in the explicitly selected workspace through M1, not from planRoot or the viewing browser machine. Deleted worktrees and historical snapshots have explicit open/export behavior; do not launch a wrong local path for a remote/absent source.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:05:07.861Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-001-add-a-local-user-machine-editor-preference-and-extensible-launcher-definitions-with-executable-argument-templates-or-supported-uri-mechanisms-do-not-restrict-the-product-to-a-fixed-editor-list",
+          "number": 1,
+          "title": "Add a local user/machine editor preference and extensible launcher definitions with executable/argument templates or supported URI mechanisms; do not restrict the product to a fixed editor list.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-002-resolve-the-current-codelink-file-worktree-and-location-before-launch-pass-structured-arguments-through-a-validated-launcher-without-evaluating-browser-provided-shell-commands",
+          "number": 2,
+          "title": "Resolve the current CodeLink/file/worktree and location before launch; pass structured arguments through a validated launcher without evaluating browser-provided shell commands.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-003-provide-open-in-preferred-editor-from-the-workspace-and-relevant-source-links-with-actionable-missing-launcher-or-unsupported-position-diagnostics",
+          "number": 3,
+          "title": "Provide Open in preferred editor from the workspace and relevant source links, with actionable missing-launcher or unsupported-position diagnostics.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-004-make-the-target-machine-explicit-a-server-host-launcher-opens-on-that-host-while-browser-device-opening-requires-an-explicitly-supported-local-handler-and-path-mapping-never-claim-a-remote-path-is-automatically-local",
+          "number": 4,
+          "title": "Make the target machine explicit: a server-host launcher opens on that host, while browser-device opening requires an explicitly supported local handler and path mapping; never claim a remote path is automatically local.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-005-detect-dirty-editor-drafts-before-opening-the-disk-file-and-make-save-open-behavior-explicit-observe-later-external-edits-through-k1-without-silently-overwriting-the-browser-draft",
+          "number": 5,
+          "title": "Detect dirty editor drafts before opening the disk file and make save/open behavior explicit; observe later external edits through K1 without silently overwriting the browser draft.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-006-verify-path-escaping-spaces-unicode-long-refs-resolved-to-locations-unsupported-os-editor-configuration-and-host-mismatch-with-stubbed-launchers-in-temporary-fixtures-retain-project-identity-and-current-human-controls",
+          "number": 6,
+          "title": "Verify path escaping, spaces, Unicode, long refs resolved to locations, unsupported OS/editor configuration and host mismatch with stubbed launchers in temporary fixtures; retain project identity and current human controls.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-007-verify-a-configured-editor-opens-the-correct-project-worktree-file-at-the-resolved-location-launch-arguments-preserve-literal-paths",
+          "number": 7,
+          "title": "Verify: A configured editor opens the correct project/worktree file at the resolved location; launch arguments preserve literal paths.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-008-verify-preferences-remain-machine-local-and-the-user-can-configure-a-compatible-editor-without-changing-core",
+          "number": 8,
+          "title": "Verify: Preferences remain machine-local and the user can configure a compatible editor without changing core.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-009-verify-remote-lan-use-and-unsaved-drafts-never-silently-open-or-present-the-wrong-machine-file-version-as-current",
+          "number": 9,
+          "title": "Verify: Remote/LAN use and unsaved drafts never silently open or present the wrong machine/file version as current.",
+          "checked": false
+        },
+        {
+          "id": "7cc6f4bb-5666-46b7-bc30-2866ca3da77c-check-010-verify-preferred-editor-resolution-from-central-storage-and-unavailable-historical-workspaces",
+          "number": 10,
+          "title": "Verify preferred-editor resolution from central storage and unavailable/historical workspaces.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "48007cac-64f6-4ec0-af25-5d54a5ce7b87"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T09:21:47.114Z",
+      "updatedAt": "2026-10-21T10:05:08.205Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-21T09:21:40.687Z",
+  "updatedAt": "2026-10-21T14:58:52.702Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "f23cb60b-5cb7-4f6a-89d8-28cdff784baa",
+      "date": "2026-10-21T09:26:50.726Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

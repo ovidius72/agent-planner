@@ -1,0 +1,224 @@
+{
+  "id": "1587a79c-750c-4ada-9ac5-e2e751f17301",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 116,
+  "shortId": "GWKE6",
+  "priority": 1,
+  "slug": "baseline-and-acceptance-contracts",
+  "title": "Baseline and acceptance contracts",
+  "discussedAt": "2026-10-20T16:40:28.364Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Reproduce the six reported failures and distinguish regressions from already shipped behavior.",
+  "description": "Reproduce the six reported failures and distinguish regressions from already shipped behavior.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows the baseline discovery and owns only the outcomes below.\n\nOutcomes:\n- Produce an evidence-backed baseline for the six user problems and their shared domain contracts.\n- Identify existing implementations to extend, including completed F016/F018/F020/F021/F023/F024.\n\nTasks and boundaries:\n- A1: Reproduce the reliability failures on isolated fixtures. A reproducible, bounded baseline identifying the failing layer for each of the six reported problems without changing real project plans.\n- A2: Define one shared next-work and context contract. Shared domain inputs, outputs and acceptance cases for scheduling, return precedence, context validity and explicit uncertainty.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/task-selection.ts:283 — export function recommendNextTask\n- packages/plan-core/src/recap.ts:46 — export async function buildRecap\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-core/src/plan-store.ts:3502 — async claimTask\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n\nAcceptance: All six reports have a reproducible scenario or an explicit evidence gap. Fixtures never write to another real project or its planner. Existing atomic claims and explicit recovery remain covered. There is one explainable precedence rule with zero-priority and tie cases. No current-phase preference silently overrides a higher global priority. The contract does not change the existing warning-only no-task guard.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR01, BR02, BR03, BR04, BR05, BR06, BR16.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nShared-planner expansion approved 21 October 2026:\nExtend the common baseline contracts to independent plan/workspace/runtime identity, task executions, target integration and revision-aware artifact availability. M/N/O then supply these foundations before B scheduling; the six original reliability failures remain required.\nAdditional outcome coverage: . Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
+  "descriptionRef": ".planner/docs/agent-brain-plan.md",
+  "descriptionUpdatedAt": "2026-10-21T14:58:50.386Z",
+  "notes": "",
+  "goals": [
+    "Produce an evidence-backed baseline for the six user problems and their shared domain contracts.",
+    "Identify existing implementations to extend, including completed F016/F018/F020/F021/F023/F024."
+  ],
+  "nonGoals": [
+    "Do not rebuild persistent memory, decisions, phase handoffs or task ownership.",
+    "Do not implement the code graph before the reliability block is accepted."
+  ],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [
+    "Historical descriptions and the earlier audit can be stale after origin/main updates.",
+    "A passing handler test does not establish installed runtime behavior."
+  ],
+  "openQuestions": [
+    "Which reported scenarios reproduce on this baseline, and which need a narrower regression fixture?"
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "All six reports have a reproducible scenario or an explicit evidence gap.",
+    "Fixtures never write to another real project or its planner.",
+    "Existing atomic claims and explicit recovery remain covered.",
+    "There is one explainable precedence rule with zero-priority and tie cases.",
+    "No current-phase preference silently overrides a higher global priority.",
+    "The contract does not change the existing warning-only no-task guard.",
+    "Shared-planner acceptance: Extend the common baseline contracts to independent plan/workspace/runtime identity, task executions, target integration and revision-aware artifact availability. M/N/O then supply these foundations before B scheduling; the six original reliability failures remain required.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "446c443d-97d5-487d-a997-7fbacf0fd972",
+    "f4ac8204-3e0c-429d-9354-4c75061d7600"
+  ],
+  "tasks": [
+    {
+      "id": "446c443d-97d5-487d-a997-7fbacf0fd972",
+      "phaseId": "1587a79c-750c-4ada-9ac5-e2e751f17301",
+      "number": 461,
+      "shortId": "DCHZL",
+      "priority": 1,
+      "shortName": "reproduce-the-reliability-fail",
+      "title": "Reproduce the reliability failures on isolated fixtures",
+      "status": "planned",
+      "description": "Outcome: A reproducible, bounded baseline identifying the failing layer for each of the six reported problems without changing real project plans.\n\nExisting state: Existing lifecycle, ownership, return stacks, read attestations and parked-task resumption are already shipped; F024 specifically addressed parked-state startability. Earlier observations were static and must be rechecked.\n\nImplementation responsibility:\n- Read the current implementations and relevant completed feature records before proposing changes.\n- Create temporary fixture plans for multiple handoffs, long pauses, nested returns, global priorities, context loss and duplicate work creation.\n- Exercise core plus real MCP/Pi/server paths where supported; record loaded versions, fixtures and content fingerprints.\n- Classify each result as reproduced failure, already resolved behavior, incomplete evidence or uncovered harness path.\n\nAcceptance and evidence:\n- All six reports have a reproducible scenario or an explicit evidence gap.\n- Fixtures never write to another real project or its planner.\n- Existing atomic claims and explicit recovery remain covered.\n\nRead before editing:\n- packages/plan-core/src/task-selection.ts:283 — export function recommendNextTask\n- packages/plan-core/src/recap.ts:46 — export async function buildRecap\n- packages/plan-core/src/on-hold.ts:1 — (module)\n- packages/plan-core/src/session-focus.ts:1 — (module)\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nPlan dependencies: none. Product requirement coverage: BR01, BR02, BR03, BR04, BR05, BR06, BR16. Supporting design: .planner/docs/agent-brain-plan.md.\n\nDetailed discussion contract:\n- Reproduce each of the six user reports against the current source and loaded runtime; keep user observations, static findings and established causes distinct.\n- F024 already addressed parked-state startability: verify its actual remaining regression rather than implementing an obsolete historical description.\n- Include unrelated-task rationale, large dirty-baseline changesets, ignored conventions and unsupported language in the eventual scenario coverage; this task establishes the baseline, not the full implementations.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.",
+      "descriptionUpdatedAt": "2026-10-20T16:40:50.456Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-001-read-the-current-implementations-and-relevant-completed-feature-records-before-proposing-changes",
+          "number": 1,
+          "title": "Read the current implementations and relevant completed feature records before proposing changes.",
+          "checked": false
+        },
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-002-create-temporary-fixture-plans-for-multiple-handoffs-long-pauses-nested-returns-global-priorities-context-loss-and-duplicate-work-creation",
+          "number": 2,
+          "title": "Create temporary fixture plans for multiple handoffs, long pauses, nested returns, global priorities, context loss and duplicate work creation.",
+          "checked": false
+        },
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-003-exercise-core-plus-real-mcp-pi-server-paths-where-supported-record-loaded-versions-fixtures-and-content-fingerprints",
+          "number": 3,
+          "title": "Exercise core plus real MCP/Pi/server paths where supported; record loaded versions, fixtures and content fingerprints.",
+          "checked": false
+        },
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-004-classify-each-result-as-reproduced-failure-already-resolved-behavior-incomplete-evidence-or-uncovered-harness-path",
+          "number": 4,
+          "title": "Classify each result as reproduced failure, already resolved behavior, incomplete evidence or uncovered harness path.",
+          "checked": false
+        },
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-005-verify-all-six-reports-have-a-reproducible-scenario-or-an-explicit-evidence-gap",
+          "number": 5,
+          "title": "Verify: All six reports have a reproducible scenario or an explicit evidence gap.",
+          "checked": false
+        },
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-006-verify-fixtures-never-write-to-another-real-project-or-its-planner",
+          "number": 6,
+          "title": "Verify: Fixtures never write to another real project or its planner.",
+          "checked": false
+        },
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-007-verify-existing-atomic-claims-and-explicit-recovery-remain-covered",
+          "number": 7,
+          "title": "Verify: Existing atomic claims and explicit recovery remain covered.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:40:50.376Z",
+      "updatedAt": "2026-10-20T16:40:50.376Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f4ac8204-3e0c-429d-9354-4c75061d7600",
+      "phaseId": "1587a79c-750c-4ada-9ac5-e2e751f17301",
+      "number": 462,
+      "shortId": "X39NV",
+      "priority": 2,
+      "shortName": "define-one-shared-next-work-an",
+      "title": "Define one shared next-work and context contract",
+      "status": "planned",
+      "description": "Outcome: Shared domain inputs, outputs and acceptance cases for scheduling, return precedence, context validity and explicit uncertainty.\n\nExisting state: Selection, recap, lifecycle messages and skill instructions still have separate logic and conflicting read-order guidance. A historical session timestamp is not proof that model context survived compaction.\n\nImplementation responsibility:\n- Specify active owned work, actionable pending returns, then globally ready feature → phase → task precedence.\n- Define readiness against dependency, parked-state, ownership and explicit-user-selection rules.\n- Specify context delivery versus attestation versus conformity evidence; preserve typed non-success results.\n- Define shared result shapes used by MCP, Pi, server and UI and map every baseline scenario to an owner.\n\nAcceptance and evidence:\n- There is one explainable precedence rule with zero-priority and tie cases.\n- No current-phase preference silently overrides a higher global priority.\n- The contract does not change the existing warning-only no-task guard.\n\nRead before editing:\n- packages/plan-core/src/task-selection.ts:283 — export function recommendNextTask\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-core/src/project-context.ts:357 — export function buildProjectContextLoadReply\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-core/src/guard-decision.ts:312 — export function noTaskWarning\n- packages/plan-core/src/api-v1.ts:343 — export function buildApiV1Model\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P116(F025)/T461. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Define one shared selection result with candidate, availability/exclusion reasons and caller identity. Work dependency ordering is separate from shared-code or decision-applicability relationships.\n- Define actual delivered content, current snapshot and effective context restoration separately from stored session attestations and conformity review.\n- Preserve warning-only no-task behavior; any new write-denial scope is a separate open decision.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nExtend the baseline contract with explicit planner/workspace/runtime binding, logical work versus execution versus integration, and revision-aware artifact availability. Specify legacy/non-code projections; N3 supplies the availability evaluator and B1 implements selection. Do not treat source-area links as work-order dependencies.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nSpecify mutation-impact/reconciliation postconditions, structural versus semantic updates and per-flow payload/token/tool budgets. Establish fixed local-change, no-op, high-fan-out, resume/compaction, graph-query and editor fixtures before claiming savings; declare token counts versus byte/character proxies.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionUpdatedAt": "2026-10-21T14:55:17.644Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-001-specify-active-owned-work-actionable-pending-returns-then-globally-ready-feature-phase-task-precedence",
+          "number": 1,
+          "title": "Specify active owned work, actionable pending returns, then globally ready feature → phase → task precedence.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-002-define-readiness-against-dependency-parked-state-ownership-and-explicit-user-selection-rules",
+          "number": 2,
+          "title": "Define readiness against dependency, parked-state, ownership and explicit-user-selection rules.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-003-specify-context-delivery-versus-attestation-versus-conformity-evidence-preserve-typed-non-success-results",
+          "number": 3,
+          "title": "Specify context delivery versus attestation versus conformity evidence; preserve typed non-success results.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-004-define-shared-result-shapes-used-by-mcp-pi-server-and-ui-and-map-every-baseline-scenario-to-an-owner",
+          "number": 4,
+          "title": "Define shared result shapes used by MCP, Pi, server and UI and map every baseline scenario to an owner.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-005-verify-there-is-one-explainable-precedence-rule-with-zero-priority-and-tie-cases",
+          "number": 5,
+          "title": "Verify: There is one explainable precedence rule with zero-priority and tie cases.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-006-verify-no-current-phase-preference-silently-overrides-a-higher-global-priority",
+          "number": 6,
+          "title": "Verify: No current-phase preference silently overrides a higher global priority.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-007-verify-the-contract-does-not-change-the-existing-warning-only-no-task-guard",
+          "number": 7,
+          "title": "Verify: The contract does not change the existing warning-only no-task guard.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-008-specify-work-execution-integration-workspace-identity-and-availability-inputs-in-the-common-baseline-contract",
+          "number": 8,
+          "title": "Specify work/execution/integration, workspace identity and availability inputs in the common baseline contract.",
+          "checked": false
+        },
+        {
+          "id": "f4ac8204-3e0c-429d-9354-4c75061d7600-check-009-define-measured-affected-delta-context-budgets-and-reconciliation-contracts-for-every-f025-workflow",
+          "number": 9,
+          "title": "Define measured affected-delta/context budgets and reconciliation contracts for every F025 workflow.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "446c443d-97d5-487d-a997-7fbacf0fd972"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:10.512Z",
+      "updatedAt": "2026-10-21T14:57:50.092Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T16:39:44.379Z",
+  "updatedAt": "2026-10-21T14:58:50.386Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "e7079d28-f4a2-40cc-aeb3-151763c2de1d",
+      "date": "2026-10-21T10:04:58.019Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

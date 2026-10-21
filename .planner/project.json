@@ -1,11 +1,15 @@
 {
   "name": "Agent Plan",
   "goal": "Deliver a self-hosted Claude Code plugin (marketplace, no approval) bundling @agent-plan/mcp + a /planner skill + a non-blocking SessionStart hook, with a reusable multi-plugin folder structure ready for Codex and future harnesses.",
-  "description": "Self-improvement: add harness-specific plugin bundles (Claude Code first, Codex next) alongside the existing npm packages, so Agent Plan integrates natively with multiple coding-agent harnesses.",
+  "description": "Agent Plan development includes the existing harness-specific native plugin bundles alongside npm packages, so it integrates with multiple coding-agent harnesses. The approved F025 Agent Brain evolution extends the existing planner with reliable priorities/returns/context, evidence-backed conventions, code-linked history and graph, dynamic analysis providers, an editable Monaco workspace and project-aware UI. Its shared-planner design separates project knowledge, workspace execution and target integration, with lossless migration and independent recovery. Every affected hierarchy/dependency change must be reconciled with bounded incremental context cost; approved details, requirements and single-owner decisions live in F025 and its supporting handoffs. This scope is registered planning, not implemented or migrated behavior. Existing project Guidelines, decisions, plugin goals and release governance remain applicable.",
   "projectGuidelines": {
-    "content": "- use the available react skill. \n- make each component small and reusable. fully typescript typed and expandable. \n- add unit tests to every component\n- make the UI user friendly\n- use the best react-router 7 patterns: form submissions, navigation and middleware",
-    "updatedAt": "2026-08-31T07:38:25.009Z",
+    "content": "- use the available react skill. \n- make each component small and reusable. fully typescript typed and expandable. \n- add unit tests to every component\n- make the UI user friendly\n- use the best react-router 7 patterns: form submissions, navigation and middleware\n\n## Agent Brain implementation workflow\n\nBefore modifying code for this feature, read the applicable project instructions, canonical Guidelines and Accepted Decisions, the exact feature/phase/task, and relevant existing implementations, interfaces and tests. Record a concise source-backed analysis on the existing task: precedents and their relevance, conventions, reuse, architectural ownership, intended integration and verification. Explicit rules and approved decisions take precedence over incompatible legacy examples. If no relevant precedent exists, state that fact and resolve material missing conventions through the existing discussion process.\n\nApply the existing lifecycle and ownership rules; preserve phase-scoped handoffs, canonical IDs and dependency edges. Use checklists for implementation details instead of creating more tasks. Before completing work, compare the actual diff with the selected precedents and applicable rules and record concrete verification and conformity evidence, including what remains unverified. A read receipt, ticked checklist or passing build alone is not architectural proof.\n\nReuse valid available context and refresh affected evidence after context loss, source changes or an expansion into another area. Follow existing authorization; do not add a permission prompt for every routine already authorized step. Preserve the accepted warning-only no-task guard. Never modify AGENTS.md, publish, release, push or open a PR without the authorization those actions require.\n\nKeep source code and technical product text in English and preserve the existing React/component/test conventions. Follow the bounded verification and tracked web-ui-dist rules in AGENTS.md. Supporting Agent Brain design is under .planner/docs/agent-brain-plan.md; canonical planner entities and decisions remain the operational authority.",
+    "updatedAt": "2026-10-20T16:43:04.515Z",
     "sessionInfo": [
+      {
+        "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+        "createdAt": "2026-10-21T19:08:21.667Z"
+      },
       {
         "sessionId": "mcp-process:81bc76af-e1ff-4eff-b9b6-b31a619aa922",
         "createdAt": "2026-10-20T07:31:16.417Z"
@@ -185,6 +189,14 @@
       "rationale": "heca 2026-09-28: after P082's planned work finished, the recommendation jumped to an unstarted phase while four parked tasks whose blocker (P097) had finished stayed hidden; the user had to notice. A reason is prose, so a match is a hint for the agent to re-check, not an automatic resume.",
       "implementationNotes": "One module, packages/plan-core/src/on-hold.ts (listOnHoldWork, refsNamedIn, startedOpenPhaseIds, renderOnHoldWork). recommendNextWork adds `onHold` and \"on-hold\" claims ahead of other advisories; buildRecommendationReply and buildRecap render the same block, so MCP, Pi and the server agree. Refs resolve by number only, never by title; a ref naming nothing in the plan, or the task itself, is not treated as finished.",
       "acceptedAt": "2026-09-28T13:43:12.759Z"
+    },
+    {
+      "id": "2959bd95-4c71-4c7f-8c60-ca582ab8d652",
+      "title": "Ready work follows global feature → phase → task priority",
+      "decision": "When no owned active work or actionable pending return takes precedence, choose ready available work globally by feature priority, then phase priority, then task priority. Current-phase continuity does not override higher global priority. Dependency, block and ownership constraints remain in force.",
+      "rationale": "Explicit user answer on 20 October 2026: Priorità globale feature → fase → task.",
+      "implementationNotes": "Implement once in the shared core; recap, recommendations, completion, MCP/Pi/server and UI consume the same result. Respect priority zero, deterministic ties and explicit user choices.",
+      "acceptedAt": "2026-10-20T16:42:42.261Z"
     }
   ],
   "nextFeatureNumber": 17,

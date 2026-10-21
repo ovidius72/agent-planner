@@ -1,0 +1,56 @@
+{
+  "kind": "F025 shared-authority/execution/integration/impact registration verification",
+  "date": "2026-10-21",
+  "result": "passed",
+  "assertions": 2397,
+  "groups": {
+    "scope": 21,
+    "preservation": 1370,
+    "planning-only": 492,
+    "contracts": 68,
+    "public-readback": 143,
+    "identity": 39,
+    "dependencies": 65,
+    "documents": 199
+  },
+  "failures": [],
+  "currentCounts": {
+    "phases": 15,
+    "tasks": 36,
+    "requirements": 29,
+    "decisions": 19,
+    "dependencyEdges": 49,
+    "uncheckedChecklistItems": 334
+  },
+  "deltaFromPreviousEditorScope": {
+    "phases": 3,
+    "tasks": 8,
+    "requirements": 8,
+    "featureDecisions": 6,
+    "taskDependencyEdges": 16,
+    "checklistSteps": 105
+  },
+  "existingTasksAmended": 22,
+  "publicReadBack": {
+    "tasks": 36,
+    "phases": 15,
+    "requirements": 29,
+    "featureDecisions": 18,
+    "incrementalTaskReadsAfterFollowup": 12,
+    "staleF025Parents": []
+  },
+  "projectAssessment": {
+    "descriptionReconciled": true,
+    "goalGuidelinesDecisionsTechnologySettingsPreserved": true
+  },
+  "canonicalMutationMethod": "Public Agent Plan granular operations only; supporting documents are non-authoritative.",
+  "implementationStarted": false,
+  "realMigrationExecuted": false,
+  "productTestsRun": false,
+  "finalProductGateRun": false,
+  "commitsOrPRsCreated": false,
+  "limits": [
+    "Planning integrity and persistence were checked; product behavior, performance budgets and migration are not implemented or verified.",
+    "Original and previous amendment/editor verification reports remain historical snapshots."
+  ]
+}

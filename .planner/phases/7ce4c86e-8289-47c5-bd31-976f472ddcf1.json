@@ -1,0 +1,277 @@
+{
+  "id": "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 124,
+  "shortId": "AUDV5",
+  "priority": 9,
+  "slug": "compatibility-installed-validation-and-operating-documentation",
+  "title": "Compatibility, installed validation and operating documentation",
+  "discussedAt": "2026-10-20T16:40:40.497Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Verify complete user workflows and leave a reproducible implementation handover.",
+  "description": "Verify complete user workflows and leave a reproducible implementation handover.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows H and owns only the outcomes below.\n\nOutcomes:\n- Validate migrations, supported harnesses, polyglot analysis and the complete scenario matrix. Ensure variable-width feature/phase/task sequences across supported surfaces.\n- Document real capabilities, limitations and the seam with a future AgentTest concept.\n\nTasks and boundaries:\n- I1: Verify migrations, invariants and complete cross-surface scenarios. Reproducible compatibility and workflow evidence over isolated old/new plans and actual supported surfaces.\n- I2: Validate installed artifacts and publish the operating guide. A reviewable feature closeout with current architecture/setup/protocol documentation and verified installed behavior, without publishing a release.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- package.json:35 — verify:final\n- packages/agent-plan/src/index.ts:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\n\nAcceptance: All required scenarios have concrete evidence or a named unresolved blocker. No migration fabricates semantic links or loses approved history. Normal reads do not silently rewrite canonical knowledge; allocation, full reference resolution, numeric ordering/search, dependencies, parked returns, API/MCP/Pi, export and Web UI preserve identities beyond three and four digits. Final evidence identifies exact package/source fingerprints and tested supported environments. A new agent can follow the documented workflow using the planner, existing sources and explicit uncertainty. No release/publish claim is made without the corresponding authorized action and registry evidence.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR01, BR02, BR03, BR04, BR05, BR06, BR07, BR08, BR09, BR10, BR11, BR12, BR13, BR14, BR15, BR16, BR17.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nExpanded closeout: all editor-workspace work must be verified before feature closeout. T481 additionally depends on P127(F025)/T487 and P127(F025)/T488; their prerequisites include P125(F025)/T483, source APIs and the shared runtime. Cover project identity, editable Monaco/diff, save conflicts, single compatible provider ownership across consumers, explicit document versions and preferred-editor target-machine semantics. T482 covers fresh local Monaco workers/assets, installed behavior and current operating documentation. See .planner/docs/agent-brain-editor-and-project-identity.md.\n\nRegistered editor completion prerequisites: P127(F025)/T487 and P127(F025)/T488 must finish before T481; all three new phase outcomes are included in this closeout.\n\nShared-planner expansion approved 21 October 2026:\nCloseout now also requires P129(F025)/T493 and P130(F025)/T495, in addition to every existing graph/editor prerequisite. Cover shared multi-host authority, isolated runtime, execution/integration, dev-a/dev-b partial delivery, squash/rebase/cherry-pick, revert, unknown evidence, migration conflicts/crashes, old/unavailable clients and complete independent backup/export/restore. T482 verifies fresh installed bindings and updates runtime/setup/API guidance. No real migration or Git/tracking action is implied.\nAdditional outcome coverage: BR22, BR23, BR24, BR25, BR26, BR27. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.\n\nPrerequisite reconciliation: T481 explicitly requires P128(F025)/T496 alongside T493/T495 and all previous graph/editor prerequisites; bounded-cost and reconciliation checks are part of feature closeout.",
+  "descriptionRef": ".planner/docs/agent-brain-plan.md",
+  "descriptionUpdatedAt": "2026-10-21T15:00:45.771Z",
+  "notes": "",
+  "goals": [
+    "Validate migrations, supported harnesses, polyglot analysis and the complete scenario matrix. Ensure variable-width feature/phase/task sequences across supported surfaces.",
+    "Document real capabilities, limitations and the seam with a future AgentTest concept."
+  ],
+  "nonGoals": [
+    "No autonomous release, publish, PR or standalone AgentTest product.",
+    "No claim of production support from workspace tests alone."
+  ],
+  "dependencies": [
+    "P123(F025)",
+    "P127(F025)",
+    "P129(F025)",
+    "P130(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Schema growth may break older plans or clients.",
+    "Cached artifacts or a stale global MCP process can hide broken packaged behavior."
+  ],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "All required scenarios have concrete evidence or a named unresolved blocker.",
+    "No migration fabricates semantic links or loses approved history.",
+    "Normal reads do not silently rewrite canonical knowledge; allocation, full reference resolution, numeric ordering/search, dependencies, parked returns, API/MCP/Pi, export and Web UI preserve identities beyond three and four digits.",
+    "Final evidence identifies exact package/source fingerprints and tested supported environments.",
+    "A new agent can follow the documented workflow using the planner, existing sources and explicit uncertainty.",
+    "No release/publish claim is made without the corresponding authorized action and registry evidence.",
+    "Project-first titles, editable source/diff/save conflicts, shared runtime/document lifecycle and external-editor target semantics have concrete cross-surface evidence.",
+    "Shared-planner acceptance: Closeout now also requires P129(F025)/T493 and P130(F025)/T495, in addition to every existing graph/editor prerequisite. Cover shared multi-host authority, isolated runtime, execution/integration, dev-a/dev-b partial delivery, squash/rebase/cherry-pick, revert, unknown evidence, migration conflicts/crashes, old/unavailable clients and complete independent backup/export/restore. T482 verifies fresh installed bindings and updates runtime/setup/API guidance. No real migration or Git/tracking action is implied.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "9f374b0e-d369-4b72-a82f-c31680e11996",
+    "759349d0-a71b-4983-951b-00d3de6edba7"
+  ],
+  "tasks": [
+    {
+      "id": "9f374b0e-d369-4b72-a82f-c31680e11996",
+      "phaseId": "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+      "number": 481,
+      "shortId": "SWVQV",
+      "priority": 1,
+      "shortName": "verify-migrations-invariants-a",
+      "title": "Verify migrations, invariants and complete cross-surface scenarios",
+      "status": "planned",
+      "description": "Outcome: Reproducible compatibility and workflow evidence over isolated old/new plans and actual supported surfaces.\n\nExisting state: Existing schema/runtime boundaries and integration suites provide precedents, but new link/history/provider data needs backward compatibility and end-to-end coverage.\n\nImplementation responsibility:\n- Test lossless/idempotent migrations preserving IDs, decisions, handoffs, requirements, checkpoints, statuses and dependency edges.\n- Verify the complete scenario matrix, including failed/partial tool responses, concurrent ownership and feature/phase/task sequence boundaries 999→1000, 9999→10000 and larger valid integers across supported surfaces; fix bounded-width assumptions found.\n- Check required fields in v1/API events and schema evolution with existing clients.\n- Verify text-only, supported-language and mixed-language paths plus context loss and stale snapshots.\n- Record unresolved coverage explicitly instead of marking untested surfaces complete.\n\nAcceptance and evidence:\n- All required scenarios have concrete evidence or a named unresolved blocker.\n- No migration fabricates semantic links or loses approved history.\n- Normal reads do not silently rewrite canonical knowledge; allocation, full reference resolution, numeric ordering/search, dependencies, parked returns, API/MCP/Pi, export and Web UI preserve identities beyond three and four digits.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n- packages/plan-core/src/api-v1.ts:343 — export function buildApiV1Model\n- packages/plan-server/src/entity-events.ts:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P123(F025)/T480, P127(F025)/T487, P127(F025)/T488, P129(F025)/T493, P130(F025)/T495, P128(F025)/T496. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Validate old/new planner migration and granular atomic operations without losing IDs, handoffs, approved decisions, checkpoints, requirements or dependency edges.\n- Run the full discussed scenario matrix with actual coverage and non-success/error handling; do not equate an entity count or handler presence with complete behavior.\n- Cross-language, text-only, mixed-repository and context-loss paths need concrete evidence. Unobserved/unsupported behavior remains explicitly unverified.\n- Use isolated fixtures with counters near boundaries, not thousands of real planner entities. Minimum three-digit padding is compatible with F001 and F1000, P10000(F1000)/T100000 and F1000/P10000/T100000. Preserve UUIDs/shortIds/history, validate parent mismatches and full-token boundaries, prevent numeric truncation/rounding, and define the supported safe-integer range explicitly. MT-xxx requirement macro-task limits are a separate model and are outside this requested F/P/T change.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nExpanded acceptance matrix: wait for P127(F025)/T487 and P127(F025)/T488 as persisted dependencies, retaining the existing T480 dependency. Verify project-first overview/detail titles under direct navigation, live rename, back/forward and error/loading; editable Monaco tabs/diff and expected-revision save conflicts with agent/external edits; one compatible provider process across simultaneous editor and supported agent host processes; explicit saved/draft/historical source versions; dynamic language capabilities; and correct external-editor paths/target-machine behavior. Use isolated fixtures and actual browser/runtime evidence, not handler presence. See .planner/docs/agent-brain-editor-and-project-identity.md.\n\nShared-planner expansion approved 21 October 2026:\nAdd explicit completion prerequisites N3 and O2 and verify the full shared-authority/execution/integration/migration/recovery matrix. Include two independent agent hosts/worktrees, atomic claims, isolated returns/context, dev-a/dev-b partial integration, multiple targets, squash/rebase/cherry-pick, revert/unknown evidence, conflicting planner copies, crash recovery, unavailable authority, old clients, standalone setup and complete restore. Use isolated mkdtemp fixtures; no real planner migration or Git action is authorized by test execution.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nAdd M3 as a completion prerequisite and verify BR28/BR29 across task/phase/feature/project mutations, task creation, moves/old-new parents, dependency add/remove/cycle rejection, concurrent stale reconciliation and interruption. Measure fixed comparable fixtures for mutation/resume/graph/editor, including unrelated-plan growth, no-op/cached and high-fan-out cases. Record payload bytes/chars, honest model-token metrics where available, tool calls and necessary context restoration; no unmeasured savings claims.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionUpdatedAt": "2026-10-21T14:59:41.241Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-001-test-lossless-idempotent-migrations-preserving-ids-decisions-handoffs-requirements-checkpoints-statuses-and-dependency-edges",
+          "number": 1,
+          "title": "Test lossless/idempotent migrations preserving IDs, decisions, handoffs, requirements, checkpoints, statuses and dependency edges.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-002-verify-the-complete-scenario-matrix-including-failed-partial-tool-responses-concurrent-ownership-and-feature-phase-task-sequence-boundaries-999-1000-9999-10000-and-larger-valid-integers-across-supported-surfaces-fix-bounded-width-assumptions-found",
+          "number": 2,
+          "title": "Verify the complete scenario matrix, including failed/partial tool responses, concurrent ownership and feature/phase/task sequence boundaries 999→1000, 9999→10000 and larger valid integers across supported surfaces; fix bounded-width assumptions found.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-003-check-required-fields-in-v1-api-events-and-schema-evolution-with-existing-clients",
+          "number": 3,
+          "title": "Check required fields in v1/API events and schema evolution with existing clients.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-004-verify-text-only-supported-language-and-mixed-language-paths-plus-context-loss-and-stale-snapshots",
+          "number": 4,
+          "title": "Verify text-only, supported-language and mixed-language paths plus context loss and stale snapshots.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-005-record-unresolved-coverage-explicitly-instead-of-marking-untested-surfaces-complete",
+          "number": 5,
+          "title": "Record unresolved coverage explicitly instead of marking untested surfaces complete.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-006-verify-all-required-scenarios-have-concrete-evidence-or-a-named-unresolved-blocker",
+          "number": 6,
+          "title": "Verify: All required scenarios have concrete evidence or a named unresolved blocker.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-007-verify-no-migration-fabricates-semantic-links-or-loses-approved-history",
+          "number": 7,
+          "title": "Verify: No migration fabricates semantic links or loses approved history.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-008-verify-normal-reads-do-not-silently-rewrite-canonical-knowledge-allocation-full-reference-resolution-numeric-ordering-search-dependencies-parked-returns-api-mcp-pi-export-and-web-ui-preserve-identities-beyond-three-and-four-digits",
+          "number": 8,
+          "title": "Verify: Normal reads do not silently rewrite canonical knowledge; allocation, full reference resolution, numeric ordering/search, dependencies, parked returns, API/MCP/Pi, export and Web UI preserve identities beyond three and four digits.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-009-verify-project-aware-titles-and-monaco-workspace-navigation-edit-save-conflict-scenarios-on-isolated-browser-fixtures",
+          "number": 9,
+          "title": "Verify project-aware titles and Monaco workspace navigation/edit/save-conflict scenarios on isolated browser fixtures.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-010-verify-shared-provider-process-reuse-explicit-source-revisions-and-external-editor-target-machine-behavior-across-supported-consumers",
+          "number": 10,
+          "title": "Verify shared provider-process reuse, explicit source revisions and external-editor target-machine behavior across supported consumers.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-011-verify-shared-authority-isolated-runtime-execution-integration-readiness-lossless-migration-and-backup-restore-across-supported-surfaces",
+          "number": 11,
+          "title": "Verify shared authority, isolated runtime, execution/integration readiness, lossless migration and backup/restore across supported surfaces.",
+          "checked": false
+        },
+        {
+          "id": "9f374b0e-d369-4b72-a82f-c31680e11996-check-012-verify-affected-hierarchy-dependency-postconditions-and-bounded-cost-acceptance-across-all-feature-workflows",
+          "number": 12,
+          "title": "Verify affected hierarchy/dependency postconditions and bounded-cost acceptance across all feature workflows.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7",
+        "7cf90abc-befd-4393-a615-4434801f1c20",
+        "7cc6f4bb-5666-46b7-bc30-2866ca3da77c",
+        "c83cce3f-0d98-4e5c-ab60-192824cf91f6",
+        "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062",
+        "e1111601-64ad-49d5-9805-df48e9dd4b70"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:26.029Z",
+      "updatedAt": "2026-10-21T14:59:41.239Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "759349d0-a71b-4983-951b-00d3de6edba7",
+      "phaseId": "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+      "number": 482,
+      "shortId": "2XV47",
+      "priority": 2,
+      "shortName": "validate-installed-artifacts-a",
+      "title": "Validate installed artifacts and publish the operating guide",
+      "status": "planned",
+      "description": "Outcome: A reviewable feature closeout with current architecture/setup/protocol documentation and verified installed behavior, without publishing a release.\n\nExisting state: Repository verification rules already require bounded checks and freshly packed installation smoke. This feature adds setup and source-context workflows requiring documented support boundaries.\n\nImplementation responsibility:\n- Run only affected verification during development and the canonical final gate according to AGENTS.md; reuse results only for unchanged fingerprints.\n- Install freshly packed artifacts in temporary locations and verify actual CLI/MCP/Pi/server/provider entry points.\n- Document empty-folder onboarding, unsupported languages, context restoration, code links, decision review and supervisor UI.\n- Describe test-evidence integration and future AgentTest extension boundaries without adding a second test product.\n- Reconcile feature/phase/task descriptions and remaining limitations; leave release and commit actions to explicit authorization.\n\nAcceptance and evidence:\n- Final evidence identifies exact package/source fingerprints and tested supported environments.\n- A new agent can follow the documented workflow using the planner, existing sources and explicit uncertainty.\n- No release/publish claim is made without the corresponding authorized action and registry evidence.\n\nRead before editing:\n- package.json:35 — verify:final\n- packages/agent-plan/src/index.ts:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\n- packages/plan-core/planner-skill.md:42 — ## Lifecycle-first context protocol\n- scripts/sync-plugins.cjs:1 — (module)\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P124(F025)/T481. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Verify fresh packaged entry points and actual runtime/source fingerprints using the existing bounded gate/smoke process; workspace tests alone do not establish installed behavior.\n- Document the complete empty-folder/provider/fallback/context/traceability/review workflow and real limitations for the next agent.\n- Record revision-bound test/evidence links and a future AgentTest seam; a separate autonomous testing product, publishing and unapproved commits/PRs are outside scope.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nInstalled workspace closeout: verify locally shipped Monaco ESM workers/language assets from freshly packed artifacts without a public-CDN dependency; exercise source navigation, safe saves/conflicts, shared provider reuse, project-aware titles and external-opener configuration using supported fixture launchers. Document source editing as included, desktop focus/mobile limits, runtime/document ownership and target-machine semantics. Preserve the earlier dynamic-language and variable-width-reference contracts. Do not launch or change the user's real editor during fixture verification. See .planner/docs/agent-brain-editor-and-project-identity.md.\n\nShared-planner expansion approved 21 October 2026:\nFresh packed installations must resolve one bound planner and the correct source workspace across supported CLI/MCP/Pi/server clients, with explicit unavailable/incompatible errors and no duplicate fallback plan. Update runtime-boundaries/setup/API/operating guidance for storage discovery, execution versus integration, current target availability, old-plan migration and independent backups/portable restore. Preserve the Monaco/dynamic-provider checks and no-release boundary.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nFresh installed clients must expose compact impact receipts and explicit reconciliation_required obligations consistently. Document delta delivery, no-change-needed assessment, cache/compaction limits, measured budgets and high-fan-out continuation; a successful leaf save cannot be described as fully reconciled while obligations remain.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionUpdatedAt": "2026-10-21T14:55:22.190Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-001-run-only-affected-verification-during-development-and-the-canonical-final-gate-according-to-agents-md-reuse-results-only-for-unchanged-fingerprints",
+          "number": 1,
+          "title": "Run only affected verification during development and the canonical final gate according to AGENTS.md; reuse results only for unchanged fingerprints.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-002-install-freshly-packed-artifacts-in-temporary-locations-and-verify-actual-cli-mcp-pi-server-provider-entry-points",
+          "number": 2,
+          "title": "Install freshly packed artifacts in temporary locations and verify actual CLI/MCP/Pi/server/provider entry points.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-003-document-empty-folder-onboarding-unsupported-languages-context-restoration-code-links-decision-review-and-supervisor-ui",
+          "number": 3,
+          "title": "Document empty-folder onboarding, unsupported languages, context restoration, code links, decision review and supervisor UI.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-004-describe-test-evidence-integration-and-future-agenttest-extension-boundaries-without-adding-a-second-test-product",
+          "number": 4,
+          "title": "Describe test-evidence integration and future AgentTest extension boundaries without adding a second test product.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-005-reconcile-feature-phase-task-descriptions-and-remaining-limitations-leave-release-and-commit-actions-to-explicit-authorization",
+          "number": 5,
+          "title": "Reconcile feature/phase/task descriptions and remaining limitations; leave release and commit actions to explicit authorization.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-006-verify-final-evidence-identifies-exact-package-source-fingerprints-and-tested-supported-environments",
+          "number": 6,
+          "title": "Verify: Final evidence identifies exact package/source fingerprints and tested supported environments.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-007-verify-a-new-agent-can-follow-the-documented-workflow-using-the-planner-existing-sources-and-explicit-uncertainty",
+          "number": 7,
+          "title": "Verify: A new agent can follow the documented workflow using the planner, existing sources and explicit uncertainty.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-008-verify-no-release-publish-claim-is-made-without-the-corresponding-authorized-action-and-registry-evidence",
+          "number": 8,
+          "title": "Verify: No release/publish claim is made without the corresponding authorized action and registry evidence.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-009-verify-freshly-packed-local-monaco-workers-assets-and-document-shared-analysis-safe-editing-and-preferred-editor-setup",
+          "number": 9,
+          "title": "Verify freshly packed local Monaco workers/assets and document shared analysis, safe editing and preferred-editor setup.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-010-smoke-test-shared-binding-from-fresh-artifacts-and-document-migration-target-semantics-and-independent-recovery",
+          "number": 10,
+          "title": "Smoke-test shared binding from fresh artifacts and document migration, target semantics and independent recovery.",
+          "checked": false
+        },
+        {
+          "id": "759349d0-a71b-4983-951b-00d3de6edba7-check-011-smoke-test-installed-mutation-receipts-and-document-measured-context-reconciliation-behavior",
+          "number": 11,
+          "title": "Smoke-test installed mutation receipts and document measured context/reconciliation behavior.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "9f374b0e-d369-4b72-a82f-c31680e11996"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:26.747Z",
+      "updatedAt": "2026-10-21T14:57:52.312Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T16:40:40.034Z",
+  "updatedAt": "2026-10-21T15:00:45.771Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "8dcb6e67-6c99-4ed8-a0e3-7fe9e3c64f84",
+      "date": "2026-10-21T08:31:14.756Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

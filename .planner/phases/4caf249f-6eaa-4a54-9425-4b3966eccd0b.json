@@ -1,0 +1,334 @@
+{
+  "id": "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 122,
+  "shortId": "M7VB4",
+  "priority": 7,
+  "slug": "unified-graph-contextual-retrieval-and-freshness",
+  "title": "Unified graph, contextual retrieval and freshness",
+  "discussedAt": "2026-10-20T16:40:37.565Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Make planner and code relationships queryable without replacing canonical entities.",
+  "description": "Make planner and code relationships queryable without replacing canonical entities.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows F and owns only the outcomes below.\n\nOutcomes:\n- Join requirements, decisions, work history, modules, symbols, usage and verification evidence.\n- Deliver a global orientation and task-relevant deep context with explicit coverage and freshness.\n\nTasks and boundaries:\n- G1: Build a provenance-aware graph projection and query API. A queryable derived graph over canonical planner entities and snapshot-bound code facts with consistent MCP/Pi/server access.\n- G2: Deliver global orientation and impact-scoped implementation context. A bounded context service that combines global project orientation with current implementation, constraints, rationale, usage and tests for the work being undertaken.\n- G3: Refresh impacted context and manage review evidence over time. Incremental invalidation and explicit review records tied to the code/text versions they actually cover.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-core/src/api-v1.ts:343 — export function buildApiV1Model\n- packages/plan-server/src/entity-events.ts:1 — (module)\n- packages/plan-server/src/api-v1.ts:1 — (module)\n- packages/plan-server/src/serve.ts:1 — (module)\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-core/docs/runtime-boundaries.md:1 — (module)\n\nAcceptance: A code target reaches relevant tasks and applicable decisions even without task-to-task dependencies. Queries expose source evidence and uncertainty. Existing API clients and hierarchical UI routes remain compatible. T020 receives current code and T010/T002 rationale/constraints without rereading all old handoffs. Large development tasks receive module and integration context rather than only one function. Mandatory applicable rules are not silently truncated and retrieved sources remain inspectable. A changed dependency can invalidate a prior explanation even if the function body is unchanged. A review cannot approve a newer unseen snapshot or unrelated worktree. No automated rewrite makes an approved decision silently agree with drifting code.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR04, BR05, BR07, BR08, BR09, BR11, BR12, BR13, BR14, BR16, BR17.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nShared-planner expansion approved 21 October 2026:\nInclude execution/integration provenance and target/workspace availability in derived projections and retrieval. Source and target movements/reverts invalidate affected evidence by exact revision; canonical intent remains project-wide. A historical integrated edge is not permanent current availability.\nAdditional outcome coverage: BR23, BR24, BR25. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
+  "descriptionRef": ".planner/docs/agent-brain-plan.md",
+  "descriptionUpdatedAt": "2026-10-21T14:58:51.643Z",
+  "notes": "",
+  "goals": [
+    "Join requirements, decisions, work history, modules, symbols, usage and verification evidence.",
+    "Deliver a global orientation and task-relevant deep context with explicit coverage and freshness."
+  ],
+  "nonGoals": [
+    "No promise of complete instant model knowledge.",
+    "No graph database, embedding service or Graphify engine chosen merely by name."
+  ],
+  "dependencies": [
+    "P121(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Requirements are absent from the current API v1 projection and change-event model.",
+    "Text similarity and graph proximity do not establish decision authority."
+  ],
+  "openQuestions": [
+    "Choose the graph projection/query storage after evaluating a small reproducible corpus and existing dependencies."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "A code target reaches relevant tasks and applicable decisions even without task-to-task dependencies.",
+    "Queries expose source evidence and uncertainty.",
+    "Existing API clients and hierarchical UI routes remain compatible.",
+    "T020 receives current code and T010/T002 rationale/constraints without rereading all old handoffs.",
+    "Large development tasks receive module and integration context rather than only one function.",
+    "Mandatory applicable rules are not silently truncated and retrieved sources remain inspectable.",
+    "A changed dependency can invalidate a prior explanation even if the function body is unchanged.",
+    "A review cannot approve a newer unseen snapshot or unrelated worktree.",
+    "No automated rewrite makes an approved decision silently agree with drifting code.",
+    "Shared-planner acceptance: Include execution/integration provenance and target/workspace availability in derived projections and retrieval. Source and target movements/reverts invalidate affected evidence by exact revision; canonical intent remains project-wide. A historical integrated edge is not permanent current availability.",
+    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+  ],
+  "taskIds": [
+    "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3",
+    "f9fe65cc-8b1c-4423-ad4e-791abae72ebd",
+    "841f4cab-4916-4fef-a977-689fab3e6514"
+  ],
+  "tasks": [
+    {
+      "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3",
+      "phaseId": "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+      "number": 476,
+      "shortId": "7JSUR",
+      "priority": 1,
+      "shortName": "build-a-provenance-aware-graph",
+      "title": "Build a provenance-aware graph projection and query API",
+      "status": "planned",
+      "description": "Outcome: A queryable derived graph over canonical planner entities and snapshot-bound code facts with consistent MCP/Pi/server access.\n\nExisting state: Planner relationships already exist as structured data; code links, changesets and provider outputs will supply additional relationships. Current public projection does not include Requirements.\n\nImplementation responsibility:\n- Project existing IDs/edges instead of copying entities into another source of truth.\n- Include Requirements and their actual phase-derived feature relationships; extend versioned API/events compatibly.\n- Add code/decision/history relationships with declared, extracted and inferred provenance, coverage and snapshot identity.\n- Provide bounded search, neighborhood, path/explain and reverse code-to-work/decision queries.\n- Evaluate Graphify-style capabilities against an internal projection; record the actual engine choice and costs before adding dependencies.\n\nAcceptance and evidence:\n- A code target reaches relevant tasks and applicable decisions even without task-to-task dependencies.\n- Queries expose source evidence and uncertainty.\n- Existing API clients and hierarchical UI routes remain compatible.\n\nRead before editing:\n- packages/plan-core/src/api-v1.ts:343 — export function buildApiV1Model\n- packages/plan-server/src/entity-events.ts:1 — (module)\n- packages/plan-server/src/api-v1.ts:1 — (module)\n- packages/plan-server/src/serve.ts:1 — (module)\n- packages/plan-core/src/schema.ts:85 — export const AcceptedDecisionSchema\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P121(F025)/T475. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Project existing canonical containment, requirements/phase links, dependencies and decisions, plus code/changeset/verification relationships with provenance and snapshot identity.\n- The graph is derived and rebuildable; do not copy planner status/decision authority into another mutable store. Work dependency edges differ from code usage and decision applicability.\n- Account for missing Requirements in current API/event projection and evolve contracts compatibly. Search/neighborhood/path results explain evidence and coverage, not merely graph proximity.\n- Graphify is a capability reference, not an already selected graph engine/database; choose exact storage/interfaces from a bounded actual corpus.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nProject execution, integration and availability provenance alongside logical task/decision/code relations. Keep canonical shared knowledge separate from revision-scoped projections; an integrated edge is historical evidence, not a permanent assertion that current behavior exists.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:05:01.944Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-001-project-existing-ids-edges-instead-of-copying-entities-into-another-source-of-truth",
+          "number": 1,
+          "title": "Project existing IDs/edges instead of copying entities into another source of truth.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-002-include-requirements-and-their-actual-phase-derived-feature-relationships-extend-versioned-api-events-compatibly",
+          "number": 2,
+          "title": "Include Requirements and their actual phase-derived feature relationships; extend versioned API/events compatibly.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-003-add-code-decision-history-relationships-with-declared-extracted-and-inferred-provenance-coverage-and-snapshot-identity",
+          "number": 3,
+          "title": "Add code/decision/history relationships with declared, extracted and inferred provenance, coverage and snapshot identity.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-004-provide-bounded-search-neighborhood-path-explain-and-reverse-code-to-work-decision-queries",
+          "number": 4,
+          "title": "Provide bounded search, neighborhood, path/explain and reverse code-to-work/decision queries.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-005-evaluate-graphify-style-capabilities-against-an-internal-projection-record-the-actual-engine-choice-and-costs-before-adding-dependencies",
+          "number": 5,
+          "title": "Evaluate Graphify-style capabilities against an internal projection; record the actual engine choice and costs before adding dependencies.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-006-verify-a-code-target-reaches-relevant-tasks-and-applicable-decisions-even-without-task-to-task-dependencies",
+          "number": 6,
+          "title": "Verify: A code target reaches relevant tasks and applicable decisions even without task-to-task dependencies.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-007-verify-queries-expose-source-evidence-and-uncertainty",
+          "number": 7,
+          "title": "Verify: Queries expose source evidence and uncertainty.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-008-verify-existing-api-clients-and-hierarchical-ui-routes-remain-compatible",
+          "number": 8,
+          "title": "Verify: Existing API clients and hierarchical UI routes remain compatible.",
+          "checked": false
+        },
+        {
+          "id": "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3-check-009-project-execution-and-per-target-history-without-turning-merged-edges-into-timeless-availability",
+          "number": 9,
+          "title": "Project execution and per-target history without turning merged edges into timeless availability.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "06f9b034-30be-45a3-997e-7dfbf14a00be"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:21.734Z",
+      "updatedAt": "2026-10-21T10:05:02.335Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd",
+      "phaseId": "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+      "number": 477,
+      "shortId": "53E9T",
+      "priority": 2,
+      "shortName": "deliver-global-orientation-and",
+      "title": "Deliver global orientation and impact-scoped implementation context",
+      "status": "planned",
+      "description": "Outcome: A bounded context service that combines global project orientation with current implementation, constraints, rationale, usage and tests for the work being undertaken.\n\nExisting state: The existing context follows the planning hierarchy. It does not automatically retrieve earlier unrelated tasks through their shared code target or relevant architectural precedents.\n\nImplementation responsibility:\n- Build a source-backed project/module responsibility overview with freshness and coverage.\n- Resolve task intent to candidate code areas; disambiguate before making authoritative associations.\n- Retrieve applicable scoped decisions, prior changesets, analogous implementations, callers/dependencies/interfaces and relevant tests.\n- Expand along relevant impact boundaries and provide explicit continuation rather than loading the entire repository.\n- Differentiate unavailable, not yet retrieved, stale and genuinely absent information.\n\nAcceptance and evidence:\n- T020 receives current code and T010/T002 rationale/constraints without rereading all old handoffs.\n- Large development tasks receive module and integration context rather than only one function.\n- Mandatory applicable rules are not silently truncated and retrieved sources remain inspectable.\n\nRead before editing:\n- packages/plan-core/src/task-context.ts:175 — export function buildPhaseContextBlock\n- packages/plan-core/src/project-context.ts:357 — export function buildProjectContextLoadReply\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-core/src/api-v1.ts:343 — export function buildApiV1Model\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P122(F025)/T476. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Deliver a source-backed global project/module orientation, then deep context for the task and relevant impact boundaries; do not promise the model instantly knows the entire repository.\n- Resolve ambiguous targets explicitly and retrieve current source, scoped constraints, prior changesets/rationale, appropriate precedents, consumers/interfaces/dependencies and tests.\n- T020 must discover T002/T010 through their shared code destination even across unrelated phases; large tasks start from module responsibilities/integration flows instead of only one named function.\n- Context packets expose mandatory delivery, snapshot/scope, coverage, missing/stale/not-yet-retrieved information and continuations. A receipt is not comprehension or conformance proof.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nRetrieve global intent plus the exact selected workspace/target source evidence. Distinguish prior implementation in another branch from code currently available to edit; expose unknown/missing artifacts and retain applicable decisions even where code is absent.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
+      "descriptionUpdatedAt": "2026-10-21T10:05:02.501Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-001-build-a-source-backed-project-module-responsibility-overview-with-freshness-and-coverage",
+          "number": 1,
+          "title": "Build a source-backed project/module responsibility overview with freshness and coverage.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-002-resolve-task-intent-to-candidate-code-areas-disambiguate-before-making-authoritative-associations",
+          "number": 2,
+          "title": "Resolve task intent to candidate code areas; disambiguate before making authoritative associations.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-003-retrieve-applicable-scoped-decisions-prior-changesets-analogous-implementations-callers-dependencies-interfaces-and-relevant-tests",
+          "number": 3,
+          "title": "Retrieve applicable scoped decisions, prior changesets, analogous implementations, callers/dependencies/interfaces and relevant tests.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-004-expand-along-relevant-impact-boundaries-and-provide-explicit-continuation-rather-than-loading-the-entire-repository",
+          "number": 4,
+          "title": "Expand along relevant impact boundaries and provide explicit continuation rather than loading the entire repository.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-005-differentiate-unavailable-not-yet-retrieved-stale-and-genuinely-absent-information",
+          "number": 5,
+          "title": "Differentiate unavailable, not yet retrieved, stale and genuinely absent information.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-006-verify-t020-receives-current-code-and-t010-t002-rationale-constraints-without-rereading-all-old-handoffs",
+          "number": 6,
+          "title": "Verify: T020 receives current code and T010/T002 rationale/constraints without rereading all old handoffs.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-007-verify-large-development-tasks-receive-module-and-integration-context-rather-than-only-one-function",
+          "number": 7,
+          "title": "Verify: Large development tasks receive module and integration context rather than only one function.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-008-verify-mandatory-applicable-rules-are-not-silently-truncated-and-retrieved-sources-remain-inspectable",
+          "number": 8,
+          "title": "Verify: Mandatory applicable rules are not silently truncated and retrieved sources remain inspectable.",
+          "checked": false
+        },
+        {
+          "id": "f9fe65cc-8b1c-4423-ad4e-791abae72ebd-check-009-retrieve-correct-intent-and-artifact-availability-for-the-same-task-across-two-checkouts",
+          "number": 9,
+          "title": "Retrieve correct intent and artifact availability for the same task across two checkouts.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "c1afeaa1-8b29-4938-b221-5ecc0cd7c0c3"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:22.662Z",
+      "updatedAt": "2026-10-21T10:05:02.866Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "841f4cab-4916-4fef-a977-689fab3e6514",
+      "phaseId": "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+      "number": 478,
+      "shortId": "89CXM",
+      "priority": 3,
+      "shortName": "refresh-impacted-context-and-m",
+      "title": "Refresh impacted context and manage review evidence over time",
+      "status": "planned",
+      "description": "Outcome: Incremental invalidation and explicit review records tied to the code/text versions they actually cover.\n\nExisting state: Planner source watching exists, but code/provider/configuration changes require separate freshness handling. An unchanged function body does not prove unchanged dependent behavior or rationale.\n\nImplementation responsibility:\n- Invalidate affected resolutions, context packets and review evidence when linked sources, configuration or known dependencies change.\n- Start with correctness-first on-demand validation; batch/cancel updates and add watchers only where useful.\n- Present baseline, diff, current source, applicable decisions and affected verification evidence.\n- Record factual-text review separately from approved decision changes; keep qualitative meaning checks explicit.\n- Collect review obligations under the relevant existing work without automatically creating more tasks.\n\nAcceptance and evidence:\n- A changed dependency can invalidate a prior explanation even if the function body is unchanged.\n- A review cannot approve a newer unseen snapshot or unrelated worktree.\n- No automated rewrite makes an approved decision silently agree with drifting code.\n\nRead before editing:\n- packages/plan-core/src/description-freshness.ts:1 — (module)\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\n- packages/plan-server/src/entity-events.ts:1 — (module)\n- packages/plan-server/src/serve.ts:1 — (module)\n- packages/plan-core/src/project-context.ts:357 — export function buildProjectContextLoadReply\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P122(F025)/T477. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Invalidate affected resolution/context/review when relevant source, binding, configuration, known dependency or text changes; unchanged function text alone does not prove unchanged meaning.\n- Begin with correct on-demand snapshot validation and bounded batches/cancellation; watchers are an optimization rather than authority on freshness.\n- Review shows historical baseline, diff, current source and original decision, and records source/text versions plus observations. Expected fingerprints prevent approving an unseen newer state.\n- Update factual text through its actual owner; explicit decision changes preserve approved history. Collect obligations in existing relevant work instead of generating automatic new tasks.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nInvalidate revision-dependent code/context/verification on workspace changes, target movement, revert, replaced results or authority rebinding. Shared canonical edits invalidate all affected consumers; workspace-local source edits invalidate only the corresponding source projections unless proven broader.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nReuse M3 mutation-impact/reconciliation primitives and indexed affected sets rather than a parallel prose-freshness authority. Source/binding changes may invalidate dependent evidence without requiring prose edits everywhere. Preserve reviewed-unchanged/version receipts and durable pending obligations; paginate large reverse-dependency fan-out.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
+      "descriptionUpdatedAt": "2026-10-21T14:57:51.706Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-001-invalidate-affected-resolutions-context-packets-and-review-evidence-when-linked-sources-configuration-or-known-dependencies-change",
+          "number": 1,
+          "title": "Invalidate affected resolutions, context packets and review evidence when linked sources, configuration or known dependencies change.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-002-start-with-correctness-first-on-demand-validation-batch-cancel-updates-and-add-watchers-only-where-useful",
+          "number": 2,
+          "title": "Start with correctness-first on-demand validation; batch/cancel updates and add watchers only where useful.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-003-present-baseline-diff-current-source-applicable-decisions-and-affected-verification-evidence",
+          "number": 3,
+          "title": "Present baseline, diff, current source, applicable decisions and affected verification evidence.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-004-record-factual-text-review-separately-from-approved-decision-changes-keep-qualitative-meaning-checks-explicit",
+          "number": 4,
+          "title": "Record factual-text review separately from approved decision changes; keep qualitative meaning checks explicit.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-005-collect-review-obligations-under-the-relevant-existing-work-without-automatically-creating-more-tasks",
+          "number": 5,
+          "title": "Collect review obligations under the relevant existing work without automatically creating more tasks.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-006-verify-a-changed-dependency-can-invalidate-a-prior-explanation-even-if-the-function-body-is-unchanged",
+          "number": 6,
+          "title": "Verify: A changed dependency can invalidate a prior explanation even if the function body is unchanged.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-007-verify-a-review-cannot-approve-a-newer-unseen-snapshot-or-unrelated-worktree",
+          "number": 7,
+          "title": "Verify: A review cannot approve a newer unseen snapshot or unrelated worktree.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-008-verify-no-automated-rewrite-makes-an-approved-decision-silently-agree-with-drifting-code",
+          "number": 8,
+          "title": "Verify: No automated rewrite makes an approved decision silently agree with drifting code.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-009-verify-target-revert-and-cross-worktree-freshness-boundaries-with-retained-historical-evidence",
+          "number": 9,
+          "title": "Verify target-revert and cross-worktree freshness boundaries with retained historical evidence.",
+          "checked": false
+        },
+        {
+          "id": "841f4cab-4916-4fef-a977-689fab3e6514-check-010-verify-indexed-targeted-freshness-reconciliation-and-no-op-high-fan-out-context-budgets",
+          "number": 10,
+          "title": "Verify indexed targeted freshness/reconciliation and no-op/high-fan-out context budgets.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "f9fe65cc-8b1c-4423-ad4e-791abae72ebd"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-20T16:41:23.410Z",
+      "updatedAt": "2026-10-21T14:57:51.704Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-20T16:40:37.100Z",
+  "updatedAt": "2026-10-21T14:58:51.643Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "334993cd-07fe-4889-b7f9-63e2420ec59f",
+      "date": "2026-10-21T10:05:01.973Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

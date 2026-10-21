@@ -1,0 +1,188 @@
+{
+  "id": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 25,
+  "shortId": "2J5KM",
+  "priority": 24,
+  "name": "Agent Brain — reliable agent workflow and code-aware project memory",
+  "description": "Evolve Agent Plan in the same repository into a reliable, code-aware project memory and operating workflow. First address the six reported failures: orientation among phase handoffs, repeated resume context cost, ignored rules/conventions, lost return to interrupted work, inconsistent next-work priority and unnecessary task growth. Then add structured code links, task changesets, scoped decision history, capability-based multilingual setup, a queryable graph, relevant context retrieval and supervisor UI. Existing planning memory, requirements, Accepted Decisions, phase handoffs, read gates and atomic ownership already exist and must be extended rather than recreated.\n\nBaseline: origin/main c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231 on branch feat/agent-brain. Relevant completed work includes F016/F018/F020/F021/F023/F024; their historical descriptions are not proof of current behavior. Core points: packages/plan-core/src/task-selection.ts (recommendNextTask), recap.ts (buildRecap), task-context.ts (buildPhaseContextBlock), project-context.ts, read-tracking.ts, schema.ts and plan-store.ts (claimTask/Accepted Decision CRUD). Adapter surfaces: packages/plan-mcp/src/index.ts, packages/pi-adapter/src/index.ts, packages/plan-server/src/serve.ts; public projection in packages/plan-core/src/api-v1.ts and packages/plan-server/src/entity-events.ts; existing Web UI under packages/plan-web-ui/src/. Source catalog in .planner/docs/agent-brain-plan.md binds navigation lines, symbols and file hashes to the baseline; revalidate before editing.\n\nPreserve canonical entity IDs and ownership, phase-scoped handoffs, derived parent statuses, existing human-supervisor semantics, no automatic dashboard activation and shared/local runtime boundaries. The project no-task guard decision remains warning-only; a new write-denial policy is not implicitly approved. File:line is never permanent identity. Analysis targets each user's project through an open set of compatible providers discovered/configured from extensible metadata; named languages are non-exclusive fixtures, not a planner-core whitelist. TypeScript is not a universal analyzer. Empty folders and undecided stacks are valid.\n\nAll work is planned, not implemented. The earlier 11-case TypeScript anchor proof was isolated and does not establish production or cross-language support. Standalone AgentTest, new product branding/package renames, autonomous publishing and a mandatory graph database/embedding service are outside scope. Canonical requirements, decisions, phase/task descriptions and checklists define execution; the supporting document explains contracts, sources, scenario matrix and remaining technical choices.\n\nThe complete technical handover is .planner/docs/agent-brain-registration-handoff.md, including CodeLink/CodeAnchor/AnchorResolution, the resolver and review mechanism, changeset attribution, provider setup/fallback, context retrieval and worked cases. Supporting discussion records are .planner/docs/agent-brain-discussion-scope.md and .planner/docs/agent-brain-code-links-design.md. These are design/evidence inputs; canonical entities remain authoritative.\n\n21 October 2026 clarifications: P121 uses dynamic provider discovery, configuration and verified per-operation coverage. P117/T464 corrects variable-width parked-reference recognition; P124/T481 owns end-to-end F/P/T sequence compatibility beyond 999 and 9999, preserving existing IDs, numbers and shortIds. These are planning amendments; implementation has not started.\n\nApproved editor expansion (21 October 2026): add P125(F025) for project-first overview/detail titles; P126(F025) for source-workspace access, conflict-aware saves and one compatible analysis runtime shared by agents and the Web UI; and P127(F025) for an editable desktop Monaco file explorer, syntax coloring/diff, semantic/context navigation and opening in a preferred external editor. Mobile source editing is not the editor-selection gate. Reuse existing provider and graph ownership; preserve dynamic language support, variable-width F/P/T refs, canonical IDs, unrelated dirty work and local runtime boundaries. The complete expansion contract is .planner/docs/agent-brain-editor-and-project-identity.md. T481/T482 remain final verification/installed-documentation owners and now cover the new scope. These are registered plans, not implemented product behavior.\n\nPrevious editor expansion: 12 phases, 28 planned tasks, 21 requirements and 13 decisions; see the current shared-planner expansion below.\n\nApproved shared-planner expansion (21 October 2026): P128(F025)/T489-T490 separates canonical plan storage, explicit code workspace and caller runtime and supplies one coordinated local authority for all supported clients. P129(F025)/T491-T493 distinguishes attributable task executions from per-target integrations and current revision-aware code availability, with separate global-work and target-delivery UI/API projections. P130(F025)/T494-T495 owns lossless previewed migration from divergent worktree planners, durable history, independent backups and portable export/restore. The intended local store is outside code branch copies under git-common-dir/projectId; standalone roots remain supported, independent clones/machines require explicit transfer/service support, and exact layout/transport are implementation choices. Worktree path or branch name is not durable identity.\n\nA verified execution in feat/due is not delivered to another target simply because dev-a merges feat/one. Historical merges remain recorded after a revert, while current availability and verification are revalidated. Targets are configurable, legacy/non-code work does not get fabricated commits/PRs, and this repository release governance is unchanged. B1 consumes availability while preserving owned work, ready returns and global priority. E changesets, H graph, K provider runtime and L Monaco retain their existing responsibilities, now using the same workspace/revision binding. No implicit task done-to-shipped reinterpretation or duplicate provider is approved.\n\nFull approved contracts, worked cases, source evidence and acceptance matrix: .planner/docs/agent-brain-shared-planner-and-execution.md. Current canonical scope: 15 phases, 36 planned tasks, 29 linked outcome requirements and 19 single-owner feature/project Accepted Decisions (18 feature, one project). All 334 implementation checklist items remain unchecked; 49 task dependency edges are acyclic subject to final registration read-back. A baseline -> shared foundations -> reliability -> code/graph/editor -> cross-surface and installed closeout remains the execution order. The title fix stays independent. Supporting prior verification reports are historical, not proof of current enlarged scope. This is planning registration only: no implementation, real migration, commit, push, PR or release.\n\nAdditional user constraint (21 October 2026): P128(F025)/T496 makes every mutation assess affected parents through phase/feature/project and real dependency effects, using structural updates plus version-bound factual reconciliation/reviewed-unchanged or explicit durable pending obligations. Creating new tasks cannot leave contradictory parent scope. This extends existing freshness and shared-skill guidance rather than restating it. All F025 flows must use relevant incremental context, bounded continuation and measured payload/token/tool budgets; no unconditional full-ancestor/plan reload, silent omission of mandatory context, unverified retention claim or arbitrary savings percentage. A2/C2/D2/D3/G3/I1/I2 and the shared-authority/availability tasks carry the corresponding acceptance scope. Details: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. T496 runs after T489 and before T490 to avoid a dependency cycle. Project description is reconciled to include the approved evolution; existing project goal/Guidelines/decisions are preserved.\n\nDependency reconciliation confirms the foundational order T489 -> T496 -> T490, with T496 also an explicit code-link and final-verification prerequisite. Parent descriptions and the project scope were reviewed after the last relationship change.",
+  "descriptionRef": ".planner/docs/agent-brain-registration-handoff.md",
+  "descriptionUpdatedAt": "2026-10-21T15:00:46.346Z",
+  "discussedAt": "2026-10-20T16:39:43.803Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-feature-discuss MCP tool.",
+  "startDate": "",
+  "endDate": "",
+  "workDone": "User discussion, source inspection, branch creation and canonical planning registration/amendments only. All shared-planner, execution/integration, migration/recovery, editor and affected-hierarchy/dependency/bounded-context scope is registered. No Agent Brain runtime implementation or real migration has started.",
+  "workRemaining": "Execute the 15 registered phases using canonical task dependencies: baseline, shared authority/execution/availability/recovery foundations, six reliability fixes, code links/dynamic providers/graph, supervisor and Monaco workspace, then complete cross-surface and fresh installed-artifact verification. Keep the independent project-title fix available, reconcile remaining technical choices in owning tasks, and do not migrate real planner data or perform Git/release actions without their required explicit authorization. Apply T496 consistency postconditions and measured bounded-context budgets to every workflow; use explicit pending reconciliation rather than claiming complete context from timestamps.",
+  "acceptedDecisions": [
+    {
+      "id": "6fa41591-873e-4562-9242-7b3a2d4c13a5",
+      "title": "Evolve Agent Plan and stabilize existing workflows first",
+      "decision": "Agent Brain is an evolution in this repository. Reuse existing planner memory, requirements, decisions, tasks, checkpoints, phase handoffs and ownership. Resolve the six reported reliability problems before the code graph extensions.",
+      "rationale": "The user corrected the initial gap analysis: most planning/memory structures already exist; the priority is their reliable application.",
+      "implementationNotes": "Use branch feat/agent-brain from refreshed origin/main as requested. Do not create a parallel planner, forked product authority or automatic task per inventory bullet.",
+      "acceptedAt": "2026-10-20T16:43:01.113Z"
+    },
+    {
+      "id": "f0378909-27b7-4492-94e8-26eee735742f",
+      "title": "Code intelligence targets the user project and is language independent",
+      "decision": "The analyzed code belongs to the project using Agent Plan. Persisted links and domain contracts are language independent. Resolve the declared or detected languages against extensible provider metadata and actual compatible tool capabilities, rather than a fixed language whitelist in planner core. TypeScript is the implementation host, not a universal source analyzer.",
+      "rationale": "The user explicitly clarified on 21 October 2026 that the previously named languages are examples, not the complete supported language set.",
+      "implementationNotes": "Use versioned provider manifests/catalog entries and user-configured compatible providers. Probe language/version/platform, workspace/build prerequisites and supplied operations before activation. A new language supported by an existing adapter is enabled through provider metadata/configuration, without editing planner core. A genuinely new protocol may need an adapter. Validate multiple unrelated language families and a dynamically added language fixture; Rust, C/C++, Java and JS/TS are non-exclusive examples. Keep coverage per provider, operation, configuration and source area; unsupported cases retain text/planning capabilities.",
+      "acceptedAt": "2026-10-20T16:43:01.451Z"
+    },
+    {
+      "id": "ee0d014f-c328-45bd-8d85-116175256d2c",
+      "title": "Code links distinguish historical evidence, current location and meaning review",
+      "decision": "A file:line reference is a navigation position, not permanent identity. Preserve recoverable snapshot baselines and provenance, resolve current locations separately, and keep architectural/factual review distinct from location resolution.",
+      "rationale": "The user identified stale references and explanations after code changes as dangerous.",
+      "implementationNotes": "Handle dirty state and worktree/configuration identity. External rename/move/copies yield verified candidates or ambiguity; no silent semantic relinking or approved-decision rewrite.",
+      "acceptedAt": "2026-10-20T16:43:01.845Z"
+    },
+    {
+      "id": "29a40d65-10fc-4cf9-bc53-6dea6c09d6b8",
+      "title": "Trace large work through changesets and scoped rationale",
+      "decision": "Track an entire task changeset automatically and record significant decisions at the appropriate module/interface/function scope. Do not require manual documentation of every modified function. Prior tasks become discoverable through shared code targets even without task-to-task references.",
+      "rationale": "The user emphasized that tasks often implement large pieces of code and unrelated tasks later modify the same function.",
+      "implementationNotes": "Capture baseline/checkpoints/closeout and preserve initial dirty state. Attribute only observed task/session changes; ambiguous overlap remains explicit. Canonical decisions keep one durable owner and versioned history.",
+      "acceptedAt": "2026-10-20T16:43:02.274Z"
+    },
+    {
+      "id": "97abeef9-dc61-42dc-9a3a-c437c5b9c978",
+      "title": "Provide global orientation and relevant deep context",
+      "decision": "Offer a source-backed global map immediately and retrieve detailed context for the current work and its relevant impact boundaries. Do not claim that the model has instantly read or understood the entire codebase.",
+      "rationale": "The user asked whether a new agent receives full codebase context or only the area of work.",
+      "implementationNotes": "Retrieve applicable rules, prior rationale, correct precedents, usages/interfaces/dependencies and tests. Expose unavailable, not retrieved, stale and absent information and explicit continuation under budgets.",
+      "acceptedAt": "2026-10-20T16:43:02.628Z"
+    },
+    {
+      "id": "62a8ef95-33e0-4a36-95da-9c959f2bd030",
+      "title": "Begin setup from discussion and declared stack, not assumed source detection",
+      "decision": "An empty folder with an undecided language is a valid project state. Record stack decisions during discussion and activate only needed analysis capabilities when their prerequisites are available. Later source detection validates declared choices.",
+      "rationale": "The user corrected the assumption that discussion always starts in an existing repository.",
+      "implementationNotes": "Use an extensible versioned provider catalog and explicit configured-provider entries, not a closed language enum. Resolve matching providers, reuse compatible local tools or produce a concrete preparation/configuration plan under existing installation policy, then validate real results. Protocols do not provide universal server/indexer discovery or installation. SCIP ingestion, live LSP and syntax parsing are complementary options, not three mandatory universal installations. Keep managed tools outside user application dependencies and preserve stack-undecided projects.",
+      "acceptedAt": "2026-10-20T16:43:02.963Z"
+    },
+    {
+      "id": "32b72689-6216-4cb5-a852-b0d8e1bc2d5c",
+      "title": "Extend existing standards workflow with evidence rather than repeated instructions",
+      "decision": "Read and apply existing project rules and appropriate implementation precedents before writing code; preserve evidence and review final conformity. Extend the existing canonical skill/protocol instead of presenting these obligations as new functionality.",
+      "rationale": "Explicit user report: agents already receive these instructions but ignore established code conventions.",
+      "implementationNotes": "Preserve project decision 7995854e-4109-48aa-b08b-a54bff4d8432 on the warning-only no-task guard. New write-denial policy is not implicitly approved. Observed reads and a checked checklist do not prove semantic conformity; document actual harness coverage and qualitative review.",
+      "acceptedAt": "2026-10-20T16:43:03.299Z"
+    },
+    {
+      "id": "237d92fa-5887-4c02-bd61-4453c431b553",
+      "title": "Keep skills portable and canonical knowledge authoritative",
+      "decision": "Use the existing core/shared skill distribution for all supported harnesses. Adapt useful external skill/rule/hook patterns without making Claude-specific configuration or a derived graph the authority over the planner.",
+      "rationale": "The user requested generalized Agent Plan skills inspired by Everything Claude Code, usable by all agents.",
+      "implementationNotes": "Domain policies stay in core. Preserve canonical versus local runtime boundaries; graph/index packets are derived. Existing single-owner decisions and phase-scoped handoffs remain authoritative.",
+      "acceptedAt": "2026-10-20T16:43:03.653Z"
+    },
+    {
+      "id": "a8241ba5-25db-4a6c-883c-d2f63ae6ad92",
+      "title": "Keep standalone AgentTest outside this feature",
+      "decision": "Use and link existing tests and revision-bound verification evidence for Agent Brain. A separate autonomous test generation/execution product called AgentTest is not a prerequisite or an implicitly included development stream.",
+      "rationale": "AgentTest was an earlier concept, not an identified existing repository; the agreed scope prioritized the six failures and code graph.",
+      "implementationNotes": "Leave an explicit extension seam for test evidence and future integrations, and document missing coverage. Do not add a separate planner or AI testing platform under this feature.",
+      "acceptedAt": "2026-10-20T16:43:04.007Z"
+    },
+    {
+      "id": "40e3f375-ebc5-46f9-a240-fabe6d9d1c92",
+      "title": "Use Monaco for the desktop source-code workspace",
+      "decision": "Use Monaco Editor for the integrated file explorer, editable source tabs, syntax coloring and diff. Source editing/saving is included. Mobile code editing is not a deciding acceptance requirement; preserve existing planner responsiveness and document actual limitations.",
+      "rationale": "The user selected an experience like the adjacent file explorer and clarified that mobile source editing is not a meaningful reason to prefer CodeMirror. Monaco is the resulting choice.",
+      "implementationNotes": "Load Monaco/workers/language assets on demand and ship them locally; retain the lightweight existing Markdown workflow. Choose a compatible tested integration stack and versions without assuming VS Code extension compatibility. Do not install dependencies or implement product code as part of this planning update.",
+      "acceptedAt": "2026-10-21T09:25:00.753Z"
+    },
+    {
+      "id": "5433fe9d-13e0-4304-b043-bcf82fc0f796",
+      "title": "Share analysis through one compatible runtime owner",
+      "decision": "Agents and the editor use the same analysis service. Reuse one compatible language-server runtime for the same project/worktree, provider/version and effective configuration; the frontend does not start a duplicate process by default.",
+      "rationale": "The user asked whether Agent Plan and the embedded editor would run two LSP servers. The agreed architecture explicitly avoids duplication merely because both consumers exist.",
+      "implementationNotes": "Extend P121 contracts with broker-owned upstream sessions, atomic cross-host-process ownership/reuse, cancellation, consumer lifecycle and named document revisions/overlays. Monaco provider hooks call common APIs; an optional frontend LSP client/gateway must not independently initialize a competing server. Separate keys may require separate runtimes, and provider capabilities remain dynamic.",
+      "acceptedAt": "2026-10-21T09:25:01.152Z"
+    },
+    {
+      "id": "39763032-8785-4e6b-99ce-00ea142ae074",
+      "title": "Put project identity first in browser page titles",
+      "decision": "The actual project name must identify the overview and prefix entity-detail browser titles. Task detail follows ProjectName - TaskID [Short task title]; feature and phase details follow the same project-first convention.",
+      "rationale": "The user cannot distinguish projects when tabs show only Agent Plan or a task title. Both reported title failures must be corrected.",
+      "implementationNotes": "Use one route-aware title owner, preserve known project context through navigation/live renames/errors, retain full variable-width refs and avoid stale cleanup restoration. The bracketed description means the short entity title, not the full Markdown task description.",
+      "acceptedAt": "2026-10-21T09:25:01.925Z"
+    },
+    {
+      "id": "5dae712b-c508-4092-8bd9-d2791a7245df",
+      "title": "One shared planner authority outside code branch copies",
+      "decision": "Local worktrees of one project use one canonical planner authority discovered through project identity and git-common-dir, with explicit standalone roots for non-Git projects. Live global planner state is not transported by ordinary code PRs.",
+      "rationale": "Sharing branch copies or merging all live progress through dev-a code can report dev-b work as delivered without its code. Independent local copies also lose coordination and conflict.",
+      "implementationNotes": "Use M1/M2 and O1/O2. The intended default is <git-common-dir>/agent-plan/<projectId>/; exact layout/transport is an implementation choice. Keep open JSON formats and an explicit cross-clone/service boundary; no implicit cloud or distributed consistency.",
+      "acceptedAt": "2026-10-21T10:03:31.702Z"
+    },
+    {
+      "id": "bbd8efbc-cb1e-4ab4-a802-6135f802f071",
+      "title": "Planner, code workspace and caller runtime have separate identities",
+      "decision": "planRoot, workspaceRoot and runtimeRoot are resolved independently. Canonical knowledge and task claims are shared, while focus, returns, context attestations, source/provider caches and overlays are scoped by their actual caller/workspace/revision owners.",
+      "rationale": "Current code derives source/runtime paths from planner location. Blind centralization would mix worktrees or make agents read the central directory as source.",
+      "implementationNotes": "M1/M2 own binding and coordination. Preserve stable workspace identity through path/branch changes, atomic claims and explicit recovery. K2 reuses this boundary but continues to own the single compatible language-server runtime; UI view changes cannot redirect active executions.",
+      "acceptedAt": "2026-10-21T10:03:31.864Z"
+    },
+    {
+      "id": "93edfefc-3050-4cad-87b8-8df026e2bb3b",
+      "title": "A logical task has executions and independent target integrations",
+      "decision": "Keep one logical task with attributable execution attempts and exact-revision evidence; represent integration of produced results into each configured target separately. A verified execution does not mean code is present in the target.",
+      "rationale": "An agent can finish in a worktree while another agent merges unrelated code. A path/branch flag or single done state cannot represent that safely.",
+      "implementationNotes": "N1/N2/N3 own the model/projections, E2 owns changeset capture. Preserve phase-scoped handoffs, dirty snapshot evidence and unknown legacy provenance. Non-code tasks do not require fabricated commits/PRs. Targets are configurable; develop/next/main release governance is unchanged.",
+      "acceptedAt": "2026-10-21T10:03:32.011Z"
+    },
+    {
+      "id": "ec31ded3-8ebd-41f7-af71-db765c5da28d",
+      "title": "Current code availability differs from work progress and historical merges",
+      "decision": "Expose global operational progress separately from workspace/target availability and delivery. Revalidate source-dependent evidence at the selected revision; use artifact availability only for tasks that need that code, preserving global priority within ready work.",
+      "rationale": "A historical PR merge may be followed by a revert or changed implementation, and squash/rebase can change SHA identity without removing the result.",
+      "implementationNotes": "N2 supplies bounded integration observations; N3 supplies availability and separate UI/API counters; B1 remains selector owner. Distinguish present/absent/unknown/review-required and invalidate stale evidence rather than promising general semantic equivalence.",
+      "acceptedAt": "2026-10-21T10:03:32.202Z"
+    },
+    {
+      "id": "066fd680-a8e1-4525-bd8c-eaee29720bd9",
+      "title": "Shared-planner adoption requires lossless migration and independent recovery",
+      "decision": "Inventory and back up every old planner copy, reconcile with provenance and explicit conflicts, then activate one recoverable binding. Maintain durable history/checkpoints, independent backup and portable export/restore because central files are not cloned/pushed automatically.",
+      "rationale": "Moving out of branch copies removes implicit Git distribution and exposes data loss if a clone is deleted or migration discards divergent knowledge.",
+      "implementationNotes": "O1/O2 own migration and durability; I1/I2 own full cross-surface and installed closeout. No mtime-wins, silent fallback, invented provenance or automatic Git/tracking change. This approval registers the work only; it does not execute the migration.",
+      "acceptedAt": "2026-10-21T10:03:32.347Z"
+    },
+    {
+      "id": "f350e492-9fee-419f-a17e-1950b88f0911",
+      "title": "Every mutation reconciles affected context through bounded deltas",
+      "decision": "Task/phase/feature/project mutations and relationship changes must assess and reconcile affected ancestors and dependencies. Update only genuinely changed facts; record version-bound reviewed-unchanged or durable pending obligations. Apply a measured incremental-context budget to every F025 workflow.",
+      "rationale": "The user requires parent/dependency consistency without excessive token consumption. Existing instructions and timestamps alone do not ensure semantic consistency or efficient context.",
+      "implementationNotes": "M3 (P128(F025)/T496) owns the shared impact/postcondition protocol; C2/D2/G3/B1 consume it and I1/I2 verify it. Use maintained impact indexes, expected revisions, compact receipts, effective-context-aware reuse and paginated continuation. Do not blindly rewrite ancestors, auto-revise decisions, invent edges or drop mandatory context. No new source-write denial policy or arbitrary fixed token-saving percentage is approved.",
+      "acceptedAt": "2026-10-21T14:55:16.116Z"
+    }
+  ],
+  "phaseIds": [
+    "1587a79c-750c-4ada-9ac5-e2e751f17301",
+    "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+    "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+    "48358f79-a719-489c-933c-a4adbc216b18",
+    "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+    "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+    "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+    "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+    "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+    "66eda762-171f-4435-9b64-b80bd0766f5b",
+    "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+    "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+    "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+    "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+    "81aa922c-06ef-4bd5-9dba-070a6b622416"
+  ],
+  "dependsOn": [
+    "Extend completed F016/F018/F020/F021/F023/F024 behavior and preserve their current invariants.",
+    "Use existing project Guidelines, Accepted Decisions, core boundaries and verification process."
+  ],
+  "statusLog": [],
+  "createdAt": "2026-10-20T16:39:25.700Z",
+  "updatedAt": "2026-10-21T15:00:46.346Z",
+  "sessionInfo": []
+}

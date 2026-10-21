@@ -13,6 +13,10 @@
       "updatedAt": "2026-08-09T20:48:57.165Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
+        {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
         },
@@ -51,6 +55,10 @@
       "updatedAt": "2026-08-09T18:06:19.365Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
+        {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
         },
@@ -88,6 +96,10 @@
       "updatedAt": "2026-08-09T18:06:24.732Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
+        {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
         },
@@ -124,6 +136,10 @@
       "updatedAt": "2026-08-09T18:06:29.784Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
+        {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
         },
@@ -159,6 +175,10 @@
       "updatedAt": "2026-08-09T18:06:35.583Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
+        {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
         },
@@ -192,6 +212,10 @@
       "createdAt": "2026-08-09T18:06:40.341Z",
       "updatedAt": "2026-08-09T18:06:40.341Z",
       "sessionInfo": [
+        {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
         {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
@@ -228,6 +252,10 @@
       "updatedAt": "2026-08-09T18:06:47.107Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
+        {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
         },
@@ -261,6 +289,10 @@
       "updatedAt": "2026-08-23T11:27:04.660Z",
       "sessionInfo": [
         {
+          "sessionId": "mcp-process:33ce3078-d8e2-4219-b517-05dd5822f5ee",
+          "createdAt": "2026-10-20T16:11:24.465Z"
+        },
+        {
           "sessionId": "mcp-process:c465a70f-d3b9-4c8e-ba7f-0583101d546d",
           "createdAt": "2026-10-14T15:55:32.774Z"
         },
@@ -281,6 +313,513 @@
           "createdAt": "2026-09-24T16:50:53.646Z"
         }
       ]
+    },
+    {
+      "id": "d611ded8-d3f4-4bf3-af67-3da59764fddd",
+      "title": "Actionable orientation after a long pause",
+      "description": "A returning user or agent can understand multiple phase handoffs, current/partial work, blockers and a justified next step without remembering old references.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-20T16:41:41.425Z",
+      "updatedAt": "2026-10-20T16:41:41.425Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "822c864c-9249-4c4f-b7b7-a20b93101665",
+      "title": "One explainable global next-work order",
+      "description": "All surfaces return the same ready work from the same snapshot and caller identity: active work and pending returns precede globally ready feature → phase → task priority; dependencies, blocks and ownership remain availability constraints.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0"
+      ],
+      "createdAt": "2026-10-20T16:42:28.966Z",
+      "updatedAt": "2026-10-21T10:04:44.336Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "f18e8fa8-d7af-4321-bf18-900691d243a7",
+      "title": "Durable return to interrupted work",
+      "description": "Temporary detours preserve their source and nested return chain across task/phase completion, restart and explicit stopped-session recovery; unready returns remain visible.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0"
+      ],
+      "createdAt": "2026-10-20T16:42:29.310Z",
+      "updatedAt": "2026-10-21T10:04:44.507Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "36dff4f1-6225-41f1-8d9b-ced7505ede93",
+      "title": "Complete context restoration with bounded delivery",
+      "description": "Required project and work context remains recoverable across sessions, compaction and source changes, with explicit incomplete delivery and measurable avoidance of duplicate transmission.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0"
+      ],
+      "createdAt": "2026-10-20T16:42:29.649Z",
+      "updatedAt": "2026-10-21T10:04:44.665Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "0e815483-2113-47d5-b640-c939326c6d46",
+      "title": "Inspectable application of project conventions",
+      "description": "The product exposes source-backed evidence of applicable rules, relevant implementation precedents, planned reuse and conformity review, distinguishing delivered information from unverified understanding.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-20T16:42:29.982Z",
+      "updatedAt": "2026-10-20T16:42:29.982Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "6f9cb695-1055-4262-bfba-729a55061284",
+      "title": "Proportionate work planning and capability ownership",
+      "description": "Users and agents can discover existing ownership before adding work, retain implementation steps in the current task and distinguish a justified independent outcome from duplication.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-20T16:42:30.341Z",
+      "updatedAt": "2026-10-20T16:42:30.341Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "f89bfadc-54e7-4545-92ad-2a8a72b7c768",
+      "title": "Reliable current and historical code references",
+      "description": "Planner knowledge can link to user-project modules/files/regions/symbols with recoverable baseline, snapshot-bound current resolution, explicit ambiguity and separate meaning-review state.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
+      ],
+      "createdAt": "2026-10-20T16:42:30.682Z",
+      "updatedAt": "2026-10-21T09:26:55.414Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "0a2f991e-389c-4a6c-98f4-79f5dffff5ce",
+      "title": "Traceability for large developments and unrelated tasks",
+      "description": "A task spanning many files has an attributable changeset and module-level outcome; later work can discover prior modifications through shared code targets without explicit task-to-task links.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0"
+      ],
+      "createdAt": "2026-10-20T16:42:31.013Z",
+      "updatedAt": "2026-10-21T10:04:44.827Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "73385e38-dbfe-4be5-8dee-5663039d8e1a",
+      "title": "Durable scoped rationale and decision history",
+      "description": "Applicable architectural decisions and prior parameter/behavior rationale remain discoverable across task and phase boundaries, with explicit revision/supersession and no fabricated missing intent.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
+      ],
+      "createdAt": "2026-10-20T16:42:31.371Z",
+      "updatedAt": "2026-10-21T09:26:56.021Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "eec900fa-b1a7-4c1a-9e4a-dd6d53399a07",
+      "title": "Onboarding before code or language selection",
+      "description": "A project can begin in an empty folder, retain an undecided stack, record the agreed stack and activate analysis after the required scaffold/configuration becomes available.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203"
+      ],
+      "createdAt": "2026-10-20T16:42:31.701Z",
+      "updatedAt": "2026-10-21T10:04:44.982Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "76f16dea-217c-41f4-897c-59ee12fc7536",
+      "title": "Dynamic language support with explicit capability coverage",
+      "description": "For any declared or detected project language, Agent Brain can discover compatible registered analysis providers, reuse or prepare and configure them, and expose their verified capabilities per source area. The language set is extensible through provider metadata/configuration and compatible adapters, without a language whitelist in planner core. Unavailable or incomplete analysis preserves planning and text retrieval with explicit limits.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
+      ],
+      "createdAt": "2026-10-20T16:42:32.039Z",
+      "updatedAt": "2026-10-21T09:26:55.868Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "eb77140f-28ef-4ea6-a42c-18b0b7d58639",
+      "title": "Queryable planner and code relationships",
+      "description": "Requirements, work, decisions, code and verification evidence can be traversed and explained in either direction with canonical identities, provenance and compatible API/event delivery.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0"
+      ],
+      "createdAt": "2026-10-20T16:42:32.385Z",
+      "updatedAt": "2026-10-21T10:04:45.144Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "7f92265b-2ac5-4891-8b2c-2006f655feba",
+      "title": "Global orientation and impact-scoped deep context",
+      "description": "An incoming agent can orient itself globally and retrieve current code, applicable decisions, analogous implementations, callers/interfaces/dependencies and tests for the work and its relevant impact boundaries.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
+      ],
+      "createdAt": "2026-10-20T16:42:32.721Z",
+      "updatedAt": "2026-10-21T09:26:56.305Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "4190d1b2-d094-4157-8da7-60e8be5c0bd7",
+      "title": "Visible freshness and explicit review obligations",
+      "description": "Changes to relevant sources/configuration/dependencies invalidate affected evidence and expose baseline/diff/current context; unknown, not retrieved, stale and absent information remain distinct.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0"
+      ],
+      "createdAt": "2026-10-20T16:42:33.061Z",
+      "updatedAt": "2026-10-21T10:04:45.295Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "d3ef32e8-98bc-464c-99fb-fd2536228305",
+      "title": "Coherent human supervision",
+      "description": "The UI explains work selection and return obligations, analysis readiness, context evidence and code/decision relationships while preserving hierarchy, live updates and authorized human controls.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "66eda762-171f-4435-9b64-b80bd0766f5b",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0"
+      ],
+      "createdAt": "2026-10-20T16:42:33.417Z",
+      "updatedAt": "2026-10-21T10:04:45.476Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "9114fe33-eea0-41d1-87e5-75e5870dabf8",
+      "title": "Compatible behavior across supported agent surfaces",
+      "description": "Core, MCP, Pi, server and supported harness integrations share domain semantics and preserve old plans, stable IDs, ownership and canonical/local runtime boundaries. Feature, phase and task references grow beyond three and four digits without truncation or renumbering: allocation, resolution, ordering, dependencies, parked-work recognition, API/MCP/Pi, export and Web UI retain the same canonical identity.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "66eda762-171f-4435-9b64-b80bd0766f5b",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416"
+      ],
+      "createdAt": "2026-10-20T16:42:33.752Z",
+      "updatedAt": "2026-10-21T10:04:45.663Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "c51365d4-2ee1-493b-a63e-4550b7552bc9",
+      "title": "Revision-bound verification evidence",
+      "description": "Relevant tests/checks and their observed results can be associated with work and code revisions, exposing partial verification and keeping future AgentTest integration separate from this feature.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416"
+      ],
+      "createdAt": "2026-10-20T16:42:34.091Z",
+      "updatedAt": "2026-10-21T10:04:45.815Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "093c4972-01bd-48f5-90bc-c4ee1d80d44b",
+      "title": "Persistent project identity in browser navigation",
+      "description": "Initialized project pages remain distinguishable by the project name in browser titles and visible navigation. The overview identifies the project; task detail uses ProjectName - TaskID [Short task title], with the same project-first convention for feature and phase details, including navigation and live renames.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "66eda762-171f-4435-9b64-b80bd0766f5b",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T09:22:26.607Z",
+      "updatedAt": "2026-10-21T09:22:26.607Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "2ccf30ea-82a4-4be8-94b0-efcd66be41c6",
+      "title": "Editable source workspace connected to project knowledge",
+      "description": "The Web UI provides a project file explorer, Monaco editing, syntax coloring, diff and revision-aware saves. Source selection and resolved links expose applicable planner context while preserving drafts, external edits and current versus historical evidence.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T09:23:33.368Z",
+      "updatedAt": "2026-10-21T09:23:33.368Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "c6e678e1-2ca3-4c61-ab03-69b9f6db8f5a",
+      "title": "One compatible analysis runtime for agents and the Web UI",
+      "description": "Supported agent surfaces and the editor share a compatible analysis runtime for the same project/worktree, provider/version and effective configuration, with explicit source versions, capability limits and independent consumer lifecycles. Opening the editor does not by itself duplicate language-server processes.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203"
+      ],
+      "createdAt": "2026-10-21T09:23:33.523Z",
+      "updatedAt": "2026-10-21T10:04:45.967Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "f5ca2816-e3be-4bd6-b86d-58ad1057a854",
+      "title": "Open resolved source in a preferred external editor",
+      "description": "A user can open a resolved project source location in a configured external editor with correct file and supported line/column, machine-local preferences, explicit target-machine semantics and clear handling of unsaved or unavailable files.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T09:23:33.679Z",
+      "updatedAt": "2026-10-21T09:23:33.679Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "928952db-43da-47a8-9f35-4be21642515c",
+      "title": "One authoritative project planner across local worktrees",
+      "description": "All supported agents and supervisor clients see the same canonical project knowledge and task ownership across local worktrees, without merging live planner state through unrelated code PRs. A selected code workspace remains explicit, and independent clones/machines require a deliberate shared-service or portable transfer boundary.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T10:03:30.761Z",
+      "updatedAt": "2026-10-21T10:03:30.761Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "cee61282-68ce-4527-859b-02330c40ef62",
+      "title": "Independent workspace and caller context within a shared project",
+      "description": "A project shares canonical knowledge and coordination while preserving distinct code roots, workspace identities, caller focus/returns and revision-scoped context. Moving or removing a worktree does not corrupt another workspace or erase historical provenance.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T10:03:30.914Z",
+      "updatedAt": "2026-10-21T10:03:30.914Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "04bab928-4cb7-44bc-aca8-224201cd1469",
+      "title": "Attributable task executions separate from delivery",
+      "description": "Each logical task retains identifiable execution attempts, source baselines/results or recoverable dirty snapshots, phase-handoff links and exact-revision verification evidence. Completion of work in one branch does not assert integration into another target; legacy and non-code work preserve honest provenance and uncertainty.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T10:03:31.065Z",
+      "updatedAt": "2026-10-21T10:03:31.065Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "01ea923c-dc4c-4245-8fbe-e4a5c0eb3e35",
+      "title": "Revision-aware target availability and delivery views",
+      "description": "Agents and supervisors can distinguish global work progress from result availability in an explicitly selected checkout or configured target. Independent integration history supports multiple targets and current observations; revert/rebase/squash and uncertain equivalence cannot silently misstate readiness or delivery.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T10:03:31.219Z",
+      "updatedAt": "2026-10-21T10:03:31.219Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "727790c3-7272-4fa2-875f-a6392a298ab5",
+      "title": "Lossless adoption of a shared planner from existing copies",
+      "description": "A project can preview, reconcile and activate a single shared planner from divergent worktree copies without losing approved knowledge, IDs, decisions, handoffs or attributable history. Incompatible edits remain explicit and recoverable; interruption or an incompatible client cannot create a silent parallel authority.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "81aa922c-06ef-4bd5-9dba-070a6b622416",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T10:03:31.394Z",
+      "updatedAt": "2026-10-21T10:03:31.394Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "6b845a9a-6a93-4389-a6ed-76a0f15a2ccd",
+      "title": "Planner history and recovery independent of code commits",
+      "description": "Project planning knowledge and execution/integration history remain durable without an agent committing code. Users can inspect change history, maintain independent backups and deliberately export/restore a complete portable project record including required recoverable evidence, without transferring stale live ownership or assuming Git clone/push copies it.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "81aa922c-06ef-4bd5-9dba-070a6b622416",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-21T10:03:31.547Z",
+      "updatedAt": "2026-10-21T10:03:31.547Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "50386239-aaca-458c-8de4-8570234979d1",
+      "title": "Consistent affected hierarchy and dependency context after every change",
+      "description": "Agents and supervisors can trust that creating, updating or moving planner work and changing relationships checks affected task/phase/feature/project context and dependency readiness. Necessary factual updates are reconciled through their canonical owners; reviewed-unchanged and pending semantic review are explicit and revision-bound, preserving approved history and unrelated content.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "66eda762-171f-4435-9b64-b80bd0766f5b",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416"
+      ],
+      "createdAt": "2026-10-21T14:55:12.815Z",
+      "updatedAt": "2026-10-21T14:55:12.815Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "5ee3730d-a439-42c8-a080-a97c437c9d38",
+      "title": "Bounded context cost across all Agent Brain workflows",
+      "description": "Routine mutation, resume, context, graph and editor workflows deliver only relevant incremental information with bounded payload/tool overhead and explicit continuation for large impact. Correctness and mandatory rules/requirements/decisions survive compaction or source/workspace changes; measured budgets and real context availability govern reuse rather than unverified token-saving claims.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "1587a79c-750c-4ada-9ac5-e2e751f17301",
+        "908fd902-6482-422d-9e09-ed0ed6ae6cd4",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "44bf0d43-63a2-4d81-9528-a954c5620bc9",
+        "f75dfa52-ab53-4d82-b74b-c7da9b9559d6",
+        "4caf249f-6eaa-4a54-9425-4b3966eccd0b",
+        "504854c9-242d-4f20-a3fc-27c6e58c2eff",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1",
+        "66eda762-171f-4435-9b64-b80bd0766f5b",
+        "c9aa212e-9ef5-4fa9-acff-3517815a4741",
+        "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58",
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416"
+      ],
+      "createdAt": "2026-10-21T14:55:12.977Z",
+      "updatedAt": "2026-10-21T14:55:12.977Z",
+      "sessionInfo": []
     }
   ]
 }

@@ -1,0 +1,181 @@
+{
+  "timestamp": "2026-10-20T14:12:46.544Z",
+  "repo": "/Users/antonio/projects/agent-plan",
+  "typescriptVersion": "5.9.3",
+  "symbol": "PlanStore.claimTask",
+  "baselineLine": 3502,
+  "directResolvedProjectCallees": [
+    {
+      "path": "packages/plan-core/src/naming.ts",
+      "symbol": "createStatusLogEntryId"
+    },
+    {
+      "path": "packages/plan-core/src/plan-store.ts",
+      "symbol": "PlanStore.listAllWorkDeviations"
+    },
+    {
+      "path": "packages/plan-core/src/plan-store.ts",
+      "symbol": "PlanStore.loadAllPhases"
+    },
+    {
+      "path": "packages/plan-core/src/plan-store.ts",
+      "symbol": "PlanStore.loadPhase"
+    },
+    {
+      "path": "packages/plan-core/src/plan-store.ts",
+      "symbol": "PlanStore.resumeTask"
+    },
+    {
+      "path": "packages/plan-core/src/plan-store.ts",
+      "symbol": "PlanStore.runBatch"
+    },
+    {
+      "path": "packages/plan-core/src/plan-store.ts",
+      "symbol": "PlanStore.updateTask"
+    },
+    {
+      "path": "packages/plan-core/src/session-focus.ts",
+      "symbol": "taskOwnershipConflict"
+    }
+  ],
+  "passed": 11,
+  "total": 11,
+  "results": [
+    {
+      "name": "unchanged declaration",
+      "result": {
+        "location": "resolved",
+        "line": 3502,
+        "targetChanged": false,
+        "dependenciesChanged": false,
+        "reviewRequired": false
+      },
+      "passed": true
+    },
+    {
+      "name": "80 inserted lines preserve the target",
+      "result": {
+        "location": "resolved",
+        "line": 3582,
+        "targetChanged": false,
+        "dependenciesChanged": false,
+        "reviewRequired": false
+      },
+      "passed": true
+    },
+    {
+      "name": "changed method body requires review",
+      "result": {
+        "location": "resolved",
+        "line": 3502,
+        "targetChanged": true,
+        "dependenciesChanged": false,
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "external rename is a candidate, never an automatic rebinding",
+      "result": {
+        "location": "candidate",
+        "candidates": [
+          {
+            "path": "packages/plan-core/src/plan-store.ts",
+            "key": "PlanStore.acquireTask",
+            "line": 3502
+          }
+        ],
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "external file move is a candidate",
+      "result": {
+        "location": "candidate",
+        "candidates": [
+          {
+            "path": "packages/plan-core/src/relocated-plan-store.ts",
+            "key": "PlanStore.claimTask",
+            "line": 3502
+          }
+        ],
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "two equivalent destinations remain ambiguous",
+      "result": {
+        "location": "ambiguous",
+        "candidates": [
+          {
+            "path": "packages/plan-core/src/plan-store.ts",
+            "key": "PlanStore.acquireTask",
+            "line": 3502
+          },
+          {
+            "path": "packages/plan-core/src/plan-store.ts",
+            "key": "PlanStore.acquireTaskAlternative",
+            "line": 3539
+          }
+        ],
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "deleted declaration does not point to unrelated code",
+      "result": {
+        "location": "missing",
+        "candidates": [],
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "parse failure is unknown, not a claim of deletion",
+      "result": {
+        "location": "unknown",
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "changed direct callee invalidates review despite unchanged target",
+      "result": {
+        "location": "resolved",
+        "line": 3504,
+        "targetChanged": false,
+        "dependenciesChanged": true,
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "live source hash rejects an outdated index",
+      "result": {
+        "location": "stale-index",
+        "reviewRequired": true
+      },
+      "passed": true
+    },
+    {
+      "name": "cached positions from another worktree are refused",
+      "result": {
+        "location": "wrong-worktree",
+        "reviewRequired": true
+      },
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "Standalone proof, not integrated into Agent Plan.",
+    "Mutable scenarios are in-memory transformations, not writes to the repository.",
+    "Rename/move candidates require confirmation and do not prove continuity of intent.",
+    "Direct compiler-resolved callees only; no complete dynamic or transitive runtime graph.",
+    "Token hashes do not prove semantic equivalence or correctness of prose.",
+    "Only class methods and function declarations are covered by this proof.",
+    "Comments are excluded from syntax hashes; production must track documentation and raw source revisions separately."
+  ]
+}

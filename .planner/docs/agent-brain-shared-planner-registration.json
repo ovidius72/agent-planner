@@ -1,0 +1,180 @@
+{
+  "kind": "F025 shared planner expansion registration journal",
+  "date": "2026-10-21",
+  "featureRef": "F025",
+  "implementationStarted": false,
+  "state": "Canonical registration, public read-back and planning-integrity verification complete",
+  "phases": {
+    "M": {
+      "ref": "P128(F025)",
+      "id": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+      "number": 128
+    },
+    "N": {
+      "ref": "P129(F025)",
+      "id": "ad510b3f-2c6d-4329-923c-543d3325f5b0",
+      "number": 129
+    },
+    "O": {
+      "ref": "P130(F025)",
+      "id": "81aa922c-06ef-4bd5-9dba-070a6b622416",
+      "number": 130
+    }
+  },
+  "tasks": {
+    "M1": {
+      "ref": "P128(F025)/T489",
+      "phaseKey": "M",
+      "number": 489,
+      "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4"
+    },
+    "M2": {
+      "ref": "P128(F025)/T490",
+      "phaseKey": "M",
+      "number": 490,
+      "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f"
+    },
+    "N1": {
+      "ref": "P129(F025)/T491",
+      "phaseKey": "N",
+      "number": 491,
+      "id": "281720b5-1617-42bd-809d-42b76c8bba4b"
+    },
+    "N2": {
+      "ref": "P129(F025)/T492",
+      "phaseKey": "N",
+      "number": 492,
+      "id": "f9af06a6-3897-4184-9eea-b7b02e16d052"
+    },
+    "N3": {
+      "ref": "P129(F025)/T493",
+      "phaseKey": "N",
+      "number": 493,
+      "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6"
+    },
+    "O1": {
+      "ref": "P130(F025)/T494",
+      "phaseKey": "O",
+      "number": 494,
+      "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2"
+    },
+    "O2": {
+      "ref": "P130(F025)/T495",
+      "phaseKey": "O",
+      "number": 495,
+      "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062"
+    },
+    "M3": {
+      "id": "e1111601-64ad-49d5-9805-df48e9dd4b70",
+      "ref": "P128(F025)/T496",
+      "number": 496,
+      "phaseKey": "M"
+    }
+  },
+  "requirements": {
+    "BR22": {
+      "id": "928952db-43da-47a8-9f35-4be21642515c",
+      "title": "One authoritative project planner across local worktrees"
+    },
+    "BR23": {
+      "id": "cee61282-68ce-4527-859b-02330c40ef62",
+      "title": "Independent workspace and caller context within a shared project"
+    },
+    "BR24": {
+      "id": "04bab928-4cb7-44bc-aca8-224201cd1469",
+      "title": "Attributable task executions separate from delivery"
+    },
+    "BR25": {
+      "id": "01ea923c-dc4c-4245-8fbe-e4a5c0eb3e35",
+      "title": "Revision-aware target availability and delivery views"
+    },
+    "BR26": {
+      "id": "727790c3-7272-4fa2-875f-a6392a298ab5",
+      "title": "Lossless adoption of a shared planner from existing copies"
+    },
+    "BR27": {
+      "id": "6b845a9a-6a93-4389-a6ed-76a0f15a2ccd",
+      "title": "Planner history and recovery independent of code commits"
+    },
+    "BR28": {
+      "id": "50386239-aaca-458c-8de4-8570234979d1",
+      "title": "Consistent affected hierarchy and dependency context after every change"
+    },
+    "BR29": {
+      "id": "5ee3730d-a439-42c8-a080-a97c437c9d38",
+      "title": "Bounded context cost across all Agent Brain workflows"
+    }
+  },
+  "decisions": {
+    "AD14": {
+      "id": "5dae712b-c508-4092-8bd9-d2791a7245df",
+      "title": "One shared planner authority outside code branch copies",
+      "owner": "F025"
+    },
+    "AD15": {
+      "id": "bbd8efbc-cb1e-4ab4-a802-6135f802f071",
+      "title": "Planner, code workspace and caller runtime have separate identities",
+      "owner": "F025"
+    },
+    "AD16": {
+      "id": "93edfefc-3050-4cad-87b8-8df026e2bb3b",
+      "title": "A logical task has executions and independent target integrations",
+      "owner": "F025"
+    },
+    "AD17": {
+      "id": "ec31ded3-8ebd-41f7-af71-db765c5da28d",
+      "title": "Current code availability differs from work progress and historical merges",
+      "owner": "F025"
+    },
+    "AD18": {
+      "id": "066fd680-a8e1-4525-bd8c-eaee29720bd9",
+      "title": "Shared-planner adoption requires lossless migration and independent recovery",
+      "owner": "F025"
+    },
+    "AD19": {
+      "id": "f350e492-9fee-419f-a17e-1950b88f0911",
+      "title": "Every mutation reconciles affected context through bounded deltas",
+      "owner": "F025"
+    }
+  },
+  "impactReconciliation": {
+    "document": ".planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md",
+    "taskRef": "P128(F025)/T496",
+    "requirements": [
+      "BR28",
+      "BR29"
+    ],
+    "decision": "AD19"
+  },
+  "currentCounts": {
+    "phases": 15,
+    "tasks": 36,
+    "requirements": 29,
+    "decisions": 19,
+    "dependencyEdges": 49,
+    "uncheckedChecklistItems": 334
+  },
+  "publicReadBack": {
+    "tasks": 36,
+    "phases": 15,
+    "requirements": 29,
+    "featureDecisions": 18,
+    "projectDecisions": 1,
+    "incrementalTaskReadsAfterFollowup": 12,
+    "staleF025Parents": []
+  },
+  "newEntityCounts": {
+    "phases": 3,
+    "tasks": 8,
+    "requirements": 8,
+    "featureDecisions": 6
+  },
+  "verificationReport": ".planner/docs/agent-brain-shared-planner-verification.json",
+  "migrationExecuted": false,
+  "productTestsRun": false,
+  "integrityVerification": {
+    "result": "passed",
+    "assertions": 2397,
+    "report": ".planner/docs/agent-brain-shared-planner-verification.json"
+  }
+}
