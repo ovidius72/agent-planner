@@ -11,6 +11,7 @@
   "contextReadyReason": "",
   "summary": "features/<id>.json invece di features.json unico; migrazione idempotente; bonus perf (no rewrite-all, lock per-feature).",
   "description": " Rifattorizzare lo storage delle feature da un singolo `features.json` a un file per feature (`features/<featureId>.json`).\n\n## Stato attuale (codice)\n- `FeaturesDocumentSchema = { features: Feature[] }` (packages/plan-core/src/schema.ts:235) → **un solo** `.planner/features.json`.\n- `PlanStore.featuresPath()` (plan-store.ts:409), `loadFeatures()` (:547) legge l'unico file, `saveFeatures({features})` (:477/933) riscrive **tutto** il file via `atomicUpdateJson` → write amplification + contesa sul lock `features.json`.\n- Consumer passano dall'API `loadFeatures`/`saveFeatures` (plan-server serve.ts:251/296/307/494/542/611; plan-mcp; pi-adapter) → **API deve restare stabile**.\n- pi-adapter ha hint stringa `.planner/features.json` in `filesTouched` (index.ts:486) — solo display, non parsato.\n\n## Work items\n1. Aggiungere `featuresDir()` + `featurePath(id)` in plan-store.ts.\n2. Riscrivere `loadFeatures()`: readdir `features/` + load ogni file Feature → assembla `FeaturesDocument`. **Backward compat**: se `features/` assente ma `features.json` presente, legge il vecchio layout.\n3. Riscrivere `saveFeatures({features})`: scrive ogni feature nel suo file + **reconcile orphan** (rimuove file in `features/` non più presenti nella lista). Aggiungere `saveFeature(feature)` granulare (un solo file).\n4. Routing dei `atomicUpdateJson(features.json)` correnti → `atomicUpdateJson(featurePath(id))` per update di singola feature (per-file lock — `withWriteLock` è già path-keyed).\n5. **Migrazione idempotente**: al primo load, se `features.json` esiste e `features/` no → split in `features/<id>.json` (una tantum). Mantenere lettura vecchio layout per non forzare la migrazione.\n6. Aggiornare hint `filesTouched` in pi-adapter (index.ts:486): `features.json` → `features/<id>.json` (o `features/`).\n\n## Rischi\n- Orphan cleanup non deve cancellare file non related (scopare solo `features/` e solo chiavi non presenti).\n- Idempotenza migrazione (safe se re-run).\n- Lock per-file: `withWriteLock` già path-keyed → parallelismo tra feature OK.\n\n## Comportamenti da preservare\n- `loadFeatures()` restituisce `FeaturesDocument` (API/return type stabile) → consumer unchanged.\n- Atomic write + .bak esistente.",
+  "descriptionUpdatedAt": "2026-07-15T17:53:48.793Z",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -26,7 +27,8 @@
     "49c7ca8c-cd9c-49d9-ae9d-5dd2a5eba71f",
     "b2d667bc-1a1d-42cf-ac2c-2414f9e0c437",
     "30ed3170-bc71-4992-8eb0-001389eee99a",
-    "3826c78f-105e-423e-85e1-b91cfce1eb08"
+    "3826c78f-105e-423e-85e1-b91cfce1eb08",
+    "9c6b76e4-dc69-4c48-a7b8-509983353cfd"
   ],
   "tasks": [
     {
@@ -39,6 +41,7 @@
       "title": "Migrazione idempotente features.json → features/*.json",
       "status": "done",
       "description": " **P1 — un file per feature.**\n\n## Da fare\n1. Al primo `loadFeatures()` (o in `ensureStructure`): se `features.json` esiste e `features/` non esiste (o vuota) → leggere `features.json`, scrivere ogni feature in `features/<id>.json`, poi **non** cancellare `features.json` subito (marcarlo migrazione avvenuta, o lasciare come backup; decidere: preferibile rimuoverlo dopo migrazione riuscita per evitare ambiguità — ma solo se `features/` popolata con successo).\n2. Idempotente: re-run non duplica/non perde dati (se `features/` già popolata, skip).\n3. La migrazione deve girare anche per progetti esistenti (es. heca: ~6 feature).\n\n## Edge case\n- Migrazione parziale (crash a metà): al re-run, feature già migrate vengono riscritte (idempotente), non duplicate.\n- `features.json` assente + `features/` assente → nulla da migrare.\n\n---\n**Completion summary:**\nDone. migrateLegacy() (:427): idempotent + crash-safe — reads legacy features.json (try/catch → no-op if absent), mkdir features/, atomicWriteJson per feature, then unlink legacy. Called under withFeaturesLock in every write op (saveFeatures/saveFeature/updateFeatures) so migration never interleaves with a writer. loadFeatures stays lock-free (reads legacy pre-migration). Verified: idempotent re-run + crash-recovery (reappeared legacy re-migrated, no data loss) in smoke test; real agent-plan .planner copy (4 features) migrated cleanly with ID preservation.",
+      "descriptionUpdatedAt": "2026-07-15T17:54:50.124Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -46,10 +49,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-07-15T19:44:09.495Z",
       "completedAt": "2026-07-15T19:48:17.184Z",
       "createdAt": "2026-07-15T17:54:50.124Z",
-      "updatedAt": "2026-07-15T19:48:17.184Z"
+      "updatedAt": "2026-07-15T19:48:17.184Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "49c7ca8c-cd9c-49d9-ae9d-5dd2a5eba71f",
@@ -61,6 +68,7 @@
       "title": "featuresDir/featurePath + rewrite loadFeatures (readdir+assemble, backward compat)",
       "status": "done",
       "description": " **P1 — un file per feature.**\n\n## Attuale\n`PlanStore.featuresPath()` (plan-core/plan-store.ts:409) = `.planner/features.json` (unico, `FeaturesDocumentSchema` schema.ts:235). `loadFeatures()` (:547) legge quell'unico file.\n\n## Da fare\n1. Aggiungere `featuresDir()` → `.planner/features` e `featurePath(id)` → `features/<id>.json`.\n2. Riscrivere `loadFeatures()`: `readdir(featuresDir)` + `readJson` ogni file `FeatureSchema` → assemblare `FeaturesDocument` (`{features: [...]}`).\n3. **Backward compat**: se `features/` assente ma `features.json` presente, leggere il vecchio layout (non forzare migrazione).\n4. Mantenere return type `FeaturesDocument` (API stabile per consumer: plan-server, plan-mcp, pi-adapter).\n\n## Edge case\n- `features/` vuota/inesistente + nessun `features.json` → `{features:[]}`.\n- File Feature non validi (zod fail) → skippa con log, non crashare tutto.\n\n---\n**Completion summary:**\nDone. Added featuresDir() (:412), featurePath(id) (:415), withFeaturesLock sentinel (:418, key=featuresDir path). Rewrote loadFeatures() (~:576): reads features/ per-file (FeatureSchema), skips invalid files (console.warn), backward-compat fallback to legacy features.json when features/ has no .json. ensureStructureOrdering (:386) now uses loadFeatures() instead of direct readJson(featuresPath). API return type FeaturesDocument unchanged → consumers (plan-server/plan-mcp/pi-adapter) unaffected. Build + pnpm check clean. Validated: smoke test + real-data (4 agent-plan features migrated, IDs preserved).",
+      "descriptionUpdatedAt": "2026-07-15T17:54:50.124Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -68,10 +76,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-07-15T19:28:26.554Z",
       "completedAt": "2026-07-15T19:48:17.184Z",
       "createdAt": "2026-07-15T17:54:50.124Z",
-      "updatedAt": "2026-07-15T19:48:17.184Z"
+      "updatedAt": "2026-07-15T19:48:17.184Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "b2d667bc-1a1d-42cf-ac2c-2414f9e0c437",
@@ -83,6 +95,7 @@
       "title": "Rewrite saveFeatures + saveFeature granulare + orphan reconcile + per-file atomicUpdate",
       "status": "done",
       "description": " **P1 — un file per feature.**\n\n## Attuale\n`saveFeatures({features})` (plan-store.ts:477/933) riscrive **tutto** `features.json` via `atomicUpdateJson`. Lock globale su `features.json`.\n\n## Da fare\n1. Riscrivere `saveFeatures({features})`: scrive ogni feature nel suo `featurePath(id)` via `atomicWriteJson`; **reconcile orphan** — rimuove file in `features/` il cui id non è più nella lista.\n2. Aggiungere `saveFeature(feature)` granulare: `atomicWriteJson(featurePath(feature.id), feature)` (un solo file, per-file lock via `withWriteLock` già path-keyed → parallelismo tra feature).\n3. Routing: i `atomicUpdateJson(features.json)` correnti (update di singola feature) → `atomicUpdateJson(featurePath(id))` (read-modify-write per-file).\n4. `ensureStructure`/init: creare `features/` con `mkdir recursive`.\n\n## Edge case\n- Orphan cleanup scope solo `features/` + solo id non presenti (mai toccare altri file).\n- Delete feature → rimuove il suo file.\n\n---\n**Completion summary:**\nDone. Rewrote saveFeatures() (:1206) = withFeaturesLock(migrateLegacy + saveFeaturesRaw) + touchManifest/maybeAutoSync. saveFeaturesRaw (:1217, no lock — caller holds sentinel): per-file atomicWriteJson + orphan reconcile (unlink features/*.json not in doc). Added saveFeature(feature) (:1240) granular single-feature write. updateFeatures (:1182) = withFeaturesLock(migrate + load + updater + saveFeaturesRaw), signature (updater)=>FeaturesDocument preserved for ~20 callers. withWriteLock not re-entrant → split public (lock) vs raw (no lock) to avoid deadlock. ensureStructure init mkdir featuresDir (:471).",
+      "descriptionUpdatedAt": "2026-07-15T17:54:50.124Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -90,10 +103,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-07-15T19:44:09.495Z",
       "completedAt": "2026-07-15T19:48:17.184Z",
       "createdAt": "2026-07-15T17:54:50.124Z",
-      "updatedAt": "2026-07-15T19:48:17.184Z"
+      "updatedAt": "2026-07-15T19:48:17.184Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "30ed3170-bc71-4992-8eb0-001389eee99a",
@@ -105,6 +122,7 @@
       "title": "Test per-feature storage + build/check",
       "status": "done",
       "description": " **P1 — un file per feature.**\n\n## Da fare\n1. Test round-trip: crea feature → saveFeature → loadFeatures → verify.\n2. Test migrazione: prep `features.json` vecchio → load → verify `features/<id>.json` creati + dati corretti; re-run idempotente.\n3. Test orphan cleanup: saveFeatures con lista ridotta → verify file rimosso.\n4. Test parallelismo: 2 saveFeature su feature diverse non si contendono (per-file lock).\n5. `pnpm -r build` + `pnpm check` verdi.\n\n## Edge case\n- Feature con id non valido nel file → skip + log.\n\n---\n**Completion summary:**\nDone. Added permanent regression test suite using Node's built-in test runner (zero new deps): packages/plan-core/test/per-feature-storage.test.mjs (7 tests: legacy load, migration on updateFeatures + legacy removal, per-file reload with ID preservation, orphan reconcile, granular saveFeature, idempotent+crash-safe migrateLegacy, fresh-project empty read + per-file write). Added \"test\": \"tsc -p tsconfig.json && node --test \\\"test/**/*.test.mjs\\\"\" script to packages/plan-core/package.json. Validation: pnpm check (tsc -b) clean; pnpm -r build clean; 7/7 tests pass.",
+      "descriptionUpdatedAt": "2026-07-15T17:54:50.124Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -112,10 +130,14 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-07-15T19:59:24.679Z",
       "completedAt": "2026-07-15T20:02:43.817Z",
       "createdAt": "2026-07-15T17:54:50.124Z",
-      "updatedAt": "2026-07-15T20:02:43.817Z"
+      "updatedAt": "2026-07-15T20:02:43.817Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     },
     {
       "id": "3826c78f-105e-423e-85e1-b91cfce1eb08",
@@ -127,6 +149,7 @@
       "title": "Aggiornare hint filesTouched in pi-adapter",
       "status": "done",
       "description": " **P1 — un file per feature.**\n\n## Attuale\npi-adapter `filesTouched` (index.ts:486) include la stringa `.planner/features.json` (solo display nel contesto resume, non parsata).\n\n## Da fare\n1. Aggiornare la stringa: `.planner/features.json` → `.planner/features/` (o `.planner/features/<id>.json` se si vuole indicare il file corrente, ma `features/` basta come hint).\n2. Verificare altre referenze stringa `features.json` nel codebase (grep) e aggiornarle se sono hint/contesto.\n\n## Edge case\n- Nessuna logica dipende da queste stringhe (solo display) → cambio a basso rischio.\n\n---\n**Completion summary:**\nDone. Updated filesTouched hint in packages/pi-adapter/src/index.ts:486 from \".planner/features.json\" to \".planner/features/\" (per-file storage dir). Display-only context hint, no logic dependency. pi-adapter build clean.",
+      "descriptionUpdatedAt": "2026-07-15T17:54:50.124Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -134,17 +157,113 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
       "startedAt": "2026-07-15T19:59:43.682Z",
       "completedAt": "2026-07-15T20:00:18.767Z",
       "createdAt": "2026-07-15T17:54:50.124Z",
-      "updatedAt": "2026-07-15T20:00:18.767Z"
+      "updatedAt": "2026-07-15T20:00:18.767Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "9c6b76e4-dc69-4c48-a7b8-509983353cfd",
+      "phaseId": "6703294b-a164-4bfb-9d73-8aa265abefab",
+      "number": 501,
+      "shortId": "K6746",
+      "priority": 6,
+      "shortName": "prevent-stale-legacy-feature-b",
+      "title": "Prevent stale legacy feature backups from being reimported",
+      "status": "done",
+      "description": "Fix the confirmed Agent Plan 0.4.9 data-loss regression reported in Heca. In packages/plan-core/src/plan-store.ts:1393, migrateLegacy reads features.json through readJson (:958), whose inline and .local/backups recovery also runs when the primary file is missing. Every feature write (updateFeatures :2715, saveFeatures :3158, saveFeature :3214) then reimports old feature snapshots over current per-feature files. Sequential F003 then F004 updates revert F003. loadRawFeatures (:1820) has the same backup-only legacy fallback when features/ is empty, which can expose deleted features again.\n\nExisting ownership and precedents: P008(F004)/T035 owns the legacy-to-per-feature migration and crash-safe reruns; T032 owns packages/plan-core/test/per-feature-storage.test.mjs. Preserve the current public PlanStore API, root write coordination, real-primary legacy migration and crash recovery, and generic readJson backup recovery. Require the actual legacy primary file to exist before either legacy migration or legacy fallback reads; a leftover backup alone must never activate legacy storage. Do not delete backups or alter Heca's real planner.\n\nAdd permanent regression coverage for inline features.json.bak and relocated .local/backups/features.json.bak across sequential updateFeatures/saveFeatures/saveFeature writes, empty per-feature storage, and real-primary corruption recovery. First demonstrate failures against the existing implementation, then apply the smallest core fix and verify with the canonical bounded focused runner. No dependency changes, UI bundles, commit, push, PR, release or global install are part of this fix. Preserve the pre-existing Agent Brain planner edits in this checkout.\n\n---\n**Completion summary:**\nFixed the confirmed legacy feature backup reimport/data-loss regression. packages/plan-core/src/plan-store.ts:1390 adds the private loadLegacyFeatures helper, which requires the actual features.json primary before invoking generic backup-aware readJson. migrateLegacy (:1400) and the legacy fallback in loadRawFeatures (:1853) both use it. Backup-only snapshots can no longer overwrite canonical per-feature documents or repopulate an empty feature store. Actual-primary migration, crash-safe reruns and recovery of a corrupt but present primary remain supported, without deleting backup files or changing adapters/public schemas.\n\nPermanent regressions in packages/plan-core/test/per-feature-storage.test.mjs:142 cover sequential F003/F004 edits via updateFeatures, saveFeatures and saveFeature for both inline and relocated backups; :160 covers read/write after removing the last feature; :173 covers legitimate corrupt-primary recovery. Before the code fix, the 17-test file produced six failures confirming corruption. Afterward, the canonical focused core build/tests passed 522/522, including all 17 per-feature tests.\n\nCanonical final gate PASSED for fingerprint 1c982e52754a: build, typecheck, coverage (943/943 Node tests plus 111 Web UI tests), plugin synchronization, capability audit, browser E2E and clean temporary installation/startup from freshly packed artifacts. Bounded logs: .planner/.local/verification/1c982e52754a-*.log. Diff reviewed against existing private-helper, atomic-write and mkdtemp test conventions; git diff --check passed. No dependencies, UI bundles or unrelated Agent Brain source/planner content were replaced.\n\nDelivery limit: the fix is implemented and verified locally in this checkout. It has not been committed, published or installed globally, and no verification used or modified Heca's real planner.",
+      "descriptionUpdatedAt": "2026-10-25T18:13:04.790Z",
+      "notes": "Implementation conformity: the change is confined to harness-agnostic PlanStore and its existing per-feature-storage Node test suite, following P008(F004)/T035 and T032. loadLegacyFeatures requires the real features.json primary before using unchanged readJson recovery; migrateLegacy and loadRawFeatures reuse it. Root write locks, public APIs, legitimate legacy migrations, corrupt-primary backup recovery and the historical backup files are preserved. No adapter, schema, dependency or UI changes were needed.\n\nRed/green evidence: before the fix, the 17-test per-feature suite had six failures for sequential rollback and empty-store resurrection across inline and relocated legacy backups (482332c14bbb focused log). After the fix, canonical focused plan-core verification rebuilt the core and passed 522/522 tests, including all 17 per-feature tests and normal read diagnostics (1c982e52754a focused log).\n\nCanonical final gate PASSED for repository fingerprint 1c982e52754a: build, typecheck, coverage (943/943 Node tests plus 111 Web UI tests; 89.95% line / 79.05% branch / 86.61% function), plugin synchronization, capability audit, browser end-to-end, and fresh packed-installation startup smoke. Logs: .planner/.local/verification/1c982e52754a-*.log; final state: .planner/.local/verification/final-gate.json. Final diff reviewed; git diff --check passed. Pre-existing Agent Brain planner work was preserved. The global 0.4.9 installation and Heca planner remain unchanged; no commit, push, PR or publication was performed.\n\nDelivery follow-up: the user explicitly authorized committing, pushing and creating a stable release, then required a new branch from develop in a sibling worktree and removal of that worktree afterward. The four fix/planner files were moved to codex/fix-legacy-feature-backups in /Users/antonio/projects/agent-plan-fix-legacy-backups, based on origin/develop. The original feat/agent-brain checkout was restored to its pre-fix tracked state, with hashes confirming preservation of its pre-existing dirty files. Focused verification in the isolated worktree rebuilt core and passed 522/522 tests (76c3b16b9beb-focused-plan-core.log). Stable delivery follows a fix PR to develop and scripts/release.cjs from clean develop; unrelated Agent Brain planning is excluded.",
+      "statusLog": [
+        {
+          "id": "916d62df-ff5a-4ae8-b2e1-ee1e254a9d2e",
+          "date": "2026-10-25T18:09:02.249Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "9c6b76e4-dc69-4c48-a7b8-509983353cfd-check-002-in-progress-done",
+          "date": "2026-10-25T18:13:04.788Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Fixed the confirmed legacy feature backup reimport/data-loss regression. packages/plan-core/src/plan-store.ts:1390 adds the private loadLegacyFeatures helper, which requires the actual features.json primary before invoking generic backup-aware readJson. migrateLegacy (:1400) and the legacy fallback in loadRawFeatures (:1853) both use it. Backup-only snapshots can no longer overwrite canonical per-feature documents or repopulate an empty feature store. Actual-primary migration, crash-safe reruns and recovery of a corrupt but present primary remain supported, without deleting backup files or changing adapters/public schemas.\n\nPermanent regressions in packages/plan-core/test/per-feature-storage.test.mjs:142 cover sequential F003/F004 edits via updateFeatures, saveFeatures and saveFeature for both inline and relocated backups; :160 covers read/write after removing the last feature; :173 covers legitimate corrupt-primary recovery. Before the code fix, the 17-test file produced six failures confirming corruption. Afterward, the canonical focused core build/tests passed 522/522, including all 17 per-feature tests.\n\nCanonical final gate PASSED for fingerprint 1c982e52754a: build, typecheck, coverage (943/943 Node tests plus 111 Web UI tests), plugin synchronization, capability audit, browser E2E and clean temporary installation/startup from freshly packed artifacts. Bounded logs: .planner/.local/verification/1c982e52754a-*.log. Diff reviewed against existing private-helper, atomic-write and mkdtemp test conventions; git diff --check passed. No dependencies, UI bundles or unrelated Agent Brain source/planner content were replaced.\n\nDelivery limit: the fix is implemented and verified locally in this checkout. It has not been committed, published or installed globally, and no verification used or modified Heca's real planner."
+        }
+      ],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "9c6b76e4-dc69-4c48-a7b8-509983353cfd-check-001-add-and-run-regressions-that-reproduce-backup-only-rollback-and-empty-store-feature-resurrection",
+          "number": 1,
+          "title": "Add and run regressions that reproduce backup-only rollback and empty-store feature resurrection.",
+          "checked": true
+        },
+        {
+          "id": "9c6b76e4-dc69-4c48-a7b8-509983353cfd-check-002-gate-legacy-reads-and-migration-on-the-actual-primary-file-while-preserving-normal-backup-recovery-and-existing-migration-behavior",
+          "number": 2,
+          "title": "Gate legacy reads and migration on the actual primary file while preserving normal backup recovery and existing migration behavior.",
+          "checked": true
+        },
+        {
+          "id": "9c6b76e4-dc69-4c48-a7b8-509983353cfd-check-003-run-bounded-focused-verification-review-the-final-diff-and-record-concrete-evidence-and-remaining-installation-limits",
+          "number": 3,
+          "title": "Run bounded focused verification, review the final diff, and record concrete evidence and remaining installation limits.",
+          "checked": true
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "2026-10-25T18:09:02.249Z",
+      "completedAt": "2026-10-25T18:13:04.788Z",
+      "createdAt": "2026-10-25T18:08:56.914Z",
+      "updatedAt": "2026-10-25T18:13:04.788Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:b2c795f8-0940-480d-8284-338bd730bd31",
+          "createdAt": "2026-10-25T18:09:02.135Z"
+        }
+      ],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-07-15T17:53:48.793Z",
-  "updatedAt": "2026-07-26T16:04:22.879Z",
+  "updatedAt": "2026-10-25T18:13:04.788Z",
   "handoff": "",
   "handoffUpdatedAt": "",
+  "handoffAudit": null,
   "handoffReadAt": "",
   "handoffHistory": [],
-  "statusLog": []
+  "statusLog": [
+    {
+      "id": "e931de7a-8486-49cd-b6f8-e95611e3b10d",
+      "date": "2026-10-25T18:09:02.305Z",
+      "fromStatus": "draft",
+      "toStatus": "in-progress",
+      "title": "draft → in-progress",
+      "description": ""
+    },
+    {
+      "id": "5876e600-83ca-4904-b950-50ca15cf6135",
+      "date": "2026-10-25T18:13:04.820Z",
+      "fromStatus": "in-progress",
+      "toStatus": "done",
+      "title": "in-progress → done",
+      "description": ""
+    }
+  ],
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:b2c795f8-0940-480d-8284-338bd730bd31",
+      "createdAt": "2026-10-25T18:09:02.135Z"
+    }
+  ]
 }

@@ -23,7 +23,16 @@
     "2535f354-bb9d-4f70-8fb8-322fb67066d4"
   ],
   "dependsOn": [],
-  "statusLog": [],
+  "statusLog": [
+    {
+      "id": "d00eae9d-1fd4-4cb2-9d20-1c7a660f0fa1",
+      "date": "2026-10-25T18:13:04.918Z",
+      "fromStatus": "planned",
+      "toStatus": "done",
+      "title": "planned → done",
+      "description": ""
+    }
+  ],
   "createdAt": "2026-07-15T17:53:11.564Z",
   "updatedAt": "2026-07-27T12:01:51.734Z",
   "sessionInfo": []
