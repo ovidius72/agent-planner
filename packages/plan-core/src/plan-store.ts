@@ -1367,9 +1367,6 @@ export class PlanStore {
     // the planner-root layer.
     return withPlanRootWriteLock(this.root, () => withWriteLock(this.featuresDir(), fn));
   }
-  /** Idempotent one-time migration: if a legacy features.json exists, split it
-   *  into features/<id>.json (one per feature) and remove the legacy file.
-   *  Must be called under withFeaturesLock. Crash-safe: re-run overwrites. */
   private async loadFeatureDeletionTombstones(): Promise<{ deletions: Record<string, string> }> {
     try {
       await access(this.featureDeletionTombstonesPath());
@@ -1390,10 +1387,20 @@ export class PlanStore {
     });
   }
 
+  /** A backup alone is not a legacy document: migration removes the primary.
+   *  Keep backup recovery available only while the legacy primary still exists. */
+  private async loadLegacyFeatures(): Promise<{ features: RawFeature[] }> {
+    await access(this.featuresPath());
+    return readJson(this.featuresPath(), FeaturesDocumentSchema);
+  }
+
+  /** Idempotent one-time migration: if a legacy features.json exists, split it
+   *  into features/<id>.json (one per feature) and remove the legacy file.
+   *  Must be called under withFeaturesLock. Crash-safe: re-run overwrites. */
   private async migrateLegacy(): Promise<void> {
     let legacy: { features: RawFeature[] };
     try {
-      legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+      legacy = await this.loadLegacyFeatures();
     } catch {
       return; // no legacy features.json (already migrated or fresh project)
     }
@@ -1844,7 +1851,7 @@ export class PlanStore {
     }
     // Legacy: single features.json (pre-migration read; migration writes on first write op).
     try {
-      const legacy = await readJson(this.featuresPath(), FeaturesDocumentSchema);
+      const legacy = await this.loadLegacyFeatures();
       const legacyFeatures = legacy.features;
       legacyFeatures.sort((a, b) => (a.number - b.number) || a.id.localeCompare(b.id));
       return legacyFeatures;
