@@ -5,7 +5,8 @@
   "launch": { "view": "focused", "file": "Main.dc.html" },
   "pages": [],
   "boards": {
-    "README.dc.html": { "x": -1560, "y": 0, "w": 1320, "h": 1680, "title": "Handoff — read me first", "expand": "fill", "is_interactive": true },
+    "README.dc.html": { "x": -3120, "y": 0, "w": 1320, "h": 1680, "title": "Handoff — read me first", "expand": "fill", "is_interactive": true },
+    "Components.dc.html": { "x": -1560, "y": 0, "w": 1320, "h": 1720, "title": "Components — UI kit", "expand": "fill", "is_interactive": true },
     "Main.dc.html": { "x": 0, "y": 0, "w": 1320, "h": 2220, "title": "Planner — dashboard", "expand": "fill", "is_interactive": true },
     "Resume.dc.html": { "x": 1440, "y": 0, "w": 1320, "h": 920, "title": "Resume — orientation", "expand": "fill", "is_interactive": true },
     "Agents.dc.html": { "x": 2880, "y": 0, "w": 1320, "h": 960, "title": "Agents & targets", "expand": "fill", "is_interactive": true },
@@ -16,7 +17,7 @@
     "Settings.dc.html": { "x": 10080, "y": 0, "w": 1320, "h": 1480, "title": "Settings", "expand": "fill", "is_interactive": true },
     "Evaluate.dc.html": { "x": 11520, "y": 0, "w": 1320, "h": 1040, "title": "To evaluate — proposals", "expand": "fill", "is_interactive": true }
   },
-  "order": ["README.dc.html", "Main.dc.html", "Resume.dc.html", "Agents.dc.html", "TaskDetail.dc.html", "Map.dc.html", "Code.dc.html", "Checks.dc.html", "Settings.dc.html", "Evaluate.dc.html"],
+  "order": ["README.dc.html", "Components.dc.html", "Main.dc.html", "Resume.dc.html", "Agents.dc.html", "TaskDetail.dc.html", "Map.dc.html", "Code.dc.html", "Checks.dc.html", "Settings.dc.html", "Evaluate.dc.html"],
   "notes": {},
   "designSystems": [
     {
