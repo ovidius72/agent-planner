@@ -8,18 +8,23 @@ final code. Development starts from here.
 A visual gallery of the primitives (atoms then molecules) is in the `Components`
 artboard of the mockup (see `ARTIFACT.md`).
 
-## Target stack (verified in `packages/plan-web-ui`)
+## Target stack (tools reused; the design is new)
+
+The **toolchain** below is reused from `packages/plan-web-ui`. The **design** —
+tokens, typography, component styles — is **new** (see `tokens.md`). Do not reuse the
+old UI's styles, tokens or components.
 
 - **React 19 + TypeScript**, Vite, `react-router-dom` v7.
-- **Tailwind CSS v4** (CSS-first: `@import "tailwindcss"`, tokens in `@theme` at
-  `src/styles/tokens.css`). Status colors already exist as `--color-status-*`.
+- **Tailwind CSS v4** (CSS-first: `@import "tailwindcss"`, `@theme`).
 - **lucide-react** for icons.
 - **elastic-input** for the faceted-search input.
 - **@dnd-kit** for drag/drop.
-- There is already a `src/components/ui/` folder — treat it as the **atoms** home.
+- Put the new atoms in `components/ui/`. They are **new** components for the redesign —
+  they replace what is there, they do not extend it.
 
-**Styling convention:** Tailwind utilities + the existing CSS variables; map our
-`design-tokens.json` onto the `@theme` tokens (don't introduce a parallel token set).
+**Styling convention:** Tailwind utilities over the **new** tokens. Build a fresh
+`@theme` from `tokens.md` / `design-tokens.json`, for light and dark; this **replaces**
+the old token layer — do **not** reference the current `tokens.css` / `theme.css`.
 Prop sketches use `LucideIcon` from `lucide-react`.
 
 **On shadcn/ui (not currently a dependency):** build atoms and molecules on the

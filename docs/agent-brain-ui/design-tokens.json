@@ -2,7 +2,8 @@
   "name": "Agent Plan",
   "version": 1,
   "meta": {
-    "source": "ovidius72/agent-planner · packages/plan-web-ui/src/styles (theme.css, tokens.css)"
+    "role": "Canonical design tokens for the Agent Brain web UI redesign.",
+    "note": "These define the NEW UI. They replace packages/plan-web-ui/src/styles (tokens.css, theme.css = the old UI). Build a fresh Tailwind v4 @theme from here, for light and dark; do not import or extend the old tokens. See docs/agent-brain-ui/tokens.md."
   },
   "color": {
     "themes": [
