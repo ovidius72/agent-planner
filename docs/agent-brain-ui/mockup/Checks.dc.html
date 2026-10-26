@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Plan — Checks</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-soft:rgba(99,102,241,0.12);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --pos-ink:#15803d; --warn-ink:#b45309; --bad-ink:#b91c1c; --mut-bg:rgba(148,163,184,0.16);
+    --pos-bg:rgba(34,197,94,0.14); --warn-bg:rgba(234,88,12,0.14); --bad-bg:rgba(239,68,68,0.12);
+    --track:rgba(148,163,184,0.2);
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-soft:rgba(129,140,248,0.16);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --bad-ink:#f87171; --mut-bg:rgba(148,163,184,0.12);
+    --pos-bg:rgba(34,197,94,0.13); --warn-bg:rgba(234,88,12,0.15); --bad-bg:rgba(239,68,68,0.13);
+    --track:rgba(148,163,184,0.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:600;line-height:1.35;white-space:nowrap}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:10px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:14px}
+  .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--border-strong)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .stat{display:flex;flex-direction:column;gap:3px;padding:13px 15px}
+  .stat .n{font-size:21px;font-weight:700;line-height:1}
+  .stat .l{font-size:11.5px;color:var(--text-subtle);font-weight:600}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .grphd{display:flex;align-items:flex-start;gap:11px;padding:15px 16px 12px}
+  .gico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--accent-soft);color:var(--accent)}
+  .grphd h3{margin:0;font-size:14.5px;font-weight:700}
+  .gsub{margin:3px 0 0;font-size:11.5px;color:var(--text-subtle);line-height:1.45}
+  .items{display:flex;flex-direction:column;border-top:1px solid var(--border)}
+  .item{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 16px}
+  .item+.item{border-top:1px solid var(--border)}
+  .itmain{display:flex;align-items:center;gap:9px;min-width:0}
+  .itlabel{font-size:13px;font-weight:600;line-height:1.25}
+  .itsub{font-size:11px;color:var(--text-subtle);margin-top:1px}
+  .facts{display:flex;gap:6px;flex-wrap:wrap}
+  .vbadge{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .bar{height:7px;border-radius:9999px;background:var(--track);overflow:hidden;flex-grow:1;min-width:80px}
+  .bar>span{display:block;height:100%;border-radius:9999px}
+  .costrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 16px}
+  .costrow+.costrow{border-top:1px solid var(--border)}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .grid4{grid-template-columns:repeat(2,1fr)}
+    .grid2{grid-template-columns:1fr}
+    .pad{padding:16px 12px !important}
+  }
+  @media (max-width:560px){ .grid4{grid-template-columns:1fr} }
+</style>
+</helmet>
+
+<div class="app {{themeClass}} {{navClass}}">
+  <div class="scrim" onClick="{{toggleNav}}"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 24px;background:var(--sidebar);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-subtle)">
+    <span class="mono">F025 · Web UI reorganization proposal</span><span>Demo scenario · illustrative data</span>
+  </div>
+
+  <header class="pad" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 24px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:13px;min-width:0">
+      <button type="button" class="navtoggle" onClick="{{toggleNav}}" aria-label="Toggle navigation"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--feature));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0">ap</div>
+      <div style="min-width:0"><div style="font-size:17px;font-weight:700;line-height:1.15">Example Project</div><div style="font-size:12px;color:var(--text-subtle)">Agent Plan · project memory &amp; work</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="pill" style="background:var(--accent-soft);color:var(--accent)" title="Provider capabilities">TypeScript · syntactic ✓ · semantic ✓</span>
+      <button type="button" class="btn" onClick="{{toggleTheme}}" aria-label="Toggle theme" style="padding:7px;width:34px;justify-content:center">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg></sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></sc-if>
+      </button>
+    </div>
+  </header>
+
+  <div class="shell" style="display:flex;flex-grow:1;min-height:0">
+    <aside class="sidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--sidebar)">
+      <div class="navgroup">Work</div>
+      <a class="navitem" href="Resume.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>Resume</a>
+      <a class="navitem" href="Main.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Planner</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Requirements</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Ideas</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Handoff</a>
+      <a class="navitem" href="Agents.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg>Agents &amp; targets</a>
+      <div class="navgroup">Context</div>
+      <a class="navitem" href="Map.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>Map</a>
+      <a class="navitem" href="Code.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code</a>
+      <a class="navitem on" href="Checks.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Checks</a>
+      <div class="navgroup">Proposals</div>
+      <a class="navitem" href="Evaluate.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"/></svg>To evaluate</a>
+      <div style="flex-grow:1;min-height:10px"></div>
+      <a class="navitem" href="Settings.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+    </aside>
+
+    <main class="pad" style="flex-grow:1;min-width:0;padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div>
+          <p class="eyebrow">Context · Checks</p>
+          <h1 style="margin:4px 0 0;font-size:21px;font-weight:700">Trust signals</h1>
+          <p style="margin:4px 0 0;font-size:12.5px;color:var(--text-subtle);max-width:560px;line-height:1.5">Each check keeps two facts apart: whether something was <b>read / run</b>, and whether it actually <b>holds now</b>. Green on one does not imply green on the other.</p>
+        </div>
+        <div class="seg">
+          <button type="button" class="{{allOn}}" onClick="{{showAll}}">All</button>
+          <button type="button" class="{{attnOn}}" onClick="{{showAttn}}">Needs attention</button>
+        </div>
+      </div>
+
+      <!-- summary -->
+      <div class="grid4">
+        <div class="card stat"><span class="n" style="color:var(--warn-ink)">5/6</span><span class="l">Context delivered</span></div>
+        <div class="card stat"><span class="n" style="color:var(--warn-ink)">2</span><span class="l">Conformance deviations</span></div>
+        <div class="card stat"><span class="n" style="color:var(--text-subtle)">1</span><span class="l">Uncertain relations</span></div>
+        <div class="card stat"><span class="n" style="color:var(--bad-ink)">1</span><span class="l">Verification failing</span></div>
+      </div>
+
+      <div class="grid2">
+        <!-- Agent context -->
+        <div class="card grp">
+          <div class="grphd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.3 4.5-2.3 4.5 2.3 4.5 2.3v9.4l-4.5 2.3-4.5 2.3-4.5-2.3L3 16V6.6z"/><path d="M12 22V12M21 6.6 12 12 3 6.6"/></svg></span>
+            <div style="flex-grow:1"><h3>Agent context</h3><p class="gsub">What each agent received for its current task — <b>delivered</b>, missing, or <b>changed</b> since it started.</p></div>
+          </div>
+          <div class="items">
+            <sc-for list="{{ctxItems}}" as="it" hint-placeholder-count="2">
+              <div class="item">
+                <div class="itmain">
+                  <span class="vbadge" style="background:rgba(217,119,87,0.16)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></svg></span>
+                  <div><div class="itlabel">{{it.model}} · {{it.session}}</div><div class="itsub">{{it.sub}}</div></div>
+                </div>
+                <div class="facts"><sc-for list="{{it.facts}}" as="f" hint-placeholder-count="2"><span class="pill" style="background:{{f.bg}};color:{{f.ink}}">{{f.text}}</span></sc-for></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Code conformance -->
+        <div class="card grp">
+          <div class="grphd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <div style="flex-grow:1"><h3>Code conformance</h3><p class="gsub">Two separate facts: whether the <b>conventions were read</b>, and whether the <b>code conforms</b> to them.</p></div>
+          </div>
+          <div class="items">
+            <sc-for list="{{confItems}}" as="it" hint-placeholder-count="3">
+              <div class="item">
+                <div class="itmain"><div><div class="itlabel mono">{{it.label}}</div><div class="itsub">{{it.sub}}</div></div></div>
+                <div class="facts"><sc-for list="{{it.facts}}" as="f" hint-placeholder-count="2"><span class="pill" style="background:{{f.bg}};color:{{f.ink}}">{{f.text}}</span></sc-for></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Plan coherence -->
+        <div class="card grp">
+          <div class="grphd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a4 4 0 0 1 4 4v5.5"/></svg></span>
+            <div style="flex-grow:1"><h3>Plan coherence</h3><p class="gsub">Relations between plan and code — <b>verified</b> by a resolved anchor, or <b>uncertain</b> / stale.</p></div>
+          </div>
+          <div class="items">
+            <sc-for list="{{cohItems}}" as="it" hint-placeholder-count="3">
+              <div class="item">
+                <div class="itmain"><div><div class="itlabel">{{it.label}}</div><div class="itsub">{{it.sub}}</div></div></div>
+                <div class="facts"><sc-for list="{{it.facts}}" as="f" hint-placeholder-count="1"><span class="pill" style="background:{{f.bg}};color:{{f.ink}}">{{f.text}}</span></sc-for></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Verifications -->
+        <div class="card grp">
+          <div class="grphd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v3a3 3 0 0 1-.5 1.7L12 12l-2.5-4.3A3 3 0 0 1 9 6z"/><path d="M7 21h10l-3.2-6.5a2 2 0 0 0-3.6 0z"/></svg></span>
+            <div style="flex-grow:1"><h3>Verifications</h3><p class="gsub">Two separate facts: whether a check <b>passed</b>, and whether it <b>still covers</b> the current code.</p></div>
+          </div>
+          <div class="items">
+            <sc-for list="{{verItems}}" as="it" hint-placeholder-count="3">
+              <div class="item">
+                <div class="itmain"><div><div class="itlabel mono">{{it.label}}</div><div class="itsub">{{it.sub}}</div></div></div>
+                <div class="facts"><sc-for list="{{it.facts}}" as="f" hint-placeholder-count="2"><span class="pill" style="background:{{f.bg}};color:{{f.ink}}">{{f.text}}</span></sc-for></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- context cost: measured, not estimated -->
+      <div class="card">
+        <div class="grphd" style="padding-bottom:10px">
+          <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg></span>
+          <div style="flex-grow:1"><h3>Context cost — measured</h3><p class="gsub">Tokens actually assembled per agent for the current task. Bounded by budget, measured after delivery — not estimated up front.</p></div>
+        </div>
+        <div style="border-top:1px solid var(--border)">
+          <sc-for list="{{costRows}}" as="r" hint-placeholder-count="2">
+            <div class="costrow">
+              <span class="vbadge" style="background:rgba(217,119,87,0.16);width:24px;height:24px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></svg></span>
+              <div style="min-width:120px"><div class="itlabel">{{r.model}} · {{r.session}}</div><div class="itsub">{{r.task}}</div></div>
+              <div class="bar"><span style="width:{{r.pct}};background:{{r.ink}}"></span></div>
+              <span class="mono" style="font-size:12px;color:var(--text-muted);min-width:118px;text-align:right">{{r.used}} / {{r.budget}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- pending reviews -->
+      <div class="card">
+        <div class="grphd" style="padding-bottom:10px">
+          <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></span>
+          <div style="flex-grow:1"><h3>Pending reviews</h3><p class="gsub">Code anchors whose review state is not yet <b>reviewed</b> — a human still has to confirm, re-point, or discard.</p></div>
+          <span class="pill" style="background:var(--warn-bg);color:var(--warn-ink)">{{reviewCount}} open</span>
+        </div>
+        <div style="border-top:1px solid var(--border)">
+          <sc-for list="{{reviewRows}}" as="r" hint-placeholder-count="3">
+            <div class="item">
+              <div class="itmain">
+                <span class="vbadge" style="background:rgba(217,119,87,0.16);width:24px;height:24px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></svg></span>
+                <div><div class="itlabel">{{r.anchor}}</div><div class="itsub">{{r.who}} · {{r.when}}</div></div>
+              </div>
+              <div class="facts" style="align-items:center">
+                <span class="pill" style="background:{{r.bg}};color:{{r.ink}}">{{r.state}}</span>
+                <button type="button" class="btn" style="padding:5px 10px">Review</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <p style="margin:0;font-size:11.5px;color:var(--text-subtle);line-height:1.5">Illustrative data for the F025 proposal. "Read" vs "conforms", "passed" vs "still relevant", and "resolved" vs "reviewed" are modelled as independent axes so a stale or unreviewed signal is never hidden behind a green one.</p>
+    </main>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props){ super(props); let narrow=false; try{narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){} this.state={ theme:'dark', filter:'all', nav:narrow }; }
+  renderVals(){
+    const st=this.state;
+    const F={
+      ok:{bg:'var(--pos-bg)',ink:'var(--pos-ink)'},
+      warn:{bg:'var(--warn-bg)',ink:'var(--warn-ink)'},
+      bad:{bg:'var(--bad-bg)',ink:'var(--bad-ink)'},
+      mut:{bg:'var(--mut-bg)',ink:'var(--text-subtle)'}
+    };
+    const fact=(text,k)=>({text,bg:F[k].bg,ink:F[k].ink});
+
+    const ctx=[
+      {model:'Opus 5.5',session:'dev-a',sub:'T020 · pricing refactor',attn:true,facts:[fact('Delivered 6/6','ok'),fact('1 changed since start','warn')]},
+      {model:'Sonnet 5.5',session:'dev-b',sub:'T031 · checkout API',attn:true,facts:[fact('Delivered 4/5','warn'),fact('1 missing','bad')]}
+    ];
+    const conf=[
+      {label:'pricing/calculation.ts',sub:'/pricing · pure functions',attn:false,facts:[fact('Rules read ✓','ok'),fact('Conforms ✓','ok')]},
+      {label:'api/handlers.ts',sub:'2 deviations from error-shape rule',attn:true,facts:[fact('Rules read ✓','ok'),fact('2 deviations','warn')]},
+      {label:'auth/session.ts',sub:'conventions never loaded for this file',attn:true,facts:[fact('Rules not read','bad'),fact('Not evaluated','mut')]}
+    ];
+    const coh=[
+      {label:'T017 ↔ applyDiscount()',sub:'anchor resolved, lines match',attn:false,facts:[fact('Verified','ok')]},
+      {label:'T020 ↔ calculatePrice()',sub:'file moved — anchor needs re-pointing',attn:true,facts:[fact('Stale anchor','warn')]},
+      {label:'P03 ↔ /pricing module',sub:'relation inferred, not confirmed',attn:true,facts:[fact('Uncertain','mut')]}
+    ];
+    const ver=[
+      {label:'pricing.test',sub:'last run 4m ago',attn:false,facts:[fact('Passed ✓','ok'),fact('Still relevant ✓','ok')]},
+      {label:'discount.test',sub:'passes, but no case for new tier logic',attn:true,facts:[fact('Passed ✓','ok'),fact('Coverage stale ⚠','warn')]},
+      {label:'api.contract',sub:'response shape changed in T031',attn:true,facts:[fact('Failing ✗','bad'),fact('Relevant ✓','ok')]}
+    ];
+    const pick=(arr)=> st.filter==='attn' ? arr.filter(x=>x.attn) : arr;
+
+    const costRows=[
+      {model:'Opus 5.5',session:'dev-a',task:'T020 refactor',used:'42k',budget:'120k',pct:'35%',ink:'var(--pos-ink)'},
+      {model:'Sonnet 5.5',session:'dev-b',task:'T031 API',used:'101k',budget:'120k',pct:'84%',ink:'var(--warn-ink)'}
+    ];
+    const rev=[
+      {anchor:'calculation.ts:L4 → T020',who:'Opus 5.5 · dev-a',when:'added 12m ago',state:'Pending',bg:'var(--warn-bg)',ink:'var(--warn-ink)'},
+      {anchor:'handlers.ts:L88 → T031',who:'Sonnet 5.5 · dev-b',when:'moved on save',state:'Invalidated',bg:'var(--bad-bg)',ink:'var(--bad-ink)'},
+      {anchor:'session.ts:L23 → T009',who:'Opus 5.5 · dev-a',when:'surrounding code edited',state:'Stale',bg:'var(--mut-bg)',ink:'var(--text-subtle)'}
+    ];
+
+    return {
+      themeClass: st.theme==='dark'?'t-dark':'', isDark:st.theme==='dark', isLight:st.theme!=='dark',
+      navClass: st.nav?'nav-collapsed':'', toggleNav:()=>this.setState({nav:!st.nav}),
+      toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
+      allOn:(st.filter==='all'?'on':''), attnOn:(st.filter==='attn'?'on':''),
+      showAll:()=>this.setState({filter:'all'}), showAttn:()=>this.setState({filter:'attn'}),
+      ctxItems:pick(ctx), confItems:pick(conf), cohItems:pick(coh), verItems:pick(ver),
+      costRows, reviewRows:rev, reviewCount:rev.length
+    };
+  }
+}
+</script>
+</body>
+</html>

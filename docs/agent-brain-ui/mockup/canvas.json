@@ -1,0 +1,30 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-21T18:45:00Z" },
+  "title": "Agent Plan — Dashboard",
+  "launch": { "view": "focused", "file": "Main.dc.html" },
+  "pages": [],
+  "boards": {
+    "README.dc.html": { "x": -1560, "y": 0, "w": 1320, "h": 1680, "title": "Handoff — read me first", "expand": "fill", "is_interactive": true },
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1320, "h": 2220, "title": "Planner — dashboard", "expand": "fill", "is_interactive": true },
+    "Resume.dc.html": { "x": 1440, "y": 0, "w": 1320, "h": 920, "title": "Resume — orientation", "expand": "fill", "is_interactive": true },
+    "Agents.dc.html": { "x": 2880, "y": 0, "w": 1320, "h": 960, "title": "Agents & targets", "expand": "fill", "is_interactive": true },
+    "TaskDetail.dc.html": { "x": 4320, "y": 0, "w": 1320, "h": 1040, "title": "Task detail", "expand": "fill", "is_interactive": true },
+    "Map.dc.html": { "x": 5760, "y": 0, "w": 1320, "h": 1000, "title": "Map — relations", "expand": "fill", "is_interactive": true },
+    "Code.dc.html": { "x": 7200, "y": 0, "w": 1320, "h": 860, "title": "Code — editor & context", "expand": "fill", "is_interactive": true },
+    "Checks.dc.html": { "x": 8640, "y": 0, "w": 1320, "h": 1180, "title": "Checks — trust signals", "expand": "fill", "is_interactive": true },
+    "Settings.dc.html": { "x": 10080, "y": 0, "w": 1320, "h": 1480, "title": "Settings", "expand": "fill", "is_interactive": true },
+    "Evaluate.dc.html": { "x": 11520, "y": 0, "w": 1320, "h": 1040, "title": "To evaluate — proposals", "expand": "fill", "is_interactive": true }
+  },
+  "order": ["README.dc.html", "Main.dc.html", "Resume.dc.html", "Agents.dc.html", "TaskDetail.dc.html", "Map.dc.html", "Code.dc.html", "Checks.dc.html", "Settings.dc.html", "Evaluate.dc.html"],
+  "notes": {},
+  "designSystems": [
+    {
+      "title": "Agent Plan",
+      "namespace": "agent-plan",
+      "artifact": "https://claude.ai/artifact/6eZ1SzyYPABFynHxak9SKp",
+      "version": "1792608146-8766",
+      "copiedAt": "2026-10-21T18:45:00Z"
+    }
+  ]
+}

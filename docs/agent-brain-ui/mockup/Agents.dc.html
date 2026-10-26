@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Plan — Agents &amp; targets</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-soft:rgba(99,102,241,0.12);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --active:#f59e0b; --paused:#ea580c; --done:#22c55e; --planned:#0ea5e9; --blocked:#ef4444;
+    --pos-ink:#15803d; --warn-ink:#b45309; --bad-ink:#b91c1c; --sub-ink:#475569;
+    --pos-bg:rgba(34,197,94,0.14); --warn-bg:rgba(234,88,12,0.14); --bad-bg:rgba(239,68,68,0.12); --mut-bg:rgba(148,163,184,0.16);
+    --shadow-card:0 12px 30px -18px rgba(15,23,42,0.18);
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-soft:rgba(129,140,248,0.16);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --active:#fbbf24; --paused:#fb923c; --done:#4ade80; --planned:#38bdf8; --blocked:#f87171;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --bad-ink:#f87171; --sub-ink:#94a3b8;
+    --pos-bg:rgba(34,197,94,0.16); --warn-bg:rgba(234,88,12,0.18); --bad-bg:rgba(239,68,68,0.18); --mut-bg:rgba(148,163,184,0.12);
+    --shadow-card:0 12px 30px -18px rgba(0,0,0,0.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .idtag{font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;color:var(--text-muted);background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:7px;padding:2px 8px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .badge{display:inline-flex;align-items:center;gap:6px;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:600;line-height:1;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:9999px;display:inline-block;flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:11px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:10px}
+  .vbadge{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .sel{appearance:none;-webkit-appearance:none;border:1px solid var(--border-strong);background:var(--surface-elevated) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;background-size:12px;color:var(--text);border-radius:11px;padding:8px 30px 8px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:16px}
+  .arow{display:grid;grid-template-columns:1.55fr 1.5fr 0.9fr 0.85fr 1fr 22px;gap:12px;align-items:center;width:100%;text-align:left;border:0;border-top:1px solid var(--border);background:transparent;padding:12px 16px;cursor:pointer;color:var(--text)}
+  .arow:hover{background:var(--accent-soft)}
+  .arow.on{background:var(--accent-soft)}
+  .ahead{display:grid;grid-template-columns:1.55fr 1.5fr 0.9fr 0.85fr 1fr 22px;gap:12px;padding:10px 16px;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)}
+  .insp-row{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text-muted);line-height:1.5}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .content-grid{grid-template-columns:1fr !important}
+    .pad{padding:20px 16px !important}
+  }
+  .tablewrap{overflow-x:auto}
+  .tablewrap .inner{min-width:720px}
+</style>
+</helmet>
+
+<div class="app {{themeClass}} {{navClass}}">
+  <div class="scrim" onClick="{{toggleNav}}"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 24px;background:var(--sidebar);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-subtle)">
+    <span class="mono">F025 · Web UI reorganization proposal</span>
+    <span>Demo scenario · illustrative data</span>
+  </div>
+
+  <header class="pad" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 24px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:13px;min-width:0">
+      <button type="button" class="navtoggle" onClick="{{toggleNav}}" aria-label="Toggle navigation"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--feature));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0">ap</div>
+      <div style="min-width:0"><div style="font-size:17px;font-weight:700;line-height:1.15">Example Project</div><div style="font-size:12px;color:var(--text-subtle)">Agent Plan · project memory &amp; work</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text-subtle)">View context</span><select class="sel" aria-label="View context"><option>Global project</option><option>Workspace feat/one</option></select></label>
+      <button type="button" class="btn" onClick="{{toggleTheme}}" aria-label="Toggle theme" style="padding:9px;width:38px;justify-content:center">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg></sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></sc-if>
+      </button>
+    </div>
+  </header>
+
+  <div class="shell" style="display:flex;flex-grow:1;min-height:0">
+    <aside class="sidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--sidebar)">
+      <div class="navgroup">Work</div>
+      <a class="navitem" href="Resume.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>Resume</a>
+      <a class="navitem" href="Main.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Planner</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Requirements</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Ideas</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Handoff</a>
+      <a class="navitem on" href="Agents.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg>Agents &amp; targets</a>
+      <div class="navgroup">Context</div>
+      <a class="navitem" href="Map.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>Map</a>
+      <a class="navitem" href="Code.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code</a>
+      <a class="navitem" href="Checks.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Checks</a>
+      <div class="navgroup">Proposals</div>
+      <a class="navitem" href="Evaluate.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"/></svg>To evaluate</a>
+      <div style="flex-grow:1;min-height:10px"></div>
+      <a class="navitem" href="Settings.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div style="flex-grow:1"></div>
+      <div class="side-foot" style="border-top:1px solid var(--border);margin-top:10px;padding:12px 12px 4px;font-size:11px;color:var(--text-subtle);line-height:1.6">One shared planner<br>Code &amp; sessions kept separate</div>
+    </aside>
+
+    <main class="pad" style="flex-grow:1;min-width:0;padding:26px 30px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <h1 style="margin:0;font-size:26px;font-weight:700;letter-spacing:-0.01em">Agents &amp; targets</h1>
+          <p style="margin:6px 0 0;font-size:14px;color:var(--text-muted);max-width:60ch">Who is working, where, and with what result — with <b style="color:var(--text)">work status</b> and <b style="color:var(--text)">integration status</b> shown separately.</p>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="font-size:12px;color:var(--text-subtle)">Availability in</span><select class="sel" value="{{target}}" onChange="{{onTarget}}" aria-label="Integration target"><option value="develop">develop</option><option value="main">main</option><option value="release/0.3">release/0.3</option></select></label>
+      </div>
+
+      <div class="content-grid" style="display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr);gap:22px;align-items:start">
+        <!-- table -->
+        <div class="card" style="overflow:hidden">
+          <div class="tablewrap"><div class="inner">
+            <div class="ahead"><span>Agent · session</span><span>Work</span><span>Work status</span><span>Checkpoint</span><span>In {{target}}</span><span></span></div>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+              <button type="button" class="arow {{r.cls}}" onClick="{{r.select}}" aria-pressed="{{r.selected}}">
+                <span style="display:flex;align-items:center;gap:9px;min-width:0">
+                  <span class="vbadge" style="background:{{r.vbg}}">
+                    <sc-if value="{{r.isClaude}}" hint-placeholder-val="{{true}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></svg></sc-if>
+                    <sc-if value="{{r.isOpenai}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8.2 4.75v9.5L12 21.5 3.8 16.75v-9.5z"/><circle cx="12" cy="12" r="2.6"/></svg></sc-if>
+                    <sc-if value="{{r.isGemini}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="#4285f4" stroke="none" aria-hidden="true"><path d="M12 2c.3 5.2 4.6 9.5 9.8 9.8C16.6 12.1 12.3 16.4 12 21.6 11.7 16.4 7.4 12.1 2.2 11.8 7.4 11.5 11.7 7.2 12 2z"/></svg></sc-if>
+                  </span>
+                  <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.model}}</span><span class="mono" style="font-size:10.5px;color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{r.agent}} · {{r.session}}"><span style="color:var(--text-muted)">{{r.agent}}</span> · {{r.session}}</span></span>
+                </span>
+                <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.wtitle}}</span><span class="mono" style="font-size:10px;color:var(--text-subtle)">{{r.task}} · {{r.ws}}</span></span>
+                <span><span class="badge" style="background:{{r.wbg}};color:{{r.wink}}"><span class="dot" style="background:{{r.wdot}}"></span>{{r.wlabel}}</span></span>
+                <span class="mono" style="font-size:11px;color:var(--text-subtle)">{{r.cp}}</span>
+                <span><span class="badge" style="background:{{r.ibg}};color:{{r.iink}}">{{r.ilabel}}</span></span>
+                <span style="color:var(--text-subtle);justify-self:end"><svg class="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
+              </button>
+            </sc-for>
+          </div></div>
+        </div>
+
+        <!-- inspector -->
+        <aside class="card" style="padding:18px;display:flex;flex-direction:column;gap:14px;align-self:start;position:sticky;top:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <p class="eyebrow">Inspector</p>
+            <span class="badge" style="background:{{sel.wbg}};color:{{sel.wink}}"><span class="dot" style="background:{{sel.wdot}}"></span>{{sel.wlabel}}</span>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="vbadge" style="background:{{sel.vbg}}">
+                <sc-if value="{{sel.isClaude}}" hint-placeholder-val="{{true}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></svg></sc-if>
+                <sc-if value="{{sel.isOpenai}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8.2 4.75v9.5L12 21.5 3.8 16.75v-9.5z"/><circle cx="12" cy="12" r="2.6"/></svg></sc-if>
+                <sc-if value="{{sel.isGemini}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="#4285f4" stroke="none" aria-hidden="true"><path d="M12 2c.3 5.2 4.6 9.5 9.8 9.8C16.6 12.1 12.3 16.4 12 21.6 11.7 16.4 7.4 12.1 2.2 11.8 7.4 11.5 11.7 7.2 12 2z"/></svg></sc-if>
+              </span>
+              <div style="min-width:0"><div style="font-size:15px;font-weight:700">{{sel.model}} <span style="color:var(--text-subtle);font-weight:500;font-size:13px">· {{sel.agent}}</span></div><div class="mono" style="font-size:11px;color:var(--text-subtle)">{{sel.session}}</div></div>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:8px">{{sel.wtitle}}</div>
+            <div class="mono" style="font-size:11px;color:var(--text-subtle);margin-top:3px">{{sel.task}} · {{sel.ws}}</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--border);padding-top:12px">
+            <p class="eyebrow">Execution</p>
+            <sc-for list="{{sel.timeline}}" as="t" hint-placeholder-count="3"><div class="insp-row"><span class="dot" style="background:{{t.dot}};margin-top:6px"></span><span><b style="color:var(--text)">{{t.label}}</b> · <span class="mono" style="font-size:11px">{{t.when}}</span></span></div></sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:12px">
+            <p class="eyebrow">Changes produced</p>
+            <sc-for list="{{sel.files}}" as="f" hint-placeholder-count="2"><div class="mono" style="font-size:11.5px;color:var(--text-muted)">{{f}}</div></sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:12px">
+            <p class="eyebrow">Verification</p>
+            <div class="insp-row"><span style="color:var(--pos-ink);flex-shrink:0">✓</span><span>{{sel.verify}} at <span class="mono" style="font-size:11px">{{sel.rev}}</span></span></div>
+            <div class="insp-row"><span style="color:{{sel.freshInk}};flex-shrink:0">{{sel.freshMark}}</span><span>{{sel.fresh}}</span></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--border);padding-top:12px">
+            <p class="eyebrow">Integration in {{target}}</p>
+            <div class="insp-row"><span class="dot" style="background:var(--text-subtle);margin-top:6px"></span><span>{{sel.merge}}</span></div>
+            <div class="insp-row"><span class="dot" style="background:{{sel.iavailDot}};margin-top:6px"></span><span><b style="color:var(--text)">Currently {{sel.iavail}}</b>{{sel.inote}}</span></div>
+            <p style="margin:2px 0 0;font-size:11px;color:var(--text-subtle);line-height:1.5">A historical merge stays distinct from current availability — a later revert can change it.</p>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px">
+            <button type="button" class="btn btn-sm">Open checkpoint</button>
+            <button type="button" class="btn btn-sm">View code</button>
+            <sc-if value="{{sel.hasPr}}" hint-placeholder-val="{{true}}"><button type="button" class="btn btn-sm">{{sel.pr}}</button></sc-if>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":960}}'>
+class Component extends DCLogic {
+  constructor(props){ super(props); let narrow=false; try{narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){} this.state={ theme:'dark', target:'develop', sel:'dev-a', nav:narrow }; }
+  wmeta(s){ const m={
+    active:{label:'Active',ink:'var(--warn-ink)',bg:'var(--warn-bg)',dot:'var(--active)'},
+    verified:{label:'Verified',ink:'var(--pos-ink)',bg:'var(--pos-bg)',dot:'var(--done)'},
+    paused:{label:'Paused',ink:'var(--warn-ink)',bg:'var(--warn-bg)',dot:'var(--paused)'},
+    failed:{label:'Failed',ink:'var(--bad-ink)',bg:'var(--bad-bg)',dot:'var(--blocked)'},
+    abandoned:{label:'Abandoned',ink:'var(--sub-ink)',bg:'var(--mut-bg)',dot:'var(--text-subtle)'}
+  }; return m[s]||m.active; }
+  imeta(s){ const m={
+    available:{label:'Available',ink:'var(--pos-ink)',bg:'var(--pos-bg)',dot:'var(--done)',avail:'available',note:'.'},
+    integrate:{label:'To integrate',ink:'var(--warn-ink)',bg:'var(--warn-bg)',dot:'var(--active)',avail:'not integrated',note:' — verified in branch, not merged yet.'},
+    behind:{label:'Behind',ink:'var(--bad-ink)',bg:'var(--bad-bg)',dot:'var(--blocked)',avail:'behind target',note:' — needs a rebase before it can land.'},
+    reverted:{label:'Reverted',ink:'var(--bad-ink)',bg:'var(--bad-bg)',dot:'var(--blocked)',avail:'not available',note:' — merged earlier, then reverted.'},
+    none:{label:'—',ink:'var(--sub-ink)',bg:'var(--mut-bg)',dot:'var(--text-subtle)',avail:'not applicable',note:' — no deliverable yet.'}
+  }; return m[s]||m.none; }
+  data(){ return [
+    {id:'dev-a',agent:'dev-a',vendor:'claude',model:'Opus 5.5',session:'sess-a1',task:'T012',wtitle:'Expose started / closed on the API',ws:'feat/one',w:'active',cp:'12m ago',i:'available',rev:'9e31c0',pr:'PR #248',merge:'Merged into develop 3h ago.',files:['packages/plan-core/src/status-rollup.ts','packages/plan-server/src/serve.ts'],timeline:[{label:'Started',when:'2h ago',dot:'var(--planned)'},{label:'Checkpoint',when:'40m ago',dot:'var(--active)'},{label:'Verified',when:'12m ago',dot:'var(--done)'}],verify:'Unit + API tests passed',fresh:'Still relevant to the current source.',freshOk:true},
+    {id:'dev-b',agent:'dev-b',vendor:'openai',model:'GPT-5.6',session:'sess-b4',task:'T020',wtitle:'Normalize task outcomes',ws:'feat/two',w:'verified',cp:'1h ago',i:'integrate',rev:'c18f22',pr:'PR #251',merge:'Not merged into develop.',files:['packages/plan-core/src/outcomes.ts','packages/plan-core/test/outcomes.test.mjs'],timeline:[{label:'Started',when:'yesterday',dot:'var(--planned)'},{label:'Checkpoint',when:'3h ago',dot:'var(--active)'},{label:'Verified',when:'1h ago',dot:'var(--done)'}],verify:'Full suite passed',fresh:'Still relevant to the current source.',freshOk:true},
+    {id:'codex-2',agent:'codex-2',vendor:'openai',model:'GPT-5.6',session:'sess-c2',task:'T003',wtitle:'Recover ownership after MCP restart',ws:'feat/one',w:'paused',cp:'2h ago',i:'none',rev:'771120',pr:'',merge:'No deliverable in develop.',files:['packages/plan-core/src/session-recover.ts'],timeline:[{label:'Started',when:'4h ago',dot:'var(--planned)'},{label:'Checkpoint',when:'2h ago',dot:'var(--active)'},{label:'Paused',when:'2h ago',dot:'var(--paused)'}],verify:'Partial — not run',fresh:'Review pending: dependency changed.',freshOk:false},
+    {id:'claude-3',agent:'claude-3',vendor:'claude',model:'Sonnet 5.5',session:'sess-d7',task:'T008',wtitle:'Live entity-changed WebSocket sync',ws:'feat/three',w:'active',cp:'5m ago',i:'behind',rev:'882252',pr:'PR #255',merge:'Not merged — branch is behind develop.',files:['packages/plan-server/src/ws.ts','packages/plan-web-ui/src/app/live-sync.tsx'],timeline:[{label:'Started',when:'1h ago',dot:'var(--planned)'},{label:'Checkpoint',when:'5m ago',dot:'var(--active)'}],verify:'Smoke test passed',fresh:'Review pending: new callers to re-check.',freshOk:false},
+    {id:'dev-c',agent:'dev-c',vendor:'gemini',model:'Gemini 3 Pro',session:'sess-e1',task:'T031',wtitle:'Zed context-server adapter',ws:'feat/four',w:'failed',cp:'3h ago',i:'none',rev:'e00202',pr:'',merge:'No deliverable in develop.',files:['packages/plan-mcp/src/zed.ts'],timeline:[{label:'Started',when:'5h ago',dot:'var(--planned)'},{label:'Failed',when:'3h ago',dot:'var(--blocked)'}],verify:'Tests failed',fresh:'Context stale.',freshOk:false}
+  ]; }
+  renderVals(){
+    const st=this.state;
+    const vb=(v)=>({claude:'rgba(217,119,87,0.16)',openai:'rgba(16,163,127,0.16)',gemini:'rgba(66,133,244,0.16)'}[v]||'var(--mut-bg)');
+    const rows=this.data().map(r=>{ const w=this.wmeta(r.w); const i=this.imeta(r.i);
+      return {agent:r.agent,session:r.session,task:r.task,wtitle:r.wtitle,ws:r.ws,cp:r.cp,vendor:r.vendor,model:r.model,isClaude:r.vendor==='claude',isOpenai:r.vendor==='openai',isGemini:r.vendor==='gemini',vbg:vb(r.vendor),
+        wlabel:w.label,wink:w.ink,wbg:w.bg,wdot:w.dot,ilabel:i.label,iink:i.ink,ibg:i.bg,
+        cls:(st.sel===r.id?'on':''),selected:(st.sel===r.id),select:()=>this.setState({sel:r.id})};});
+    const d=this.data().find(x=>x.id===st.sel)||this.data()[0]; const w=this.wmeta(d.w); const i=this.imeta(d.i);
+    const sel={agent:d.agent,session:d.session,task:d.task,wtitle:d.wtitle,ws:d.ws,vendor:d.vendor,model:d.model,isClaude:d.vendor==='claude',isOpenai:d.vendor==='openai',isGemini:d.vendor==='gemini',vbg:vb(d.vendor),wlabel:w.label,wink:w.ink,wbg:w.bg,wdot:w.dot,
+      timeline:d.timeline,files:d.files,verify:d.verify,rev:d.rev,fresh:d.fresh,
+      freshMark:d.freshOk?'✓':'…',freshInk:d.freshOk?'var(--pos-ink)':'var(--warn-ink)',
+      merge:d.merge,iavail:i.avail,inote:i.note,iavailDot:i.dot,hasPr:!!d.pr,pr:d.pr};
+    return {
+      themeClass: st.theme==='dark'?'t-dark':'', isDark:st.theme==='dark', isLight:st.theme!=='dark',
+      navClass: st.nav?'nav-collapsed':'', toggleNav:()=>this.setState({nav:!st.nav}),
+      toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
+      target:st.target, onTarget:(e)=>this.setState({target:e.target.value}),
+      rows, sel
+    };
+  }
+}
+</script>
+</body>
+</html>

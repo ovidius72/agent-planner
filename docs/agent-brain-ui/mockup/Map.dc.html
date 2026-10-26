@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Plan — Map</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --surface-soft:#f1f5f9; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-soft:rgba(99,102,241,0.12);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981; --dec:#6366f1; --req:#8b5cf6; --test:#06b6d4; --code:#64748b;
+    --pos-ink:#15803d; --warn-ink:#b45309; --mut-bg:rgba(148,163,184,0.16);
+    --edge:rgba(100,116,139,0.5);
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --surface-soft:#0d1526; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-soft:rgba(129,140,248,0.16);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399; --dec:#818cf8; --req:#a78bfa; --test:#22d3ee; --code:#94a3b8;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --mut-bg:rgba(148,163,184,0.12);
+    --edge:rgba(148,163,184,0.45);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;letter-spacing:.03em;line-height:1.3;white-space:nowrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:11px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:10px}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .sel{appearance:none;-webkit-appearance:none;border:1px solid var(--border-strong);background:var(--surface-elevated) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;background-size:12px;color:var(--text);border-radius:11px;padding:8px 30px 8px 12px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:16px}
+  .node{position:absolute;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:12px;padding:8px 11px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;box-shadow:0 6px 18px -12px rgba(0,0,0,0.4)}
+  .node:hover{border-color:var(--accent)}
+  .node.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .content-grid{grid-template-columns:1fr !important}
+    .pad{padding:20px 16px !important}
+  }
+</style>
+</helmet>
+
+<div class="app {{themeClass}} {{navClass}}">
+  <div class="scrim" onClick="{{toggleNav}}"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 24px;background:var(--sidebar);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-subtle)">
+    <span class="mono">F025 · Web UI reorganization proposal</span><span>Demo scenario · illustrative data</span>
+  </div>
+
+  <header class="pad" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 24px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:13px;min-width:0">
+      <button type="button" class="navtoggle" onClick="{{toggleNav}}" aria-label="Toggle navigation"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--feature));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0">ap</div>
+      <div style="min-width:0"><div style="font-size:17px;font-weight:700;line-height:1.15">Example Project</div><div style="font-size:12px;color:var(--text-subtle)">Agent Plan · project memory &amp; work</div></div>
+    </div>
+    <button type="button" class="btn" onClick="{{toggleTheme}}" aria-label="Toggle theme" style="padding:9px;width:38px;justify-content:center">
+      <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg></sc-if>
+      <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></sc-if>
+    </button>
+  </header>
+
+  <div class="shell" style="display:flex;flex-grow:1;min-height:0">
+    <aside class="sidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--sidebar)">
+      <div class="navgroup">Work</div>
+      <a class="navitem" href="Resume.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>Resume</a>
+      <a class="navitem" href="Main.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Planner</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Requirements</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Ideas</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Handoff</a>
+      <a class="navitem" href="Agents.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg>Agents &amp; targets</a>
+      <div class="navgroup">Context</div>
+      <a class="navitem on" href="Map.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>Map</a>
+      <a class="navitem" href="Code.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code</a>
+      <a class="navitem" href="Checks.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Checks</a>
+      <div class="navgroup">Proposals</div>
+      <a class="navitem" href="Evaluate.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"/></svg>To evaluate</a>
+      <div style="flex-grow:1;min-height:10px"></div>
+      <a class="navitem" href="Settings.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div style="flex-grow:1"></div>
+      <div class="side-foot" style="border-top:1px solid var(--border);margin-top:10px;padding:12px 12px 4px;font-size:11px;color:var(--text-subtle);line-height:1.6">One shared planner<br>Code &amp; sessions kept separate</div>
+    </aside>
+
+    <main class="pad" style="flex-grow:1;min-width:0;padding:22px 30px 40px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="min-width:0"><h1 style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.01em">Map</h1><p style="margin:6px 0 0;font-size:14px;color:var(--text-muted);max-width:58ch">Start from one element and discover what it is connected to — intention, work and code.</p></div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="font-size:12px;color:var(--text-subtle)">Area</span><select class="sel" aria-label="Project area"><option>Pricing calculation</option><option>Status rollup</option><option>Session recovery</option></select></label>
+      </div>
+
+      <!-- legend -->
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);align-items:center">
+        <span style="display:inline-flex;align-items:center;gap:6px"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--task)" stroke-width="2.4"/></svg>modifies</span>
+        <span style="display:inline-flex;align-items:center;gap:6px"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--text-subtle)" stroke-width="2" stroke-dasharray="1 3"/></svg>depends</span>
+        <span style="display:inline-flex;align-items:center;gap:6px"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--dec)" stroke-width="2.4"/></svg>constrains</span>
+        <span style="display:inline-flex;align-items:center;gap:6px"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--req)" stroke-width="2.4"/></svg>satisfies</span>
+        <span style="display:inline-flex;align-items:center;gap:6px"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--test)" stroke-width="2.4"/></svg>covers</span>
+        <span style="color:var(--text-subtle)">·</span>
+        <span style="display:inline-flex;align-items:center;gap:6px"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--text-muted)" stroke-width="2.4" stroke-dasharray="5 4"/></svg>uncertain</span>
+      </div>
+
+      <div class="content-grid" style="display:grid;grid-template-columns:minmax(0,1.8fr) minmax(0,1fr);gap:22px;align-items:start">
+        <!-- map canvas -->
+        <div class="card" style="overflow:auto;padding:0">
+          <div style="position:relative;width:760px;height:460px;min-width:760px">
+            <svg width="760" height="460" style="position:absolute;inset:0;pointer-events:none">
+              <line x1="147" y1="76" x2="384" y2="208" stroke="var(--task)" stroke-width="2.2"/>
+              <line x1="384" y1="56" x2="384" y2="208" stroke="var(--task)" stroke-width="2.2"/>
+              <line x1="628" y1="76" x2="384" y2="208" stroke="var(--task)" stroke-width="2.2" stroke-dasharray="5 4"/>
+              <line x1="147" y1="76" x2="384" y2="56" stroke="var(--text-subtle)" stroke-width="1.6" stroke-dasharray="1 3"/>
+              <line x1="384" y1="56" x2="628" y2="76" stroke="var(--text-subtle)" stroke-width="1.6" stroke-dasharray="1 3"/>
+              <line x1="150" y1="360" x2="384" y2="208" stroke="var(--dec)" stroke-width="2.2"/>
+              <line x1="140" y1="208" x2="300" y2="208" stroke="var(--req)" stroke-width="2.2"/>
+              <line x1="628" y1="356" x2="384" y2="208" stroke="var(--test)" stroke-width="2.2"/>
+            </svg>
+            <sc-for list="{{nodes}}" as="n" hint-placeholder-count="7">
+              <button type="button" class="node {{n.cls}}" onClick="{{n.select}}" style="left:{{n.x}}px;top:{{n.y}}px;width:{{n.w}}px">
+                <span style="display:flex;align-items:center;gap:6px"><span class="pill" style="background:{{n.kbg}};color:{{n.kink}}">{{n.kind}}</span><sc-if value="{{n.hasChip}}" hint-placeholder-val="{{false}}"><span class="mono" style="font-size:10px;color:var(--text-subtle)">{{n.chip}}</span></sc-if></span>
+                <span style="font-size:{{n.fs}};font-weight:600;line-height:1.25;color:var(--text)">{{n.label}}</span>
+                <sc-if value="{{n.hasSub}}" hint-placeholder-val="{{false}}"><span class="mono" style="font-size:10px;color:var(--text-subtle)">{{n.sub}}</span></sc-if>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- node inspector -->
+        <aside class="card" style="padding:18px;display:flex;flex-direction:column;gap:13px;align-self:start;position:sticky;top:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><p class="eyebrow">Node</p><span class="pill" style="background:{{sel.kbg}};color:{{sel.kink}}">{{sel.kind}}</span></div>
+          <div><div style="font-size:16px;font-weight:700">{{sel.label}}</div><sc-if value="{{sel.hasSub}}" hint-placeholder-val="{{false}}"><div class="mono" style="font-size:11px;color:var(--text-subtle);margin-top:3px">{{sel.sub}}</div></sc-if></div>
+          <p style="margin:0;font-size:13px;line-height:1.55;color:var(--text-muted)">{{sel.desc}}</p>
+          <div style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:11px">
+            <p class="eyebrow">Origin</p><div style="font-size:13px;color:var(--text-muted)">{{sel.origin}}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:11px">
+            <p class="eyebrow">Connected</p>
+            <sc-for list="{{sel.links}}" as="l" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-muted)"><span style="width:14px;height:2px;border-radius:2px;background:{{l.c}};flex-shrink:0"></span><span>{{l.rel}} <b style="color:var(--text)">{{l.to}}</b></span></div></sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--border);padding-top:11px">
+            <p class="eyebrow">Evidence &amp; state</p>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-muted)"><span class="pill" style="background:{{sel.stbg}};color:{{sel.stink}}">{{sel.state}}</span><span>{{sel.evidence}}</span></div>
+          </div>
+        </aside>
+      </div>
+      <p style="margin:0;font-size:12px;color:var(--text-subtle);line-height:1.5;max-width:80ch">Selecting <span class="mono">calculatePrice()</span> makes all three tasks and the decision "keep it small &amp; pure" traceable — even with no direct link between those tasks. Verified relations are shown solid; uncertain ones dashed; incomplete analysis coverage is flagged on the node.</p>
+    </main>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props){ super(props); let narrow=false; try{narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){} this.state={ theme:'dark', sel:'code', nav:narrow }; }
+  kmeta(k){ const m={
+    CODE:{bg:'var(--mut-bg)',ink:'var(--code)'},
+    TASK:{bg:'rgba(16,185,129,0.16)',ink:'var(--task)'},
+    DECISION:{bg:'var(--accent-soft)',ink:'var(--dec)'},
+    REQUIREMENT:{bg:'rgba(139,92,246,0.16)',ink:'var(--req)'},
+    TEST:{bg:'rgba(6,182,212,0.16)',ink:'var(--test)'}
+  }; return m[k]||m.CODE; }
+  data(){ return [
+    {id:'code',kind:'CODE',label:'calculatePrice()',sub:'pricing/calculation.ts',x:296,y:184,w:176,big:true,
+      desc:'Computes the final price. Resolved via the TypeScript provider at the current checkout.',
+      origin:'Introduced by T002; shaped by T010 and the pricing decision.',
+      links:[{rel:'modified by',to:'T002, T010, T020',c:'var(--task)'},{rel:'constrained by',to:'keep it small & pure',c:'var(--dec)'},{rel:'satisfies',to:'BR7',c:'var(--req)'},{rel:'covered by',to:'pricing.test',c:'var(--test)'}],
+      state:'Verified', evidence:'semantic resolution · T020 refactor uncertain'},
+    {id:'t002',kind:'TASK',chip:'T002',label:'First implementation',x:58,y:46,w:168,
+      desc:'Introduced calculatePrice with the base rules.',origin:'Feature F002 · phase P010.',
+      links:[{rel:'modifies',to:'calculatePrice()',c:'var(--task)'},{rel:'precedes',to:'T010',c:'var(--text-subtle)'}],
+      state:'Verified',evidence:'merged · tests passed'},
+    {id:'t010',kind:'TASK',chip:'T010',label:'Add context param',x:296,y:26,w:176,
+      desc:'Added a parameter to distinguish the available context.',origin:'Phase P010.',
+      links:[{rel:'modifies',to:'calculatePrice()',c:'var(--task)'},{rel:'depends on',to:'T002',c:'var(--text-subtle)'}],
+      state:'Verified',evidence:'merged · tests passed'},
+    {id:'t020',kind:'TASK',chip:'T020',label:'Refactoring (in progress)',x:540,y:46,w:184,uncertain:true,
+      desc:'Refactoring the function; relation is not yet confirmed at the current revision.',origin:'Phase P012.',
+      links:[{rel:'modifies',to:'calculatePrice()',c:'var(--task)'},{rel:'depends on',to:'T010',c:'var(--text-subtle)'}],
+      state:'Uncertain',evidence:'in progress · coverage incomplete'},
+    {id:'dec',kind:'DECISION',label:'Keep it small & pure',x:34,y:328,w:216,
+      desc:'A function/module-specific choice: the pricing function stays small and side-effect free.',origin:'Owned decision · applies to pricing/calculation.ts.',
+      links:[{rel:'constrains',to:'calculatePrice()',c:'var(--dec)'}],
+      state:'Review pending',evidence:'a binding changed since last review'},
+    {id:'req',kind:'REQUIREMENT',label:'BR7 · pricing rules',x:22,y:186,w:150,
+      desc:'The pricing rules the implementation must satisfy.',origin:'Project requirement.',
+      links:[{rel:'satisfied by',to:'calculatePrice()',c:'var(--req)'}],
+      state:'Verified',evidence:'implementation present'},
+    {id:'test',kind:'TEST',label:'pricing.test',sub:'covers @ rev c18f',x:548,y:330,w:184,
+      desc:'Covers the pricing behavior at a specific revision.',origin:'Verification evidence.',
+      links:[{rel:'covers',to:'calculatePrice()',c:'var(--test)'}],
+      state:'Passed',evidence:'still relevant at current source'}
+  ]; }
+  stmeta(s){ const m={
+    'Verified':{bg:'rgba(34,197,94,0.14)',ink:'var(--pos-ink)'},'Passed':{bg:'rgba(34,197,94,0.14)',ink:'var(--pos-ink)'},
+    'Uncertain':{bg:'rgba(234,88,12,0.16)',ink:'var(--warn-ink)'},'Review pending':{bg:'rgba(234,88,12,0.16)',ink:'var(--warn-ink)'}
+  }; return m[s]||m['Verified']; }
+  renderVals(){
+    const st=this.state;
+    const nodes=this.data().map(n=>{ const k=this.kmeta(n.kind);
+      return {kind:n.kind,chip:n.chip||'',hasChip:!!n.chip,label:n.label,sub:n.sub||'',hasSub:!!n.sub,
+        x:n.x,y:n.y,w:n.w,fs:n.big?'14px':'12.5px',kbg:k.bg,kink:k.ink,
+        cls:(st.sel===n.id?'on':''),select:()=>this.setState({sel:n.id})};});
+    const d=this.data().find(x=>x.id===st.sel)||this.data()[0]; const k=this.kmeta(d.kind); const sm=this.stmeta(d.state);
+    const sel={kind:d.kind,label:d.label,sub:d.sub||'',hasSub:!!d.sub,desc:d.desc,origin:d.origin,links:d.links,
+      kbg:k.bg,kink:k.ink,state:d.state,evidence:d.evidence,stbg:sm.bg,stink:sm.ink};
+    return {
+      themeClass: st.theme==='dark'?'t-dark':'', isDark:st.theme==='dark', isLight:st.theme!=='dark',
+      navClass: st.nav?'nav-collapsed':'', toggleNav:()=>this.setState({nav:!st.nav}),
+      toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
+      nodes, sel
+    };
+  }
+}
+</script>
+</body>
+</html>

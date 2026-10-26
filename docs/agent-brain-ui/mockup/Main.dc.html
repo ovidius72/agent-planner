@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Plan — Dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg-base:#f8fafc; --grad-a:rgba(59,130,246,0.18); --grad-b:rgba(139,92,246,0.16);
+    --surface:rgba(255,255,255,0.76); --surface-strong:rgba(255,255,255,0.9); --surface-elevated:rgba(255,255,255,0.98);
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-hover:#4f46e5; --accent-soft:rgba(99,102,241,0.14);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --done:#22c55e; --in-progress:#f59e0b; --paused:#ea580c; --planned:#0ea5e9; --blocked:#ef4444; --draft:#94a3b8;
+    --pos:#15803d; --neg:#b45309; --bad:#b91c1c; --phase-ink:#0e7490; --task-ink:#047857;
+    --done-ink:#15803d; --inprog-ink:#b45309; --planned-ink:#0369a1; --paused-ink:#c2410c; --blocked-ink:#b91c1c; --draft-ink:#475569;
+    --shadow-card:0 12px 30px -18px rgba(15,23,42,0.18); --shadow-panel:0 20px 60px -24px rgba(15,23,42,0.22);
+  }
+  .t-dark{
+    --bg-base:#08111f; --grad-a:rgba(59,130,246,0.12); --grad-b:rgba(139,92,246,0.14);
+    --surface:rgba(15,23,42,0.74); --surface-strong:rgba(15,23,42,0.88); --surface-elevated:rgba(15,23,42,0.96);
+    --border:rgba(148,163,184,0.16); --border-strong:rgba(148,163,184,0.3);
+    --text:#f8fafc; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-hover:#a5b4fc; --accent-soft:rgba(129,140,248,0.18);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --done:#4ade80; --in-progress:#fbbf24; --paused:#fb923c; --planned:#38bdf8; --blocked:#f87171; --draft:#94a3b8;
+    --pos:#4ade80; --neg:#fbbf24; --bad:#f87171; --phase-ink:#22d3ee; --task-ink:#34d399;
+    --done-ink:#4ade80; --inprog-ink:#fbbf24; --planned-ink:#38bdf8; --paused-ink:#fb923c; --blocked-ink:#f87171; --draft-ink:#94a3b8;
+    --shadow-card:0 12px 30px -18px rgba(0,0,0,0.5); --shadow-panel:0 20px 60px -24px rgba(0,0,0,0.65);
+  }
+  .approot{height:100vh;overflow:hidden;display:flex;flex-direction:column;color:var(--text);background:radial-gradient(1200px 700px at 8% -5%,var(--grad-a),transparent 60%),radial-gradient(1100px 700px at 100% 108%,var(--grad-b),transparent 58%),var(--bg-base)}
+  .appshell>main{overflow:auto;min-height:0}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased;}
+  a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-hover)}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0}
+  .card{background:var(--surface-strong);border:1px solid var(--border);border-radius:20px;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:var(--shadow-card)}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:24px;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:var(--shadow-panel)}
+  .badge{display:inline-flex;align-items:center;gap:6px;border-radius:9999px;padding:3px 10px;font-size:11px;font-weight:600;line-height:1;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:9999px;display:inline-block;flex-shrink:0}
+  .ent{display:inline-flex;align-items:center;gap:6px;border-radius:9999px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap;flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:14px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:11px}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .navlink{font-size:13px;font-weight:600;color:var(--text-muted);padding:7px 12px;border-radius:12px}
+  .navlink.active{color:var(--accent);background:var(--accent-soft)}
+  .meter{height:8px;border-radius:9999px;background:rgba(148,163,184,0.22);overflow:hidden;flex-shrink:0}
+  .ico{width:15px;height:15px;display:inline-block;vertical-align:middle;flex-shrink:0}
+  .ttl2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .seg{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:600;color:var(--text-muted);background:transparent;border:0;padding:1px 3px;border-radius:5px;cursor:pointer;line-height:1.4}
+  .seg:hover{color:var(--accent);background:var(--accent-soft);text-decoration:underline}
+  .idsep{color:var(--text-subtle);font-size:10px;font-family:"JetBrains Mono",monospace}
+  .copyid{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:6px;border:1px solid var(--border);background:var(--surface-elevated);color:var(--text-subtle);cursor:pointer;flex-shrink:0}
+  .copyid:hover{color:var(--accent);border-color:var(--accent)}
+  .shortid{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--text-subtle);border:1px dashed var(--border-strong);border-radius:6px;padding:1px 5px;cursor:pointer;line-height:1.4}
+  .shortid:hover{color:var(--accent);border-color:var(--accent)}
+  .navitem{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:12px;padding:8px 10px;cursor:pointer;color:var(--text)}
+  .navitem:hover{background:var(--surface-elevated)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border-strong)}
+  .fchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:9999px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--text-muted);cursor:pointer;white-space:nowrap}
+  .selmini{font-size:11px;border:1px solid var(--border-strong);background-color:var(--surface-elevated);color:var(--text-muted);border-radius:9px;padding:4px 26px 4px 9px;font-family:inherit;font-weight:600;cursor:pointer;max-width:100%;appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:12px;transition:border-color .12s ease,box-shadow .12s ease}
+  .selmini:hover{border-color:var(--accent);color:var(--text)}
+  .selmini:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .selmini option{font-weight:500;color:var(--text);background:var(--surface-elevated)}
+  .trow{display:flex;gap:10px;border-radius:12px;border:1px solid var(--border);background:var(--surface-elevated)}
+  .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:var(--surface-elevated);cursor:pointer;color:var(--text-subtle);flex-shrink:0}
+  .iconbtn:hover{color:var(--accent);border-color:var(--accent)}
+  .tokchip{display:inline-flex;align-items:center;gap:5px;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:3px 5px 3px 9px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;white-space:nowrap}
+  .tokx{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;border:0;background:rgba(99,102,241,0.18);color:var(--accent);cursor:pointer}
+  .sugrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;border-radius:10px;padding:7px 9px;cursor:pointer;color:var(--text)}
+  .sugrow:hover{background:var(--accent-soft)}
+  .grid-auto{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:16px}
+  .cardhead{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap}
+  .chartframe{border:1px solid var(--border);border-radius:16px;background:var(--surface-elevated);padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+  .kpi{border:1px solid var(--border);background:var(--surface-elevated);border-radius:14px;padding:9px 12px;flex:1 1 120px;min-width:112px}
+  .kpi dt{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)}
+  .kpi dd{margin:4px 0 0;font-size:20px;font-weight:700;line-height:1}
+  .stickyhdr{position:sticky;top:0;z-index:20}
+  .hdr-nav{display:flex;flex-wrap:wrap;gap:4px}
+  .hdr-id{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .hdr-burger{display:none}
+  .idtag{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:600;color:var(--text-muted);background:var(--surface-elevated);border:1px solid var(--border);border-radius:7px;padding:2px 7px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .indent-f{margin-left:26px}
+  .indent-p{margin-left:22px}
+  .titlelink{background:transparent;border:0;padding:0;margin:0;text-align:left;font:inherit;color:var(--text);cursor:pointer}
+  .titlelink:hover{color:var(--accent);text-decoration:underline}
+  .tl-strong{font-weight:600}
+  .tl-done{color:var(--text-muted);text-decoration:line-through;text-decoration-color:rgba(148,163,184,0.5)}
+  input,select{font-family:inherit}
+  /* ===== shell: sidebar + drawer ===== */
+  .appshell{display:flex;flex-grow:1;min-height:0}
+  .sidebar{width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--surface-strong);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .snavgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .snav{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600;text-decoration:none}
+  .snav:hover{background:var(--surface-elevated);color:var(--text)}
+  .snav.on{background:var(--surface-elevated);border-color:var(--border-strong);color:var(--text)}
+  .snav.on svg{color:var(--accent)}
+  .snav svg{flex-shrink:0;color:currentColor;width:17px;height:17px}
+  .ssub{padding-left:34px;font-size:13px}
+  .ssub svg{width:15px;height:15px}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  .side-foot{border-top:1px solid var(--border);margin-top:4px;padding:12px 12px 4px;font-size:11px;color:var(--text-subtle);line-height:1.6}
+  .approot.side-collapsed .sidebar{width:64px !important}
+  .approot.side-collapsed .snav{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .approot.side-collapsed .snavgroup,.approot.side-collapsed .ssub,.approot.side-collapsed .side-foot{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.4);max-height:none}
+    .approot:not(.side-collapsed) .sidebar{transform:translateX(0)}
+    .approot.side-collapsed .snav{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .approot.side-collapsed .snavgroup{display:block}
+    .approot.side-collapsed .ssub,.approot.side-collapsed .side-foot{display:block}
+    .approot:not(.side-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+  }
+  @media (max-width:720px){
+    .shell-pad{padding:22px 14px 56px !important}
+    .goal-pad{padding:18px 16px !important}
+    .explorer-pad{padding:16px 14px !important}
+    .stickyhdr{position:static;top:auto;z-index:auto}
+    .indent-f{margin-left:10px}
+    .indent-p{margin-left:8px}
+    .shortid{display:none}
+    .goal-actions{justify-content:flex-start !important;gap:6px}
+    .goal-actions .btn{padding:6px 10px;font-size:12px;border-radius:11px;gap:6px}
+    .hdr-burger{display:inline-flex}
+    .hdr-nav{display:none;order:9;flex-basis:100%;flex-direction:column;align-items:stretch;gap:2px;border-top:1px solid var(--border);padding-top:8px;margin-top:4px}
+    .hdr-nav.open{display:flex}
+    .hdr-id{display:none}
+  }
+</style>
+</helmet>
+
+<div class="approot {{themeClass}} {{sideClass}}">
+  <div class="scrim" onClick="{{toggleSide}}"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 24px;background:var(--surface-strong);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-subtle);position:relative;z-index:12">
+    <span class="mono">F025 · Web UI reorganization proposal</span><span>Demo scenario · illustrative data</span>
+  </div>
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:14px 22px;border-bottom:1px solid var(--border);position:relative;z-index:12">
+    <div style="display:flex;align-items:center;gap:12px;min-width:0">
+      <button type="button" class="navtoggle" onClick="{{toggleSide}}" aria-label="Toggle navigation"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--feature));display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:18px;height:18px"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:16px;font-weight:700;line-height:1.1">Agent&nbsp;Plan</span><span class="mono" style="font-size:10px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:7px;padding:2px 7px;white-space:nowrap">v0.2.1</span></div>
+        <div style="font-size:12px;color:var(--text-subtle)">Planner · one shared <span class="mono" style="font-size:11px">.planner/</span> workspace</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+      <span class="badge" style="background:rgba(34,197,94,0.14);color:var(--pos)"><span class="dot" style="background:var(--done)"></span>target: ready</span>
+      <span class="badge" style="background:var(--accent-soft);color:var(--accent)"><span class="dot" style="background:var(--accent)"></span>Web UI live</span>
+      <button type="button" class="iconbtn" onClick="{{toggleTheme}}" aria-label="{{themeLabel}}" style="width:34px;height:34px">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg></sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></sc-if>
+      </button>
+    </div>
+  </header>
+  <div class="appshell">
+    <aside class="sidebar">
+      <div class="snavgroup">Work</div>
+      <a class="snav" href="Resume.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>Resume</a>
+      <a class="snav on" href="Main.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Planner</a>
+      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Requirements</a>
+      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Ideas</a>
+      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Handoff</a>
+      <a class="snav" href="Agents.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg>Agents &amp; targets</a>
+      <div class="snavgroup">Context</div>
+      <a class="snav" href="Map.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>Map</a>
+      <a class="snav" href="Code.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code</a>
+      <a class="snav" href="Checks.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Checks</a>
+      <div class="snavgroup">Proposals</div>
+      <a class="snav" href="Evaluate.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"/></svg>To evaluate</a>
+      <div style="flex-grow:1;min-height:10px"></div>
+      <a class="snav" href="Settings.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div class="side-foot">One shared planner<br>Code &amp; sessions kept separate</div>
+    </aside>
+    <main class="shell-pad" style="flex-grow:1;min-width:0;padding:24px 24px 64px">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:18px">
+
+  <!-- STICKY HEADER: nav + compact focus bar (not sticky on mobile) -->
+  <div class="stickyhdr" style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+  <!-- focus card: in-progress always visible (no modal) -->
+  <div class="card" style="padding:8px 12px;display:flex;flex-direction:column;gap:7px">
+    <button type="button" onClick="{{toggleFocusCollapse}}" aria-expanded="{{focusExpanded}}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;background:transparent;cursor:pointer;padding:0;text-align:left;width:100%">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span class="dot" style="width:8px;height:8px;background:{{focusDot}}"></span>
+        <span class="eyebrow" style="color:{{focusDot}}">{{focusTitle}}</span>
+        <sc-if value="{{focusCollapsed}}" hint-placeholder-val="{{false}}"><span style="font-size:11px;color:var(--text-subtle)">· {{focusHint}}</span></sc-if>
+      </span>
+      <span style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <sc-if value="{{hasParked}}" hint-placeholder-val="{{true}}"><span style="font-size:11px;color:var(--paused);font-weight:600">{{parkedCount}} parked</span></sc-if>
+        <span class="iconbtn" style="width:24px;height:24px;transform:{{focusCollapseCaret}}"><svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+      </span>
+    </button>
+    <sc-if value="{{focusExpanded}}" hint-placeholder-val="{{true}}">
+
+    <sc-if value="{{hasActive}}" hint-placeholder-val="{{true}}">
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:188px;overflow:auto;overscroll-behavior:contain">
+      <sc-for list="{{active}}" as="a" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);border-radius:11px;padding:6px 10px">
+          <span class="dot" style="width:8px;height:8px;background:var(--in-progress)"></span>
+          <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0">
+            <button type="button" class="seg" onClick="{{a.navFeat}}" aria-label="Open {{a.feat}}">{{a.feat}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{a.navPhase}}" aria-label="Open {{a.phasefull}}">{{a.phase}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{a.nav}}" aria-label="Open {{a.idfull}}">{{a.task}}</button>
+            <button type="button" class="copyid" onClick="{{a.copy}}" aria-label="Copy {{a.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+          </span>
+          <button type="button" class="titlelink tl-strong" onClick="{{a.locate}}" style="flex:1 1 150px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{a.title}}</button>
+          <span class="mono" style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{a.owner}}</span>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{noActive}}" hint-placeholder-val="{{false}}">
+    <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;border:1px solid var(--accent-soft);background:var(--accent-soft);border-radius:11px;padding:8px 10px">
+      <span class="dot" style="width:8px;height:8px;background:var(--accent);margin-top:5px"></span>
+      <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px">
+        <button type="button" class="seg" onClick="{{suggested.nav}}" aria-label="Open {{suggested.idfull}}">{{suggested.idfull}}</button>
+        <button type="button" class="copyid" onClick="{{suggested.copy}}" aria-label="Copy {{suggested.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </span>
+      <span style="flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <button type="button" class="titlelink tl-strong" onClick="{{suggested.locate}}" style="font-size:13px;line-height:1.35">{{suggested.title}}</button>
+        <span style="font-size:11px;color:var(--text-muted);line-height:1.4">{{suggested.reason}}</span>
+      </span>
+      <button type="button" class="btn btn-primary btn-sm" onClick="{{suggested.start}}" style="flex-shrink:0;margin-top:1px">Start</button>
+    </div>
+    </sc-if>
+
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:8px">
+      <sc-if value="{{hasActive}}" hint-placeholder-val="{{true}}">
+        <span class="eyebrow" style="color:var(--accent);flex-shrink:0">Next</span>
+        <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0"><button type="button" class="seg" onClick="{{suggested.locate}}" aria-label="Locate {{suggested.idfull}}">{{suggested.idfull}}</button></span>
+        <button type="button" class="titlelink" onClick="{{suggested.locate}}" style="flex:1 1 120px;min-width:0;font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{suggested.title}}</button>
+        <button type="button" class="btn btn-primary btn-sm" onClick="{{suggested.start}}" style="flex-shrink:0">Start</button>
+      </sc-if>
+      <span style="flex-grow:1;min-width:4px"></span>
+      <sc-if value="{{hasParked}}" hint-placeholder-val="{{true}}">
+        <button type="button" class="fchip" onClick="{{toggleParked}}" aria-expanded="{{parkedOpen}}" style="flex-shrink:0"><span class="dot" style="background:var(--paused)"></span>{{parkedCount}} parked <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{parkedCaret}}"><path d="m6 9 6 6 6-6"/></svg></button>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{parkedOpen}}" hint-placeholder-val="{{false}}">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <sc-for list="{{parked}}" as="a" hint-placeholder-count="1">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;border:1px solid rgba(234,88,12,0.28);background:rgba(234,88,12,0.05);border-radius:11px;padding:6px 10px">
+          <span class="badge" style="background:rgba(234,88,12,0.14);color:var(--paused)"><span class="dot" style="background:var(--paused)"></span>Paused</span>
+          <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0">
+            <button type="button" class="seg" onClick="{{a.nav}}" aria-label="Open {{a.idfull}}">{{a.idfull}}</button>
+            <button type="button" class="copyid" onClick="{{a.copy}}" aria-label="Copy {{a.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+          </span>
+          <button type="button" class="titlelink ttl2" onClick="{{a.locate}}" style="flex:1 1 150px;min-width:0;font-size:13px;color:var(--text-muted);line-height:1.35">{{a.title}}</button>
+          <span class="mono" style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{a.owner}}</span>
+          <button type="button" class="btn btn-sm" onClick="{{a.pickup}}" style="flex-shrink:0"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy resume cmd</button>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+    </sc-if>
+  </div>
+  </div>
+
+  <!-- PROJECT GOAL -->
+  <div class="card goal-pad" style="padding:22px 24px;display:flex;flex-direction:column;gap:12px;position:relative;z-index:5">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 320px">
+        <p class="eyebrow">Project goal</p>
+        <h1 style="margin:0;font-size:18px;font-weight:700">A durable, inspectable planning workspace for AI coding agents</h1>
+      </div>
+      <div class="goal-actions" style="display:flex;gap:8px;flex:1 1 300px;min-width:0;flex-wrap:wrap;justify-content:flex-end;position:relative">
+        <button class="btn" type="button" onClick="{{openProj}}">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          Project details
+        </button>
+        <button class="btn" type="button">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          Edit
+        </button>
+        <button class="btn" type="button" onClick="{{toggleExport}}" aria-expanded="{{exportOpen}}">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Export
+          <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <sc-if value="{{exportOpen}}" hint-placeholder-val="{{false}}">
+        <button type="button" onClick="{{toggleExport}}" aria-label="Close export menu" style="position:fixed;inset:0;z-index:40;border:0;background:transparent;cursor:default"></button>
+        <div style="position:absolute;top:48px;right:0;z-index:41;width:292px;max-width:86vw;background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-panel);padding:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle);padding:5px 9px 6px">Export Markdown · .planner/generated</div>
+          <sc-for list="{{exportItems}}" as="x" hint-placeholder-count="4">
+            <button type="button" class="sugrow" onClick="{{x.run}}">
+              <span class="mono" style="font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:2px 7px;white-space:nowrap;flex-shrink:0">{{x.file}}</span>
+              <span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{x.desc}}</span>
+            </button>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+    </div>
+    <p style="margin:0;max-width:760px;font-size:14px;line-height:1.55;color:var(--text-muted)">
+      Keep a single <span class="mono" style="font-size:13px;color:var(--text)">.planner/</span> source of truth per project and expose it through many surfaces — a TypeScript core, a local server &amp; dashboard, a Claude Code MCP server and <span class="mono" style="font-size:13px;color:var(--text)">/planner</span> commands — so planning stays shared across agents without coupling the model to any one harness.
+    </p>
+  </div>
+
+  <!-- STAT STRIP (compact) -->
+  <div class="card" style="padding:12px 18px;display:flex;flex-wrap:wrap;align-items:center;gap:12px" id="stats">
+    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
+      <span style="width:30px;height:30px;border-radius:9px;background:rgba(139,92,246,0.12);color:var(--feature);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
+      <div style="min-width:0"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Features</div><div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:20px;font-weight:700;line-height:1.1">9</span><span style="font-size:11px;color:var(--text-subtle)"><span style="color:var(--pos);font-weight:600">6 done</span> · <span style="color:var(--neg);font-weight:600">3 left</span></span></div></div>
+    </div>
+    <span style="width:1px;align-self:stretch;background:var(--border)"></span>
+    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
+      <span style="width:30px;height:30px;border-radius:9px;background:rgba(6,182,212,0.12);color:var(--phase);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg></span>
+      <div style="min-width:0"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Phases</div><div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:20px;font-weight:700;line-height:1.1">41</span><span style="font-size:11px;color:var(--text-subtle)"><span style="color:var(--pos);font-weight:600">28 done</span> · <span style="color:var(--neg);font-weight:600">13 left</span></span></div></div>
+    </div>
+    <span style="width:1px;align-self:stretch;background:var(--border)"></span>
+    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
+      <span style="width:30px;height:30px;border-radius:9px;background:rgba(16,185,129,0.12);color:var(--task);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+      <div style="min-width:0"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Tasks</div><div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:20px;font-weight:700;line-height:1.1">182</span><span style="font-size:11px;color:var(--text-subtle)"><span style="color:var(--pos);font-weight:600">147 done</span> · <span style="color:var(--neg);font-weight:600">35 left</span></span></div></div>
+    </div>
+    <span style="width:1px;align-self:stretch;background:var(--border)"></span>
+    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
+      <span style="width:30px;height:30px;border-radius:9px;background:rgba(34,197,94,0.12);color:var(--done);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg></span>
+      <div style="min-width:0;flex-grow:1"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Completion</div><div style="display:flex;align-items:center;gap:9px"><span style="font-size:20px;font-weight:700;line-height:1.1;color:var(--pos)">81%</span><span class="meter" style="display:block;flex-grow:1;max-width:96px"><span style="display:block;width:81%;height:100%;background:linear-gradient(90deg,var(--task),var(--done))"></span></span></div></div>
+    </div>
+  </div>
+
+  <!-- ANALYTICS (collapsible, window-scoped) -->
+  <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+    <div class="cardhead">
+      <button type="button" onClick="{{toggleCharts}}" aria-expanded="{{chartsOpen}}" style="display:flex;align-items:center;gap:10px;border:0;background:transparent;cursor:pointer;padding:0;text-align:left">
+        <span class="iconbtn" style="transform:{{chartsCaret}}"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
+        <span style="display:flex;flex-direction:column;gap:2px"><span class="eyebrow">Analytics</span><span style="font-size:15px;font-weight:700">Flow &amp; backlog</span></span>
+      </button>
+      <sc-if value="{{chartsOpen}}" hint-placeholder-val="{{true}}">
+      <div style="display:inline-flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--text-subtle)">active-day window</span>
+        <div style="display:inline-flex;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden">
+          <sc-for list="{{windowChips}}" as="w" hint-placeholder-count="3"><button type="button" onClick="{{w.pick}}" style="{{w.style}}border:0;border-left:{{w.bl}};padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer">{{w.label}}</button></sc-for>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{chartsOpen}}" hint-placeholder-val="{{true}}">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <!-- KPI row -->
+      <dl style="display:flex;flex-wrap:wrap;gap:10px;margin:0">
+        <div class="kpi"><dt>Added</dt><dd>{{k.added}}</dd></div>
+        <div class="kpi"><dt>Closed</dt><dd style="color:var(--pos)">{{k.closed}}</dd></div>
+        <div class="kpi"><dt>Reopened</dt><dd style="color:var(--neg)">{{k.reopened}}</dd></div>
+        <div class="kpi"><dt>Net backlog</dt><dd style="{{k.netColor}}">{{k.net}}</dd></div>
+        <div class="kpi"><dt>Throughput</dt><dd>{{k.rate}}<span style="font-size:12px;font-weight:600;color:var(--text-subtle)">/day</span></dd></div>
+        <div class="kpi"><dt>Open now</dt><dd>{{k.open}}</dd></div>
+      </dl>
+
+      <div class="grid-auto">
+        <!-- Throughput -->
+        <div class="chartframe">
+          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Task throughput</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{windowLabel}} · done/day</span></div>
+          <svg viewBox="0 0 520 160" width="100%" height="146" preserveAspectRatio="none" role="img" aria-label="Tasks completed per active day, trending upward.">
+            <g stroke="rgba(148,163,184,0.22)" stroke-width="1"><line x1="44" y1="16" x2="508" y2="16"/><line x1="44" y1="56" x2="508" y2="56"/><line x1="44" y1="96" x2="508" y2="96"/><line x1="44" y1="136" x2="508" y2="136"/></g>
+            <path d="{{thArea}}" fill="var(--accent-soft)"/>
+            <path d="{{thLine}}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="{{thLastX}}" cy="{{thLastY}}" r="4" fill="var(--accent)"/>
+          </svg>
+        </div>
+        <!-- Open vs closed (burn-up) -->
+        <div class="chartframe">
+          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Open vs closed</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">cumulative</span></div>
+          <svg viewBox="0 0 520 160" width="100%" height="146" preserveAspectRatio="none" role="img" aria-label="Cumulative scope versus cumulative completion; the gap is the open backlog.">
+            <g stroke="rgba(148,163,184,0.22)" stroke-width="1"><line x1="44" y1="16" x2="508" y2="16"/><line x1="44" y1="76" x2="508" y2="76"/><line x1="44" y1="136" x2="508" y2="136"/></g>
+            <path d="{{buScopeArea}}" fill="rgba(99,102,241,0.10)"/>
+            <path d="{{buScope}}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="{{buClosedArea}}" fill="rgba(34,197,94,0.14)"/>
+            <path d="{{buClosed}}" fill="none" stroke="var(--done)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div style="display:flex;gap:14px;font-size:11px;color:var(--text-muted)"><span style="display:inline-flex;align-items:center;gap:6px"><span class="dot" style="background:var(--accent)"></span>Scope 182</span><span style="display:inline-flex;align-items:center;gap:6px"><span class="dot" style="background:var(--done)"></span>Closed 147</span></div>
+        </div>
+        <!-- Aging -->
+        <div class="chartframe">
+          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Open task aging</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">by age bucket</span></div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{aging}}" as="g" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:10px"><span class="mono" style="width:54px;font-size:11px;color:var(--text-muted);flex-shrink:0">{{g.label}}</span><div class="meter" style="flex-grow:1"><div style="width:{{g.pct}}%;height:100%;background:{{g.color}}"></div></div><span class="mono" style="width:20px;text-align:right;font-size:12px;color:var(--text-muted);flex-shrink:0">{{g.n}}</span></div>
+            </sc-for>
+          </div>
+        </div>
+        <!-- Backlog by status -->
+        <div class="chartframe">
+          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Open backlog by status</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">35 open</span></div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{backlog}}" as="b" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:10px"><span style="width:92px;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-shrink:0"><span class="dot" style="background:{{b.color}}"></span>{{b.label}}</span><div class="meter" style="flex-grow:1"><div style="width:{{b.pct}}%;height:100%;background:{{b.color}}"></div></div><span class="mono" style="width:20px;text-align:right;font-size:12px;color:var(--text-muted);flex-shrink:0">{{b.n}}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+
+  <!-- ========== WORK EXPLORER ========== -->
+  <div class="panel explorer-pad" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px" id="explorer">
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
+        <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">
+          <p class="eyebrow">Work explorer</p>
+          <h2 style="margin:0;font-size:16px;font-weight:700">Features · phases · tasks</h2>
+        </div>
+
+        <!-- elastic-input faceted search -->
+        <div style="position:relative;flex:1 1 280px;min-width:220px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:14px;padding:7px 10px;min-height:40px">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <sc-for list="{{tokens}}" as="tk" hint-placeholder-count="1">
+              <span class="tokchip">{{tk.text}}<button type="button" class="tokx" onClick="{{tk.remove}}" aria-label="Remove filter {{tk.text}}"><svg class="ico" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
+            </sc-for>
+            <input type="text" value="{{draft}}" onInput="{{onDraft}}" onKeyDown="{{onDraftKey}}" onFocus="{{onFocus}}" onBlur="{{onBlur}}" placeholder="{{searchPlaceholder}}" aria-label="Structured search: field:value tokens" style="flex-grow:1;min-width:130px;border:0;outline:0;background:transparent;font-size:13px;color:var(--text);padding:3px 0"/>
+          </div>
+          <sc-if value="{{showSug}}" hint-placeholder-val="{{false}}">
+          <div style="position:absolute;top:46px;left:0;right:0;z-index:40;background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-panel);padding:6px;max-height:300px;overflow:auto">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle);padding:4px 9px 6px">{{sugHeading}}</div>
+            <sc-for list="{{suggestions}}" as="s" hint-placeholder-count="5">
+              <button type="button" class="sugrow" onMouseDown="{{s.choose}}">
+                <span class="mono" style="font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:2px 7px;white-space:nowrap;flex-shrink:0">{{s.label}}</span>
+                <span style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{s.desc}}</span>
+              </button>
+            </sc-for>
+          </div>
+          </sc-if>
+        </div>
+
+        <button type="button" class="btn btn-primary" onClick="{{toggleNewFeat}}" aria-expanded="{{newFeatOpen}}" style="flex-shrink:0">
+          <svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          New feature
+        </button>
+      </div>
+
+      <sc-if value="{{searchScopeNote}}" hint-placeholder-val="{{false}}">
+        <div style="font-size:11px;color:var(--text-subtle);display:flex;align-items:center;gap:6px"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Searching across <strong style="color:var(--text-muted)">all features</strong> — the left selection is ignored while a filter is active.</div>
+      </sc-if>
+
+      <!-- new-feature form (top-level; phases & tasks are added inline where they live) -->
+      <sc-if value="{{newFeatOpen}}" hint-placeholder-val="{{false}}">
+      <div style="display:flex;flex-direction:column;gap:12px;border:1px dashed var(--accent);background:var(--accent-soft);border-radius:16px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:8px"><span class="ent" style="background:rgba(139,92,246,0.14);color:var(--feature)">FEATURE</span><span style="font-size:12px;color:var(--text-muted)">Top-level container for phases and tasks.</span></div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label for="nfn" style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)">Feature name <span style="color:var(--bad)">*</span></label>
+          <input id="nfn" type="text" required placeholder="Products page implementation" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label for="nfd" style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)">Description <span style="font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-subtle)">(optional)</span></label>
+          <textarea id="nfd" rows="2" placeholder="Short context for the feature" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%;resize:vertical;font-family:inherit;line-height:1.5"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn" onClick="{{toggleNewFeat}}">Cancel</button>
+          <button type="button" class="btn btn-primary" onClick="{{addFeatureConfirm}}">Create feature</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+        <label style="display:inline-flex;align-items:center;gap:7px">
+          <span style="font-size:11px;font-weight:600;color:var(--text-subtle)">Status</span>
+          <select class="selmini" value="{{statusValue}}" onChange="{{onStatus}}" aria-label="Filter by status" style="padding:6px 28px 6px 10px;font-size:12px">
+            <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="6"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+          </select>
+        </label>
+        <span style="flex-grow:1;min-width:8px"></span>
+        <div style="display:inline-flex;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden">
+          <button type="button" onClick="{{expandAll}}" style="{{expandStyle}}border:0;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Expand all</button>
+          <button type="button" onClick="{{collapseAll}}" style="{{collapseStyle}}border:0;border-left:1px solid var(--border-strong);padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Collapse all</button>
+        </div>
+        <div style="display:inline-flex;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden">
+          <button type="button" onClick="{{setComfortable}}" style="{{densComfy}}border:0;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Comfortable</button>
+          <button type="button" onClick="{{setCompact}}" style="{{densCompact}}border:0;border-left:1px solid var(--border-strong);padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Compact</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+      <aside style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:16px;background:var(--surface-elevated);padding:10px;max-height:640px;overflow:auto" aria-label="Feature navigator">
+        <button type="button" class="navitem {{allOn}}" onClick="{{pickAll}}">
+          <span class="dot" style="background:var(--accent);width:8px;height:8px"></span>
+          <span style="flex-grow:1;font-size:13px;font-weight:600">All features</span>
+          <span class="mono" style="font-size:11px;color:var(--text-subtle)">{{totalFeatures}}</span>
+        </button>
+        <div style="height:1px;background:var(--border);margin:2px 0"></div>
+        <sc-for list="{{nav}}" as="n" hint-placeholder-count="6">
+          <button type="button" class="navitem {{n.cls}}" onClick="{{n.pick}}">
+            <span class="dot" style="background:{{n.dot}};width:8px;height:8px"></span>
+            <span style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+              <span style="display:flex;align-items:flex-start;gap:7px;min-width:0"><span class="mono" style="font-size:10px;color:var(--text-subtle);flex-shrink:0;margin-top:1px">{{n.id}}</span><span class="ttl2" title="{{n.titleAttr}}" style="font-size:13px;font-weight:600;line-height:1.3">{{n.title}}</span></span>
+              <span style="display:flex;align-items:center;gap:7px"><span class="meter" style="flex-grow:1;height:5px"><span style="display:block;width:{{n.pct}}%;height:100%;background:var(--feature)"></span></span><span class="mono" style="font-size:10px;color:var(--text-subtle)">{{n.counts}}</span></span>
+            </span>
+          </button>
+        </sc-for>
+      </aside>
+
+      <div style="flex:999 1 500px;min-width:0;display:flex;flex-direction:column;gap:10px">
+        <sc-if value="{{noResults}}" hint-placeholder-val="{{false}}">
+          <div style="border:1px dashed var(--border-strong);border-radius:16px;padding:32px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px"><span style="color:var(--text-subtle);font-size:13px">No features, phases or tasks match the current search and filters.</span><button type="button" class="btn btn-sm" onClick="{{clearFilters}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Clear all filters</button></div>
+        </sc-if>
+
+        <sc-for list="{{features}}" as="f" hint-placeholder-count="2">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="trow" style="padding:11px 14px;gap:10px;align-items:flex-start;flex-wrap:wrap">
+              <button type="button" class="iconbtn" onClick="{{f.toggle}}" aria-label="Toggle feature" aria-expanded="{{f.open}}" style="transform:{{f.caret}}"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+              <span style="width:4px;align-self:stretch;border-radius:9999px;background:var(--feature);min-height:24px"></span>
+              <span class="ent" style="background:rgba(139,92,246,0.14);color:var(--feature);margin-top:1px">FEATURE</span>
+              <span style="display:inline-flex;align-items:center;gap:3px;flex-shrink:0;margin-top:1px">
+                <button type="button" class="seg" onClick="{{f.nav}}" aria-label="Open feature {{f.id}}">{{f.id}}</button>
+                <button type="button" class="copyid" onClick="{{f.copy}}" aria-label="Copy {{f.id}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                <button type="button" class="shortid" onClick="{{f.copyShort}}" aria-label="Copy short id {{f.short}}">{{f.short}}</button>
+              </span>
+              <span style="flex:1 1 180px;min-width:0;font-size:14px;font-weight:600;line-height:1.35" class="ttl2">{{f.title}}</span>
+              <label style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0;margin-top:1px" title="Filter this feature's phases">
+                <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg>
+                <select class="selmini" value="{{f.filter}}" onChange="{{f.setFilter}}" aria-label="Filter phases in {{f.id}}"><option value="all">All phases</option><option value="in-progress">In progress</option><option value="planned">Planned</option><option value="paused">Paused</option><option value="blocked">Blocked</option><option value="done">Done</option></select>
+              </label>
+              <div class="meter" style="width:90px;margin-top:6px"><div style="width:{{f.pct}}%;height:100%;background:var(--feature)"></div></div>
+              <span class="badge" style="background:{{f.bg}};color:{{f.color}};margin-top:1px"><span class="dot" style="background:{{f.dot}}"></span>{{f.statusLabel}}</span>
+            </div>
+
+            <sc-if value="{{f.open}}" hint-placeholder-val="{{true}}">
+            <div class="indent-f" style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{f.phases}}" as="p" hint-placeholder-count="2">
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div class="trow" style="padding:9px 12px;gap:10px;align-items:flex-start;flex-wrap:wrap">
+                    <button type="button" class="iconbtn" onClick="{{p.toggle}}" aria-label="Toggle phase" aria-expanded="{{p.open}}" style="transform:{{p.caret}};width:22px;height:22px"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+                    <span style="width:4px;align-self:stretch;border-radius:9999px;background:var(--phase);min-height:20px"></span>
+                    <span class="ent" style="background:rgba(6,182,212,0.14);color:var(--phase-ink);margin-top:1px">PHASE</span>
+                    <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px">
+                      <button type="button" class="seg" onClick="{{p.navFeat}}" aria-label="Open feature {{f.id}}">{{f.id}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{p.nav}}" aria-label="Open phase {{p.idfull}}">{{p.id}}</button>
+                      <button type="button" class="copyid" onClick="{{p.copy}}" aria-label="Copy {{p.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                      <button type="button" class="shortid" onClick="{{p.copyShort}}" aria-label="Copy short id {{p.short}}">{{p.short}}</button>
+                    </span>
+                    <span style="flex:1 1 160px;min-width:0;font-size:13px;font-weight:600;line-height:1.35" class="ttl2">{{p.title}}</span>
+                    <select class="selmini" style="margin-top:1px" value="{{p.filter}}" onChange="{{p.setFilter}}" aria-label="Filter tasks in {{p.idfull}}"><option value="all">All tasks</option><option value="in-progress">In progress</option><option value="planned">Planned</option><option value="paused">Paused</option><option value="blocked">Blocked</option><option value="done">Done</option></select>
+                    <div class="meter" style="width:72px;margin-top:6px"><div style="width:{{p.pct}}%;height:100%;background:var(--phase)"></div></div>
+                    <span class="mono" style="font-size:11px;color:var(--text-subtle);margin-top:3px">{{p.ratio}}</span>
+                    <span class="badge" style="background:{{p.bg}};color:{{p.color}};margin-top:1px"><span class="dot" style="background:{{p.dot}}"></span>{{p.statusLabel}}</span>
+                  </div>
+
+                  <sc-if value="{{p.open}}" hint-placeholder-val="{{true}}">
+                  <div class="indent-p" style="display:flex;flex-direction:column;gap:6px">
+                    <sc-for list="{{p.tasks}}" as="t" hint-placeholder-count="3">
+                      <div class="trow" id="{{t.rowId}}" style="padding:{{t.pad}};gap:9px;align-items:flex-start;flex-wrap:wrap;background:{{t.rowbg}};border-color:{{t.rowborder}}">
+                        <span class="ent" style="background:rgba(16,185,129,0.14);color:var(--task-ink);margin-top:1px">TASK</span>
+                        <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px">
+                          <button type="button" class="seg" onClick="{{t.navFeat}}" aria-label="Open feature {{f.id}}">{{f.id}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{t.navPhase}}" aria-label="Open phase {{p.idfull}}">{{p.id}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{t.nav}}" aria-label="Open task {{t.idfull}}">{{t.id}}</button>
+                          <button type="button" class="copyid" onClick="{{t.copy}}" aria-label="Copy {{t.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                          <button type="button" class="shortid" onClick="{{t.copyShort}}" aria-label="Copy short id {{t.short}}">{{t.short}}</button>
+                        </span>
+                        <button type="button" class="{{t.titleClass}}" onClick="{{t.locate}}" style="flex:1 1 160px;min-width:0;font-size:{{t.fs}};line-height:1.4">{{t.title}}</button>
+                        <sc-if value="{{t.hasOwner}}" hint-placeholder-val="{{true}}"><span class="mono" style="font-size:10px;color:var(--text-subtle);margin-top:2px;flex-shrink:0">{{t.owner}}</span></sc-if>
+                        <span class="badge" style="background:{{t.bg}};color:{{t.color}};margin-top:1px"><span class="dot" style="background:{{t.dot}}"></span>{{t.statusLabel}}</span>
+                      </div>
+                    </sc-for>
+                    <sc-if value="{{p.hasMore}}" hint-placeholder-val="{{true}}"><button type="button" onClick="{{p.toggleMore}}" style="align-self:flex-start;border:0;background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:4px 2px">{{p.moreLabel}}</button></sc-if>
+                    <sc-if value="{{p.noAdd}}" hint-placeholder-val="{{true}}">
+                    <button type="button" onClick="{{p.addTask}}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--border-strong);background:transparent;color:var(--text-subtle);border-radius:11px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add task to <span class="mono" style="font-size:11px">{{p.idfull}}</span></button>
+                    </sc-if>
+                    <sc-if value="{{p.showAdd}}" hint-placeholder-val="{{false}}">
+                    <div style="align-self:stretch;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px dashed var(--accent);background:var(--accent-soft);border-radius:11px;padding:8px 10px">
+                      <span class="ent" style="background:rgba(16,185,129,0.14);color:var(--task-ink);flex-shrink:0">TASK</span>
+                      <span class="mono" style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{p.idfull}}</span>
+                      <input type="text" placeholder="New task title…" aria-label="New task title for {{p.idfull}}" style="flex:1 1 180px;min-width:0;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:9px;padding:7px 10px;font-size:13px;color:var(--text);outline:0"/>
+                      <button type="button" class="btn btn-primary btn-sm" onClick="{{p.addConfirm}}" style="flex-shrink:0">Add</button>
+                      <button type="button" class="btn btn-sm" onClick="{{p.cancelAddInline}}" style="flex-shrink:0">Cancel</button>
+                    </div>
+                    </sc-if>
+                  </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <button type="button" onClick="{{f.addPhase}}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--border-strong);background:transparent;color:var(--text-subtle);border-radius:11px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add phase to <span class="mono" style="font-size:11px">{{f.id}}</span></button>
+            </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="grid-auto">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+      <p class="eyebrow">Latest completed</p>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div class="trow" style="padding:9px 12px;align-items:center;gap:8px"><span class="dot" style="background:var(--done);width:8px;height:8px"></span><span class="mono" style="font-size:12px;color:var(--text-subtle);flex-shrink:0">P040(F006)/T007</span><span style="flex:1 1 120px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Publish @agent-plan/mcp 0.2.1 to npm</span><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">2h ago</span></div>
+        <div class="trow" style="padding:9px 12px;align-items:center;gap:8px"><span class="dot" style="background:var(--done);width:8px;height:8px"></span><span class="mono" style="font-size:12px;color:var(--text-subtle);flex-shrink:0">P039(F004)/T011</span><span style="flex:1 1 120px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Map child statuses to a parent rollup</span><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">5h ago</span></div>
+        <div class="trow" style="padding:9px 12px;align-items:center;gap:8px"><span class="dot" style="background:var(--done);width:8px;height:8px"></span><span class="mono" style="font-size:12px;color:var(--text-subtle);flex-shrink:0">P038(F002)/T004</span><span style="flex:1 1 120px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Generated /planner slash-command router</span><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">yesterday</span></div>
+      </div>
+    </div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px" id="new">
+      <p class="eyebrow">Newly added</p>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div class="trow" style="padding:9px 12px;align-items:center;gap:8px"><span class="dot" style="background:var(--planned);width:8px;height:8px"></span><span class="mono" style="font-size:12px;color:var(--text-subtle);flex-shrink:0">P041(F008)/T004</span><span style="flex:1 1 120px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Zed MCP context-server setup doc</span><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">18m ago</span></div>
+        <div class="trow" style="padding:9px 12px;align-items:center;gap:8px"><span class="dot" style="background:var(--planned);width:8px;height:8px"></span><span class="mono" style="font-size:12px;color:var(--text-subtle);flex-shrink:0">P041(F008)/T005</span><span style="flex:1 1 120px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Harden session-recover against live processes</span><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">41m ago</span></div>
+        <div class="trow" style="padding:9px 12px;align-items:center;gap:8px"><span class="dot" style="background:var(--draft);width:8px;height:8px"></span><span class="mono" style="font-size:12px;color:var(--text-subtle);flex-shrink:0">P036(F009)/T021</span><span style="flex:1 1 120px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Draft: OpenCode autosuggest shortcuts</span><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">today</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+    </main>
+  </div>
+
+<!-- PROJECT DETAILS MODAL -->
+<sc-if value="{{projOpen}}" hint-placeholder-val="{{false}}">
+<div style="position:fixed;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px">
+  <button type="button" onClick="{{closeProj}}" aria-label="Close project details" style="position:fixed;inset:0;border:0;background:rgba(15,23,42,0.42);cursor:pointer"></button>
+  <div role="dialog" aria-modal="true" aria-label="Project details" style="position:relative;z-index:1;width:100%;max-width:640px;max-height:84vh;background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:22px;box-shadow:var(--shadow-panel);display:flex;flex-direction:column;overflow:hidden">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 24px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="display:flex;flex-direction:column;gap:4px"><p class="eyebrow">Project</p><h2 style="margin:0;font-size:18px;font-weight:700">Agent Plan</h2></div>
+      <button type="button" class="iconbtn" onClick="{{closeProj}}" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div style="overflow:auto;overscroll-behavior:contain;padding:18px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="font-size:13px;line-height:1.55;color:var(--text-muted)">{{projGoal}}</div>
+    <sc-for list="{{projSections}}" as="s" hint-placeholder-count="4">
+      <section style="display:flex;flex-direction:column;gap:7px">
+        <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:{{s.color}}">{{s.title}}</h3>
+        <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px">
+          <sc-for list="{{s.items}}" as="it" hint-placeholder-count="3"><li style="font-size:13px;color:var(--text-muted);line-height:1.45">{{it}}</li></sc-for>
+        </ul>
+      </section>
+    </sc-for>
+    <section style="display:flex;flex-direction:column;gap:7px">
+      <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)">Project guidelines</h3>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.55;white-space:pre-line">{{projGuidelines}}</div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:7px">
+      <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)">Accepted decisions</h3>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{projDecisions}}" as="d" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--border);border-radius:11px;padding:8px 11px;background:var(--surface-strong)"><svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--done)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top:1px"><path d="M20 6 9 17l-5-5"/></svg><span style="font-size:13px;color:var(--text-muted);line-height:1.45">{{d}}</span></div></sc-for>
+      </div>
+    </section>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- toast -->
+<sc-if value="{{showToast}}" hint-placeholder-val="{{false}}">
+<div style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1e293b;color:#fff;border-radius:12px;padding:9px 16px;font-size:13px;font-weight:600;box-shadow:0 12px 30px -10px rgba(0,0,0,0.45);display:flex;align-items:center;gap:8px;z-index:70">
+  <span style="color:#4ade80">{{toastIcon}}</span><span>{{toastMsg}}</span>
+</div>
+</sc-if>
+</div>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":2220}}'>
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    let _narrow=false; try{_narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){}
+    this.state = { side:_narrow, tokens:[], draft:'', focus:false, status:'all', feature:'F004', expanded:{}, treeMode:'', more:{}, fFilter:{}, pFilter:{}, density:'comfortable', chartsOpen:true, win:'21', newFeatOpen:false, newOpen:false, newFeature:'F004', newPhase:'P039', projOpen:false, theme:'light', exportOpen:false, focusOpen:false, parkedOpen:false, navOpen:false, focusCollapsed:false, located:'', addInline:'', toastMsg:'', toastIcon:'✓', showToast:false };
+  }
+  meta(s){
+    const m={'done':{label:'Done',color:'var(--done-ink)',bg:'rgba(34,197,94,0.14)',dot:'#22c55e'},'in-progress':{label:'In progress',color:'var(--inprog-ink)',bg:'rgba(245,158,11,0.14)',dot:'#f59e0b'},'planned':{label:'Planned',color:'var(--planned-ink)',bg:'rgba(14,165,233,0.14)',dot:'#0ea5e9'},'paused':{label:'Paused',color:'var(--paused-ink)',bg:'rgba(234,88,12,0.14)',dot:'#ea580c'},'blocked':{label:'Blocked',color:'var(--blocked-ink)',bg:'rgba(239,68,68,0.14)',dot:'#ef4444'},'draft':{label:'Draft',color:'var(--draft-ink)',bg:'rgba(148,163,184,0.16)',dot:'#94a3b8'}};
+    return m[s]||m['draft'];
+  }
+  fields(){ return [
+    {name:'feature',desc:'Feature number, e.g. 4 (F004)'},{name:'phase',desc:'Phase number, e.g. 39 (P039)'},
+    {name:'task',desc:'Task number, e.g. 12 (T012). Comma-list supported.'},{name:'id',desc:'Global short id, e.g. a3f9c2'},
+    {name:'status',desc:'Task status'},{name:'feature-status',desc:'Status of the feature'},
+    {name:'phase-status',desc:'Status of the phase'},{name:'title',desc:'Substring match on title'}
+  ]; }
+  statuses(){ return ['planned','in-progress','done','blocked','paused','draft']; }
+  project(){ return {
+    goal:'Make planning durable, inspectable and shared across AI coding agents — one .planner/ workspace, many harnesses — without coupling the core model to any one tool.',
+    sections:[
+      {title:'In scope',color:'var(--done)',items:['The .planner/ JSON workspace is the single source of truth','Harness adapters call shared planning core logic, never their own rules','A stable, read-only /api/v1 with live entity-changed events for outside programs']},
+      {title:'Out of scope',color:'var(--blocked)',items:['Reading, migrating or using .plan/ (belongs to GSD / get-shit-done)','Hosting a remote multi-tenant planning service']},
+      {title:'Technologies',color:'var(--accent)',items:['TypeScript','React 19','Zod schemas','HTTP + WebSocket']},
+      {title:'Tools',color:'var(--phase)',items:['pnpm workspaces','Vite','Vitest','Playwright']}
+    ],
+    guidelines:'Adapters never reimplement planning logic — they wire a harness to @agent-plan/core.\nJSON under .planner/ is canonical; Markdown under generated/ is a view for humans and agents.\nPlanner operations (handoff, plan CRUD) are not code edits and are always allowed regardless of task state.\nThe planner is disabled by default; nothing auto-starts.',
+    decisions:['Disable the planner by default; nothing auto-starts on load','Keep the plugin version track independent from the npm package versions','Claim task-start ownership atomically; a second caller gets TASK_OWNED_BY_ANOTHER_SESSION']
+  }; }
+  windows(){ return {
+    '7':{label:'7 active days', line:[7,9,6,11,9,13,12], kpi:{added:9,closed:12,reopened:1,net:-2,rate:'1.7',open:35}},
+    '21':{label:'21 active days', line:[4,5,4,7,6,9,8,11,10,12,13,15,16,18], kpi:{added:23,closed:31,reopened:2,net:-10,rate:'2.1',open:35}},
+    '60':{label:'60 active days', line:[3,5,4,6,8,7,9,11,10,13,12,15,17,16,19], kpi:{added:58,closed:72,reopened:5,net:-19,rate:'1.9',open:35}}
+  }; }
+  data(){
+    if(this._d) return this._d;
+    const F=(id,short,title,status,phases)=>({id,short,title,status,phases});
+    const P=(id,short,title,status,tasks)=>({id,short,title,status,tasks});
+    const T=(id,short,title,status,owner)=>({id,short,title,status,owner});
+    this._d=[
+      F('F004','a3f9c2','Harness-agnostic planning core','in-progress',[
+        P('P039','7d12e0','Derived display statuses','in-progress',[
+          T('T011','4b9a10','Map child statuses to a parent rollup','done'),
+          T('T012','c18f22','Expose started / closed on the API and the web tree','in-progress','claude-1'),
+          T('T013','9e5531','Snapshot test the derived-status matrix across every parent/child combination','planned'),
+          T('T014','2a0749','Document the rollup precedence rules','planned'),
+          T('T015','f63088','Backfill legacy phases without a stored status','draft'),
+          T('T016','81cc04','Edge case: a parent whose children are all canceled','planned')
+        ]),
+        P('P042','b0a4e1','Zod schema and public JSON export','planned',[
+          T('T001','5c2db7','Generate planner-schema.json from the core Zod schemas','planned'),
+          T('T002','e7b130','Validate .planner/ against the schema on load','planned')
+        ]),
+        P('P031','11f8aa','Core planning model','done',[
+          T('T001','aa1002','project → features → phases → tasks hierarchy model','done'),
+          T('T002','aa1103','Atomic task-start ownership claim','done')
+        ])
+      ]),
+      F('F008','d41b77','Multi-session ownership and recovery','paused',[
+        P('P041','3f9c51','Session recovery','paused',[
+          T('T003','771120','Recover task ownership after a stdio MCP restart creates a new caller identity','paused','codex-2'),
+          T('T004','771221','Refuse recovery for a process that is still alive','in-progress','claude-1'),
+          T('T005','771322','Transfer the complete deviation stack on recover','planned')
+        ]),
+        P('P037','9a2e18','Per-session focus','done',[ T('T001','662140','Keep the 20 most-recent session snapshots','done') ])
+      ]),
+      F('F002','9c7a21','Claude Code plugin and marketplace','done',[
+        P('P038','44de90','Slash-command router','done',[ T('T004','331080','Generated /planner slash-command router','done'), T('T005','331181','SessionStart non-blocking notify hook','done') ])
+      ]),
+      F('F003','2e88b5','Local server and React dashboard','in-progress',[
+        P('P040','77a1c0','Dashboard analytics','in-progress',[
+          T('T006','882050','Flow and backlog analytics charts','done'),
+          T('T007','882151','Publish @agent-plan/mcp 0.2.1 to npm','done'),
+          T('T008','882252','Live entity-changed WebSocket sync','in-progress','claude-3'),
+          T('T009','882353','Drill down from a chart into the work tree','planned')
+        ])
+      ]),
+      F('F007','5ab903','Public read API v1','planned',[
+        P('P043','c90b44','Versioned /api/v1','planned',[ T('T001','b40101','Freeze the v1 read surface','planned'), T('T002','b40202','Emit entity-changed events','planned') ])
+      ]),
+      F('F009','81cd44','OpenCode and Zed adapters','planned',[
+        P('P036','d7e200','OpenCode bundle','planned',[ T('T021','e00101','OpenCode autosuggest shortcuts','draft'), T('T022','e00202','Zed custom context-server setup','planned') ])
+      ])
+    ];
+    return this._d;
+  }
+  setExp(key,def){ const e=this.state.expanded; return (key in e)? e[key] : def; }
+  pctOf(f){ let d=0,n=0; f.phases.forEach(p=>p.tasks.forEach(t=>{n++; if(t.status==='done')d++;})); return n? Math.round(d/n*100):0; }
+  toast(msg,icon){ this.setState({toastMsg:msg,toastIcon:icon||'✓',showToast:true}); clearTimeout(this._ct); this._ct=setTimeout(()=>this.setState({showToast:false}),1500); }
+  copy(text){ try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text); }catch(_){ } this.toast('Copied '+text,'✓'); }
+  nav(label){ this.toast('Opening '+label+' →','→'); }
+  locate(feat,ph,idfull){ const st=this.state; this.setState({ feature:feat, status:'all', tokens:[], draft:'', focusOpen:false, expanded:Object.assign({},st.expanded,{['F:'+feat]:true,['P:'+ph]:true}), located:idfull }); this.toast('Located '+idfull+' in the work tree','→'); clearTimeout(this._st); this._st=setTimeout(()=>{ try{ var el=document.getElementById('located-row')||document.getElementById('explorer'); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){ } },80); }
+  buildPath(vals,maxV){ const n=vals.length; const mv=maxV||(Math.max.apply(null,vals)*1.15)||1; const x=i=> 44 + (n<=1?228:(i*(464/(n-1)))); const y=v=> 136 - (v/mv)*116; let d=''; for(let i=0;i<n;i++){ d+=(i?' L':'M')+x(i).toFixed(1)+' '+y(vals[i]).toFixed(1); } const area=d+' L'+x(n-1).toFixed(1)+' 136 L44 136 Z'; return {line:d,area:area,lastX:x(n-1).toFixed(1),lastY:y(vals[n-1]).toFixed(1)}; }
+
+  renderVals(){
+    const st=this.state; const num=s=>parseInt(s.slice(1),10);
+    const flt=this.parseFilters(); const limit = st.density==='compact'?6:4;
+    const searchActive = st.tokens.length>0 || (st.draft||'').trim()!=='';
+    const scopeAll = searchActive || st.status!=='all';
+
+    // status chips
+    const counts={all:0,'in-progress':0,planned:0,paused:0,blocked:0,done:0};
+    this.data().forEach(f=>f.phases.forEach(p=>p.tasks.forEach(t=>{counts.all++; if(counts[t.status]!=null)counts[t.status]++;})));
+    const chipDefs=[['all','All','#94a3b8'],['in-progress','In progress','#f59e0b'],['planned','Planned','#0ea5e9'],['paused','Paused','#ea580c'],['blocked','Blocked','#ef4444'],['done','Done','#22c55e']];
+    const statusChips=chipDefs.map(a=>{const k=a[0]; return {label:a[1],dot:a[2],count:counts[k]!=null?counts[k]:0, style: st.status===k?('background:'+a[2]+';border-color:'+a[2]+';color:#fff;'):'', pick:()=>this.setState({status:k})};});
+
+    const buildFeature=(f)=>{
+      const fFilter=st.fFilter[f.id]||'all';
+      const fOpen = (st.feature==='all'||scopeAll) ? this.setExp('F:'+f.id, scopeAll && (searchActive)) : true;
+      const fm=this.meta(f.status);
+      const featureIdHit = flt.id && f.short.toLowerCase().indexOf(flt.id)===0;
+      const featureTitleHit = flt.titles.length>0 && flt.titles.every(s=> f.title.toLowerCase().indexOf(s)>-1);
+      const phases=f.phases.map(p=>{
+        const pFilter=st.pFilter[p.id]||'all';
+        const pOpen=this.setExp('P:'+p.id, true);
+        const phaseIdHit = flt.id && p.short.toLowerCase().indexOf(flt.id)===0;
+        const phaseTitleHit = flt.titles.length>0 && flt.titles.every(s=> p.title.toLowerCase().indexOf(s)>-1);
+        const ancTitle=featureTitleHit||phaseTitleHit; const ancId=featureIdHit||phaseIdHit;
+        const tAll=p.tasks.filter(t=>{ const tNum=num(t.id);
+          const okG=st.status==='all'||t.status===st.status; const okStatus=!flt.status||t.status===flt.status;
+          const okTask=flt.tasks.length===0||flt.tasks.indexOf(tNum)>-1;
+          const okId=!flt.id||ancId||t.short.toLowerCase().indexOf(flt.id)===0;
+          const okTitle=flt.titles.length===0||ancTitle||flt.titles.every(s=> t.title.toLowerCase().indexOf(s)>-1||t.id.toLowerCase().indexOf(s)>-1);
+          const okChild=pFilter==='all'||t.status===pFilter;
+          return okG&&okStatus&&okTask&&okId&&okTitle&&okChild;
+        });
+        const moreOpen=!!st.more[p.id]; const shown=moreOpen?tAll:tAll.slice(0,limit); const hidden=tAll.length-shown.length;
+        const pm=this.meta(p.status); const done=p.tasks.filter(t=>t.status==='done').length; const idfull='P'+p.id.slice(1)+'('+f.id+')';
+        const tasks=shown.map(t=>{ const m=this.meta(t.status); const tfull=idfull+'/'+t.id;
+          return {id:t.id,short:t.short,title:t.title,owner:t.owner||'',hasOwner:!!t.owner,idfull:tfull,statusLabel:m.label,color:m.color,bg:m.bg,dot:m.dot,
+            pad:st.density==='compact'?'7px 10px':'9px 12px',fs:st.density==='compact'?'12px':'13px',
+            rowbg:(st.located===tfull)?'var(--accent-soft)':((t.status==='paused')?'rgba(234,88,12,0.06)':'var(--surface-elevated)'),rowborder:(st.located===tfull)?'var(--accent)':((t.status==='paused')?'rgba(234,88,12,0.35)':'var(--border)'),rowId:(st.located===tfull)?'located-row':'',
+            titleClass:'titlelink ttl2'+((t.status==='done')?' tl-done':((t.status==='in-progress')?' tl-strong':'')),
+            nav:()=>this.nav('task '+tfull),navPhase:()=>this.nav('phase '+idfull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(tfull),copyShort:()=>this.copy(t.short),locate:()=>this.locate(f.id,p.id,tfull)};
+        });
+        return {raw:p,_num:num(p.id),_idHit:phaseIdHit,_titleHit:phaseTitleHit,id:p.id,short:p.short,title:p.title,idfull,open:pOpen,caret:pOpen?'rotate(90deg)':'rotate(0deg)',ratio:done+'/'+p.tasks.length,pct:(p.tasks.length?Math.round(done/p.tasks.length*100):0),filter:pFilter,statusLabel:pm.label,color:pm.color,bg:pm.bg,dot:pm.dot,tasks,_tcount:tAll.length,hasMore:hidden>0||(moreOpen&&tAll.length>limit),moreLabel:moreOpen?'Show fewer':('Show '+hidden+' more'),
+          toggle:()=>this.setState({expanded:Object.assign({},st.expanded,{['P:'+p.id]:!pOpen}),treeMode:''}),toggleMore:()=>this.setState({more:Object.assign({},st.more,{[p.id]:!moreOpen})}),setFilter:(e)=>this.setState({pFilter:Object.assign({},st.pFilter,{[p.id]:e.target.value})}),nav:()=>this.nav('phase '+idfull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(idfull),copyShort:()=>this.copy(p.short),showAdd:st.addInline===p.id,noAdd:st.addInline!==p.id,addTask:()=>this.setState({addInline:p.id}),cancelAddInline:()=>this.setState({addInline:''}),addConfirm:()=>{ this.setState({addInline:''}); this.toast('Added task to '+idfull,'✓'); }};
+      }).filter(p=>{ if(flt.phase!=null&&p._num!==flt.phase) return false; if(fFilter!=='all'&&p.raw.status!==fFilter) return false; if(flt.pstatus&&p.raw.status!==flt.pstatus) return false;
+        const narrowing=st.status!=='all'||flt.status||flt.tasks.length||flt.id||flt.titles.length; if(p.tasks.length>0) return true; if(p._idHit||p._titleHit) return true; return !narrowing&&!flt.pstatus; });
+      return {obj:f,_num:num(f.id),id:f.id,short:f.short,title:f.title,pct:this.pctOf(f),open:fOpen,caret:fOpen?'rotate(90deg)':'rotate(0deg)',filter:fFilter,statusLabel:fm.label,color:fm.color,bg:fm.bg,dot:fm.dot,phases,_visible:phases.length>0||featureIdHit||featureTitleHit,
+        toggle:()=>this.setState({expanded:Object.assign({},st.expanded,{['F:'+f.id]:!fOpen}),treeMode:''}),setFilter:(e)=>this.setState({fFilter:Object.assign({},st.fFilter,{[f.id]:e.target.value})}),nav:()=>this.nav('feature '+f.id),copy:()=>this.copy(f.id),copyShort:()=>this.copy(f.short),addPhase:()=>this.toast('New phase in '+f.id+' →','→')};
+    };
+
+    const all=this.data();
+    let base = scopeAll ? all : (st.feature==='all'?all:all.filter(f=>f.id===st.feature));
+    base=base.filter(f=> (flt.feature==null||num(f.id)===flt.feature) && (!flt.fstatus||f.status===flt.fstatus));
+    let features=base.map(buildFeature).filter(f=>f._visible);
+
+    const nav=all.map(f=>{const m=this.meta(f.status); let nt=0; f.phases.forEach(p=>nt+=p.tasks.length); return {id:f.id,title:f.title,titleAttr:(f.title.length>44?f.title:''),pct:this.pctOf(f),dot:m.dot,counts:f.phases.length+'ph · '+nt+'t',cls:(st.feature===f.id&&!scopeAll)?'on':'',pick:()=>this.setState({feature:f.id})};});
+
+    // focus
+    const active=[]; const parked=[];
+    all.forEach(f=>f.phases.forEach(p=>p.tasks.forEach(t=>{ const tfull='P'+p.id.slice(1)+'('+f.id+')/'+t.id; const phasefull='P'+p.id.slice(1)+'('+f.id+')';
+      if(t.status==='in-progress') active.push({feat:f.id,phase:p.id,task:t.id,phasefull,idfull:tfull,title:t.title,owner:t.owner||'unassigned',nav:()=>this.nav('task '+tfull),navPhase:()=>this.nav('phase '+phasefull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(tfull),open:()=>this.nav('task '+tfull),locate:()=>this.locate(f.id,p.id,tfull),park:()=>this.toast('Checkpointed '+tfull,'✓')});
+      if(t.status==='paused') parked.push({idfull:tfull,feat:f.id,phase:p.id,title:t.title,owner:t.owner||'unassigned',nav:()=>this.nav('task '+tfull),copy:()=>this.copy(tfull),locate:()=>this.locate(f.id,p.id,tfull),pickup:()=>{ try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText('planner-session-recover { task: "'+tfull+'", confirmed: true }'); }catch(_){ } this.toast('Copied resume command for '+tfull,'✓'); }}); }) ));
+
+    // suggested next work (planner recommendation; shown when nothing is in progress)
+    const sg={ feat:'F004', phase:'P039', task:'T013', idfull:'P039(F004)/T013', phasefull:'P039(F004)', title:'Snapshot test the derived-status matrix across every parent/child combination', reason:'Next in the active phase P039 · dependencies met · continues in-progress work' };
+    const suggested=Object.assign({}, sg, { nav:()=>this.nav('task '+sg.idfull), navFeat:()=>this.nav('feature '+sg.feat), navPhase:()=>this.nav('phase '+sg.phasefull), copy:()=>this.copy(sg.idfull), locate:()=>this.locate(sg.feat,sg.phase,sg.idfull), start:()=>this.toast('Started '+sg.idfull,'✓') });
+
+    // analytics
+    const win=this.windows()[st.win]; const th=this.buildPath(win.line);
+    const scope=this.buildPath([120,128,135,140,150,158,165,170,175,178,180,182],190);
+    const closed=this.buildPath([70,82,95,105,115,122,130,136,140,144,146,147],190);
+    const agingDefs=[['0-7d',14,'#22c55e'],['8-14d',9,'#84cc16'],['15-30d',7,'#f59e0b'],['31-60d',3,'#ea580c'],['61+d',2,'#ef4444']]; const agMax=14;
+    const aging=agingDefs.map(a=>({label:a[0],n:a[1],pct:Math.round(a[1]/agMax*100),color:a[2]}));
+    const blDefs=[['In progress',9,'#f59e0b'],['Planned',18,'#0ea5e9'],['Paused',5,'#ea580c'],['Blocked',3,'#ef4444']]; const blMax=18;
+    const backlog=blDefs.map(b=>({label:b[0],n:b[1],pct:Math.round(b[1]/blMax*100),color:b[2]}));
+    const windowChips=['7','21','60'].map((w,i)=>({label:w,style: st.win===w?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',bl:i===0?'0':'1px solid var(--border-strong)',pick:()=>this.setState({win:w})}));
+    const k=win.kpi;
+
+    // search suggestions
+    const draft=st.draft; const ci=draft.indexOf(':'); let suggestions=[]; let sugHeading='Filter by field';
+    if(ci===-1){ const d=draft.toLowerCase(); suggestions=this.fields().filter(fl=>fl.name.indexOf(d)===0||d==='').map(fl=>({label:fl.name+':',desc:fl.desc,choose:()=>this.setState({draft:fl.name+':'})})); }
+    else { const field=draft.slice(0,ci),partial=draft.slice(ci+1); sugHeading='Values for '+field; suggestions=this.valuesFor(field,partial).slice(0,14).map(v=>({label:field+':'+v.t,desc:v.l,choose:()=>this.setState({tokens:st.tokens.concat(field+':'+v.t),draft:''})})); }
+
+    const proj=this.project();
+
+    return {
+      tokens: st.tokens.map((tk,i)=>({text:tk,remove:()=>{const t=st.tokens.slice(); t.splice(i,1); this.setState({tokens:t});}})),
+      draft:st.draft, searchPlaceholder:(st.tokens.length||st.draft)?'':'Search… e.g. feature:4  status:in-progress  title:api',
+      onDraft:(e)=>this.setState({draft:e.target.value||''}),
+      onDraftKey:(e)=>{ if(e.key==='Enter'||e.key===' '){ const d=(st.draft||'').trim(); if(d){ if(e.preventDefault)e.preventDefault(); this.setState({tokens:st.tokens.concat(d),draft:''}); } } else if(e.key==='Backspace'&&(st.draft||'')===''&&st.tokens.length){ if(e.preventDefault)e.preventDefault(); const t=st.tokens.slice(); const last=t.pop(); this.setState({tokens:t,draft:last}); } },
+      onFocus:()=>this.setState({focus:true}), onBlur:()=>{ clearTimeout(this._bt); this._bt=setTimeout(()=>this.setState({focus:false}),160); },
+      showSug: st.focus&&suggestions.length>0, suggestions, sugHeading, searchScopeNote: scopeAll,
+      statusChips, statusValue:st.status, onStatus:(e)=>this.setState({status:e.target.value}), statusOptions: chipDefs.map(a=>({value:a[0],label:a[1]+' ('+(counts[a[0]]!=null?counts[a[0]]:0)+')'})),
+      clearFilters:()=>this.setState({status:'all',tokens:[],draft:'',fFilter:{},pFilter:{}}), navMenuClass:st.navOpen?'open':'', navOpen:st.navOpen, toggleNav:()=>this.setState({navOpen:!st.navOpen}),
+      expandAll:()=>{const ex=Object.assign({},st.expanded); all.forEach(f=>{ex['F:'+f.id]=true; f.phases.forEach(p=>ex['P:'+p.id]=true);}); this.setState({expanded:ex,treeMode:'expanded'});},
+      collapseAll:()=>{const ex=Object.assign({},st.expanded); all.forEach(f=>{ex['F:'+f.id]=false; f.phases.forEach(p=>ex['P:'+p.id]=false);}); this.setState({expanded:ex,treeMode:'collapsed'});},
+      expandStyle: st.treeMode==='expanded'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
+      collapseStyle: st.treeMode==='collapsed'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
+      setComfortable:()=>this.setState({density:'comfortable'}), setCompact:()=>this.setState({density:'compact'}),
+      densComfy: st.density==='comfortable'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
+      densCompact: st.density==='compact'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
+      chartsOpen:st.chartsOpen, chartsCaret:st.chartsOpen?'rotate(90deg)':'rotate(0deg)', toggleCharts:()=>this.setState({chartsOpen:!st.chartsOpen}),
+      windowChips, windowLabel:win.label, k:{added:k.added,closed:k.closed,reopened:k.reopened,net:(k.net>0?'+':'')+k.net,rate:k.rate,open:k.open,netColor: k.net>0?'color:var(--bad)':'color:var(--pos)'},
+      thLine:th.line, thArea:th.area, thLastX:th.lastX, thLastY:th.lastY,
+      buScope:scope.line, buScopeArea:scope.area, buClosed:closed.line, buClosedArea:closed.area,
+      aging, backlog,
+      nav, totalFeatures:all.length, allOn:(st.feature==='all'&&!scopeAll)?'on':'', pickAll:()=>this.setState({feature:'all'}),
+      features, noResults:features.length===0,
+      active, activeCount:active.length, parked, parkedCount:parked.length, hasParked:parked.length>0,
+      primary:(active[0]||{}), hasActive:active.length>0, noActive:active.length===0, suggested, hasSuggested:true, focusOpen:st.focusOpen, focusCaret: st.focusOpen?'rotate(180deg)':'rotate(0deg)', toggleFocus:()=>this.setState({focusOpen:!st.focusOpen}), parkedOpen:st.parkedOpen, toggleParked:()=>this.setState({parkedOpen:!st.parkedOpen}), parkedCaret:st.parkedOpen?'rotate(180deg)':'rotate(0deg)', focusHint:(active.length>0?(active.length+' session'+(active.length>1?'s':'')+' running'):'nothing running'),
+      focusCollapsed:st.focusCollapsed, focusExpanded:!st.focusCollapsed, toggleFocusCollapse:()=>this.setState({focusCollapsed:!st.focusCollapsed}), focusCollapseCaret:(st.focusCollapsed?'rotate(0deg)':'rotate(180deg)'), focusTitle:(active.length>0?(active.length+' task'+(active.length>1?'s':'')+' in progress'):'Suggested next'), focusDot:(active.length>0?'var(--in-progress)':'var(--accent)'),
+      newFeatOpen:st.newFeatOpen, toggleNewFeat:()=>this.setState({newFeatOpen:!st.newFeatOpen}), addFeatureConfirm:()=>{ this.setState({newFeatOpen:false}); this.toast('Created a new feature','✓'); },
+      newOpen:st.newOpen, toggleNew:()=>this.setState({newOpen:!st.newOpen}), newFeature:st.newFeature,newPhase:st.newPhase,newTarget:'P'+(st.newPhase||'').slice(1)+'('+(st.newFeature||'')+')',
+      featureOptions:all.map(f=>({id:f.id,label:f.id+' — '+f.title})), phaseOptions:((all.find(f=>f.id===st.newFeature)||all[0]).phases).map(p=>({id:p.id,label:p.id+' — '+p.title})),
+      onNewFeature:(e)=>{const id=e.target.value; const ff=all.find(x=>x.id===id); this.setState({newFeature:id,newPhase:(ff&&ff.phases[0])?ff.phases[0].id:''});}, onNewPhase:(e)=>this.setState({newPhase:e.target.value}),
+      projOpen:st.projOpen, openProj:()=>this.setState({projOpen:true}), closeProj:()=>this.setState({projOpen:false}),
+      projGoal:proj.goal, projSections:proj.sections, projGuidelines:proj.guidelines, projDecisions:proj.decisions,
+      themeClass: st.theme==='dark'?'t-dark':'', isDark: st.theme==='dark', isLight: st.theme!=='dark', themeLabel: st.theme==='dark'?'Switch to light theme':'Switch to dark theme', toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
+      sideClass: st.side?'side-collapsed':'', toggleSide:()=>this.setState({side:!st.side}),
+      exportOpen:st.exportOpen, toggleExport:()=>this.setState({exportOpen:!st.exportOpen}),
+      exportItems:[
+        {file:'PLAN.md',desc:'Full plan overview',run:()=>{this.setState({exportOpen:false}); this.toast('Exported .planner/generated/PLAN.md','↓');}},
+        {file:'features/*.md',desc:'One Markdown file per feature',run:()=>{this.setState({exportOpen:false}); this.toast('Exported 9 feature files','↓');}},
+        {file:'phases/*.md',desc:'One Markdown file per phase',run:()=>{this.setState({exportOpen:false}); this.toast('Exported 41 phase files','↓');}},
+        {file:'HANDOFF.md',desc:'Latest session handoff',run:()=>{this.setState({exportOpen:false}); this.toast('Exported .planner/generated/HANDOFF.md','↓');}}
+      ],
+      toastMsg:st.toastMsg, toastIcon:st.toastIcon, showToast:st.showToast
+    };
+  }
+  parseFilters(){
+    const st=this.state; const toks=st.tokens.slice(); const d=(st.draft||'').trim();
+    if(d && (/^[a-z-]+:.+$/.test(d) || d.indexOf(':')===-1)) toks.push(d);
+    const flt={feature:null,phase:null,tasks:[],id:null,status:null,fstatus:null,pstatus:null,titles:[]};
+    toks.forEach(tk=>{ const i=tk.indexOf(':'); if(i===-1){ if(tk) flt.titles.push(tk.toLowerCase()); return; } const kk=tk.slice(0,i), v=tk.slice(i+1); if(!v) return;
+      if(kk==='feature') flt.feature=parseInt(v,10); else if(kk==='phase') flt.phase=parseInt(v,10);
+      else if(kk==='task') v.split(',').forEach(x=>{const n=parseInt(x,10); if(!isNaN(n))flt.tasks.push(n);});
+      else if(kk==='id') flt.id=v.toLowerCase(); else if(kk==='status') flt.status=v.toLowerCase();
+      else if(kk==='feature-status') flt.fstatus=v.toLowerCase(); else if(kk==='phase-status') flt.pstatus=v.toLowerCase();
+      else if(kk==='title') flt.titles.push(v.toLowerCase()); else flt.titles.push(tk.toLowerCase()); });
+    return flt;
+  }
+  valuesFor(field,partial){
+    const p=(partial||'').toLowerCase(); const num=s=>parseInt(s.slice(1),10); const data=this.data();
+    if(field==='feature') return data.map(f=>({t:String(num(f.id)),l:f.id})).filter(x=>x.t.indexOf(partial)===0||partial==='');
+    if(field==='phase'){ const r=[]; data.forEach(f=>f.phases.forEach(ph=>r.push({t:String(num(ph.id)),l:ph.id}))); return r.filter(x=>x.t.indexOf(partial)===0||partial===''); }
+    if(field==='task'){ const s={},r=[]; data.forEach(f=>f.phases.forEach(ph=>ph.tasks.forEach(t=>{const n=num(t.id); if(!s[n]){s[n]=1;r.push({t:String(n),l:t.id});}}))); return r.filter(x=>x.t.indexOf(partial)===0||partial===''); }
+    if(field==='id'){ const r=[]; data.forEach(f=>{r.push({t:f.short,l:f.short+' · '+f.id}); f.phases.forEach(ph=>{r.push({t:ph.short,l:ph.short+' · '+ph.id}); ph.tasks.forEach(t=>r.push({t:t.short,l:t.short+' · '+t.id}));});}); return r.filter(x=>x.t.toLowerCase().indexOf(p)===0); }
+    if(field==='status'||field==='feature-status'||field==='phase-status') return this.statuses().filter(s=>s.indexOf(p)===0).map(s=>({t:s,l:s}));
+    if(field==='title'){ const r=[]; data.forEach(f=>f.phases.forEach(ph=>ph.tasks.forEach(t=>r.push({t:t.title,l:t.title.length>40?t.title.slice(0,40)+'…':t.title})))); return r.filter(x=>x.t.toLowerCase().indexOf(p)>-1).slice(0,12); }
+    return [];
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Plan — Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-soft:rgba(99,102,241,0.12);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --pos-ink:#15803d; --warn-ink:#b45309; --bad-ink:#b91c1c; --mut-bg:rgba(148,163,184,0.16);
+    --pos-bg:rgba(34,197,94,0.14); --warn-bg:rgba(234,88,12,0.14); --bad-bg:rgba(239,68,68,0.12);
+    --track:rgba(148,163,184,0.3); --field:#ffffff;
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-soft:rgba(129,140,248,0.16);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --bad-ink:#f87171; --mut-bg:rgba(148,163,184,0.12);
+    --pos-bg:rgba(34,197,94,0.13); --warn-bg:rgba(234,88,12,0.15); --bad-bg:rgba(239,68,68,0.13);
+    --track:rgba(148,163,184,0.2); --field:#0d1526;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:600;line-height:1.35;white-space:nowrap}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-primary:hover{border-color:var(--accent);filter:brightness(1.05)}
+  .btn-danger{color:var(--bad-ink);border-color:rgba(239,68,68,0.4)}
+  .btn-danger:hover{border-color:var(--bad-ink)}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:14px}
+  .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--border-strong)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  /* settings */
+  .shd{display:flex;align-items:flex-start;gap:11px;padding:15px 16px 13px;border-bottom:1px solid var(--border)}
+  .gico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--accent-soft);color:var(--accent)}
+  .shd h3{margin:0;font-size:14.5px;font-weight:700}
+  .shd .gsub{margin:3px 0 0;font-size:11.5px;color:var(--text-subtle);line-height:1.45}
+  .srow{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:13px 16px}
+  .srow+.srow{border-top:1px solid var(--border)}
+  .lbl{font-size:13.5px;font-weight:600;line-height:1.3}
+  .dsc{font-size:11.5px;color:var(--text-subtle);margin-top:2px;max-width:440px;line-height:1.45}
+  .field{background:var(--field);border:1px solid var(--border-strong);border-radius:9px;padding:8px 11px;font-size:13px;color:var(--text);min-width:200px;font-family:inherit}
+  .field.mono{font-family:"JetBrains Mono",monospace;font-size:12px}
+  .sel{appearance:none;-webkit-appearance:none;background:var(--field);border:1px solid var(--border-strong);border-radius:9px;padding:8px 32px 8px 11px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
+  .sw{width:40px;height:23px;border-radius:9999px;background:var(--track);position:relative;cursor:pointer;border:0;flex-shrink:0;transition:background .15s;padding:0}
+  .sw.on{background:var(--accent)}
+  .sw i{position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,0.25)}
+  .sw.on i{left:19px}
+  .chip-agent{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:600}
+  .vbadge{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(217,119,87,0.16)}
+  .rpt{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 16px}
+  .rpt+.rpt{border-top:1px solid var(--border)}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .pad{padding:16px 12px !important}
+    .field,.sel{min-width:0;width:100%}
+  }
+</style>
+</helmet>
+
+<div class="app {{themeClass}} {{navClass}}">
+  <div class="scrim" onClick="{{toggleNav}}"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 24px;background:var(--sidebar);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-subtle)">
+    <span class="mono">F025 · Web UI reorganization proposal</span><span>Demo scenario · illustrative data</span>
+  </div>
+
+  <header class="pad" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 24px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:13px;min-width:0">
+      <button type="button" class="navtoggle" onClick="{{toggleNav}}" aria-label="Toggle navigation"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--feature));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0">ap</div>
+      <div style="min-width:0"><div style="font-size:17px;font-weight:700;line-height:1.15">Example Project</div><div style="font-size:12px;color:var(--text-subtle)">Agent Plan · project memory &amp; work</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="pill" style="background:var(--accent-soft);color:var(--accent)" title="Provider capabilities">TypeScript · syntactic ✓ · semantic ✓</span>
+      <button type="button" class="btn" onClick="{{toggleTheme}}" aria-label="Toggle theme" style="padding:7px;width:34px;justify-content:center">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg></sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></sc-if>
+      </button>
+    </div>
+  </header>
+
+  <div class="shell" style="display:flex;flex-grow:1;min-height:0">
+    <aside class="sidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--sidebar)">
+      <div class="navgroup">Work</div>
+      <a class="navitem" href="Resume.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>Resume</a>
+      <a class="navitem" href="Main.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Planner</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Requirements</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Ideas</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Handoff</a>
+      <a class="navitem" href="Agents.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg>Agents &amp; targets</a>
+      <div class="navgroup">Context</div>
+      <a class="navitem" href="Map.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>Map</a>
+      <a class="navitem" href="Code.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code</a>
+      <a class="navitem" href="Checks.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Checks</a>
+      <div class="navgroup">Proposals</div>
+      <a class="navitem" href="Evaluate.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"/></svg>To evaluate</a>
+      <div style="flex-grow:1"></div>
+      <a class="navitem on" href="Settings.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div class="side-foot" style="border-top:1px solid var(--border);margin-top:8px;padding:12px 12px 4px;font-size:11px;color:var(--text-subtle);line-height:1.6">One shared planner<br>Code &amp; sessions kept separate</div>
+    </aside>
+
+    <main class="pad" style="flex-grow:1;min-width:0;padding:18px 20px;display:flex;flex-direction:column;gap:14px;overflow:auto">
+      <div style="max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+        <div>
+          <p class="eyebrow">Project · Settings</p>
+          <h1 style="margin:4px 0 0;font-size:21px;font-weight:700">Settings</h1>
+          <p style="margin:4px 0 0;font-size:12.5px;color:var(--text-subtle);max-width:560px;line-height:1.5">Project memory, how context is delivered to agents, and how the <code class="mono">.planner</code> workspace is backed up, exported and restored.</p>
+        </div>
+
+        <!-- PROJECT -->
+        <div class="card">
+          <div class="shd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+            <div><h3>Project</h3><p class="gsub">Identity and where the plan lives. The workspace is separate from the integration target.</p></div>
+          </div>
+          <div class="srow"><div><div class="lbl">Project name</div><div class="dsc">Shown across the planner and in handoffs.</div></div><input class="field" value="Example Project" aria-label="Project name"></div>
+          <div class="srow"><div><div class="lbl">Workspace</div><div class="dsc">The <code class="mono">.planner</code> directory tracked in this repo — plan, anchors, decisions.</div></div><input class="field mono" value=".planner/ · feat/one" aria-label="Workspace"></div>
+          <div class="srow"><div><div class="lbl">Default integration target</div><div class="dsc">Where finished work integrates. Work status and integration status stay distinct.</div></div>
+            <select class="sel" aria-label="Integration target"><option>develop</option><option>main</option><option>next</option></select>
+          </div>
+          <div class="srow"><div><div class="lbl">Provider capabilities</div><div class="dsc">Detected for the active language. Semantic relations need a semantic-capable provider.</div></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill" style="background:var(--pos-bg);color:var(--pos-ink)">syntactic ✓</span><span class="pill" style="background:var(--pos-bg);color:var(--pos-ink)">semantic ✓</span></div>
+          </div>
+        </div>
+
+        <!-- AGENTS -->
+        <div class="card">
+          <div class="shd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg></span>
+            <div><h3>Agents &amp; sessions</h3><p class="gsub">Defaults applied when a new session is created.</p></div>
+          </div>
+          <div class="srow"><div><div class="lbl">Default agent</div><div class="dsc">Vendor and model a new session starts with.</div></div>
+            <span class="chip-agent"><span class="vbadge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></svg></span>Opus 5.5<svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div class="srow"><div><div class="lbl">Session name prefix</div><div class="dsc">Human-readable session ids, e.g. <span class="mono">sess-a1</span>.</div></div><input class="field mono" value="sess-" aria-label="Session prefix"></div>
+          <div class="srow"><div><div class="lbl">Max concurrent sessions</div><div class="dsc">Agents working the plan at the same time.</div></div>
+            <select class="sel" aria-label="Max sessions"><option>2</option><option selected>4</option><option>6</option><option>8</option></select>
+          </div>
+          <div class="srow"><div><div class="lbl">Auto-handoff on idle</div><div class="dsc">Package a handoff automatically when a session goes idle mid-task.</div></div>
+            <button type="button" class="{{swHandoff}}" onClick="{{tgHandoff}}" role="switch" aria-checked="true"><i></i></button>
+          </div>
+        </div>
+
+        <!-- CONTEXT DELIVERY -->
+        <div class="card">
+          <div class="shd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.3 4.5-2.3 4.5 2.3 4.5 2.3v9.4l-4.5 2.3-4.5 2.3-4.5-2.3L3 16V6.6z"/><path d="M12 22V12M21 6.6 12 12 3 6.6"/></svg></span>
+            <div><h3>Context delivery</h3><p class="gsub">What each agent receives, and the budget it is bounded by. Cost is measured after delivery, not estimated.</p></div>
+          </div>
+          <div class="srow"><div><div class="lbl">Context budget</div><div class="dsc">Upper bound of tokens assembled per task. Shown as measured usage in Checks.</div></div>
+            <select class="sel" aria-label="Budget"><option>60k tokens</option><option>90k tokens</option><option selected>120k tokens</option><option>200k tokens</option></select>
+          </div>
+          <div class="srow"><div><div class="lbl">Include in context</div><div class="dsc">Which project memory an agent gets by default. Each still counts toward the budget.</div></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+              <button type="button" class="{{incDec}}" onClick="{{tgDec}}">Decisions</button>
+              <button type="button" class="{{incConv}}" onClick="{{tgConv}}">Conventions</button>
+              <button type="button" class="{{incTest}}" onClick="{{tgTest}}">Tests</button>
+              <button type="button" class="{{incCode}}" onClick="{{tgCode}}">Related code</button>
+            </div>
+          </div>
+          <div class="srow"><div><div class="lbl">Reconcile anchors on save</div><div class="dsc">After each save, re-resolve code anchors and flag what became stale or invalidated.</div></div>
+            <button type="button" class="{{swReconcile}}" onClick="{{tgReconcile}}" role="switch"><i></i></button>
+          </div>
+        </div>
+
+        <!-- BACKUP -->
+        <div class="card">
+          <div class="shd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg></span>
+            <div style="flex-grow:1"><h3>Backup</h3><p class="gsub">Point-in-time snapshots of the <code class="mono">.planner</code> workspace, kept locally so work is never lost.</p></div>
+            <button type="button" class="btn btn-primary" style="align-self:center"><svg class="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Back up now</button>
+          </div>
+          <div class="srow"><div><div class="lbl">Automatic backups</div><div class="dsc">Snapshot on a schedule and before risky operations (restore, reset, bulk edits).</div></div>
+            <div style="display:flex;align-items:center;gap:12px"><select class="sel" aria-label="Frequency"><option>Every 15 min</option><option selected>Every 30 min</option><option>Hourly</option></select><button type="button" class="{{swAutoBak}}" onClick="{{tgAutoBak}}" role="switch"><i></i></button></div>
+          </div>
+          <div style="padding:6px 16px 4px"><p class="eyebrow">Restore points · last 12 min ago · 3.2 MB</p></div>
+          <div class="rpt"><div style="display:flex;align-items:center;gap:9px"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--pos-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><div class="lbl" style="font-weight:600">Today · 14:38</div><div class="dsc">auto · 3.2 MB · 41 tasks, 12 anchors</div></div></div><button type="button" class="btn">Restore</button></div>
+          <div class="rpt"><div style="display:flex;align-items:center;gap:9px"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><div class="lbl" style="font-weight:600">Today · 09:02</div><div class="dsc">before restore · 3.1 MB</div></div></div><button type="button" class="btn">Restore</button></div>
+          <div class="rpt"><div style="display:flex;align-items:center;gap:9px"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><div class="lbl" style="font-weight:600">Yesterday · 18:20</div><div class="dsc">auto · 3.0 MB</div></div></div><button type="button" class="btn">Restore</button></div>
+        </div>
+
+        <!-- EXPORT / IMPORT -->
+        <div class="card">
+          <div class="shd">
+            <span class="gico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+            <div><h3>Export &amp; import</h3><p class="gsub">Move the whole project memory between machines or repos as a portable bundle.</p></div>
+          </div>
+          <div class="srow"><div><div class="lbl">Export project memory</div><div class="dsc">Plan, code anchors, decisions and conventions in one <span class="mono">.planner</span> bundle.</div></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><span class="pill" style="background:var(--mut-bg);color:var(--text-subtle)">plan</span><span class="pill" style="background:var(--mut-bg);color:var(--text-subtle)">anchors</span><span class="pill" style="background:var(--mut-bg);color:var(--text-subtle)">decisions</span><button type="button" class="btn">Export bundle</button></div>
+          </div>
+          <div class="srow"><div><div class="lbl">Import / restore from file</div><div class="dsc">Bring a bundle in. Conflicting entries are kept side by side for review — nothing is overwritten silently.</div></div>
+            <button type="button" class="btn"><svg class="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Choose file…</button>
+          </div>
+        </div>
+
+        <!-- DANGER -->
+        <div class="card" style="border-color:rgba(239,68,68,0.3)">
+          <div class="shd" style="border-color:rgba(239,68,68,0.2)">
+            <span class="gico" style="background:var(--bad-bg);color:var(--bad-ink)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+            <div><h3>Data &amp; reset</h3><p class="gsub">Irreversible. A backup is taken automatically before any of these run.</p></div>
+          </div>
+          <div class="srow"><div><div class="lbl">Rebuild code anchors</div><div class="dsc">Re-resolve every anchor from scratch. Clears stale/invalidated flags; review state resets to pending.</div></div><button type="button" class="btn">Rebuild</button></div>
+          <div class="srow"><div><div class="lbl">Clear unsaved drafts</div><div class="dsc">Discard every draft that has not been saved as source across all files.</div></div><button type="button" class="btn btn-danger">Clear drafts</button></div>
+          <div class="srow"><div><div class="lbl">Reset project memory</div><div class="dsc">Remove the plan, anchors and decisions. The repository code is untouched.</div></div><button type="button" class="btn btn-danger">Reset…</button></div>
+        </div>
+
+        <p style="margin:0;font-size:11.5px;color:var(--text-subtle);line-height:1.5">Illustrative data for the F025 proposal. Backup covers BR26; export, import and restore cover BR27. Controls are a design proposal — field names are not final.</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":1480}}'>
+class Component extends DCLogic {
+  constructor(props){ super(props); let narrow=false; try{narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){} this.state={ theme:'dark', nav:narrow, handoff:true, reconcile:true, autobak:true, dec:true, conv:true, test:true, code:false }; }
+  renderVals(){
+    const st=this.state;
+    const seg=(on)=>'btn'+(on?' btn-primary':'');
+    return {
+      themeClass: st.theme==='dark'?'t-dark':'', isDark:st.theme==='dark', isLight:st.theme!=='dark',
+      toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
+      navClass: st.nav?'nav-collapsed':'', toggleNav:()=>this.setState({nav:!st.nav}),
+      swHandoff:'sw'+(st.handoff?' on':''), tgHandoff:()=>this.setState({handoff:!st.handoff}),
+      swReconcile:'sw'+(st.reconcile?' on':''), tgReconcile:()=>this.setState({reconcile:!st.reconcile}),
+      swAutoBak:'sw'+(st.autobak?' on':''), tgAutoBak:()=>this.setState({autobak:!st.autobak}),
+      incDec:seg(st.dec), tgDec:()=>this.setState({dec:!st.dec}),
+      incConv:seg(st.conv), tgConv:()=>this.setState({conv:!st.conv}),
+      incTest:seg(st.test), tgTest:()=>this.setState({test:!st.test}),
+      incCode:seg(st.code), tgCode:()=>this.setState({code:!st.code})
+    };
+  }
+}
+</script>
+</body>
+</html>

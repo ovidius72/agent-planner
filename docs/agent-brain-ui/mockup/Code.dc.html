@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Plan — Code</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --editor:#fbfcfe; --sidebar:#f1f5f9; --gutter:#eef2f7;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-soft:rgba(99,102,241,0.12);
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --pos-ink:#15803d; --warn-ink:#b45309; --bad-ink:#b91c1c; --mut-bg:rgba(148,163,184,0.16);
+    --k:#7c3aed; --s:#15803d; --cm:#94a3b8; --fn:#0e7490; --num:#b45309; --ty:#8b5cf6;
+    --selbg:rgba(99,102,241,0.08);
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --editor:#0d1526; --sidebar:#0d1526; --gutter:#0b1220;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-soft:rgba(129,140,248,0.16);
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --bad-ink:#f87171; --mut-bg:rgba(148,163,184,0.12);
+    --k:#c4b5fd; --s:#86efac; --cm:#64748b; --fn:#67e8f9; --num:#fdba74; --ty:#d8b4fe;
+    --selbg:rgba(129,140,248,0.12);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:600;line-height:1.3;white-space:nowrap}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:10px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:14px}
+  .ftree{font-size:13px;color:var(--text-muted);display:flex;flex-direction:column;gap:1px}
+  .ftree a{padding:4px 8px;border-radius:7px;display:flex;align-items:center;gap:7px}
+  .ftree a:hover{background:var(--accent-soft)}
+  .ftree a.on{background:var(--accent-soft);color:var(--text);font-weight:600}
+  .tab{display:inline-flex;align-items:center;gap:7px;border:0;border-right:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:12.5px;font-weight:600;padding:9px 14px;cursor:pointer}
+  .tab.on{background:var(--editor);color:var(--text)}
+  .code{font-family:"JetBrains Mono",monospace;font-size:12.5px;line-height:1.75;color:var(--text);white-space:pre}
+  .ln{display:inline-block;width:30px;text-align:right;color:var(--text-subtle);user-select:none;margin-right:16px;opacity:.7}
+  .k{color:var(--k)} .s{color:var(--s)} .cm{color:var(--cm);font-style:italic} .fn{color:var(--fn)} .num{color:var(--num)} .ty{color:var(--ty)}
+  .symbtn{font:inherit;background:transparent;border:0;padding:0;color:var(--fn);cursor:pointer;border-bottom:1px dashed transparent}
+  .symbtn:hover{border-bottom-color:var(--fn)}
+  .symbtn.on{background:var(--selbg);border-radius:3px;border-bottom-color:var(--accent)}
+  .seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font-size:11px;font-weight:600;padding:5px 10px;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--border-strong)}
+  .seg button.on{background:var(--accent);color:#fff}
+  .insp h4{margin:0;font-size:12px;font-weight:700}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-subtle);background-clip:content-box;border:3px solid transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .ide{grid-template-columns:1fr !important}
+    .explorer,.insp-pane{max-height:none !important}
+    .pad{padding:16px 12px !important}
+  }
+</style>
+</helmet>
+
+<div class="app {{themeClass}} {{navClass}}">
+  <div class="scrim" onClick="{{toggleNav}}"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 24px;background:var(--sidebar);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-subtle)">
+    <span class="mono">F025 · Web UI reorganization proposal</span><span>Demo scenario · illustrative data</span>
+  </div>
+
+  <header class="pad" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 24px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:13px;min-width:0">
+      <button type="button" class="navtoggle" onClick="{{toggleNav}}" aria-label="Toggle navigation"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--feature));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0">ap</div>
+      <div style="min-width:0"><div style="font-size:17px;font-weight:700;line-height:1.15">Example Project</div><div style="font-size:12px;color:var(--text-subtle)">Agent Plan · project memory &amp; work</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="pill" style="background:var(--accent-soft);color:var(--accent)" title="Provider capabilities">TypeScript · syntactic ✓ · semantic ✓</span>
+      <button type="button" class="btn" onClick="{{toggleTheme}}" aria-label="Toggle theme" style="padding:7px;width:34px;justify-content:center">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg></sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></sc-if>
+      </button>
+    </div>
+  </header>
+
+  <div class="shell" style="display:flex;flex-grow:1;min-height:0">
+    <aside class="sidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--sidebar)">
+      <div class="navgroup">Work</div>
+      <a class="navitem" href="Resume.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>Resume</a>
+      <a class="navitem" href="Main.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Planner</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Requirements</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Ideas</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Handoff</a>
+      <a class="navitem" href="Agents.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg>Agents &amp; targets</a>
+      <div class="navgroup">Context</div>
+      <a class="navitem" href="Map.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>Map</a>
+      <a class="navitem on" href="Code.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code</a>
+      <a class="navitem" href="Checks.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Checks</a>
+      <div class="navgroup">Proposals</div>
+      <a class="navitem" href="Evaluate.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"/></svg>To evaluate</a>
+      <div style="flex-grow:1;min-height:10px"></div>
+      <a class="navitem" href="Settings.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+    </aside>
+
+    <main class="pad" style="flex-grow:1;min-width:0;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+      <!-- conflict banner -->
+      <sc-if value="{{conflict}}" hint-placeholder-val="{{false}}">
+      <div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--warn-bg);border-color:rgba(234,88,12,0.35)">
+        <svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warn-ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--text)"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:7px;background:rgba(217,119,87,0.16);flex-shrink:0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"/></svg></span><b>Opus 5.5 · dev-a changed this file</b> while you were editing. Both versions are kept.</span>
+        <div style="display:flex;gap:6px;margin-left:auto"><button type="button" class="btn">Keep mine</button><button type="button" class="btn">Keep theirs</button><button type="button" class="btn btn-primary">Merge…</button></div>
+      </div>
+      </sc-if>
+
+      <div class="ide" style="display:grid;grid-template-columns:210px minmax(0,1.7fr) 320px;gap:12px;align-items:stretch;flex-grow:1;min-height:0">
+        <!-- explorer -->
+        <div class="card explorer" style="padding:12px;overflow:auto;max-height:620px">
+          <p class="eyebrow" style="margin-bottom:8px">Explorer</p>
+          <div class="ftree">
+            <span style="color:var(--text-subtle);padding:2px 4px;font-weight:600">packages/plan-core/src</span>
+            <span style="color:var(--text-subtle);padding:2px 4px 2px 14px">pricing</span>
+            <a class="on" style="padding-left:24px" href="#"><svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--phase)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>calculation.ts<span style="width:6px;height:6px;border-radius:9999px;background:var(--warn-ink);margin-left:auto"></span></a>
+            <a style="padding-left:24px" href="#"><svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>discount.ts</a>
+            <a style="padding-left:14px" href="#"><svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>status-rollup.ts</a>
+            <span style="color:var(--text-subtle);padding:6px 4px 2px;font-weight:600">plan-server/src</span>
+            <a style="padding-left:14px" href="#"><svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>serve.ts</a>
+          </div>
+        </div>
+
+        <!-- editor -->
+        <div class="card" style="display:flex;flex-direction:column;overflow:hidden;min-height:0">
+          <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);overflow-x:auto">
+            <button type="button" class="tab on">calculation.ts <span style="width:6px;height:6px;border-radius:9999px;background:var(--warn-ink)"></span></button>
+            <button type="button" class="tab">status-rollup.ts</button>
+            <button type="button" class="tab">serve.ts</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--border)">
+            <div class="seg">
+              <button type="button" class="{{modeSource}}" onClick="{{setSource}}">Source</button>
+              <button type="button" class="{{modeDraft}}" onClick="{{setDraft}}">Draft</button>
+              <button type="button" class="{{modeHistory}}" onClick="{{setHistory}}">History</button>
+            </div>
+            <span class="pill" style="background:{{stateBg}};color:{{stateInk}}">{{stateLabel}}</span>
+            <span style="flex-grow:1"></span>
+            <button type="button" class="btn" onClick="{{toggleConflict}}">Simulate agent edit</button>
+            <button type="button" class="btn"><svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Open external</button>
+            <button type="button" class="btn btn-primary"><svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Save</button>
+          </div>
+          <div style="padding:14px 14px;overflow:auto;background:var(--editor);flex-grow:1;min-height:0">
+            <div class="code"><span class="ln">1</span><span class="cm">// Pricing calculation · pure, side-effect free</span>
+<span class="ln">2</span><span class="k">import</span> { <span class="ty">Context</span> } <span class="k">from</span> <span class="s">"./context"</span>;
+<span class="ln">3</span>
+<span class="ln">4</span><span class="k">export function</span> <button type="button" class="symbtn {{c1}}" onClick="{{selPrice}}">calculatePrice</button>(base<span class="k">:</span> <span class="ty">number</span>, ctx<span class="k">:</span> <span class="ty">Context</span>)<span class="k">:</span> <span class="ty">number</span> {
+<span class="ln">5</span>  <span class="k">const</span> rate <span class="k">=</span> ctx.region <span class="k">===</span> <span class="s">"eu"</span> <span class="k">?</span> <span class="num">1.22</span> <span class="k">:</span> <span class="num">1</span>;
+<span class="ln">6</span>  <span class="k">const</span> net <span class="k">=</span> <button type="button" class="symbtn {{c2}}" onClick="{{selDiscount}}">applyDiscount</button>(base, ctx.tier);
+<span class="ln">7</span>  <span class="k">return</span> <span class="fn">Math</span>.round(net <span class="k">*</span> rate <span class="k">*</span> <span class="num">100</span>) <span class="k">/</span> <span class="num">100</span>;
+<span class="ln">8</span>}
+<span class="ln">9</span>
+<span class="ln">10</span><span class="cm">// T017 · discounts are additive, never compounding</span>
+<span class="ln">11</span><span class="k">export function</span> <button type="button" class="symbtn {{c2b}}" onClick="{{selDiscount}}">applyDiscount</button>(base<span class="k">:</span> <span class="ty">number</span>, tier<span class="k">:</span> <span class="ty">Tier</span>)<span class="k">:</span> <span class="ty">number</span> {
+<span class="ln">12</span>  <span class="k">return</span> base <span class="k">-</span> base <span class="k">*</span> discountFor(tier);
+<span class="ln">13</span>}
+</div>
+          </div>
+        </div>
+
+        <!-- inspector: 4 needs -->
+        <aside class="card insp-pane" style="padding:16px;display:flex;flex-direction:column;gap:13px;overflow:auto;max-height:620px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><p class="eyebrow">Context</p><span class="mono" style="font-size:12px;color:var(--fn)">{{sym.name}}</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><h4>Origin</h4><p class="eyebrow" style="letter-spacing:0;text-transform:none;font-weight:400;font-size:12px;color:var(--text-muted)">which tasks introduced or changed this area</p>
+            <sc-for list="{{sym.origin}}" as="o" hint-placeholder-count="2"><div style="display:flex;gap:7px;font-size:13px;color:var(--text-muted)"><span class="mono" style="font-size:11px;color:var(--task);flex-shrink:0">{{o.id}}</span><span>{{o.what}}</span></div></sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:11px"><h4>Rationale</h4>
+            <div style="display:flex;gap:7px;font-size:13px;color:var(--text-muted)"><span class="pill" style="background:var(--accent-soft);color:var(--accent);flex-shrink:0">DECISION</span><span>{{sym.rationale}}</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:11px"><h4>Conventions</h4>
+            <div style="font-size:13px;color:var(--text-muted)">{{sym.convention}}</div>
+            <div style="font-size:12px;color:var(--text-subtle)">Similar: <span class="mono" style="color:var(--fn)">{{sym.similar}}</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border);padding-top:11px"><h4>Impact</h4>
+            <div style="font-size:13px;color:var(--text-muted)">Callers: <sc-for list="{{sym.callers}}" as="c" hint-placeholder-count="2"><span class="mono" style="font-size:11px;color:var(--text)">{{c}} </span></sc-for></div>
+            <div style="display:flex;gap:7px;font-size:13px;color:var(--text-muted)"><span style="color:var(--pos-ink);flex-shrink:0">✓</span><span>Covered by <span class="mono">{{sym.test}}</span> · still relevant</span></div>
+          </div>
+        </aside>
+      </div>
+      <p style="margin:0;font-size:11.5px;color:var(--text-subtle);line-height:1.5">Saved source, unsaved draft and historical version are distinct states. If an agent edits the file while you are editing, both versions are kept for review.</p>
+    </main>
+  </div>
+</div>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":860}}'>
+class Component extends DCLogic {
+  constructor(props){ super(props); let narrow=false; try{narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){} this.state={ theme:'dark', mode:'draft', sym:'price', conflict:false, nav:narrow }; }
+  renderVals(){
+    const st=this.state;
+    const modes={source:{label:'Saved source',bg:'rgba(34,197,94,0.14)',ink:'var(--pos-ink)'},draft:{label:'Unsaved draft',bg:'rgba(234,88,12,0.16)',ink:'var(--warn-ink)'},history:{label:'Historical · rev 9e31c0',bg:'var(--mut-bg)',ink:'var(--text-subtle)'}};
+    const m=modes[st.mode];
+    const syms={
+      price:{name:'calculatePrice()',origin:[{id:'T002',what:'first implementation'},{id:'T010',what:'added the context parameter'},{id:'T020',what:'refactoring (in progress)'}],rationale:'Keep this function small and pure — no side effects.',convention:'Pure functions in /pricing; no I/O.',similar:'applyTax()',callers:['checkout.ts','invoice.ts'],test:'pricing.test'},
+      discount:{name:'applyDiscount()',origin:[{id:'T017',what:'introduced additive discounts'}],rationale:'Discounts are additive, never compounding.',convention:'Pure functions in /pricing; no I/O.',similar:'applyTax()',callers:['calculatePrice()'],test:'discount.test'}
+    };
+    const sym=syms[st.sym];
+    return {
+      themeClass: st.theme==='dark'?'t-dark':'', isDark:st.theme==='dark', isLight:st.theme!=='dark',
+      navClass: st.nav?'nav-collapsed':'', toggleNav:()=>this.setState({nav:!st.nav}),
+      toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
+      modeSource:(st.mode==='source'?'on':''), modeDraft:(st.mode==='draft'?'on':''), modeHistory:(st.mode==='history'?'on':''),
+      setSource:()=>this.setState({mode:'source'}), setDraft:()=>this.setState({mode:'draft'}), setHistory:()=>this.setState({mode:'history'}),
+      stateLabel:m.label, stateBg:m.bg, stateInk:m.ink,
+      c1:(st.sym==='price'?'on':''), c2:(st.sym==='discount'?'on':''), c2b:(st.sym==='discount'?'on':''),
+      selPrice:()=>this.setState({sym:'price'}), selDiscount:()=>this.setState({sym:'discount'}),
+      sym, conflict:st.conflict, toggleConflict:()=>this.setState({conflict:!st.conflict})
+    };
+  }
+}
+</script>
+</body>
+</html>
