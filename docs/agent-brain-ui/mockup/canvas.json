@@ -5,7 +5,7 @@
   "launch": { "view": "focused", "file": "Main.dc.html" },
   "pages": [],
   "boards": {
-    "README.dc.html": { "x": -3120, "y": 0, "w": 1320, "h": 1680, "title": "Handoff — read me first", "expand": "fill", "is_interactive": true },
+    "README.dc.html": { "x": -3120, "y": 0, "w": 1320, "h": 1680, "title": "Read me first", "expand": "fill", "is_interactive": true },
     "Components.dc.html": { "x": -1560, "y": 0, "w": 1320, "h": 1720, "title": "Components — UI kit", "expand": "fill", "is_interactive": true },
     "Main.dc.html": { "x": 0, "y": 0, "w": 1320, "h": 2220, "title": "Planner — dashboard", "expand": "fill", "is_interactive": true },
     "Resume.dc.html": { "x": 1440, "y": 0, "w": 1320, "h": 920, "title": "Resume — orientation", "expand": "fill", "is_interactive": true },
