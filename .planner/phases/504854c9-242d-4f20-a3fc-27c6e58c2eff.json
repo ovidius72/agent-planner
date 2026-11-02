@@ -3,45 +3,39 @@
   "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
   "number": 123,
   "shortId": "XNSM4",
-  "priority": 8,
-  "slug": "supervisor-ui-and-graph-exploration",
-  "title": "Supervisor UI and graph exploration",
-  "discussedAt": "2026-10-20T16:40:39.071Z",
+  "priority": 13,
+  "slug": "supervisor-graph-and-evidence-backed-controls",
+  "title": "Supervisor graph and evidence-backed controls",
+  "discussedAt": "2026-10-29T21:02:40.005Z",
   "contextReady": true,
   "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
-  "summary": "Expose the same scheduling, context and traceability evidence that agents receive.",
-  "description": "Expose the same scheduling, context and traceability evidence that agents receive.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows G and owns only the outcomes below.\n\nOutcomes:\n- Make graph navigation, provenance, setup readiness and review obligations understandable.\n- Preserve existing hierarchy, routing, human-supervisor semantics and live updates.\n\nTasks and boundaries:\n- H1: Add graph navigation and reverse code-to-rationale inspection. Accessible navigation between requirements, work, code usages and decisions, with source-backed explanations and preserved hierarchy.\n- H2: Expose setup, context analysis and review state in supervisor workflows. A coherent inspector for analysis readiness, pre-implementation evidence, changesets and explicit review/relink operations.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx:1 — (module)\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:1 — (module)\n- packages/plan-web-ui/src/routes/task-detail/route.tsx:1 — (module)\n- packages/plan-web-ui/src/components/dashboard/project-context.tsx:1 — (module)\n- packages/plan-server/src/api-v1.ts:1 — (module)\n- packages/plan-server/src/entity-events.ts:1 — (module)\n\nAcceptance: A supervisor can navigate from a function or module to T002/T010/T020 and the applicable decision. Graph and hierarchy show the same canonical identities and current state. Partial semantic coverage is visibly distinguishable from no usage. A supervisor can see why a task is ready to implement or what evidence is missing. Current-location confirmation is not presented as approval of architectural meaning. Existing settings, routes, content and human controls remain intact.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR01, BR05, BR07, BR08, BR09, BR10, BR11, BR12, BR14, BR15, BR16, BR17.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nMonaco workspace extension: P127(F025) owns the editable file explorer, Monaco integration, editor bindings and preferred external opener; this phase retains graph/inspector ownership. P125(F025) owns project-first browser-title fixes. Editor bindings reuse this phase's canonical graph/context contracts and the shared runtime in P126(F025). See .planner/docs/agent-brain-editor-and-project-identity.md.\n\nShared-planner expansion approved 21 October 2026:\nReuse N3 work-versus-delivery projections and N1/N2 history in graph/inspector views. Graph, context and selected source agree on workspace/target/revision. Preserve existing graph ownership and distinguish source-location review, architectural approval and present code.\nAdditional outcome coverage: BR24, BR25. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
-  "descriptionRef": ".planner/docs/agent-brain-plan.md",
-  "descriptionUpdatedAt": "2026-10-21T14:58:51.869Z",
+  "summary": "Inspect source-to-task-to-rationale relationships. Show setup/context/review state with real capability owners.",
+  "description": "Purpose: Inspect source-to-task-to-rationale relationships. Show setup/context/review state with real capability owners.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P123(F025)/T479: Supervisor graph navigation and reverse source-to-rationale inspection.\n- P123(F025)/T480: Supervisor setup, context and review controls that remain useful without Heca.\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-web-ui/src/app/router.tsx:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/project-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: The visual design comes from reviewed prototype canvases. Graph and Controls consume service DTOs and commands; domain eligibility and evidence decisions remain in core/service.",
+  "descriptionUpdatedAt": "2026-10-30T08:26:59.989Z",
   "notes": "",
   "goals": [
-    "Make graph navigation, provenance, setup readiness and review obligations understandable.",
-    "Preserve existing hierarchy, routing, human-supervisor semantics and live updates."
+    "Inspect source-to-task-to-rationale relationships.",
+    "Show setup/context/review state with real capability owners."
   ],
   "nonGoals": [
-    "No mandatory graph-only navigation.",
-    "No model-comprehension score or unsupported coverage claim."
+    "No unrelated runtime implementation, real data migration or Git/release action during planning.",
+    "No duplicate ownership, fixed language list or global task-queue scheduling."
   ],
   "dependencies": [
     "P122(F025)"
   ],
   "dependsOn": [],
   "risks": [
-    "A complex graph can hide actionable information behind visual clutter.",
-    "The tracked server and Pi web-ui-dist consumers must be regenerated together for UI changes."
+    "Old JSON/path assumptions can leak through direct consumers; inspect current integration seams.",
+    "A passing fixture or stored read does not prove live native behavior or model understanding."
   ],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [
-    "A supervisor can navigate from a function or module to T002/T010/T020 and the applicable decision.",
-    "Graph and hierarchy show the same canonical identities and current state.",
-    "Partial semantic coverage is visibly distinguishable from no usage.",
-    "A supervisor can see why a task is ready to implement or what evidence is missing.",
-    "Current-location confirmation is not presented as approval of architectural meaning.",
-    "Existing settings, routes, content and human controls remain intact.",
-    "Shared-planner acceptance: Reuse N3 work-versus-delivery projections and N1/N2 history in graph/inspector views. Graph, context and selected source agree on workspace/target/revision. Preserve existing graph ownership and distinguish source-location review, architectural approval and present code.",
-    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+    "Every owned task meets its complete canonical contract with concrete evidence.",
+    "Affected hierarchy/dependencies and context validity are reconciled without unbounded payloads.",
+    "Unverified native/provider/installed boundaries are explicit."
   ],
   "taskIds": [
     "3c2a6e59-c267-475b-9949-132b24241dfc",
@@ -57,65 +51,41 @@
       "shortName": "add-graph-navigation-and-rever",
       "title": "Add graph navigation and reverse code-to-rationale inspection",
       "status": "planned",
-      "description": "Outcome: Accessible navigation between requirements, work, code usages and decisions, with source-backed explanations and preserved hierarchy.\n\nExisting state: The current Web UI exposes hierarchical planner views. Earlier reliability tasks extend those views; this task owns the new graph/traceability surface.\n\nImplementation responsibility:\n- Reuse current UI components, routing and data patterns after reading relevant precedents.\n- Add focused neighborhood/path views and filters before presenting a whole-project graph.\n- Show current resolved location versus historical baseline and source provenance.\n- Support keyboard/accessibility and meaningful empty/partial/stale states; preserve live synchronization.\n- Regenerate both intentional web-ui-dist consumers with relevant UI validation.\n\nAcceptance and evidence:\n- A supervisor can navigate from a function or module to T002/T010/T020 and the applicable decision.\n- Graph and hierarchy show the same canonical identities and current state.\n- Partial semantic coverage is visibly distinguishable from no usage.\n\nRead before editing:\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx:1 — (module)\n- packages/plan-web-ui/src/components/dashboard/work-tree-rows.tsx:1 — (module)\n- packages/plan-web-ui/src/routes/task-detail/route.tsx:1 — (module)\n- packages/plan-server/src/api-v1.ts:1 — (module)\n- packages/plan-server/src/entity-events.ts:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P122(F025)/T478. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Improve existing reliability views before graph work, then add graph inspection while preserving hierarchy/routes and canonical identity.\n- Use focused neighborhoods/paths, provenance and coverage instead of requiring a giant whole-project visualization for normal use.\n- Support code → prior tasks/decisions/usages, current location versus baseline and partial/stale/unknown states; reuse real UI precedents and regenerate both tracked bundle consumers.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nEditor integration boundary: P127(F025)/T487 binds the Monaco workspace to this graph/traceability surface. Preserve this task's ownership of graph inspection and reverse code-to-rationale context; expose source-backed navigation contracts rather than implementing another editor here. P125(F025)/T483 owns project-aware browser titles. See .planner/docs/agent-brain-editor-and-project-identity.md.\n\nShared-planner expansion approved 21 October 2026:\nReuse N3 global/target context and N1/N2 identities. Graph navigation shows where an execution happened and whether its code is available in the selected source; historical integrations cannot masquerade as current code. Do not rebuild N3 execution/history controls as a second state model.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
-      "descriptionUpdatedAt": "2026-10-21T10:05:03.625Z",
+      "description": "Outcome: Supervisor graph navigation and reverse source-to-rationale inspection.\n\nCurrent implementation: The Web UI already organizes project entities; graph/code/rationale exploration is planned rather than a replacement planner.\n\nImplementation responsibility:\n- Implement the reviewed prototype design using suitable React/router infrastructure to navigate project, feature, phase, task, code area, decision and verification evidence.\n- Show selected workspace/revision and edge provenance, unknown/stale/review state and relevant prior tasks.\n- Provide inspectable paths/impact with bounded server queries and deep links to actual source/historical content.\n- Keep human-supervisor and agent permissions distinct; graph interactions do not silently mutate canonical decisions or task order.\n\nAcceptance and evidence:\n- A user can inspect which tasks changed a code area and why, including unrelated task history.\n- Navigation preserves project/source context and supports explicit continuation.\n- No hidden source relink or decision promotion occurs on selecting a graph node.\n\nCurrent source navigation:\n- packages/plan-web-ui/src/app/router.tsx:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nUI design and domain boundary: Implement the new Web UI from the reviewed prototype canvases; the current UI appearance is not the target. Read docs/agent-brain/ui-prototypes.md and confirm the applicable design revision before visual implementation. Reuse suitable typed React/router/accessibility infrastructure. Core/service APIs own eligibility, priority, permissions, relationships and evidence interpretation; the UI renders their results, submits commands and manages presentation/drafts. Prototype fixtures are illustrative, never a live backend or a competing source of domain policy.",
+      "descriptionUpdatedAt": "2026-10-30T08:26:54.610Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-001-reuse-current-ui-components-routing-and-data-patterns-after-reading-relevant-precedents",
+          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-001-compose-existing-react-router-ui-patterns-to-navigate-project-feature-phase-task-code-area-decision-and-verification-evidence",
           "number": 1,
-          "title": "Reuse current UI components, routing and data patterns after reading relevant precedents.",
+          "title": "Compose existing React/router/UI patterns to navigate project, feature, phase, task, code area, decision and verification evidence.",
           "checked": false
         },
         {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-002-add-focused-neighborhood-path-views-and-filters-before-presenting-a-whole-project-graph",
+          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-002-show-selected-workspace-revision-and-edge-provenance-unknown-stale-review-state-and-relevant-prior-tasks",
           "number": 2,
-          "title": "Add focused neighborhood/path views and filters before presenting a whole-project graph.",
+          "title": "Show selected workspace/revision and edge provenance, unknown/stale/review state and relevant prior tasks.",
           "checked": false
         },
         {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-003-show-current-resolved-location-versus-historical-baseline-and-source-provenance",
+          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-003-provide-inspectable-paths-impact-with-bounded-server-queries-and-deep-links-to-actual-source-historical-content",
           "number": 3,
-          "title": "Show current resolved location versus historical baseline and source provenance.",
+          "title": "Provide inspectable paths/impact with bounded server queries and deep links to actual source/historical content.",
           "checked": false
         },
         {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-004-support-keyboard-accessibility-and-meaningful-empty-partial-stale-states-preserve-live-synchronization",
+          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-004-keep-human-supervisor-and-agent-permissions-distinct-graph-interactions-do-not-silently-mutate-canonical-decisions-or-task-order",
           "number": 4,
-          "title": "Support keyboard/accessibility and meaningful empty/partial/stale states; preserve live synchronization.",
+          "title": "Keep human-supervisor and agent permissions distinct; graph interactions do not silently mutate canonical decisions or task order.",
           "checked": false
         },
         {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-005-regenerate-both-intentional-web-ui-dist-consumers-with-relevant-ui-validation",
+          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-005-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 5,
-          "title": "Regenerate both intentional web-ui-dist consumers with relevant UI validation.",
-          "checked": false
-        },
-        {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-006-verify-a-supervisor-can-navigate-from-a-function-or-module-to-t002-t010-t020-and-the-applicable-decision",
-          "number": 6,
-          "title": "Verify: A supervisor can navigate from a function or module to T002/T010/T020 and the applicable decision.",
-          "checked": false
-        },
-        {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-007-verify-graph-and-hierarchy-show-the-same-canonical-identities-and-current-state",
-          "number": 7,
-          "title": "Verify: Graph and hierarchy show the same canonical identities and current state.",
-          "checked": false
-        },
-        {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-008-verify-partial-semantic-coverage-is-visibly-distinguishable-from-no-usage",
-          "number": 8,
-          "title": "Verify: Partial semantic coverage is visibly distinguishable from no usage.",
-          "checked": false
-        },
-        {
-          "id": "3c2a6e59-c267-475b-9949-132b24241dfc-check-009-navigate-task-execution-integration-selected-code-using-explicit-provenance",
-          "number": 9,
-          "title": "Navigate task -> execution -> integration -> selected code using explicit provenance.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
@@ -128,7 +98,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-20T16:41:24.307Z",
-      "updatedAt": "2026-10-21T10:05:03.952Z",
+      "updatedAt": "2026-10-30T08:26:54.607Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -141,84 +111,61 @@
       "shortName": "expose-setup-context-analysis",
       "title": "Expose setup, context analysis and review state in supervisor workflows",
       "status": "planned",
-      "description": "Outcome: A coherent inspector for analysis readiness, pre-implementation evidence, changesets and explicit review/relink operations.\n\nExisting state: Human supervision needs to inspect actual delivered sources, conventions, coverage and review state without treating a receipt as comprehension.\n\nImplementation responsibility:\n- Show undecided stack, no code, indexing, missing tool/configuration, ready and stale states with useful next actions.\n- Display selected implementation precedents and source-backed convention/conformity evidence.\n- Allow explicit candidate confirmation and scoped factual/decision review using expected snapshots.\n- Keep agent-only governance distinct from authorized human controls; never give agents a supervisor bypass.\n- Reuse existing UI primitives and regenerate both tracked UI bundles.\n\nAcceptance and evidence:\n- A supervisor can see why a task is ready to implement or what evidence is missing.\n- Current-location confirmation is not presented as approval of architectural meaning.\n- Existing settings, routes, content and human controls remain intact.\n\nRead before editing:\n- packages/plan-web-ui/src/components/dashboard/project-context.tsx:1 — (module)\n- packages/plan-web-ui/src/routes/task-detail/route.tsx:1 — (module)\n- packages/plan-server/src/serve.ts:1 — (module)\n- packages/plan-server/src/entity-events.ts:1 — (module)\n- packages/plan-core/src/read-tracking.ts:28 — type ReadState\n- packages/plan-core/src/plan-store.ts:3399 — async createAcceptedDecision\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P123(F025)/T479. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Expose empty/undecided/missing/configuration-incomplete/indexing/ready/stale setup state with actual next actions.\n- Show source precedents, convention/conformity evidence, delivered context, task changesets and review obligations; no model-comprehension score.\n- Keep current-location confirmation distinct from review of architectural meaning and use expected snapshots for mutations. Preserve human-supervisor versus agent governance boundaries.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nEditor readiness integration: display source/provider freshness and context evidence from the shared analysis runtime owned by P126(F025)/T485; P127(F025)/T487 owns the editor-specific bindings. Existing inspector/supervisor rules remain authoritative. Do not create another analysis lifecycle or claim a checked context packet proves understanding. See .planner/docs/agent-brain-editor-and-project-identity.md.\n\nShared-planner expansion approved 21 October 2026:\nExtend the inspector with N3 work-versus-delivery projections and integration freshness. Preserve phase handoff and conformity controls; current-location review, architectural approval and target-code availability are distinct facts.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
-      "descriptionUpdatedAt": "2026-10-21T10:05:04.098Z",
+      "description": "Outcome: Supervisor setup, context and review controls that remain useful without Heca.\n\nCurrent implementation: Sketches imply controls but do not prove provider, execution or collaboration availability.\n\nImplementation responsibility:\n- Expose provider/setup capability coverage and relevant context/preparation state from real service results.\n- Show required review obligations, applicable standards, evidence and verification gaps with clear current/historical scope.\n- Keep action availability tied to the owning service/principal; display explicit unavailable/incompatible/denied states.\n- Integrate compact impact/receipt results and avoid full-plan reloads or model calls for routine synchronization.\n\nAcceptance and evidence:\n- Resume/planner/graph/code/recorded checks work with no Heca connection.\n- A checked item or old passing test does not appear as current conformity proof.\n- UI actions have an implemented owner and honest outcomes rather than mock success.\n\nCurrent source navigation:\n- packages/plan-web-ui/src/app/router.tsx:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/project-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/task-context.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nUI design and domain boundary: Implement the new Web UI from the reviewed prototype canvases; the current UI appearance is not the target. Read docs/agent-brain/ui-prototypes.md and confirm the applicable design revision before visual implementation. Reuse suitable typed React/router/accessibility infrastructure. Core/service APIs own eligibility, priority, permissions, relationships and evidence interpretation; the UI renders their results, submits commands and manages presentation/drafts. Prototype fixtures are illustrative, never a live backend or a competing source of domain policy.",
+      "descriptionUpdatedAt": "2026-10-30T08:26:55.050Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-001-show-undecided-stack-no-code-indexing-missing-tool-configuration-ready-and-stale-states-with-useful-next-actions",
+          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-001-expose-provider-setup-capability-coverage-and-relevant-context-preparation-state-from-real-service-results",
           "number": 1,
-          "title": "Show undecided stack, no code, indexing, missing tool/configuration, ready and stale states with useful next actions.",
+          "title": "Expose provider/setup capability coverage and relevant context/preparation state from real service results.",
           "checked": false
         },
         {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-002-display-selected-implementation-precedents-and-source-backed-convention-conformity-evidence",
+          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-002-show-required-review-obligations-applicable-standards-evidence-and-verification-gaps-with-clear-current-historical-scope",
           "number": 2,
-          "title": "Display selected implementation precedents and source-backed convention/conformity evidence.",
+          "title": "Show required review obligations, applicable standards, evidence and verification gaps with clear current/historical scope.",
           "checked": false
         },
         {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-003-allow-explicit-candidate-confirmation-and-scoped-factual-decision-review-using-expected-snapshots",
+          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-003-keep-action-availability-tied-to-the-owning-service-principal-display-explicit-unavailable-incompatible-denied-states",
           "number": 3,
-          "title": "Allow explicit candidate confirmation and scoped factual/decision review using expected snapshots.",
+          "title": "Keep action availability tied to the owning service/principal; display explicit unavailable/incompatible/denied states.",
           "checked": false
         },
         {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-004-keep-agent-only-governance-distinct-from-authorized-human-controls-never-give-agents-a-supervisor-bypass",
+          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-004-integrate-compact-impact-receipt-results-and-avoid-full-plan-reloads-or-model-calls-for-routine-synchronization",
           "number": 4,
-          "title": "Keep agent-only governance distinct from authorized human controls; never give agents a supervisor bypass.",
+          "title": "Integrate compact impact/receipt results and avoid full-plan reloads or model calls for routine synchronization.",
           "checked": false
         },
         {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-005-reuse-existing-ui-primitives-and-regenerate-both-tracked-ui-bundles",
+          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-005-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 5,
-          "title": "Reuse existing UI primitives and regenerate both tracked UI bundles.",
-          "checked": false
-        },
-        {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-006-verify-a-supervisor-can-see-why-a-task-is-ready-to-implement-or-what-evidence-is-missing",
-          "number": 6,
-          "title": "Verify: A supervisor can see why a task is ready to implement or what evidence is missing.",
-          "checked": false
-        },
-        {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-007-verify-current-location-confirmation-is-not-presented-as-approval-of-architectural-meaning",
-          "number": 7,
-          "title": "Verify: Current-location confirmation is not presented as approval of architectural meaning.",
-          "checked": false
-        },
-        {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-008-verify-existing-settings-routes-content-and-human-controls-remain-intact",
-          "number": 8,
-          "title": "Verify: Existing settings, routes, content and human controls remain intact.",
-          "checked": false
-        },
-        {
-          "id": "cc3005be-2a6b-4ee4-b1c8-89d1e65d7ac7-check-009-inspect-verified-work-awaiting-integration-and-a-later-reverted-target-without-misleading-completion-claims",
-          "number": 9,
-          "title": "Inspect verified work awaiting integration and a later reverted target without misleading completion claims.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
-        "3c2a6e59-c267-475b-9949-132b24241dfc"
+        "3c2a6e59-c267-475b-9949-132b24241dfc",
+        "bfc1cbb9-d168-4bb2-9315-bf6d53f39b43"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-20T16:41:25.085Z",
-      "updatedAt": "2026-10-21T10:05:04.442Z",
+      "updatedAt": "2026-10-30T08:26:55.047Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-20T16:40:38.617Z",
-  "updatedAt": "2026-10-21T14:58:51.869Z",
+  "updatedAt": "2026-11-02T10:19:31.415Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

@@ -1,8 +1,10 @@
 # Agent Brain — shared planner, executions and target integration
 
-## Current registered scope — 21 October 2026
+> Target reconciliation, 2026-10-29: read [the reviewed design package](../../docs/agent-brain/README.md) and [gap matrix](../../docs/agent-brain/reconciliation.md). HOME SQLite, one API-only application service and descriptor-first migration supersede earlier Git-common-directory/JSON target-storage passages. Detailed unaffected editor/provider/context/execution contracts and dated evidence remain useful. F025 task and parent amendments are registered; use the current execution map and canonical entities. Historical drafts below are supporting context only. The global task queue proposal is not adopted.
 
-F025 now contains **15 phases / 36 planned tasks / 29 outcome requirements / 19 single-owner decisions** (18 feature and one project), **49 acyclic task dependency edges** and **334 unchecked checklist items**. This is planning registration only; no product implementation, real migration, commit, PR or release has started. Earlier registration/editor/amendment counts and verification reports below are historical snapshots.
+## Historical registration scope — 21 October 2026
+
+At the 21 October registration, F025 contained **15 phases / 36 planned tasks / 29 outcome requirements / 19 single-owner decisions** (18 feature and one project), **49 acyclic task dependency edges** and **334 unchecked checklist items**. This is planning registration only; no product implementation, real migration, commit, PR or release has started. Earlier registration/editor/amendment counts and verification reports below are historical snapshots.
 
 The complete new contracts and source evidence are in `.planner/docs/agent-brain-shared-planner-and-execution.md` and `.planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md`. Canonical refs/UUIDs are mapped in `.planner/docs/agent-brain-registration.json`; the new mutation/read-back record is `.planner/docs/agent-brain-shared-planner-registration.json`. Supporting JSON/documents are not another operational planner and must not be re-imported to create duplicates.
 
@@ -37,13 +39,11 @@ The planned design intentionally evolves that storage policy through explicit co
 
 ## Storage and identity contract
 
-Resolve three independent roots and identities: planRoot for canonical project knowledge; workspaceRoot for the actual source checkout; runtimeRoot for scoped operational data. All supported clients resolve the same project binding. The intended local default is <git-common-dir>/agent-plan/<projectId>/ with canonical plan, shared coordination, workspace runtime and history areas. Exact subdirectory names and transport are choices in M1/M2, not already shipped API names.
+The 29 October target selects per-project SQLite under HOME, owned exclusively by one Agent Plan application service per OS user. A repository descriptor identifies the planner independently of source worktrees and caller runtime. `git-common-dir` is local clone discovery evidence, not the storage destination or remote identity.
 
-Canonical requirements, decisions, task definitions, phase handoffs and execution/integration records are project-wide. Claims and coordinator ownership also need shared arbitration. Focus, return obligations, read/context receipts, source indexes, analysis caches and draft overlays require their actual caller/workspace/revision namespace; copying everything into a common .local is unsafe. A global project return overview can summarize obligations without making a foreign caller's obligation actionable.
+Clients use the application API; JSON is explicit portable export/import only. Project, repository registration, workspace, caller, native session and execution identities remain separate. Source paths and branch names remain mutable locators. See [architecture](../../docs/agent-brain/architecture.md) for the descriptor, transaction, search/document and recovery contracts.
 
-Use stable project, repository-instance, workspace and execution identities. Worktree path and branch name are mutable locators. A moved worktree may update its path; a deleted one becomes unavailable but retains its history. Distinguish nested repositories/submodules and foreign overrides explicitly. A supervisor changing the viewed target does not relocate an agent's active execution or redirect its file writes.
-
-git-common-dir covers worktrees of one local clone. Custom files there are neither cloned nor pushed by normal Git operations. Standalone/non-Git folders need an explicit shared root and remain usable before any stack is chosen. Independent clones/machines require deliberate backup/import/rebinding or a separately designed shared-service/synchronization boundary. Do not silently promise distributed consistency or mandatory cloud infrastructure.
+The historical task drafts later in this document retain the original registration for provenance. T489/T490/T494/T495 and their parents must be reconciled through planner tools before implementation under the new target.
 
 ## One authority and many clients
 
@@ -79,9 +79,9 @@ O1 inventories every old planner copy before activation and makes immutable back
 
 Migration is dry-run first, validated, interruption-safe and recoverable. Activate one binding atomically, preserve rollback and reject incompatible clients. Old copies become explicit migration snapshots/read-only sources, not fallback authorities. Shared coordination cannot import stale PIDs/locks as live ownership. Changing tracked .planner policy, descriptors or gitignore requires the appropriate explicit implementation-time authorization; this planning update performs none of it. Test on mkdtemp fixtures, never another real project.
 
-O2 provides inspectable operation history/provenance, crash-safe checkpoints, independent backups and versioned complete export/import/restore. JSON may remain the durable format; no mandatory DB or wholesale event-sourcing framework is chosen. Include canonical entities and required recoverable source-snapshot blobs; exclude transient locks/PIDs, credentials and stale read attestations from portable restoration. Verify checksums/completeness and identity/rebinding policy. Restore cannot silently overwrite a different live project.
+O2 provides inspectable operation history/provenance, crash-safe checkpoints, independent backups and versioned complete export/import/restore. SQLite is the selected target operational store; portable JSON is export/import only. The database transaction/history and consistent-backup mechanisms replace this older file-storage choice. Include canonical entities and required recoverable source-snapshot blobs; exclude transient locks/PIDs, credentials and stale read attestations from portable restoration. Verify checksums/completeness and identity/rebinding policy. Restore cannot silently overwrite a different live project.
 
-Deleting a worktree preserves canonical history. Deleting the whole clone/common Git directory can still lose local planner data, so independent backup location, status, retention and recovery are product requirements. A deliberate portable export accompanies a code PR only as an explicit artifact; it is never proof all globally planned code is included. Normal planner writes persist without requiring an agent to commit code.
+Deleting a worktree preserves canonical history. Deleting the HOME data directory can lose unexported planner state, so independent backup location, status, retention and descriptor-based recovery are product requirements. A deliberate portable export accompanies a code PR only as an explicit artifact; it is never proof all globally planned code is included. Normal planner writes persist without requiring an agent to commit code.
 
 ## Priority, dependencies and bounded scope
 

@@ -1,5 +1,7 @@
 # Collegamenti al codice: meccanismo implementativo proposto
 
+> Target reconciliation, 2026-10-29: read [the reviewed design package](../../docs/agent-brain/README.md) and [gap matrix](../../docs/agent-brain/reconciliation.md). HOME SQLite, one API-only application service and descriptor-first migration supersede earlier Git-common-directory/JSON target-storage passages. Detailed unaffected editor/provider/context/execution contracts and dated evidence remain useful. F025 task and parent amendments are registered; use the current execution map and canonical entities. Historical drafts below are supporting context only. The global task queue proposal is not adopted.
+
 20 ottobre 2026. Proposta concreta per E1/E2, successiva ai sei interventi di affidabilità già concordati. Non introduce nuove entità planner di lavoro: task, requisiti, decisioni e handoff mantengono il modello e i proprietari attuali. I moduli e le operazioni qui nominati sono proposti, non già presenti nel prodotto.
 
 **Chiarimento di perimetro:** si analizza il codice del progetto che usa Agent Plan, qualunque sia il suo linguaggio, non necessariamente il sorgente TypeScript di Agent Plan. Il precedente esperimento TypeScript è una prova locale limitata e non stabilisce la tecnologia universale del prodotto. Il contratto comune deve essere verificato su progetti e strumenti di linguaggi diversi.

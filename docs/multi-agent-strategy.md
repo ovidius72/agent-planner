@@ -1,5 +1,7 @@
 # Multi-Agent Strategy: porting agent-plan to Claude Code, Codex, OpenClaude, Hermes
 
+> Historical multi-harness proposal. MCP and Pi are now existing product surfaces. For the current accepted target read [Agent Brain architecture](agent-brain/architecture.md): MCP and the Pi adapter call the application service, and only that service opens SQLite. The old adapter/first-host rollout below is not a new implementation plan.
+
 > Status: proposal — 2026-07-01
 > Owner: agent-plan platform
 > Goal: make the planner usable from multiple AI coding agents, not only Pi.

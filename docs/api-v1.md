@@ -1,5 +1,7 @@
 # Agent Plan API v1
 
+> This remains the current read-only v1 contract. The planned [Agent Brain application API](agent-brain/architecture.md) adds full command parity under a reviewed version boundary; it does not make v1 writable. See [integration protocol](agent-brain/heca-protocol.md).
+
 A read-only HTTP API and a live event for programs that follow a planner from outside
 (dashboards, other agent tools). It is separate from the web UI's own routes, which change
 whenever the UI does. This one is promised not to.

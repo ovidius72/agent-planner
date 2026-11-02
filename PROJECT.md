@@ -1,285 +1,72 @@
-# Agent Plan Platform
+# Agent Plan Platform and Agent Brain evolution
 
-## Obiettivo
-Realizzare una platform locale e project-scoped per creare, mantenere e visualizzare un piano di progetto strutturato, con integrazione nativa per Pi e compatibilità progettuale con altri harness/agenti (Claude Code, Codex, ecc.).
+## Product
 
-## Visione
-La platform deve permettere di:
-- inizializzare un piano di progetto se non esiste
-- raccogliere e mantenere scopo, regole, stack tecnologico e tools
-- definire requirements iniziali e macro-task
-- definire fasi di lavoro ad alto livello
-- discutere ogni fase tramite Q&A guidata fino a chiarirne scope, vincoli, dipendenze e outcome, senza entrare subito nei dettagli implementativi
-- creare checklist di task e subtasks per ogni fase
-- visualizzare e modificare il piano da web UI
-- sincronizzare modifiche web <-> file di progetto
-- rendere il piano leggibile e usabile anche da altri harness
+Agent Plan is a harness-independent project planning and memory platform. It maintains project context, requirements, single-owner Accepted Decisions, features, phases, tasks, checklists and phase handoffs. Pi uses its adapter; other supported harnesses use MCP. A Web UI gives the human supervisor visibility and editing tools.
 
-## Requisiti funzionali consolidati
+Agent Brain is the planned evolution in F025, in this repository. It first makes existing workflows reliable, then adds source-aware memory, code/rationale relationships, relevant context retrieval and verification evidence. Heca-Pro remains an optional collaboration runtime.
 
-### 0. Regola di esecuzione del progetto
-Chiunque lavori su questo progetto deve:
-- mantenere aggiornato il planner del progetto
-- sincronizzare task, phase, feature e handoff durante lo svolgimento delle attività, non solo alla fine
-- rendere espliciti stato, prossimi passi e blocchi nel planner
-- trattare questa regola come obbligatoria per agenti e umani
+## Current implementation and accepted target
 
-### 1. Inizializzazione piano
-Il sistema deve:
-- creare il piano se non esiste già
-- vivere dentro il progetto target in una cartella `.planner/`
-- raccogliere almeno:
-  - scopo del progetto
-  - regole da seguire
-  - tecnologie da usare
-  - tools da usare
-  - requirements iniziali
-  - macro-task iniziali
+| Area | Current inspected implementation | Accepted target direction |
+| --- | --- | --- |
+| Persistence | JSON under `.planner/`; clients can construct PlanStore directly. | SQLite under the user's HOME; one application service owns all operational access. |
+| Project discovery | cwd/.planner and AGENT_PLAN_ROOT. | Versioned project descriptor plus registered repository/workspace identity. |
+| Clients | Pi adapter, stdio MCP, CLI and Web UI with existing domain behavior. | Preserve operation parity through the application API; no client database access. |
+| Public API | Versioned read-only v1 and entity-changed events. | Compatible read surface plus complete versioned command/document/search APIs. |
+| Realtime | Hono/Node service and WebSocket. | Project-scoped snapshots/events, bounded replay and explicit reconnect gaps. |
+| Documents and skills | Planner documents and managed/custom skills in `.planner`. | Planner documents in DB logical folders; installed bootstrap and API-delivered project guidance. |
+| Source intelligence | F025 contracts describe the extension. | Revision-aware code links, changesets, decisions, dynamic providers and derived graph. |
+| Editor | F025 source/Monaco work is planned. | Revision-safe source access and one compatible analysis runtime shared by agents/editor. |
+| Heca | Separate Heca-Pro product and integration plans. | Shared planner API, optional public collaboration API and initial planner WebView in Heca. |
 
-### 2. Gestione progetto
-Il piano deve contenere:
-- goal del progetto
-- scope e out-of-scope
-- decisioni principali
-- regole globali operative
-- stack e tools
-- requirements e macro-task
+The target is not a claim that the installed product has migrated. Existing commands and setup instructions in README describe the current product until their implementation changes.
 
-### 3. Gestione fasi
-Per ogni fase il sistema deve supportare:
-- creazione
-- modifica
-- stato
-- discussione guidata
-- checklist task/subtask
-- rendering leggibile
+## Functional requirements
 
-Ogni fase deve avere:
-- numero identificativo
-- slug stabile
-- id derivato da numero + slug
-- titolo
-- descrizione
-- summary
-- stato
-- date di creazione/aggiornamento
+- Initialize or load an existing project, including empty/non-Git folders and undecided languages.
+- Preserve entity UUIDs/short IDs, variable-width numeric references, hierarchy, history and derived parent status.
+- Maintain requirements separately from implementation guidelines and agent operating rules.
+- Support discussion, lifecycle, pauses, nested returns, explicit recovery and explainable ready-work selection.
+- Deliver required context completely, reuse only valid available context, and restore after supported context-loss events.
+- Require source precedent analysis and record actual conformity review; reading alone is not proof of compliance.
+- Reconcile affected parents and real dependency consumers with bounded deltas and explicit pending obligations.
+- Link tasks and decisions to historical/current code evidence without treating file:line as permanent identity.
+- Preserve source workspace, task execution, verified revision and target integration as separate concepts.
+- Provide full standalone planning, source/editor and verification-evidence capabilities without Heca.
+- Migrate legacy planner entities/documents/custom guidance without loss; provide independent backup and explicit portable export/import.
 
-Formato id raccomandato:
-- `phase-01-auth-core`
-- `phase-02-api-foundation`
+## Architecture and ownership
 
-### 4. Discovery di fase
-Per ogni fase l’agente deve:
-- fare domande e risposte fino a chiarire la fase
-- usare `grill-me` quando disponibile
-- non richiedere dettagli implementativi completi in discovery
-- raccogliere solo quanto necessario per definire:
-  - obiettivo
-  - scope
-  - non-scope
-  - dipendenze
-  - rischi
-  - criteri di completamento ad alto livello
+Frontend: React + TypeScript, Vite. Local application service: Hono on Node.js. Validation: Zod. Realtime: WebSocket. Package manager: pnpm workspace monorepo. SQLite is the selected target persistence engine; the driver/build matrix remains an implementation choice. There is no separate database server.
 
-### 5. Gestione task
-Ogni fase deve avere:
-- checklist di task
-- subtasks annidate o associate
-- stato per task/subtask
-- descrizione e aggiornamento
+- `plan-core`: harness-independent models, domain policies and validated operations.
+- `plan-server`: service lifecycle, complete API, authentication, events and exclusive database ownership.
+- `plan-mcp`: MCP tool bridge to the service.
+- `pi-adapter`: Pi-native integration using the same application operations.
+- `agent-plan`: CLI/bootstrap and human commands.
+- `plan-web-ui`: supervisor UI and optional Heca collaboration consumer.
 
-Naming task richiesto:
-- `[phase-slug]-task-[numero]-[short-name]`
+Exact internal storage modules and proposed endpoint names are specified as recommendations, not pre-approved package creation. Reuse existing ownership and precedents during implementation.
 
-Esempio:
-- `auth-core-task-001-db-schema`
-- `auth-core-task-002-login-flow`
+## Planning and scheduling
 
-### 6. Regole operative globali
-Devono esistere regole configurabili per:
-- prima di iniziare una fase
-- prima di iniziare un task della fase
-- al termine della fase
+Canonical planner entities remain the operational work register. The documentation package records architecture and completed F025 registration, with Heca-Pro amendments registered on 2026-10-31; it is not a parallel task board.
 
-### 7. Stati
-Stati minimi richiesti per fasi/task:
-- `planned`
-- `in-progress`
-- `done`
-- `blocked`
-- `canceled`
+Keep the existing priority model for this amendment: owned work and valid pending returns, then ready feature -> phase -> task. Preserve phase continuity and deliberate recoverable interruptions. The discussed global task queue/free pooling model is not adopted.
 
-Per le fasi il modello può includere anche:
-- `draft`
-- `discovery`
+Higher task priority inside a lower-priority feature does not create global precedence. Use the correct feature owner and real prerequisites; review parent priority and cycles. Preserve completed historical contracts when adding adaptations.
 
-### 8. Web UI
-Deve essere possibile da web:
-- visualizzare il piano
-- visualizzare le fasi
-- visualizzare i task correlati
-- vedere stato, data aggiornamento e descrizione
-- aggiungere nuove fasi
-- aggiungere task
-- modificare entità esistenti
-- sincronizzare le modifiche con il piano nel progetto
+## Recovery and boundaries
 
-### 9. Compatibilità multi-harness
-La platform deve essere progettata in modo che il piano sia fruibile anche da:
-- Pi
-- Claude Code
-- Codex
-- altri harness futuri
+The project descriptor identifies the planner and optional export source. Credentials and absolute database paths stay local. Export/import can publish versioned logical data through a private Git transport without touching the code checkout. It does not provide team-wide atomic ownership across independent computers. Network-authoritative planning is deferred.
 
-Questo implica:
-- formati file aperti e leggibili
-- schema esplicito
-- API o CLI riusabili
-- adapter separati dal core
+A separate autonomous AgentTest product, automatic Git publishing on ordinary mutations, model-specific domain logic, mandatory graph/embedding services and a fixed supported-language list are outside this approved scope.
 
-## Decisioni architetturali prese
+The redesigned Web UI follows reviewed prototype canvases. Business rules stay in core/application APIs and remain consistent across MCP, Pi, CLI, Web UI and Heca clients; the UI owns presentation, navigation and local drafts. See [prototype provenance](docs/agent-brain/ui-prototypes.md).
 
-### A. Architettura generale
-Decisione: **platform core + adapter Pi**
+## Detailed specifications
 
-Quindi:
-- il dominio del piano non dipende da Pi
-- Pi è un adapter/orchestratore
-- altri adapter potranno essere aggiunti in futuro
+Start with [the design package](docs/agent-brain/README.md), then [architecture](docs/agent-brain/architecture.md), [communication](docs/agent-brain/heca-protocol.md) and [reconciliation](docs/agent-brain/reconciliation.md). Heca-Pro owns its [workflow and integration specification](../heca-pro/docs/agent-brain-integration.md) in the sibling repository.
 
-### B. Source of truth
-Decisione: **JSON strutturato** come fonte primaria.
-
-Motivazione:
-- editing affidabile
-- validazione schema
-- sincronizzazione più semplice
-- compatibilità con più harness
-
-### C. Markdown
-Decisione: **Markdown generato**, non fonte primaria.
-
-Motivazione:
-- deve essere leggibile da umani e agenti
-- evitare parsing bidirezionale fragile
-
-### D. Posizione dei dati
-Decisione: il piano vive dentro il progetto in:
-- `.planner/`
-
-### E. UI
-Decisione: **React da subito**.
-
-### F. Web stack
-Direzione approvata:
-- frontend: React + TypeScript
-- backend locale: Hono su Node
-- sync live: SSE inizialmente
-- validazione: Zod
-
-### G. Modularità
-Componenti previsti:
-- `plan-core`
-- `plan-server`
-- `plan-web`
-- `pi-adapter`
-
-### H. Compatibilità multi-harness
-Decisione: il core deve essere **harness-agnostic**.
-
-### I. Sviluppo isolato
-Decisione: il progetto viene sviluppato fuori da `~/.pi`, nella cartella:
-- `/Users/antonio/projects/agent-plan`
-
-### J. Struttura repository
-Decisione: partire subito con un monorepo/workspace minimale, con package separati ma un solo repository.
-
-### K. Disciplina di esecuzione
-Decisione: ogni lavorazione deve mantenere il planner aggiornato come unica fonte di verità operativa.
-
-Implicazioni:
-- ogni agente deve leggere le entità planner rilevanti all'inizio del lavoro
-- ogni agente deve aggiornare il planner quando completa, avvia o blocca un'attività
-- backlog e stato operativo devono vivere nel planner, non in documenti markdown separati
-
-## Architettura target
-
-### 1. plan-core
-Responsabilità:
-- schema dati
-- validazione
-- CRUD file
-- naming/id/slug
-- gestione stati
-- render markdown
-- sync e persistenza
-
-### 2. plan-server
-Responsabilità:
-- API REST locale
-- SSE per aggiornamenti live
-- accesso ai dati `.planner/`
-- trigger di render markdown
-
-### 3. plan-web
-Responsabilità:
-- overview progetto
-- lista requirements
-- lista fasi
-- dettaglio fase
-- dettaglio task
-- CRUD essenziale
-
-### 4. pi-adapter
-Responsabilità:
-- init del piano
-- workflow discovery fase
-- integrazione `grill-me`
-- comandi/tool custom
-- avvio/arresto web server
-- prompt injection contestuale
-
-## Struttura `.planner/` proposta
-
-```text
-.planner/
-  README.md
-  manifest.json
-  project.json
-  requirements.json
-  phases/
-    phase-01-auth-core.json
-    phase-02-api-foundation.json
-  generated/
-    PLAN.md
-    phases/
-      phase-01-auth-core.md
-      phase-02-api-foundation.md
-  schema/
-    plan.schema.json
-  adapters/
-    AGENTS.md
-    CLAUDE.md
-    CODEX.md
-```
-
-## Vincoli progettuali
-- niente dipendenza del dominio da Pi
-- niente markdown come source of truth
-- scritture centralizzate
-- validazione forte
-- file leggibili anche da tooling esterno
-- workflow fase ad alto livello prima dell’implementazione dettagliata
-
-## Non-obiettivi v1
-- collaborazione multi-user remota
-- auth complessa
-- realtime collaboration avanzata
-- board/gantt sofisticati
-- pianificazione implementativa ultra-dettagliata già in discovery
-
-## Esito attuale
-Le decisioni principali sono consolidate. Il prossimo lavoro è trasformarle in:
-1. struttura monorepo/workspace minimale
-2. schema dati completo
-3. scaffold tecnico iniziale
+The initial foundation proposal is retained as [historical context](docs/history/project-foundation.md). It is not the target persistence or identity contract. `AGENTS.md` remains the current governance file and is changed only by a separate explicit request.

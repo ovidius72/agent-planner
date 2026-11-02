@@ -1,5 +1,7 @@
 # Planner runtime boundaries: shared vs worktree-local
 
+> Current implementation contract. The accepted Agent Brain target is [one HOME SQLite authority](../../../docs/agent-brain/architecture.md), with [pending task reconciliation](../../../docs/agent-brain/reconciliation.md). This file documents the existing JSON runtime until that migration is implemented; do not use its physical layout as the new target.
+
 This document defines the boundary between **canonical, shared, mergeable
 planner state** and **volatile, worktree-local runtime/session state** in
 `@agent-plan/core`. It is the authoritative reference for the invariants that

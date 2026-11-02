@@ -327,13 +327,13 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-20T16:41:41.425Z",
-      "updatedAt": "2026-10-20T16:41:41.425Z",
+      "updatedAt": "2026-10-29T21:03:00.036Z",
       "sessionInfo": []
     },
     {
       "id": "822c864c-9249-4c4f-b7b7-a20b93101665",
       "title": "One explainable global next-work order",
-      "description": "All surfaces return the same ready work from the same snapshot and caller identity: active work and pending returns precede globally ready feature → phase → task priority; dependencies, blocks and ownership remain availability constraints.",
+      "description": "All surfaces use the same snapshot/caller and eligibility rules: owned active work and valid ready returns precede globally ready feature -> phase -> task priority. Dependencies, blocks, held returns, actual task ownership and applicable source availability constrain readiness. Phase context is preserved through deliberate detours; no global task queue or automatic free-agent redistribution is introduced.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "1587a79c-750c-4ada-9ac5-e2e751f17301",
@@ -342,13 +342,13 @@
         "ad510b3f-2c6d-4329-923c-543d3325f5b0"
       ],
       "createdAt": "2026-10-20T16:42:28.966Z",
-      "updatedAt": "2026-10-21T10:04:44.336Z",
+      "updatedAt": "2026-10-29T21:03:00.179Z",
       "sessionInfo": []
     },
     {
       "id": "f18e8fa8-d7af-4321-bf18-900691d243a7",
       "title": "Durable return to interrupted work",
-      "description": "Temporary detours preserve their source and nested return chain across task/phase completion, restart and explicit stopped-session recovery; unready returns remain visible.",
+      "description": "Coherent phase work and approved temporary detours preserve source task/phase, checkpoint, reason, execution/workspace and nested return conditions across task/phase completion and explicit stopped-caller recovery. Unready returns remain visible; current priority does not silently preempt active work or introduce a global task pool.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "1587a79c-750c-4ada-9ac5-e2e751f17301",
@@ -359,13 +359,13 @@
         "ad510b3f-2c6d-4329-923c-543d3325f5b0"
       ],
       "createdAt": "2026-10-20T16:42:29.310Z",
-      "updatedAt": "2026-10-21T10:04:44.507Z",
+      "updatedAt": "2026-10-29T21:03:00.302Z",
       "sessionInfo": []
     },
     {
       "id": "36dff4f1-6225-41f1-8d9b-ced7505ede93",
       "title": "Complete context restoration with bounded delivery",
-      "description": "Required project and work context remains recoverable across sessions, compaction and source changes, with explicit incomplete delivery and measurable avoidance of duplicate transmission.",
+      "description": "Required project/task/phase/feature rules, requirements, decisions and pertinent source context are delivered completely through APIs, with explicit partial continuation. Caller/context-revision delivery records support valid reuse but never prove retained model context after compaction, or comprehension/conformity. Restore only missing/stale effective context and recheck at start.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "1587a79c-750c-4ada-9ac5-e2e751f17301",
@@ -377,7 +377,7 @@
         "ad510b3f-2c6d-4329-923c-543d3325f5b0"
       ],
       "createdAt": "2026-10-20T16:42:29.649Z",
-      "updatedAt": "2026-10-21T10:04:44.665Z",
+      "updatedAt": "2026-10-29T21:03:00.424Z",
       "sessionInfo": []
     },
     {
@@ -393,7 +393,7 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-20T16:42:29.982Z",
-      "updatedAt": "2026-10-20T16:42:29.982Z",
+      "updatedAt": "2026-10-29T21:03:00.546Z",
       "sessionInfo": []
     },
     {
@@ -407,7 +407,7 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-20T16:42:30.341Z",
-      "updatedAt": "2026-10-20T16:42:30.341Z",
+      "updatedAt": "2026-10-29T21:03:00.676Z",
       "sessionInfo": []
     },
     {
@@ -425,7 +425,7 @@
         "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
       ],
       "createdAt": "2026-10-20T16:42:30.682Z",
-      "updatedAt": "2026-10-21T09:26:55.414Z",
+      "updatedAt": "2026-10-29T21:03:00.804Z",
       "sessionInfo": []
     },
     {
@@ -442,7 +442,7 @@
         "ad510b3f-2c6d-4329-923c-543d3325f5b0"
       ],
       "createdAt": "2026-10-20T16:42:31.013Z",
-      "updatedAt": "2026-10-21T10:04:44.827Z",
+      "updatedAt": "2026-10-29T21:03:00.930Z",
       "sessionInfo": []
     },
     {
@@ -458,7 +458,7 @@
         "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
       ],
       "createdAt": "2026-10-20T16:42:31.371Z",
-      "updatedAt": "2026-10-21T09:26:56.021Z",
+      "updatedAt": "2026-10-29T21:03:01.058Z",
       "sessionInfo": []
     },
     {
@@ -473,7 +473,7 @@
         "84e698f2-d901-4d1d-813b-6c3ed5d79203"
       ],
       "createdAt": "2026-10-20T16:42:31.701Z",
-      "updatedAt": "2026-10-21T10:04:44.982Z",
+      "updatedAt": "2026-10-29T21:03:01.189Z",
       "sessionInfo": []
     },
     {
@@ -491,7 +491,7 @@
         "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
       ],
       "createdAt": "2026-10-20T16:42:32.039Z",
-      "updatedAt": "2026-10-21T09:26:55.868Z",
+      "updatedAt": "2026-10-29T21:03:01.316Z",
       "sessionInfo": []
     },
     {
@@ -508,7 +508,7 @@
         "ad510b3f-2c6d-4329-923c-543d3325f5b0"
       ],
       "createdAt": "2026-10-20T16:42:32.385Z",
-      "updatedAt": "2026-10-21T10:04:45.144Z",
+      "updatedAt": "2026-10-29T21:03:01.439Z",
       "sessionInfo": []
     },
     {
@@ -525,7 +525,7 @@
         "2e0878e2-dfe0-4d33-ae18-6f36cadc6f58"
       ],
       "createdAt": "2026-10-20T16:42:32.721Z",
-      "updatedAt": "2026-10-21T09:26:56.305Z",
+      "updatedAt": "2026-10-29T21:03:01.565Z",
       "sessionInfo": []
     },
     {
@@ -545,7 +545,7 @@
         "ad510b3f-2c6d-4329-923c-543d3325f5b0"
       ],
       "createdAt": "2026-10-20T16:42:33.061Z",
-      "updatedAt": "2026-10-21T10:04:45.295Z",
+      "updatedAt": "2026-10-29T21:03:01.694Z",
       "sessionInfo": []
     },
     {
@@ -564,13 +564,13 @@
         "ad510b3f-2c6d-4329-923c-543d3325f5b0"
       ],
       "createdAt": "2026-10-20T16:42:33.417Z",
-      "updatedAt": "2026-10-21T10:04:45.476Z",
+      "updatedAt": "2026-10-29T21:03:01.823Z",
       "sessionInfo": []
     },
     {
       "id": "9114fe33-eea0-41d1-87e5-75e5870dabf8",
       "title": "Compatible behavior across supported agent surfaces",
-      "description": "Core, MCP, Pi, server and supported harness integrations share domain semantics and preserve old plans, stable IDs, ownership and canonical/local runtime boundaries. Feature, phase and task references grow beyond three and four digits without truncation or renumbering: allocation, resolution, ordering, dependencies, parked-work recognition, API/MCP/Pi, export and Web UI retain the same canonical identity.",
+      "description": "Pi adapter, MCP harnesses, CLI and Web UI retain their currently supported planner operations through the same application service and typed domain checks. Generic installed bootstrap and API-delivered canonical/project guidance remain usable after .planner removal. A database path, private UI route or caller-selected owner alias is not an integration API.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "1587a79c-750c-4ada-9ac5-e2e751f17301",
@@ -589,7 +589,7 @@
         "81aa922c-06ef-4bd5-9dba-070a6b622416"
       ],
       "createdAt": "2026-10-20T16:42:33.752Z",
-      "updatedAt": "2026-10-21T10:04:45.663Z",
+      "updatedAt": "2026-10-29T21:03:01.947Z",
       "sessionInfo": []
     },
     {
@@ -607,7 +607,7 @@
         "81aa922c-06ef-4bd5-9dba-070a6b622416"
       ],
       "createdAt": "2026-10-20T16:42:34.091Z",
-      "updatedAt": "2026-10-21T10:04:45.815Z",
+      "updatedAt": "2026-10-29T21:03:02.071Z",
       "sessionInfo": []
     },
     {
@@ -621,7 +621,7 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T09:22:26.607Z",
-      "updatedAt": "2026-10-21T09:22:26.607Z",
+      "updatedAt": "2026-10-29T21:03:02.201Z",
       "sessionInfo": []
     },
     {
@@ -635,7 +635,7 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T09:23:33.368Z",
-      "updatedAt": "2026-10-21T09:23:33.368Z",
+      "updatedAt": "2026-10-29T21:03:02.328Z",
       "sessionInfo": []
     },
     {
@@ -651,7 +651,7 @@
         "84e698f2-d901-4d1d-813b-6c3ed5d79203"
       ],
       "createdAt": "2026-10-21T09:23:33.523Z",
-      "updatedAt": "2026-10-21T10:04:45.967Z",
+      "updatedAt": "2026-10-29T21:03:02.454Z",
       "sessionInfo": []
     },
     {
@@ -664,13 +664,13 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T09:23:33.679Z",
-      "updatedAt": "2026-10-21T09:23:33.679Z",
+      "updatedAt": "2026-10-29T21:03:02.579Z",
       "sessionInfo": []
     },
     {
       "id": "928952db-43da-47a8-9f35-4be21642515c",
       "title": "One authoritative project planner across local worktrees",
-      "description": "All supported agents and supervisor clients see the same canonical project knowledge and task ownership across local worktrees, without merging live planner state through unrelated code PRs. A selected code workspace remains explicit, and independent clones/machines require a deliberate shared-service or portable transfer boundary.",
+      "description": "A project uses one canonical HOME SQLite planner through a single user-scoped, multi-project application service. Every local worktree and supported MCP/Pi/CLI/UI client uses its authorized API; code branches do not carry competing live planner copies. Descriptor and local repository registration identify the project without exposing database access.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "84e698f2-d901-4d1d-813b-6c3ed5d79203",
@@ -679,13 +679,13 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T10:03:30.761Z",
-      "updatedAt": "2026-10-21T10:03:30.761Z",
+      "updatedAt": "2026-10-29T21:03:02.729Z",
       "sessionInfo": []
     },
     {
       "id": "cee61282-68ce-4527-859b-02330c40ef62",
       "title": "Independent workspace and caller context within a shared project",
-      "description": "A project shares canonical knowledge and coordination while preserving distinct code roots, workspace identities, caller focus/returns and revision-scoped context. Moving or removing a worktree does not corrupt another workspace or erase historical provenance.",
+      "description": "Project knowledge is shared while stable code-workspace, native harness session, planner caller and execution identities remain distinct. Paths/branches can change without losing history; each caller keeps its own context, active task, return chain and source overlays. Ambiguous copied/forked bindings and unavailable workspaces are explicit.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "84e698f2-d901-4d1d-813b-6c3ed5d79203",
@@ -701,13 +701,13 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T10:03:30.914Z",
-      "updatedAt": "2026-10-21T10:03:30.914Z",
+      "updatedAt": "2026-10-29T21:03:02.859Z",
       "sessionInfo": []
     },
     {
       "id": "04bab928-4cb7-44bc-aca8-224201cd1469",
       "title": "Attributable task executions separate from delivery",
-      "description": "Each logical task retains identifiable execution attempts, source baselines/results or recoverable dirty snapshots, phase-handoff links and exact-revision verification evidence. Completion of work in one branch does not assert integration into another target; legacy and non-code work preserve honest provenance and uncertainty.",
+      "description": "Accepted product amendment, 2026-11-01: Task execution history attributes standalone/integrated agent names, harness/native sessions when available, source workspace, start/end/outcomes and Heca room/orchestrator associations. Delegated operations retain actual requester and execution owner separately.\n\nEach logical task retains identifiable execution attempts, source baselines/results or recoverable dirty snapshots, phase-handoff links and exact-revision verification evidence. Completion of work in one branch does not assert integration into another target; legacy and non-code work preserve honest provenance and uncertainty.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "ad510b3f-2c6d-4329-923c-543d3325f5b0",
@@ -720,7 +720,7 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T10:03:31.065Z",
-      "updatedAt": "2026-10-21T10:03:31.065Z",
+      "updatedAt": "2026-10-31T23:39:10.122Z",
       "sessionInfo": []
     },
     {
@@ -740,33 +740,33 @@
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T10:03:31.219Z",
-      "updatedAt": "2026-10-21T10:03:31.219Z",
+      "updatedAt": "2026-10-29T21:03:03.109Z",
       "sessionInfo": []
     },
     {
       "id": "727790c3-7272-4fa2-875f-a6392a298ab5",
       "title": "Lossless adoption of a shared planner from existing copies",
-      "description": "A project can preview, reconcile and activate a single shared planner from divergent worktree copies without losing approved knowledge, IDs, decisions, handoffs or attributable history. Incompatible edits remain explicit and recoverable; interruption or an incompatible client cannot create a silent parallel authority.",
+      "description": "A legacy project can preview and validate migration of all planner entities, history, handoffs, custom guidance, documents and required assets into SQLite. Divergent copies retain conflicting alternatives and source provenance. Activation and descriptor publication are recoverable; stale runtime ownership is not imported and incompatible old writers cannot create fallback planners.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "81aa922c-06ef-4bd5-9dba-070a6b622416",
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T10:03:31.394Z",
-      "updatedAt": "2026-10-21T10:03:31.394Z",
+      "updatedAt": "2026-10-29T21:03:03.240Z",
       "sessionInfo": []
     },
     {
       "id": "6b845a9a-6a93-4389-a6ed-76a0f15a2ccd",
       "title": "Planner history and recovery independent of code commits",
-      "description": "Project planning knowledge and execution/integration history remain durable without an agent committing code. Users can inspect change history, maintain independent backups and deliberately export/restore a complete portable project record including required recoverable evidence, without transferring stale live ownership or assuming Git clone/push copies it.",
+      "description": "Planner knowledge has durable operation history, consistent independent backups and complete versioned logical export/import. Explicit snapshot publication can use a configured remote Git branch through a private transport without changing source checkout/index. Descriptor-based clones and missing HOME recover up to an available exported revision. Divergent computers require baseline-aware reconciliation, never silent overwrite or a claim of team-wide atomic ownership.",
       "macroTasks": [],
       "linkedPhaseIds": [
         "81aa922c-06ef-4bd5-9dba-070a6b622416",
         "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
       ],
       "createdAt": "2026-10-21T10:03:31.547Z",
-      "updatedAt": "2026-10-21T10:03:31.547Z",
+      "updatedAt": "2026-10-29T21:03:03.363Z",
       "sessionInfo": []
     },
     {
@@ -792,7 +792,7 @@
         "81aa922c-06ef-4bd5-9dba-070a6b622416"
       ],
       "createdAt": "2026-10-21T14:55:12.815Z",
-      "updatedAt": "2026-10-21T14:55:12.815Z",
+      "updatedAt": "2026-10-29T21:03:03.485Z",
       "sessionInfo": []
     },
     {
@@ -818,7 +818,62 @@
         "81aa922c-06ef-4bd5-9dba-070a6b622416"
       ],
       "createdAt": "2026-10-21T14:55:12.977Z",
-      "updatedAt": "2026-10-21T14:55:12.977Z",
+      "updatedAt": "2026-10-29T21:03:03.611Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "20702652-0d6b-4164-baec-8a587a1c752c",
+      "title": "Optional live collaboration linked to the same project planner",
+      "description": "Accepted product amendment, 2026-11-01: An authorised Heca-initiated bidirectional connection exposes current room/member/activity information for the same project. Manually launched terminal agents remain standalone. Both service startup orders preserve optional independent operation.\n\nA supervisor can inspect Heca instances, rooms, members, extensible roles, observed agent state and their task/execution/workspace relationships from Agent Plan when a compatible authenticated runtime is connected, with consistent scoped live updates and honest provenance.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-23T08:13:00.236Z",
+      "updatedAt": "2026-10-31T23:39:10.036Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "c123357a-0ca1-4db5-a8eb-450672d3208a",
+      "title": "Attributed room chat and authorized runtime requests from planner clients",
+      "description": "Accepted product amendment, 2026-11-01: The user can read and write the same shared room conversation from Heca-Pro and Agent Plan Web UI. Default requests address the orchestrator, requests/replies are visible to the room, ordinary input queues, and Heca retains chat/attachments after closure until explicit deletion. Native transcript aggregation is outside this delivery.\n\nA human supervisor or an authorized agent can access permitted room/direct conversations, send messages and request supported runtime actions through Heca's public API, retaining real authorship, explicit destinations and observable request outcomes under native permissions.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-23T08:13:02.402Z",
+      "updatedAt": "2026-10-31T23:39:09.950Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "0fc4405f-3117-45b9-8523-8f074c5b13a0",
+      "title": "Standalone continuity and explicit runtime integration availability",
+      "description": "Planner, resume/context, graph, editable source and recorded verification remain usable without Heca. Authenticated protocol/capability discovery distinguishes absent, unbound, incompatible, denied, disconnected and stale external observations. Reconnect/retry preserves existing work and cannot manufacture delivery or task-start evidence.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-23T08:13:04.906Z",
+      "updatedAt": "2026-10-29T21:03:03.989Z",
+      "sessionInfo": []
+    },
+    {
+      "id": "e1101b11-fd43-43be-b4cb-e597332845c7",
+      "title": "Searchable versioned planner documents and portable guidance",
+      "description": "Users and agents can browse logical document folders, retrieve exact document revisions, search literal IDs/text or full-text phrases with structured scope and bounded excerpts, and recover custom project guidance through the application API. Legacy .planner/docs content and assets migrate without broken references. Search indexes are rebuildable; no direct database access or live file mirror is required.",
+      "macroTasks": [],
+      "linkedPhaseIds": [
+        "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+        "845336f6-f90e-4012-99c9-2c6b3a066e0a",
+        "48358f79-a719-489c-933c-a4adbc216b18",
+        "81aa922c-06ef-4bd5-9dba-070a6b622416",
+        "7ce4c86e-8289-47c5-bd31-976f472ddcf1"
+      ],
+      "createdAt": "2026-10-29T21:03:04.124Z",
+      "updatedAt": "2026-10-29T21:03:04.124Z",
       "sessionInfo": []
     }
   ]

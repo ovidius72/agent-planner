@@ -1,205 +1,58 @@
-# Roadmap di realizzazione
+# Agent Brain delivery roadmap
 
-## Obiettivo della roadmap
-Costruire la platform in modo incrementale, mantenendo il core indipendente dagli adapter e limitando il rischio durante lo sviluppo.
+This document describes implementation order, not live task status. The Agent Plan planner remains the work register. See [the design package](docs/agent-brain/README.md) and [reconciliation matrix](docs/agent-brain/reconciliation.md).
 
-## Regola di processo obbligatoria
-Durante qualunque attività su questo progetto deve esistere uno stato planner aggiornato nel repository.
+## 1. Registered plan and remaining contract decisions
 
-Regole:
-- aggiornare il planner mentre si lavora
-- segnare stato, blocchi e prossimi step nelle entità planner rilevanti
-- non considerare un'attività completa se il planner non è stato aggiornato
+- Approve descriptor, service bootstrap/authentication, public Heca transport and recovery conflict contracts.
+- F025 registration is complete: 16 phases, 41 planned tasks, 33 linked requirements, 21 feature decisions. See [the report](docs/agent-brain/replan-registration.md). Heca-Pro owner amendments were registered on 2026-10-31; implementation remains open.
+- Keep correctly completed work as history; allocate only coherent missing adaptation outcomes.
+- Review effective feature/phase/task priority and real prerequisites. Do not introduce the discussed global task queue.
 
-## Fase 0 — Foundation del repository
-Obiettivo:
-- creare il workspace del progetto
-- impostare tooling base
-- preparare la suddivisione in package
+## 2. Identity, database and application API
 
-Output attesi:
-- monorepo/workspace iniziale
-- package base:
-  - `plan-core`
-  - `plan-server`
-  - `plan-web`
-  - `pi-adapter`
-- TypeScript config condivisa
-- lint/format/test base
+- T489 separates project, repository, workspace, caller and execution identities and defines descriptor resolution.
+- T502 supplies schema, documents/FTS, transactions, driver isolation and crash boundaries. The foundation is T489 -> T502 -> T496 -> T490.
+- T496 supplies bounded mutation-impact reconciliation; preserve its ordering with T489/T490.
+- T490 supplies one compatible application service per user, multi-project routing, command API and client parity.
+- Retain read API compatibility and explicit errors for unavailable/incompatible authority. Do not create fallback planners in worktrees.
 
-## Fase 1 — Dominio e persistenza (`plan-core`)
-Obiettivo:
-- definire il modello dati e la persistenza in `.planner/`
+## 3. First usable migration and recovery
 
-Attività:
-- definire schema Zod per:
-  - manifest
-  - project
-  - requirements
-  - **feature** (nuovo — contiene fasi e raggruppa attività)
-  - phase (con link a feature)
-  - task
-  - subtask
-- definire convenzioni naming/id/slug per feature
-- implementare read/write atomico
-- implementare validazione
-- implementare CRUD minimo
-- implementare generazione markdown:
-  - `generated/PLAN.md`
-  - `generated/features/*.md`
-  - `generated/phases/*.md`
+- Adapt T494/T495 for legacy imports including documents and custom skills, consistent backups and explicit export/import.
+- Stage, preview, validate and activate with recovery after interruption.
+- Support descriptor-based restore after HOME loss up to the last complete exported revision.
+- T494/T495 now follow the service foundation without waiting for advanced target integration; basic migration/restore belongs in the first usable DB release.
+- Keep remote divergence explicit; shared network planning remains deferred.
 
-Criteri di completamento:
-- è possibile creare `.planner/` da zero
-- è possibile creare/modificare fasi e task da API di libreria
-- il markdown viene rigenerato in modo coerente
+## 4. Reliable work and context
 
-## Fase 2 — Server locale (`plan-server`)
-Obiettivo:
-- esporre il core tramite API locale
+- T461-T469 cover the six reported failures, one explainable selection contract, complete context restoration, phase continuity/returns and duplicate-task prevention.
+- Preserve exact caller identity, atomic claims and independent return chains.
+- Convert MCP/Pi/CLI/UI to API-only operation; bootstrap skills must keep all currently supported operations reachable.
+- Demonstrate bounded payload/context cost on fixed comparable flows without omitting required information.
 
-Attività:
-- creare server Hono
-- implementare endpoint REST per:
-  - project
-  - requirements
-  - **features** (CRUD completo)
-  - phases (con filtro featureId)
-  - tasks
-- WebSocket broadcast per events `features-updated`
-- implementare file watcher su `.planner/`
-- propagare eventi di aggiornamento ai client
+## 5. Source memory, graph and editor
 
-Criteri di completamento:
-- un client può leggere e modificare il piano via HTTP
-- il server notifica aggiornamenti live
-- cambi esterni ai file vengono rilevati
+- T470-T480 own snapshot-bound code links, changesets, decisions, provider setup, graph/context and supervisor navigation.
+- T483 remains the independent project-title correction.
+- T484-T488 own source access, safe concurrent saves, shared compatible LSP, Monaco and external editor opening.
+- T491-T493 own attributable executions, target integration and revision-aware availability.
+- Implement the redesigned Web UI from reviewed prototypes; core/application APIs retain business policy, and React retains presentation/drafts.
+- Dynamic provider coverage and text-only fallback remain supported; no fixed language whitelist.
 
-## Fase 3 — Nuova Web App (v2)
-Obiettivo:
-- creare UI React professionale e strutturata
-- gerarchia **features → phases → tasks**
-- pagine e componenti separati
+## 6. Heca-Pro connection and collaboration
 
-Attività:
-- struttura cartelle: pages/ + components/ui + components/features + components/phases
-- pagine:
-  - Dashboard con riepilogo + grafici + lista stile ClickUp
-  - Features list (CRUD completo, stato modificabile dalla lista)
-  - Feature detail (phases annesse, workDone/workRemaining)
-- componenti atomici: Card, Button, Badge, Modal, Input/Textarea/Select
-- design tokens CSS: colori, spaziature, temi light/dark
-- gradient + blur + glassmorphism
-- TanStack Query + WebSocket live sync
-- TailwindCSS v4 puro, niente classi CSS custom globali
+- Reconcile Heca-Pro T032/T039/T040 for descriptor/global-service following and worker startup contracts.
+- Preserve its existing YAML, helper, authorization and orchestration owners.
+- Heca-Pro T043-T046 supply public collaboration conformance; Agent Plan T497-T500 consume it.
+- Reuse generic open-Heca browser/content support for the initial planner overlay. Native planner components remain a later API consumer.
+- Implement snapshots/events, attributed chat and authorized actions with real supported-host evidence; standalone Agent Plan remains usable.
 
-Criteri di completamento:
-- il piano è navigabile dal browser
-- fasi e task sono modificabili dal web
-- la UI resta sincronizzata con i file `.planner/`
+## 7. Closeout
 
-## Fase 4 — Adapter Pi (`pi-adapter`)
-Obiettivo:
-- integrare Pi come orchestratore intelligente della platform
+T481 first establishes the standalone milestone; T482 follows it and the optional collaboration UI for freshly packed installed-artifact/native closeout. Verify crash/retry/reconnect, old clients, source conflicts, dynamic providers, long IDs and the dev-a/dev-b partial-integration scenario. Native UI and mesh acceptance require their actual runtimes.
 
-Attività:
-- registrare tool custom per lettura/scrittura piano
-- registrare comandi custom, ad esempio:
-  - `/plan-init`
-  - `/plan-show`
-  - `/phase-add`
-  - `/phase-discuss <phase-id>`
-  - `/task-add <phase-id>`
-  - `/plan-web start`
-  - `/plan-web stop`
-- implementare init guidato del piano
-- implementare avvio/arresto server web
-- implementare prompt injection contestuale
+Run focused checks while implementing. Use the canonical final gate at closeout, preserving measured evidence and explicit remaining blockers. A documentation review is not a release or permission to migrate a real user project.
 
-Criteri di completamento:
-- Pi può inizializzare il piano
-- Pi può creare e aggiornare fasi/task
-- Pi può avviare la web UI locale
-
-## Fase 5 — Discovery guidata delle fasi
-Obiettivo:
-- supportare il workflow Q&A ad alto livello per chiarire una fase
-
-Attività:
-- integrare `grill-me` quando disponibile
-- prevedere fallback interno se la skill non è disponibile
-- definire stop condition della discovery
-- salvare in fase almeno:
-  - goals
-  - nonGoals
-  - dependencies
-  - risks
-  - openQuestions
-  - completionCriteria
-
-Criteri di completamento:
-- una fase può passare da `draft`/`discovery` a `planned`
-- la discovery chiarisce la fase senza pretendere dettagli implementativi completi
-
-## Fase 6 — Regole operative / gates
-Obiettivo:
-- applicare le regole globali richieste prima/dopo fase/task
-
-Attività:
-- modellare regole in `project.json`
-- implementare controlli per:
-  - beforePhaseStart
-  - beforeTaskStart
-  - afterPhaseComplete
-- renderizzare queste regole nel markdown e nella UI
-- iniettarle nel prompt di Pi quando rilevante
-
-Criteri di completamento:
-- i gate sono persistiti, visibili e applicabili
-- Pi li usa come contesto operativo
-
-## Fase 7 — Compatibilità multi-harness
-Obiettivo:
-- rendere il sistema utilizzabile anche fuori da Pi
-
-Attività:
-- pubblicare schema JSON chiaro
-- creare docs adapter-specifiche:
-  - `AGENTS.md`
-  - `CLAUDE.md`
-  - `CODEX.md`
-- valutare CLI o MCP come step successivo
-
-Criteri di completamento:
-- un altro harness può leggere e capire `.planner/`
-- la struttura è abbastanza stabile da essere integrata da tooling esterno
-
-## Ordine di implementazione consigliato
-1. repository/workspace
-2. `plan-core`
-3. `plan-server`
-4. `plan-web`
-5. `pi-adapter`
-6. discovery fase
-7. gates
-8. multi-harness docs/adapter
-
-## Rischi principali
-- crescita prematura della UI React
-- coupling involontario del core con Pi
-- conflitti di scrittura tra web e adapter
-- eccesso di dettaglio in discovery fase
-- parsing/rigenerazione markdown non consistente
-
-## Mitigazioni
-- core separato fin dall’inizio
-- un solo layer di persistenza
-- markdown solo derivato
-- API piccole e validate
-- workflow discovery con stop condition esplicita
-
-## Prossimo step consigliato
-Dopo questi documenti, il passo migliore è:
-1. definire la struttura del repository (repo semplice vs workspace)
-2. definire lo schema Zod completo
-3. generare lo scaffold iniziale dei package/moduli
+The initial scaffold roadmap is retained as [historical context](docs/history/roadmap-foundation.md). Release and branch governance remain in `AGENTS.md` and README; this roadmap does not change them.

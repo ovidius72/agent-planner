@@ -3,51 +3,47 @@
   "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
   "number": 128,
   "shortId": "FK645",
-  "priority": 1,
-  "slug": "shared-planner-authority-and-workspace-isolation",
-  "title": "Shared planner authority and workspace isolation",
-  "discussedAt": "2026-10-21T10:04:02.613Z",
+  "priority": 2,
+  "slug": "descriptor-sqlite-authority-and-user-scoped-application-service",
+  "title": "Descriptor, SQLite authority and user-scoped application service",
+  "discussedAt": "2026-10-29T21:02:36.538Z",
   "contextReady": true,
   "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
-  "summary": "Give every local worktree one planner authority and an explicit independent code/runtime binding.",
-  "description": "Give every local worktree one planner authority and an explicit independent code/runtime binding.\n\nCurrent state: MCP, Pi and CLI default to cwd/.planner. PlanStore already discovers git-common-dir for allocation only; serve.ts derives code root with dirname(store.root). PlanStore.localRoot also houses focus, resumes and session data.\n\nGoals:\n- Separate canonical plan identity from workspace/source and caller runtime identity.\n- Reuse one coordinated local authority across all supported harnesses.\n\nResponsibilities:\n- P128(F025)/T489: Separate planner storage, code workspace and runtime identities. One harness-agnostic resolved binding identifies the canonical plan independently of the selected code checkout and caller runtime.\n- P128(F025)/T490: Route all clients through one coordinated local planner authority. Supported MCP, Pi, CLI, server and Web UI consumers use the same local planner authority while keeping code and caller state correctly scoped.\n\nBoundaries:\n- No product migration or automatic Git action during planning registration.\n- No mandatory cloud service, database or language-specific setup.\n\nRisks:\n- Blindly centralizing .local would mix focus, returns and source caches.\n- A branch/path locator can change and must not become durable identity.\n\nAcceptance:\n- Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.\n- Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.\n- Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.\n- Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.\n- Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.\n- Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.\n\nRead before editing:\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n- packages/plan-mcp/src/index.ts:118 — planRoot / AGENT_PLAN_ROOT\n- packages/pi-adapter/src/index.ts:275 — planRootForCwd / resolvePlanRoot / ensureStore\n- packages/agent-plan/src/index.ts:124 — plannerRoot\n- packages/plan-server/src/serve.ts:258 — GET /project derives projectRoot from dirname(store.root)\n- packages/plan-core/src/write-coordination.ts:95 — writer lock path and transaction coordination\n\nDependencies: P116(F025). Requirements: BR22, BR23, BR03, BR04, BR10, BR16, BR20. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.\n\nSource positions above are dated navigation evidence from 21 October 2026, not permanent anchors; revalidate against the current checkout.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Foundational task order is T489 (identity), T496 (impact/reconciliation), then T490 (shared authority); T490 reuses T496 primitives. T496 is stable execution task identity moved from its initial draft placement, not a recreated task.\n\nPrerequisite reconciliation: Current prerequisite contract: T489 -> T496 -> T490; T490 also retains its direct T489 dependency. The shared authority consumes the impact primitives rather than requiring a later standards phase.",
-  "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-  "descriptionUpdatedAt": "2026-10-21T15:00:46.057Z",
+  "summary": "Separate source/caller/project identity from persistence. Implement transactional SQLite, bounded consistency and complete API-only clients.",
+  "description": "Purpose: Every agent uses planner load against one shared service with independent session/context/execution attribution. Separate source/caller/project identity from persistence. Implement transactional SQLite, bounded consistency and complete API-only clients.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P128(F025)/T489: Descriptor-first project and workspace identity independent of code checkout and database location.\n- P128(F025)/T502: Transactional SQLite authority with versioned documents, search and durable command receipts.\n- P128(F025)/T496: Atomic structural consistency and bounded semantic reconciliation after every mutation.\n- P128(F025)/T490: One authenticated multi-project application service used by every supported client: shared runtime location with newest-version launcher (protocol N/N-1), local-only Web UI (loopback with Host/Origin checks, pluggable auth middleware), audit-only planner writes and the execution lock (in-progress / parked / abandoned).\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: SQLite is the sole operational authority. T502 precedes T496 and T490; the same validated domain operations serve MCP, Pi, CLI, Web UI and Heca consumers.",
+  "descriptionUpdatedAt": "2026-11-02T19:15:17.985Z",
   "notes": "",
   "goals": [
-    "Separate canonical plan identity from workspace/source and caller runtime identity.",
-    "Reuse one coordinated local authority across all supported harnesses."
+    "Separate source/caller/project identity from persistence.",
+    "Implement transactional SQLite, bounded consistency and complete API-only clients."
   ],
   "nonGoals": [
-    "No product migration or automatic Git action during planning registration.",
-    "No mandatory cloud service, database or language-specific setup."
+    "No unrelated runtime implementation, real data migration or Git/release action during planning.",
+    "No duplicate ownership, fixed language list or global task-queue scheduling."
   ],
   "dependencies": [
     "P116(F025)"
   ],
   "dependsOn": [],
   "risks": [
-    "Blindly centralizing .local would mix focus, returns and source caches.",
-    "A branch/path locator can change and must not become durable identity."
+    "Old JSON/path assumptions can leak through direct consumers; inspect current integration seams.",
+    "A passing fixture or stored read does not prove live native behavior or model understanding."
   ],
   "openQuestions": [
-    "Choose compatible local discovery/transport and binding versioning after inspecting existing transaction/server precedents."
+    "Finalize descriptor schema, compatible service discovery/authentication and supported SQLite driver/build in the owning task before committing their implementation contracts."
   ],
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [
-    "Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.",
-    "Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.",
-    "Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.",
-    "Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.",
-    "Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.",
-    "Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.",
-    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+    "Every owned task meets its complete canonical contract with concrete evidence.",
+    "Affected hierarchy/dependencies and context validity are reconciled without unbounded payloads.",
+    "Unverified native/provider/installed boundaries are explicit."
   ],
   "taskIds": [
     "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4",
     "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f",
-    "e1111601-64ad-49d5-9805-df48e9dd4b70"
+    "e1111601-64ad-49d5-9805-df48e9dd4b70",
+    "bf80a08e-a3d7-4cd9-8910-c7ad62b62238"
   ],
   "tasks": [
     {
@@ -59,60 +55,41 @@
       "shortName": "separate-planner-storage-code",
       "title": "Separate planner storage, code workspace and runtime identities",
       "status": "planned",
-      "description": "Outcome: One harness-agnostic resolved binding identifies the canonical plan independently of the selected code checkout and caller runtime.\n\nExisting state: MCP, Pi and CLI default to cwd/.planner. PlanStore already discovers git-common-dir for allocation only; serve.ts derives code root with dirname(store.root). PlanStore.localRoot also houses focus, resumes and session data.\n\nImplementation responsibility:\n- Define projectId, repository-instance identity, stable workspaceId, current path and source revision/dirty identity; paths and branch names are mutable locators, not durable execution identities.\n- Define explicit planRoot, workspaceRoot and runtimeRoot and a shared resolver. For local worktrees discover the same git-common-dir/projectId authority; support explicit standalone/non-Git roots and empty folders without guessing a language.\n- Define a descriptor/binding format, precedence for explicit overrides, compatibility/version diagnostics and repository containment. Do not infer workspaceRoot from the planner directory or follow a binding to an unrelated repository silently.\n- Inventory every PlanStore/root consumer and classify shared canonical knowledge, shared coordination, workspace-scoped caches and caller-scoped focus/read/return state; define move/delete/re-register and clone boundaries.\n\nAcceptance and evidence:\n- Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.\n- Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.\n- Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.\n\nRead before editing:\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n- packages/plan-mcp/src/index.ts:118 — planRoot / AGENT_PLAN_ROOT\n- packages/pi-adapter/src/index.ts:275 — planRootForCwd / resolvePlanRoot / ensureStore\n- packages/agent-plan/src/index.ts:124 — plannerRoot\n- packages/plan-server/src/serve.ts:258 — GET /project derives projectRoot from dirname(store.root)\n- packages/plan-core/docs/runtime-boundaries.md:1 — current versioned plan and worktree-local runtime policy\n\nDetailed discussion contract:\n- The intended local default is <git-common-dir>/agent-plan/<projectId>/ with canonical plan, coordination, workspace runtime and history areas. Exact filenames and transport are implementation choices; the independent identities and one authority are binding decisions.\n- git-common-dir is shared by worktrees of one local clone. An independent clone or another machine does not inherit these custom files through git push/clone. An explicit service/synchronization boundary may support those later; do not promise it implicitly.\n- The public descriptor must be safely inspectable without leaking unnecessary local paths into portable exports. Do not edit AGENTS.md as an incidental architecture task.\n\nExecution dependencies: P116(F025)/T462. Requirement aliases: BR22, BR23, BR10, BR16. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.",
-      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-      "descriptionUpdatedAt": "2026-10-21T10:04:01.485Z",
+      "description": "Outcome: Descriptor-first project and workspace identity independent of code checkout and database location.\n\nCurrent implementation: Consumers default to cwd/.planner or AGENT_PLAN_ROOT; code root is inferred from the planner directory. git-common-dir currently supports allocation, not portable identity.\n\nImplementation responsibility:\n- Finalize a versioned descriptor and resolver precedence for explicit selection, nested repositories, non-Git/empty folders and copied/forked descriptors.\n- Define resolver/registration ports and stable project/workspace/caller bindings; keep path/branch mutable and native session separate from planner ownership.\n- Resolve descriptor first, legacy migration second, initialization last. Incompatible descriptor or missing bound data yields typed errors; never create a silent replacement.\n- Define the service-owned HOME location and git-common-dir as local clone evidence only. Supply typed registration interfaces for the SQLite and service owners without opening a client-side store.\n\nAcceptance and evidence:\n- Two worktrees bind one project and distinct source contexts; non-Git planning and undecided languages remain valid.\n- Moving a folder/renaming a branch preserves identity; ambiguous forks/foreign overrides require deliberate rebind.\n- Descriptor contains no secrets, database path or live sessions; deletion of HOME leads to restore-required.\n\nCurrent source navigation:\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:42.275Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-001-finalize-a-versioned-descriptor-and-resolver-precedence-for-explicit-selection-nested-repositories-non-git-empty-folders-and-copied-forked-descriptors",
           "number": 1,
-          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "title": "Finalize a versioned descriptor and resolver precedence for explicit selection, nested repositories, non-Git/empty folders and copied/forked descriptors.",
           "checked": false
         },
         {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-002-define-projectid-repository-instance-identity-stable-workspaceid-current-path-and-source-revision-dirty-identity-paths-and-branch-names-are-mutable-locators-not-durable-execution-identities",
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-002-define-resolver-registration-ports-and-stable-project-workspace-caller-bindings-keep-path-branch-mutable-and-native-session-separate-from-planner-ownership",
           "number": 2,
-          "title": "Define projectId, repository-instance identity, stable workspaceId, current path and source revision/dirty identity; paths and branch names are mutable locators, not durable execution identities.",
+          "title": "Define resolver/registration ports and stable project/workspace/caller bindings; keep path/branch mutable and native session separate from planner ownership.",
           "checked": false
         },
         {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-003-define-explicit-planroot-workspaceroot-and-runtimeroot-and-a-shared-resolver-for-local-worktrees-discover-the-same-git-common-dir-projectid-authority-support-explicit-standalone-non-git-roots-and-empty-folders-without-guessing-a-language",
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-003-resolve-descriptor-first-legacy-migration-second-initialization-last-incompatible-descriptor-or-missing-bound-data-yields-typed-errors-never-create-a-silent-replacement",
           "number": 3,
-          "title": "Define explicit planRoot, workspaceRoot and runtimeRoot and a shared resolver. For local worktrees discover the same git-common-dir/projectId authority; support explicit standalone/non-Git roots and empty folders without guessing a language.",
+          "title": "Resolve descriptor first, legacy migration second, initialization last. Incompatible descriptor or missing bound data yields typed errors; never create a silent replacement.",
           "checked": false
         },
         {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-004-define-a-descriptor-binding-format-precedence-for-explicit-overrides-compatibility-version-diagnostics-and-repository-containment-do-not-infer-workspaceroot-from-the-planner-directory-or-follow-a-binding-to-an-unrelated-repository-silently",
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-004-define-the-service-owned-home-location-and-git-common-dir-as-local-clone-evidence-only-supply-typed-registration-interfaces-for-the-sqlite-and-service-owners-without-opening-a-client-side-store",
           "number": 4,
-          "title": "Define a descriptor/binding format, precedence for explicit overrides, compatibility/version diagnostics and repository containment. Do not infer workspaceRoot from the planner directory or follow a binding to an unrelated repository silently.",
+          "title": "Define the service-owned HOME location and git-common-dir as local clone evidence only. Supply typed registration interfaces for the SQLite and service owners without opening a client-side store.",
           "checked": false
         },
         {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-005-inventory-every-planstore-root-consumer-and-classify-shared-canonical-knowledge-shared-coordination-workspace-scoped-caches-and-caller-scoped-focus-read-return-state-define-move-delete-re-register-and-clone-boundaries",
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-005-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 5,
-          "title": "Inventory every PlanStore/root consumer and classify shared canonical knowledge, shared coordination, workspace-scoped caches and caller-scoped focus/read/return state; define move/delete/re-register and clone boundaries.",
-          "checked": false
-        },
-        {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-006-verify-on-isolated-mkdtemp-fixtures-two-local-worktrees-resolve-one-project-planner-and-distinct-code-runtime-contexts-standalone-initialization-remains-usable",
-          "number": 6,
-          "title": "Verify on isolated mkdtemp fixtures: Two local worktrees resolve one project planner and distinct code/runtime contexts; standalone initialization remains usable.",
-          "checked": false
-        },
-        {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-007-verify-on-isolated-mkdtemp-fixtures-moving-a-worktree-or-renaming-a-branch-preserves-stable-identity-and-history-missing-deleted-paths-give-explicit-unavailability",
-          "number": 7,
-          "title": "Verify on isolated mkdtemp fixtures: Moving a worktree or renaming a branch preserves stable identity and history; missing/deleted paths give explicit unavailability.",
-          "checked": false
-        },
-        {
-          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-008-verify-on-isolated-mkdtemp-fixtures-nested-repositories-submodules-and-foreign-overrides-cannot-silently-mix-source-provenance-no-language-provider-installation-is-required-for-planning",
-          "number": 8,
-          "title": "Verify on isolated mkdtemp fixtures: Nested repositories/submodules and foreign overrides cannot silently mix source provenance; no language/provider installation is required for planning.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
@@ -125,7 +102,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T10:03:10.913Z",
-      "updatedAt": "2026-10-21T10:04:01.880Z",
+      "updatedAt": "2026-10-29T21:02:42.272Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -134,82 +111,56 @@
       "phaseId": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
       "number": 490,
       "shortId": "VPWAV",
-      "priority": 3,
+      "priority": 4,
       "shortName": "route-all-clients-through-one",
       "title": "Route all clients through one coordinated local planner authority",
       "status": "planned",
-      "description": "Outcome: Supported MCP, Pi, CLI, server and Web UI consumers use the same local planner authority while keeping code and caller state correctly scoped.\n\nExisting state: Each host can construct its own PlanStore and per-root writer lock. Existing claims/recovery protect a task only when callers reach the same physical state; server-record discovery is advisory rather than atomic startup exclusion.\n\nImplementation responsibility:\n- Implement the resolved binding from M1 and the shared authority/service lifecycle, including atomic startup ownership, compatible discovery, reconnect and typed dead/incompatible/unavailable outcomes.\n- Reuse existing transactions and atomic claims; serialize conflicting operations with expected entity revisions, idempotency keys and actor/execution provenance. Independent code work remains parallel; a slow/dead client cannot leave an indefinite write lock.\n- Keep global task claims and coordinator ownership shared, but namespace focus, return chains, read/context evidence, source indexes and analysis caches by their explicit workspace/session/revision keys.\n- Update all host entry points and source-root consumers, including GET /project; normal planner operations must not fall back to silently creating a fresh cwd/.planner when the bound authority is unavailable.\n- Expose stable domain/service APIs and events for later source and provider brokers. K2 still owns language-server lifecycle and document overlays; sharing planner authority must not launch the dashboard or duplicate the provider broker.\n\nAcceptance and evidence:\n- Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.\n- Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.\n- Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.\n\nRead before editing:\n- packages/plan-core/src/write-coordination.ts:95 — writer lock path and transaction coordination\n- packages/plan-core/src/plan-store.ts:3493 — registerSession / claimTask / recoverSessionForTask\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n- packages/plan-server/src/server-record.ts:1 — advisory server discovery record\n- packages/plan-mcp/src/index.ts:118 — planRoot / AGENT_PLAN_ROOT\n- packages/pi-adapter/src/index.ts:275 — planRootForCwd / resolvePlanRoot / ensureStore\n- packages/agent-plan/src/index.ts:124 — plannerRoot\n- packages/plan-server/src/serve.ts:258 — GET /project derives projectRoot from dirname(store.root)\n\nDetailed discussion contract:\n- Use a single coordination boundary for planner mutations, with short operation-scoped locks and a recoverable owner. JSON may remain the durable format; this decision does not mandate a database, event-sourcing framework or cloud service.\n- A public read must not claim that an arbitrary stored attestation proves the model retained context. Shared storage does not make caller context interchangeable.\n- A .planner symlink or AGENT_PLAN_ROOT override alone cannot meet this task: source-root inference, runtime scoping, startup races, incompatible clients and failures must be handled.\n\nExecution dependencies: P128(F025)/T489, P128(F025)/T496. Requirement coverage and earlier responsibilities are preserved.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nShared mutations carry M3 affected-revision and reconciliation receipts; coordinate compact indexed impact calculation with existing transactions. Bounded metadata serialization must not become repeated full-plan reads/writes or leak caller context.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
-      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-      "descriptionUpdatedAt": "2026-10-21T14:59:41.574Z",
+      "description": "Outcome: One authenticated multi-project application service used by every supported client.\n\nCurrent implementation: MCP/Pi construct PlanStore directly; v1 is GET-only and Web UI routes have separate behavior. Server records are advisory and per root. plan-server uses cors({origin:\"*\"}) without authentication. Task ownership never expires, so a task left by a switch blocks a later resume.\n\nImplementation responsibility:\n- Each agent enters through planner load: descriptor resolution, shared-service reuse, independent registration and complete applicable context (docs/agent-brain/session-registration.md). Dashboard presentation is separate; simultaneous loads must not spawn HTTP servers or browsers.\n- Distribution: Heca's bundle and npm installs both place service versions under ~/.agent-plan/runtime/<version>/. The user-scoped launcher atomically starts the newest installed version; the service accepts protocol N and N-1; MCP/Pi bridges are thin, version-tolerant clients. A newer installed version takes over once no write is in progress. No first-starter-wins incompatibility; lifetime is not tied to a window.\n- Expose a complete versioned application API over the shared SQLite/domain boundary: current CRUD/discuss, requirements/decisions, lifecycle, handoffs, documents/search, context and recovery operations. Preserve v1 compatibility explicitly.\n- Convert MCP into its stdio API bridge, Pi into its native API adapter, and CLI/Web UI into the same operations. Inventory actual tool/error/approval parity before removing direct store access.\n- Local access without a token: listen only on 127.0.0.1; reject Host headers other than localhost/127.0.0.1 (DNS rebinding); accept writes and WebSocket upgrades only from the Agent Plan UI and Heca origins; remove cors({origin:\"*\"}) and the LAN mode.\n- Prepare remote use without building it: one authentication middleware with pluggable strategies (today loopback + Host/Origin, later per-device tokens issued by pairing); every request resolves a principalId recorded in the audit; permissions come from the principal, never from the request being local.\n- Planner writes are not restricted between agents: workers and orchestrators may modify other tasks on request. Record actor and requester on every mutation (audit) instead of blocking; no role- or room-based write gates.\n- Execution lock, the only block: in-progress blocks a start by another live session; parked (switch/return) does not block, a takeover warns, is recorded and the original session is told on return; abandoned when the adapter heartbeat (about every 30 s, in code) stops, the lease expiring about 2 min after process death without manual recovery. The same logical agent (same Heca member, or same harness + workspace when standalone) reclaims its tasks. A live owner idle beyond a configurable threshold (e.g. 2 h) is shown idle; takeover only with explicit confirmation. The Web UI offers a human Release action.\n- Bootstrap snapshots and project-filtered WebSocket events using durable cursors/outbox with bounded replay, gap/epoch handling and slow-consumer limits. Serve the correct source workspace independently of data root.\n\nAcceptance and evidence:\n- Concurrent clients observe one authority; only one live session can hold the in-progress lock of a task.\n- A killed agent's task becomes abandoned within the lease; the same agent reclaims it; another agent takes over an idle task only after confirmation.\n- Different projects/worktrees keep independent context/returns/overlays; API clients never open the DB.\n- Every existing operation remains reachable; no silent cwd fallback, auto dashboard or separate per-project service.\n- Requests with a foreign Host or Origin, cross-site writes and non-loopback connections are rejected; Heca-bundled and npm-installed versions converge on the newest service.\n- Lost acknowledgements, stale revisions, unavailable service and incompatible clients have typed non-success results.\n\nCurrent source navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/ws-hub.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, the execution lock and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T19:09:23.664Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-001-implement-atomic-user-scoped-startup-ownership-compatible-endpoint-boot-protocol-discovery-reuse-reconnect-and-explicit-shutdown-without-tying-lifetime-to-a-window",
           "number": 1,
-          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "title": "Implement atomic user-scoped startup ownership, compatible endpoint/boot/protocol discovery, reuse, reconnect and explicit shutdown without tying lifetime to a window.",
           "checked": false
         },
         {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-002-implement-the-resolved-binding-from-m1-and-the-shared-authority-service-lifecycle-including-atomic-startup-ownership-compatible-discovery-reconnect-and-typed-dead-incompatible-unavailable-outcomes",
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-002-expose-a-complete-versioned-application-api-over-the-shared-sqlite-domain-boundary-current-crud-discuss-requirements-decisions-lifecycle-handoffs-documents-search-context-and-recovery-operations-preserve-v1-compatibility-explicitly",
           "number": 2,
-          "title": "Implement the resolved binding from M1 and the shared authority/service lifecycle, including atomic startup ownership, compatible discovery, reconnect and typed dead/incompatible/unavailable outcomes.",
+          "title": "Expose a complete versioned application API over the shared SQLite/domain boundary: current CRUD/discuss, requirements/decisions, lifecycle, handoffs, documents/search, context and recovery operations. Preserve v1 compatibility explicitly.",
           "checked": false
         },
         {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-003-reuse-existing-transactions-and-atomic-claims-serialize-conflicting-operations-with-expected-entity-revisions-idempotency-keys-and-actor-execution-provenance-independent-code-work-remains-parallel-a-slow-dead-client-cannot-leave-an-indefinite-write-lock",
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-003-convert-mcp-into-its-stdio-api-bridge-pi-into-its-native-api-adapter-and-cli-web-ui-into-the-same-operations-inventory-actual-tool-error-approval-parity-before-removing-direct-store-access",
           "number": 3,
-          "title": "Reuse existing transactions and atomic claims; serialize conflicting operations with expected entity revisions, idempotency keys and actor/execution provenance. Independent code work remains parallel; a slow/dead client cannot leave an indefinite write lock.",
+          "title": "Convert MCP into its stdio API bridge, Pi into its native API adapter, and CLI/Web UI into the same operations. Inventory actual tool/error/approval parity before removing direct store access.",
           "checked": false
         },
         {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-004-keep-global-task-claims-and-coordinator-ownership-shared-but-namespace-focus-return-chains-read-context-evidence-source-indexes-and-analysis-caches-by-their-explicit-workspace-session-revision-keys",
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-004-authenticate-principal-caller-and-authorize-project-workspace-operations-a-role-string-project-uuid-or-ui-header-does-not-confer-privileges-credentials-stay-local",
           "number": 4,
-          "title": "Keep global task claims and coordinator ownership shared, but namespace focus, return chains, read/context evidence, source indexes and analysis caches by their explicit workspace/session/revision keys.",
+          "title": "Authenticate principal/caller and authorize project/workspace operations. A role string, project UUID or UI header does not confer privileges; credentials stay local.",
           "checked": false
         },
         {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-005-update-all-host-entry-points-and-source-root-consumers-including-get-project-normal-planner-operations-must-not-fall-back-to-silently-creating-a-fresh-cwd-planner-when-the-bound-authority-is-unavailable",
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-005-bootstrap-snapshots-and-project-filtered-websocket-events-using-durable-cursors-outbox-with-bounded-replay-gap-epoch-handling-and-slow-consumer-limits-serve-the-correct-source-workspace-independently-of-data-root",
           "number": 5,
-          "title": "Update all host entry points and source-root consumers, including GET /project; normal planner operations must not fall back to silently creating a fresh cwd/.planner when the bound authority is unavailable.",
+          "title": "Bootstrap snapshots and project-filtered WebSocket events using durable cursors/outbox with bounded replay, gap/epoch handling and slow-consumer limits. Serve the correct source workspace independently of data root.",
           "checked": false
         },
         {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-006-expose-stable-domain-service-apis-and-events-for-later-source-and-provider-brokers-k2-still-owns-language-server-lifecycle-and-document-overlays-sharing-planner-authority-must-not-launch-the-dashboard-or-duplicate-the-provider-broker",
+          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Expose stable domain/service APIs and events for later source and provider brokers. K2 still owns language-server lifecycle and document overlays; sharing planner authority must not launch the dashboard or duplicate the provider broker.",
-          "checked": false
-        },
-        {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-007-verify-on-isolated-mkdtemp-fixtures-concurrent-supported-host-processes-observe-the-same-task-decision-changes-and-cannot-both-successfully-claim-one-task",
-          "number": 7,
-          "title": "Verify on isolated mkdtemp fixtures: Concurrent supported host processes observe the same task/decision changes and cannot both successfully claim one task.",
-          "checked": false
-        },
-        {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-008-verify-on-isolated-mkdtemp-fixtures-separate-worktrees-retain-independent-focus-resumes-and-source-caches-crash-restart-does-not-transfer-a-live-foreign-claim-or-discard-pending-returns",
-          "number": 8,
-          "title": "Verify on isolated mkdtemp fixtures: Separate worktrees retain independent focus, resumes and source caches; crash/restart does not transfer a live foreign claim or discard pending returns.",
-          "checked": false
-        },
-        {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-009-verify-on-isolated-mkdtemp-fixtures-stale-revisions-repeated-requests-incompatible-clients-and-unavailable-authority-return-explicit-non-success-without-duplicate-writes-or-parallel-planners",
-          "number": 9,
-          "title": "Verify on isolated mkdtemp fixtures: Stale revisions, repeated requests, incompatible clients and unavailable authority return explicit non-success without duplicate writes or parallel planners.",
-          "checked": false
-        },
-        {
-          "id": "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f-check-010-verify-shared-authority-mutation-receipts-and-scoped-invalidation-without-whole-plan-agent-payloads",
-          "number": 10,
-          "title": "Verify shared authority mutation receipts and scoped invalidation without whole-plan agent payloads.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
-        "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4",
         "e1111601-64ad-49d5-9805-df48e9dd4b70"
       ],
       "pauseSnapshot": null,
@@ -217,7 +168,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T10:03:11.170Z",
-      "updatedAt": "2026-10-21T14:59:41.571Z",
+      "updatedAt": "2026-11-02T19:09:23.532Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -226,13 +177,12 @@
       "phaseId": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
       "number": 496,
       "shortId": "M6ZCH",
-      "priority": 2,
+      "priority": 3,
       "shortName": "reconcile-affected-hierarchy-a",
       "title": "Reconcile affected hierarchy and dependencies with bounded context cost",
       "status": "planned",
-      "description": "Outcome: Every planner mutation keeps affected hierarchy and dependency context consistent through one explicit postcondition protocol, with measured bounded agent-context cost.\n\nExisting state: packages/plan-core/src/description-freshness.ts:94 computes timestamp-based phase/feature prose freshness; it does not cover project prose, dependency-impact semantics or an enforced mutation/reconciliation lifecycle. packages/plan-core/planner-skill.md:131 already tells agents to reconcile parents, but the user reports it is not reliably followed. PlanStore.runBatch at packages/plan-core/src/plan-store.ts:1077 and write coordination are existing extension points; do not recreate a parallel planner.\n\nImplementation responsibility:\n- Extend the existing description-freshness, transaction and rule/skill contracts; classify each create/update/move/status/priority/dependency/requirement/decision change by actual semantic impact, not generic updatedAt.\n- Compute a bounded affected set from maintained parent/reverse-dependency/link indexes: owning phase/feature/project, old and new parents on moves, incoming/outgoing dependencies and affected readiness/context projections. Do not scan or reload unrelated project content on every write.\n- Recompute structural relations and derived rollups within the coordinated mutation; reject dangling references, parent mismatches and dependency cycles with typed diagnostics, without inventing dependencies or cascading task-status changes.\n- Assess parent prose and linked/dependent descriptions against changed facts. Apply a minimal factual update through the canonical owner only where necessary; preserve decisions, rationale, user prose and unrelated content. Otherwise record a version-bound no-change-needed assessment, not a cosmetic rewrite.\n- Return a compact change-impact receipt containing changed IDs/revisions, relevant before/after facts, affected parents/dependencies and reconciliation outcomes. If semantic review needs an agent/user, persist a durable bounded obligation and return reconciliation_required; do not claim the full operation is reconciled merely because the leaf write persisted.\n- Provide expected-revision/idempotent reconcile operations and paginated impact continuation. Concurrent changes invalidate stale assessments, interrupted clients resume obligations, and phase/feature closeout verifies required reconciliation or an explicit recorded unresolved blocker.\n- Expose the same domain postconditions through supported MCP/Pi/CLI/server/UI surfaces and D2 portable skills; normal reads are non-mutating, no-task behavior remains warning-only, and a missing agent hook cannot be advertised as enforced interception.\n- Measure A2-defined per-flow payload/token and tool-call budgets using fixed fixtures. Reuse already delivered unchanged mandatory context, return affected deltas by default and request full content only on cache/context loss or explicit drill-down; large impact uses bounded continuation without hiding required context.\n\nAcceptance and evidence:\n- Creating/updating/moving a task or changing an edge leaves all affected structural parents/dependencies consistent, with a factual prose update or explicit revision-bound reviewed-unchanged/pending result.\n- Task -> phase -> feature -> project scope changes reconcile only affected meaning; a new task cannot silently leave contradictory parent descriptions. Edge removal, cross-phase links, deletion/move and concurrent edits are covered.\n- A local mutation has bounded incremental response/tool overhead independent of unrelated plan growth; high-fan-out changes paginate explicitly and cached no-op operations do not reload full ancestors/graph.\n- Required rules/requirements/decisions remain available after compaction or workspace change; token economy never relies on a stored timestamp as proof of effective model context or silently drops mandatory content.\n\nDetailed contract: structural updates and semantic review are distinct. A write may be persisted while reconciliation remains required; the response must say so and preserve the obligation. Do not blindly rewrite every ancestor, auto-change Accepted Decisions, infer new work dependencies from graph/code links or block unrelated tasks for a local edit. Assess old/new parents and both directions of actual dependency effects. A reviewed-unchanged receipt must name the source/parent revisions and cannot be satisfied by merely touching a timestamp. The no-task guard remains warning-only; this is a planner consistency postcondition, not a newly authorized source-write denial policy.\n\nOwnership: this task owns mutation-impact and reconciliation contracts. G3 reuses them for source/context freshness; B1 consumes updated readiness; C2 owns context delivery/reuse; D2 owns portable skill distribution; I1/I2 own complete and fresh-installed closeout. Exact field/tool names and numeric per-flow budgets are selected from measured A2 baselines, not fabricated promises. All F025 improvements, including shared planner, graph and editor, must meet the common bounded-cost contract.\n\nRead before editing: packages/plan-core/src/description-freshness.ts:94; packages/plan-core/src/plan-store.ts:1036; packages/plan-core/src/write-coordination.ts:95; packages/plan-core/src/planner-rules.ts:20; packages/plan-core/planner-skill.md:131; packages/plan-core/src/api-v1.ts:343. These are dated navigation entry points inspected on 21 October 2026, never durable code identities; revalidate current sources and hashes in the handoff.\n\nDependencies: P128(F025)/T489. Requirement aliases: BR28, BR29, BR02, BR04, BR06, BR14, BR16. Full approved contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Preserve canonical IDs, derived statuses, phase handoffs, single-owner decisions, source/runtime isolation, global priority and existing project Guidelines. Use this checklist rather than new tasks per implementation step. Planning only; no product implementation or Git action is authorized here.",
-      "descriptionRef": ".planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md",
-      "descriptionUpdatedAt": "2026-10-21T14:57:53.244Z",
+      "description": "Outcome: Atomic structural consistency and bounded semantic reconciliation after every mutation.\n\nCurrent implementation: Parent rollups, reference validation and description freshness exist. Their separate file-based paths do not yet provide the full affected-context postcondition through the new service.\n\nImplementation responsibility:\n- Use SQLite reverse indexes to determine old/new parents, requirement links and real dependency consumers for create/update/move/dependency operations.\n- Commit mechanical membership/status/reference consequences with the leaf mutation; issue compact version-bound impact receipts.\n- For semantic prose and decision applicability, support explicit factual updates, reviewed-unchanged evidence or durable reconciliation_required obligations. Never blindly copy child text upward.\n- Reject stale/cyclic/foreign reconciliation; paginate genuine high-fan-out work and preserve pending obligations after crashes.\n- Cover project/feature/phase/task updates, new tasks, moves across features and dependencies without a full-plan or full-ancestor reread per operation.\n\nAcceptance and evidence:\n- A leaf save cannot report complete reconciliation while relevant obligations remain.\n- Unrelated plan growth and repeated no-op updates do not cause unconditional full context delivery.\n- Requirements/decisions keep their canonical single owners and measured budgets never omit mandatory information.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:43.003Z",
       "notes": "",
       "statusLog": [
         {
@@ -248,81 +198,111 @@
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-001-inspect-existing-freshness-transaction-rule-precedents-and-record-applicable-guidelines",
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-001-use-sqlite-reverse-indexes-to-determine-old-new-parents-requirement-links-and-real-dependency-consumers-for-create-update-move-dependency-operations",
           "number": 1,
-          "title": "Inspect existing freshness/transaction/rule precedents and record applicable Guidelines.",
+          "title": "Use SQLite reverse indexes to determine old/new parents, requirement links and real dependency consumers for create/update/move/dependency operations.",
           "checked": false
         },
         {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-002-extend-the-existing-description-freshness-transaction-and-rule-skill-contracts-classify-each-create-update-move-status-priority-dependency-requirement-decision-change-by-actual-semantic-impact-not-generic-updatedat",
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-002-commit-mechanical-membership-status-reference-consequences-with-the-leaf-mutation-issue-compact-version-bound-impact-receipts",
           "number": 2,
-          "title": "Extend the existing description-freshness, transaction and rule/skill contracts; classify each create/update/move/status/priority/dependency/requirement/decision change by actual semantic impact, not generic updatedAt.",
+          "title": "Commit mechanical membership/status/reference consequences with the leaf mutation; issue compact version-bound impact receipts.",
           "checked": false
         },
         {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-003-compute-a-bounded-affected-set-from-maintained-parent-reverse-dependency-link-indexes-owning-phase-feature-project-old-and-new-parents-on-moves-incoming-outgoing-dependencies-and-affected-readiness-context-projections-do-not-scan-or-reload-unrelated-project-content-on-every-write",
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-003-for-semantic-prose-and-decision-applicability-support-explicit-factual-updates-reviewed-unchanged-evidence-or-durable-reconciliation-required-obligations-never-blindly-copy-child-text-upward",
           "number": 3,
-          "title": "Compute a bounded affected set from maintained parent/reverse-dependency/link indexes: owning phase/feature/project, old and new parents on moves, incoming/outgoing dependencies and affected readiness/context projections. Do not scan or reload unrelated project content on every write.",
+          "title": "For semantic prose and decision applicability, support explicit factual updates, reviewed-unchanged evidence or durable reconciliation_required obligations. Never blindly copy child text upward.",
           "checked": false
         },
         {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-004-recompute-structural-relations-and-derived-rollups-within-the-coordinated-mutation-reject-dangling-references-parent-mismatches-and-dependency-cycles-with-typed-diagnostics-without-inventing-dependencies-or-cascading-task-status-changes",
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-004-reject-stale-cyclic-foreign-reconciliation-paginate-genuine-high-fan-out-work-and-preserve-pending-obligations-after-crashes",
           "number": 4,
-          "title": "Recompute structural relations and derived rollups within the coordinated mutation; reject dangling references, parent mismatches and dependency cycles with typed diagnostics, without inventing dependencies or cascading task-status changes.",
+          "title": "Reject stale/cyclic/foreign reconciliation; paginate genuine high-fan-out work and preserve pending obligations after crashes.",
           "checked": false
         },
         {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-005-assess-parent-prose-and-linked-dependent-descriptions-against-changed-facts-apply-a-minimal-factual-update-through-the-canonical-owner-only-where-necessary-preserve-decisions-rationale-user-prose-and-unrelated-content-otherwise-record-a-version-bound-no-change-needed-assessment-not-a-cosmetic-rewrite",
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-005-cover-project-feature-phase-task-updates-new-tasks-moves-across-features-and-dependencies-without-a-full-plan-or-full-ancestor-reread-per-operation",
           "number": 5,
-          "title": "Assess parent prose and linked/dependent descriptions against changed facts. Apply a minimal factual update through the canonical owner only where necessary; preserve decisions, rationale, user prose and unrelated content. Otherwise record a version-bound no-change-needed assessment, not a cosmetic rewrite.",
+          "title": "Cover project/feature/phase/task updates, new tasks, moves across features and dependencies without a full-plan or full-ancestor reread per operation.",
           "checked": false
         },
         {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-006-return-a-compact-change-impact-receipt-containing-changed-ids-revisions-relevant-before-after-facts-affected-parents-dependencies-and-reconciliation-outcomes-if-semantic-review-needs-an-agent-user-persist-a-durable-bounded-obligation-and-return-reconciliation-required-do-not-claim-the-full-operation-is-reconciled-merely-because-the-leaf-write-persisted",
+          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Return a compact change-impact receipt containing changed IDs/revisions, relevant before/after facts, affected parents/dependencies and reconciliation outcomes. If semantic review needs an agent/user, persist a durable bounded obligation and return reconciliation_required; do not claim the full operation is reconciled merely because the leaf write persisted.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "bf80a08e-a3d7-4cd9-8910-c7ad62b62238"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-21T14:52:52.874Z",
+      "updatedAt": "2026-10-29T21:02:56.006Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238",
+      "phaseId": "84e698f2-d901-4d1d-813b-6c3ed5d79203",
+      "number": 502,
+      "shortId": "MR7WJ",
+      "priority": 2,
+      "shortName": "implement-the-transactional-sq",
+      "title": "Implement the transactional SQLite authority, documents and planner search",
+      "status": "planned",
+      "description": "Outcome: Transactional SQLite authority with versioned documents, search and durable command receipts.\n\nCurrent implementation: PlanStore uses multi-file JSON and root locks. The service-owned SQLite backend selected by the user has no dedicated implementation owner; current exports are not a full portable database backup.\n\nImplementation responsibility:\n- Choose the driver by benchmark: node:sqlite (built-in, no native addon) versus better-sqlite3 (native addon, expected faster) on real planner flows (start/claim, context load, FTS search, bulk import, backup), on the latest Node release available when this task starts. Put the winner behind a thin, harness-independent persistence-driver interface. Heca bundles that pinned Node runtime; npm installs declare it as the minimum; if better-sqlite3 wins, ship prebuilt binaries per OS/CPU. Verify FTS5, JSON, WAL, the backup API and crash behaviour on the pinned build. Keep blocking DB work in a bounded worker and document schema/driver compatibility.\n- Implement relational entity/parent/dependency/ownership/revision tables, validated extensible JSON metadata, single-owner decision revisions, logical document folders/content/assets and indexed reverse relationships.\n- Implement BEGIN IMMEDIATE command transactions with expected revisions, authenticated caller identity, idempotency-key/payload validation, durable receipt and outbox/event cursor committed together. No Git/network/model calls in a transaction.\n- Provide document CRUD/history, exact-ID/literal and FTS5 word/phrase search with filters, snippets and pagination. Maintain a rebuildable FTS index transactionally; clients receive content through domain operations, never SQL or DB paths.\n- Enable foreign keys and a reviewed WAL/durability/busy/checkpoint policy. Expose consistent snapshot/backup primitives and schema migration APIs for T494/T495; no live JSON/Markdown mirror.\n- Measure representative read/context/write/search flows and inject before-commit, after-commit/lost-ack and event-publication crashes in temporary fixtures.\n\nAcceptance and evidence:\n- Task/parent/receipt/event state commits atomically; retry of a retained request cannot repeat the mutation, and conflicting payload reuse is refused.\n- Tasks are independent rows; documents/required portable assets survive snapshot restore and FTS can be rebuilt without changing canonical content.\n- SQLite is embedded in Agent Plan only; no separate DB service, network filesystem DB or installed user-data migration.\n- The backend provides complete typed primitives for T496/T490 and exposes honest busy/corrupt/schema-incompatible outcomes.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/export-service.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-11-02T19:15:16.506Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238-check-001-choose-a-supported-sqlite-driver-build-behind-a-harness-independent-persistence-port-keep-blocking-db-work-in-a-bounded-worker-and-document-schema-driver-compatibility",
+          "number": 1,
+          "title": "Choose a supported SQLite driver/build behind a harness-independent persistence port. Keep blocking DB work in a bounded worker and document schema/driver compatibility.",
           "checked": false
         },
         {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-007-provide-expected-revision-idempotent-reconcile-operations-and-paginated-impact-continuation-concurrent-changes-invalidate-stale-assessments-interrupted-clients-resume-obligations-and-phase-feature-closeout-verifies-required-reconciliation-or-an-explicit-recorded-unresolved-blocker",
+          "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238-check-002-implement-relational-entity-parent-dependency-ownership-revision-tables-validated-extensible-json-metadata-single-owner-decision-revisions-logical-document-folders-content-assets-and-indexed-reverse-relationships",
+          "number": 2,
+          "title": "Implement relational entity/parent/dependency/ownership/revision tables, validated extensible JSON metadata, single-owner decision revisions, logical document folders/content/assets and indexed reverse relationships.",
+          "checked": false
+        },
+        {
+          "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238-check-003-implement-begin-immediate-command-transactions-with-expected-revisions-authenticated-caller-identity-idempotency-key-payload-validation-durable-receipt-and-outbox-event-cursor-committed-together-no-git-network-model-calls-in-a-transaction",
+          "number": 3,
+          "title": "Implement BEGIN IMMEDIATE command transactions with expected revisions, authenticated caller identity, idempotency-key/payload validation, durable receipt and outbox/event cursor committed together. No Git/network/model calls in a transaction.",
+          "checked": false
+        },
+        {
+          "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238-check-004-provide-document-crud-history-exact-id-literal-and-fts5-word-phrase-search-with-filters-snippets-and-pagination-maintain-a-rebuildable-fts-index-transactionally-clients-receive-content-through-domain-operations-never-sql-or-db-paths",
+          "number": 4,
+          "title": "Provide document CRUD/history, exact-ID/literal and FTS5 word/phrase search with filters, snippets and pagination. Maintain a rebuildable FTS index transactionally; clients receive content through domain operations, never SQL or DB paths.",
+          "checked": false
+        },
+        {
+          "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238-check-005-enable-foreign-keys-and-a-reviewed-wal-durability-busy-checkpoint-policy-expose-consistent-snapshot-backup-primitives-and-schema-migration-apis-for-t494-t495-no-live-json-markdown-mirror",
+          "number": 5,
+          "title": "Enable foreign keys and a reviewed WAL/durability/busy/checkpoint policy. Expose consistent snapshot/backup primitives and schema migration APIs for T494/T495; no live JSON/Markdown mirror.",
+          "checked": false
+        },
+        {
+          "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238-check-006-measure-representative-read-context-write-search-flows-and-inject-before-commit-after-commit-lost-ack-and-event-publication-crashes-in-temporary-fixtures",
+          "number": 6,
+          "title": "Measure representative read/context/write/search flows and inject before-commit, after-commit/lost-ack and event-publication crashes in temporary fixtures.",
+          "checked": false
+        },
+        {
+          "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238-check-007-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 7,
-          "title": "Provide expected-revision/idempotent reconcile operations and paginated impact continuation. Concurrent changes invalidate stale assessments, interrupted clients resume obligations, and phase/feature closeout verifies required reconciliation or an explicit recorded unresolved blocker.",
-          "checked": false
-        },
-        {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-008-expose-the-same-domain-postconditions-through-supported-mcp-pi-cli-server-ui-surfaces-and-d2-portable-skills-normal-reads-are-non-mutating-no-task-behavior-remains-warning-only-and-a-missing-agent-hook-cannot-be-advertised-as-enforced-interception",
-          "number": 8,
-          "title": "Expose the same domain postconditions through supported MCP/Pi/CLI/server/UI surfaces and D2 portable skills; normal reads are non-mutating, no-task behavior remains warning-only, and a missing agent hook cannot be advertised as enforced interception.",
-          "checked": false
-        },
-        {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-009-measure-a2-defined-per-flow-payload-token-and-tool-call-budgets-using-fixed-fixtures-reuse-already-delivered-unchanged-mandatory-context-return-affected-deltas-by-default-and-request-full-content-only-on-cache-context-loss-or-explicit-drill-down-large-impact-uses-bounded-continuation-without-hiding-required-context",
-          "number": 9,
-          "title": "Measure A2-defined per-flow payload/token and tool-call budgets using fixed fixtures. Reuse already delivered unchanged mandatory context, return affected deltas by default and request full content only on cache/context loss or explicit drill-down; large impact uses bounded continuation without hiding required context.",
-          "checked": false
-        },
-        {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-010-verify-on-isolated-fixtures-creating-updating-moving-a-task-or-changing-an-edge-leaves-all-affected-structural-parents-dependencies-consistent-with-a-factual-prose-update-or-explicit-revision-bound-reviewed-unchanged-pending-result",
-          "number": 10,
-          "title": "Verify on isolated fixtures: Creating/updating/moving a task or changing an edge leaves all affected structural parents/dependencies consistent, with a factual prose update or explicit revision-bound reviewed-unchanged/pending result.",
-          "checked": false
-        },
-        {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-011-verify-on-isolated-fixtures-task-phase-feature-project-scope-changes-reconcile-only-affected-meaning-a-new-task-cannot-silently-leave-contradictory-parent-descriptions-edge-removal-cross-phase-links-deletion-move-and-concurrent-edits-are-covered",
-          "number": 11,
-          "title": "Verify on isolated fixtures: Task -> phase -> feature -> project scope changes reconcile only affected meaning; a new task cannot silently leave contradictory parent descriptions. Edge removal, cross-phase links, deletion/move and concurrent edits are covered.",
-          "checked": false
-        },
-        {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-012-verify-on-isolated-fixtures-a-local-mutation-has-bounded-incremental-response-tool-overhead-independent-of-unrelated-plan-growth-high-fan-out-changes-paginate-explicitly-and-cached-no-op-operations-do-not-reload-full-ancestors-graph",
-          "number": 12,
-          "title": "Verify on isolated fixtures: A local mutation has bounded incremental response/tool overhead independent of unrelated plan growth; high-fan-out changes paginate explicitly and cached no-op operations do not reload full ancestors/graph.",
-          "checked": false
-        },
-        {
-          "id": "e1111601-64ad-49d5-9805-df48e9dd4b70-check-013-verify-on-isolated-fixtures-required-rules-requirements-decisions-remain-available-after-compaction-or-workspace-change-token-economy-never-relies-on-a-stored-timestamp-as-proof-of-effective-model-context-or-silently-drops-mandatory-content",
-          "number": 13,
-          "title": "Verify on isolated fixtures: Required rules/requirements/decisions remain available after compaction or workspace change; token economy never relies on a stored timestamp as proof of effective model context or silently drops mandatory content.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
@@ -334,14 +314,14 @@
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
-      "createdAt": "2026-10-21T14:52:52.874Z",
-      "updatedAt": "2026-10-21T14:57:53.242Z",
+      "createdAt": "2026-10-29T21:00:59.954Z",
+      "updatedAt": "2026-11-02T19:15:16.380Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-21T10:02:59.058Z",
-  "updatedAt": "2026-10-21T15:00:46.057Z",
+  "updatedAt": "2026-11-02T19:15:17.985Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

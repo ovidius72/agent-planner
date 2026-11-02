@@ -3,49 +3,40 @@
   "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
   "number": 129,
   "shortId": "PUBBR",
-  "priority": 1,
-  "slug": "task-executions-and-revision-aware-target-integration",
-  "title": "Task executions and revision-aware target integration",
-  "discussedAt": "2026-10-21T10:04:04.594Z",
+  "priority": 8,
+  "slug": "attributable-executions-and-revision-aware-target-availability",
+  "title": "Attributable executions and revision-aware target availability",
+  "discussedAt": "2026-10-29T21:02:38.265Z",
   "contextReady": true,
   "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
-  "summary": "Keep produced work, current source availability and delivery to each configured target independently traceable.",
-  "description": "Keep produced work, current source availability and delivery to each configured target independently traceable.\n\nCurrent state: TaskSchema stores a single lifecycle, owner and pause history; E2 already owns automatic baseline/checkpoint/closeout changesets. There is no separate durable attempt model identifying where verified work was produced.\n\nGoals:\n- Persist one task with attributable attempts and revision-bound evidence.\n- Expose separate integration history and current availability through agent context and UI.\n\nResponsibilities:\n- P129(F025)/T491: Persist attributable task executions and revision-bound verification. One logical task can retain multiple identifiable executions without confusing work produced in different worktrees or losing handoff and test evidence.\n- P129(F025)/T492: Track target integrations and revalidate current code availability. Each produced result has independent per-target integration history and an evidence-based assessment of current artifact availability.\n- P129(F025)/T493: Expose work progress and target availability in planner context and UI. Agents and supervisors can distinguish what work was performed from what source and evidence are available in their selected workspace or target.\n\nBoundaries:\n- Do not infer semantic behavior from a merged flag or force all tasks through a PR.\n- Do not replace B scheduling, E changesets, H graph or K/L editor/provider ownership.\n\nRisks:\n- A verified feature branch can be absent from the target.\n- Revert/squash/rebase can invalidate simplistic SHA/merged checks.\n\nAcceptance:\n- Two attempts remain separately attributable and one task keeps one canonical identity; worktree deletion/branch rename cannot erase old evidence.\n- An uncommitted verified result has a recoverable snapshot and is not reported as delivered to a target branch.\n- Resume and phase handoff identify the correct execution; a test result for revision A cannot certify changed revision B.\n- dev-a merges feat/one while dev-b has verified feat/due: the shared planner reports both executions, but the target contains only the demonstrated result of dev-a.\n- Squash/rebase/cherry-pick cases are not falsely absent solely because original SHAs differ; uncertainty is exposed.\n- A later revert invalidates current availability while preserving the historical merge; develop/next/main targets are configurable and release-only main governance is unchanged.\n- Global and target views show dev-b verified in feat/due and awaiting integration without claiming its code is in the viewed target.\n- A code-dependent task in another checkout is blocked or uncertain with an actionable reason, while a planning-only dependency is not blocked by a fictitious missing merge.\n- Switching workspace/target or observing a revert updates evidence and delivery projections consistently across agent context and UI, without changing canonical task IDs or losing historical progress.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:252 — TaskSchema / dependsOn / pauseSnapshot / activeOwnerSession\n- packages/plan-core/src/plan-store.ts:3493 — registerSession / claimTask / recoverSessionForTask\n- packages/plan-core/src/task-selection.ts:283 — recommendNextTask\n- packages/plan-core/src/api-v1.ts:343 — buildApiV1Model\n- packages/plan-web-ui/src/routes/task-detail/route.tsx:108 — task detail route\n- packages/plan-core/src/handoff-context.ts:1 — phase-scoped handoff context\n\nDependencies: P128(F025). Requirements: BR24, BR25, BR02, BR03, BR04, BR08, BR12, BR14, BR15, BR17. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.\n\nSource positions above are dated navigation evidence from 21 October 2026, not permanent anchors; revalidate against the current checkout.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
-  "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-  "descriptionUpdatedAt": "2026-10-21T14:58:53.135Z",
+  "summary": "Separate execution/verification from delivered code. Expose current target evidence without blocking unrelated planning.",
+  "description": "Integration context: every agent uses planner load against one shared service; preserve independent session/context/execution attribution, including requester and executor as audit (planner writes are not restricted between agents). Only explicitly enrolled room agents bind to Heca. Native transcript aggregation is outside this delivery.\n\nPurpose: Separate execution/verification from delivered code. Expose current target evidence without blocking unrelated planning.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P129(F025)/T491: Attributable task executions and exact-revision verification records independent of target delivery.\n- P129(F025)/T492: Per-target integration history and honest present code availability.\n- P129(F025)/T493: Separate global work progress, workspace evidence and target-delivery views.\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/handoff-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: Separate source execution, verification at an exact revision, historical target integration and currently observable availability. Report uncertain availability honestly.",
+  "descriptionUpdatedAt": "2026-11-02T16:58:34.893Z",
   "notes": "",
   "goals": [
-    "Persist one task with attributable attempts and revision-bound evidence.",
-    "Expose separate integration history and current availability through agent context and UI."
+    "Separate execution/verification from delivered code.",
+    "Expose current target evidence without blocking unrelated planning."
   ],
   "nonGoals": [
-    "Do not infer semantic behavior from a merged flag or force all tasks through a PR.",
-    "Do not replace B scheduling, E changesets, H graph or K/L editor/provider ownership."
+    "No unrelated runtime implementation, real data migration or Git/release action during planning.",
+    "No duplicate ownership, fixed language list or global task-queue scheduling."
   ],
   "dependencies": [
-    "P128(F025)"
+    "P128(F025)",
+    "P117(F025)"
   ],
   "dependsOn": [],
   "risks": [
-    "A verified feature branch can be absent from the target.",
-    "Revert/squash/rebase can invalidate simplistic SHA/merged checks."
+    "Old JSON/path assumptions can leak through direct consumers; inspect current integration seams.",
+    "A passing fixture or stored read does not prove live native behavior or model understanding."
   ],
-  "openQuestions": [
-    "Define bounded provider-neutral integration observation and legacy done mapping without fabricating historical provenance."
-  ],
+  "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [
-    "Two attempts remain separately attributable and one task keeps one canonical identity; worktree deletion/branch rename cannot erase old evidence.",
-    "An uncommitted verified result has a recoverable snapshot and is not reported as delivered to a target branch.",
-    "Resume and phase handoff identify the correct execution; a test result for revision A cannot certify changed revision B.",
-    "dev-a merges feat/one while dev-b has verified feat/due: the shared planner reports both executions, but the target contains only the demonstrated result of dev-a.",
-    "Squash/rebase/cherry-pick cases are not falsely absent solely because original SHAs differ; uncertainty is exposed.",
-    "A later revert invalidates current availability while preserving the historical merge; develop/next/main targets are configurable and release-only main governance is unchanged.",
-    "Global and target views show dev-b verified in feat/due and awaiting integration without claiming its code is in the viewed target.",
-    "A code-dependent task in another checkout is blocked or uncertain with an actionable reason, while a planning-only dependency is not blocked by a fictitious missing merge.",
-    "Switching workspace/target or observing a revert updates evidence and delivery projections consistently across agent context and UI, without changing canonical task IDs or losing historical progress.",
-    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+    "Every owned task meets its complete canonical contract with concrete evidence.",
+    "Affected hierarchy/dependencies and context validity are reconciled without unbounded payloads.",
+    "Unverified native/provider/installed boundaries are explicit."
   ],
   "taskIds": [
     "281720b5-1617-42bd-809d-42b76c8bba4b",
@@ -62,66 +53,47 @@
       "shortName": "persist-attributable-task-exec",
       "title": "Persist attributable task executions and revision-bound verification",
       "status": "planned",
-      "description": "Outcome: One logical task can retain multiple identifiable executions without confusing work produced in different worktrees or losing handoff and test evidence.\n\nExisting state: TaskSchema stores a single lifecycle, owner and pause history; E2 already owns automatic baseline/checkpoint/closeout changesets. There is no separate durable attempt model identifying where verified work was produced.\n\nImplementation responsibility:\n- Add an Execution model and granular store/API operations linking taskId, executionId, agent/session, stable workspace/repository identity, branch locator, starting revision and attributable resulting commits or recoverable dirty snapshots.\n- Define explicit running/paused/verified/failed/abandoned semantics and transition/recovery rules. Resume the same attempt only after identity/lineage validation; a genuinely new attempt creates another execution instead of replacing history.\n- Bind test/conformity evidence to the exact execution and source/configuration fingerprint, recording command/suite, result, environment and coverage limitations; later edits invalidate current verification without deleting historical evidence.\n- Attach existing phase handoffs, caller ownership and E2 changeset checkpoints to the exact execution/workspace. Preserve foreign/pre-existing dirty changes and mark unobserved attribution rather than manufacturing it.\n- Define compatibility projections for legacy tasks and first-class non-code/planning work. Retain unknown historical provenance; do not fabricate branch, commit, PR or test evidence to populate new fields.\n\nAcceptance and evidence:\n- Two attempts remain separately attributable and one task keeps one canonical identity; worktree deletion/branch rename cannot erase old evidence.\n- An uncommitted verified result has a recoverable snapshot and is not reported as delivered to a target branch.\n- Resume and phase handoff identify the correct execution; a test result for revision A cannot certify changed revision B.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:252 — TaskSchema / dependsOn / pauseSnapshot / activeOwnerSession\n- packages/plan-core/src/plan-store.ts:3493 — registerSession / claimTask / recoverSessionForTask\n- packages/plan-core/src/handoff-context.ts:1 — phase-scoped handoff context\n- packages/plan-core/src/session-focus.ts:1 — caller-scoped focus and returns\n- packages/plan-core/docs/runtime-boundaries.md:1 — current versioned plan and worktree-local runtime policy\n\nDetailed discussion contract:\n- Execution is not integration. A finished verified attempt can coexist with no code in develop/next/main. No automatic Git action follows an execution transition.\n- E2 remains responsible for deriving and attributing large-task changesets; this task supplies the execution identity, lifecycle and evidence owner that E2 reuses.\n- Do not silently redefine the old task done flag to mean every possible target is delivered. Define and test the legacy mapping and uncertainty before changing public compatibility projections.\n\nExecution dependencies: P128(F025)/T490. Requirement aliases: BR24, BR23, BR08, BR17, BR03. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.",
-      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-      "descriptionUpdatedAt": "2026-10-21T10:04:02.938Z",
+      "description": "Attribution contract: Implement independent standalone/integrated execution history using agentId, planner sessionId, nativeSessionId when known, harness/model/source identity, requestedBySessionId versus executionSessionId (audit only; planner writes are not restricted between agents), policy revision and lifecycle observations. Resolve parents server-side; retain name/role/model snapshots. Native IDs are correlation, never credentials or owner overrides. A disconnected agent does not imply finished work.\n\nOutcome: Attributable task executions and exact-revision verification records independent of target delivery.\n\nCurrent implementation: Tasks have a lifecycle/owner and pause history, but no durable attempt model separating results from different workspaces and code revisions.\n\nImplementation responsibility:\n- Add execution identity/lifecycle and granular operations linking task, authenticated caller, stable workspace, baseline/configuration and attributable result commits or recoverable dirty snapshots.\n- Define running/paused/verified/failed/abandoned transitions and same-attempt resume checks without overwriting earlier attempts.\n- Bind tests/conformity to command/suite, environment, source/configuration fingerprint and coverage limits; later edits invalidate current verification without deleting history.\n- Provide the identity/checkpoint port T471 changesets and phase handoffs consume. Preserve foreign dirty changes and unknown historical attribution.\n- Handle non-code work without fabricated commits/PRs. AgentTest remains an evidence producer seam, not an approved autonomous testing platform.\n\nAcceptance and evidence:\n- Two attempts retain one task ID and separately attributable evidence.\n- Verified uncommitted code has recoverable evidence but is not reported as integrated.\n- Native session, planner caller and execution IDs cannot be conflated or client-set to steal work.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/handoff-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T16:58:33.556Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-001-add-execution-identity-lifecycle-and-granular-operations-linking-task-authenticated-caller-stable-workspace-baseline-configuration-and-attributable-result-commits-or-recoverable-dirty-snapshots",
           "number": 1,
-          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "title": "Add execution identity/lifecycle and granular operations linking task, authenticated caller, stable workspace, baseline/configuration and attributable result commits or recoverable dirty snapshots.",
           "checked": false
         },
         {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-002-add-an-execution-model-and-granular-store-api-operations-linking-taskid-executionid-agent-session-stable-workspace-repository-identity-branch-locator-starting-revision-and-attributable-resulting-commits-or-recoverable-dirty-snapshots",
+          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-002-define-running-paused-verified-failed-abandoned-transitions-and-same-attempt-resume-checks-without-overwriting-earlier-attempts",
           "number": 2,
-          "title": "Add an Execution model and granular store/API operations linking taskId, executionId, agent/session, stable workspace/repository identity, branch locator, starting revision and attributable resulting commits or recoverable dirty snapshots.",
+          "title": "Define running/paused/verified/failed/abandoned transitions and same-attempt resume checks without overwriting earlier attempts.",
           "checked": false
         },
         {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-003-define-explicit-running-paused-verified-failed-abandoned-semantics-and-transition-recovery-rules-resume-the-same-attempt-only-after-identity-lineage-validation-a-genuinely-new-attempt-creates-another-execution-instead-of-replacing-history",
+          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-003-bind-tests-conformity-to-command-suite-environment-source-configuration-fingerprint-and-coverage-limits-later-edits-invalidate-current-verification-without-deleting-history",
           "number": 3,
-          "title": "Define explicit running/paused/verified/failed/abandoned semantics and transition/recovery rules. Resume the same attempt only after identity/lineage validation; a genuinely new attempt creates another execution instead of replacing history.",
+          "title": "Bind tests/conformity to command/suite, environment, source/configuration fingerprint and coverage limits; later edits invalidate current verification without deleting history.",
           "checked": false
         },
         {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-004-bind-test-conformity-evidence-to-the-exact-execution-and-source-configuration-fingerprint-recording-command-suite-result-environment-and-coverage-limitations-later-edits-invalidate-current-verification-without-deleting-historical-evidence",
+          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-004-provide-the-identity-checkpoint-port-t471-changesets-and-phase-handoffs-consume-preserve-foreign-dirty-changes-and-unknown-historical-attribution",
           "number": 4,
-          "title": "Bind test/conformity evidence to the exact execution and source/configuration fingerprint, recording command/suite, result, environment and coverage limitations; later edits invalidate current verification without deleting historical evidence.",
+          "title": "Provide the identity/checkpoint port T471 changesets and phase handoffs consume. Preserve foreign dirty changes and unknown historical attribution.",
           "checked": false
         },
         {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-005-attach-existing-phase-handoffs-caller-ownership-and-e2-changeset-checkpoints-to-the-exact-execution-workspace-preserve-foreign-pre-existing-dirty-changes-and-mark-unobserved-attribution-rather-than-manufacturing-it",
+          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-005-handle-non-code-work-without-fabricated-commits-prs-agenttest-remains-an-evidence-producer-seam-not-an-approved-autonomous-testing-platform",
           "number": 5,
-          "title": "Attach existing phase handoffs, caller ownership and E2 changeset checkpoints to the exact execution/workspace. Preserve foreign/pre-existing dirty changes and mark unobserved attribution rather than manufacturing it.",
+          "title": "Handle non-code work without fabricated commits/PRs. AgentTest remains an evidence producer seam, not an approved autonomous testing platform.",
           "checked": false
         },
         {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-006-define-compatibility-projections-for-legacy-tasks-and-first-class-non-code-planning-work-retain-unknown-historical-provenance-do-not-fabricate-branch-commit-pr-or-test-evidence-to-populate-new-fields",
+          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Define compatibility projections for legacy tasks and first-class non-code/planning work. Retain unknown historical provenance; do not fabricate branch, commit, PR or test evidence to populate new fields.",
-          "checked": false
-        },
-        {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-007-verify-on-isolated-mkdtemp-fixtures-two-attempts-remain-separately-attributable-and-one-task-keeps-one-canonical-identity-worktree-deletion-branch-rename-cannot-erase-old-evidence",
-          "number": 7,
-          "title": "Verify on isolated mkdtemp fixtures: Two attempts remain separately attributable and one task keeps one canonical identity; worktree deletion/branch rename cannot erase old evidence.",
-          "checked": false
-        },
-        {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-008-verify-on-isolated-mkdtemp-fixtures-an-uncommitted-verified-result-has-a-recoverable-snapshot-and-is-not-reported-as-delivered-to-a-target-branch",
-          "number": 8,
-          "title": "Verify on isolated mkdtemp fixtures: An uncommitted verified result has a recoverable snapshot and is not reported as delivered to a target branch.",
-          "checked": false
-        },
-        {
-          "id": "281720b5-1617-42bd-809d-42b76c8bba4b-check-009-verify-on-isolated-mkdtemp-fixtures-resume-and-phase-handoff-identify-the-correct-execution-a-test-result-for-revision-a-cannot-certify-changed-revision-b",
-          "number": 9,
-          "title": "Verify on isolated mkdtemp fixtures: Resume and phase handoff identify the correct execution; a test result for revision A cannot certify changed revision B.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
@@ -134,7 +106,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T10:03:11.453Z",
-      "updatedAt": "2026-10-21T10:04:03.275Z",
+      "updatedAt": "2026-11-02T16:58:33.414Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -147,66 +119,41 @@
       "shortName": "track-target-integrations-and",
       "title": "Track target integrations and revalidate current code availability",
       "status": "planned",
-      "description": "Outcome: Each produced result has independent per-target integration history and an evidence-based assessment of current artifact availability.\n\nExisting state: Task completion and dependsOn contain no target-branch or source-result integration evidence. A worktree path, original SHA or historical merged PR alone cannot establish that a result is present in a current checkout.\n\nImplementation responsibility:\n- Add Integration records referencing an execution/result, configured repository target, optional PR identity, source revision(s), observed target/result revision and verification/provenance. Allow several targets and record immutable historical observations.\n- Define target observations for pending review/integration, observed integration, current present/absent/unknown/review-required availability and invalidated verification. Keep historical merge facts separate from current capability claims.\n- Support ordinary merges plus squash/rebase/cherry-pick using provider-neutral observations or explicit user attestation with provenance; original-commit ancestry is one signal, never the only proof. Uncertain equivalence remains unknown.\n- Recheck on target movement, revert, replacement, force-push or execution changes; cache by repository/target/source fingerprints and preserve the old evidence trail when current confidence changes.\n- Define artifact-presence requirements separately from work-order dependencies; a selected checkout can satisfy an artifact through its own source/ancestry even before integration into another target. Non-code tasks need no invented PR.\n\nAcceptance and evidence:\n- dev-a merges feat/one while dev-b has verified feat/due: the shared planner reports both executions, but the target contains only the demonstrated result of dev-a.\n- Squash/rebase/cherry-pick cases are not falsely absent solely because original SHAs differ; uncertainty is exposed.\n- A later revert invalidates current availability while preserving the historical merge; develop/next/main targets are configurable and release-only main governance is unchanged.\n\nRead before editing:\n- packages/plan-core/src/schema.ts:252 — TaskSchema / dependsOn / pauseSnapshot / activeOwnerSession\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/src/api-v1.ts:343 — buildApiV1Model\n- packages/plan-core/docs/runtime-boundaries.md:1 — current versioned plan and worktree-local runtime policy\n\nDetailed discussion contract:\n- Do not hardcode main as the integration target. This repository integrates daily work into the user-selected develop or next branch, with release PRs into main; this registration does not change that workflow.\n- Historical integrated and currently available are independent facts. No graph edge, task status, merged PR flag or source hash alone proves that arbitrary semantic behavior survived a later edit.\n- Use explicit bounded supported Git/hosting observations. No mandatory GitHub account, cloud backend, automatic commit/push/merge or guaranteed semantic equivalence detector is authorized.\n\nExecution dependencies: P129(F025)/T491. Requirement aliases: BR24, BR25, BR14, BR17. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.",
-      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-      "descriptionUpdatedAt": "2026-10-21T10:04:03.446Z",
+      "description": "Outcome: Per-target integration history and honest present code availability.\n\nCurrent implementation: A task marked done does not establish that its code exists in main/develop/another worktree. Squash/rebase/cherry-pick and reverts complicate simple SHA ancestry.\n\nImplementation responsibility:\n- Record configurable target integrations against attributable execution artifacts, target revision and provenance without triggering automatic Git actions.\n- Distinguish historical merge from current availability, and expose present/absent/unknown/review-required evidence.\n- Handle normal merge, squash/rebase/cherry-pick, target replacement and revert with bounded evidence; never claim general semantic equivalence from a hash match.\n- Revalidate affected source-dependent verification at the selected source/configuration. Retain legacy unknowns and non-code task projections.\n\nAcceptance and evidence:\n- Merging dev-a/feat-one does not mark dev-b/feat-two delivered.\n- A later revert preserves historical integration while invalidating current availability.\n- Deleting/renaming a worktree/branch does not erase execution evidence.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:47.294Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-001-record-configurable-target-integrations-against-attributable-execution-artifacts-target-revision-and-provenance-without-triggering-automatic-git-actions",
           "number": 1,
-          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "title": "Record configurable target integrations against attributable execution artifacts, target revision and provenance without triggering automatic Git actions.",
           "checked": false
         },
         {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-002-add-integration-records-referencing-an-execution-result-configured-repository-target-optional-pr-identity-source-revision-s-observed-target-result-revision-and-verification-provenance-allow-several-targets-and-record-immutable-historical-observations",
+          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-002-distinguish-historical-merge-from-current-availability-and-expose-present-absent-unknown-review-required-evidence",
           "number": 2,
-          "title": "Add Integration records referencing an execution/result, configured repository target, optional PR identity, source revision(s), observed target/result revision and verification/provenance. Allow several targets and record immutable historical observations.",
+          "title": "Distinguish historical merge from current availability, and expose present/absent/unknown/review-required evidence.",
           "checked": false
         },
         {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-003-define-target-observations-for-pending-review-integration-observed-integration-current-present-absent-unknown-review-required-availability-and-invalidated-verification-keep-historical-merge-facts-separate-from-current-capability-claims",
+          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-003-handle-normal-merge-squash-rebase-cherry-pick-target-replacement-and-revert-with-bounded-evidence-never-claim-general-semantic-equivalence-from-a-hash-match",
           "number": 3,
-          "title": "Define target observations for pending review/integration, observed integration, current present/absent/unknown/review-required availability and invalidated verification. Keep historical merge facts separate from current capability claims.",
+          "title": "Handle normal merge, squash/rebase/cherry-pick, target replacement and revert with bounded evidence; never claim general semantic equivalence from a hash match.",
           "checked": false
         },
         {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-004-support-ordinary-merges-plus-squash-rebase-cherry-pick-using-provider-neutral-observations-or-explicit-user-attestation-with-provenance-original-commit-ancestry-is-one-signal-never-the-only-proof-uncertain-equivalence-remains-unknown",
+          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-004-revalidate-affected-source-dependent-verification-at-the-selected-source-configuration-retain-legacy-unknowns-and-non-code-task-projections",
           "number": 4,
-          "title": "Support ordinary merges plus squash/rebase/cherry-pick using provider-neutral observations or explicit user attestation with provenance; original-commit ancestry is one signal, never the only proof. Uncertain equivalence remains unknown.",
+          "title": "Revalidate affected source-dependent verification at the selected source/configuration. Retain legacy unknowns and non-code task projections.",
           "checked": false
         },
         {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-005-recheck-on-target-movement-revert-replacement-force-push-or-execution-changes-cache-by-repository-target-source-fingerprints-and-preserve-the-old-evidence-trail-when-current-confidence-changes",
+          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-005-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 5,
-          "title": "Recheck on target movement, revert, replacement, force-push or execution changes; cache by repository/target/source fingerprints and preserve the old evidence trail when current confidence changes.",
-          "checked": false
-        },
-        {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-006-define-artifact-presence-requirements-separately-from-work-order-dependencies-a-selected-checkout-can-satisfy-an-artifact-through-its-own-source-ancestry-even-before-integration-into-another-target-non-code-tasks-need-no-invented-pr",
-          "number": 6,
-          "title": "Define artifact-presence requirements separately from work-order dependencies; a selected checkout can satisfy an artifact through its own source/ancestry even before integration into another target. Non-code tasks need no invented PR.",
-          "checked": false
-        },
-        {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-007-verify-on-isolated-mkdtemp-fixtures-dev-a-merges-feat-one-while-dev-b-has-verified-feat-due-the-shared-planner-reports-both-executions-but-the-target-contains-only-the-demonstrated-result-of-dev-a",
-          "number": 7,
-          "title": "Verify on isolated mkdtemp fixtures: dev-a merges feat/one while dev-b has verified feat/due: the shared planner reports both executions, but the target contains only the demonstrated result of dev-a.",
-          "checked": false
-        },
-        {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-008-verify-on-isolated-mkdtemp-fixtures-squash-rebase-cherry-pick-cases-are-not-falsely-absent-solely-because-original-shas-differ-uncertainty-is-exposed",
-          "number": 8,
-          "title": "Verify on isolated mkdtemp fixtures: Squash/rebase/cherry-pick cases are not falsely absent solely because original SHAs differ; uncertainty is exposed.",
-          "checked": false
-        },
-        {
-          "id": "f9af06a6-3897-4184-9eea-b7b02e16d052-check-009-verify-on-isolated-mkdtemp-fixtures-a-later-revert-invalidates-current-availability-while-preserving-the-historical-merge-develop-next-main-targets-are-configurable-and-release-only-main-governance-is-unchanged",
-          "number": 9,
-          "title": "Verify on isolated mkdtemp fixtures: A later revert invalidates current availability while preserving the historical merge; develop/next/main targets are configurable and release-only main governance is unchanged.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
@@ -219,7 +166,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T10:03:11.709Z",
-      "updatedAt": "2026-10-21T10:04:03.845Z",
+      "updatedAt": "2026-10-29T21:02:47.292Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -232,91 +179,61 @@
       "shortName": "expose-work-progress-and-targe",
       "title": "Expose work progress and target availability in planner context and UI",
       "status": "planned",
-      "description": "Outcome: Agents and supervisors can distinguish what work was performed from what source and evidence are available in their selected workspace or target.\n\nExisting state: Existing selection/context/API/UI surfaces expose logical task status without an execution or target revision dimension. B1 owns selector implementation; H owns graph/inspector and L owns Monaco bindings.\n\nImplementation responsibility:\n- Define one availability evaluator and projection contract taking explicit project/workspace/target revision and required artifact inputs, returning evidence, freshness and typed exclusion/unknown reasons for B1 and context consumers.\n- Define compatibility projections for logical task/phase/feature progress and separate target delivery counters; do not count all global verified work as code shipped to the viewed branch.\n- Expose execution/integration history, global operational view and explicit workspace/target selector through API/events and existing detail/dashboard surfaces. Use clear work/integration labels and visible revision provenance.\n- Feed B1 with artifact readiness only when the downstream task actually needs that code; keep logical order, active ownership, ready pending returns and global feature -> phase -> task priority distinct. This task supplies availability, B1 remains the selector owner.\n- Extend context/graph/editor contracts with the same chosen source identity; historical/draft/current views remain distinct. Delegate graph navigation to H and Monaco/source/provider work to K/L rather than implementing parallel tools.\n\nAcceptance and evidence:\n- Global and target views show dev-b verified in feat/due and awaiting integration without claiming its code is in the viewed target.\n- A code-dependent task in another checkout is blocked or uncertain with an actionable reason, while a planning-only dependency is not blocked by a fictitious missing merge.\n- Switching workspace/target or observing a revert updates evidence and delivery projections consistently across agent context and UI, without changing canonical task IDs or losing historical progress.\n\nRead before editing:\n- packages/plan-core/src/task-selection.ts:283 — recommendNextTask\n- packages/plan-core/src/task-context.ts:175 — buildPhaseContextBlock\n- packages/plan-core/src/api-v1.ts:343 — buildApiV1Model\n- packages/plan-web-ui/src/app/router.tsx:51 — project and entity routes\n- packages/plan-web-ui/src/routes/task-detail/route.tsx:108 — task detail route\n- packages/plan-server/src/entity-events.ts:1 — domain event publication\n\nDetailed discussion contract:\n- The UI selector does not change an agent execution workspace by implication. A source-writing request carries an explicit resolved workspace binding; changing the supervisor view alone cannot redirect an active agent.\n- Work-complete and integration-available are separate projections. Preserve existing derived parent status until its documented compatibility mapping is deliberately implemented and verified.\n- Target selection and code-availability evidence do not create duplicate tasks or impose code delivery on research, planning or documentation-only outcomes.\n\nExecution dependencies: P129(F025)/T492. Requirement aliases: BR25, BR24, BR02, BR04, BR12, BR15. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nExecution/integration/target changes feed M3 affected readiness/context/parent assessments and compact UI/agent deltas. Recompute relevant delivery projections without reloading all source, planner or graph content; historical progress and pending review remain visible.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
-      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-      "descriptionUpdatedAt": "2026-10-21T14:57:52.941Z",
+      "description": "Outcome: Separate global work progress, workspace evidence and target-delivery views.\n\nCurrent implementation: Current task/parent statuses are a single operational projection. The selector must consume availability only when work actually needs produced source.\n\nImplementation responsibility:\n- Expose execution/verification/source/target counters and explanations through read models and UI, preserving derived parent work status.\n- Integrate the T463 availability extension without changing global priority or turning all work dependencies into code-delivery dependencies.\n- Scope context and evidence to selected workspace/target revision; navigation must not silently redirect active writes.\n- Mark stale/unknown/reverted evidence and retain non-code/legacy compatibility without fabricated results.\n\nAcceptance and evidence:\n- Global verified progress and target availability can differ visibly and correctly.\n- A source-dependent successor is not told to use unavailable code; unrelated planning work is not blocked on a merge.\n- Current target selection and evidence provenance remain visible in agent and supervisor results.\n\nCurrent source navigation:\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/on-hold.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/refs.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-web-ui/src/app/router.tsx:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:47.645Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-001-expose-execution-verification-source-target-counters-and-explanations-through-read-models-and-ui-preserving-derived-parent-work-status",
           "number": 1,
-          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "title": "Expose execution/verification/source/target counters and explanations through read models and UI, preserving derived parent work status.",
           "checked": false
         },
         {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-002-define-one-availability-evaluator-and-projection-contract-taking-explicit-project-workspace-target-revision-and-required-artifact-inputs-returning-evidence-freshness-and-typed-exclusion-unknown-reasons-for-b1-and-context-consumers",
+          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-002-integrate-the-t463-availability-extension-without-changing-global-priority-or-turning-all-work-dependencies-into-code-delivery-dependencies",
           "number": 2,
-          "title": "Define one availability evaluator and projection contract taking explicit project/workspace/target revision and required artifact inputs, returning evidence, freshness and typed exclusion/unknown reasons for B1 and context consumers.",
+          "title": "Integrate the T463 availability extension without changing global priority or turning all work dependencies into code-delivery dependencies.",
           "checked": false
         },
         {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-003-define-compatibility-projections-for-logical-task-phase-feature-progress-and-separate-target-delivery-counters-do-not-count-all-global-verified-work-as-code-shipped-to-the-viewed-branch",
+          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-003-scope-context-and-evidence-to-selected-workspace-target-revision-navigation-must-not-silently-redirect-active-writes",
           "number": 3,
-          "title": "Define compatibility projections for logical task/phase/feature progress and separate target delivery counters; do not count all global verified work as code shipped to the viewed branch.",
+          "title": "Scope context and evidence to selected workspace/target revision; navigation must not silently redirect active writes.",
           "checked": false
         },
         {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-004-expose-execution-integration-history-global-operational-view-and-explicit-workspace-target-selector-through-api-events-and-existing-detail-dashboard-surfaces-use-clear-work-integration-labels-and-visible-revision-provenance",
+          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-004-mark-stale-unknown-reverted-evidence-and-retain-non-code-legacy-compatibility-without-fabricated-results",
           "number": 4,
-          "title": "Expose execution/integration history, global operational view and explicit workspace/target selector through API/events and existing detail/dashboard surfaces. Use clear work/integration labels and visible revision provenance.",
+          "title": "Mark stale/unknown/reverted evidence and retain non-code/legacy compatibility without fabricated results.",
           "checked": false
         },
         {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-005-feed-b1-with-artifact-readiness-only-when-the-downstream-task-actually-needs-that-code-keep-logical-order-active-ownership-ready-pending-returns-and-global-feature-phase-task-priority-distinct-this-task-supplies-availability-b1-remains-the-selector-owner",
+          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-005-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 5,
-          "title": "Feed B1 with artifact readiness only when the downstream task actually needs that code; keep logical order, active ownership, ready pending returns and global feature -> phase -> task priority distinct. This task supplies availability, B1 remains the selector owner.",
-          "checked": false
-        },
-        {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-006-extend-context-graph-editor-contracts-with-the-same-chosen-source-identity-historical-draft-current-views-remain-distinct-delegate-graph-navigation-to-h-and-monaco-source-provider-work-to-k-l-rather-than-implementing-parallel-tools",
-          "number": 6,
-          "title": "Extend context/graph/editor contracts with the same chosen source identity; historical/draft/current views remain distinct. Delegate graph navigation to H and Monaco/source/provider work to K/L rather than implementing parallel tools.",
-          "checked": false
-        },
-        {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-007-verify-on-isolated-mkdtemp-fixtures-global-and-target-views-show-dev-b-verified-in-feat-due-and-awaiting-integration-without-claiming-its-code-is-in-the-viewed-target",
-          "number": 7,
-          "title": "Verify on isolated mkdtemp fixtures: Global and target views show dev-b verified in feat/due and awaiting integration without claiming its code is in the viewed target.",
-          "checked": false
-        },
-        {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-008-verify-on-isolated-mkdtemp-fixtures-a-code-dependent-task-in-another-checkout-is-blocked-or-uncertain-with-an-actionable-reason-while-a-planning-only-dependency-is-not-blocked-by-a-fictitious-missing-merge",
-          "number": 8,
-          "title": "Verify on isolated mkdtemp fixtures: A code-dependent task in another checkout is blocked or uncertain with an actionable reason, while a planning-only dependency is not blocked by a fictitious missing merge.",
-          "checked": false
-        },
-        {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-009-verify-on-isolated-mkdtemp-fixtures-switching-workspace-target-or-observing-a-revert-updates-evidence-and-delivery-projections-consistently-across-agent-context-and-ui-without-changing-canonical-task-ids-or-losing-historical-progress",
-          "number": 9,
-          "title": "Verify on isolated mkdtemp fixtures: Switching workspace/target or observing a revert updates evidence and delivery projections consistently across agent context and UI, without changing canonical task IDs or losing historical progress.",
-          "checked": false
-        },
-        {
-          "id": "c83cce3f-0d98-4e5c-ab60-192824cf91f6-check-010-measure-target-execution-projection-updates-through-compact-affected-context-receipts",
-          "number": 10,
-          "title": "Measure target/execution projection updates through compact affected-context receipts.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
-        "f9af06a6-3897-4184-9eea-b7b02e16d052"
+        "f9af06a6-3897-4184-9eea-b7b02e16d052",
+        "77ea877f-6320-4776-a19f-90d2b05f9900"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T10:03:11.993Z",
-      "updatedAt": "2026-10-21T14:57:52.939Z",
+      "updatedAt": "2026-10-29T21:02:56.490Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-21T10:02:59.391Z",
-  "updatedAt": "2026-10-21T14:58:53.135Z",
+  "updatedAt": "2026-11-02T16:58:34.875Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

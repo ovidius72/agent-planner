@@ -97,6 +97,7 @@ available through MCP/Pi and the core; the read-only `/api/v1` remains unchanged
 
 ## Documentation
 
+- [`docs/agent-brain/README.md`](./docs/agent-brain/README.md) — accepted evolution, technical review contracts, Heca-Pro workflow and task/document gap matrix. Current setup below remains file-based until migration ships.
 - [`docs/setup-claude-code.md`](./docs/setup-claude-code.md) — Claude Code MCP + slash-command setup.
 - [`docs/setup-codex.md`](./docs/setup-codex.md) — Codex MCP + skill setup.
 - [`docs/setup-opencode.md`](./docs/setup-opencode.md) — OpenCode MCP + `/planner` command setup.

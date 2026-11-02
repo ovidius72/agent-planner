@@ -1,0 +1,53 @@
+{
+  "assertions": 1542,
+  "failures": [],
+  "feature": "F025",
+  "phaseCount": 16,
+  "taskCount": 41,
+  "newTask": 502,
+  "linkedRequirements": 33,
+  "featureDecisions": 21,
+  "dependencyEdges": 68,
+  "uncheckedChecklistItems": 230,
+  "maxTaskDescriptionChars": 3586,
+  "allPlanned": true,
+  "cycles": 0,
+  "historicalReferenceWarnings": [
+    {
+      "requirementId": "f794df81-953f-42e4-bb68-91e1c303d7d0",
+      "title": "Detail-page filter parity with WorkTree + text-search fix",
+      "missingPhaseIds": [
+        "P074"
+      ],
+      "scope": "pre-existing outside F025; unchanged"
+    }
+  ],
+  "verifiedOn": "2026-10-30",
+  "evidenceType": "planner-registration-consistency-only",
+  "freshParents": 17,
+  "staleParents": [],
+  "sourceImplementationStarted": false,
+  "canonicalJsonMutationMethod": "Agent Plan MCP tools",
+  "uiPrototypeInspection": "Authenticated browser: dashboard rendered; design session visible history; not complete canvas/source export",
+  "canonicalFileSha256": {
+    ".planner/project.json": "4d2602a724ff63818b1c7ec3973ad98e7c9cca774d10ea81abf4d04fcc3b1b78",
+    ".planner/requirements.json": "2205ff8a8969539d7ba0412cddd2ed4c7d5f9d3892399c925469a3e72340ecde",
+    ".planner/features/87552320-99ec-42a3-beb5-04d29997b0f5.json": "c45ef185aac499bfc0e2bf15805922183ddfa2c691e4d4cc3263c4d9f3ff38d5",
+    ".planner/phases/504854c9-242d-4f20-a3fc-27c6e58c2eff.json": "73d6df489cbbe246ecce314474994962c324f072e3253ca06affabbe2bc7038f",
+    ".planner/phases/2e0878e2-dfe0-4d33-ae18-6f36cadc6f58.json": "19fe73d2896c0713a23121505d9d5f07968fcf8fba5e590045869fe825ff0ca6",
+    ".planner/phases/908fd902-6482-422d-9e09-ed0ed6ae6cd4.json": "6ab6f8f7babbeec80b39887959f9dda4e0d8f0673eb5aada1f949f1e6a05be05",
+    ".planner/phases/66eda762-171f-4435-9b64-b80bd0766f5b.json": "999924469b3bf427fc3f0af8c024b0e39830b68dbd0ce1ec1dacf96a4726cb60",
+    ".planner/phases/7ce4c86e-8289-47c5-bd31-976f472ddcf1.json": "e5956e5e6d0f4598d67dfaab1fa56bad6d8175e853c9b8f5129039817d031bda",
+    ".planner/phases/c9aa212e-9ef5-4fa9-acff-3517815a4741.json": "08be7fb9653cdc9f93dc028d7c6407488d90971176ccf19d16619e370da774ad",
+    ".planner/phases/ad510b3f-2c6d-4329-923c-543d3325f5b0.json": "b25ee6415d19631754919f81ca88a42757113026f7fdce963f755479eae1e817",
+    ".planner/phases/48358f79-a719-489c-933c-a4adbc216b18.json": "866456e1bb52caeaf3abab8a5079a6333fc4ce31cd08e10d0af6c72a3e965d4f",
+    ".planner/phases/845336f6-f90e-4012-99c9-2c6b3a066e0a.json": "da88ba8f16d3330b450c95e4986d18906bd05900014f9ae23c18fa3866215104",
+    ".planner/phases/81aa922c-06ef-4bd5-9dba-070a6b622416.json": "0faf84424b8b124fb9dd6f0b3605ae1e71ab5e28e0a8a08d998b68b4871ac38f",
+    ".planner/phases/da7ea8a7-75f7-4067-a70c-ec17cf8ebbac.json": "10f13bbfafeb58294736868c03cbe195251ccc31fc2d3f90a98c8499bd32c0b6",
+    ".planner/phases/84e698f2-d901-4d1d-813b-6c3ed5d79203.json": "2b40432541a15d8fbdcdaf9c983f162392d5da51642535e1c30851cb96182439",
+    ".planner/phases/1587a79c-750c-4ada-9ac5-e2e751f17301.json": "145c5e9a76200fe7e099bd32efa32b3ce44c765ef2eabf7ba62de26010139981",
+    ".planner/phases/4caf249f-6eaa-4a54-9425-4b3966eccd0b.json": "0d9172e802f5ee7cd40864544180347f410bc2ea0993a7926071cd6673470c3d",
+    ".planner/phases/44bf0d43-63a2-4d81-9528-a954c5620bc9.json": "1f339647e5827c2fa7fc60c6ce79a57c51e0271ea8e45b92604f2040c244a6d6",
+    ".planner/phases/f75dfa52-ab53-4d82-b74b-c7da9b9559d6.json": "7b2c3997ffeef5cc42f59a5619ef58733d98fbbae3925abe6ea6d8985a23e95a"
+  }
+}

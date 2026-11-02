@@ -1,5 +1,7 @@
 # Agent Brain: affidabilità di Agent Plan prima delle evoluzioni
 
+> Target reconciliation, 2026-10-29: read [the reviewed design package](../../docs/agent-brain/README.md) and [gap matrix](../../docs/agent-brain/reconciliation.md). HOME SQLite, one API-only application service and descriptor-first migration supersede earlier Git-common-directory/JSON target-storage passages. Detailed unaffected editor/provider/context/execution contracts and dated evidence remain useful. F025 task and parent amendments are registered; use the current execution map and canonical entities. Historical drafts below are supporting context only. The global task queue proposal is not adopted.
+
 Specificazione di scope del 20 ottobre 2026, aggiornata sui problemi indicati direttamente dall'utente. Non è un piano operativo parallelo: servirà come input per una feature Agent Plan, ancora da registrare. Questo documento sostituisce, quanto a priorità e perimetro, le roadmap preparatorie precedenti.
 
 ## Obiettivo e ordine

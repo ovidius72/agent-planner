@@ -3,49 +3,42 @@
   "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
   "number": 126,
   "shortId": "3JXCB",
-  "priority": 7,
-  "slug": "code-workspace-access-and-shared-analysis-service",
-  "title": "Code workspace access and shared analysis service",
-  "discussedAt": "2026-10-21T09:25:09.794Z",
+  "priority": 12,
+  "slug": "source-workspace-access-safe-saves-and-shared-analysis",
+  "title": "Source workspace access, safe saves and shared analysis",
+  "discussedAt": "2026-10-29T21:02:39.666Z",
   "contextReady": true,
   "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
-  "summary": "Expose revision-aware source access and one reusable analysis runtime to agents and the Web UI.",
-  "description": "Expose revision-aware source access and one reusable analysis runtime to agents and the Web UI.\n\nCurrent state: packages/plan-server/src/serve.ts:525 exposes planner-owned Markdown document routes only; packages/plan-web-ui/src/lib/api.ts:1 consumes HTTP domain APIs. packages/plan-server/src/ws-hub.ts:1 broadcasts planner events, not source-buffer revisions. No general code workspace service is implemented.\n\nP121/T474 owns common provider adapters and lifecycle, but does not yet implement a shared multi-consumer runtime. packages/plan-server/src/server-record.ts:1 shows existing local server discovery; its advisory record alone is not proof of atomic process ownership. MCP/Pi/server can run in different processes.\n\nGoals:\n- Provide project-scoped source reads and conflict-aware saves without broadening planner-document APIs.\n- Share compatible provider processes across editor and supported agent surfaces with explicit document versions and ownership.\n\nResponsibilities:\n- P126(F025)/T484: Add project-scoped source access and revision-safe file saves. A shared source-workspace service can enumerate, read and save user-project text files with explicit versions, conflicts and change provenance.\n- P126(F025)/T485: Share language-server processes across agents and the editor. Agents and the browser query one compatible provider runtime per project/worktree, provider/version and effective analysis configuration.\n\nBoundaries:\n- Do not recreate provider discovery/adapters owned by P121/T473-T475.\n- Do not make browser-only Monaco APIs part of planner core or start the dashboard implicitly.\n\nRisks:\n- Independent MCP, Pi and Web UI hosts can each start a duplicate provider unless runtime ownership is coordinated.\n- Unsaved editor buffers and external agent writes can invalidate analysis or lose work if versions are implicit.\n\nAcceptance:\n- The explorer can read and save files only in the resolved project scope; planner Markdown remains separately governed.\n- Two consumers saving from the same revision cannot silently overwrite each other; conflict responses preserve both the user draft and current content.\n- Successful or external saves notify consumers and invalidate dependent evidence without fabricating task attribution.\n- Opening Monaco while an agent uses the same compatible workspace does not create a second language-server process; concurrent startup is covered by evidence.\n- Different worktrees, providers or effective configurations are isolated and their results never cross-contaminate.\n- Browser disconnect, unsaved edits, external saves and provider restart preserve explicit source versions and do not stop other consumers or advertise unsupported operations.\n\nUse .planner/docs/agent-brain-editor-and-project-identity.md and exact child task contracts. Existing source references are named above; revalidate before editing.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nRegistered scope: P126(F025)/T484, P126(F025)/T485. All tasks remain planned; implementation has not started.\n\nShared-planner expansion approved 21 October 2026:\nReuse M1/M2 independent planRoot/workspaceRoot/runtimeRoot and coordination service. T484 reads/saves the explicit source workspace, including GET /project correction; T485 remains the sole provider-runtime owner per compatible workspace/provider/configuration and explicitly depends on P128(F025)/T490. Central plan storage must not mix source roots, overlays or language-server sessions.\nAdditional outcome coverage: BR23, BR25. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
-  "descriptionRef": ".planner/docs/agent-brain-editor-and-project-identity.md",
-  "descriptionUpdatedAt": "2026-10-21T14:58:52.484Z",
+  "summary": "Keep source roots independent of HOME storage. Preserve concurrent drafts and share only compatible provider runtimes.",
+  "description": "Purpose: Keep source roots independent of HOME storage. Preserve concurrent drafts and share only compatible provider runtimes.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P126(F025)/T484: Explicit workspace source access and safe expected-revision saves.\n- P126(F025)/T485: One compatible analysis runtime shared by agent and editor consumers.\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: Workspace source access remains separate from HOME planner storage. One compatible analysis owner serves agents and editor; saves preserve concurrent drafts/conflicts.",
+  "descriptionUpdatedAt": "2026-10-30T08:26:59.744Z",
   "notes": "",
   "goals": [
-    "Provide project-scoped source reads and conflict-aware saves without broadening planner-document APIs.",
-    "Share compatible provider processes across editor and supported agent surfaces with explicit document versions and ownership."
+    "Keep source roots independent of HOME storage.",
+    "Preserve concurrent drafts and share only compatible provider runtimes."
   ],
   "nonGoals": [
-    "Do not recreate provider discovery/adapters owned by P121/T473-T475.",
-    "Do not make browser-only Monaco APIs part of planner core or start the dashboard implicitly."
+    "No unrelated runtime implementation, real data migration or Git/release action during planning.",
+    "No duplicate ownership, fixed language list or global task-queue scheduling."
   ],
   "dependencies": [
-    "P121(F025)",
-    "P128(F025)"
+    "P128(F025)",
+    "P121(F025)"
   ],
   "dependsOn": [],
   "risks": [
-    "Independent MCP, Pi and Web UI hosts can each start a duplicate provider unless runtime ownership is coordinated.",
-    "Unsaved editor buffers and external agent writes can invalidate analysis or lose work if versions are implicit."
+    "Old JSON/path assumptions can leak through direct consumers; inspect current integration seams.",
+    "A passing fixture or stored read does not prove live native behavior or model understanding."
   ],
   "openQuestions": [
-    "Choose transport, runtime owner discovery and compatible reuse using existing server-record/runtime-boundary precedents; advisory records alone are not atomic exclusion.",
-    "Define the explicit unsaved-overlay policy and resource limits for real tested providers; never silently substitute an editor buffer for disk."
+    "Resolve provider overlay/version compatibility using actual selected provider capabilities."
   ],
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [
-    "The explorer can read and save files only in the resolved project scope; planner Markdown remains separately governed.",
-    "Two consumers saving from the same revision cannot silently overwrite each other; conflict responses preserve both the user draft and current content.",
-    "Successful or external saves notify consumers and invalidate dependent evidence without fabricating task attribution.",
-    "Opening Monaco while an agent uses the same compatible workspace does not create a second language-server process; concurrent startup is covered by evidence.",
-    "Different worktrees, providers or effective configurations are isolated and their results never cross-contaminate.",
-    "Browser disconnect, unsaved edits, external saves and provider restart preserve explicit source versions and do not stop other consumers or advertise unsupported operations.",
-    "Shared-planner acceptance: Reuse M1/M2 independent planRoot/workspaceRoot/runtimeRoot and coordination service. T484 reads/saves the explicit source workspace, including GET /project correction; T485 remains the sole provider-runtime owner per compatible workspace/provider/configuration and explicitly depends on P128(F025)/T490. Central plan storage must not mix source roots, overlays or language-server sessions.",
-    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+    "Every owned task meets its complete canonical contract with concrete evidence.",
+    "Affected hierarchy/dependencies and context validity are reconciled without unbounded payloads.",
+    "Unverified native/provider/installed boundaries are explicit."
   ],
   "taskIds": [
     "e73006a1-5106-432f-8018-932b88e15e58",
@@ -61,84 +54,61 @@
       "shortName": "add-project-scoped-source-acce",
       "title": "Add project-scoped source access and revision-safe file saves",
       "status": "planned",
-      "description": "Outcome: A shared source-workspace service can enumerate, read and save user-project text files with explicit versions, conflicts and change provenance.\n\nExisting state: packages/plan-server/src/serve.ts:525 exposes planner-owned Markdown document routes only; packages/plan-web-ui/src/lib/api.ts:1 consumes HTTP domain APIs. packages/plan-server/src/ws-hub.ts:1 broadcasts planner events, not source-buffer revisions. No general code workspace service is implemented.\n\nImplementation responsibility:\n- Read the existing source-access, document-path and runtime boundaries; add separate code-workspace APIs instead of widening .planner/docs routes.\n- Resolve project/worktree roots and normalized relative paths; enforce root containment, explicit symlink handling, regular-text-file checks, encoding, binary/size limits and useful pagination for large trees.\n- Return file content with revision/hash, language identity hints and checkout provenance; resolve durable CodeLinks via the existing E1 contract rather than treating a URL line as permanent identity.\n- Implement saves with an expected revision, per-file serialization and safe replacement; reject stale saves with current/base/draft comparison rather than silently overwriting an agent or external edit.\n- Observe on-disk changes and publish scoped source/version events; invalidate affected provider results, graph/context and meaning-review evidence through their owning contracts.\n- Attribute UI/external edits honestly in task changesets, preserving unrelated dirty work and task/session ownership; verify APIs on isolated mkdtemp fixtures with save races, deletion and malformed/foreign paths.\n\nAcceptance and evidence:\n- The explorer can read and save files only in the resolved project scope; planner Markdown remains separately governed.\n- Two consumers saving from the same revision cannot silently overwrite each other; conflict responses preserve both the user draft and current content.\n- Successful or external saves notify consumers and invalidate dependent evidence without fabricating task attribution.\n\nRead before editing:\n- packages/plan-server/src/serve.ts:525\n- packages/plan-server/src/ws-hub.ts:1\n- packages/plan-web-ui/src/lib/api.ts:1\n- packages/plan-core/docs/runtime-boundaries.md:1\n\nDetailed discussion contract:\n- Source bytes remain in the user-project filesystem; canonical planner links remain planner-owned and derived indexes are not a second source of truth.\n- Saving code from the human supervisor does not imply that an agent task owns the edit, and does not grant agents a governance bypass.\n- Revision checks are part of the save operation, not just an earlier client check. The implementation must document the actual external-writer race limits of its filesystem strategy.\n\nExecution dependencies: P121(F025)/T475. Requirement coverage and earlier responsibilities are preserved.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nShared-planner expansion approved 21 October 2026:\nUse M1/M2 explicit workspaceRoot and workspaceId; never dirname(store.root). Source reads/saves name the selected workspace and revision, remain contained there and carry execution provenance only when actually attributable. Central planner files are not source files in the opened worktree.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
-      "descriptionUpdatedAt": "2026-10-21T10:05:05.733Z",
+      "description": "Outcome: Explicit workspace source access and safe expected-revision saves.\n\nCurrent implementation: The server currently infers source root from planRoot, which fails when the planner moves to HOME.\n\nImplementation responsibility:\n- Expose source tree/content/history APIs against the registered workspace, not database location; enforce path containment and deliberate symlink policy.\n- Identify saved source, dirty baseline, historical snapshot and draft separately with content/revision fingerprints.\n- Implement atomic conflict-aware save using expected source revision and preserving an external/agent edit; provide reviewable conflict results.\n- Handle deleted/moved files, binary/large content, readonly/historical views and unavailable local/remote workspace explicitly.\n- Notify affected analysis/graph owners without automatically committing code or overwriting foreign edits.\n\nAcceptance and evidence:\n- A database outside the project cannot redirect source access into HOME or the wrong checkout.\n- Concurrent editor/agent edits preserve both versions and refuse silent overwrite.\n- Source context remains project/workspace/revision explicit across clients.\n\nCurrent source navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:52.240Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-001-read-the-existing-source-access-document-path-and-runtime-boundaries-add-separate-code-workspace-apis-instead-of-widening-planner-docs-routes",
+          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-001-expose-source-tree-content-history-apis-against-the-registered-workspace-not-database-location-enforce-path-containment-and-deliberate-symlink-policy",
           "number": 1,
-          "title": "Read the existing source-access, document-path and runtime boundaries; add separate code-workspace APIs instead of widening .planner/docs routes.",
+          "title": "Expose source tree/content/history APIs against the registered workspace, not database location; enforce path containment and deliberate symlink policy.",
           "checked": false
         },
         {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-002-resolve-project-worktree-roots-and-normalized-relative-paths-enforce-root-containment-explicit-symlink-handling-regular-text-file-checks-encoding-binary-size-limits-and-useful-pagination-for-large-trees",
+          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-002-identify-saved-source-dirty-baseline-historical-snapshot-and-draft-separately-with-content-revision-fingerprints",
           "number": 2,
-          "title": "Resolve project/worktree roots and normalized relative paths; enforce root containment, explicit symlink handling, regular-text-file checks, encoding, binary/size limits and useful pagination for large trees.",
+          "title": "Identify saved source, dirty baseline, historical snapshot and draft separately with content/revision fingerprints.",
           "checked": false
         },
         {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-003-return-file-content-with-revision-hash-language-identity-hints-and-checkout-provenance-resolve-durable-codelinks-via-the-existing-e1-contract-rather-than-treating-a-url-line-as-permanent-identity",
+          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-003-implement-atomic-conflict-aware-save-using-expected-source-revision-and-preserving-an-external-agent-edit-provide-reviewable-conflict-results",
           "number": 3,
-          "title": "Return file content with revision/hash, language identity hints and checkout provenance; resolve durable CodeLinks via the existing E1 contract rather than treating a URL line as permanent identity.",
+          "title": "Implement atomic conflict-aware save using expected source revision and preserving an external/agent edit; provide reviewable conflict results.",
           "checked": false
         },
         {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-004-implement-saves-with-an-expected-revision-per-file-serialization-and-safe-replacement-reject-stale-saves-with-current-base-draft-comparison-rather-than-silently-overwriting-an-agent-or-external-edit",
+          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-004-handle-deleted-moved-files-binary-large-content-readonly-historical-views-and-unavailable-local-remote-workspace-explicitly",
           "number": 4,
-          "title": "Implement saves with an expected revision, per-file serialization and safe replacement; reject stale saves with current/base/draft comparison rather than silently overwriting an agent or external edit.",
+          "title": "Handle deleted/moved files, binary/large content, readonly/historical views and unavailable local/remote workspace explicitly.",
           "checked": false
         },
         {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-005-observe-on-disk-changes-and-publish-scoped-source-version-events-invalidate-affected-provider-results-graph-context-and-meaning-review-evidence-through-their-owning-contracts",
+          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-005-notify-affected-analysis-graph-owners-without-automatically-committing-code-or-overwriting-foreign-edits",
           "number": 5,
-          "title": "Observe on-disk changes and publish scoped source/version events; invalidate affected provider results, graph/context and meaning-review evidence through their owning contracts.",
+          "title": "Notify affected analysis/graph owners without automatically committing code or overwriting foreign edits.",
           "checked": false
         },
         {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-006-attribute-ui-external-edits-honestly-in-task-changesets-preserving-unrelated-dirty-work-and-task-session-ownership-verify-apis-on-isolated-mkdtemp-fixtures-with-save-races-deletion-and-malformed-foreign-paths",
+          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Attribute UI/external edits honestly in task changesets, preserving unrelated dirty work and task/session ownership; verify APIs on isolated mkdtemp fixtures with save races, deletion and malformed/foreign paths.",
-          "checked": false
-        },
-        {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-007-verify-the-explorer-can-read-and-save-files-only-in-the-resolved-project-scope-planner-markdown-remains-separately-governed",
-          "number": 7,
-          "title": "Verify: The explorer can read and save files only in the resolved project scope; planner Markdown remains separately governed.",
-          "checked": false
-        },
-        {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-008-verify-two-consumers-saving-from-the-same-revision-cannot-silently-overwrite-each-other-conflict-responses-preserve-both-the-user-draft-and-current-content",
-          "number": 8,
-          "title": "Verify: Two consumers saving from the same revision cannot silently overwrite each other; conflict responses preserve both the user draft and current content.",
-          "checked": false
-        },
-        {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-009-verify-successful-or-external-saves-notify-consumers-and-invalidate-dependent-evidence-without-fabricating-task-attribution",
-          "number": 9,
-          "title": "Verify: Successful or external saves notify consumers and invalidate dependent evidence without fabricating task attribution.",
-          "checked": false
-        },
-        {
-          "id": "e73006a1-5106-432f-8018-932b88e15e58-check-010-verify-a-central-planner-serves-two-correct-source-roots-without-cross-worktree-reads-or-writes",
-          "number": 10,
-          "title": "Verify a central planner serves two correct source roots without cross-worktree reads or writes.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
-        "06f9b034-30be-45a3-997e-7dfbf14a00be"
+        "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4",
+        "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T09:21:38.042Z",
-      "updatedAt": "2026-10-21T10:05:06.113Z",
+      "updatedAt": "2026-10-29T21:02:58.274Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -151,92 +121,67 @@
       "shortName": "share-language-server-processe",
       "title": "Share language-server processes across agents and the editor",
       "status": "planned",
-      "description": "Outcome: Agents and the browser query one compatible provider runtime per project/worktree, provider/version and effective analysis configuration.\n\nExisting state: P121/T474 owns common provider adapters and lifecycle, but does not yet implement a shared multi-consumer runtime. packages/plan-server/src/server-record.ts:1 shows existing local server discovery; its advisory record alone is not proof of atomic process ownership. MCP/Pi/server can run in different processes.\n\nImplementation responsibility:\n- Extend P121 provider contracts with a shared analysis service; define the complete runtime key, capability negotiation, cancellation, diagnostics and source/configuration fingerprints.\n- Coordinate a single compatible runtime owner across supported MCP/Pi/server hosts using an atomic startup/discovery mechanism; reuse live compatible owners and distinguish dead/incompatible owners without killing foreign embedded hosts.\n- Keep one upstream LSP session under broker ownership and expose common analysis APIs to consumers. Do not connect independent frontend/backend initializations blindly to one stdio connection.\n- Define document-open/change/close ownership, source revisions and explicit unsaved overlays. Agents normally query a named saved snapshot unless an overlay is explicitly requested; conflicting browser drafts never silently replace one another or the agent's analysis.\n- Use bounded resources, consumer leases/reference tracking, idle cleanup, reconnect and crash recovery. Closing an editor tab must not stop a provider still used by agents; analysis lifecycle must not imply dashboard activation.\n- Verify simultaneous editor and agent clients, including separate supported host processes: one process for the same key, appropriate separate processes for different keys, versioned results, unsupported capabilities and stale/partial failures.\n\nAcceptance and evidence:\n- Opening Monaco while an agent uses the same compatible workspace does not create a second language-server process; concurrent startup is covered by evidence.\n- Different worktrees, providers or effective configurations are isolated and their results never cross-contaminate.\n- Browser disconnect, unsaved edits, external saves and provider restart preserve explicit source versions and do not stop other consumers or advertise unsupported operations.\n\nRead before editing:\n- packages/plan-server/src/server-record.ts:1\n- packages/plan-server/src/ws-hub.ts:1\n- packages/plan-core/docs/runtime-boundaries.md:1\n- packages/plan-mcp/src/index.ts:1\n- packages/pi-adapter/src/index.ts:1\n\nDetailed discussion contract:\n- CodeMirror or Monaco is an editor/client, not a reason to start another server. The agreed design is one compatible analysis owner serving both human UI and agents.\n- An editor LSP-client package does not automatically implement reuse. Prefer editor provider hooks mapped to the common broker APIs; an LSP gateway requires explicit initialization/session virtualization if selected.\n- Language support remains manifest/configuration driven. Syntax coloring and semantic operations are separate capabilities, and no provider means explicit text-only/incomplete analysis rather than zero references.\n\nExecution dependencies: P126(F025)/T484, P121(F025)/T474, P128(F025)/T490. Requirement coverage and earlier responsibilities are preserved.\n\nPreserve canonical planner IDs/decision ownership, phase-scoped handoffs, existing settings, atomic session ownership, warning-only no-task behavior and shared versus worktree-local runtime boundaries. Read existing source precedents and applicable Guidelines before coding. File:line entries above are navigation evidence inspected on 21 October 2026, never durable identity; source hashes are recorded in the supporting document. Verify current code before implementation. Use task checklists rather than creating tasks per step. This registration does not start implementation, install dependencies, commit or publish.\n\nShared-planner expansion approved 21 October 2026:\nDepend explicitly on M2 shared discovery/coordination and reuse its identity/service boundary. K2 remains analysis-runtime owner: one compatible provider process per workspace/provider/version/effective configuration, independently scoped documents/overlays, no duplicate server merely because the planner is central.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
-      "descriptionUpdatedAt": "2026-10-21T10:05:06.260Z",
+      "description": "Outcome: One compatible analysis runtime shared by agent and editor consumers.\n\nCurrent implementation: Adding Monaco must not spawn a second LSP for the same effective workspace/configuration, while unrelated workspaces may require different processes.\n\nImplementation responsibility:\n- Define broker keys from project/workspace, provider/version and effective build/configuration; atomically coordinate startup/reuse across host processes.\n- Own upstream lifecycle, cancellation, consumer attach/detach and recovery in the common service/provider boundary.\n- Name document revisions and separate incompatible unsaved overlays; one browser draft cannot overwrite another consumer document state.\n- Expose normalized capabilities/navigation/diagnostics through common APIs. A frontend LSP bridge must not initialize a competing runtime independently.\n- Verify two agents plus editor, crashed owner, config drift and unsupported semantic operations using isolated compatible provider fixtures.\n\nAcceptance and evidence:\n- Compatible consumers reuse one runtime; incompatible keys are explicitly separate.\n- Closing the editor does not stop a provider still used by agents.\n- Syntax-only capability is not labelled semantic support.\n\nCurrent source navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:52.584Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-001-extend-p121-provider-contracts-with-a-shared-analysis-service-define-the-complete-runtime-key-capability-negotiation-cancellation-diagnostics-and-source-configuration-fingerprints",
+          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-001-define-broker-keys-from-project-workspace-provider-version-and-effective-build-configuration-atomically-coordinate-startup-reuse-across-host-processes",
           "number": 1,
-          "title": "Extend P121 provider contracts with a shared analysis service; define the complete runtime key, capability negotiation, cancellation, diagnostics and source/configuration fingerprints.",
+          "title": "Define broker keys from project/workspace, provider/version and effective build/configuration; atomically coordinate startup/reuse across host processes.",
           "checked": false
         },
         {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-002-coordinate-a-single-compatible-runtime-owner-across-supported-mcp-pi-server-hosts-using-an-atomic-startup-discovery-mechanism-reuse-live-compatible-owners-and-distinguish-dead-incompatible-owners-without-killing-foreign-embedded-hosts",
+          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-002-own-upstream-lifecycle-cancellation-consumer-attach-detach-and-recovery-in-the-common-service-provider-boundary",
           "number": 2,
-          "title": "Coordinate a single compatible runtime owner across supported MCP/Pi/server hosts using an atomic startup/discovery mechanism; reuse live compatible owners and distinguish dead/incompatible owners without killing foreign embedded hosts.",
+          "title": "Own upstream lifecycle, cancellation, consumer attach/detach and recovery in the common service/provider boundary.",
           "checked": false
         },
         {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-003-keep-one-upstream-lsp-session-under-broker-ownership-and-expose-common-analysis-apis-to-consumers-do-not-connect-independent-frontend-backend-initializations-blindly-to-one-stdio-connection",
+          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-003-name-document-revisions-and-separate-incompatible-unsaved-overlays-one-browser-draft-cannot-overwrite-another-consumer-document-state",
           "number": 3,
-          "title": "Keep one upstream LSP session under broker ownership and expose common analysis APIs to consumers. Do not connect independent frontend/backend initializations blindly to one stdio connection.",
+          "title": "Name document revisions and separate incompatible unsaved overlays; one browser draft cannot overwrite another consumer document state.",
           "checked": false
         },
         {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-004-define-document-open-change-close-ownership-source-revisions-and-explicit-unsaved-overlays-agents-normally-query-a-named-saved-snapshot-unless-an-overlay-is-explicitly-requested-conflicting-browser-drafts-never-silently-replace-one-another-or-the-agent-s-analysis",
+          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-004-expose-normalized-capabilities-navigation-diagnostics-through-common-apis-a-frontend-lsp-bridge-must-not-initialize-a-competing-runtime-independently",
           "number": 4,
-          "title": "Define document-open/change/close ownership, source revisions and explicit unsaved overlays. Agents normally query a named saved snapshot unless an overlay is explicitly requested; conflicting browser drafts never silently replace one another or the agent's analysis.",
+          "title": "Expose normalized capabilities/navigation/diagnostics through common APIs. A frontend LSP bridge must not initialize a competing runtime independently.",
           "checked": false
         },
         {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-005-use-bounded-resources-consumer-leases-reference-tracking-idle-cleanup-reconnect-and-crash-recovery-closing-an-editor-tab-must-not-stop-a-provider-still-used-by-agents-analysis-lifecycle-must-not-imply-dashboard-activation",
+          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-005-verify-two-agents-plus-editor-crashed-owner-config-drift-and-unsupported-semantic-operations-using-isolated-compatible-provider-fixtures",
           "number": 5,
-          "title": "Use bounded resources, consumer leases/reference tracking, idle cleanup, reconnect and crash recovery. Closing an editor tab must not stop a provider still used by agents; analysis lifecycle must not imply dashboard activation.",
+          "title": "Verify two agents plus editor, crashed owner, config drift and unsupported semantic operations using isolated compatible provider fixtures.",
           "checked": false
         },
         {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-006-verify-simultaneous-editor-and-agent-clients-including-separate-supported-host-processes-one-process-for-the-same-key-appropriate-separate-processes-for-different-keys-versioned-results-unsupported-capabilities-and-stale-partial-failures",
+          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Verify simultaneous editor and agent clients, including separate supported host processes: one process for the same key, appropriate separate processes for different keys, versioned results, unsupported capabilities and stale/partial failures.",
-          "checked": false
-        },
-        {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-007-verify-opening-monaco-while-an-agent-uses-the-same-compatible-workspace-does-not-create-a-second-language-server-process-concurrent-startup-is-covered-by-evidence",
-          "number": 7,
-          "title": "Verify: Opening Monaco while an agent uses the same compatible workspace does not create a second language-server process; concurrent startup is covered by evidence.",
-          "checked": false
-        },
-        {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-008-verify-different-worktrees-providers-or-effective-configurations-are-isolated-and-their-results-never-cross-contaminate",
-          "number": 8,
-          "title": "Verify: Different worktrees, providers or effective configurations are isolated and their results never cross-contaminate.",
-          "checked": false
-        },
-        {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-009-verify-browser-disconnect-unsaved-edits-external-saves-and-provider-restart-preserve-explicit-source-versions-and-do-not-stop-other-consumers-or-advertise-unsupported-operations",
-          "number": 9,
-          "title": "Verify: Browser disconnect, unsaved edits, external saves and provider restart preserve explicit source versions and do not stop other consumers or advertise unsupported operations.",
-          "checked": false
-        },
-        {
-          "id": "38dbf040-f73d-4759-b624-097b57c84307-check-010-verify-shared-authority-plus-one-compatible-provider-per-actual-workspace-across-simultaneous-supported-hosts",
-          "number": 10,
-          "title": "Verify shared authority plus one compatible provider per actual workspace across simultaneous supported hosts.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
         "e73006a1-5106-432f-8018-932b88e15e58",
-        "8e90b4cf-6845-4f28-8282-b2861e1cfaf4",
-        "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f"
+        "06f9b034-30be-45a3-997e-7dfbf14a00be"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T09:21:40.453Z",
-      "updatedAt": "2026-10-21T10:05:06.652Z",
+      "updatedAt": "2026-10-29T21:02:58.439Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-21T09:20:10.465Z",
-  "updatedAt": "2026-10-21T14:58:52.484Z",
+  "updatedAt": "2026-11-02T10:19:31.616Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

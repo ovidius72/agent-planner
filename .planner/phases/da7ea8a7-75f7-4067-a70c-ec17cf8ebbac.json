@@ -1,0 +1,335 @@
+{
+  "id": "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+  "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
+  "number": 131,
+  "shortId": "AMDDU",
+  "priority": 4,
+  "slug": "optional-heca-public-api-client-and-collaboration-ui",
+  "title": "Optional Heca public API client and collaboration UI",
+  "discussedAt": "2026-10-29T21:02:41.023Z",
+  "contextReady": true,
+  "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
+  "summary": "Bind the same planner project to authorized Heca instances/rooms. Consume live snapshots/chat/actions without owning orchestration.",
+  "description": "Purpose: Phase 4 of F025, after P116/P128/P130. Bind the same planner project to Heca rooms over the Heca-initiated restricted duplex: Heca reads planner snapshots/events; Agent Plan shows project -> rooms -> room chat and sends messages through one Heca action, send_message, via Heca's single command door. Only enrolled room agents bind to Heca; Heca owns rooms, chat archive and orchestration. Further reverse actions only per explicit use case; multi-computer use is out of scope.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P131(F025)/T497: The Heca connection contract and verified shared-planner bindings.\n- P131(F025)/T498: Scoped Heca collaboration snapshots and recoverable live events in Agent Plan.\n- P131(F025)/T499: Room chat from Agent Plan through one Heca action, with honest receipts.\n- P131(F025)/T500: Collaboration views: project -> rooms -> room chat, member handles with live labels and @ autocomplete.\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: Collaboration visuals follow the reviewed prototypes and actual capability negotiation. Heca owns conversations/rooms/actions; standalone planner sections remain available.",
+  "descriptionUpdatedAt": "2026-11-02T16:57:53.821Z",
+  "notes": "",
+  "goals": [
+    "Bind the same planner project to authorized Heca instances/rooms.",
+    "Consume live snapshots/chat/actions without owning orchestration."
+  ],
+  "nonGoals": [
+    "No unrelated runtime implementation, real data migration or Git/release action during planning.",
+    "No duplicate ownership, fixed language list or global task-queue scheduling."
+  ],
+  "dependencies": [
+    "P128(F025)",
+    "P129(F025)",
+    "P127(F025)"
+  ],
+  "dependsOn": [],
+  "risks": [
+    "Old JSON/path assumptions can leak through direct consumers; inspect current integration seams.",
+    "A passing fixture or stored read does not prove live native behavior or model understanding."
+  ],
+  "openQuestions": [
+    "Finalize the native owner-approved public Heca transport/authentication/version contract; documented HTTP/WebSocket paths are recommendations, not released endpoints."
+  ],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [
+    "Every owned task meets its complete canonical contract with concrete evidence.",
+    "Affected hierarchy/dependencies and context validity are reconciled without unbounded payloads.",
+    "Unverified native/provider/installed boundaries are explicit."
+  ],
+  "taskIds": [
+    "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516",
+    "f865c931-40be-445a-968d-83f7af3efa62",
+    "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c",
+    "696ae573-3071-4ad1-9666-0ac58b559bdc"
+  ],
+  "tasks": [
+    {
+      "id": "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516",
+      "phaseId": "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+      "number": 497,
+      "shortId": "5PPH2",
+      "priority": 1,
+      "shortName": "define-the-optional-execution",
+      "title": "Define the optional execution-runtime contract and shared-planner bindings",
+      "status": "planned",
+      "description": "Outcome: The Heca connection contract and verified shared-planner bindings.\n\nImplementation contract:\n- Heca initiates the authenticated WebSocket to Agent Plan; consume requests/events on that channel without dialing a Heca listener.\n- Restricted duplex: every request from Agent Plan to Heca is an invocation of a Heca action-catalog entry through Heca's single command door, authorised for a dedicated agent-plan principal role. v1: planner reads/events for Heca, room snapshots/events and chat history for Agent Plan, plus one reverse action, send_message. More actions only per explicit use case.\n- Only explicitly enrolled room agents gain a verified binding. A manually launched agent in a Heca terminal remains standalone even with generic status reporting. Use session-registration.md for full fields, multiple memberships, late native IDs and Heca server/boot/instance/workspace/member identities.\n- Planner permissions never depend on Heca bindings; a dropped channel only marks rooms, members and chat stale/unavailable.\n- Support both startup orders with retries in code; no model-driven polling. Multi-computer use (remote endpoint, TLS, pairing) is out of scope.\n- Depends on T489/T490 only; execution history (T491) is attached later. Co-owned with Heca-Pro T043 (cross-project dependency not expressible in the planner).\n\nAcceptance: demonstrate the actual integration against Heca-Pro on one computer, in both startup orders; preserve completed historical evidence.\n\nCurrent source navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, the execution lock and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/heca-protocol.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T16:57:25.000Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516-check-001-implement-a-harness-neutral-runtime-client-in-agent-plan-keep-heca-specific-adapters-out-of-planner-domain",
+          "number": 1,
+          "title": "Implement a harness-neutral runtime client in Agent Plan; keep Heca-specific adapters out of planner domain.",
+          "checked": false
+        },
+        {
+          "id": "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516-check-002-negotiate-owner-approved-endpoint-protocol-server-epoch-principal-and-runnable-capabilities-http-plus-websocket-is-the-documented-recommendation-final-public-spelling-auth-defaults-require-the-owning-contract",
+          "number": 2,
+          "title": "Negotiate owner-approved endpoint/protocol, server epoch, principal and runnable capabilities. HTTP plus WebSocket is the documented recommendation; final public spelling/auth/defaults require the owning contract.",
+          "checked": false
+        },
+        {
+          "id": "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516-check-003-bind-project-repository-workspace-to-heca-server-instance-room-member-identities-preserving-caller-native-session-execution-distinctions-and-unknown-metadata",
+          "number": 3,
+          "title": "Bind project/repository/workspace to Heca server/instance/room/member identities, preserving caller/native-session/execution distinctions and unknown metadata.",
+          "checked": false
+        },
+        {
+          "id": "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516-check-004-support-local-and-explicitly-configured-remote-endpoints-with-authorized-mapping-do-not-use-path-basename-or-a-shared-uuid-as-credentials",
+          "number": 4,
+          "title": "Support local and explicitly configured remote endpoints with authorized mapping; do not use path basename or a shared UUID as credentials.",
+          "checked": false
+        },
+        {
+          "id": "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516-check-005-keep-standalone-behavior-first-class-and-credential-storage-local-reuse-native-dispatch-permissions-no-direct-agent-comms-connection-independent-heca-backend-or-agent-auto-enrollment",
+          "number": 5,
+          "title": "Keep standalone behavior first-class and credential storage local. Reuse native dispatch/permissions; no direct agent-comms connection, independent Heca backend or agent auto-enrollment.",
+          "checked": false
+        },
+        {
+          "id": "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
+          "number": 6,
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4",
+        "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-23T08:07:10.261Z",
+      "updatedAt": "2026-11-02T16:57:24.490Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "f865c931-40be-445a-968d-83f7af3efa62",
+      "phaseId": "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+      "number": 498,
+      "shortId": "NB5UJ",
+      "priority": 2,
+      "shortName": "connect-heca-collaboration-sna",
+      "title": "Connect Heca collaboration snapshots and live events to the shared planner view",
+      "status": "planned",
+      "description": "Outcome: Scoped Heca collaboration snapshots and recoverable live events in Agent Plan.\n\nCurrent implementation: Planner entity events cannot describe rooms, worker crashes or chat messages. YAML is desired setup, not live state.\n\nImplementation responsibility:\n- Provide project -> linked Heca rooms: read authorized snapshots from Heca-owned state, including instances/rooms/members (stable handle plus live label data)/roles/assignments and optional execution links.\n- Use consistent snapshot/cursor bootstrap over the one Heca-initiated connection with project-filtered subscriptions. Persist attributable binding/session changes while Heca stays authoritative for room/chat facts.\n- Handle epoch changes, expired cursors, lost events, revocation and slow consumers with explicit gaps/resnapshot and bounded history.\n- Forward projections over Agent Plan's own WebSocket; do not turn runtime events into mirrored planner writes or derived done transitions. Neither disconnect nor replay changes execution locks, starts work or creates a second chat database.\n- On disconnect show rooms and chat as unavailable and keep last-known data marked stale; task work, native turn, connection and target availability remain distinct.\n- No dependency on T493: target availability is attached later.\n\nAcceptance and evidence:\n- A new/crashed worker is reflected without reading mutable runtime data from Git/YAML.\n- Two projects cannot leak rooms/messages across authorization boundaries.\n- Agent Plan continues receiving standalone planner changes while Heca is stopped.\n\nCurrent source navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/ws-hub.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/entity-events.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, the execution lock and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/heca-protocol.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T16:57:25.106Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "f865c931-40be-445a-968d-83f7af3efa62-check-001-read-authorized-project-snapshots-from-heca-owned-state-including-all-relevant-instances-rooms-members-roles-assignments-and-optional-execution-links",
+          "number": 1,
+          "title": "Read authorized project snapshots from Heca-owned state, including all relevant instances/rooms/members/roles/assignments and optional execution links.",
+          "checked": false
+        },
+        {
+          "id": "f865c931-40be-445a-968d-83f7af3efa62-check-002-use-consistent-snapshot-cursor-bootstrap-and-one-multiplexed-backend-connection-per-server-principal-with-project-filtered-subscriptions",
+          "number": 2,
+          "title": "Use consistent snapshot/cursor bootstrap and one multiplexed backend connection per server/principal with project-filtered subscriptions.",
+          "checked": false
+        },
+        {
+          "id": "f865c931-40be-445a-968d-83f7af3efa62-check-003-handle-epoch-changes-expired-cursors-lost-events-revocation-and-slow-consumers-with-explicit-gaps-resnapshot-and-bounded-history",
+          "number": 3,
+          "title": "Handle epoch changes, expired cursors, lost events, revocation and slow consumers with explicit gaps/resnapshot and bounded history.",
+          "checked": false
+        },
+        {
+          "id": "f865c931-40be-445a-968d-83f7af3efa62-check-004-forward-appropriate-projections-over-agent-plan-own-websocket-do-not-turn-runtime-events-into-mirrored-planner-writes-or-derived-done-transitions",
+          "number": 4,
+          "title": "Forward appropriate projections over Agent Plan own WebSocket; do not turn runtime events into mirrored planner writes or derived done transitions.",
+          "checked": false
+        },
+        {
+          "id": "f865c931-40be-445a-968d-83f7af3efa62-check-005-mark-last-known-disconnected-observations-stale-task-work-native-turn-connection-and-target-availability-remain-distinct",
+          "number": 5,
+          "title": "Mark last-known disconnected observations stale; task work, native turn, connection and target availability remain distinct.",
+          "checked": false
+        },
+        {
+          "id": "f865c931-40be-445a-968d-83f7af3efa62-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
+          "number": 6,
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "5f66bdcb-8e74-40c5-b6b9-6e1c06e26516"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-23T08:07:10.544Z",
+      "updatedAt": "2026-11-02T16:57:24.490Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c",
+      "phaseId": "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+      "number": 499,
+      "shortId": "X9JL2",
+      "priority": 3,
+      "shortName": "add-attributed-room-chat-and-a",
+      "title": "Add attributed room chat and authorized runtime actions for UI and agent clients",
+      "status": "planned",
+      "description": "Outcome: Room chat from Agent Plan through one Heca action, with honest receipts.\n\nCurrent implementation: Agent Plan has no reverse interface to Heca; queuing a native message does not prove delivery or turn/task start.\n\nImplementation responsibility:\n- v1 scope: send_message(room, to?, text) only, invoked as a Heca action through the one door under the agent-plan principal role. Plain text; no attachments, no native actions. Read room history pages from Heca's archive.\n- Addressing: messages are visible to the whole room but delivered as model input only to addressees: the configured orchestrator by default, @member, or @all for an explicit broadcast. A room without an orchestrator rejects a recipient-less message with a typed no_default_recipient error; the UI asks for @member or @all. Messages queued for a removed orchestrator stay visible as undelivered and are never redirected.\n- Agent Plan is not a mesh/room agent and never calls agent-comms or model APIs directly. Heca owns the SQLite chat archive and attachments until explicit deletion. Native transcript aggregation is excluded.\n- Use authenticated principal, explicit project/room/destination and request identity; keep long-lived Heca secrets out of browser bundles. Ordinary messages queue without interrupting busy agents.\n- Receipts: queued / sent / uncertain, only with evidence; status lookup/idempotency handle acknowledgement loss; no unsafe retries.\n- Do not convert chat automatically into Accepted Decisions.\n\nAcceptance and evidence:\n- Human and agent authorship remain distinct; an agent cannot impersonate the UI supervisor.\n- A non-addressed member receives no model input; @all reaches every member.\n- A delivered message never certifies a model turn, task start, test or merge.\n\nCurrent source navigation:\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-web-ui/src/app/router.tsx:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, the execution lock and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/heca-protocol.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T16:57:25.217Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c-check-001-expose-permitted-conversation-history-send-and-catalog-backed-action-tools-ui-operations-through-agent-plan-backend-to-the-public-heca-facade",
+          "number": 1,
+          "title": "Expose permitted conversation/history/send and catalog-backed action tools/UI operations through Agent Plan backend to the public Heca facade.",
+          "checked": false
+        },
+        {
+          "id": "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c-check-002-use-authenticated-principal-immutable-explicit-project-destination-request-identity-and-bounded-content-attachment-capabilities-keep-long-lived-heca-secrets-out-of-browser-bundles",
+          "number": 2,
+          "title": "Use authenticated principal, immutable explicit project/destination, request identity and bounded content/attachment capabilities; keep long-lived Heca secrets out of browser bundles.",
+          "checked": false
+        },
+        {
+          "id": "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c-check-003-heca-routes-messages-actions-through-its-existing-permission-confirmation-owners-and-helper-so-both-products-share-conversation-ids-history-and-resulting-state",
+          "number": 3,
+          "title": "Heca routes messages/actions through its existing permission/confirmation owners and helper, so both products share conversation IDs/history and resulting state.",
+          "checked": false
+        },
+        {
+          "id": "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c-check-004-separate-chat-text-from-structured-administrative-intent-record-accepted-queued-delivered-failed-unknown-only-with-evidence-status-lookup-idempotency-handle-acknowledgement-loss",
+          "number": 4,
+          "title": "Separate chat text from structured administrative intent. Record accepted/queued/delivered/failed/unknown only with evidence; status lookup/idempotency handle acknowledgement loss.",
+          "checked": false
+        },
+        {
+          "id": "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c-check-005-respect-attachment-workspace-host-mapping-and-retained-draft-scope-do-not-call-model-apis-directly-or-convert-chat-automatically-into-accepted-decisions",
+          "number": 5,
+          "title": "Respect attachment workspace/host mapping and retained draft scope. Do not call model APIs directly or convert chat automatically into Accepted Decisions.",
+          "checked": false
+        },
+        {
+          "id": "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
+          "number": 6,
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "f865c931-40be-445a-968d-83f7af3efa62"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-23T08:07:10.831Z",
+      "updatedAt": "2026-11-02T16:57:24.490Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    },
+    {
+      "id": "696ae573-3071-4ad1-9666-0ac58b559bdc",
+      "phaseId": "da7ea8a7-75f7-4067-a70c-ec17cf8ebbac",
+      "number": 500,
+      "shortId": "8NBBL",
+      "priority": 4,
+      "shortName": "add-collaboration-views-chat-a",
+      "title": "Add collaboration views, chat and planner-to-room navigation",
+      "status": "planned",
+      "description": "Outcome: Collaboration views in Agent Plan: project -> rooms -> room chat.\n\nCurrent implementation: Existing sketches show rooms/agents and work/availability; the reviewed prototypes have no room, member or chat screens, so design intake comes first.\n\nImplementation responsibility:\n- Navigation: project -> its Heca-linked rooms -> room group chat, with addressing as in T499 (default orchestrator, @member, @all; no-orchestrator rule).\n- Agent identity: stable handle (worker-1, orchestrator) for @mentions and history, plus a live label computed at display time (model + current F/P/T, or the free-text title). Typing '@' autocompletes matching members showing model and F/P/T.\n- Show room-wide visibility, queued/sent/uncertain and undelivered states, stale runtime and the unavailable state when Heca is disconnected; preserve drafts and destination on navigation.\n- Present standalone and room-integrated agent/session/execution attribution and the execution-lock state with the human Release action.\n- Reuse Heca message IDs/history through its API; no planner chat archive. Keep resume/planner/graph/code views usable without Heca. Heca native/WebView hosting is external owner work.\n- Code/editor links (T487/T488) are an optional later extension, not a dependency.\n\nAcceptance and evidence:\n- Collaboration controls appear only for available authorized capabilities and show explicit unavailability.\n- '@wo' suggests the matching workers with model and F/P/T.\n- The same real Heca messages are visible in both products, with no shadow room/orchestrator store.\n\nCurrent source navigation:\n- packages/plan-web-ui/src/app/router.tsx:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, the execution lock and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/heca-protocol.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nUI design and domain boundary: Implement the new Web UI from the reviewed prototype canvases; the current UI appearance is not the target. Read docs/agent-brain/ui-prototypes.md and confirm the applicable design revision before visual implementation. Reuse suitable typed React/router/accessibility infrastructure. Core/service APIs own eligibility, priority, permissions, relationships and evidence interpretation; the UI renders their results, submits commands and manages presentation/drafts. Prototype fixtures are illustrative, never a live backend or a competing source of domain policy.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T16:57:25.320Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "696ae573-3071-4ad1-9666-0ac58b559bdc-check-001-compose-collaboration-overview-room-member-conversation-views-using-existing-react-router-patterns-and-t498-t499-read-action-models",
+          "number": 1,
+          "title": "Compose collaboration overview/room/member/conversation views using existing React/router patterns and T498/T499 read/action models.",
+          "checked": false
+        },
+        {
+          "id": "696ae573-3071-4ad1-9666-0ac58b559bdc-check-002-link-project-instance-feature-room-phase-and-explicit-member-task-associations-without-imposing-a-new-rigid-one-to-one-runtime-hierarchy",
+          "number": 2,
+          "title": "Link project, instance-feature, room-phase and explicit member-task associations without imposing a new rigid one-to-one runtime hierarchy.",
+          "checked": false
+        },
+        {
+          "id": "696ae573-3071-4ad1-9666-0ac58b559bdc-check-003-show-scoped-chat-requests-stale-unavailable-denied-states-and-truthful-work-connection-turn-integration-evidence",
+          "number": 3,
+          "title": "Show scoped chat, requests, stale/unavailable/denied states and truthful work/connection/turn/integration evidence.",
+          "checked": false
+        },
+        {
+          "id": "696ae573-3071-4ad1-9666-0ac58b559bdc-check-004-preserve-drafts-and-destination-on-navigation-link-to-code-editor-history-through-t487-t488-without-redirecting-in-flight-writes",
+          "number": 4,
+          "title": "Preserve drafts and destination on navigation; link to code/editor/history through T487/T488 without redirecting in-flight writes.",
+          "checked": false
+        },
+        {
+          "id": "696ae573-3071-4ad1-9666-0ac58b559bdc-check-005-keep-resume-planner-graph-code-check-evidence-usable-without-heca-heca-native-webview-hosting-is-external-owner-work-not-another-ui-toolkit-inside-agent-plan",
+          "number": 5,
+          "title": "Keep resume/planner/graph/code/check evidence usable without Heca. Heca native/WebView hosting is external owner work, not another UI toolkit inside Agent Plan.",
+          "checked": false
+        },
+        {
+          "id": "696ae573-3071-4ad1-9666-0ac58b559bdc-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
+          "number": 6,
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "fa2877c4-e9fc-415b-8da9-2c166f1f3e4c"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-10-23T08:07:11.106Z",
+      "updatedAt": "2026-11-02T16:57:24.490Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
+    }
+  ],
+  "createdAt": "2026-10-23T08:06:57.452Z",
+  "updatedAt": "2026-11-02T16:57:53.451Z",
+  "handoff": "",
+  "handoffUpdatedAt": "",
+  "handoffAudit": null,
+  "handoffReadAt": "",
+  "handoffHistory": [],
+  "statusLog": [
+    {
+      "id": "d576166f-7ba0-4a4c-944e-c02065f6f849",
+      "date": "2026-10-23T08:12:25.789Z",
+      "fromStatus": "draft",
+      "toStatus": "planned",
+      "title": "draft → planned",
+      "description": ""
+    }
+  ],
+  "sessionInfo": []
+}

@@ -3,47 +3,41 @@
   "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
   "number": 130,
   "shortId": "4XLYK",
-  "priority": 1,
-  "slug": "lossless-shared-planner-migration-and-durable-recovery",
-  "title": "Lossless shared-planner migration and durable recovery",
-  "discussedAt": "2026-10-21T10:04:06.074Z",
+  "priority": 3,
+  "slug": "legacy-migration-portable-snapshots-and-independent-recovery",
+  "title": "Legacy migration, portable snapshots and independent recovery",
+  "discussedAt": "2026-10-29T21:02:36.875Z",
   "contextReady": true,
   "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
-  "summary": "Adopt one authority from divergent old copies and preserve it independently of code commits.",
-  "description": "Adopt one authority from divergent old copies and preserve it independently of code commits.\n\nCurrent state: Existing tracked .planner entities can diverge between branches/worktrees and collide in Git merges. Current runtime-boundaries.md describes that older shared-and-mergeable layout.\n\nGoals:\n- Reconcile old planner knowledge with explicit conflicts and atomic recoverable activation.\n- Provide history, independent backup and portable verified export/restore.\n\nResponsibilities:\n- P130(F025)/T494: Migrate divergent worktree planners through a lossless reviewed binding. A project can adopt one shared authority without losing any worktree knowledge or leaving silent competing planners.\n- P130(F025)/T495: Add recoverable planner history, backup and portable export/restore. The shared planner retains and can restore operational knowledge independently of whether agents commit code.\n\nBoundaries:\n- No mtime-wins, silent new planner fallback or automatic removal of tracked .planner.\n- No unrequested distributed synchronization or release workflow change.\n\nRisks:\n- Custom common-Git-directory files do not travel with clone/push.\n- Partial migration or loss of an unbacked local clone can destroy operational knowledge.\n\nAcceptance:\n- Divergent two-worktree fixtures retain every decision/handoff and either reconcile provably compatible edits or report exact unresolved conflicts before activation.\n- Interruptions at inventory, write, binding and recovery boundaries preserve backups and one recoverable authority; incompatible clients never write a second plan.\n- The migration never runs on another real project or changes repository tracking/AGENTS without the specific user authorization required at implementation time.\n- After concurrent writes and process crashes, recovery yields a validated consistent plan or explicit recoverable failure, never a silent empty replacement.\n- A complete export restores task/decision/handoff/execution/integration identities and recoverable evidence, without requiring access to the original worktree path.\n- A new clone can deliberately import/rebind a backup; ordinary git clone/push is not advertised as copying the shared planner.\n\nRead before editing:\n- packages/plan-core/docs/runtime-boundaries.md:1 — current versioned plan and worktree-local runtime policy\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/src/export-service.ts:1 — export service\n- packages/plan-core/src/write-coordination.ts:95 — writer lock path and transaction coordination\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n\nDependencies: P128(F025), P129(F025). Requirements: BR22, BR23, BR24, BR26, BR27, BR16, BR17. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.\n\nSource positions above are dated navigation evidence from 21 October 2026, not permanent anchors; revalidate against the current checkout.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
-  "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-  "descriptionUpdatedAt": "2026-10-21T14:58:53.337Z",
+  "summary": "Import old planner entities/documents/custom guidance safely. Recover/export/import independently of code commits and detect remote divergence.",
+  "description": "Purpose: Import old planner entities/documents/custom guidance safely. Recover/export/import independently of code commits and detect remote divergence.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P130(F025)/T494: Previewed, lossless migration from legacy planner copies to a descriptor-bound SQLite project.\n- P130(F025)/T495: Independent backup, conflict-aware snapshot export/import and descriptor-based restore.\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/planner-skill.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/export-service.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: The first usable service release includes legacy document/guidance import and independent restore. Advanced target-availability work is not a prerequisite for this foundation.",
+  "descriptionUpdatedAt": "2026-10-30T08:26:57.769Z",
   "notes": "",
   "goals": [
-    "Reconcile old planner knowledge with explicit conflicts and atomic recoverable activation.",
-    "Provide history, independent backup and portable verified export/restore."
+    "Import old planner entities/documents/custom guidance safely.",
+    "Recover/export/import independently of code commits and detect remote divergence."
   ],
   "nonGoals": [
-    "No mtime-wins, silent new planner fallback or automatic removal of tracked .planner.",
-    "No unrequested distributed synchronization or release workflow change."
+    "No unrelated runtime implementation, real data migration or Git/release action during planning.",
+    "No duplicate ownership, fixed language list or global task-queue scheduling."
   ],
   "dependencies": [
-    "P128(F025)",
-    "P129(F025)"
+    "P128(F025)"
   ],
   "dependsOn": [],
   "risks": [
-    "Custom common-Git-directory files do not travel with clone/push.",
-    "Partial migration or loss of an unbacked local clone can destroy operational knowledge."
+    "Old JSON/path assumptions can leak through direct consumers; inspect current integration seams.",
+    "A passing fixture or stored read does not prove live native behavior or model understanding."
   ],
   "openQuestions": [
-    "Choose and document bounded journal/snapshot/retention defaults and backward-client behavior; unresolved real data conflicts are a migration-time decision."
+    "Resolve detailed common-baseline field-conflict rules and restore UX within T495; remote network authority remains deferred."
   ],
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [
-    "Divergent two-worktree fixtures retain every decision/handoff and either reconcile provably compatible edits or report exact unresolved conflicts before activation.",
-    "Interruptions at inventory, write, binding and recovery boundaries preserve backups and one recoverable authority; incompatible clients never write a second plan.",
-    "The migration never runs on another real project or changes repository tracking/AGENTS without the specific user authorization required at implementation time.",
-    "After concurrent writes and process crashes, recovery yields a validated consistent plan or explicit recoverable failure, never a silent empty replacement.",
-    "A complete export restores task/decision/handoff/execution/integration identities and recoverable evidence, without requiring access to the original worktree path.",
-    "A new clone can deliberately import/rebind a backup; ordinary git clone/push is not advertised as copying the shared planner.",
-    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+    "Every owned task meets its complete canonical contract with concrete evidence.",
+    "Affected hierarchy/dependencies and context validity are reconciled without unbounded payloads.",
+    "Unverified native/provider/installed boundaries are explicit."
   ],
   "taskIds": [
     "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2",
@@ -59,79 +53,60 @@
       "shortName": "migrate-divergent-worktree-pla",
       "title": "Migrate divergent worktree planners through a lossless reviewed binding",
       "status": "planned",
-      "description": "Outcome: A project can adopt one shared authority without losing any worktree knowledge or leaving silent competing planners.\n\nExisting state: Existing tracked .planner entities can diverge between branches/worktrees and collide in Git merges. Current runtime-boundaries.md describes that older shared-and-mergeable layout.\n\nImplementation responsibility:\n- Inventory old plan copies and capture immutable full backups with source worktree/branch/revision provenance before proposing a binding. Use stable IDs and common baseline/history to identify additions, equivalent edits and incompatible concurrent changes.\n- Produce a dry-run reconciliation report covering requirements, decisions/supersession, dependencies, task progress, handoffs, evidence and runtime/ownership state; never choose latest mtime or whole-file ours/theirs as conflict policy.\n- Preserve all conflicting content for explicit resolution; do not turn textual old done states into fabricated execution/integration proof. Move genuinely portable knowledge and isolate caller runtime, inspecting live ownership rather than importing stale locks.\n- Activate the shared binding atomically only after validation, with interruption-safe journal/checkpoint and rollback. All supported clients must agree on schema and authority; old copies become explicit snapshots/read-only migration sources, not silent fallback authorities.\n- Provide opt-in descriptor/tracking guidance so future code PRs do not transport live project-wide planner state. Retain legacy compatibility diagnostics, standalone setup and documented recovery from partial activation.\n\nAcceptance and evidence:\n- Divergent two-worktree fixtures retain every decision/handoff and either reconcile provably compatible edits or report exact unresolved conflicts before activation.\n- Interruptions at inventory, write, binding and recovery boundaries preserve backups and one recoverable authority; incompatible clients never write a second plan.\n- The migration never runs on another real project or changes repository tracking/AGENTS without the specific user authorization required at implementation time.\n\nRead before editing:\n- packages/plan-core/docs/runtime-boundaries.md:1 — current versioned plan and worktree-local runtime policy\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/src/plan-store.ts:1413 — localRoot / session and resume paths\n- packages/plan-core/src/write-coordination.ts:95 — writer lock path and transaction coordination\n- packages/plan-core/src/export-service.ts:1 — export service\n\nDetailed discussion contract:\n- This registration is not the migration. Do not delete .planner, change gitignore/tracking, move files into .git or migrate the user project while implementing isolated contract tests.\n- A code PR represents the code delta of its branch; project-wide operational history stays in the shared authority. A deliberate portable snapshot/export is a separate artifact, never proof that all associated code is in that PR.\n- If old copies lack a common base or reliable execution provenance, preserve ambiguity and require an explicit reconciliation decision rather than inventing a chronology.\n\nExecution dependencies: P129(F025)/T492. Requirement aliases: BR26, BR22, BR23, BR24, BR16. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.",
-      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-      "descriptionUpdatedAt": "2026-10-21T10:04:04.941Z",
+      "description": "Outcome: Previewed, lossless migration from legacy planner copies to a descriptor-bound SQLite project.\n\nCurrent implementation: Tracked .planner copies can diverge. Legacy docs/custom skills and active process ownership require explicit treatment; old migration waited on advanced target integration unnecessarily.\n\nImplementation responsibility:\n- Inventory legacy copies and live writers; create immutable backups with source schema/worktree/branch/revision provenance before proposing activation.\n- Stage and reconcile entities, counters, requirements, single-owner decisions, handoffs/archives, checkpoints and all linked documents/assets. Import custom skills/guidance into DB content and map filesystem references to document identities.\n- Use common identity/baselines where available; preserve conflicting fields and unknown provenance. Never use latest mtime, whole-file wins or fabricated old execution/merge evidence.\n- Validate schema, parent containment, references, cycles and document completeness. Activate transactionally and write the descriptor only after durable success; journal partial migration/descriptor publication for recovery.\n- Make old sources explicit read-only backups; incompatible old writers must not create competing authority. Exclude stale locks/PIDs/credentials and do not restore live ownership.\n\nAcceptance and evidence:\n- Divergent two-worktree imports preserve all knowledge or expose exact conflicts before activation.\n- Crashes at staging/commit/descriptor boundaries retain one recoverable authority and original backup.\n- Initial migration is usable after T490, without waiting for T492; later execution schemas retain explicit unknown legacy provenance.\n- Tests use isolated temporary projects; real migration/tracking changes need their implementation-time authorization.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/planner-skill.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/export-service.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:43.736Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-001-inventory-legacy-copies-and-live-writers-create-immutable-backups-with-source-schema-worktree-branch-revision-provenance-before-proposing-activation",
           "number": 1,
-          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "title": "Inventory legacy copies and live writers; create immutable backups with source schema/worktree/branch/revision provenance before proposing activation.",
           "checked": false
         },
         {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-002-inventory-old-plan-copies-and-capture-immutable-full-backups-with-source-worktree-branch-revision-provenance-before-proposing-a-binding-use-stable-ids-and-common-baseline-history-to-identify-additions-equivalent-edits-and-incompatible-concurrent-changes",
+          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-002-stage-and-reconcile-entities-counters-requirements-single-owner-decisions-handoffs-archives-checkpoints-and-all-linked-documents-assets-import-custom-skills-guidance-into-db-content-and-map-filesystem-references-to-document-identities",
           "number": 2,
-          "title": "Inventory old plan copies and capture immutable full backups with source worktree/branch/revision provenance before proposing a binding. Use stable IDs and common baseline/history to identify additions, equivalent edits and incompatible concurrent changes.",
+          "title": "Stage and reconcile entities, counters, requirements, single-owner decisions, handoffs/archives, checkpoints and all linked documents/assets. Import custom skills/guidance into DB content and map filesystem references to document identities.",
           "checked": false
         },
         {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-003-produce-a-dry-run-reconciliation-report-covering-requirements-decisions-supersession-dependencies-task-progress-handoffs-evidence-and-runtime-ownership-state-never-choose-latest-mtime-or-whole-file-ours-theirs-as-conflict-policy",
+          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-003-use-common-identity-baselines-where-available-preserve-conflicting-fields-and-unknown-provenance-never-use-latest-mtime-whole-file-wins-or-fabricated-old-execution-merge-evidence",
           "number": 3,
-          "title": "Produce a dry-run reconciliation report covering requirements, decisions/supersession, dependencies, task progress, handoffs, evidence and runtime/ownership state; never choose latest mtime or whole-file ours/theirs as conflict policy.",
+          "title": "Use common identity/baselines where available; preserve conflicting fields and unknown provenance. Never use latest mtime, whole-file wins or fabricated old execution/merge evidence.",
           "checked": false
         },
         {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-004-preserve-all-conflicting-content-for-explicit-resolution-do-not-turn-textual-old-done-states-into-fabricated-execution-integration-proof-move-genuinely-portable-knowledge-and-isolate-caller-runtime-inspecting-live-ownership-rather-than-importing-stale-locks",
+          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-004-validate-schema-parent-containment-references-cycles-and-document-completeness-activate-transactionally-and-write-the-descriptor-only-after-durable-success-journal-partial-migration-descriptor-publication-for-recovery",
           "number": 4,
-          "title": "Preserve all conflicting content for explicit resolution; do not turn textual old done states into fabricated execution/integration proof. Move genuinely portable knowledge and isolate caller runtime, inspecting live ownership rather than importing stale locks.",
+          "title": "Validate schema, parent containment, references, cycles and document completeness. Activate transactionally and write the descriptor only after durable success; journal partial migration/descriptor publication for recovery.",
           "checked": false
         },
         {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-005-activate-the-shared-binding-atomically-only-after-validation-with-interruption-safe-journal-checkpoint-and-rollback-all-supported-clients-must-agree-on-schema-and-authority-old-copies-become-explicit-snapshots-read-only-migration-sources-not-silent-fallback-authorities",
+          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-005-make-old-sources-explicit-read-only-backups-incompatible-old-writers-must-not-create-competing-authority-exclude-stale-locks-pids-credentials-and-do-not-restore-live-ownership",
           "number": 5,
-          "title": "Activate the shared binding atomically only after validation, with interruption-safe journal/checkpoint and rollback. All supported clients must agree on schema and authority; old copies become explicit snapshots/read-only migration sources, not silent fallback authorities.",
+          "title": "Make old sources explicit read-only backups; incompatible old writers must not create competing authority. Exclude stale locks/PIDs/credentials and do not restore live ownership.",
           "checked": false
         },
         {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-006-provide-opt-in-descriptor-tracking-guidance-so-future-code-prs-do-not-transport-live-project-wide-planner-state-retain-legacy-compatibility-diagnostics-standalone-setup-and-documented-recovery-from-partial-activation",
+          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Provide opt-in descriptor/tracking guidance so future code PRs do not transport live project-wide planner state. Retain legacy compatibility diagnostics, standalone setup and documented recovery from partial activation.",
-          "checked": false
-        },
-        {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-007-verify-on-isolated-mkdtemp-fixtures-divergent-two-worktree-fixtures-retain-every-decision-handoff-and-either-reconcile-provably-compatible-edits-or-report-exact-unresolved-conflicts-before-activation",
-          "number": 7,
-          "title": "Verify on isolated mkdtemp fixtures: Divergent two-worktree fixtures retain every decision/handoff and either reconcile provably compatible edits or report exact unresolved conflicts before activation.",
-          "checked": false
-        },
-        {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-008-verify-on-isolated-mkdtemp-fixtures-interruptions-at-inventory-write-binding-and-recovery-boundaries-preserve-backups-and-one-recoverable-authority-incompatible-clients-never-write-a-second-plan",
-          "number": 8,
-          "title": "Verify on isolated mkdtemp fixtures: Interruptions at inventory, write, binding and recovery boundaries preserve backups and one recoverable authority; incompatible clients never write a second plan.",
-          "checked": false
-        },
-        {
-          "id": "2c05c24d-6993-4a3e-8d8b-9aa31a568ed2-check-009-verify-on-isolated-mkdtemp-fixtures-the-migration-never-runs-on-another-real-project-or-changes-repository-tracking-agents-without-the-specific-user-authorization-required-at-implementation-time",
-          "number": 9,
-          "title": "Verify on isolated mkdtemp fixtures: The migration never runs on another real project or changes repository tracking/AGENTS without the specific user authorization required at implementation time.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
-        "f9af06a6-3897-4184-9eea-b7b02e16d052"
+        "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f"
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T10:03:12.275Z",
-      "updatedAt": "2026-10-21T10:04:05.313Z",
+      "updatedAt": "2026-10-29T21:02:56.168Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -144,66 +119,53 @@
       "shortName": "add-recoverable-planner-histor",
       "title": "Add recoverable planner history, backup and portable export/restore",
       "status": "planned",
-      "description": "Outcome: The shared planner retains and can restore operational knowledge independently of whether agents commit code.\n\nExisting state: Tracked planner files currently benefit from user Git commits; custom files under git-common-dir are not pushed or cloned automatically. Existing export-service is an extension point, not proof of complete durable recovery.\n\nImplementation responsibility:\n- Define durable operation history/provenance, crash-safe writes/checkpoints and bounded snapshot/backup retention using existing JSON/store conventions; avoid a mandatory new database or full event-sourcing platform.\n- Back up canonical entities, decisions, executions, integrations and required recoverable source-snapshot evidence. Classify transient locks/PIDs/read attestations/caches as non-portable; do not export live credentials or adopt foreign ownership.\n- Extend portable export/import/restore with format/schema versions, checksums, referenced-blob completeness and explicit identity/rebinding policy for another clone or storage location; restore must not silently overwrite a different live project.\n- Make missing/corrupt/incompatible stores diagnosable with recovery paths; verify crash injection, journal replay or checkpoint rollback and backup restoration into isolated mkdtemp fixtures.\n- Document normal writes without commits, backup location/status, retention and recovery guarantees/limits. Integrate actual restored-state verification into I1/I2 and preserve no-release/no-auto-commit behavior.\n\nAcceptance and evidence:\n- After concurrent writes and process crashes, recovery yields a validated consistent plan or explicit recoverable failure, never a silent empty replacement.\n- A complete export restores task/decision/handoff/execution/integration identities and recoverable evidence, without requiring access to the original worktree path.\n- A new clone can deliberately import/rebind a backup; ordinary git clone/push is not advertised as copying the shared planner.\n\nRead before editing:\n- packages/plan-core/src/export-service.ts:1 — export service\n- packages/plan-core/src/write-coordination.ts:95 — writer lock path and transaction coordination\n- packages/plan-core/src/plan-store.ts:488 — gitCommonDirFor / shared allocation registry\n- packages/plan-core/docs/runtime-boundaries.md:1 — current versioned plan and worktree-local runtime policy\n\nDetailed discussion contract:\n- The approved requirement is durable inspectable history plus recoverable backup/export. Exact journal/snapshot implementation and retention defaults remain bounded implementation choices with measured behavior.\n- Deleting a worktree does not delete canonical project history. Removing the whole clone/common Git directory can destroy local planner data, so independent backup is part of the product workflow.\n- Do not claim distributed multi-machine consistency; the first implementation covers local shared worktrees with a portable boundary for later explicit sync/service support.\n\nExecution dependencies: P130(F025)/T494. Requirement aliases: BR27, BR26, BR22, BR16, BR17. Full approved handoff: .planner/docs/agent-brain-shared-planner-and-execution.md.\n\nSource positions are dated navigation evidence inspected on 21 October 2026 at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, never durable identity. Revalidate current sources; hashes are in the handoff.\n\nPreserve canonical UUIDs/shortIds and variable-width references, single-owner Accepted Decisions, phase-scoped handoffs, derived parent status, atomic task/session ownership, explicit recovery, global feature -> phase -> task priority and the accepted warning-only no-task guard. Read current sources, existing precedents and applicable Project Guidelines before coding. Use checklist steps rather than creating tasks per step. No automatic commit, push, merge, release or dashboard activation is authorized. This is planned work; no central store or execution/integration model has been implemented by this registration.",
-      "descriptionRef": ".planner/docs/agent-brain-shared-planner-and-execution.md",
-      "descriptionUpdatedAt": "2026-10-21T10:04:05.517Z",
+      "description": "Outcome: Independent backup, conflict-aware snapshot export/import and descriptor-based restore.\n\nCurrent implementation: Current Markdown export is not a complete portable backup. Files in git-common-dir/HOME are not copied by ordinary source clone/push, and a lost acknowledgement can hide a successful publication.\n\nImplementation responsibility:\n- Use consistent SQLite backups and read snapshot revision from the snapshot itself. Configure retention, independent destinations and distinct local-backup/remote-publication status.\n- Export versioned logical JSON plus manifest/project/revision/baseline/hashes and all required documents/source-evidence assets; omit credentials, active ownership, PIDs, caches and inherited read authorization.\n- Implement explicit UI/tool snapshot publication using a private bare Git transport and normal authenticated commit/push. Fetch/import must leave source checkout/index/branch untouched; ordinary planner updates do not auto-publish.\n- Compare both local baseline and fetched remote tip. Stage common-baseline reconciliation for divergent computers, retaining same-field/delete-edit/lifecycle conflicts and validating the resulting graph before activation.\n- Recheck the local revision at import activation, preserve backup and support interruption/status lookup. Descriptor-only clones and missing-HOME cases recover up to the last complete available snapshot, never unpublished data.\n- Document limits: local DB claims are not team-wide ownership, snapshots are not a network authority, and restoring planner knowledge does not revert source code.\n\nAcceptance and evidence:\n- Round-trip restore preserves IDs, decisions, handoffs and portable evidence without old absolute paths or resurrected sessions.\n- Remote divergence cannot silently overwrite another snapshot; retry after unknown publication outcome does not duplicate it.\n- No force push, pull into the live DB, required personal hook, operational mirror or shared-drive SQLite.\n- Backup/restore is available for the first usable migrated DB release and uses isolated crash/conflict fixtures.\n\nCurrent source navigation:\n- packages/plan-core/src/export-service.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
+      "descriptionUpdatedAt": "2026-10-29T21:02:44.092Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-001-inspect-existing-implementation-and-record-applicable-precedents-and-guidelines",
+          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-001-use-consistent-sqlite-backups-and-read-snapshot-revision-from-the-snapshot-itself-configure-retention-independent-destinations-and-distinct-local-backup-remote-publication-status",
           "number": 1,
-          "title": "Inspect existing implementation and record applicable precedents and Guidelines.",
+          "title": "Use consistent SQLite backups and read snapshot revision from the snapshot itself. Configure retention, independent destinations and distinct local-backup/remote-publication status.",
           "checked": false
         },
         {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-002-define-durable-operation-history-provenance-crash-safe-writes-checkpoints-and-bounded-snapshot-backup-retention-using-existing-json-store-conventions-avoid-a-mandatory-new-database-or-full-event-sourcing-platform",
+          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-002-export-versioned-logical-json-plus-manifest-project-revision-baseline-hashes-and-all-required-documents-source-evidence-assets-omit-credentials-active-ownership-pids-caches-and-inherited-read-authorization",
           "number": 2,
-          "title": "Define durable operation history/provenance, crash-safe writes/checkpoints and bounded snapshot/backup retention using existing JSON/store conventions; avoid a mandatory new database or full event-sourcing platform.",
+          "title": "Export versioned logical JSON plus manifest/project/revision/baseline/hashes and all required documents/source-evidence assets; omit credentials, active ownership, PIDs, caches and inherited read authorization.",
           "checked": false
         },
         {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-003-back-up-canonical-entities-decisions-executions-integrations-and-required-recoverable-source-snapshot-evidence-classify-transient-locks-pids-read-attestations-caches-as-non-portable-do-not-export-live-credentials-or-adopt-foreign-ownership",
+          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-003-implement-explicit-ui-tool-snapshot-publication-using-a-private-bare-git-transport-and-normal-authenticated-commit-push-fetch-import-must-leave-source-checkout-index-branch-untouched-ordinary-planner-updates-do-not-auto-publish",
           "number": 3,
-          "title": "Back up canonical entities, decisions, executions, integrations and required recoverable source-snapshot evidence. Classify transient locks/PIDs/read attestations/caches as non-portable; do not export live credentials or adopt foreign ownership.",
+          "title": "Implement explicit UI/tool snapshot publication using a private bare Git transport and normal authenticated commit/push. Fetch/import must leave source checkout/index/branch untouched; ordinary planner updates do not auto-publish.",
           "checked": false
         },
         {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-004-extend-portable-export-import-restore-with-format-schema-versions-checksums-referenced-blob-completeness-and-explicit-identity-rebinding-policy-for-another-clone-or-storage-location-restore-must-not-silently-overwrite-a-different-live-project",
+          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-004-compare-both-local-baseline-and-fetched-remote-tip-stage-common-baseline-reconciliation-for-divergent-computers-retaining-same-field-delete-edit-lifecycle-conflicts-and-validating-the-resulting-graph-before-activation",
           "number": 4,
-          "title": "Extend portable export/import/restore with format/schema versions, checksums, referenced-blob completeness and explicit identity/rebinding policy for another clone or storage location; restore must not silently overwrite a different live project.",
+          "title": "Compare both local baseline and fetched remote tip. Stage common-baseline reconciliation for divergent computers, retaining same-field/delete-edit/lifecycle conflicts and validating the resulting graph before activation.",
           "checked": false
         },
         {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-005-make-missing-corrupt-incompatible-stores-diagnosable-with-recovery-paths-verify-crash-injection-journal-replay-or-checkpoint-rollback-and-backup-restoration-into-isolated-mkdtemp-fixtures",
+          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-005-recheck-the-local-revision-at-import-activation-preserve-backup-and-support-interruption-status-lookup-descriptor-only-clones-and-missing-home-cases-recover-up-to-the-last-complete-available-snapshot-never-unpublished-data",
           "number": 5,
-          "title": "Make missing/corrupt/incompatible stores diagnosable with recovery paths; verify crash injection, journal replay or checkpoint rollback and backup restoration into isolated mkdtemp fixtures.",
+          "title": "Recheck the local revision at import activation, preserve backup and support interruption/status lookup. Descriptor-only clones and missing-HOME cases recover up to the last complete available snapshot, never unpublished data.",
           "checked": false
         },
         {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-006-document-normal-writes-without-commits-backup-location-status-retention-and-recovery-guarantees-limits-integrate-actual-restored-state-verification-into-i1-i2-and-preserve-no-release-no-auto-commit-behavior",
+          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-006-document-limits-local-db-claims-are-not-team-wide-ownership-snapshots-are-not-a-network-authority-and-restoring-planner-knowledge-does-not-revert-source-code",
           "number": 6,
-          "title": "Document normal writes without commits, backup location/status, retention and recovery guarantees/limits. Integrate actual restored-state verification into I1/I2 and preserve no-release/no-auto-commit behavior.",
+          "title": "Document limits: local DB claims are not team-wide ownership, snapshots are not a network authority, and restoring planner knowledge does not revert source code.",
           "checked": false
         },
         {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-007-verify-on-isolated-mkdtemp-fixtures-after-concurrent-writes-and-process-crashes-recovery-yields-a-validated-consistent-plan-or-explicit-recoverable-failure-never-a-silent-empty-replacement",
+          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-007-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 7,
-          "title": "Verify on isolated mkdtemp fixtures: After concurrent writes and process crashes, recovery yields a validated consistent plan or explicit recoverable failure, never a silent empty replacement.",
-          "checked": false
-        },
-        {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-008-verify-on-isolated-mkdtemp-fixtures-a-complete-export-restores-task-decision-handoff-execution-integration-identities-and-recoverable-evidence-without-requiring-access-to-the-original-worktree-path",
-          "number": 8,
-          "title": "Verify on isolated mkdtemp fixtures: A complete export restores task/decision/handoff/execution/integration identities and recoverable evidence, without requiring access to the original worktree path.",
-          "checked": false
-        },
-        {
-          "id": "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062-check-009-verify-on-isolated-mkdtemp-fixtures-a-new-clone-can-deliberately-import-rebind-a-backup-ordinary-git-clone-push-is-not-advertised-as-copying-the-shared-planner",
-          "number": 9,
-          "title": "Verify on isolated mkdtemp fixtures: A new clone can deliberately import/rebind a backup; ordinary git clone/push is not advertised as copying the shared planner.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
@@ -216,13 +178,13 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-21T10:03:12.530Z",
-      "updatedAt": "2026-10-21T10:04:05.901Z",
+      "updatedAt": "2026-10-29T21:02:44.089Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-21T10:02:59.712Z",
-  "updatedAt": "2026-10-21T14:58:53.337Z",
+  "updatedAt": "2026-10-30T08:26:57.769Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

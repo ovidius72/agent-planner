@@ -3,47 +3,40 @@
   "featureId": "87552320-99ec-42a3-beb5-04d29997b0f5",
   "number": 117,
   "shortId": "WK4AF",
-  "priority": 2,
-  "slug": "deterministic-priorities-and-reliable-returns",
-  "title": "Deterministic priorities and reliable returns",
-  "discussedAt": "2026-10-20T16:40:29.752Z",
+  "priority": 5,
+  "slug": "deterministic-priorities-phase-continuity-and-reliable-returns",
+  "title": "Deterministic priorities, phase continuity and reliable returns",
+  "discussedAt": "2026-10-29T21:02:37.218Z",
   "contextReady": true,
   "contextReadyReason": "Updated through planner-phase-discuss MCP tool.",
-  "summary": "Make next-work recommendations and interrupted-work resumption agree across all surfaces.",
-  "description": "Make next-work recommendations and interrupted-work resumption agree across all surfaces.\n\nCurrent state: extend existing Agent Plan functionality; see each task for the verified starting point. This phase follows the A baseline and the M/N/O shared-authority, availability and recovery foundations; it owns the reliability outcomes below.\n\nOutcomes:\n- Apply the agreed global hierarchy and preserve nested returns through task and phase completion.\n- Preserve atomic session ownership and intentional parked/block/defer distinctions.\n\nTasks and boundaries:\n- B1: Unify ready-work selection and recommendation explanations. A shared core evaluation returning the candidate and reasons for selecting or excluding work, consumed consistently by agents and the existing UI.\n- B2: Preserve and resume nested interrupted work across phase closure. A durable, caller-scoped return chain that remains visible and actionable after temporary work and phase completion, interruption and recovery.\n\nPreserve canonical planner identity, phase-scoped handoffs, derived status and session ownership. Read existing code precedents before implementation; use the current task checklist for steps. Source locations are navigation evidence at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231, not permanent anchors.\n\nExisting source entry points:\n- packages/plan-core/src/task-selection.ts:283 — export function recommendNextTask\n- packages/plan-core/src/on-hold.ts:1 — (module)\n- packages/plan-core/src/session-focus.ts:1 — (module)\n- packages/plan-core/src/plan-store.ts:3502 — async claimTask\n\nAcceptance: Core/MCP/Pi/server/UI agree on candidate or explain why none is available. A ready task in a higher-priority feature wins over current-phase continuity. Foreign ownership never produces successful start or an actionable personal return. No return target is silently lost when a phase completes. Unready work remains parked with an explicit reason; references at and beyond 999/1000 and 9999/10000 resolve to the complete correct identity in reasons and return handling. Recovery transfers only explicitly recoverable stopped callers and retains complete checkpoints.\n\nDesign detail: .planner/docs/agent-brain-plan.md. Product requirements: BR01, BR02, BR03, BR15, BR16.\n\nFull technical contracts and worked cases are in .planner/docs/agent-brain-registration-handoff.md. Preserve them in execution context; counts/titles alone do not satisfy this phase. Associated task descriptions include their detailed discussion contracts.\n\nShared-planner expansion approved 21 October 2026:\nConsume P129(F025)/T493 availability and P130(F025)/T495 shared-store migration/recovery before T463. Source-dependent readiness names the actual checkout/target and evidence; planning-only dependencies do not invent merges. Caller-scoped return obligations survive a shared-store restart or unavailable/moved worktree. Keep active ownership, actionable returns, then global feature -> phase -> task priority.\nAdditional outcome coverage: BR23, BR24, BR25. Full architecture, examples and boundaries: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable .planner policy in inspected source docs is the baseline being evolved; no product migration has run.\n\nCross-cutting consistency and bounded-cost acceptance (21 October 2026):\nEvery create/update/move or relationship change checks affected task/phase/feature/project scope and dependency readiness through P128(F025)/T496. Update genuinely obsolete facts only; reviewed-unchanged assessments name exact revisions, and pending semantic obligations remain explicit and resumable. Return indexed affected deltas rather than full ancestor/plan/graph reloads; measure per-flow context/payload/tool budgets without dropping mandatory rules or inventing context retention. BR28 and BR29 apply to this phase. Full contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md.",
-  "descriptionRef": ".planner/docs/agent-brain-plan.md",
-  "descriptionUpdatedAt": "2026-10-21T14:58:50.601Z",
+  "summary": "Unify next-work explanations without a global task queue. Preserve nested interruptions across phase completion and recovery.",
+  "description": "Purpose: Unify next-work explanations without a global task queue. Preserve nested interruptions across phase completion and recovery.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P117(F025)/T463: One explainable ready-work selector shared by core, clients and UI.\n- P117(F025)/T464: Durable nested interruptions with reliable task/phase continuation; parked tasks no longer reserve work against other agents.\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/on-hold.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/refs.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: Phase continuity and durable approved returns coexist with ready feature/phase/task priority. The orchestrator follows planner priorities; an out-of-order start agreed with the user records a reason. Only the execution lock (T490) blocks. No global individual-task queue or automatic preemption is adopted.",
+  "descriptionUpdatedAt": "2026-11-02T16:57:53.595Z",
   "notes": "",
   "goals": [
-    "Apply the agreed global hierarchy and preserve nested returns through task and phase completion.",
-    "Preserve atomic session ownership and intentional parked/block/defer distinctions."
+    "Unify next-work explanations without a global task queue.",
+    "Preserve nested interruptions across phase completion and recovery."
   ],
   "nonGoals": [
-    "No automatic start of blocked work.",
-    "No implicit recovery of a live or unverified caller."
+    "No unrelated runtime implementation, real data migration or Git/release action during planning.",
+    "No duplicate ownership, fixed language list or global task-queue scheduling."
   ],
   "dependencies": [
     "P116(F025)",
-    "P129(F025)",
     "P130(F025)"
   ],
   "dependsOn": [],
   "risks": [
-    "Phase rollups can accidentally bypass pending returns.",
-    "A parked status and a resumable checkpoint are different signals."
+    "Old JSON/path assumptions can leak through direct consumers; inspect current integration seams.",
+    "A passing fixture or stored read does not prove live native behavior or model understanding."
   ],
   "openQuestions": [],
   "decisions": [],
   "acceptedDecisions": [],
   "completionCriteria": [
-    "Core/MCP/Pi/server/UI agree on candidate or explain why none is available.",
-    "A ready task in a higher-priority feature wins over current-phase continuity.",
-    "Foreign ownership never produces successful start or an actionable personal return.",
-    "No return target is silently lost when a phase completes.",
-    "Unready work remains parked with an explicit reason; references at and beyond 999/1000 and 9999/10000 resolve to the complete correct identity in reasons and return handling.",
-    "Recovery transfers only explicitly recoverable stopped callers and retains complete checkpoints.",
-    "Shared-planner acceptance: Consume P129(F025)/T493 availability and P130(F025)/T495 shared-store migration/recovery before T463. Source-dependent readiness names the actual checkout/target and evidence; planning-only dependencies do not invent merges. Caller-scoped return obligations survive a shared-store restart or unavailable/moved worktree. Keep active ownership, actionable returns, then global feature -> phase -> task priority.",
-    "Affected hierarchy/dependency consistency is explicit and per-flow context/payload/tool cost meets measured budgets without losing mandatory context."
+    "Every owned task meets its complete canonical contract with concrete evidence.",
+    "Affected hierarchy/dependencies and context validity are reconciled without unbounded payloads.",
+    "Unverified native/provider/installed boundaries are explicit."
   ],
   "taskIds": [
     "77ea877f-6320-4776-a19f-90d2b05f9900",
@@ -59,72 +52,53 @@
       "shortName": "unify-ready-work-selection-and",
       "title": "Unify ready-work selection and recommendation explanations",
       "status": "planned",
-      "description": "Outcome: A shared core evaluation returning the candidate and reasons for selecting or excluding work, consumed consistently by agents and the existing UI.\n\nExisting state: Priority fields and recommendation helpers exist; recap, focus and adapters can still diverge or prefer current-phase continuity.\n\nImplementation responsibility:\n- Implement the agreed hierarchy after active work and pending returns.\n- Handle dependencies, ownership, priority zero, ties, derived parent statuses and explicit user choices.\n- Replace independent selection in recap, completion and adapter/UI focus paths with the shared result.\n- Add focused parity tests against the same snapshot and caller identity.\n\nAcceptance and evidence:\n- Core/MCP/Pi/server/UI agree on candidate or explain why none is available.\n- A ready task in a higher-priority feature wins over current-phase continuity.\n- Foreign ownership never produces successful start or an actionable personal return.\n\nRead before editing:\n- packages/plan-core/src/task-selection.ts:283 — export function recommendNextTask\n- packages/plan-core/src/recap.ts:46 — export async function buildRecap\n- packages/plan-core/src/session-focus.ts:1 — (module)\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\n- packages/plan-web-ui/src/components/dashboard/work-tree.tsx:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P116(F025)/T462, P129(F025)/T493, P130(F025)/T495. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Evaluate owned active work and pending returns before globally ready feature → phase → task priority; current-phase continuity introduces no hidden precedence.\n- Use the same snapshot/caller inputs across recap, recommendations, completion, MCP/Pi/server and UI; respect priority zero, ties, dependencies and ownership.\n- An explicit user instruction is distinct from an autonomous recommendation and does not require unnecessary permission ceremony.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nConsume N3 availability and O2 migrated/bound storage. Filter source-dependent work by the explicitly selected checkout/target and exact artifact evidence; preserve active ownership, actionable caller returns, then global feature -> phase -> task priority. Planning-only dependencies do not require a fictitious merge. Unknown/missing code receives an actionable typed reason. Reuse the shared evaluator across surfaces rather than checking a global done flag.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.\n\nHierarchy/dependency consistency and token-cost contract (21 October 2026):\nDependency/parent changes consume M3 invalidation and recomputed readiness; no stale recommendation can survive a changed edge or source-availability input. Query the affected candidate set and compact reasons instead of reloading the whole plan.\nFull contract: .planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md. Requirements BR28/BR29 apply across the feature; no implementation is started by registration.",
-      "descriptionUpdatedAt": "2026-10-21T14:57:50.411Z",
+      "description": "Outcome: One explainable ready-work selector shared by core, clients and UI.\n\nCurrent implementation: The selector can prefer currentPhaseId before global priorities. Active ownership and pending returns exist but differ across completion/recap paths.\n\nImplementation responsibility:\n- Implement the T462 precedence from one persisted snapshot/caller: owned active work, valid ready return, then globally ready feature -> phase -> task.\n- Preserve deliberate phase continuity and explicit temporary detours; remove the current-phase priority exception without creating a global task queue or free worker pool.\n- Recommendations are advisory: the orchestrator chooses the next task following planner priorities. With the user's agreement a task may start out of priority order; the planner asks for and records a deviation reason and does not block. Unmet dependencies produce a warning; only the execution lock (T490) blocks a start.\n- Filter or explain dependencies, parked/abandoned states, in-progress locks of other sessions and held returns; explain zero-priority/tie cases and every exclusion.\n- Expose an availability-extension result for later T493 source/target evidence. Do not make the base scheduler depend on advanced target integration.\n- Replace independent recap/completion/MCP/Pi/UI selection with this result and verify parity. Recommendations do not reserve work; start still takes the execution lock atomically.\n\nAcceptance and evidence:\n- The same snapshot and caller yield the same candidate/reasons across supported surfaces.\n- A higher-priority ready feature wins over unowned current-phase preference; an in-progress task is not silently preempted.\n- An out-of-order start with user agreement succeeds and records its reason; a start with unmet dependencies warns.\n- No dependency becomes eligible merely because its display priority changed.\n\nCurrent source navigation:\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/on-hold.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/refs.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, the execution lock and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T16:57:24.630Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-001-implement-the-agreed-hierarchy-after-active-work-and-pending-returns",
+          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-001-implement-the-t462-precedence-from-one-persisted-snapshot-caller-owned-active-work-valid-ready-return-then-globally-ready-feature-phase-task",
           "number": 1,
-          "title": "Implement the agreed hierarchy after active work and pending returns.",
+          "title": "Implement the T462 precedence from one persisted snapshot/caller: owned active work, valid ready return, then globally ready feature -> phase -> task.",
           "checked": false
         },
         {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-002-handle-dependencies-ownership-priority-zero-ties-derived-parent-statuses-and-explicit-user-choices",
+          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-002-preserve-deliberate-phase-continuity-and-explicit-temporary-detours-remove-the-current-phase-priority-exception-without-creating-a-global-task-queue-or-free-worker-pool",
           "number": 2,
-          "title": "Handle dependencies, ownership, priority zero, ties, derived parent statuses and explicit user choices.",
+          "title": "Preserve deliberate phase continuity and explicit temporary detours; remove the current-phase priority exception without creating a global task queue or free worker pool.",
           "checked": false
         },
         {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-003-replace-independent-selection-in-recap-completion-and-adapter-ui-focus-paths-with-the-shared-result",
+          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-003-filter-dependencies-unavailable-parked-states-foreign-claims-and-held-returns-explain-zero-priority-tie-cases-and-every-exclusion",
           "number": 3,
-          "title": "Replace independent selection in recap, completion and adapter/UI focus paths with the shared result.",
+          "title": "Filter dependencies, unavailable/parked states, foreign claims and held returns; explain zero-priority/tie cases and every exclusion.",
           "checked": false
         },
         {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-004-add-focused-parity-tests-against-the-same-snapshot-and-caller-identity",
+          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-004-expose-an-availability-extension-result-for-later-t493-source-target-evidence-do-not-make-the-base-scheduler-depend-on-advanced-target-integration",
           "number": 4,
-          "title": "Add focused parity tests against the same snapshot and caller identity.",
+          "title": "Expose an availability-extension result for later T493 source/target evidence. Do not make the base scheduler depend on advanced target integration.",
           "checked": false
         },
         {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-005-verify-core-mcp-pi-server-ui-agree-on-candidate-or-explain-why-none-is-available",
+          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-005-replace-independent-recap-completion-mcp-pi-ui-selection-with-this-result-and-verify-parity-recommendations-do-not-reserve-work-start-still-claims-atomically",
           "number": 5,
-          "title": "Verify: Core/MCP/Pi/server/UI agree on candidate or explain why none is available.",
+          "title": "Replace independent recap/completion/MCP/Pi/UI selection with this result and verify parity. Recommendations do not reserve work; start still claims atomically.",
           "checked": false
         },
         {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-006-verify-a-ready-task-in-a-higher-priority-feature-wins-over-current-phase-continuity",
+          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Verify: A ready task in a higher-priority feature wins over current-phase continuity.",
-          "checked": false
-        },
-        {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-007-verify-foreign-ownership-never-produces-successful-start-or-an-actionable-personal-return",
-          "number": 7,
-          "title": "Verify: Foreign ownership never produces successful start or an actionable personal return.",
-          "checked": false
-        },
-        {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-008-verify-global-order-and-pending-returns-across-shared-worktrees-with-present-absent-and-unknown-code-artifacts",
-          "number": 8,
-          "title": "Verify global order and pending returns across shared worktrees with present, absent and unknown code artifacts.",
-          "checked": false
-        },
-        {
-          "id": "77ea877f-6320-4776-a19f-90d2b05f9900-check-009-verify-ready-work-selection-after-edge-priority-changes-using-bounded-affected-state-inputs",
-          "number": 9,
-          "title": "Verify ready-work selection after edge/priority changes using bounded affected-state inputs.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
       "subtasks": [],
       "dependsOn": [
         "f4ac8204-3e0c-429d-9354-4c75061d7600",
-        "c83cce3f-0d98-4e5c-ab60-192824cf91f6",
         "2e04d951-d7c2-4bd6-92e7-9dfbdf3f4062"
       ],
       "pauseSnapshot": null,
@@ -132,7 +106,7 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-20T16:41:11.203Z",
-      "updatedAt": "2026-10-21T14:57:50.409Z",
+      "updatedAt": "2026-11-02T16:57:24.490Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -145,65 +119,47 @@
       "shortName": "preserve-and-resume-nested-int",
       "title": "Preserve and resume nested interrupted work across phase closure",
       "status": "planned",
-      "description": "Outcome: A durable, caller-scoped return chain that remains visible and actionable after temporary work and phase completion, interruption and recovery.\n\nExisting state: Pause snapshots, pause history, work deviations and per-session focus already exist. The reported issue concerns reliable return and selection, not introducing another parked-work system.\n\nImplementation responsibility:\n- Exercise A → B → C and unwind C → B → A, including completion of the temporary phase.\n- Reconcile parked-state eligibility with F024 and remove fixed digit limits from reference recognition in parked-work reasons; reuse the common variable-width reference grammar without partial-number matches.\n- Keep blocked, waiting, deferred and deliberate cancellation distinct; retain pending return when it cannot run.\n- Verify persisted focus and recovery after process restart, while preserving other sessions.\n- Expose reason and return chain in existing task/focus UI and shared recommendations.\n\nAcceptance and evidence:\n- No return target is silently lost when a phase completes.\n- Unready work remains parked with an explicit reason; references at and beyond 999/1000 and 9999/10000 resolve to the complete correct identity in reasons and return handling.\n- Recovery transfers only explicitly recoverable stopped callers and retains complete checkpoints.\n\nRead before editing:\n- packages/plan-core/src/task-selection.ts:283 — export function recommendNextTask\n- packages/plan-core/src/on-hold.ts:1 — (module)\n- packages/plan-core/src/session-focus.ts:1 — (module)\n- packages/plan-core/src/plan-store.ts:3502 — async claimTask\n- packages/plan-mcp/src/index.ts:2263 — server.registerTool(\"planner-task-start\"\n- packages/pi-adapter/src/index.ts:1385 — async function scanCodebase\n- packages/plan-server/src/serve.ts:1 — (module)\n- packages/plan-web-ui/src/routes/task-detail/route.tsx:1 — (module)\nThese module/symbol references and line positions were inspected at c4d0c459f74f5365c9ab8a9fe53ad6d7907a8231; revalidate against the current checkout. New module names/provider/storage details remain implementation choices to resolve in the owning task, not claims of existing code.\n\nPreserve: canonical IDs, decision ownership, phase-scoped handoffs, atomic task/session ownership, derived parent statuses and the accepted warning-only no-task guard. Follow the existing project Guidelines and record relevant source precedents and conformity evidence on this task. Do not create new tasks for the checklist steps.\n\nExecution dependencies: P117(F025)/T463. Requirement coverage and earlier responsibilities are preserved.\n\nDetailed discussion contract:\n- Persist the full temporary A → B → C return chain with source, reason, checkpoint and resume obligation; unwind through phase completion as well as task completion.\n- Retain an unavailable return with its explicit blocker instead of dropping it in favor of unrelated new work.\n- Recover only explicitly stopped recoverable callers; never take a live or foreign session merely because its work appears in the same graph.\n- 21 October clarification: the formatter pads to a minimum of three digits and core refs.ts already accepts one or more digits. on-hold.ts currently restricts prose refs to 1–4 digits; correct that inconsistency without renumbering entities, truncating a longer reference or confusing composite parents. Retain number-only matching and false-positive boundaries such as HTTP2.\n\nRead .planner/docs/agent-brain-registration-handoff.md for full mechanisms, examples and coverage mapping. Exact proposed fields/tool versions/storage engines remain choices in the owning task, not already implemented or automatically approved facts.\n\nShared-planner expansion approved 21 October 2026:\nStore return obligations under the correct caller/workspace/execution namespace in the shared authority. A ready return in another path must resolve its stable workspace identity and source availability; never resume it in the current directory by assumption. Deleted/unavailable worktrees retain a visible recovery obligation, and another live owner is not actionable.\n\nFull binding, execution/integration, migration and recovery contracts: .planner/docs/agent-brain-shared-planner-and-execution.md. The older mergeable plan layout described in current source documentation is the baseline being evolved, not the new storage policy. This registration does not implement or migrate it.",
-      "descriptionUpdatedAt": "2026-10-21T10:04:58.946Z",
+      "description": "Outcome: Durable nested interruptions with reliable task/phase continuation and explicit recovery.\n\nCurrent implementation: Pause snapshots and deviation stacks already exist; losing the return after temporary phase completion or restart is the reported failure, and a parked task stays owned so a later resume is refused (TASK_OWNED_BY_ANOTHER_SESSION).\n\nImplementation responsibility:\n- Persist checkpoint, reason, source task/phase, execution/workspace, temporary target and return condition atomically through the shared service.\n- Unwind A -> B -> C as C -> B -> A, even after the temporary phase closes. Revalidate context/eligibility at return and keep blocked returns visible.\n- A switch or return leaves the task parked (T490 execution lock): it no longer reserves the task against other agents. A takeover warns and is recorded; a return to a task taken over meanwhile reports the takeover instead of failing.\n- The same logical agent reclaims its own parked or abandoned tasks from a new conversation; keep other agents unchanged and expose the return chain/reason in focus and UI.\n- Preserve exact full variable-width refs in parked reasons and use stable IDs rather than parsing partial display labels.\n- Keep block/defer/wait/cancel distinct. Do not replace this mechanism with another parked-work system or automatic cross-phase dispatch.\n\nAcceptance and evidence:\n- Closing a temporary phase never deletes the preserved return.\n- A blocked return is explained rather than silently skipped or started.\n- A parked task can be resumed by its own agent after restart and taken over by another one with a warning; long refs resolve completely.\n\nCurrent source navigation:\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/on-hold.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/refs.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/project-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/task-context.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, the execution lock and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\nCurrent detailed contract: docs/agent-brain/decisions.md; docs/agent-brain/session-registration.md; docs/agent-brain/heca-protocol.md.",
+      "descriptionUpdatedAt": "2026-11-02T16:57:24.762Z",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-001-exercise-a-b-c-and-unwind-c-b-a-including-completion-of-the-temporary-phase",
+          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-001-persist-checkpoint-reason-source-task-phase-execution-workspace-temporary-target-and-return-condition-atomically-through-the-shared-service",
           "number": 1,
-          "title": "Exercise A → B → C and unwind C → B → A, including completion of the temporary phase.",
+          "title": "Persist checkpoint, reason, source task/phase, execution/workspace, temporary target and return condition atomically through the shared service.",
           "checked": false
         },
         {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-002-reconcile-parked-state-eligibility-with-f024-and-remove-fixed-digit-limits-from-reference-recognition-in-parked-work-reasons-reuse-the-common-variable-width-reference-grammar-without-partial-number-matches",
+          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-002-unwind-a-b-c-as-c-b-a-even-after-the-temporary-phase-closes-revalidate-context-eligibility-at-return-and-keep-blocked-returns-visible",
           "number": 2,
-          "title": "Reconcile parked-state eligibility with F024 and remove fixed digit limits from reference recognition in parked-work reasons; reuse the common variable-width reference grammar without partial-number matches.",
+          "title": "Unwind A -> B -> C as C -> B -> A, even after the temporary phase closes. Revalidate context/eligibility at return and keep blocked returns visible.",
           "checked": false
         },
         {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-003-keep-blocked-waiting-deferred-and-deliberate-cancellation-distinct-retain-pending-return-when-it-cannot-run",
+          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-003-preserve-exact-full-variable-width-refs-in-parked-reasons-and-use-stable-ids-rather-than-parsing-partial-display-labels",
           "number": 3,
-          "title": "Keep blocked, waiting, deferred and deliberate cancellation distinct; retain pending return when it cannot run.",
+          "title": "Preserve exact full variable-width refs in parked reasons and use stable IDs rather than parsing partial display labels.",
           "checked": false
         },
         {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-004-verify-persisted-focus-and-recovery-after-process-restart-while-preserving-other-sessions",
+          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-004-recover-only-explicitly-stopped-callers-under-the-lifecycle-policy-keep-other-agents-unchanged-and-expose-the-return-chain-reason-in-focus-and-ui",
           "number": 4,
-          "title": "Verify persisted focus and recovery after process restart, while preserving other sessions.",
+          "title": "Recover only explicitly stopped callers under the lifecycle policy; keep other agents unchanged and expose the return chain/reason in focus and UI.",
           "checked": false
         },
         {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-005-expose-reason-and-return-chain-in-existing-task-focus-ui-and-shared-recommendations",
+          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-005-keep-block-defer-wait-cancel-distinct-do-not-replace-this-mechanism-with-another-parked-work-system-or-automatic-cross-phase-dispatch",
           "number": 5,
-          "title": "Expose reason and return chain in existing task/focus UI and shared recommendations.",
+          "title": "Keep block/defer/wait/cancel distinct. Do not replace this mechanism with another parked-work system or automatic cross-phase dispatch.",
           "checked": false
         },
         {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-006-verify-no-return-target-is-silently-lost-when-a-phase-completes",
+          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-006-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 6,
-          "title": "Verify: No return target is silently lost when a phase completes.",
-          "checked": false
-        },
-        {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-007-verify-unready-work-remains-parked-with-an-explicit-reason-references-at-and-beyond-999-1000-and-9999-10000-resolve-to-the-complete-correct-identity-in-reasons-and-return-handling",
-          "number": 7,
-          "title": "Verify: Unready work remains parked with an explicit reason; references at and beyond 999/1000 and 9999/10000 resolve to the complete correct identity in reasons and return handling.",
-          "checked": false
-        },
-        {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-008-verify-recovery-transfers-only-explicitly-recoverable-stopped-callers-and-retains-complete-checkpoints",
-          "number": 8,
-          "title": "Verify: Recovery transfers only explicitly recoverable stopped callers and retains complete checkpoints.",
-          "checked": false
-        },
-        {
-          "id": "4093d6ee-1fa2-4dd4-9cf4-b3d12b29f78e-check-009-verify-interrupted-returns-survive-shared-store-restart-worktree-moves-and-phase-closure-without-cross-caller-leakage",
-          "number": 9,
-          "title": "Verify interrupted returns survive shared-store restart, worktree moves and phase closure without cross-caller leakage.",
+          "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
           "checked": false
         }
       ],
@@ -216,13 +172,13 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-10-20T16:41:11.992Z",
-      "updatedAt": "2026-10-21T10:04:59.288Z",
+      "updatedAt": "2026-11-02T16:57:24.490Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-10-20T16:40:29.281Z",
-  "updatedAt": "2026-10-21T14:58:50.601Z",
+  "updatedAt": "2026-11-02T16:57:53.451Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

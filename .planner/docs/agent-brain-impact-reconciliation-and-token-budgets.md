@@ -1,5 +1,7 @@
 # Agent Brain — impact reconciliation and bounded context cost
 
+> Target reconciliation, 2026-10-29: read [the reviewed design package](../../docs/agent-brain/README.md) and [gap matrix](../../docs/agent-brain/reconciliation.md). HOME SQLite, one API-only application service and descriptor-first migration supersede earlier Git-common-directory/JSON target-storage passages. Detailed unaffected editor/provider/context/execution contracts and dated evidence remain useful. F025 task and parent amendments are registered; use the current execution map and canonical entities. Historical drafts below are supporting context only. The global task queue proposal is not adopted.
+
 Registered implementation owner: **P128(F025)/T496**, alias M3, UUID e1111601-64ad-49d5-9805-df48e9dd4b70. It follows T489 and precedes T490, T470 and T481. BR28/BR29 are linked to all 15 phases and AD19 is owned once by F025. All 334 checklist items across the 36-task feature remain unchecked.
 
 User-approved addition, 21 October 2026. This applies to every F025 workflow, not just shared storage. It is planned behavior, not a claim that existing adapters enforce it today. Canonical planner entities remain authoritative.

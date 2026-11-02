@@ -1,5 +1,7 @@
 # Agent Brain — Monaco workspace, shared analysis and project identity
 
+> Target reconciliation, 2026-10-29: read [the reviewed design package](../../docs/agent-brain/README.md) and [gap matrix](../../docs/agent-brain/reconciliation.md). HOME SQLite, one API-only application service and descriptor-first migration supersede earlier Git-common-directory/JSON target-storage passages. Detailed unaffected editor/provider/context/execution contracts and dated evidence remain useful. F025 task and parent amendments are registered; use the current execution map and canonical entities. Historical drafts below are supporting context only. The global task queue proposal is not adopted.
+
 Current amendment: shared-plan storage is independent of the selected code workspace. K/L must reuse the explicit binding, execution/target provenance and affected-context/bounded-cost contracts in `.planner/docs/agent-brain-shared-planner-and-execution.md` and `.planner/docs/agent-brain-impact-reconciliation-and-token-budgets.md`. The current total is 15 phases/36 tasks/29 requirements/19 decisions; earlier editor-only counts in this document are historical. Monaco/provider/project-title decisions remain in force.
 
 **Registered and verified in F025: P125–P127 / T483–T488.** Canonical planner entities are authoritative. This is the complete implementation handover for the user-approved planning expansion of 21 October 2026. Product implementation, dependency installation, commits and release are not part of this registration.
