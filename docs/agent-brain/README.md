@@ -15,6 +15,7 @@ Consolidated 2026-11-02. Implementation owner: Agent Plan F025, with the Heca-Pr
 | [UI prototypes](ui-prototypes.md) | Inspected design references, their gaps and the API/presentation boundary. |
 | [Replan registration](replan-registration.md) | How F025 was registered, with verification evidence. |
 | [Reconciliation and gap matrix](reconciliation.md) | Dated audit of existing work and how it was resolved. |
+| [Improvements and fixes](improvements-and-fixes.md) | Maintained register of reported bugs, discovery/conduct improvements and dependency-impact corrections for Agent Brain development. |
 | [Decisions 2026-11-01](decisions-2026-11-01.md), [2026-11-02](decisions-2026-11-02.md) | Dated decision records and the planner changes applied on those days. |
 
 Each server owns its API schema; the communication contract connects those schemas rather than introducing a third dispatcher or store.
