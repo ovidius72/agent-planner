@@ -21,7 +21,7 @@ import {
   writeStoredArray,
 } from "../lib/dashboard-storage";
 import type { Feature, FeatureStatus, Phase, PhaseStatus, TaskStatus } from "../lib/types";
-import { isSearchActive, matchTask, parseSearchQuery, buildTaskHay } from "../lib/task-search";
+import { isSearchActive, matchTask, matchFeature, matchPhase, parseSearchQuery, buildTaskHay } from "../lib/task-search";
 
 export type TreeOpenMode = "smart" | "all" | "none";
 
@@ -140,7 +140,15 @@ export function useDashboardTree({
     const phaseIds = new Set<string>();
     if (!searchActive) return { matchedTaskIds: taskIds, matchedFeatureIds: featureIds, matchedPhaseIds: phaseIds };
     for (const entry of workTree) {
+      // Features and phases match on their own, so empty entities (no phases /
+      // no tasks) stay discoverable. Parents also appear via matched
+      // descendants, exactly as before.
+      if (matchFeature(searchFilters, entry.feature)) featureIds.add(entry.feature.id);
       for (const pe of entry.allPhases) {
+        if (matchPhase(searchFilters, { feature: entry.feature, phase: pe.phase })) {
+          phaseIds.add(pe.phase.id);
+          featureIds.add(entry.feature.id);
+        }
         for (const t of pe.allTasks) {
           if (matchTask(searchFilters, { feature: entry.feature, phase: pe.phase, task: t }, hayByTaskId?.get(t.id))) {
             taskIds.add(t.id);
@@ -238,7 +246,8 @@ export function useDashboardTree({
 
   // ── The filtered, active-only-pruned tree actually rendered ────────────
   const displayedWorkTree = useMemo<WorkTreeFeature[]>(() => {
-    // Search overrides status filters: show only branches containing matched tasks.
+    // Search overrides status filters: show only branches containing matched
+    // tasks, plus matched phases/features even when they are empty.
     if (searchActive) {
       return workTree
         .filter((entry) => matchesStatus(entry.feature.status, effectiveFeatureStatusFilters))
@@ -253,9 +262,9 @@ export function useDashboardTree({
                 matchesStatus(task.status, effectiveTaskStatusFilters),
               ),
             }))
-            .filter((phaseEntry) => phaseEntry.allTasks.length > 0),
+            .filter((phaseEntry) => phaseEntry.allTasks.length > 0 || matchedPhaseIds.has(phaseEntry.phase.id)),
         }))
-        .filter((entry) => entry.allPhases.length > 0);
+        .filter((entry) => entry.allPhases.length > 0 || matchedFeatureIds.has(entry.feature.id));
     }
 
     const activeOnly = !showAllFeatures || onlyActiveBranches;

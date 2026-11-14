@@ -3,6 +3,7 @@ import { Link, Outlet, useNavigate, useNavigation } from "react-router-dom";
 import { LocateFixed } from "lucide-react";
 import { TopNav } from "./top-nav";
 import { FormattedText } from "../ui/formatted-text";
+import { Accordion } from "../ui/accordion";
 import type { ActiveTaskSummary, FocusTaskSummary, ServerInfo, TaskFocusSummary } from "../../lib/api";
 import { CopyableBadge, EntityPathBadge, formatEntityPath, ShortIdBadge } from "../ui/badges";
 import { StatusBadge } from "../ui/status-badge";
@@ -157,10 +158,14 @@ export function AppShell({ project, taskFocus, serverInfo }: { project: Project;
                 ) : null}
               </div>
             ) : null}
-            {project?.description ? <FormattedText text={project.description} className="mt-2 max-w-3xl" /> : null}
           </div>
           {navigation.state !== "idle" ? <div className="text-sm font-semibold text-[var(--accent)]">Updating…</div> : null}
         </div>
+        {project?.description ? (
+          <Accordion title="Project description" className="mb-8">
+            <FormattedText text={project.description} />
+          </Accordion>
+        ) : null}
         <Outlet />
       </div>
     </div>

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useLoaderData, useNavigate, useRouteLoaderData } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
+import { Accordion } from "../../components/ui/accordion";
 import { FormattedText } from "../../components/ui/formatted-text";
 import { ProjectContext } from "../../components/dashboard/project-context";
 import { LatestCompletedTasks } from "../../components/dashboard/latest-completed-tasks";
@@ -45,17 +45,18 @@ export function DashboardRoute() {
   const projectStorageScope = project.projectRoot || project.planRoot || project.name || "default";
 
   return (
-    <div className="grid grid-cols-1 gap-8">
-      <Card className="grid grid-cols-1 gap-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="min-w-0 text-lg font-bold text-[var(--text)]">Project Goal</h2>
-          <Button type="button" shortcut="edit" onClick={openEditProject} className="shrink-0">
+    <div className="grid grid-cols-1 gap-5">
+      <Accordion
+        title="Project Goal"
+        defaultOpen={!project.goal}
+        actions={
+          <Button type="button" shortcut="edit" iconOnly aria-label="Edit project" title="Edit project" onClick={openEditProject}>
             <Pencil className="h-4 w-4" />
-            Edit project
           </Button>
-        </div>
-        {project.goal ? <FormattedText text={project.goal} className="max-w-4xl" /> : <p className="max-w-4xl text-sm text-[var(--text-muted)]">Add a project goal to define the main objective.</p>}
-      </Card>
+        }
+      >
+        {project.goal ? <FormattedText text={project.goal} /> : <p className="text-sm text-[var(--text-muted)]">Add a project goal to define the main objective.</p>}
+      </Accordion>
 
       <ProjectContext project={project} />
 
