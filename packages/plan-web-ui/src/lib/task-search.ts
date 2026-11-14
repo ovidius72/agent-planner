@@ -190,42 +190,131 @@ export function isSearchActive(filters: SearchFilters): boolean {
   );
 }
 
-/** Does this task (within its feature/phase) match the filters? */
-/** Build the lowercased haystack for a task's free-text match. Includes
- *  number, title, shortName, shortId, description, notes (task); title, slug,
- *  shortId, number, description, summary, notes (phase); name, shortId,
- *  number, description (feature); plus composite-style refs (F00x/P00x/T00x)
- *  so bare queries like `85` or `P085` match. Exported so callers can precompute
- *  once per data change instead of per keystroke. */
+function pad3(n: number): string {
+  return String(n).padStart(3, "0");
+}
+
+/** Lowercased free-text haystack for a feature alone: name, shortId, number,
+ *  composite ref and description. Exported so empty features (no phases) can
+ *  match free-text searches, and so every consumer shares one definition. */
+export function buildFeatureHay(feature: Feature): string {
+  return [
+    feature.name,
+    feature.shortId ?? "",
+    String(feature.number),
+    `F${pad3(feature.number)}`,
+    feature.description ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+/** Lowercased free-text haystack for a phase alone: title, slug, shortId,
+ *  number, composite ref, description, summary and notes. Exported so empty
+ *  phases (no tasks) can match free-text searches. */
+export function buildPhaseHay(phase: Phase): string {
+  return [
+    phase.title,
+    phase.slug ?? "",
+    phase.shortId ?? "",
+    String(phase.number),
+    `P${pad3(phase.number)}`,
+    phase.description ?? "",
+    phase.summary ?? "",
+    phase.notes ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+/** Build the lowercased haystack for a task's free-text match: the task's own
+ *  fields (number, title, shortName, shortId, description, notes) composed with
+ *  its phase and feature hays, so bare queries like `85` or `P085` match and
+ *  tasks and parents can never disagree about what their text matches. Exported
+ *  so callers can precompute once per data change instead of per keystroke. */
 export function buildTaskHay(ctx: { feature: Feature; phase: Phase; task: Task }): string {
-  const pad = (n: number) => String(n).padStart(3, "0");
   return [
     // task
     ctx.task.title,
     ctx.task.shortName ?? "",
     ctx.task.shortId ?? "",
     String(ctx.task.number),
-    `T${pad(ctx.task.number)}`,
+    `T${pad3(ctx.task.number)}`,
     ctx.task.description ?? "",
     ctx.task.notes ?? "",
-    // phase
-    ctx.phase.title,
-    ctx.phase.slug ?? "",
-    ctx.phase.shortId ?? "",
-    String(ctx.phase.number),
-    `P${pad(ctx.phase.number)}`,
-    ctx.phase.description ?? "",
-    ctx.phase.summary ?? "",
-    ctx.phase.notes ?? "",
-    // feature
-    ctx.feature.name,
-    ctx.feature.shortId ?? "",
-    String(ctx.feature.number),
-    `F${pad(ctx.feature.number)}`,
-    ctx.feature.description ?? "",
+    buildPhaseHay(ctx.phase),
+    buildFeatureHay(ctx.feature),
   ]
     .join(" ")
     .toLowerCase();
+}
+
+/** Task-scoped filters (task numbers, task status) can never be satisfied by a
+ *  parent entity without fabricating a matching task, so a feature or phase
+ *  only matches independently while none of them is active. */
+function hasTaskScopedFilters(filters: SearchFilters): boolean {
+  return Boolean(filters.taskNumbers || filters.status);
+}
+
+/** Feature-scoped structured filters: number set and feature status. Shared by
+ *  feature, phase and task matching so all three agree on these fields. */
+function matchesFeatureScope(filters: SearchFilters, feature: Feature): boolean {
+  if (filters.featureNumbers && !filters.featureNumbers.has(feature.number)) return false;
+  if (filters.featureStatus && feature.status !== filters.featureStatus) return false;
+  return true;
+}
+
+/** Phase-scoped structured filters: number set and phase status. */
+function matchesPhaseScope(filters: SearchFilters, phase: Phase): boolean {
+  if (filters.phaseNumbers && !filters.phaseNumbers.has(phase.number)) return false;
+  if (filters.phaseStatus && phase.status !== filters.phaseStatus) return false;
+  return true;
+}
+
+/** Does this feature match the filters on its own — including when it has no
+ *  phases or only empty phases? Pass `precomputedHay` (from buildFeatureHay)
+ *  to avoid rebuilding the haystack on every keystroke. */
+export function matchFeature(
+  filters: SearchFilters,
+  feature: Feature,
+  precomputedHay?: string,
+): boolean {
+  if (hasTaskScopedFilters(filters)) return false;
+  // Phase-scoped filters can only be satisfied by a phase; the feature still
+  // appears through a matching descendant phase, but never on its own.
+  if (filters.phaseNumbers || filters.phaseStatus) return false;
+  if (!matchesFeatureScope(filters, feature)) return false;
+  if (filters.shortIds && !filters.shortIds.has(feature.shortId ?? "")) return false;
+  if (filters.text) {
+    const hay = precomputedHay ?? buildFeatureHay(feature);
+    if (!hay.includes(filters.text)) return false;
+  }
+  return true;
+}
+
+/** Does this phase match the filters on its own — including when it has no
+ *  tasks? A phase lives inside its feature, so the feature-scoped filters must
+ *  match too, and its shortId filter accepts the phase's or the feature's id.
+ *  Pass `precomputedHay` (from buildPhaseHay) to avoid rebuilding per keystroke. */
+export function matchPhase(
+  filters: SearchFilters,
+  ctx: { feature: Feature; phase: Phase },
+  precomputedHay?: string,
+): boolean {
+  if (hasTaskScopedFilters(filters)) return false;
+  if (!matchesFeatureScope(filters, ctx.feature)) return false;
+  if (!matchesPhaseScope(filters, ctx.phase)) return false;
+  if (filters.shortIds) {
+    const hit =
+      filters.shortIds.has(ctx.phase.shortId ?? "")
+      || filters.shortIds.has(ctx.feature.shortId ?? "");
+    if (!hit) return false;
+  }
+  if (filters.text) {
+    const hay = precomputedHay ?? buildPhaseHay(ctx.phase);
+    if (!hay.includes(filters.text)) return false;
+  }
+  return true;
 }
 
 /** Does this task (within its feature/phase) match the filters?
@@ -236,9 +325,10 @@ export function matchTask(
   ctx: { feature: Feature; phase: Phase; task: Task },
   precomputedHay?: string,
 ): boolean {
-  if (filters.featureNumbers && !filters.featureNumbers.has(ctx.feature.number)) return false;
-  if (filters.phaseNumbers && !filters.phaseNumbers.has(ctx.phase.number)) return false;
+  if (!matchesFeatureScope(filters, ctx.feature)) return false;
+  if (!matchesPhaseScope(filters, ctx.phase)) return false;
   if (filters.taskNumbers && !filters.taskNumbers.has(ctx.task.number)) return false;
+  if (filters.status && ctx.task.status !== filters.status) return false;
   if (filters.shortIds) {
     // shortId is global; match if the task OR its phase OR its feature shortId is in the set.
     const hit =
@@ -247,16 +337,9 @@ export function matchTask(
       || filters.shortIds.has(ctx.feature.shortId ?? "");
     if (!hit) return false;
   }
-  if (filters.status && ctx.task.status !== filters.status) {
-    // also allow matching when the filter targets a phase/feature status? Keep task-only for status.
-    return false;
-  }
-  if (filters.featureStatus && ctx.feature.status !== filters.featureStatus) return false;
-  if (filters.phaseStatus && ctx.phase.status !== filters.phaseStatus) return false;
   if (filters.text) {
-    const t = filters.text;
     const hay = precomputedHay ?? buildTaskHay(ctx);
-    if (!hay.includes(t)) return false;
+    if (!hay.includes(filters.text)) return false;
   }
   return true;
 }
