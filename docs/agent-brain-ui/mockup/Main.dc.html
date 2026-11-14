@@ -74,7 +74,7 @@
   .trow{display:flex;gap:10px;border-radius:12px;border:1px solid var(--border);background:var(--surface-elevated)}
   .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:var(--surface-elevated);cursor:pointer;color:var(--text-subtle);flex-shrink:0}
   .iconbtn:hover{color:var(--accent);border-color:var(--accent)}
-  .tokchip{display:inline-flex;align-items:center;gap:5px;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:3px 5px 3px 9px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;white-space:nowrap}
+  .tokchip{display:inline-flex;align-items:center;gap:5px;max-width:100%;min-width:0;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:3px 5px 3px 9px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;white-space:nowrap}
   .tokx{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;border:0;background:rgba(99,102,241,0.18);color:var(--accent);cursor:pointer}
   .sugrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;border-radius:10px;padding:7px 9px;cursor:pointer;color:var(--text)}
   .sugrow:hover{background:var(--accent-soft)}
@@ -85,15 +85,20 @@
   .kpi dt{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)}
   .kpi dd{margin:4px 0 0;font-size:20px;font-weight:700;line-height:1}
   .stickyhdr{position:sticky;top:0;z-index:20}
-  .exp-toolbar{display:flex;flex:1 1 auto;min-width:0;flex-wrap:wrap;align-items:center;gap:8px}
-  .filterbar-wrap{position:sticky;top:var(--focus-h,0px);z-index:25;flex:1 1 100%;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);background:var(--surface-elevated)}
-  .filterbar-wrap.collapsed{padding:0;border:0}
-  .filterbar-wrap.collapsed .exp-toolbar{display:none}
-  .exp-toggle .ico-show{display:none}
-  .exp-toggle.collapsed .ico-show{display:block}
-  .exp-toggle.collapsed .ico-hide{display:none}
+  .toktxt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* filter bar: elastic input + actions always on one row; never wider than the layout */
+  .exp-body{overflow-x:clip}
+  .exp-toolbar{display:flex;flex:1 1 auto;min-width:0;flex-wrap:nowrap;align-items:center;gap:8px}
+  .filterbar-wrap{position:sticky;top:var(--focus-h,0px);z-index:25;flex:1 1 100%;min-width:0;max-width:100%;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);background:var(--surface-elevated);max-height:480px;transition:transform .26s ease,opacity .2s ease,max-height .26s ease,padding .26s ease,border-color .26s ease}
+  /* hidden: the bar slides off-screen to the right and gives its height back */
+  .filterbar-wrap.collapsed{transform:translateX(calc(100% + 32px));opacity:0;max-height:0;padding-top:0;padding-bottom:0;border-bottom-color:transparent;overflow:hidden;pointer-events:none}
+  .fbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);border-radius:10px;padding:5px 10px;min-height:30px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0}
+  .fbtn:hover{border-color:var(--accent);color:var(--text)}
+  .fbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  /* sticky reopen tab: only while the bar is hidden */
   .exp-toggle{display:none;top:var(--filt-top,100px)}
-  html.filt-scrolled .exp-toggle{display:flex}
+  .exp-toggle.collapsed{display:flex}
+  .exp-toggle .tdot{position:absolute;top:6px;left:5px;width:6px;height:6px;border-radius:9999px;background:var(--accent)}
   .hdr-nav{display:flex;flex-wrap:wrap;gap:4px}
   .hdr-id{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .hdr-burger{display:none}
@@ -449,14 +454,14 @@
 
     </div>
 
-    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
-      <div class="filterbar-wrap {{filterCls}}">
+    <div class="exp-body" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+      <div class="filterbar-wrap {{filterCls}}" aria-hidden="{{filtersHiddenAttr}}">
         <div class="exp-toolbar">
         <div class="exp-search" style="position:relative;flex:1 1 80px;min-width:0">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:14px;padding:7px 10px;min-height:40px">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
             <sc-for list="{{tokens}}" as="tk" hint-placeholder-count="1">
-              <span class="tokchip">{{tk.text}}<button type="button" class="tokx" onClick="{{tk.remove}}" aria-label="Remove filter {{tk.text}}"><svg class="ico" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
+              <span class="tokchip" title="{{tk.text}}"><span class="toktxt">{{tk.text}}</span><button type="button" class="tokx" onClick="{{tk.remove}}" aria-label="Remove filter {{tk.text}}"><svg class="ico" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></span>
             </sc-for>
             <input class="exp-input" type="text" value="{{draft}}" onInput="{{onDraft}}" onKeyDown="{{onDraftKey}}" onFocus="{{onFocus}}" onBlur="{{onBlur}}" placeholder="{{searchPlaceholder}}" aria-label="Structured search: field:value tokens" style="flex-grow:1;min-width:130px;border:0;outline:0;background:transparent;font-size:13px;color:var(--text);padding:3px 0"/>
           </div>
@@ -473,9 +478,9 @@
           </sc-if>
         </div>
         <div class="exp-actions" style="display:flex;flex-wrap:nowrap;flex-shrink:0;align-items:center;gap:8px">
-        <button type="button" onClick="{{toggleTree}}" title="{{treeToggleLabel}}" aria-label="{{treeToggleLabel}}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);border-radius:10px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer"><sc-if value="{{treeExpanded}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 20 5-5 5 5M7 4l5 5 5-5"/></svg></sc-if><sc-if value="{{treeCollapsed}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></sc-if><span class="btxt">{{treeToggleLabel}}</span></button>
-
-        <button type="button" onClick="{{clearFilters}}" title="Reset all filters" aria-label="Reset all filters" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);border-radius:10px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="btxt">Reset</span></button>
+        <button type="button" class="fbtn" onClick="{{toggleTree}}" title="{{treeToggleLabel}}" aria-label="{{treeToggleLabel}}"><sc-if value="{{treeExpanded}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 20 5-5 5 5M7 4l5 5 5-5"></path></svg></sc-if><sc-if value="{{treeCollapsed}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg></sc-if><span class="btxt">{{treeToggleLabel}}</span></button>
+        <button type="button" class="fbtn {{resetCls}}" onClick="{{clearFilters}}" title="Reset all filters" aria-label="Reset all filters"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg><span class="btxt">Reset</span></button>
+        <button type="button" class="fbtn exp-hide" onClick="{{toggleFilters}}" title="Hide filters" aria-label="Hide filters" aria-expanded="true"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8z"></path></svg></button>
         </div>
         </div>
       </div>
@@ -661,8 +666,8 @@
 </div>
 </sc-if>
 
-<!-- filters toggle: fixed to the viewport, outside the layout -->
-<button type="button" id="filt-toggle" class="exp-toggle {{filterCls}}" onClick="{{toggleFilters}}" title="Show / hide filters" aria-label="Show or hide filters" style="position:fixed;right:0;z-index:55;align-items:center;justify-content:center;width:24px;height:44px;padding:0;border:1px solid var(--border-strong);border-right:0;background:var(--surface-elevated);color:var(--text-muted);border-radius:10px 0 0 10px;cursor:pointer;box-shadow:var(--shadow-panel)"><svg class="ico ico-hide" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 17 5-5-5-5M6 17l5-5-5-5"/></svg><svg class="ico ico-show" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg></button>
+<!-- filters reopen tab: fixed to the right edge, shown only while the filter bar is hidden -->
+<button type="button" id="filt-toggle" class="exp-toggle {{filterCls}}" onClick="{{toggleFilters}}" title="Show filters" aria-label="Show filters" aria-expanded="false" style="position:fixed;right:0;z-index:55;align-items:center;justify-content:center;width:30px;height:44px;padding:0;border:1px solid var(--border-strong);border-right:0;background:var(--surface-elevated);color:var(--accent);border-radius:12px 0 0 12px;cursor:pointer;box-shadow:var(--shadow-panel)"><sc-if value="{{anyFilter}}" hint-placeholder-val="{{false}}"><span class="tdot" aria-hidden="true"></span></sc-if><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8z"></path></svg></button>
 
 <!-- toast -->
 <sc-if value="{{showToast}}" hint-placeholder-val="{{false}}">
@@ -679,7 +684,7 @@ class Component extends DCLogic {
     super(props);
     let _narrow=false; try{_narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){}
     const _p=this.project();
-    this.state = { side:_narrow, tokens:[], draft:'', focus:false, status:'all', feature:'F004', expanded:{}, treeMode:'', more:{}, fFilter:{}, pFilter:{}, density:'comfortable', chartsOpen:false, win:'21', newFeatOpen:false, newOpen:false, newFeature:'F004', newPhase:'P039', projOpen:false, projEdit:false, goalOpen:false, projTitle:'A durable, inspectable planning workspace for AI coding agents', projGoal:_p.goal, projGuide:_p.guidelines, theme:'light', exportOpen:false, focusOpen:false, parkedOpen:false, navOpen:false, focusCollapsed:false, located:'', addInline:'', toastMsg:'', toastIcon:'✓', showToast:false, filtersHidden:false };
+    this.state = { side:_narrow, tokens:[], draft:'', focus:false, feature:'F004', expanded:{}, treeMode:'', more:{}, fFilter:{}, pFilter:{}, chartsOpen:false, win:'21', newFeatOpen:false, newOpen:false, newFeature:'F004', newPhase:'P039', projOpen:false, projEdit:false, goalOpen:false, projTitle:'A durable, inspectable planning workspace for AI coding agents', projGoal:_p.goal, projGuide:_p.guidelines, theme:'light', exportOpen:false, focusOpen:false, parkedOpen:false, navOpen:false, focusCollapsed:false, located:'', addInline:'', toastMsg:'', toastIcon:'✓', showToast:false, filtersHidden:false };
   }
   meta(s){
     const m={'done':{label:'Done',color:'var(--done-ink)',bg:'rgba(34,197,94,0.14)',dot:'#22c55e'},'in-progress':{label:'In progress',color:'var(--inprog-ink)',bg:'rgba(245,158,11,0.14)',dot:'#f59e0b'},'planned':{label:'Planned',color:'var(--planned-ink)',bg:'rgba(14,165,233,0.14)',dot:'#0ea5e9'},'paused':{label:'Paused',color:'var(--paused-ink)',bg:'rgba(234,88,12,0.14)',dot:'#ea580c'},'blocked':{label:'Blocked',color:'var(--blocked-ink)',bg:'rgba(239,68,68,0.14)',dot:'#ef4444'},'draft':{label:'Draft',color:'var(--draft-ink)',bg:'rgba(148,163,184,0.16)',dot:'#94a3b8'}};
@@ -765,12 +770,12 @@ class Component extends DCLogic {
   toast(msg,icon){ this.setState({toastMsg:msg,toastIcon:icon||'✓',showToast:true}); clearTimeout(this._ct); this._ct=setTimeout(()=>this.setState({showToast:false}),1500); }
   copy(text){ try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text); }catch(_){ } this.toast('Copied '+text,'✓'); }
   nav(label){ this.toast('Opening '+label+' →','→'); }
-  locate(feat,ph,idfull){ const st=this.state; this.setState({ feature:feat, status:'all', tokens:[], draft:'', focusOpen:false, expanded:Object.assign({},st.expanded,{['F:'+feat]:true,['P:'+ph]:true}), located:idfull }); this.toast('Located '+idfull+' in the work tree','→'); clearTimeout(this._st); this._st=setTimeout(()=>{ try{ var el=document.getElementById('located-row')||document.getElementById('explorer'); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){ } },80); }
+  locate(feat,ph,idfull){ const st=this.state; this.setState({ feature:feat, tokens:[], draft:'', focusOpen:false, expanded:Object.assign({},st.expanded,{['F:'+feat]:true,['P:'+ph]:true}), located:idfull }); this.toast('Located '+idfull+' in the work tree','→'); clearTimeout(this._st); this._st=setTimeout(()=>{ try{ var el=document.getElementById('located-row')||document.getElementById('explorer'); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){ } },80); }
   buildPath(vals,maxV){ const n=vals.length; const mv=maxV||(Math.max.apply(null,vals)*1.15)||1; const x=i=> 44 + (n<=1?228:(i*(464/(n-1)))); const y=v=> 136 - (v/mv)*116; let d=''; for(let i=0;i<n;i++){ d+=(i?' L':'M')+x(i).toFixed(1)+' '+y(vals[i]).toFixed(1); } const area=d+' L'+x(n-1).toFixed(1)+' 136 L44 136 Z'; return {line:d,area:area,lastX:x(n-1).toFixed(1),lastY:y(vals[n-1]).toFixed(1)}; }
 
   componentDidUpdate(){
     // After a filter change, bring the first result below the sticky filter bar.
-    const st=this.state; const key=JSON.stringify([st.tokens,st.status,st.feature,st.fFilter,st.pFilter]);
+    const st=this.state; const key=JSON.stringify([st.tokens,st.feature,st.fFilter,st.pFilter]);
     if(this._fkey!==undefined && key!==this._fkey){ clearTimeout(this._rv); this._rv=setTimeout(()=>{ try{
       const sen=document.getElementById('filt-sentinel'); const bar=document.querySelector('.filterbar-wrap'); if(!sen||!bar) return;
       const delta=sen.getBoundingClientRect().top-bar.getBoundingClientRect().bottom-8; if(delta>=0) return;
@@ -781,15 +786,11 @@ class Component extends DCLogic {
   }
   renderVals(){
     const st=this.state; const num=s=>parseInt(s.slice(1),10);
-    const flt=this.parseFilters(); const limit = st.density==='compact'?6:4;
+    const flt=this.parseFilters(); const limit = 4;
     const searchActive = st.tokens.length>0 || (st.draft||'').trim()!=='';
-    const scopeAll = searchActive || st.status!=='all';
+    const scopeAll = searchActive;
 
     // status chips
-    const counts={all:0,'in-progress':0,planned:0,paused:0,blocked:0,done:0};
-    this.data().forEach(f=>f.phases.forEach(p=>p.tasks.forEach(t=>{counts.all++; if(counts[t.status]!=null)counts[t.status]++;})));
-    const chipDefs=[['all','All','#94a3b8'],['in-progress','In progress','#f59e0b'],['planned','Planned','#0ea5e9'],['paused','Paused','#ea580c'],['blocked','Blocked','#ef4444'],['done','Done','#22c55e']];
-    const statusChips=chipDefs.map(a=>{const k=a[0]; return {label:a[1],dot:a[2],count:counts[k]!=null?counts[k]:0, style: st.status===k?('background:'+a[2]+';border-color:'+a[2]+';color:#fff;'):'', pick:()=>this.setState({status:k})};});
 
     const buildFeature=(f)=>{
       const fFilter=st.fFilter[f.id]||'all';
@@ -804,18 +805,18 @@ class Component extends DCLogic {
         const phaseTitleHit = flt.titles.length>0 && flt.titles.every(s=> p.title.toLowerCase().indexOf(s)>-1);
         const ancTitle=featureTitleHit||phaseTitleHit; const ancId=featureIdHit||phaseIdHit;
         const tAll=p.tasks.filter(t=>{ const tNum=num(t.id);
-          const okG=st.status==='all'||t.status===st.status; const okStatus=!flt.status||t.status===flt.status;
+          const okStatus=!flt.status||t.status===flt.status;
           const okTask=flt.tasks.length===0||flt.tasks.indexOf(tNum)>-1;
           const okId=!flt.id||ancId||t.short.toLowerCase().indexOf(flt.id)===0;
           const okTitle=flt.titles.length===0||ancTitle||flt.titles.every(s=> t.title.toLowerCase().indexOf(s)>-1||t.id.toLowerCase().indexOf(s)>-1);
           const okChild=pFilter==='all'||t.status===pFilter;
-          return okG&&okStatus&&okTask&&okId&&okTitle&&okChild;
+          return okStatus&&okTask&&okId&&okTitle&&okChild;
         });
         const moreOpen=!!st.more[p.id]; const shown=moreOpen?tAll:tAll.slice(0,limit); const hidden=tAll.length-shown.length;
         const pm=this.meta(p.status); const done=p.tasks.filter(t=>t.status==='done').length; const idfull='P'+p.id.slice(1)+'('+f.id+')';
         const tasks=shown.map(t=>{ const m=this.meta(t.status); const tfull=idfull+'/'+t.id;
           return {id:t.id,short:t.short,title:t.title,owner:t.owner||'',hasOwner:!!t.owner,idfull:tfull,statusLabel:m.label,color:m.color,bg:m.bg,dot:m.dot,
-            pad:st.density==='compact'?'7px 10px':'9px 12px',fs:st.density==='compact'?'12px':'13px',
+            pad:'9px 12px',fs:'13px',
             rowbg:(st.located===tfull)?'var(--accent-soft)':((t.status==='paused')?'rgba(234,88,12,0.06)':'var(--surface-elevated)'),rowborder:(st.located===tfull)?'var(--accent)':((t.status==='paused')?'rgba(234,88,12,0.35)':'var(--border)'),rowId:(st.located===tfull)?'located-row':'',
             titleClass:'titlelink ttl2'+((t.status==='done')?' tl-done':((t.status==='in-progress')?' tl-strong':'')),
             nav:()=>this.nav('task '+tfull),navPhase:()=>this.nav('phase '+idfull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(tfull),copyShort:()=>this.copy(t.short),locate:()=>this.locate(f.id,p.id,tfull)};
@@ -823,7 +824,7 @@ class Component extends DCLogic {
         return {raw:p,_num:num(p.id),_idHit:phaseIdHit,_titleHit:phaseTitleHit,id:p.id,short:p.short,title:p.title,idfull,open:pOpen,caret:pOpen?'rotate(90deg)':'rotate(0deg)',ratio:done+'/'+p.tasks.length,pct:(p.tasks.length?Math.round(done/p.tasks.length*100):0),filter:pFilter,filterActive:pFilter!=='all',statusLabel:pm.label,color:pm.color,bg:pm.bg,dot:pm.dot,tasks,_tcount:tAll.length,hasMore:hidden>0||(moreOpen&&tAll.length>limit),moreLabel:moreOpen?'Show fewer':('Show '+hidden+' more'),
           toggle:()=>this.setState({expanded:Object.assign({},st.expanded,{['P:'+p.id]:!pOpen}),treeMode:''}),toggleMore:()=>this.setState({more:Object.assign({},st.more,{[p.id]:!moreOpen})}),setFilter:(e)=>this.setState({pFilter:Object.assign({},st.pFilter,{[p.id]:e.target.value})}),resetFilter:()=>this.setState({pFilter:Object.assign({},st.pFilter,{[p.id]:'all'})}),nav:()=>this.nav('phase '+idfull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(idfull),copyShort:()=>this.copy(p.short),showAdd:st.addInline===p.id,noAdd:st.addInline!==p.id,addTask:()=>this.setState({addInline:p.id}),cancelAddInline:()=>this.setState({addInline:''}),addConfirm:()=>{ this.setState({addInline:''}); this.toast('Added task to '+idfull,'✓'); }};
       }).filter(p=>{ if(flt.phase!=null&&p._num!==flt.phase) return false; if(fFilter!=='all'&&p.raw.status!==fFilter) return false; if(flt.pstatus&&p.raw.status!==flt.pstatus) return false;
-        const narrowing=st.status!=='all'||flt.status||flt.tasks.length||flt.id||flt.titles.length; if(p.tasks.length>0) return true; if(p._idHit||p._titleHit) return true; return !narrowing&&!flt.pstatus; });
+        const narrowing=flt.status||flt.tasks.length||flt.id||flt.titles.length; if(p.tasks.length>0) return true; if(p._idHit||p._titleHit) return true; return !narrowing&&!flt.pstatus; });
       return {obj:f,_num:num(f.id),id:f.id,short:f.short,title:f.title,pct:this.pctOf(f),open:fOpen,caret:fOpen?'rotate(90deg)':'rotate(0deg)',filter:fFilter,statusLabel:fm.label,color:fm.color,bg:fm.bg,dot:fm.dot,phases,_visible:phases.length>0||featureIdHit||featureTitleHit,
         toggle:()=>this.setState({expanded:Object.assign({},st.expanded,{['F:'+f.id]:!fOpen}),treeMode:''}),setFilter:(e)=>this.setState({fFilter:Object.assign({},st.fFilter,{[f.id]:e.target.value})}),nav:()=>this.nav('feature '+f.id),copy:()=>this.copy(f.id),copyShort:()=>this.copy(f.short),addPhase:()=>this.toast('New phase in '+f.id+' →','→')};
     };
@@ -863,18 +864,20 @@ class Component extends DCLogic {
 
     const proj=this.project();
 
-    try{ clearTimeout(this._fh); this._fh=setTimeout(function(){ try{ var fh=document.querySelector('.stickyhdr'); document.documentElement.style.setProperty('--focus-h',((fh&&fh.offsetParent!==null)?fh.offsetHeight:0)+'px'); }catch(_){ } }, 30); }catch(_){ }
-
-    if(!this._fsetup){ this._fsetup=1; var cmp=this; setTimeout(function(){ try{
-      var tog=document.getElementById('filt-toggle'); var sen=document.getElementById('filt-sentinel');
-      if(!tog||!sen){ cmp._fsetup=0; return; }
-      var sc=sen.parentElement; while(sc){ var o=getComputedStyle(sc).overflowY; if((o==='auto'||o==='scroll')&&sc.scrollHeight>sc.clientHeight+2) break; sc=sc.parentElement; }
-      var scroller=sc||window;
-      var upd=function(){ try{ var r=sen.getBoundingClientRect(); var de=document.documentElement; de.classList.toggle('filt-scrolled', r.top<90); var fh=document.querySelector('.stickyhdr'); de.style.setProperty('--focus-h',((fh&&fh.offsetParent!==null)?fh.offsetHeight:0)+'px'); var bar=document.querySelector('.filterbar-wrap'); if(bar){ de.style.setProperty('--filt-top',(bar.getBoundingClientRect().top+6)+'px'); } }catch(_){ } };
+    // Sticky offsets (outside DCLogic state so they never trigger a re-render):
+    // --focus-h  = height of the sticky in-progress section the filter bar stacks under;
+    // --filt-top = where the reopen tab sits, aligned with the bar and kept inside the viewport.
+    var updFilt=function(){ try{ var de=document.documentElement; var fh=document.querySelector('.stickyhdr');
+      var fhH=(fh&&fh.offsetParent!==null&&getComputedStyle(fh).position==='sticky')?fh.offsetHeight:0; de.style.setProperty('--focus-h',fhH+'px');
+      var bar=document.querySelector('.filterbar-wrap'); if(bar){ var hdr=document.querySelector('header'); var minTop=Math.max(12,(hdr?hdr.getBoundingClientRect().bottom:0)+8)+fhH;
+        var t=Math.min(Math.max(bar.getBoundingClientRect().top+6,minTop),window.innerHeight-56); de.style.setProperty('--filt-top',Math.round(t)+'px'); } }catch(_){ } };
+    try{ clearTimeout(this._fh); this._fh=setTimeout(updFilt,30); clearTimeout(this._fh2); this._fh2=setTimeout(updFilt,320); }catch(_){ }
+    if(!this._fsetup){ this._fsetup=1; setTimeout(function(){ try{
       // Capture scrolls from any container: the scroller differs between desktop (main) and mobile (window).
-      document.addEventListener('scroll', upd, {passive:true,capture:true});
-      window.addEventListener('resize', upd, {passive:true}); upd();
+      document.addEventListener('scroll', updFilt, {passive:true,capture:true});
+      window.addEventListener('resize', updFilt, {passive:true}); updFilt();
     }catch(_){ } }, 80); }
+    const anyFilterOn=(st.tokens.length>0||!!st.draft||Object.keys(st.fFilter||{}).some(k=>st.fFilter[k]&&st.fFilter[k]!=='all')||Object.keys(st.pFilter||{}).some(k=>st.pFilter[k]&&st.pFilter[k]!=='all'));
     return {
       tokens: st.tokens.map((tk,i)=>({text:tk,remove:()=>{const t=st.tokens.slice(); t.splice(i,1); this.setState({tokens:t});}})),
       draft:st.draft, searchPlaceholder:(st.tokens.length||st.draft)?'':'Search… e.g. feature:4  status:in-progress  title:api',
@@ -882,17 +885,13 @@ class Component extends DCLogic {
       onDraftKey:(e)=>{ if(e.key==='Enter'||e.key===' '){ const d=(st.draft||'').trim(); if(d){ if(e.preventDefault)e.preventDefault(); this.setState({tokens:st.tokens.concat(d),draft:''}); } } else if(e.key==='Backspace'&&(st.draft||'')===''&&st.tokens.length){ if(e.preventDefault)e.preventDefault(); const t=st.tokens.slice(); const last=t.pop(); this.setState({tokens:t,draft:last}); } },
       onFocus:()=>this.setState({focus:true}), onBlur:()=>{ clearTimeout(this._bt); this._bt=setTimeout(()=>this.setState({focus:false}),160); },
       showSug: st.focus&&suggestions.length>0, suggestions, sugHeading, searchScopeNote: scopeAll,
-      statusChips, statusValue:st.status, onStatus:(e)=>this.setState({status:e.target.value}), statusOptions: chipDefs.map(a=>({value:a[0],label:a[1]+' ('+(counts[a[0]]!=null?counts[a[0]]:0)+')'})),
-      clearFilters:()=>{ this.setState({status:'all',tokens:[],draft:'',fFilter:{},pFilter:{},feature:'all'}); this.toast('Filters cleared','↺'); }, anyFilter:(st.status!=='all'||st.tokens.length>0||!!st.draft||Object.keys(st.fFilter||{}).some(k=>st.fFilter[k]&&st.fFilter[k]!=='all')||Object.keys(st.pFilter||{}).some(k=>st.pFilter[k]&&st.pFilter[k]!=='all')), filterCls:st.filtersHidden?'collapsed':'', filtersShown:!st.filtersHidden, toggleFilters:()=>this.setState({filtersHidden:!st.filtersHidden}), navMenuClass:st.navOpen?'open':'', navOpen:st.navOpen, toggleNav:()=>this.setState({navOpen:!st.navOpen}),
+      clearFilters:()=>{ this.setState({tokens:[],draft:'',fFilter:{},pFilter:{},feature:'all',located:'',focus:false}); this.toast('Filters cleared','↺'); }, resetCls:anyFilterOn?'on':'', anyFilter:anyFilterOn, filterCls:st.filtersHidden?'collapsed':'', filtersShown:!st.filtersHidden, filtersHiddenAttr:st.filtersHidden?'true':'false', toggleFilters:()=>this.setState({filtersHidden:!st.filtersHidden}), navMenuClass:st.navOpen?'open':'', navOpen:st.navOpen, toggleNav:()=>this.setState({navOpen:!st.navOpen}),
       expandAll:()=>{const ex=Object.assign({},st.expanded); all.forEach(f=>{ex['F:'+f.id]=true; f.phases.forEach(p=>ex['P:'+p.id]=true);}); this.setState({expanded:ex,treeMode:'expanded'});},
       collapseAll:()=>{const ex=Object.assign({},st.expanded); all.forEach(f=>{ex['F:'+f.id]=false; f.phases.forEach(p=>ex['P:'+p.id]=false);}); this.setState({expanded:ex,treeMode:'collapsed'});},
       toggleTree:()=>{ const ex=Object.assign({},st.expanded); const we=st.treeMode!=='expanded'; all.forEach(f=>{ex['F:'+f.id]=we; f.phases.forEach(p=>ex['P:'+p.id]=we);}); this.setState({expanded:ex,treeMode:we?'expanded':'collapsed'}); },
       treeExpanded: st.treeMode==='expanded', treeCollapsed: st.treeMode!=='expanded', treeToggleLabel:(st.treeMode==='expanded'?'Collapse all':'Expand all'),
       expandStyle: st.treeMode==='expanded'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
       collapseStyle: st.treeMode==='collapsed'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
-      setComfortable:()=>this.setState({density:'comfortable'}), setCompact:()=>this.setState({density:'compact'}),
-      densComfy: st.density==='comfortable'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
-      densCompact: st.density==='compact'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
       chartsOpen:st.chartsOpen, chartsCaret:st.chartsOpen?'rotate(90deg)':'rotate(0deg)', toggleCharts:()=>this.setState({chartsOpen:!st.chartsOpen}),
       windowChips, windowLabel:win.label, k:{added:k.added,closed:k.closed,reopened:k.reopened,net:(k.net>0?'+':'')+k.net,rate:k.rate,open:k.open,netColor: k.net>0?'color:var(--bad)':'color:var(--pos)'},
       thLine:th.line, thArea:th.area, thLastX:th.lastX, thLastY:th.lastY,
