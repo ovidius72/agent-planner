@@ -127,6 +127,14 @@ Non-negotiable rules:
 - A modified `web-ui-dist/` in the working tree usually means someone has an uncommitted UI change. Find out whose before touching it. If there is no UI source change behind it, regenerate it, do not delete it.
 - Changing this policy needs an explicit user decision.
 
+### 19. Qualità del codice e riuso
+
+Non-negotiable rules:
+
+- Scrivere codice di qualità: principi DRY e SOLID.
+- Correggere a livello di libreria, componente o modulo. Centralizzare la logica condivisa il più possibile; non distribuire correzioni duplicate sui call site.
+- Seguire i pattern e lo styling consolidati del progetto: i componenti React seguono i pattern React consolidati, i moduli Node seguono i pattern backend consolidati. Non riscrivere componenti o moduli esistenti più volte: riusare ed estendere l'implementazione canonica.
+
 ## Comportamento atteso dagli agenti
 
 Quando lavori sullo sviluppo di agent-plan:
