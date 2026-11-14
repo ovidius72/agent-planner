@@ -129,11 +129,20 @@
       "priority": 4,
       "shortName": "find-empty-features-and-phases",
       "title": "Find empty features and phases in structured search",
-      "status": "planned",
-      "description": "AB-IMP-004. Outcome: elastic-input search returns matching features and phases even with no child tasks. Current source: packages/plan-web-ui/src/hooks/use-dashboard-tree.ts:119 collects matching parent IDs within task iteration; packages/plan-web-ui/src/components/dashboard/search-bar.tsx:86 builds title suggestions from task titles. Inspect these and packages/plan-web-ui/src/lib/task-search.ts:1 and tree visibility rules before changes; paths and lines are navigation only. Support empty feature, phase without tasks and features with only empty phases by supported IDs/names and structured feature/phase queries. Preserve task results, filters, entity navigation and counts, and align suggestions with the supported results. Capture an isolated reproduction and verify search, selection, clearing, status filters and a task-bearing control branch. Use reviewed Agent Brain UI design and appropriate existing search owner. Full contract: docs/agent-brain/improvements-and-fixes.md#AB-IMP-004.",
-      "descriptionUpdatedAt": "2026-11-13T14:18:14.776Z",
+      "status": "done",
+      "description": "AB-IMP-004. Outcome: elastic-input search returns matching features and phases even with no child tasks. Current source: packages/plan-web-ui/src/hooks/use-dashboard-tree.ts:119 collects matching parent IDs within task iteration; packages/plan-web-ui/src/components/dashboard/search-bar.tsx:86 builds title suggestions from task titles. Inspect these and packages/plan-web-ui/src/lib/task-search.ts:1 and tree visibility rules before changes; paths and lines are navigation only. Support empty feature, phase without tasks and features with only empty phases by supported IDs/names and structured feature/phase queries. Preserve task results, filters, entity navigation and counts, and align suggestions with the supported results. Capture an isolated reproduction and verify search, selection, clearing, status filters and a task-bearing control branch. Use reviewed Agent Brain UI design and appropriate existing search owner. Full contract: docs/agent-brain/improvements-and-fixes.md#AB-IMP-004.\n\n---\n**Completion summary:**\nShipped: centralized the fix in the shared search library. task-search.ts now builds buildFeatureHay/buildPhaseHay as the entity haystacks composed into buildTaskHay, adds matchFeature/matchPhase sharing the feature/phase scope helpers with matchTask; task-scoped filters (task:/status:) never fabricate a parent match and phase-scoped filters match a parent only through a matching descendant phase. use-dashboard-tree.ts collects matched feature/phase ids independently of tasks and keeps matched empty branches visible with correct zero-task counts. search-bar.tsx title suggestions cover feature names and phase titles too. Files: packages/plan-web-ui/src/lib/task-search.ts, packages/plan-web-ui/src/hooks/use-dashboard-tree.ts, packages/plan-web-ui/src/components/dashboard/search-bar.tsx. Verification: 21 new cases in packages/plan-web-ui/test/task-search.test.mjs (34 pass) covering empty feature/phase by number, status, shortId, free text, cross-scope intersections and fabricated-match guards; plan-web-ui typecheck green; canonical pnpm verify:final gate green (build, typecheck, coverage, plugin sync, capability audit, browser E2E, packed-installation smoke). Shipped in release v0.4.11 via PR #86 (commits 44072c5, ca73947) merged to develop and PR #88 to main; AB-IMP-004 criteria exercised: structured feature/phase queries, name search, suggestions-vs-tree consistency, clear-query and status-filter regression. Remaining: none.",
+      "descriptionUpdatedAt": "2026-11-14T13:29:49.222Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "6539da22-6042-49a4-9be0-f8853e29a122-check-001-planned-done",
+          "date": "2026-11-14T13:29:49.219Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Shipped: centralized the fix in the shared search library. task-search.ts now builds buildFeatureHay/buildPhaseHay as the entity haystacks composed into buildTaskHay, adds matchFeature/matchPhase sharing the feature/phase scope helpers with matchTask; task-scoped filters (task:/status:) never fabricate a parent match and phase-scoped filters match a parent only through a matching descendant phase. use-dashboard-tree.ts collects matched feature/phase ids independently of tasks and keeps matched empty branches visible with correct zero-task counts. search-bar.tsx title suggestions cover feature names and phase titles too. Files: packages/plan-web-ui/src/lib/task-search.ts, packages/plan-web-ui/src/hooks/use-dashboard-tree.ts, packages/plan-web-ui/src/components/dashboard/search-bar.tsx. Verification: 21 new cases in packages/plan-web-ui/test/task-search.test.mjs (34 pass) covering empty feature/phase by number, status, shortId, free text, cross-scope intersections and fabricated-match guards; plan-web-ui typecheck green; canonical pnpm verify:final gate green (build, typecheck, coverage, plugin sync, capability audit, browser E2E, packed-installation smoke). Shipped in release v0.4.11 via PR #86 (commits 44072c5, ca73947) merged to develop and PR #88 to main; AB-IMP-004 criteria exercised: structured feature/phase queries, name search, suggestions-vs-tree consistency, clear-query and status-filter regression. Remaining: none."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -141,10 +150,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-14T13:29:49.219Z",
+      "completedAt": "2026-11-14T13:29:49.219Z",
       "createdAt": "2026-11-13T14:18:14.707Z",
-      "updatedAt": "2026-11-13T14:18:14.707Z",
+      "updatedAt": "2026-11-14T13:29:49.219Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -156,11 +165,20 @@
       "priority": 5,
       "shortName": "collapse-the-project-descripti",
       "title": "Collapse the project description in the Web UI",
-      "status": "planned",
-      "description": "AB-IMP-005. Outcome: the project description appears in an initially collapsed accordion, avoiding an oversized project header while keeping its complete formatted content available. Inspect packages/plan-web-ui/src/components/layout/app-shell.tsx:160 and existing accordion/accessibility patterns before implementation; the redesigned UI follows docs/agent-brain/ui-prototypes.md. Reuse suitable existing components, preserve the project name, formatting and project navigation, and avoid an empty control when description is absent. The user can expand/collapse by pointer and keyboard with appropriate accessibility semantics. Acceptance: verify a long formatted description starts collapsed, expands completely, collapses again and remains accessible via keyboard; verify empty descriptions and switching between projects. Full contract: docs/agent-brain/improvements-and-fixes.md#AB-IMP-005.",
-      "descriptionUpdatedAt": "2026-11-13T14:18:17.748Z",
+      "status": "done",
+      "description": "AB-IMP-005. Outcome: the project description appears in an initially collapsed accordion, avoiding an oversized project header while keeping its complete formatted content available. Inspect packages/plan-web-ui/src/components/layout/app-shell.tsx:160 and existing accordion/accessibility patterns before implementation; the redesigned UI follows docs/agent-brain/ui-prototypes.md. Reuse suitable existing components, preserve the project name, formatting and project navigation, and avoid an empty control when description is absent. The user can expand/collapse by pointer and keyboard with appropriate accessibility semantics. Acceptance: verify a long formatted description starts collapsed, expands completely, collapses again and remains accessible via keyboard; verify empty descriptions and switching between projects. Full contract: docs/agent-brain/improvements-and-fixes.md#AB-IMP-005.\n\n---\n**Completion summary:**\nShipped: project description now renders in the canonical Accordion (packages/plan-web-ui/src/components/layout/app-shell.tsx) at full container width below the page header, collapsed by default, expandable/collapsible by pointer and keyboard via native details/summary semantics, and not rendered when the description is missing or empty. Project Goal is also a canonical Accordion (packages/plan-web-ui/src/routes/dashboard/route.tsx) with the Edit action as an icon-only Button (aria-label preserved, shortcut still functional), auto-expanded when no goal exists so the add-a-goal hint stays visible; dashboard grid rhythm tightened gap-8 to gap-5. Supporting component ownership landed with it: Accordion owns its title (canonical h3), content typography (text-sm leading-6), chevron state (direct-child CSS rule fixing nested-accordion rotation) and carries no built-in margin; Project Context switched from Card + raw details to the canonical Accordion. Files: app-shell.tsx, dashboard/route.tsx, components/ui/accordion.tsx, components/ui/button.tsx, styles/base.css, components/dashboard/project-context.tsx. Verification: plan-web-ui suite 111/111 green including entity-references and disclosure-defaults suites; canonical pnpm verify:final gate green; released in v0.4.11 via PR #86 (commits 8197f4c, 153090c) and PR #88 to main. Remaining: none.",
+      "descriptionUpdatedAt": "2026-11-14T13:29:49.571Z",
       "notes": "",
-      "statusLog": [],
+      "statusLog": [
+        {
+          "id": "9aaa81ce-8a0c-4deb-a9ec-64d2ad9590b4-check-001-planned-done",
+          "date": "2026-11-14T13:29:49.569Z",
+          "fromStatus": "planned",
+          "toStatus": "done",
+          "title": "planned → done",
+          "description": "Shipped: project description now renders in the canonical Accordion (packages/plan-web-ui/src/components/layout/app-shell.tsx) at full container width below the page header, collapsed by default, expandable/collapsible by pointer and keyboard via native details/summary semantics, and not rendered when the description is missing or empty. Project Goal is also a canonical Accordion (packages/plan-web-ui/src/routes/dashboard/route.tsx) with the Edit action as an icon-only Button (aria-label preserved, shortcut still functional), auto-expanded when no goal exists so the add-a-goal hint stays visible; dashboard grid rhythm tightened gap-8 to gap-5. Supporting component ownership landed with it: Accordion owns its title (canonical h3), content typography (text-sm leading-6), chevron state (direct-child CSS rule fixing nested-accordion rotation) and carries no built-in margin; Project Context switched from Card + raw details to the canonical Accordion. Files: app-shell.tsx, dashboard/route.tsx, components/ui/accordion.tsx, components/ui/button.tsx, styles/base.css, components/dashboard/project-context.tsx. Verification: plan-web-ui suite 111/111 green including entity-references and disclosure-defaults suites; canonical pnpm verify:final gate green; released in v0.4.11 via PR #86 (commits 8197f4c, 153090c) and PR #88 to main. Remaining: none."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
@@ -168,10 +186,10 @@
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-14T13:29:49.569Z",
+      "completedAt": "2026-11-14T13:29:49.569Z",
       "createdAt": "2026-11-13T14:18:17.683Z",
-      "updatedAt": "2026-11-13T14:18:17.683Z",
+      "updatedAt": "2026-11-14T13:29:49.569Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     },
@@ -265,7 +283,7 @@
     }
   ],
   "createdAt": "2026-11-13T14:17:36.105Z",
-  "updatedAt": "2026-11-14T11:22:25.607Z",
+  "updatedAt": "2026-11-14T13:29:49.569Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -278,6 +296,14 @@
       "fromStatus": "draft",
       "toStatus": "planned",
       "title": "draft → planned",
+      "description": ""
+    },
+    {
+      "id": "7ca30a5e-b582-49bc-8916-63bdc5e99383",
+      "date": "2026-11-14T13:29:49.253Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
       "description": ""
     }
   ],
