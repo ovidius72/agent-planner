@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Plan — Room chat</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap">
+<style>
+  :root{
+    --bg-base:#f8fafc; --surface-elevated:#ffffff; --sidebar:#f1f5f9;
+    --border:rgba(148,163,184,0.22); --border-strong:rgba(148,163,184,0.34);
+    --text:#0f172a; --text-muted:#475569; --text-subtle:#64748b;
+    --accent:#6366f1; --accent-hover:#4f46e5; --accent-soft:rgba(99,102,241,0.12); --on-accent:#ffffff;
+    --feature:#8b5cf6; --phase:#06b6d4; --task:#10b981;
+    --f-ink:#6d28d9; --p-ink:#0e7490; --t-ink:#047857;
+    --active:#f59e0b; --paused:#ea580c; --done:#22c55e; --planned:#0ea5e9; --blocked:#ef4444;
+    --pos-ink:#15803d; --warn-ink:#b45309; --bad-ink:#b91c1c; --sub-ink:#475569;
+    --pos-bg:rgba(34,197,94,0.14); --warn-bg:rgba(234,88,12,0.14); --bad-bg:rgba(239,68,68,0.12); --mut-bg:rgba(148,163,184,0.16);
+    --shadow-card:0 12px 30px -18px rgba(15,23,42,0.18);
+  }
+  .t-dark{
+    --bg-base:#0a1220; --surface-elevated:#111827; --sidebar:#0d1526;
+    --border:rgba(148,163,184,0.14); --border-strong:rgba(148,163,184,0.26);
+    --text:#f1f5f9; --text-muted:#94a3b8; --text-subtle:#7c8aa0;
+    --accent:#818cf8; --accent-hover:#6366f1; --accent-soft:rgba(129,140,248,0.16); --on-accent:#0a1220;
+    --feature:#a78bfa; --phase:#22d3ee; --task:#34d399;
+    --f-ink:#c4b5fd; --p-ink:#67e8f9; --t-ink:#6ee7b7;
+    --active:#fbbf24; --paused:#fb923c; --done:#4ade80; --planned:#38bdf8; --blocked:#f87171;
+    --pos-ink:#4ade80; --warn-ink:#fbbf24; --bad-ink:#f87171; --sub-ink:#94a3b8;
+    --pos-bg:rgba(34,197,94,0.16); --warn-bg:rgba(234,88,12,0.18); --bad-bg:rgba(239,68,68,0.18); --mut-bg:rgba(148,163,184,0.12);
+    --shadow-card:0 12px 30px -18px rgba(0,0,0,0.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg-base);-webkit-font-smoothing:antialiased}
+  .app{height:100vh;overflow:hidden;color:var(--text);background:var(--bg-base);display:flex;flex-direction:column}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  .eyebrow{font-size:10px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-subtle);margin:0}
+  a{color:inherit;text-decoration:none}
+  .badge{display:inline-flex;align-items:center;gap:6px;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:600;line-height:1;white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:9999px;display:inline-block;flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);border-radius:11px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--text-subtle)}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:10px}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+  .vbadge{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ico{display:inline-block;vertical-align:middle;flex-shrink:0}
+  .navgroup{font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle);padding:0 12px;margin:14px 0 6px}
+  .navitem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:11px;padding:9px 12px;cursor:pointer;color:var(--text-muted);font-size:14px;font-weight:600}
+  .navitem:hover{background:var(--surface-elevated);color:var(--text)}
+  .navitem.on{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .navitem.on .ico{color:var(--accent)}
+  .subitem{padding-left:34px;font-size:13px}
+  .navcount{margin-left:auto;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:9999px;padding:1px 7px}
+  .card{background:var(--surface-elevated);border:1px solid var(--border);border-radius:16px}
+  .sidebar{transition:width .18s ease, transform .2s ease;overflow-y:auto}
+  .shell>main{overflow:auto;min-height:0}
+  .navtoggle{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);cursor:pointer;flex-shrink:0}
+  .scrim{display:none}
+  .seg{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:9px;background:var(--surface-elevated)}
+  .seg button{border:0;background:transparent;color:var(--text-muted);font:inherit;font-size:11px;font-weight:600;padding:4px 9px;border-radius:7px;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--text)}
+  .tabs{display:inline-flex;gap:4px}
+  .tab{border:1px solid transparent;background:transparent;color:var(--text-muted);font:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:10px;cursor:pointer}
+  .tab[aria-pressed="true"]{background:var(--surface-elevated);border-color:var(--border);color:var(--text)}
+  .tchip{display:inline-flex;align-items:center;gap:6px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;color:var(--t-ink);background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:7px;padding:3px 8px;white-space:nowrap}
+  .tchip:hover{border-color:var(--task)}
+  .stack{display:flex}
+  .stack .vbadge{border:2px solid var(--surface-elevated);margin-left:-6px;width:26px;height:26px}
+  .stack .vbadge:first-child{margin-left:0}
+  .stale{opacity:.62}
+  *{scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  .app.nav-collapsed .sidebar{width:64px !important}
+  .app.nav-collapsed .navitem{justify-content:center;gap:0;font-size:0;padding-left:0;padding-right:0}
+  .app.nav-collapsed .navgroup,.app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:none}
+  .sideclose{display:none}
+  @media (max-width:1180px){
+    .sidebar{position:fixed;top:0;bottom:0;left:0;z-index:60;width:248px !important;flex-direction:column !important;transform:translateX(-100%);box-shadow:0 20px 50px rgba(0,0,0,0.35);overflow-y:auto}
+    .app:not(.nav-collapsed) .sidebar{transform:translateX(0)}
+    .app.nav-collapsed .sidebar{width:248px !important}
+    .app.nav-collapsed .navitem{font-size:14px;gap:11px;justify-content:flex-start;padding:9px 12px}
+    .app.nav-collapsed .navgroup{display:block}
+    .app.nav-collapsed .subitem,.app.nav-collapsed .side-foot{display:flex}
+    .app:not(.nav-collapsed) .scrim{display:block;position:fixed;inset:0;background:rgba(2,6,23,0.5);z-index:55}
+    .room-grid{grid-template-columns:minmax(0,1fr) !important}
+    .pad{padding:20px 16px !important}
+    .sideclose{display:inline-flex !important}
+  }
+  .msg{display:flex;gap:11px;align-items:flex-start;padding:10px 4px}
+  .msg-you{background:var(--accent-soft);border-radius:14px;padding:10px 12px}
+  .sys{display:flex;justify-content:center;font-size:12px;color:var(--text-subtle);padding:4px 0}
+  .tochip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--text-muted);background:var(--mut-bg);border-radius:6px;padding:2px 7px;white-space:nowrap}
+  .ent{font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:600;border-radius:5px;padding:1px 5px;border:1px solid var(--border-strong);background:var(--surface-elevated)}
+  .ent-f{color:var(--f-ink)} .ent-p{color:var(--p-ink)} .ent-t{color:var(--t-ink)}
+  .composer{position:relative;border-top:1px solid var(--border);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+  .cin{flex:1 1 auto;min-width:0;border:1px solid var(--border-strong);background:var(--bg-base);color:var(--text);border-radius:12px;padding:10px 12px;font:inherit;font-size:14px}
+  .cin:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .cin:disabled{opacity:.6}
+  .ac{position:absolute;left:14px;right:14px;bottom:100%;margin-bottom:-4px;background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-card);padding:6px;display:flex;flex-direction:column;gap:2px;z-index:5}
+  .acrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:transparent;color:var(--text);font:inherit;border-radius:10px;padding:8px 10px;cursor:pointer;min-height:44px}
+  .acrow:hover,.acrow:focus{background:var(--accent-soft);outline:none}
+  .mrow{display:flex;flex-direction:column;gap:8px;padding:12px 0;border-top:1px solid var(--border)}
+  .mrow:first-child{border-top:0;padding-top:0}
+  .jump{position:absolute;left:50%;top:-50px;transform:translateX(-50%);display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 14px;border-radius:9999px;border:1px solid var(--border-strong);background:var(--surface-elevated);color:var(--text);font:inherit;font-size:12px;font-weight:600;box-shadow:var(--shadow-card);cursor:pointer;z-index:4;white-space:nowrap}
+  .jump:hover{border-color:var(--accent)}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .overlay{position:fixed;inset:0;background:rgba(2,6,23,0.55);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px}
+  @media (max-width:1180px){ .chat-grid{grid-template-columns:minmax(0,1fr) !important} .members{position:static !important} }
+
+  /* project switcher + mobile shell (rooms proposal, 2026-11-02) */
+  .projsw{position:relative;min-width:0}
+  .projsw>summary{list-style:none;cursor:pointer;display:flex;align-items:center;border-radius:10px;padding:4px 8px;margin:-4px -8px;min-width:0;color:var(--text)}
+  .projsw>summary::-webkit-details-marker{display:none}
+  .projsw>summary:hover{background:var(--accent-soft)}
+  .projsw>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .projsw[open] .projsw-caret{transform:rotate(180deg)}
+  .projsw[open]>summary{position:relative;z-index:72}
+  .projsw[open]>summary::before{content:"";position:fixed;inset:0;z-index:-1;cursor:default}
+  .projsw-menu{z-index:73 !important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+  header:has(.projsw[open]){z-index:90 !important}
+  .projsw-path{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-subtle);margin-top:1px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .projsw-menu{position:absolute;top:calc(100% + 10px);left:-8px;z-index:70;width:min(330px,calc(100vw - 32px));background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 20px 50px -20px rgba(2,6,23,0.55);padding:8px;display:flex;flex-direction:column;gap:2px}
+  .projsw-head{margin:4px 8px 6px;font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)}
+  .projsw-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 10px;border-radius:10px;color:var(--text);text-decoration:none}
+  .projsw-item:hover,.projsw-item.on{background:var(--accent-soft)}
+  .projsw-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;font-size:13.5px}
+  .projsw-txt .mono{font-size:10.5px;color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .projsw-meta{font-size:11px;color:var(--text-subtle);white-space:nowrap}
+  .projsw-foot{margin:6px 8px 4px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;line-height:1.5;color:var(--text-subtle)}
+  @supports (height:100dvh){ .app,.approot{height:100dvh} }
+  @media (max-width:760px){
+    .app,.approot{height:auto !important;min-height:100dvh;overflow:visible !important}
+    .app main,.approot main,.shell>main{overflow:visible !important}
+    .app>div:nth-child(2),.approot>div:nth-child(2){padding:6px 16px !important;font-size:10px !important;gap:6px !important}
+    .app>div:nth-child(2)>span:first-child,.approot>div:nth-child(2)>span:first-child{display:none}
+    .app>header,.approot>header{padding:8px 12px !important;gap:8px !important}
+    .hdr-hide-sm{display:none !important}
+    .stickyhdr,[style*="position:sticky"]{position:static !important}
+    .filterbar-wrap{top:0 !important}
+    .msglist{height:min(560px,62dvh) !important}
+    input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px !important}
+  }
+  .wifi-status{display:inline-flex;align-items:center;gap:4px;color:var(--done,#22c55e)}
+  .live-dot{width:7px;height:7px;border-radius:9999px;background:var(--done,#22c55e);display:inline-block;animation:livepulse 1.6s ease-in-out infinite}
+  @keyframes livepulse{0%,100%{opacity:1}50%{opacity:.35}}
+</style>
+</helmet>
+
+<div class="app {{themeClass}} {{navClass}}">
+  <div class="scrim" onClick="{{toggleNav}}"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 24px;background:var(--sidebar);border-bottom:1px solid var(--border);font-size:11px;color:var(--text-subtle)">
+    <span class="mono">F025 · Rooms &amp; chat proposal</span>
+    <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Demo scenario · illustrative data
+      <span class="seg" role="group" aria-label="Room scenario">
+        <sc-for list="{{scenarios}}" as="sc" hint-placeholder-count="3"><button type="button" aria-pressed="{{sc.on}}" onClick="{{sc.pick}}">{{sc.label}}</button></sc-for>
+      </span>
+    </span>
+  </div>
+
+  <header class="pad" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 20px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:11px;min-width:0;flex:1 1 auto">
+      <button type="button" class="navtoggle" onClick="{{toggleNav}}" aria-label="Toggle navigation" style="width:32px;height:32px;border-color:var(--border)"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+      <details class="projsw">
+        <summary aria-label="Current project: Agent Plan. Switch project">
+          <span style="display:flex;flex-direction:column;min-width:0">
+            <span style="display:flex;align-items:center;gap:7px"><span style="font-size:16px;font-weight:700;line-height:1.15;white-space:nowrap">Agent Plan</span><svg class="projsw-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span>
+            <span class="mono projsw-path"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>~/code/agent-plan</span>
+          </span>
+        </summary>
+        <div class="projsw-menu">
+          <p class="projsw-head">Projects on this machine</p>
+          <a class="projsw-item on" href="#" onClick="{{closeProjsw}}" aria-current="true"><span class="projsw-txt"><b>Agent Plan</b><span class="mono">~/code/agent-plan</span></span><span class="projsw-meta">3 rooms</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent);flex-shrink:0"><path d="M20 6 9 17l-5-5"></path></svg></a>
+          <a class="projsw-item" href="#" onClick="{{closeProjsw}}"><span class="projsw-txt"><b>Heca-Pro</b><span class="mono">~/code/heca-pro</span></span><span class="projsw-meta">1 room</span></a>
+          <a class="projsw-item" href="#" onClick="{{closeProjsw}}"><span class="projsw-txt"><b>Heca</b><span class="mono">~/code/heca</span></span><span class="projsw-meta">No rooms</span></a>
+          <p class="projsw-foot">A project appears here once an agent loads the planner in its folder. Switching keeps the current section.</p>
+        </div>
+      </details>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="wifi-status" title="Web UI server connected — the dashboard is live and updates in real time as agents work" aria-label="Web UI live"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14 0M2 8.82a16 16 0 0 1 20 0M8.5 16.43a6 6 0 0 1 7 0"></path></svg><span class="live-dot"></span></span>
+      
+      <button type="button" class="btn" onClick="{{toggleTheme}}" aria-label="Toggle theme" style="padding:9px;width:32px;height:32px;justify-content:center">
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{true}}"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg></sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{false}}"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></sc-if>
+      </button>
+    </div>
+  </header>
+
+  <div class="shell" style="display:flex;flex-grow:1;min-height:0">
+    <aside class="sidebar" style="width:230px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:var(--sidebar)">
+      <button type="button" class="sideclose" onClick="{{toggleNav}}" aria-label="Close menu" style="align-self:flex-end;align-items:center;justify-content:center;gap:6px;width:auto;padding:6px 10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;margin-bottom:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>Close</button>
+      <div class="navgroup">Work</div>
+      <a class="navitem" href="Resume.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h11a5 5 0 0 1 5 5v6"></path></svg>Resume</a>
+      <a class="navitem" href="Main.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Planner</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"></path><path d="m3 7 2 2 4-4"></path><path d="M13 6h8M13 12h8M13 18h8"></path></svg>Requirements</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"></path></svg>Ideas</a>
+      <a class="navitem subitem" href="#"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg>Handoff</a>
+      <a class="navitem subitem on" href="Rooms.dc.html" aria-current="page"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Rooms<span class="navcount">{{unreadTotal}}</span></a>
+      <a class="navitem" href="Agents.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="12" r="2.5"></circle><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"></path></svg>Agents &amp; targets</a>
+      <div class="navgroup">Context</div>
+      <a class="navitem" href="Map.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"></rect><rect x="3" y="16" width="6" height="5" rx="1"></rect><rect x="15" y="16" width="6" height="5" rx="1"></rect><path d="M12 8v4M6 16v-2h12v2"></path></svg>Map</a>
+      <a class="navitem" href="Code.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>Code</a>
+      <a class="navitem" href="Checks.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>Checks</a>
+      <a class="navitem" href="Analytics.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"></path><rect x="7" y="12" width="3" height="6"></rect><rect x="12" y="8" width="3" height="10"></rect><rect x="17" y="5" width="3" height="13"></rect></svg>Analytics</a>
+      <div class="navgroup">Proposals</div>
+      <a class="navitem" href="Evaluate.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"></path></svg>To evaluate</a>
+      <div style="flex-grow:1;min-height:10px"></div>
+      <a class="navitem" href="Settings.dc.html"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Settings</a>
+      <div class="side-foot" style="border-top:1px solid var(--border);margin-top:10px;padding:12px 12px 4px;font-size:11px;color:var(--text-subtle);line-height:1.6">Rooms live in Heca-Pro<br>Agent Plan reads and writes through Heca</div>
+    </aside>
+
+    <main class="pad" style="flex-grow:1;min-width:0;padding:22px 30px;display:flex;flex-direction:column;gap:16px">
+      <nav aria-label="Breadcrumb" style="font-size:12px;color:var(--text-subtle);display:flex;gap:6px;align-items:center"><a href="Main.dc.html" style="color:var(--text-muted)">Planner</a><span aria-hidden="true">/</span><a href="Rooms.dc.html" style="color:var(--text-muted)">Rooms</a><span aria-hidden="true">/</span><span>agent-brain</span></nav>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h1 style="margin:0;font-size:24px;font-weight:700;letter-spacing:-0.01em">agent-brain</h1><span class="badge" style="background:{{conn.bg}};color:{{conn.ink}}"><span class="dot" style="background:{{conn.dot}}"></span>{{conn.label}}</span></div>
+          <div class="mono" style="font-size:11px;color:var(--text-subtle);margin-top:5px">agent-plan · feat/agent-brain · workflow agent-brain.yaml</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn btn-sm" href="TaskDetail.dc.html">Room tasks</a><button type="button" class="btn btn-sm">Open in Heca</button></div>
+      </div>
+
+      <sc-if value="{{isOffline}}" hint-placeholder-val="{{false}}">
+        <div role="status" class="card" style="display:flex;gap:12px;align-items:flex-start;padding:12px 16px;background:var(--warn-bg);border-color:transparent">
+          <svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--warn-ink);margin-top:1px"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+          <div style="font-size:13px;line-height:1.5"><b>Heca unreachable since 18:42.</b> <span style="color:var(--text-muted)">The room keeps running in Heca. This chat and the member labels are the last snapshot. Your draft is kept; sending resumes when Heca reconnects.</span></div>
+        </div>
+      </sc-if>
+
+      <div class="chat-grid" style="display:grid;grid-template-columns:minmax(0,1.85fr) minmax(0,1fr);gap:20px;align-items:start">
+        <section class="card" aria-label="Room chat" style="display:flex;flex-direction:column;overflow:visible">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
+            <p class="eyebrow">Group chat</p>
+            <span style="font-size:11px;color:var(--text-subtle)">Visible to everyone · delivered to addressees only</span>
+          </div>
+          <div class="msglist {{staleCls}}" ref="{{setList}}" onScroll="{{onListScroll}}" style="display:flex;flex-direction:column;gap:4px;padding:12px 14px;height:560px;overflow-y:auto" aria-live="polite">
+            <sc-for list="{{msgs}}" as="m" hint-placeholder-count="5">
+              <sc-if value="{{m.isSys}}" hint-placeholder-val="{{false}}"><div class="sys"><span>{{m.text}} · <span class="mono" style="font-size:11px">{{m.time}}</span></span></div></sc-if>
+              <sc-if value="{{m.isMsg}}" hint-placeholder-val="{{true}}">
+                <div class="msg {{m.youCls}}">
+                  <span class="vbadge" style="background:{{m.vbg}};width:30px;height:30px;border-radius:9px">
+                    <sc-if value="{{m.isClaude}}" hint-placeholder-val="{{true}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg></sc-if>
+                    <sc-if value="{{m.isOpenai}}" hint-placeholder-val="{{false}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8.2 4.75v9.5L12 21.5 3.8 16.75v-9.5z"></path><circle cx="12" cy="12" r="2.6"></circle></svg></sc-if>
+                    <sc-if value="{{m.isYou}}" hint-placeholder-val="{{false}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></sc-if>
+                  </span>
+                  <div style="display:flex;flex-direction:column;gap:5px;min-width:0;flex:1 1 auto">
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                      <b style="font-size:13px">{{m.author}}</b><span style="font-size:11.5px;color:var(--text-subtle)">{{m.label}}</span>
+                      <span class="mono" style="font-size:10.5px;color:var(--text-subtle)">{{m.time}}</span>
+                    </div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+                      <span style="font-size:11px;color:var(--text-subtle)">to</span>
+                      <sc-for list="{{m.to}}" as="t" hint-placeholder-count="1"><span class="tochip">{{t}}</span></sc-for>
+                    </div>
+                    <div style="font-size:14px;line-height:1.5">{{m.text}}</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                      <sc-if value="{{m.hasTask}}" hint-placeholder-val="{{false}}"><a class="tchip" href="TaskDetail.dc.html">{{m.task}}</a></sc-if>
+                      <sc-if value="{{m.hasReceipt}}" hint-placeholder-val="{{true}}"><span class="badge" style="background:{{m.rbg}};color:{{m.rink}}" title="{{m.rnote}}"><span class="dot" style="background:{{m.rdot}}"></span>{{m.rlabel}}</span></sc-if>
+                      <sc-if value="{{m.hasRnote}}" hint-placeholder-val="{{false}}"><span style="font-size:11.5px;color:var(--text-subtle)">{{m.rnote}}</span></sc-if>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+            </sc-for>
+          </div>
+
+          <form class="composer" onSubmit="{{send}}">
+            <sc-if value="{{hasUnseen}}" hint-placeholder-val="{{false}}">
+              <button type="button" class="jump" onClick="{{jumpLatest}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"></path></svg>{{unseenLabel}}</button>
+            </sc-if>
+            <sc-if value="{{showAc}}" hint-placeholder-val="{{false}}">
+              <div class="ac" role="listbox" aria-label="Mention suggestions">
+                <sc-for list="{{suggestions}}" as="s" hint-placeholder-count="3">
+                  <button type="button" class="acrow" role="option" aria-selected="false" onClick="{{s.pick}}">
+                    <b class="mono" style="font-size:13px">@{{s.handle}}</b>
+                    <span style="font-size:12px;color:var(--text-muted)">{{s.model}}</span>
+                    <span style="display:inline-flex;gap:4px;margin-left:auto">
+                      <sc-if value="{{s.hasF}}" hint-placeholder-val="{{true}}"><span class="ent ent-f">{{s.f}}</span></sc-if>
+                      <sc-if value="{{s.hasP}}" hint-placeholder-val="{{true}}"><span class="ent ent-p">{{s.p}}</span></sc-if>
+                      <sc-if value="{{s.hasT}}" hint-placeholder-val="{{true}}"><span class="ent ent-t">{{s.t}}</span></sc-if>
+                      <sc-if value="{{s.isAll}}" hint-placeholder-val="{{false}}"><span style="font-size:11.5px;color:var(--text-subtle)">Broadcast to every member</span></sc-if>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px">
+              <span style="color:var(--text-subtle)">To</span>
+              <sc-for list="{{toChips}}" as="c" hint-placeholder-count="1"><span class="tochip">{{c}}</span></sc-for>
+              <sc-if value="{{noRecipient}}" hint-placeholder-val="{{false}}"><span class="badge" style="background:var(--warn-bg);color:var(--warn-ink)">No default recipient · add @member or @all</span></sc-if>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <label for="room-draft" class="sr">Message the room</label>
+              <input id="room-draft" class="cin" type="text" autocomplete="off" placeholder="Message the room · @ to address" value="{{draft}}" onChange="{{onDraft}}">
+              <button type="submit" class="btn btn-primary" disabled="{{sendDisabled}}" style="min-height:44px">Send</button>
+            </div>
+            <sc-if value="{{hasErr}}" hint-placeholder-val="{{false}}"><div role="alert" style="font-size:12px;color:var(--bad-ink)">{{err}}</div></sc-if>
+            <div style="font-size:11px;color:var(--text-subtle)">{{composerHint}}</div>
+          </form>
+        </section>
+
+        <aside class="card members" aria-label="Members" style="padding:16px 18px;display:flex;flex-direction:column;gap:4px;position:sticky;top:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <p class="eyebrow">Members · {{memberCount}}</p>
+            <span style="font-size:11px;color:var(--text-subtle)">Live labels</span>
+          </div>
+          <sc-for list="{{members}}" as="m" hint-placeholder-count="4">
+            <div class="mrow {{staleCls}}">
+              <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                <span class="vbadge" style="background:{{m.vbg}}">
+                  <sc-if value="{{m.isClaude}}" hint-placeholder-val="{{true}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3"></path></svg></sc-if>
+                  <sc-if value="{{m.isOpenai}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8.2 4.75v9.5L12 21.5 3.8 16.75v-9.5z"></path><circle cx="12" cy="12" r="2.6"></circle></svg></sc-if>
+                  <sc-if value="{{m.isGemini}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="#4285f4" stroke="none" aria-hidden="true"><path d="M12 2c.3 5.2 4.6 9.5 9.8 9.8C16.6 12.1 12.3 16.4 12 21.6 11.7 16.4 7.4 12.1 2.2 11.8 7.4 11.5 11.7 7.2 12 2z"></path></svg></sc-if>
+                </span>
+                <div style="min-width:0;flex:1 1 auto">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b class="mono" style="font-size:13px">{{m.handle}}</b><span style="font-size:11.5px;color:var(--text-subtle)">{{m.role}}</span></div>
+                  <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:3px">
+                    <span style="font-size:12px;color:var(--text-muted)">{{m.model}}</span>
+                    <sc-if value="{{m.hasF}}" hint-placeholder-val="{{true}}"><span class="ent ent-f">{{m.f}}</span></sc-if>
+                    <sc-if value="{{m.hasP}}" hint-placeholder-val="{{true}}"><span class="ent ent-p">{{m.p}}</span></sc-if>
+                    <sc-if value="{{m.hasT}}" hint-placeholder-val="{{true}}"><a class="ent ent-t" href="TaskDetail.dc.html">{{m.t}}</a></sc-if>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-left:33px">
+                <span class="badge" style="background:{{m.lbg}};color:{{m.link}}"><span class="dot" style="background:{{m.ldot}}"></span>{{m.llabel}}</span>
+                <span style="font-size:11.5px;color:var(--text-subtle)">{{m.lnote}}</span>
+                <sc-if value="{{m.canRelease}}" hint-placeholder-val="{{false}}"><button type="button" class="btn btn-sm" style="margin-left:auto" onClick="{{m.ask}}" disabled="{{m.releaseDisabled}}">Release…</button></sc-if>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{noOrch}}" hint-placeholder-val="{{false}}">
+            <div style="margin-top:10px;font-size:12px;line-height:1.5;color:var(--text-muted);border-top:1px solid var(--border);padding-top:12px">No orchestrator in this room. An orchestrator added in Heca becomes the default recipient for new messages; earlier undelivered messages are never redirected.</div>
+          </sc-if>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <sc-if value="{{hasConfirm}}" hint-placeholder-val="{{false}}">
+    <div class="overlay">
+      <div class="card" role="dialog" aria-modal="true" aria-labelledby="rel-title" style="max-width:440px;width:100%;padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow-card)">
+        <h2 id="rel-title" style="margin:0;font-size:16px;font-weight:700">Release {{confirm.t}} from {{confirm.handle}}?</h2>
+        <p style="margin:0;font-size:13px;line-height:1.55;color:var(--text-muted)">{{confirm.body}}</p>
+        <p style="margin:0;font-size:12px;color:var(--text-subtle)">The task status and checkpoints do not change. The release is recorded with you as actor.</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <button type="button" class="btn btn-sm" onClick="{{cancelRelease}}">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary" onClick="{{doRelease}}">Release task</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"scenario":{"editor":"enum","options":["live","no-orchestrator","heca-unavailable"],"default":"live"},"$preview":{"width":1320,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props){
+    super(props); let narrow=false; try{narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){}
+    this.state={ theme:'dark', nav:narrow, scenario:(props.scenario ?? 'live'), draft:'', err:'', sent:[], confirm:null, released:{}, unseen:0 };
+    // Auto-scroll: follow new messages only while the reader is at the bottom.
+    this.stick=true; this.listEl=null;
+    this.setList=(el)=>{ this.listEl=el; if(el && !this.didInit){ this.didInit=true; el.scrollTop=el.scrollHeight; } };
+    this.onListScroll=(e)=>{ const el=e.currentTarget; const atBottom=(el.scrollHeight-el.scrollTop-el.clientHeight)<48; this.stick=atBottom; if(atBottom && this.state.unseen) this.setState({unseen:0}); };
+    this.toBottom=(smooth)=>{ const el=this.listEl; if(!el) return; try{ el.scrollTo({top:el.scrollHeight,behavior:smooth?'smooth':'auto'}); }catch(_){ el.scrollTop=el.scrollHeight; } };
+    this.seq=0;
+  }
+  componentDidUpdate(){
+    // The runtime does not pass prevState, so keep our own snapshot.
+    const prev=this.snap||{sent:[],scenario:this.state.scenario}; const st=this.state;
+    this.snap={sent:st.sent,scenario:st.scenario};
+    if(st.scenario!==prev.scenario){ this.stick=true; this.toBottom(false); if(st.unseen) this.setState({unseen:0}); return; }
+    if(st.sent===prev.sent) return;
+    if(this.stick) this.toBottom(true);
+    else if(st.sent.length>prev.sent.length) this.setState({unseen:st.unseen+1});
+  }
+  allMembers(){ return [
+    {handle:'orchestrator',role:'Orchestrator',vendor:'claude',model:'Opus 5.5',f:'F025',p:'P131',t:'',lock:'none',lnote:'Coordinating the phase'},
+    {handle:'worker-1',role:'Worker',vendor:'claude',model:'Sonnet 5.5',f:'F025',p:'P131',t:'T502',lock:'executing',lnote:'Heartbeat 12 s ago'},
+    {handle:'worker-2',role:'Worker',vendor:'openai',model:'GPT-5.6',f:'F025',p:'P131',t:'T498',lock:'parked',lnote:'Switched to T499 · 25 min ago'},
+    {handle:'worker-3',role:'Worker',vendor:'gemini',model:'Gemini 3 Pro',f:'F025',p:'P130',t:'T491',lock:'idle',lnote:'No activity for 2 h 14 min'}
+  ]; }
+  members(){ const s=this.state.scenario; return this.allMembers().filter(m=>!(s==='no-orchestrator' && m.handle==='orchestrator')); }
+  lmeta(s){ return ({
+    none:{label:'Active',ink:'var(--pos-ink)',bg:'var(--pos-bg)',dot:'var(--done)'},
+    executing:{label:'In progress',ink:'var(--warn-ink)',bg:'var(--warn-bg)',dot:'var(--active)'},
+    parked:{label:'Parked',ink:'var(--warn-ink)',bg:'var(--warn-bg)',dot:'var(--paused)'},
+    idle:{label:'Idle',ink:'var(--sub-ink)',bg:'var(--mut-bg)',dot:'var(--text-subtle)'},
+    released:{label:'Released',ink:'var(--sub-ink)',bg:'var(--mut-bg)',dot:'var(--text-subtle)'}
+  })[s]; }
+  rmeta(s){ return ({
+    queued:{label:'Queued',ink:'var(--sub-ink)',bg:'var(--mut-bg)',dot:'var(--text-subtle)',note:''},
+    sent:{label:'Sent',ink:'var(--pos-ink)',bg:'var(--pos-bg)',dot:'var(--done)',note:''},
+    uncertain:{label:'Uncertain',ink:'var(--warn-ink)',bg:'var(--warn-bg)',dot:'var(--paused)',note:'Heca did not confirm in time. Not retried automatically.'},
+    undelivered:{label:'Undelivered',ink:'var(--bad-ink)',bg:'var(--bad-bg)',dot:'var(--blocked)',note:'Recipient left the room. Never redirected.'}
+  })[s]; }
+  baseMsgs(){
+    const s=this.state.scenario;
+    const m=[
+      {sys:true,text:'Room started from workflow agent-brain.yaml',time:'17:02'},
+      {author:'You',you:true,label:'via Agent Plan',to:['orchestrator'],text:'Start the phase from the driver benchmark, then the collaboration views.',time:'17:05',r:'sent'},
+      {author:'orchestrator',vendor:'claude',label:'Opus 5.5 · F025/P131',to:['@worker-1'],text:'Take T502: compare node:sqlite and better-sqlite3 on real planner flows.',time:'17:06',task:'T502'},
+      {author:'worker-1',vendor:'claude',label:'Sonnet 5.5 · F025/P131/T502',to:['orchestrator'],text:'Started T502. First benchmark run is in; full results after the write-heavy flow.',time:'18:31',task:'T502'},
+      {author:'You',you:true,label:'via Agent Plan',to:['@worker-2'],text:'Leave T498 parked and look at T499 first.',time:'18:36',r:'uncertain'}
+    ];
+    if(s==='no-orchestrator'){
+      m.push({author:'You',you:true,label:'via Agent Plan',to:['orchestrator'],text:'Plan the next task after T502 is verified.',time:'18:37',r:'undelivered'});
+      m.push({sys:true,text:'orchestrator left the room',time:'18:38'});
+    }
+    return m;
+  }
+  renderVals(){
+    const st=this.state; const s=st.scenario; const offline=s==='heca-unavailable';
+    const vb=(v)=>({claude:'rgba(217,119,87,0.16)',openai:'rgba(16,163,127,0.16)',gemini:'rgba(66,133,244,0.16)'}[v]||'var(--accent-soft)');
+    const mem=this.members(); const hasOrch=mem.some(m=>m.handle==='orchestrator');
+    const msgs=this.baseMsgs().concat(st.sent).map((x,i)=>{
+      if(x.sys) return {isSys:true,isMsg:false,text:x.text,time:x.time};
+      const r=x.r?this.rmeta(x.r):null;
+      return {isSys:false,isMsg:true,author:x.author,label:x.label,to:x.to,text:x.text,time:x.time,
+        youCls:x.you?'msg-you':'',isYou:!!x.you,isClaude:x.vendor==='claude',isOpenai:x.vendor==='openai',vbg:vb(x.vendor),
+        hasTask:!!x.task,task:x.task||'',hasReceipt:!!r,rlabel:r?r.label:'',rink:r?r.ink:'',rbg:r?r.bg:'',rdot:r?r.dot:'',
+        rnote:r?r.note:'',hasRnote:!!(r&&r.note)};
+    });
+    // mentions
+    const draft=st.draft; const tok=draft.match(/(^|\s)@([\w-]*)$/);
+    const cands=mem.map(m=>({handle:m.handle,model:m.model,f:m.f,p:m.p,t:m.t})).concat([{handle:'all',model:'',f:'',p:'',t:'',all:true}]);
+    const suggestions=tok?cands.filter(c=>c.handle.startsWith(tok[2])).map(c=>({handle:c.handle,model:c.model,f:c.f,p:c.p,t:c.t,hasF:!!c.f,hasP:!!c.p,hasT:!!c.t,isAll:!!c.all,
+      pick:()=>this.setState({draft:draft.replace(/@([\w-]*)$/,'@'+c.handle+' '),err:''})})):[];
+    const known=cands.map(c=>c.handle);
+    const mentioned=[...new Set((draft.match(/@([\w-]+)/g)||[]).map(x=>x.slice(1)).filter(h=>known.includes(h)))];
+    const toChips=mentioned.length?mentioned.map(h=>'@'+h):(hasOrch?['orchestrator (default)']:[]);
+    const noRecipient=!mentioned.length && !hasOrch;
+    const send=(e)=>{ if(e&&e.preventDefault) e.preventDefault(); if(offline) return; const text=st.draft.trim(); if(!text) return;
+      if(noRecipient){ this.setState({err:'no_default_recipient · this room has no orchestrator. Address the message with @member or @all.'}); return; }
+      const id='s'+(++this.seq); const d=new Date(); const time=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+      const msg={id,author:'You',you:true,label:'via Agent Plan',to:mentioned.length?mentioned.map(h=>'@'+h):['orchestrator'],text,time,r:'queued'};
+      this.setState({sent:st.sent.concat([msg]),draft:'',err:''});
+      setTimeout(()=>{ this.setState({sent:this.state.sent.map(m=>m.id===id?Object.assign({},m,{r:'sent'}):m)}); },1400);
+    };
+    const members=mem.map(m=>{ const lock=st.released[m.handle]?'released':m.lock; const l=this.lmeta(lock);
+      return {handle:m.handle,role:m.role,model:m.model,f:m.f,p:m.p,t:m.t,hasF:!!m.f,hasP:!!m.p,hasT:!!m.t&&lock!=='released',
+        isClaude:m.vendor==='claude',isOpenai:m.vendor==='openai',isGemini:m.vendor==='gemini',vbg:vb(m.vendor),
+        llabel:l.label,link:l.ink,lbg:l.bg,ldot:l.dot,lnote:lock==='released'?'Released by you · recorded':m.lnote,
+        canRelease:(lock==='parked'||lock==='idle'),releaseDisabled:offline,
+        ask:()=>this.setState({confirm:m.handle})};
+    });
+    const cm=st.confirm?this.allMembers().find(m=>m.handle===st.confirm):null;
+    const confirm=cm?{handle:cm.handle,t:cm.t,body:cm.lock==='parked'
+      ? cm.handle+' parked '+cm.t+' and is working on something else. Releasing frees the task for any agent; '+cm.handle+' is told when it returns.'
+      : cm.handle+' still holds '+cm.t+' but has been idle for over 2 h. Its process may still be alive: releasing frees the task for any agent and '+cm.handle+' is told on its next turn.'}:{handle:'',t:'',body:''};
+    const scenarios=[['live','Live'],['no-orchestrator','No orchestrator'],['heca-unavailable','Heca unreachable']].map(([id,label])=>({label,on:s===id,pick:()=>this.setState({scenario:id,err:'',confirm:null})}));
+    return {
+      themeClass: st.theme==='dark'?'t-dark':'', isDark:st.theme==='dark', isLight:st.theme!=='dark',
+      navClass: st.nav?'nav-collapsed':'', toggleNav:()=>this.setState({nav:!st.nav}),
+      toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
+      scenarios, isOffline:offline, staleCls:offline?'stale':'',
+      conn: offline?{label:'Heca unreachable',ink:'var(--warn-ink)',bg:'var(--warn-bg)',dot:'var(--paused)'}:{label:'Heca connected',ink:'var(--pos-ink)',bg:'var(--pos-bg)',dot:'var(--done)'},
+      msgs, draft, onDraft:(e)=>this.setState({draft:e.target.value,err:''}),
+      suggestions, showAc:suggestions.length>0 && !offline,
+      toChips, noRecipient, send, sendDisabled:offline || !draft.trim(),
+      err:st.err, hasErr:!!st.err,
+      composerHint: offline?'Sending is paused until Heca reconnects. Your draft stays here.':'Plain text in v1. Busy agents receive it at their next turn; nothing is interrupted.',
+      members, memberCount:mem.length, noOrch:!hasOrch,
+      hasUnseen:st.unseen>0, unseenLabel: st.unseen===1?'1 new message':st.unseen+' new messages',
+      jumpLatest:()=>{ this.stick=true; this.toBottom(true); this.setState({unseen:0}); },
+      setList:this.setList, onListScroll:this.onListScroll,
+      hasConfirm:!!cm, confirm, cancelRelease:()=>this.setState({confirm:null}),
+      doRelease:()=>{ const h=st.confirm; this.setState({confirm:null,released:Object.assign({},st.released,{[h]:true})}); },
+      unreadTotal:3
+    };
+  }
+}
+
+// Close the project switcher when a project is picked.
+(function(){ var rv=Component.prototype.renderVals; Component.prototype.renderVals=function(){ var v=rv.call(this)||{}; v.closeProjsw=function(e){ try{ var d=e.currentTarget.closest('details'); if(d) d.removeAttribute('open'); if(e.preventDefault) e.preventDefault(); }catch(_){ } }; return v; }; })();
+</script>
+</body>
+</html>

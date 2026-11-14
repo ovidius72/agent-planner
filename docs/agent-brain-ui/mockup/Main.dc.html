@@ -9,8 +9,8 @@
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap">
 <style>
   :root{
     --bg-base:#f8fafc; --grad-a:rgba(59,130,246,0.18); --grad-b:rgba(139,92,246,0.16);
@@ -85,6 +85,15 @@
   .kpi dt{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)}
   .kpi dd{margin:4px 0 0;font-size:20px;font-weight:700;line-height:1}
   .stickyhdr{position:sticky;top:0;z-index:20}
+  .exp-toolbar{display:flex;flex:1 1 auto;min-width:0;flex-wrap:wrap;align-items:center;gap:8px}
+  .filterbar-wrap{position:sticky;top:var(--focus-h,0px);z-index:25;flex:1 1 100%;display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);background:var(--surface-elevated)}
+  .filterbar-wrap.collapsed{padding:0;border:0}
+  .filterbar-wrap.collapsed .exp-toolbar{display:none}
+  .exp-toggle .ico-show{display:none}
+  .exp-toggle.collapsed .ico-show{display:block}
+  .exp-toggle.collapsed .ico-hide{display:none}
+  .exp-toggle{display:none;top:var(--filt-top,100px)}
+  html.filt-scrolled .exp-toggle{display:flex}
   .hdr-nav{display:flex;flex-wrap:wrap;gap:4px}
   .hdr-id{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .hdr-burger{display:none}
@@ -128,16 +137,39 @@
   }
   .sideclose{display:none}
   @media (max-width:1180px){ .sideclose{display:inline-flex !important} }
-  @media (max-width:860px){
-    .hdr-ver,.hdr-sub{display:none}
+  .wifi-status{display:inline-flex;align-items:center;gap:4px;color:var(--done)}
+  .live-dot{width:7px;height:7px;border-radius:9999px;background:var(--done);display:inline-block;animation:livepulse 1.6s ease-in-out infinite}
+  @keyframes livepulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @media (max-width:640px){
+    .seg-text{display:none}
+    .wifi-status svg{display:none}
+    .statseg,.statdiv{display:none !important}
+    .statchip{border-radius:10px}
+    .dashcol{gap:12px !important}
+    .statstrip{padding:10px 12px !important;gap:8px !important}
+    .statcell{flex:1 1 calc(50% - 4px) !important;min-width:0 !important}
+    .statdivv{display:none !important}
+    .anacard{padding:14px 14px !important}
+    .kpi{flex:1 1 calc(33.333% - 6px) !important;min-width:0 !important;padding:6px 8px}
+    .kpi dt{font-size:9px;letter-spacing:.06em}
+    .kpi dd{font-size:15px;margin-top:3px}
+    .btxt{display:none}
+    .goal-actions .btn{padding:7px 9px !important}
+    .exp-title{flex:1 1 100% !important}
+    .exp-search{min-width:0 !important;flex:1 1 auto !important}
+    .exp-input{min-width:70px !important}
+    .filterbar-wrap{order:1}
+    .exp-toolbar{gap:6px !important}
+    .exp-toolbar .selmini{padding:5px 20px 5px 8px !important;min-width:0}
+    .exp-toolgrp{flex-shrink:0}
+    .exp-toolgrp button{padding:5px 8px !important}
+    .exp-tree{order:2}
+    .sumbar{gap:5px 10px !important;padding:9px 12px !important}
   }
-  @media (max-width:640px){ .inprog-text{display:none} }
-  @media (max-width:560px){ .hdr-webui{display:none} }
   @media (max-width:720px){
     .shell-pad{padding:22px 14px 56px !important}
     .goal-pad{padding:18px 16px !important}
     .explorer-pad{padding:16px 14px !important}
-    .stickyhdr{position:static;top:auto;z-index:auto}
     .indent-f{margin-left:10px}
     .indent-p{margin-left:8px}
     .shortid{display:none}
@@ -147,6 +179,41 @@
     .hdr-nav{display:none;order:9;flex-basis:100%;flex-direction:column;align-items:stretch;gap:2px;border-top:1px solid var(--border);padding-top:8px;margin-top:4px}
     .hdr-nav.open{display:flex}
     .hdr-id{display:none}
+  }
+
+  /* project switcher + mobile shell (rooms proposal, 2026-11-02) */
+  .projsw{position:relative;min-width:0}
+  .projsw>summary{list-style:none;cursor:pointer;display:flex;align-items:center;border-radius:10px;padding:4px 8px;margin:-4px -8px;min-width:0;color:var(--text)}
+  .projsw>summary::-webkit-details-marker{display:none}
+  .projsw>summary:hover{background:var(--accent-soft)}
+  .projsw>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .projsw[open] .projsw-caret{transform:rotate(180deg)}
+  .projsw[open]>summary{position:relative;z-index:72}
+  .projsw[open]>summary::before{content:"";position:fixed;inset:0;z-index:-1;cursor:default}
+  .projsw-menu{z-index:73 !important;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+  header:has(.projsw[open]){z-index:90 !important}
+  .projsw-path{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-subtle);margin-top:1px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .projsw-menu{position:absolute;top:calc(100% + 10px);left:-8px;z-index:70;width:min(330px,calc(100vw - 32px));background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 20px 50px -20px rgba(2,6,23,0.55);padding:8px;display:flex;flex-direction:column;gap:2px}
+  .projsw-head{margin:4px 8px 6px;font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)}
+  .projsw-item{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 10px;border-radius:10px;color:var(--text);text-decoration:none}
+  .projsw-item:hover,.projsw-item.on{background:var(--accent-soft)}
+  .projsw-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;font-size:13.5px}
+  .projsw-txt .mono{font-size:10.5px;color:var(--text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .projsw-meta{font-size:11px;color:var(--text-subtle);white-space:nowrap}
+  .projsw-foot{margin:6px 8px 4px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;line-height:1.5;color:var(--text-subtle)}
+  @supports (height:100dvh){ .app,.approot{height:100dvh} }
+  @media (max-width:760px){
+    .app,.approot{height:auto !important;min-height:100dvh;overflow:visible !important}
+    .app main,.approot main,.shell>main{overflow:visible !important}
+    .app>div:nth-child(2),.approot>div:nth-child(2){padding:6px 16px !important;font-size:10px !important;gap:6px !important}
+    .app>div:nth-child(2)>span:first-child,.approot>div:nth-child(2)>span:first-child{display:none}
+    .app>header,.approot>header{padding:8px 12px !important;gap:8px !important}
+    .hdr-hide-sm{display:none !important}
+    .stickyhdr,[style*="position:sticky"]{position:static !important}
+    .filterbar-wrap{top:0 !important}
+    .msglist{height:min(560px,62dvh) !important}
+    .exp-input{min-width:64px !important;flex:1 1 64px !important;width:64px}
+    input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:16px !important}
   }
 </style>
 </helmet>
@@ -158,49 +225,61 @@
   </div>
   <header class="apphdr" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 20px;border-bottom:1px solid var(--border);position:relative;z-index:12">
     <div class="hb-left" style="display:flex;align-items:center;gap:11px;min-width:0;flex:1 1 auto">
-      <button type="button" class="navtoggle" onClick="{{toggleSide}}" aria-label="Toggle navigation" style="width:32px;height:32px;border-color:var(--border)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
-      <div style="min-width:0">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:16px;font-weight:700;line-height:1.1">Agent&nbsp;Plan</span><span class="mono hdr-ver" style="font-size:10px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:7px;padding:2px 7px;white-space:nowrap">v0.2.1</span></div>
-        <div class="hdr-sub" style="font-size:12px;color:var(--text-subtle)">Planner · one shared <span class="mono" style="font-size:11px">.planner/</span> workspace</div>
-      </div>
+      <button type="button" class="navtoggle" onClick="{{toggleSide}}" aria-label="Toggle navigation" style="width:32px;height:32px;border-color:var(--border)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+      <details class="projsw">
+        <summary aria-label="Current project: Agent Plan. Switch project">
+          <span style="display:flex;flex-direction:column;min-width:0">
+            <span style="display:flex;align-items:center;gap:7px"><span style="font-size:16px;font-weight:700;line-height:1.15;white-space:nowrap">Agent Plan</span><svg class="projsw-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span>
+            <span class="mono projsw-path"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>~/code/agent-plan</span>
+          </span>
+        </summary>
+        <div class="projsw-menu">
+          <p class="projsw-head">Projects on this machine</p>
+          <a class="projsw-item on" href="#" onClick="{{closeProjsw}}" aria-current="true"><span class="projsw-txt"><b>Agent Plan</b><span class="mono">~/code/agent-plan</span></span><span class="projsw-meta">3 rooms</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent);flex-shrink:0"><path d="M20 6 9 17l-5-5"></path></svg></a>
+          <a class="projsw-item" href="#" onClick="{{closeProjsw}}"><span class="projsw-txt"><b>Heca-Pro</b><span class="mono">~/code/heca-pro</span></span><span class="projsw-meta">1 room</span></a>
+          <a class="projsw-item" href="#" onClick="{{closeProjsw}}"><span class="projsw-txt"><b>Heca</b><span class="mono">~/code/heca</span></span><span class="projsw-meta">No rooms</span></a>
+          <p class="projsw-foot">A project appears here once an agent loads the planner in its folder. Switching keeps the current section.</p>
+        </div>
+      </details>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span class="wifi-status" title="Web UI server connected — the dashboard is live and updates in real time as agents work" aria-label="Web UI live"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14 0M2 8.82a16 16 0 0 1 20 0M8.5 16.43a6 6 0 0 1 7 0"></path></svg><span class="live-dot"></span></span>
       <button type="button" class="iconbtn" onClick="{{toggleTheme}}" aria-label="{{themeLabel}}" style="width:32px;height:32px">
-        <sc-if value="{{isDark}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg></sc-if>
-        <sc-if value="{{isLight}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></sc-if>
+        <sc-if value="{{isDark}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"></path></svg></sc-if>
+        <sc-if value="{{isLight}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></sc-if>
       </button>
-      <button type="button" onClick="{{toggleFocusCollapse}}" aria-expanded="{{focusExpanded}}" title="Show / hide in-progress tasks" style="display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:var(--inprog-ink);border-radius:9999px;padding:4px 11px;font-size:11.5px;font-weight:700;cursor:pointer">
-        <span class="dot" style="width:7px;height:7px;background:var(--in-progress)"></span>{{activeCount}}<span class="inprog-text">&nbsp;in&nbsp;progress</span>
-        <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{focusCollapseCaret}}"><path d="m6 9 6 6 6-6"/></svg>
+      <button type="button" class="statchip" onClick="{{toggleFocusCollapse}}" aria-expanded="{{focusExpanded}}" title="Tasks running now vs. parked for later — show or hide the list" style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:var(--surface-elevated);border-radius:9999px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--text)">
+        <span class="statseg" title="In progress — active sessions running now" style="display:inline-flex;align-items:center;gap:4px;color:var(--inprog-ink)"><span class="dot" style="width:7px;height:7px;background:var(--in-progress)"></span>{{activeCount}}<span class="seg-text">&nbsp;in&nbsp;progress</span></span>
+        <span class="statdiv" style="color:var(--text-subtle);font-weight:600" aria-hidden="true">/</span>
+        <span class="statseg" title="Parked — checkpointed, waiting to be resumed" style="display:inline-flex;align-items:center;gap:4px;color:var(--paused-ink)"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="var(--paused)" stroke="none" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>{{parkedCount}}<span class="seg-text">&nbsp;parked</span></span>
+        <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{focusCollapseCaret}};color:var(--text-subtle)"><path d="m6 9 6 6 6-6"></path></svg>
       </button>
-    </div>
-    <div class="hb-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-basis:100%">
-      <span class="badge mono" style="background:var(--surface-elevated);color:var(--text-muted);border:1px solid var(--border);font-size:10px" title="Folder where this planner is running"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>~/code/agent-plan</span>
-      <span class="badge hdr-webui" style="background:var(--accent-soft);color:var(--accent)"><span class="dot" style="background:var(--accent)"></span>Web UI live</span>
     </div>
   </header>
   <div class="appshell">
     <aside class="sidebar">
-      <button type="button" class="sideclose" onClick="{{toggleSide}}" aria-label="Close menu" style="align-self:flex-end;align-items:center;justify-content:center;gap:6px;width:auto;padding:6px 10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;margin-bottom:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Close</button>
+      <button type="button" class="sideclose" onClick="{{toggleSide}}" aria-label="Close menu" style="align-self:flex-end;align-items:center;justify-content:center;gap:6px;width:auto;padding:6px 10px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;cursor:pointer;margin-bottom:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>Close</button>
       <div class="snavgroup">Work</div>
-      <a class="snav" href="Resume.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v6"/></svg>Resume</a>
-      <a class="snav on" href="Main.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Planner</a>
-      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Requirements</a>
-      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>Ideas</a>
-      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Handoff</a>
-      <a class="snav" href="Agents.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"/></svg>Agents &amp; targets</a>
+      <a class="snav" href="Resume.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h11a5 5 0 0 1 5 5v6"></path></svg>Resume</a>
+      <a class="snav on" href="Main.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Planner</a>
+      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"></path><path d="m3 7 2 2 4-4"></path><path d="M13 6h8M13 12h8M13 18h8"></path></svg>Requirements</a>
+      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"></path></svg>Ideas</a>
+      <a class="snav ssub" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg>Handoff</a>
+      <a class="snav ssub" href="Rooms.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Rooms</a>
+      <a class="snav" href="Agents.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="12" r="2.5"></circle><path d="M8.5 6H14a3 3 0 0 1 3 3v.5M8.5 18H14a3 3 0 0 0 3-3v-.5"></path></svg>Agents &amp; targets</a>
       <div class="snavgroup">Context</div>
-      <a class="snav" href="Map.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-2h12v2"/></svg>Map</a>
-      <a class="snav" href="Code.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Code</a>
-      <a class="snav" href="Checks.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Checks</a>
+      <a class="snav" href="Map.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"></rect><rect x="3" y="16" width="6" height="5" rx="1"></rect><rect x="15" y="16" width="6" height="5" rx="1"></rect><path d="M12 8v4M6 16v-2h12v2"></path></svg>Map</a>
+      <a class="snav" href="Code.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg>Code</a>
+      <a class="snav" href="Checks.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>Checks</a>
+      <a class="snav" href="Analytics.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"></path><rect x="7" y="12" width="3" height="6"></rect><rect x="12" y="8" width="3" height="10"></rect><rect x="17" y="5" width="3" height="13"></rect></svg>Analytics</a>
       <div class="snavgroup">Proposals</div>
-      <a class="snav" href="Evaluate.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"/></svg>To evaluate</a>
+      <a class="snav" href="Evaluate.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.7.7 1 1.2 1 2h6c0-.8.3-1.3 1-2a7 7 0 0 0-4-12z"></path></svg>To evaluate</a>
       <div style="flex-grow:1;min-height:10px"></div>
-      <a class="snav" href="Settings.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <a class="snav" href="Settings.dc.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Settings</a>
       <div class="side-foot">One shared planner<br>Code &amp; sessions kept separate</div>
     </aside>
     <main class="shell-pad" style="flex-grow:1;min-width:0;padding:14px 24px 64px">
-<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:18px">
+<div class="dashcol" style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:18px">
 
   <!-- STICKY HEADER: nav + compact focus bar (not sticky on mobile) -->
   <div class="stickyhdr" style="display:flex;flex-direction:column;gap:10px;padding-top:0">
@@ -215,7 +294,7 @@
           <span class="dot" style="width:8px;height:8px;background:var(--in-progress)"></span>
           <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0">
             <button type="button" class="seg" onClick="{{a.navFeat}}" aria-label="Open {{a.feat}}">{{a.feat}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{a.navPhase}}" aria-label="Open {{a.phasefull}}">{{a.phase}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{a.nav}}" aria-label="Open {{a.idfull}}">{{a.task}}</button>
-            <button type="button" class="copyid" onClick="{{a.copy}}" aria-label="Copy {{a.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+            <button type="button" class="copyid" onClick="{{a.copy}}" aria-label="Copy {{a.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
           </span>
           <button type="button" class="titlelink tl-strong" onClick="{{a.locate}}" style="flex:1 1 150px;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{a.title}}</button>
           <span class="mono" style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{a.owner}}</span>
@@ -229,7 +308,7 @@
       <span class="dot" style="width:8px;height:8px;background:var(--accent);margin-top:5px"></span>
       <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px">
         <button type="button" class="seg" onClick="{{suggested.nav}}" aria-label="Open {{suggested.idfull}}">{{suggested.idfull}}</button>
-        <button type="button" class="copyid" onClick="{{suggested.copy}}" aria-label="Copy {{suggested.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+        <button type="button" class="copyid" onClick="{{suggested.copy}}" aria-label="Copy {{suggested.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
       </span>
       <span style="flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:3px">
         <button type="button" class="titlelink tl-strong" onClick="{{suggested.locate}}" style="font-size:13px;line-height:1.35">{{suggested.title}}</button>
@@ -248,7 +327,7 @@
       </sc-if>
       <span style="flex-grow:1;min-width:4px"></span>
       <sc-if value="{{hasParked}}" hint-placeholder-val="{{true}}">
-        <button type="button" class="fchip" onClick="{{toggleParked}}" aria-expanded="{{parkedOpen}}" style="flex-shrink:0"><span class="dot" style="background:var(--paused)"></span>{{parkedCount}} parked <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{parkedCaret}}"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button type="button" class="fchip" onClick="{{toggleParked}}" aria-expanded="{{parkedOpen}}" style="flex-shrink:0"><span class="dot" style="background:var(--paused)"></span>{{parkedCount}} parked <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{parkedCaret}}"><path d="m6 9 6 6 6-6"></path></svg></button>
       </sc-if>
     </div>
 
@@ -259,11 +338,11 @@
           <span class="badge" style="background:rgba(234,88,12,0.14);color:var(--paused)"><span class="dot" style="background:var(--paused)"></span>Paused</span>
           <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0">
             <button type="button" class="seg" onClick="{{a.nav}}" aria-label="Open {{a.idfull}}">{{a.idfull}}</button>
-            <button type="button" class="copyid" onClick="{{a.copy}}" aria-label="Copy {{a.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+            <button type="button" class="copyid" onClick="{{a.copy}}" aria-label="Copy {{a.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
           </span>
           <button type="button" class="titlelink ttl2" onClick="{{a.locate}}" style="flex:1 1 150px;min-width:0;font-size:13px;color:var(--text-muted);line-height:1.35">{{a.title}}</button>
           <span class="mono" style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{a.owner}}</span>
-          <button type="button" class="btn btn-sm" onClick="{{a.pickup}}" style="flex-shrink:0"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copy resume cmd</button>
+          <button type="button" class="btn btn-sm" onClick="{{a.pickup}}" style="flex-shrink:0"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>Copy resume cmd</button>
         </div>
       </sc-for>
     </div>
@@ -277,21 +356,22 @@
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 320px">
         <p class="eyebrow">Project goal</p>
-        <h1 style="margin:0;font-size:18px;font-weight:700">A durable, inspectable planning workspace for AI coding agents</h1>
+        <h1 style="margin:0;font-size:18px;font-weight:700">{{projTitle}}</h1>
       </div>
       <div class="goal-actions" style="display:flex;gap:8px;flex:1 1 300px;min-width:0;flex-wrap:wrap;justify-content:flex-end;position:relative">
-        <button class="btn" type="button" onClick="{{openProj}}">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-          Project details
+        <button class="iconbtn" type="button" onClick="{{toggleGoal}}" aria-expanded="{{goalOpen}}" title="Show / hide project description" style="width:32px;height:32px"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:{{goalCaret}}"><path d="m6 9 6 6 6-6"></path></svg></button>
+        <button class="btn" type="button" onClick="{{openProj}}" title="Project details">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+          <span class="btxt">Project details</span>
         </button>
-        <button class="btn" type="button">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-          Edit
+        <button class="btn" type="button" onClick="{{editProj}}" title="Edit project">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+          <span class="btxt">Edit</span>
         </button>
-        <button class="btn" type="button" onClick="{{toggleExport}}" aria-expanded="{{exportOpen}}">
-          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-          Export
-          <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        <button class="btn" type="button" onClick="{{toggleExport}}" aria-expanded="{{exportOpen}}" title="Export Markdown">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
+          <span class="btxt">Export</span>
+          <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
         <sc-if value="{{exportOpen}}" hint-placeholder-val="{{false}}">
         <button type="button" onClick="{{toggleExport}}" aria-label="Close export menu" style="position:fixed;inset:0;z-index:40;border:0;background:transparent;cursor:default"></button>
@@ -307,127 +387,78 @@
         </sc-if>
       </div>
     </div>
+    <sc-if value="{{goalOpen}}" hint-placeholder-val="{{true}}">
     <p style="margin:0;max-width:760px;font-size:14px;line-height:1.55;color:var(--text-muted)">
       Keep a single <span class="mono" style="font-size:13px;color:var(--text)">.planner/</span> source of truth per project and expose it through many surfaces — a TypeScript core, a local server &amp; dashboard, a Claude Code MCP server and <span class="mono" style="font-size:13px;color:var(--text)">/planner</span> commands — so planning stays shared across agents without coupling the model to any one harness.
     </p>
-  </div>
-
-  <!-- STAT STRIP (compact) -->
-  <div class="card" style="padding:12px 18px;display:flex;flex-wrap:wrap;align-items:center;gap:12px" id="stats">
-    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
-      <span style="width:30px;height:30px;border-radius:9px;background:rgba(139,92,246,0.12);color:var(--feature);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
-      <div style="min-width:0"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Features</div><div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:20px;font-weight:700;line-height:1.1">9</span><span style="font-size:11px;color:var(--text-subtle)"><span style="color:var(--pos);font-weight:600">6 done</span> · <span style="color:var(--neg);font-weight:600">3 left</span></span></div></div>
-    </div>
-    <span style="width:1px;align-self:stretch;background:var(--border)"></span>
-    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
-      <span style="width:30px;height:30px;border-radius:9px;background:rgba(6,182,212,0.12);color:var(--phase);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg></span>
-      <div style="min-width:0"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Phases</div><div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:20px;font-weight:700;line-height:1.1">41</span><span style="font-size:11px;color:var(--text-subtle)"><span style="color:var(--pos);font-weight:600">28 done</span> · <span style="color:var(--neg);font-weight:600">13 left</span></span></div></div>
-    </div>
-    <span style="width:1px;align-self:stretch;background:var(--border)"></span>
-    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
-      <span style="width:30px;height:30px;border-radius:9px;background:rgba(16,185,129,0.12);color:var(--task);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
-      <div style="min-width:0"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Tasks</div><div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:20px;font-weight:700;line-height:1.1">182</span><span style="font-size:11px;color:var(--text-subtle)"><span style="color:var(--pos);font-weight:600">147 done</span> · <span style="color:var(--neg);font-weight:600">35 left</span></span></div></div>
-    </div>
-    <span style="width:1px;align-self:stretch;background:var(--border)"></span>
-    <div style="display:flex;align-items:center;gap:11px;flex:1 1 170px;min-width:150px">
-      <span style="width:30px;height:30px;border-radius:9px;background:rgba(34,197,94,0.12);color:var(--done);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg></span>
-      <div style="min-width:0;flex-grow:1"><div style="font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle)">Completion</div><div style="display:flex;align-items:center;gap:9px"><span style="font-size:20px;font-weight:700;line-height:1.1;color:var(--pos)">81%</span><span class="meter" style="display:block;flex-grow:1;max-width:96px"><span style="display:block;width:81%;height:100%;background:linear-gradient(90deg,var(--task),var(--done))"></span></span></div></div>
-    </div>
-  </div>
-
-  <!-- ANALYTICS (collapsible, window-scoped) -->
-  <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
-    <div class="cardhead">
-      <button type="button" onClick="{{toggleCharts}}" aria-expanded="{{chartsOpen}}" style="display:flex;align-items:center;gap:10px;border:0;background:transparent;cursor:pointer;padding:0;text-align:left">
-        <span class="iconbtn" style="transform:{{chartsCaret}}"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
-        <span style="display:flex;flex-direction:column;gap:2px"><span class="eyebrow">Analytics</span><span style="font-size:15px;font-weight:700">Flow &amp; backlog</span></span>
-      </button>
-      <sc-if value="{{chartsOpen}}" hint-placeholder-val="{{true}}">
-      <div style="display:inline-flex;align-items:center;gap:6px">
-        <span style="font-size:11px;color:var(--text-subtle)">active-day window</span>
-        <div style="display:inline-flex;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden">
-          <sc-for list="{{windowChips}}" as="w" hint-placeholder-count="3"><button type="button" onClick="{{w.pick}}" style="{{w.style}}border:0;border-left:{{w.bl}};padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer">{{w.label}}</button></sc-for>
-        </div>
-      </div>
-      </sc-if>
-    </div>
-
-    <sc-if value="{{chartsOpen}}" hint-placeholder-val="{{true}}">
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <!-- KPI row -->
-      <dl style="display:flex;flex-wrap:wrap;gap:10px;margin:0">
-        <div class="kpi"><dt>Added</dt><dd>{{k.added}}</dd></div>
-        <div class="kpi"><dt>Closed</dt><dd style="color:var(--pos)">{{k.closed}}</dd></div>
-        <div class="kpi"><dt>Reopened</dt><dd style="color:var(--neg)">{{k.reopened}}</dd></div>
-        <div class="kpi"><dt>Net backlog</dt><dd style="{{k.netColor}}">{{k.net}}</dd></div>
-        <div class="kpi"><dt>Throughput</dt><dd>{{k.rate}}<span style="font-size:12px;font-weight:600;color:var(--text-subtle)">/day</span></dd></div>
-        <div class="kpi"><dt>Open now</dt><dd>{{k.open}}</dd></div>
-      </dl>
-
-      <div class="grid-auto">
-        <!-- Throughput -->
-        <div class="chartframe">
-          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Task throughput</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{windowLabel}} · done/day</span></div>
-          <svg viewBox="0 0 520 160" width="100%" height="146" preserveAspectRatio="none" role="img" aria-label="Tasks completed per active day, trending upward.">
-            <g stroke="rgba(148,163,184,0.22)" stroke-width="1"><line x1="44" y1="16" x2="508" y2="16"/><line x1="44" y1="56" x2="508" y2="56"/><line x1="44" y1="96" x2="508" y2="96"/><line x1="44" y1="136" x2="508" y2="136"/></g>
-            <path d="{{thArea}}" fill="var(--accent-soft)"/>
-            <path d="{{thLine}}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="{{thLastX}}" cy="{{thLastY}}" r="4" fill="var(--accent)"/>
-          </svg>
-        </div>
-        <!-- Open vs closed (burn-up) -->
-        <div class="chartframe">
-          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Open vs closed</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">cumulative</span></div>
-          <svg viewBox="0 0 520 160" width="100%" height="146" preserveAspectRatio="none" role="img" aria-label="Cumulative scope versus cumulative completion; the gap is the open backlog.">
-            <g stroke="rgba(148,163,184,0.22)" stroke-width="1"><line x1="44" y1="16" x2="508" y2="16"/><line x1="44" y1="76" x2="508" y2="76"/><line x1="44" y1="136" x2="508" y2="136"/></g>
-            <path d="{{buScopeArea}}" fill="rgba(99,102,241,0.10)"/>
-            <path d="{{buScope}}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="{{buClosedArea}}" fill="rgba(34,197,94,0.14)"/>
-            <path d="{{buClosed}}" fill="none" stroke="var(--done)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <div style="display:flex;gap:14px;font-size:11px;color:var(--text-muted)"><span style="display:inline-flex;align-items:center;gap:6px"><span class="dot" style="background:var(--accent)"></span>Scope 182</span><span style="display:inline-flex;align-items:center;gap:6px"><span class="dot" style="background:var(--done)"></span>Closed 147</span></div>
-        </div>
-        <!-- Aging -->
-        <div class="chartframe">
-          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Open task aging</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">by age bucket</span></div>
-          <div style="display:flex;flex-direction:column;gap:9px">
-            <sc-for list="{{aging}}" as="g" hint-placeholder-count="5">
-              <div style="display:flex;align-items:center;gap:10px"><span class="mono" style="width:54px;font-size:11px;color:var(--text-muted);flex-shrink:0">{{g.label}}</span><div class="meter" style="flex-grow:1"><div style="width:{{g.pct}}%;height:100%;background:{{g.color}}"></div></div><span class="mono" style="width:20px;text-align:right;font-size:12px;color:var(--text-muted);flex-shrink:0">{{g.n}}</span></div>
-            </sc-for>
-          </div>
-        </div>
-        <!-- Backlog by status -->
-        <div class="chartframe">
-          <div class="cardhead"><h3 style="margin:0;font-size:13px;font-weight:700">Open backlog by status</h3><span style="font-size:11px;color:var(--text-subtle);flex-shrink:0">35 open</span></div>
-          <div style="display:flex;flex-direction:column;gap:9px">
-            <sc-for list="{{backlog}}" as="b" hint-placeholder-count="4">
-              <div style="display:flex;align-items:center;gap:10px"><span style="width:92px;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-shrink:0"><span class="dot" style="background:{{b.color}}"></span>{{b.label}}</span><div class="meter" style="flex-grow:1"><div style="width:{{b.pct}}%;height:100%;background:{{b.color}}"></div></div><span class="mono" style="width:20px;text-align:right;font-size:12px;color:var(--text-muted);flex-shrink:0">{{b.n}}</span></div>
-            </sc-for>
-          </div>
-        </div>
-      </div>
-    </div>
     </sc-if>
   </div>
 
+  <!-- SLIM PROJECT SUMMARY (full metrics live on the Analytics page) -->
+  <div class="sumbar" style="display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px;padding:9px 16px;border:1px solid var(--border);background:var(--surface-elevated);border-radius:12px;font-size:12px">
+    <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-muted)"><strong style="color:var(--text);font-size:13px">9</strong>features</span>
+    <span class="sumsep" aria-hidden="true" style="color:var(--text-subtle)">·</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-muted)"><strong style="color:var(--text);font-size:13px">41</strong>phases</span>
+    <span class="sumsep" aria-hidden="true" style="color:var(--text-subtle)">·</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-muted)"><strong style="color:var(--text);font-size:13px">182</strong>tasks</span>
+    <span style="flex-grow:1;min-width:8px"></span>
+    <span style="display:inline-flex;align-items:center;gap:8px;color:var(--text-muted)"><span><strong style="color:var(--pos);font-size:13px">81%</strong> done</span><span class="meter" style="width:96px;max-width:30vw"><span style="display:block;width:81%;height:100%;background:linear-gradient(90deg,var(--task),var(--done))"></span></span></span>
+    <a href="Analytics.dc.html" style="display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-weight:600;text-decoration:none;flex-shrink:0">Analytics<svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+  </div>
+
   <!-- ========== WORK EXPLORER ========== -->
-  <div class="panel explorer-pad" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px" id="explorer">
+  <div class="panel explorer-pad" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px;position:relative" id="explorer">
 
     <div style="display:flex;flex-direction:column;gap:12px">
       <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px">
-        <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">
+        <div class="exp-title" style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">
           <p class="eyebrow">Work explorer</p>
           <h2 style="margin:0;font-size:16px;font-weight:700">Features · phases · tasks</h2>
         </div>
 
-        <!-- elastic-input faceted search -->
-        <div style="position:relative;flex:1 1 280px;min-width:220px">
+
+
+        <button type="button" class="btn btn-primary" onClick="{{toggleNewFeat}}" aria-expanded="{{newFeatOpen}}" title="New feature" style="flex-shrink:0;margin-left:auto">
+          <svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          <span class="btxt">New feature</span>
+        </button>
+      </div>
+
+      <sc-if value="{{searchScopeNote}}" hint-placeholder-val="{{false}}">
+        <div style="font-size:11px;color:var(--text-subtle);display:flex;align-items:center;gap:6px"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>Searching across <strong style="color:var(--text-muted)">all features</strong> — the left selection is ignored while a filter is active.</div>
+      </sc-if>
+
+      <!-- new-feature form (top-level; phases & tasks are added inline where they live) -->
+      <sc-if value="{{newFeatOpen}}" hint-placeholder-val="{{false}}">
+      <div style="display:flex;flex-direction:column;gap:12px;border:1px dashed var(--accent);background:var(--accent-soft);border-radius:16px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:8px"><span class="ent" style="background:rgba(139,92,246,0.14);color:var(--feature)">FEATURE</span><span style="font-size:12px;color:var(--text-muted)">Top-level container for phases and tasks.</span></div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label for="nfn" style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)">Feature name <span style="color:var(--bad)">*</span></label>
+          <input id="nfn" type="text" required="" placeholder="Products page implementation" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label for="nfd" style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)">Description <span style="font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-subtle)">(optional)</span></label>
+          <textarea id="nfd" rows="2" placeholder="Short context for the feature" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%;resize:vertical;font-family:inherit;line-height:1.5"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn" onClick="{{toggleNewFeat}}">Cancel</button>
+          <button type="button" class="btn btn-primary" onClick="{{addFeatureConfirm}}">Create feature</button>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+      <div class="filterbar-wrap {{filterCls}}">
+        <div class="exp-toolbar">
+        <div class="exp-search" style="position:relative;flex:1 1 80px;min-width:0">
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:14px;padding:7px 10px;min-height:40px">
-            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
             <sc-for list="{{tokens}}" as="tk" hint-placeholder-count="1">
-              <span class="tokchip">{{tk.text}}<button type="button" class="tokx" onClick="{{tk.remove}}" aria-label="Remove filter {{tk.text}}"><svg class="ico" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>
+              <span class="tokchip">{{tk.text}}<button type="button" class="tokx" onClick="{{tk.remove}}" aria-label="Remove filter {{tk.text}}"><svg class="ico" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></span>
             </sc-for>
-            <input type="text" value="{{draft}}" onInput="{{onDraft}}" onKeyDown="{{onDraftKey}}" onFocus="{{onFocus}}" onBlur="{{onBlur}}" placeholder="{{searchPlaceholder}}" aria-label="Structured search: field:value tokens" style="flex-grow:1;min-width:130px;border:0;outline:0;background:transparent;font-size:13px;color:var(--text);padding:3px 0"/>
+            <input class="exp-input" type="text" value="{{draft}}" onInput="{{onDraft}}" onKeyDown="{{onDraftKey}}" onFocus="{{onFocus}}" onBlur="{{onBlur}}" placeholder="{{searchPlaceholder}}" aria-label="Structured search: field:value tokens" style="flex-grow:1;min-width:130px;border:0;outline:0;background:transparent;font-size:13px;color:var(--text);padding:3px 0">
           </div>
           <sc-if value="{{showSug}}" hint-placeholder-val="{{false}}">
           <div style="position:absolute;top:46px;left:0;right:0;z-index:40;background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-panel);padding:6px;max-height:300px;overflow:auto">
@@ -441,56 +472,13 @@
           </div>
           </sc-if>
         </div>
+        <div class="exp-actions" style="display:flex;flex-wrap:nowrap;flex-shrink:0;align-items:center;gap:8px">
+        <button type="button" onClick="{{toggleTree}}" title="{{treeToggleLabel}}" aria-label="{{treeToggleLabel}}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);border-radius:10px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer"><sc-if value="{{treeExpanded}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 20 5-5 5 5M7 4l5 5 5-5"></path></svg></sc-if><sc-if value="{{treeCollapsed}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"></path></svg></sc-if><span class="btxt">{{treeToggleLabel}}</span></button>
 
-        <button type="button" class="btn btn-primary" onClick="{{toggleNewFeat}}" aria-expanded="{{newFeatOpen}}" style="flex-shrink:0">
-          <svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-          New feature
-        </button>
-      </div>
-
-      <sc-if value="{{searchScopeNote}}" hint-placeholder-val="{{false}}">
-        <div style="font-size:11px;color:var(--text-subtle);display:flex;align-items:center;gap:6px"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Searching across <strong style="color:var(--text-muted)">all features</strong> — the left selection is ignored while a filter is active.</div>
-      </sc-if>
-
-      <!-- new-feature form (top-level; phases & tasks are added inline where they live) -->
-      <sc-if value="{{newFeatOpen}}" hint-placeholder-val="{{false}}">
-      <div style="display:flex;flex-direction:column;gap:12px;border:1px dashed var(--accent);background:var(--accent-soft);border-radius:16px;padding:14px 16px">
-        <div style="display:flex;align-items:center;gap:8px"><span class="ent" style="background:rgba(139,92,246,0.14);color:var(--feature)">FEATURE</span><span style="font-size:12px;color:var(--text-muted)">Top-level container for phases and tasks.</span></div>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label for="nfn" style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)">Feature name <span style="color:var(--bad)">*</span></label>
-          <input id="nfn" type="text" required placeholder="Products page implementation" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%"/>
+        <button type="button" onClick="{{clearFilters}}" title="Reset all filters" aria-label="Reset all filters" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);border-radius:10px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg><span class="btxt">Reset</span></button>
         </div>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label for="nfd" style="font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--text-subtle)">Description <span style="font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-subtle)">(optional)</span></label>
-          <textarea id="nfd" rows="2" placeholder="Short context for the feature" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%;resize:vertical;font-family:inherit;line-height:1.5"></textarea>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button type="button" class="btn" onClick="{{toggleNewFeat}}">Cancel</button>
-          <button type="button" class="btn btn-primary" onClick="{{addFeatureConfirm}}">Create feature</button>
         </div>
       </div>
-      </sc-if>
-
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-        <label style="display:inline-flex;align-items:center;gap:7px">
-          <span style="font-size:11px;font-weight:600;color:var(--text-subtle)">Status</span>
-          <select class="selmini" value="{{statusValue}}" onChange="{{onStatus}}" aria-label="Filter by status" style="padding:6px 28px 6px 10px;font-size:12px">
-            <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="6"><option value="{{o.value}}">{{o.label}}</option></sc-for>
-          </select>
-        </label>
-        <span style="flex-grow:1;min-width:8px"></span>
-        <div style="display:inline-flex;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden">
-          <button type="button" onClick="{{expandAll}}" style="{{expandStyle}}border:0;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Expand all</button>
-          <button type="button" onClick="{{collapseAll}}" style="{{collapseStyle}}border:0;border-left:1px solid var(--border-strong);padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Collapse all</button>
-        </div>
-        <div style="display:inline-flex;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden">
-          <button type="button" onClick="{{setComfortable}}" style="{{densComfy}}border:0;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Comfortable</button>
-          <button type="button" onClick="{{setCompact}}" style="{{densCompact}}border:0;border-left:1px solid var(--border-strong);padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer">Compact</button>
-        </div>
-      </div>
-    </div>
-
-    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
       <aside style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:16px;background:var(--surface-elevated);padding:10px;max-height:640px;overflow:auto" aria-label="Feature navigator">
         <button type="button" class="navitem {{allOn}}" onClick="{{pickAll}}">
           <span class="dot" style="background:var(--accent);width:8px;height:8px"></span>
@@ -509,25 +497,25 @@
         </sc-for>
       </aside>
 
-      <div style="flex:999 1 500px;min-width:0;display:flex;flex-direction:column;gap:10px">
+      <div class="exp-tree" style="flex:999 1 500px;min-width:0;display:flex;flex-direction:column;gap:10px"><div id="filt-sentinel" aria-hidden="true" style="height:0"></div>
         <sc-if value="{{noResults}}" hint-placeholder-val="{{false}}">
-          <div style="border:1px dashed var(--border-strong);border-radius:16px;padding:32px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px"><span style="color:var(--text-subtle);font-size:13px">No features, phases or tasks match the current search and filters.</span><button type="button" class="btn btn-sm" onClick="{{clearFilters}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Clear all filters</button></div>
+          <div style="border:1px dashed var(--border-strong);border-radius:16px;padding:32px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px"><span style="color:var(--text-subtle);font-size:13px">No features, phases or tasks match the current search and filters.</span><button type="button" class="btn btn-sm" onClick="{{clearFilters}}"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg>Clear all filters</button></div>
         </sc-if>
 
         <sc-for list="{{features}}" as="f" hint-placeholder-count="2">
           <div style="display:flex;flex-direction:column;gap:8px">
             <div class="trow" style="padding:11px 14px;gap:10px;align-items:flex-start;flex-wrap:wrap">
-              <button type="button" class="iconbtn" onClick="{{f.toggle}}" aria-label="Toggle feature" aria-expanded="{{f.open}}" style="transform:{{f.caret}}"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+              <button type="button" class="iconbtn" onClick="{{f.toggle}}" aria-label="Toggle feature" aria-expanded="{{f.open}}" style="transform:{{f.caret}}"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
               <span style="width:4px;align-self:stretch;border-radius:9999px;background:var(--feature);min-height:24px"></span>
               <span class="ent" style="background:rgba(139,92,246,0.14);color:var(--feature);margin-top:1px">FEATURE</span>
               <span style="display:inline-flex;align-items:center;gap:3px;flex-shrink:0;margin-top:1px">
                 <button type="button" class="seg" onClick="{{f.nav}}" aria-label="Open feature {{f.id}}">{{f.id}}</button>
-                <button type="button" class="copyid" onClick="{{f.copy}}" aria-label="Copy {{f.id}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                <button type="button" class="copyid" onClick="{{f.copy}}" aria-label="Copy {{f.id}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
                 <button type="button" class="shortid" onClick="{{f.copyShort}}" aria-label="Copy short id {{f.short}}">{{f.short}}</button>
               </span>
               <span style="flex:1 1 180px;min-width:0;font-size:14px;font-weight:600;line-height:1.35" class="ttl2">{{f.title}}</span>
               <label style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0;margin-top:1px" title="Filter this feature's phases">
-                <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8z"/></svg>
+                <svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--text-subtle)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8z"></path></svg>
                 <select class="selmini" value="{{f.filter}}" onChange="{{f.setFilter}}" aria-label="Filter phases in {{f.id}}"><option value="all">All phases</option><option value="in-progress">In progress</option><option value="planned">Planned</option><option value="paused">Paused</option><option value="blocked">Blocked</option><option value="done">Done</option></select>
               </label>
               <div class="meter" style="width:90px;margin-top:6px"><div style="width:{{f.pct}}%;height:100%;background:var(--feature)"></div></div>
@@ -539,16 +527,17 @@
               <sc-for list="{{f.phases}}" as="p" hint-placeholder-count="2">
                 <div style="display:flex;flex-direction:column;gap:6px">
                   <div class="trow" style="padding:9px 12px;gap:10px;align-items:flex-start;flex-wrap:wrap">
-                    <button type="button" class="iconbtn" onClick="{{p.toggle}}" aria-label="Toggle phase" aria-expanded="{{p.open}}" style="transform:{{p.caret}};width:22px;height:22px"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+                    <button type="button" class="iconbtn" onClick="{{p.toggle}}" aria-label="Toggle phase" aria-expanded="{{p.open}}" style="transform:{{p.caret}};width:22px;height:22px"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
                     <span style="width:4px;align-self:stretch;border-radius:9999px;background:var(--phase);min-height:20px"></span>
                     <span class="ent" style="background:rgba(6,182,212,0.14);color:var(--phase-ink);margin-top:1px">PHASE</span>
                     <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px">
                       <button type="button" class="seg" onClick="{{p.navFeat}}" aria-label="Open feature {{f.id}}">{{f.id}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{p.nav}}" aria-label="Open phase {{p.idfull}}">{{p.id}}</button>
-                      <button type="button" class="copyid" onClick="{{p.copy}}" aria-label="Copy {{p.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                      <button type="button" class="copyid" onClick="{{p.copy}}" aria-label="Copy {{p.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
                       <button type="button" class="shortid" onClick="{{p.copyShort}}" aria-label="Copy short id {{p.short}}">{{p.short}}</button>
                     </span>
                     <span style="flex:1 1 160px;min-width:0;font-size:13px;font-weight:600;line-height:1.35" class="ttl2">{{p.title}}</span>
                     <select class="selmini" style="margin-top:1px" value="{{p.filter}}" onChange="{{p.setFilter}}" aria-label="Filter tasks in {{p.idfull}}"><option value="all">All tasks</option><option value="in-progress">In progress</option><option value="planned">Planned</option><option value="paused">Paused</option><option value="blocked">Blocked</option><option value="done">Done</option></select>
+                    <button type="button" class="copyid" onClick="{{p.resetFilter}}" title="Reset task filter" aria-label="Reset task filter for {{p.idfull}}" style="margin-top:3px"><svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg></button>
                     <div class="meter" style="width:72px;margin-top:6px"><div style="width:{{p.pct}}%;height:100%;background:var(--phase)"></div></div>
                     <span class="mono" style="font-size:11px;color:var(--text-subtle);margin-top:3px">{{p.ratio}}</span>
                     <span class="badge" style="background:{{p.bg}};color:{{p.color}};margin-top:1px"><span class="dot" style="background:{{p.dot}}"></span>{{p.statusLabel}}</span>
@@ -561,7 +550,7 @@
                         <span class="ent" style="background:rgba(16,185,129,0.14);color:var(--task-ink);margin-top:1px">TASK</span>
                         <span style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px">
                           <button type="button" class="seg" onClick="{{t.navFeat}}" aria-label="Open feature {{f.id}}">{{f.id}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{t.navPhase}}" aria-label="Open phase {{p.idfull}}">{{p.id}}</button><span class="idsep">/</span><button type="button" class="seg" onClick="{{t.nav}}" aria-label="Open task {{t.idfull}}">{{t.id}}</button>
-                          <button type="button" class="copyid" onClick="{{t.copy}}" aria-label="Copy {{t.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                          <button type="button" class="copyid" onClick="{{t.copy}}" aria-label="Copy {{t.idfull}}"><svg class="ico" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button>
                           <button type="button" class="shortid" onClick="{{t.copyShort}}" aria-label="Copy short id {{t.short}}">{{t.short}}</button>
                         </span>
                         <button type="button" class="{{t.titleClass}}" onClick="{{t.locate}}" style="flex:1 1 160px;min-width:0;font-size:{{t.fs}};line-height:1.4">{{t.title}}</button>
@@ -571,13 +560,13 @@
                     </sc-for>
                     <sc-if value="{{p.hasMore}}" hint-placeholder-val="{{true}}"><button type="button" onClick="{{p.toggleMore}}" style="align-self:flex-start;border:0;background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:4px 2px">{{p.moreLabel}}</button></sc-if>
                     <sc-if value="{{p.noAdd}}" hint-placeholder-val="{{true}}">
-                    <button type="button" onClick="{{p.addTask}}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--border-strong);background:transparent;color:var(--text-subtle);border-radius:11px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add task to <span class="mono" style="font-size:11px">{{p.idfull}}</span></button>
+                    <button type="button" onClick="{{p.addTask}}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--border-strong);background:transparent;color:var(--text-subtle);border-radius:11px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add task to <span class="mono" style="font-size:11px">{{p.idfull}}</span></button>
                     </sc-if>
                     <sc-if value="{{p.showAdd}}" hint-placeholder-val="{{false}}">
                     <div style="align-self:stretch;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px dashed var(--accent);background:var(--accent-soft);border-radius:11px;padding:8px 10px">
                       <span class="ent" style="background:rgba(16,185,129,0.14);color:var(--task-ink);flex-shrink:0">TASK</span>
                       <span class="mono" style="font-size:11px;color:var(--text-subtle);flex-shrink:0">{{p.idfull}}</span>
-                      <input type="text" placeholder="New task title…" aria-label="New task title for {{p.idfull}}" style="flex:1 1 180px;min-width:0;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:9px;padding:7px 10px;font-size:13px;color:var(--text);outline:0"/>
+                      <input type="text" placeholder="New task title…" aria-label="New task title for {{p.idfull}}" style="flex:1 1 180px;min-width:0;border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:9px;padding:7px 10px;font-size:13px;color:var(--text);outline:0">
                       <button type="button" class="btn btn-primary btn-sm" onClick="{{p.addConfirm}}" style="flex-shrink:0">Add</button>
                       <button type="button" class="btn btn-sm" onClick="{{p.cancelAddInline}}" style="flex-shrink:0">Cancel</button>
                     </div>
@@ -586,7 +575,7 @@
                   </sc-if>
                 </div>
               </sc-for>
-              <button type="button" onClick="{{f.addPhase}}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--border-strong);background:transparent;color:var(--text-subtle);border-radius:11px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add phase to <span class="mono" style="font-size:11px">{{f.id}}</span></button>
+              <button type="button" onClick="{{f.addPhase}}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--border-strong);background:transparent;color:var(--text-subtle);border-radius:11px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer"><svg class="ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add phase to <span class="mono" style="font-size:11px">{{f.id}}</span></button>
             </div>
             </sc-if>
           </div>
@@ -626,10 +615,28 @@
   <div role="dialog" aria-modal="true" aria-label="Project details" style="position:relative;z-index:1;width:100%;max-width:640px;max-height:84vh;background:var(--surface-elevated);border:1px solid var(--border-strong);border-radius:22px;box-shadow:var(--shadow-panel);display:flex;flex-direction:column;overflow:hidden">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 24px;border-bottom:1px solid var(--border);flex-shrink:0">
       <div style="display:flex;flex-direction:column;gap:4px"><p class="eyebrow">Project</p><h2 style="margin:0;font-size:18px;font-weight:700">Agent Plan</h2></div>
-      <button type="button" class="iconbtn" onClick="{{closeProj}}" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <sc-if value="{{projView}}" hint-placeholder-val="{{true}}">
+          <button type="button" class="btn btn-sm" onClick="{{editProj}}"><svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>Edit</button>
+        </sc-if>
+        <sc-if value="{{projEdit}}" hint-placeholder-val="{{false}}">
+          <button type="button" class="btn btn-sm" onClick="{{cancelProjEdit}}">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" onClick="{{saveProj}}"><svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Save</button>
+        </sc-if>
+        <button type="button" class="iconbtn" onClick="{{closeProj}}" aria-label="Close"><svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
     </div>
     <div style="overflow:auto;overscroll-behavior:contain;padding:18px 24px;display:flex;flex-direction:column;gap:16px">
-    <div style="font-size:13px;line-height:1.55;color:var(--text-muted)">{{projGoal}}</div>
+    <section style="display:flex;flex-direction:column;gap:7px">
+      <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)">Title</h3>
+      <sc-if value="{{projView}}" hint-placeholder-val="{{true}}"><div style="font-size:15px;font-weight:700;color:var(--text);line-height:1.35">{{projTitle}}</div></sc-if>
+      <sc-if value="{{projEdit}}" hint-placeholder-val="{{false}}"><input type="text" value="{{projTitle}}" onInput="{{onProjTitle}}" aria-label="Project title" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:14px;font-weight:600;color:var(--text);outline:0;width:100%"></sc-if>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:7px">
+      <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)">Description</h3>
+      <sc-if value="{{projView}}" hint-placeholder-val="{{true}}"><div style="font-size:13px;line-height:1.55;color:var(--text-muted)">{{projGoal}}</div></sc-if>
+      <sc-if value="{{projEdit}}" hint-placeholder-val="{{false}}"><textarea rows="4" onInput="{{onProjGoal}}" aria-label="Project description" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%;resize:vertical;font-family:inherit;line-height:1.55">{{projGoal}}</textarea></sc-if>
+    </section>
     <sc-for list="{{projSections}}" as="s" hint-placeholder-count="4">
       <section style="display:flex;flex-direction:column;gap:7px">
         <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:{{s.color}}">{{s.title}}</h3>
@@ -640,18 +647,22 @@
     </sc-for>
     <section style="display:flex;flex-direction:column;gap:7px">
       <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)">Project guidelines</h3>
-      <div style="font-size:13px;color:var(--text-muted);line-height:1.55;white-space:pre-line">{{projGuidelines}}</div>
+      <sc-if value="{{projView}}" hint-placeholder-val="{{true}}"><div style="font-size:13px;color:var(--text-muted);line-height:1.55;white-space:pre-line">{{projGuide}}</div></sc-if>
+      <sc-if value="{{projEdit}}" hint-placeholder-val="{{false}}"><textarea rows="5" onInput="{{onProjGuide}}" aria-label="Project guidelines" style="border:1px solid var(--border-strong);background:var(--surface-elevated);border-radius:11px;padding:9px 11px;font-size:13px;color:var(--text);outline:0;width:100%;resize:vertical;font-family:inherit;line-height:1.55">{{projGuide}}</textarea></sc-if>
     </section>
     <section style="display:flex;flex-direction:column;gap:7px">
       <h3 style="margin:0;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-subtle)">Accepted decisions</h3>
       <div style="display:flex;flex-direction:column;gap:6px">
-        <sc-for list="{{projDecisions}}" as="d" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--border);border-radius:11px;padding:8px 11px;background:var(--surface-strong)"><svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--done)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top:1px"><path d="M20 6 9 17l-5-5"/></svg><span style="font-size:13px;color:var(--text-muted);line-height:1.45">{{d}}</span></div></sc-for>
+        <sc-for list="{{projDecisions}}" as="d" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--border);border-radius:11px;padding:8px 11px;background:var(--surface-strong)"><svg class="ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--done)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top:1px"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size:13px;color:var(--text-muted);line-height:1.45">{{d}}</span></div></sc-for>
       </div>
     </section>
     </div>
   </div>
 </div>
 </sc-if>
+
+<!-- filters toggle: fixed to the viewport, outside the layout -->
+<button type="button" id="filt-toggle" class="exp-toggle {{filterCls}}" onClick="{{toggleFilters}}" title="Show / hide filters" aria-label="Show or hide filters" style="position:fixed;right:0;z-index:55;align-items:center;justify-content:center;width:24px;height:44px;padding:0;border:1px solid var(--border-strong);border-right:0;background:var(--surface-elevated);color:var(--text-muted);border-radius:10px 0 0 10px;cursor:pointer;box-shadow:var(--shadow-panel)"><svg class="ico ico-hide" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 17 5-5-5-5M6 17l5-5-5-5"></path></svg><svg class="ico ico-show" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8v6l-4 2v-8z"></path></svg></button>
 
 <!-- toast -->
 <sc-if value="{{showToast}}" hint-placeholder-val="{{false}}">
@@ -667,7 +678,8 @@ class Component extends DCLogic {
   constructor(props){
     super(props);
     let _narrow=false; try{_narrow=window.matchMedia('(max-width:1180px)').matches;}catch(e){}
-    this.state = { side:_narrow, tokens:[], draft:'', focus:false, status:'all', feature:'F004', expanded:{}, treeMode:'', more:{}, fFilter:{}, pFilter:{}, density:'comfortable', chartsOpen:true, win:'21', newFeatOpen:false, newOpen:false, newFeature:'F004', newPhase:'P039', projOpen:false, theme:'light', exportOpen:false, focusOpen:false, parkedOpen:false, navOpen:false, focusCollapsed:false, located:'', addInline:'', toastMsg:'', toastIcon:'✓', showToast:false };
+    const _p=this.project();
+    this.state = { side:_narrow, tokens:[], draft:'', focus:false, status:'all', feature:'F004', expanded:{}, treeMode:'', more:{}, fFilter:{}, pFilter:{}, density:'comfortable', chartsOpen:false, win:'21', newFeatOpen:false, newOpen:false, newFeature:'F004', newPhase:'P039', projOpen:false, projEdit:false, goalOpen:false, projTitle:'A durable, inspectable planning workspace for AI coding agents', projGoal:_p.goal, projGuide:_p.guidelines, theme:'light', exportOpen:false, focusOpen:false, parkedOpen:false, navOpen:false, focusCollapsed:false, located:'', addInline:'', toastMsg:'', toastIcon:'✓', showToast:false, filtersHidden:false };
   }
   meta(s){
     const m={'done':{label:'Done',color:'var(--done-ink)',bg:'rgba(34,197,94,0.14)',dot:'#22c55e'},'in-progress':{label:'In progress',color:'var(--inprog-ink)',bg:'rgba(245,158,11,0.14)',dot:'#f59e0b'},'planned':{label:'Planned',color:'var(--planned-ink)',bg:'rgba(14,165,233,0.14)',dot:'#0ea5e9'},'paused':{label:'Paused',color:'var(--paused-ink)',bg:'rgba(234,88,12,0.14)',dot:'#ea580c'},'blocked':{label:'Blocked',color:'var(--blocked-ink)',bg:'rgba(239,68,68,0.14)',dot:'#ef4444'},'draft':{label:'Draft',color:'var(--draft-ink)',bg:'rgba(148,163,184,0.16)',dot:'#94a3b8'}};
@@ -756,6 +768,17 @@ class Component extends DCLogic {
   locate(feat,ph,idfull){ const st=this.state; this.setState({ feature:feat, status:'all', tokens:[], draft:'', focusOpen:false, expanded:Object.assign({},st.expanded,{['F:'+feat]:true,['P:'+ph]:true}), located:idfull }); this.toast('Located '+idfull+' in the work tree','→'); clearTimeout(this._st); this._st=setTimeout(()=>{ try{ var el=document.getElementById('located-row')||document.getElementById('explorer'); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){ } },80); }
   buildPath(vals,maxV){ const n=vals.length; const mv=maxV||(Math.max.apply(null,vals)*1.15)||1; const x=i=> 44 + (n<=1?228:(i*(464/(n-1)))); const y=v=> 136 - (v/mv)*116; let d=''; for(let i=0;i<n;i++){ d+=(i?' L':'M')+x(i).toFixed(1)+' '+y(vals[i]).toFixed(1); } const area=d+' L'+x(n-1).toFixed(1)+' 136 L44 136 Z'; return {line:d,area:area,lastX:x(n-1).toFixed(1),lastY:y(vals[n-1]).toFixed(1)}; }
 
+  componentDidUpdate(){
+    // After a filter change, bring the first result below the sticky filter bar.
+    const st=this.state; const key=JSON.stringify([st.tokens,st.status,st.feature,st.fFilter,st.pFilter]);
+    if(this._fkey!==undefined && key!==this._fkey){ clearTimeout(this._rv); this._rv=setTimeout(()=>{ try{
+      const sen=document.getElementById('filt-sentinel'); const bar=document.querySelector('.filterbar-wrap'); if(!sen||!bar) return;
+      const delta=sen.getBoundingClientRect().top-bar.getBoundingClientRect().bottom-8; if(delta>=0) return;
+      let sc=sen.parentElement; while(sc&&sc!==document.body){ const o=getComputedStyle(sc).overflowY; if((o==='auto'||o==='scroll')&&sc.scrollHeight>sc.clientHeight+2) break; sc=sc.parentElement; }
+      (sc&&sc!==document.body?sc:window).scrollBy({top:delta,behavior:'smooth'});
+    }catch(_){ } },60); }
+    this._fkey=key;
+  }
   renderVals(){
     const st=this.state; const num=s=>parseInt(s.slice(1),10);
     const flt=this.parseFilters(); const limit = st.density==='compact'?6:4;
@@ -797,8 +820,8 @@ class Component extends DCLogic {
             titleClass:'titlelink ttl2'+((t.status==='done')?' tl-done':((t.status==='in-progress')?' tl-strong':'')),
             nav:()=>this.nav('task '+tfull),navPhase:()=>this.nav('phase '+idfull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(tfull),copyShort:()=>this.copy(t.short),locate:()=>this.locate(f.id,p.id,tfull)};
         });
-        return {raw:p,_num:num(p.id),_idHit:phaseIdHit,_titleHit:phaseTitleHit,id:p.id,short:p.short,title:p.title,idfull,open:pOpen,caret:pOpen?'rotate(90deg)':'rotate(0deg)',ratio:done+'/'+p.tasks.length,pct:(p.tasks.length?Math.round(done/p.tasks.length*100):0),filter:pFilter,statusLabel:pm.label,color:pm.color,bg:pm.bg,dot:pm.dot,tasks,_tcount:tAll.length,hasMore:hidden>0||(moreOpen&&tAll.length>limit),moreLabel:moreOpen?'Show fewer':('Show '+hidden+' more'),
-          toggle:()=>this.setState({expanded:Object.assign({},st.expanded,{['P:'+p.id]:!pOpen}),treeMode:''}),toggleMore:()=>this.setState({more:Object.assign({},st.more,{[p.id]:!moreOpen})}),setFilter:(e)=>this.setState({pFilter:Object.assign({},st.pFilter,{[p.id]:e.target.value})}),nav:()=>this.nav('phase '+idfull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(idfull),copyShort:()=>this.copy(p.short),showAdd:st.addInline===p.id,noAdd:st.addInline!==p.id,addTask:()=>this.setState({addInline:p.id}),cancelAddInline:()=>this.setState({addInline:''}),addConfirm:()=>{ this.setState({addInline:''}); this.toast('Added task to '+idfull,'✓'); }};
+        return {raw:p,_num:num(p.id),_idHit:phaseIdHit,_titleHit:phaseTitleHit,id:p.id,short:p.short,title:p.title,idfull,open:pOpen,caret:pOpen?'rotate(90deg)':'rotate(0deg)',ratio:done+'/'+p.tasks.length,pct:(p.tasks.length?Math.round(done/p.tasks.length*100):0),filter:pFilter,filterActive:pFilter!=='all',statusLabel:pm.label,color:pm.color,bg:pm.bg,dot:pm.dot,tasks,_tcount:tAll.length,hasMore:hidden>0||(moreOpen&&tAll.length>limit),moreLabel:moreOpen?'Show fewer':('Show '+hidden+' more'),
+          toggle:()=>this.setState({expanded:Object.assign({},st.expanded,{['P:'+p.id]:!pOpen}),treeMode:''}),toggleMore:()=>this.setState({more:Object.assign({},st.more,{[p.id]:!moreOpen})}),setFilter:(e)=>this.setState({pFilter:Object.assign({},st.pFilter,{[p.id]:e.target.value})}),resetFilter:()=>this.setState({pFilter:Object.assign({},st.pFilter,{[p.id]:'all'})}),nav:()=>this.nav('phase '+idfull),navFeat:()=>this.nav('feature '+f.id),copy:()=>this.copy(idfull),copyShort:()=>this.copy(p.short),showAdd:st.addInline===p.id,noAdd:st.addInline!==p.id,addTask:()=>this.setState({addInline:p.id}),cancelAddInline:()=>this.setState({addInline:''}),addConfirm:()=>{ this.setState({addInline:''}); this.toast('Added task to '+idfull,'✓'); }};
       }).filter(p=>{ if(flt.phase!=null&&p._num!==flt.phase) return false; if(fFilter!=='all'&&p.raw.status!==fFilter) return false; if(flt.pstatus&&p.raw.status!==flt.pstatus) return false;
         const narrowing=st.status!=='all'||flt.status||flt.tasks.length||flt.id||flt.titles.length; if(p.tasks.length>0) return true; if(p._idHit||p._titleHit) return true; return !narrowing&&!flt.pstatus; });
       return {obj:f,_num:num(f.id),id:f.id,short:f.short,title:f.title,pct:this.pctOf(f),open:fOpen,caret:fOpen?'rotate(90deg)':'rotate(0deg)',filter:fFilter,statusLabel:fm.label,color:fm.color,bg:fm.bg,dot:fm.dot,phases,_visible:phases.length>0||featureIdHit||featureTitleHit,
@@ -840,6 +863,18 @@ class Component extends DCLogic {
 
     const proj=this.project();
 
+    try{ clearTimeout(this._fh); this._fh=setTimeout(function(){ try{ var fh=document.querySelector('.stickyhdr'); document.documentElement.style.setProperty('--focus-h',((fh&&fh.offsetParent!==null)?fh.offsetHeight:0)+'px'); }catch(_){ } }, 30); }catch(_){ }
+
+    if(!this._fsetup){ this._fsetup=1; var cmp=this; setTimeout(function(){ try{
+      var tog=document.getElementById('filt-toggle'); var sen=document.getElementById('filt-sentinel');
+      if(!tog||!sen){ cmp._fsetup=0; return; }
+      var sc=sen.parentElement; while(sc){ var o=getComputedStyle(sc).overflowY; if((o==='auto'||o==='scroll')&&sc.scrollHeight>sc.clientHeight+2) break; sc=sc.parentElement; }
+      var scroller=sc||window;
+      var upd=function(){ try{ var r=sen.getBoundingClientRect(); var de=document.documentElement; de.classList.toggle('filt-scrolled', r.top<90); var fh=document.querySelector('.stickyhdr'); de.style.setProperty('--focus-h',((fh&&fh.offsetParent!==null)?fh.offsetHeight:0)+'px'); var bar=document.querySelector('.filterbar-wrap'); if(bar){ de.style.setProperty('--filt-top',(bar.getBoundingClientRect().top+6)+'px'); } }catch(_){ } };
+      // Capture scrolls from any container: the scroller differs between desktop (main) and mobile (window).
+      document.addEventListener('scroll', upd, {passive:true,capture:true});
+      window.addEventListener('resize', upd, {passive:true}); upd();
+    }catch(_){ } }, 80); }
     return {
       tokens: st.tokens.map((tk,i)=>({text:tk,remove:()=>{const t=st.tokens.slice(); t.splice(i,1); this.setState({tokens:t});}})),
       draft:st.draft, searchPlaceholder:(st.tokens.length||st.draft)?'':'Search… e.g. feature:4  status:in-progress  title:api',
@@ -848,9 +883,11 @@ class Component extends DCLogic {
       onFocus:()=>this.setState({focus:true}), onBlur:()=>{ clearTimeout(this._bt); this._bt=setTimeout(()=>this.setState({focus:false}),160); },
       showSug: st.focus&&suggestions.length>0, suggestions, sugHeading, searchScopeNote: scopeAll,
       statusChips, statusValue:st.status, onStatus:(e)=>this.setState({status:e.target.value}), statusOptions: chipDefs.map(a=>({value:a[0],label:a[1]+' ('+(counts[a[0]]!=null?counts[a[0]]:0)+')'})),
-      clearFilters:()=>this.setState({status:'all',tokens:[],draft:'',fFilter:{},pFilter:{}}), navMenuClass:st.navOpen?'open':'', navOpen:st.navOpen, toggleNav:()=>this.setState({navOpen:!st.navOpen}),
+      clearFilters:()=>{ this.setState({status:'all',tokens:[],draft:'',fFilter:{},pFilter:{},feature:'all'}); this.toast('Filters cleared','↺'); }, anyFilter:(st.status!=='all'||st.tokens.length>0||!!st.draft||Object.keys(st.fFilter||{}).some(k=>st.fFilter[k]&&st.fFilter[k]!=='all')||Object.keys(st.pFilter||{}).some(k=>st.pFilter[k]&&st.pFilter[k]!=='all')), filterCls:st.filtersHidden?'collapsed':'', filtersShown:!st.filtersHidden, toggleFilters:()=>this.setState({filtersHidden:!st.filtersHidden}), navMenuClass:st.navOpen?'open':'', navOpen:st.navOpen, toggleNav:()=>this.setState({navOpen:!st.navOpen}),
       expandAll:()=>{const ex=Object.assign({},st.expanded); all.forEach(f=>{ex['F:'+f.id]=true; f.phases.forEach(p=>ex['P:'+p.id]=true);}); this.setState({expanded:ex,treeMode:'expanded'});},
       collapseAll:()=>{const ex=Object.assign({},st.expanded); all.forEach(f=>{ex['F:'+f.id]=false; f.phases.forEach(p=>ex['P:'+p.id]=false);}); this.setState({expanded:ex,treeMode:'collapsed'});},
+      toggleTree:()=>{ const ex=Object.assign({},st.expanded); const we=st.treeMode!=='expanded'; all.forEach(f=>{ex['F:'+f.id]=we; f.phases.forEach(p=>ex['P:'+p.id]=we);}); this.setState({expanded:ex,treeMode:we?'expanded':'collapsed'}); },
+      treeExpanded: st.treeMode==='expanded', treeCollapsed: st.treeMode!=='expanded', treeToggleLabel:(st.treeMode==='expanded'?'Collapse all':'Expand all'),
       expandStyle: st.treeMode==='expanded'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
       collapseStyle: st.treeMode==='collapsed'?'background:var(--accent);color:#fff;':'background:transparent;color:var(--text-muted);',
       setComfortable:()=>this.setState({density:'comfortable'}), setCompact:()=>this.setState({density:'compact'}),
@@ -870,8 +907,15 @@ class Component extends DCLogic {
       newOpen:st.newOpen, toggleNew:()=>this.setState({newOpen:!st.newOpen}), newFeature:st.newFeature,newPhase:st.newPhase,newTarget:'P'+(st.newPhase||'').slice(1)+'('+(st.newFeature||'')+')',
       featureOptions:all.map(f=>({id:f.id,label:f.id+' — '+f.title})), phaseOptions:((all.find(f=>f.id===st.newFeature)||all[0]).phases).map(p=>({id:p.id,label:p.id+' — '+p.title})),
       onNewFeature:(e)=>{const id=e.target.value; const ff=all.find(x=>x.id===id); this.setState({newFeature:id,newPhase:(ff&&ff.phases[0])?ff.phases[0].id:''});}, onNewPhase:(e)=>this.setState({newPhase:e.target.value}),
-      projOpen:st.projOpen, openProj:()=>this.setState({projOpen:true}), closeProj:()=>this.setState({projOpen:false}),
-      projGoal:proj.goal, projSections:proj.sections, projGuidelines:proj.guidelines, projDecisions:proj.decisions,
+      projOpen:st.projOpen, projEdit:st.projEdit, projView:!st.projEdit,
+      openProj:()=>this.setState({projOpen:true, projEdit:false}),
+      editProj:()=>{ this._projSnap={projTitle:st.projTitle,projGoal:st.projGoal,projGuide:st.projGuide}; this.setState({projOpen:true, projEdit:true}); },
+      cancelProjEdit:()=>this.setState(Object.assign({projEdit:false}, this._projSnap||{})),
+      saveProj:()=>{ this.setState({projEdit:false}); this.toast('Project details saved','✓'); },
+      closeProj:()=>this.setState({projOpen:false, projEdit:false}),
+      onProjTitle:(e)=>this.setState({projTitle:e.target.value}), onProjGoal:(e)=>this.setState({projGoal:e.target.value}), onProjGuide:(e)=>this.setState({projGuide:e.target.value}),
+      projTitle:st.projTitle, projGoal:st.projGoal, projGuide:st.projGuide, projSections:proj.sections, projDecisions:proj.decisions,
+      goalOpen:st.goalOpen, toggleGoal:()=>this.setState({goalOpen:!st.goalOpen}), goalCaret:(st.goalOpen?'rotate(180deg)':'rotate(0deg)'),
       themeClass: st.theme==='dark'?'t-dark':'', isDark: st.theme==='dark', isLight: st.theme!=='dark', themeLabel: st.theme==='dark'?'Switch to light theme':'Switch to dark theme', toggleTheme:()=>this.setState({theme:st.theme==='dark'?'light':'dark'}),
       sideClass: st.side?'side-collapsed':'', toggleSide:()=>this.setState({side:!st.side}),
       exportOpen:st.exportOpen, toggleExport:()=>this.setState({exportOpen:!st.exportOpen}),
@@ -907,6 +951,9 @@ class Component extends DCLogic {
     return [];
   }
 }
+
+// Close the project switcher when a project is picked.
+(function(){ var rv=Component.prototype.renderVals; Component.prototype.renderVals=function(){ var v=rv.call(this)||{}; v.closeProjsw=function(e){ try{ var d=e.currentTarget.closest('details'); if(d) d.removeAttribute('open'); if(e.preventDefault) e.preventDefault(); }catch(_){ } }; return v; }; })();
 </script>
 </body>
 </html>
