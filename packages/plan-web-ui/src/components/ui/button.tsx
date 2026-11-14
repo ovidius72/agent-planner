@@ -11,14 +11,14 @@ const variantClass: Record<Variant, string> = {
   danger: "border-transparent bg-[var(--danger-soft)] text-[var(--color-status-blocked)] hover:bg-[color-mix(in_srgb,var(--danger-soft)_88%,black_12%)]",
 };
 
-export function Button({ variant = "secondary", className = "", children, shortcut, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; children: ReactNode; shortcut?: ShortcutTarget }) {
+export function Button({ variant = "secondary", className = "", children, shortcut, iconOnly = false, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; children: ReactNode; shortcut?: ShortcutTarget; /** Compact square rendering for icon-only actions; pass an aria-label. */ iconOnly?: boolean }) {
   return (
     <button
-      className={`inline-flex min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-[12px] border px-3 py-1.5 text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-11 sm:rounded-[14px] sm:px-4 sm:py-2 sm:gap-2 ${variantClass[variant]} ${className}`}
+      className={`inline-flex min-h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-[12px] border ${iconOnly ? "w-9 p-0 sm:w-11" : "px-3 py-1.5 sm:min-h-11 sm:rounded-[14px] sm:px-4 sm:py-2 sm:gap-2"} text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-60 ${variantClass[variant]} ${className}`}
       {...props}
     >
-      <span className="inline-flex items-center gap-1.5 sm:gap-2">{children}</span>
-      {shortcut ? <ShortcutHint shortcut={shortcut} /> : null}
+      {iconOnly ? children : <span className="inline-flex items-center gap-1.5 sm:gap-2">{children}</span>}
+      {shortcut && !iconOnly ? <ShortcutHint shortcut={shortcut} /> : null}
     </button>
   );
 }

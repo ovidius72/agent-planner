@@ -19,7 +19,7 @@ function RequirementCard({ requirement }: { requirement: Requirement }) {
     <Card className="overflow-hidden p-0">
       <Accordion
         defaultOpen={false}
-        title={<h2 className="min-w-0 text-lg font-black tracking-tight text-[var(--text)] [overflow-wrap:anywhere]">{requirement.title}</h2>}
+        title={requirement.title}
         count={requirement.linkedPhaseIds.length}
         subtitle={(
           <>

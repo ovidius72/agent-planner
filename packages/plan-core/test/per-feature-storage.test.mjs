@@ -1,9 +1,9 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { PlanStore, FeatureSchema, createFeatureId } from "../dist/index.js";
-import { mkdtemp, rm, writeFile, readdir, access, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, readdir, access, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // Helper: create a temp .planner via PlanStore.init, optionally seeding a
 // legacy single-file features.json with N valid features. Returns the store,
@@ -35,6 +35,27 @@ async function setup({ legacyFeatures = 0 } = {}) {
 const listJson = (planner) =>
   readdir(join(planner, "features")).catch(() => []).then((f) => f.filter((x) => x.endsWith(".json")));
 const exists = (p) => access(p).then(() => true).catch(() => false);
+
+async function seedLegacyBackup(planner, features, relativePath) {
+  const path = join(planner, relativePath);
+  const legacy = { features: features.map((feature) => ({ ...feature, description: `Stale feature ${feature.number}` })) };
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(legacy));
+  return { path, legacy };
+}
+
+async function writeDescription(store, method, featureId, description) {
+  if (method === "updateFeatures") {
+    return store.updateFeatures((document) => {
+      document.features.find((feature) => feature.id === featureId).description = description;
+      return document;
+    });
+  }
+  const document = await store.loadFeatures();
+  const feature = document.features.find((feature) => feature.id === featureId);
+  feature.description = description;
+  return method === "saveFeatures" ? store.saveFeatures(document) : store.saveFeature(feature);
+}
 
 const dirs = [];
 after(async () => {
@@ -115,6 +136,55 @@ describe("PlanStore per-feature storage", () => {
     assert.equal(await exists(join(planner, "features.json")), false, "reappeared legacy must be removed");
     assert.equal((await listJson(planner)).length, 2, "per-file count preserved");
   });
+
+  for (const backupPath of ["features.json.bak", join(".local", "backups", "features.json.bak")]) {
+    for (const method of ["updateFeatures", "saveFeatures", "saveFeature"]) {
+      test(`${method} preserves sequential feature edits with only ${backupPath} left`, async () => {
+        const { store, planner, features, root } = await setup({ legacyFeatures: 4 });
+        dirs.push(root);
+        await store.updateFeatures((document) => document);
+        const backup = await seedLegacyBackup(planner, features, backupPath);
+        assert.equal(await exists(join(planner, "features.json")), false);
+
+        await writeDescription(store, method, features[2].id, "Updated F003");
+        assert.equal((await store.loadFeatures()).features.find((feature) => feature.id === features[2].id).description, "Updated F003");
+        await writeDescription(store, method, features[3].id, "Updated F004");
+
+        const reloaded = await new PlanStore(planner).loadFeatures();
+        assert.equal(reloaded.features.find((feature) => feature.id === features[2].id).description, "Updated F003", "editing F004 must preserve the F003 update");
+        assert.equal(reloaded.features.find((feature) => feature.id === features[3].id).description, "Updated F004");
+        assert.deepEqual(JSON.parse(await readFile(backup.path, "utf-8")), backup.legacy, "the fix must leave historical backups intact");
+      });
+    }
+
+    test(`empty per-feature storage ignores orphaned ${backupPath} on read and write`, async () => {
+      const { store, planner, features, root } = await setup({ legacyFeatures: 1 });
+      dirs.push(root);
+      await store.updateFeatures((document) => document);
+      await seedLegacyBackup(planner, features, backupPath);
+      await store.saveFeatures({ features: [] });
+
+      assert.deepEqual((await new PlanStore(planner).loadFeatures()).features, [], "a legacy backup must not resurrect deleted features on read");
+      const replacement = FeatureSchema.parse({ ...features[0], id: createFeatureId(), number: 2, name: "Replacement" });
+      await store.saveFeature(replacement);
+      assert.deepEqual((await store.loadFeatures()).features.map((feature) => feature.id), [replacement.id], "a new feature write must not resurrect deleted features");
+    });
+
+    test(`migrates a corrupt but present legacy primary using ${backupPath}`, async () => {
+      const { store, planner, features, root } = await setup({ legacyFeatures: 2 });
+      dirs.push(root);
+      const backup = await seedLegacyBackup(planner, features, backupPath);
+      await writeFile(join(planner, "features.json"), "invalid json");
+
+      await store.updateFeatures((document) => document);
+
+      const reloaded = await store.loadFeatures();
+      assert.deepEqual(reloaded.features.map((feature) => feature.id), features.map((feature) => feature.id));
+      assert.deepEqual(reloaded.features.map((feature) => feature.description), backup.legacy.features.map((feature) => feature.description));
+      assert.equal(await exists(join(planner, "features.json")), false);
+      assert.equal(await exists(backup.path), true);
+    });
+  }
 
   test("fresh project (no legacy) reads empty and writes per-file", async () => {
     const { store, planner, root } = await setup({ legacyFeatures: 0 });
