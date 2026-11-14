@@ -86,14 +86,14 @@ export function IdeasRoute() {
             <article key={idea.id} className="min-w-0">
               <Accordion
                 defaultOpen={false}
-                className="surface-card mt-0 rounded-2xl"
+                className="surface-card rounded-2xl"
                 summaryClassName="hover:bg-[var(--surface-hover)]/60 focus-visible:bg-[var(--surface-hover)]/60"
                 title={(
                   <>
                     <span className="rounded-lg bg-[var(--accent-soft)] px-2 py-1 font-mono text-xs font-bold text-[var(--accent)]">I{String(idea.number).padStart(3, "0")}</span>
                     <span className="font-mono text-xs font-normal text-[var(--text-muted)]">{idea.shortId}</span>
                     {idea.promotion ? (idea.targetHref ? <Link to={idea.targetHref} className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400">Promoted to {idea.promotion.targetRef}</Link> : <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Promoted to {idea.promotion.targetRef}</span>) : null}
-                    <h2 className="break-words text-base font-bold">{idea.title}</h2>
+                    <span className="min-w-0 break-words">{idea.title}</span>
                   </>
                 )}
                 actions={(

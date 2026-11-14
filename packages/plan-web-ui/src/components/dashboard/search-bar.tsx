@@ -126,7 +126,15 @@ export function SearchBar({
         ].filter(Boolean),
       ),
     ] as string[];
-    const titles = [...new Set(phases.flatMap((p) => p.tasks.map((t) => t.title)))];
+    // The `title` field matches feature names, phase titles and task titles
+    // (see buildFeatureHay/buildPhaseHay/buildTaskHay), so suggestions must
+    // cover all three to stay consistent with result matching.
+    const titles = [
+      ...new Set([
+        ...features.map((f) => f.name),
+        ...phases.flatMap((p) => [p.title, ...p.tasks.map((t) => t.title)]),
+      ]),
+    ];
     return { featureNums, phaseNums, taskNums, shortIds, titles };
   }, [features, phases]);
 

@@ -43,6 +43,13 @@ a { color: inherit; text-decoration: none; }
   overflow-wrap: anywhere;
 }
 
+/* Accordion chevron rotation must react to the chevron's OWN <details> state.
+   A generic `.group[open] .chevron` descendant selector also matches nested
+   accordions (an open parent accordion would rotate the closed child's
+   chevron), so the child combinator binds each chevron to its own summary. */
+details.group > summary .accordion-chevron { transition: transform 150ms ease; }
+details.group[open] > summary .accordion-chevron { transform: rotate(180deg); }
+
 .surface-panel {
   background: var(--surface);
   border: 1px solid var(--border);

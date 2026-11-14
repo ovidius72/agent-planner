@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { parseSearchQuery, isSearchActive, matchTask } from "../src/lib/task-search.ts";
+import { parseSearchQuery, isSearchActive, matchTask, matchFeature, matchPhase, buildFeatureHay, buildPhaseHay, buildTaskHay } from "../src/lib/task-search.ts";
 
 function mkFeature(n, status = "planned", shortId) {
   return { id: `f${n}`, number: n, name: `Feature ${n}`, status, shortId, createdAt: "", updatedAt: "" };
@@ -109,5 +109,115 @@ describe("matchTask — union + intersection behavior", () => {
     const phase = { ...mkPhase(1), description: "Parent context mentions T003" };
     assert.ok(matchTask(f, { feature, phase, task: mkTask(3) }));
     assert.ok(!matchTask(f, { feature, phase, task: mkTask(4) }));
+  });
+});
+
+describe("matchFeature — empty features stay discoverable", () => {
+  test("feature:1 matches the feature with no phases at all", () => {
+    const f = parseSearchQuery("feature:1");
+    assert.ok(matchFeature(f, mkFeature(1)));
+  });
+  test("feature:1 does not match another feature number", () => {
+    const f = parseSearchQuery("feature:1");
+    assert.ok(!matchFeature(f, mkFeature(2)));
+  });
+  test("feature-status:planned matches by feature status", () => {
+    const f = parseSearchQuery("feature-status:planned");
+    assert.ok(matchFeature(f, mkFeature(1)));
+    assert.ok(!matchFeature(f, mkFeature(1, "done")));
+  });
+  test("bare text matches the feature's own name and description", () => {
+    const f = parseSearchQuery("brain");
+    const feature = { ...mkFeature(1), name: "Agent Brain", description: "Reliable workflow" };
+    assert.ok(matchFeature(f, feature));
+    assert.ok(!matchFeature(f, mkFeature(2)));
+  });
+  test("id:<feature shortId> matches the feature itself", () => {
+    const f = parseSearchQuery("id:UUXD1");
+    assert.ok(matchFeature(f, mkFeature(1, "planned", "UUXD1")));
+    assert.ok(!matchFeature(f, mkFeature(1, "planned", "OTHER")));
+  });
+  test("task-scoped filters never fabricate a parent match", () => {
+    const taskFilter = parseSearchQuery("task:1");
+    assert.ok(!matchFeature(taskFilter, mkFeature(1)));
+    const statusFilter = parseSearchQuery("status:done");
+    assert.ok(!matchFeature(statusFilter, mkFeature(1)));
+  });
+  test("phase:2 does not independently match a bare feature", () => {
+    const f = parseSearchQuery("phase:2");
+    assert.ok(!matchFeature(f, mkFeature(1)));
+  });
+});
+
+describe("matchPhase — empty phases stay discoverable", () => {
+  test("phase:2 matches a phase with no tasks", () => {
+    const f = parseSearchQuery("phase:2");
+    assert.ok(matchPhase(f, { feature: mkFeature(1), phase: mkPhase(2) }));
+  });
+  test("phase:2 does not match another phase number", () => {
+    const f = parseSearchQuery("phase:2");
+    assert.ok(!matchPhase(f, { feature: mkFeature(1), phase: mkPhase(3) }));
+  });
+  test("phase-status:in-progress matches by phase status", () => {
+    const f = parseSearchQuery("phase-status:in-progress");
+    assert.ok(matchPhase(f, { feature: mkFeature(1), phase: mkPhase(2, "in-progress") }));
+    assert.ok(!matchPhase(f, { feature: mkFeature(1), phase: mkPhase(2) }));
+  });
+  test("feature:1 phase:2 requires both scopes to match", () => {
+    const f = parseSearchQuery("feature:1 phase:2");
+    assert.ok(matchPhase(f, { feature: mkFeature(1), phase: mkPhase(2) }));
+    assert.ok(!matchPhase(f, { feature: mkFeature(2), phase: mkPhase(2) }));
+    assert.ok(!matchPhase(f, { feature: mkFeature(1), phase: mkPhase(3) }));
+  });
+  test("bare text matches the phase's own title and description", () => {
+    const f = parseSearchQuery("setup");
+    const phase = { ...mkPhase(2), title: "Initial setup", description: "Bootstrap the plan" };
+    assert.ok(matchPhase(f, { feature: mkFeature(1), phase }));
+    assert.ok(!matchPhase(f, { feature: mkFeature(1), phase: mkPhase(2) }));
+  });
+  test("id:<feature shortId> matches its empty phases like it matches tasks", () => {
+    const f = parseSearchQuery("id:UUXD1");
+    assert.ok(matchPhase(f, { feature: mkFeature(1, "planned", "UUXD1"), phase: mkPhase(2) }));
+    assert.ok(!matchPhase(f, { feature: mkFeature(1, "planned", "OTHER"), phase: mkPhase(2) }));
+  });
+  test("task-scoped filters never fabricate a parent match", () => {
+    const taskFilter = parseSearchQuery("task:1");
+    assert.ok(!matchPhase(taskFilter, { feature: mkFeature(1), phase: mkPhase(2) }));
+    const statusFilter = parseSearchQuery("status:done");
+    assert.ok(!matchPhase(statusFilter, { feature: mkFeature(1), phase: mkPhase(2) }));
+  });
+});
+
+describe("haystacks — composed entity hays keep task matching unchanged", () => {
+  test("buildTaskHay still contains parent phase and feature metadata", () => {
+    const hay = buildTaskHay({
+      feature: mkFeature(1, "planned", "FFEA1"),
+      phase: mkPhase(2, "planned", "PPHA2"),
+      task: mkTask(3, "planned", "TTAS3", "user auth flow"),
+    });
+    assert.ok(hay.includes("user auth flow"));
+    assert.ok(hay.includes("phase 2"));
+    assert.ok(hay.includes("feature 1"));
+    assert.ok(hay.includes("t003"));
+    assert.ok(hay.includes("p002"));
+    assert.ok(hay.includes("f001"));
+    assert.ok(hay.includes("ffea1"));
+  });
+  test("buildFeatureHay/buildPhaseHay produce the entity-only subsets", () => {
+    const feature = { ...mkFeature(1, "planned", "FFE"), description: "auth domain" };
+    const featureHay = buildFeatureHay(feature);
+    assert.ok(featureHay.includes("feature 1"));
+    assert.ok(featureHay.includes("f001"));
+    assert.ok(featureHay.includes("auth domain"));
+    assert.ok(!featureHay.includes("p002"));
+    const phaseHay = buildPhaseHay(mkPhase(2));
+    assert.ok(phaseHay.includes("phase 2"));
+    assert.ok(phaseHay.includes("p002"));
+    assert.ok(!phaseHay.includes("feature 1"));
+  });
+  test("buildTaskHay equals the composed task, phase and feature hays", () => {
+    const ctx = { feature: mkFeature(1), phase: mkPhase(2), task: mkTask(3) };
+    const taskPart = [ctx.task.title, ctx.task.shortName ?? "", ctx.task.shortId ?? "", String(ctx.task.number), `T${String(ctx.task.number).padStart(3, "0")}`, ctx.task.description ?? "", ctx.task.notes ?? ""].join(" ");
+    assert.equal(buildTaskHay(ctx), [taskPart, buildPhaseHay(ctx.phase), buildFeatureHay(ctx.feature)].join(" ").toLowerCase());
   });
 });
