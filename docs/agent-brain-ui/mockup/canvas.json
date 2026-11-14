@@ -1,0 +1,177 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Agents.dc.html": {
+      "expand": "fill",
+      "h": 960,
+      "is_interactive": true,
+      "title": "Agents & targets",
+      "w": 1320,
+      "x": 2880,
+      "y": 0
+    },
+    "Analytics.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "is_interactive": true,
+      "title": "Analytics — flow & backlog",
+      "w": 1320,
+      "x": 12960,
+      "y": 0
+    },
+    "Checks.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "is_interactive": true,
+      "title": "Checks — trust signals",
+      "w": 1320,
+      "x": 8640,
+      "y": 0
+    },
+    "Code.dc.html": {
+      "expand": "fill",
+      "h": 860,
+      "is_interactive": true,
+      "title": "Code — editor & context",
+      "w": 1320,
+      "x": 7200,
+      "y": 0
+    },
+    "Components.dc.html": {
+      "expand": "fill",
+      "h": 1720,
+      "is_interactive": true,
+      "title": "Components — UI kit",
+      "w": 1320,
+      "x": -1560,
+      "y": 0
+    },
+    "Evaluate.dc.html": {
+      "expand": "fill",
+      "h": 1040,
+      "is_interactive": true,
+      "title": "To evaluate — proposals",
+      "w": 1320,
+      "x": 11520,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 2220,
+      "is_interactive": true,
+      "title": "Planner — dashboard",
+      "w": 1320,
+      "x": 0,
+      "y": 0
+    },
+    "Map.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "title": "Map — relations",
+      "w": 1320,
+      "x": 5760,
+      "y": 0
+    },
+    "README.dc.html": {
+      "expand": "fill",
+      "h": 1680,
+      "is_interactive": true,
+      "title": "Read me first",
+      "w": 1320,
+      "x": -3120,
+      "y": 0
+    },
+    "Resume.dc.html": {
+      "expand": "fill",
+      "h": 920,
+      "is_interactive": true,
+      "title": "Resume — orientation",
+      "w": 1320,
+      "x": 1440,
+      "y": 0
+    },
+    "RoomChat.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "is_interactive": true,
+      "title": "Room chat & members",
+      "w": 1320,
+      "x": 1440,
+      "y": 2700
+    },
+    "Rooms.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "title": "Rooms — Heca-linked",
+      "w": 1320,
+      "x": 0,
+      "y": 2700
+    },
+    "Settings.dc.html": {
+      "expand": "fill",
+      "h": 1480,
+      "is_interactive": true,
+      "title": "Settings",
+      "w": 1320,
+      "x": 10080,
+      "y": 0
+    },
+    "TaskDetail.dc.html": {
+      "expand": "fill",
+      "h": 1040,
+      "is_interactive": true,
+      "title": "Task detail",
+      "w": 1320,
+      "x": 4320,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-21T18:45:00Z",
+    "v": 1
+  },
+  "designSystems": [
+    {
+      "artifact": "https://claude.ai/artifact/6eZ1SzyYPABFynHxak9SKp",
+      "copiedAt": "2026-10-21T18:45:00Z",
+      "namespace": "agent-plan",
+      "title": "Agent Plan",
+      "version": "1792608146-8766"
+    }
+  ],
+  "launch": {
+    "file": "Main.dc.html",
+    "view": "focused"
+  },
+  "notes": {
+    "roomsTitle": {
+      "kind": "title1",
+      "maxW": 2760,
+      "text": "Rooms & chat — Heca integration (proposal)",
+      "w": 240,
+      "x": 0,
+      "y": 2420
+    }
+  },
+  "order": [
+    "README.dc.html",
+    "Components.dc.html",
+    "Main.dc.html",
+    "Resume.dc.html",
+    "Agents.dc.html",
+    "TaskDetail.dc.html",
+    "Map.dc.html",
+    "Code.dc.html",
+    "Checks.dc.html",
+    "Analytics.dc.html",
+    "Settings.dc.html",
+    "Evaluate.dc.html",
+    "Rooms.dc.html",
+    "RoomChat.dc.html"
+  ],
+  "pages": [],
+  "title": "Agent Plan — Dashboard"
+}
