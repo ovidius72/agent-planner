@@ -86,7 +86,7 @@
         <thead><tr><th>Area</th><th>Screen</th><th>Purpose</th></tr></thead>
         <tbody>
           <tr><td rowspan="4"><b>Work</b></td><td><b>Resume</b></td><td>Orientation on return: suggested next, what changed, resume command.</td></tr>
-          <tr><td><b>Planner</b></td><td>The dashboard: features → phases → tasks, faceted search, analytics, focus card. Sub-items: Requirements, Ideas, Handoff.</td></tr>
+          <tr><td><b>Planner</b></td><td>The dashboard: features → phases → tasks, faceted search, analytics, focus card. Sub-items: Requirements, Ideas, Handoff, Rooms (Heca-linked rooms and their group chat).</td></tr>
           <tr><td><b>Agents &amp; targets</b></td><td>Who is working, where, with what result — work status and integration status kept separate.</td></tr>
           <tr><td><b>Task detail</b></td><td>One task: context, executions, code anchors, draft/saved/history.</td></tr>
           <tr><td rowspan="3"><b>Context</b></td><td><b>Map</b></td><td>Relations between plan and code; verified vs uncertain.</td></tr>
@@ -162,6 +162,7 @@
   </div>
 </div>
 
+</x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1320,"height":1680}}'>
 class Component extends DCLogic {
   constructor(props){ super(props); this.state={ theme:'dark' }; }
