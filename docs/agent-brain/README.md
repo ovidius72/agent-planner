@@ -34,7 +34,7 @@ Each server owns its API schema; the communication contract connects those schem
 2. Implement identity, SQLite and the complete command API before converting clients or migrating real data (P116, P128).
 3. Deliver migration, recovery and export/import for the first usable database-backed release (P130).
 4. Connect Heca: planner reads, room snapshots and room chat (P131).
-5. Continue with priorities, context, executions and code intelligence in the order of the [execution map](../../.planner/docs/agent-brain-plan.md).
+5. Continue with priorities, context, executions, code intelligence and the P132 project-use improvements in the order of the [execution map](../../.planner/docs/agent-brain-plan.md).
 6. Close with compatibility, real-host and freshly installed artifact evidence (P124).
 
 No product code, real database migration, running service, commit, push or release has been created by this design work.
