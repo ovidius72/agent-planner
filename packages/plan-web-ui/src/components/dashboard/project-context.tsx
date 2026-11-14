@@ -1,4 +1,4 @@
-import { Card } from "../ui/card";
+import { Accordion } from "../ui/accordion";
 import { AcceptedDecisionsList } from "../ui/accepted-decisions-list";
 import { FormattedText } from "../ui/formatted-text";
 import type { Project } from "../../lib/types";
@@ -34,35 +34,31 @@ export function ProjectContext({ project }: { project: Project }) {
   if (!hasContext) return null;
 
   return (
-    <Card className="grid gap-4">
-      <details className="group">
-        <summary className="cursor-pointer select-none text-lg font-bold text-[var(--text)]">
-          Project Context
-        </summary>
-        <div className="mt-4 grid gap-4">
-          <ListSection title="In scope" items={project.scope} />
-          <ListSection title="Out of scope" items={project.outOfScope} />
-          {(project.technologies.length > 0 || project.tools.length > 0) ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <ListSection title="Technologies" items={project.technologies} />
-              <ListSection title="Tools" items={project.tools} />
-            </div>
-          ) : null}
-          {guidelines ? (
-            <section>
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">Project Guidelines</h3>
-              <div className="mt-2 text-sm text-[var(--text-muted)]"><FormattedText text={guidelines} /></div>
-            </section>
-          ) : null}
-          <AcceptedDecisionsList decisions={project.acceptedDecisions} targetType="project" />
-          {legacyCount > 0 ? (
-            <aside className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-muted)]" aria-label="Legacy project context">
-              <span className="font-semibold text-[var(--text)]">Legacy project context remains.</span>{" "}
-              {legacyCount} legacy rule or decision {legacyCount === 1 ? "entry will" : "entries will"} migrate automatically on the next explicit planner load.
-            </aside>
-          ) : null}
+    <Accordion
+      title="Project Context"
+      contentClassName="grid gap-4"
+    >
+      <ListSection title="In scope" items={project.scope} />
+      <ListSection title="Out of scope" items={project.outOfScope} />
+      {(project.technologies.length > 0 || project.tools.length > 0) ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <ListSection title="Technologies" items={project.technologies} />
+          <ListSection title="Tools" items={project.tools} />
         </div>
-      </details>
-    </Card>
+      ) : null}
+      {guidelines ? (
+        <section>
+          <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--text-subtle)]">Project Guidelines</h3>
+          <div className="mt-2 text-sm text-[var(--text-muted)]"><FormattedText text={guidelines} /></div>
+        </section>
+      ) : null}
+      <AcceptedDecisionsList decisions={project.acceptedDecisions} targetType="project" />
+      {legacyCount > 0 ? (
+        <aside className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--text-muted)]" aria-label="Legacy project context">
+          <span className="font-semibold text-[var(--text)]">Legacy project context remains.</span>{" "}
+          {legacyCount} legacy rule or decision {legacyCount === 1 ? "entry will" : "entries will"} migrate automatically on the next explicit planner load.
+        </aside>
+      ) : null}
+    </Accordion>
   );
 }

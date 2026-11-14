@@ -37,7 +37,7 @@ export function FeatureEditModalRoute() {
           </Select>
         </Field>
         <Field label="Priority"><Input type="number" name="priority" defaultValue={feature.priority ?? 0} min={0} /></Field>
-        <Accordion title="Planning notes" subtitle="Optional agent-maintained notes for progress tracking." defaultOpen={false} className="mt-0">
+        <Accordion title="Planning notes" subtitle="Optional agent-maintained notes for progress tracking." defaultOpen={false}>
           <div className="grid gap-4">
             <Field label="Work done"><Textarea name="workDone" defaultValue={feature.workDone} /></Field>
             <Field label="Work remaining"><Textarea name="workRemaining" defaultValue={feature.workRemaining} /></Field>
