@@ -48,11 +48,28 @@
       "priority": 1,
       "shortName": "reproduce-the-reliability-fail",
       "title": "Reproduce the reliability failures on isolated fixtures",
-      "status": "planned",
-      "description": "Outcome: Reproducible baseline fixtures for the six reported failures and the new storage boundary.\n\nCurrent implementation: Handoffs, rules, claims, read tracking and recommendation already exist. Reports identify unreliable behavior; previous fixture reports do not certify this checkout.\n\nImplementation responsibility:\n- Build isolated old-format fixtures for several handoffs, repeated resume reads, ignored conventions, nested detours, current-phase priority bias and duplicate capability creation.\n- Capture real core/MCP/Pi/server outputs and exact revisions, including same-task races, source workspace inference and failed/incomplete replies.\n- Record bytes, characters, tool calls and model tokens where available; define comparable small/large-plan and no-op fixtures for later regression.\n- Add the descriptor-missing/incompatible, missing-HOME and per-project-server assumptions to the migration baseline without changing real data.\n\nAcceptance and evidence:\n- Each reported case has a reproducible input and an observable expected correction; uncertain causes stay explicit.\n- Fixtures use mkdtemp and stop owned processes; no real project is migrated or dashboard auto-started.\n- Measurements distinguish product scenarios from synthetic SQL primitives.\n\nCurrent source navigation:\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/on-hold.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/refs.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/project-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/task-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
-      "descriptionUpdatedAt": "2026-10-29T21:02:41.562Z",
-      "notes": "",
-      "statusLog": [],
+      "status": "done",
+      "description": "Outcome: Reproducible baseline fixtures for the six reported failures and the new storage boundary.\n\nCurrent implementation: Handoffs, rules, claims, read tracking and recommendation already exist. Reports identify unreliable behavior; previous fixture reports do not certify this checkout.\n\nImplementation responsibility:\n- Build isolated old-format fixtures for several handoffs, repeated resume reads, ignored conventions, nested detours, current-phase priority bias and duplicate capability creation.\n- Capture real core/MCP/Pi/server outputs and exact revisions, including same-task races, source workspace inference and failed/incomplete replies.\n- Record bytes, characters, tool calls and model tokens where available; define comparable small/large-plan and no-op fixtures for later regression.\n- Add the descriptor-missing/incompatible, missing-HOME and per-project-server assumptions to the migration baseline without changing real data.\n\nAcceptance and evidence:\n- Each reported case has a reproducible input and an observable expected correction; uncertain causes stay explicit.\n- Fixtures use mkdtemp and stop owned processes; no real project is migrated or dashboard auto-started.\n- Measurements distinguish product scenarios from synthetic SQL primitives.\n\nCurrent source navigation:\n- packages/plan-core/src/task-selection.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/on-hold.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/refs.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/project-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/task-context.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\n---\n**Completion summary:**\nShipped: reproducible baseline for the six reported reliability failures and the migration storage boundary, in four runnable suites (26 tests, all green) plus a checked-in measurement snapshot. Core (packages/plan-core/test/agent-brain-baseline.test.mjs, 16 tests): several handoffs surface as unranked competing claims with old-format phase-file read-back; repeated resume reads (fresh session needs task+phase+feature, unrelated writes stale persisted attestations); ignored conventions (unread guidelines never gate an eligible start; customized planner skill preserved, never reconciled); nested detours resolve LIFO one level at a time with standardized resume proposals; current-phase priority bias (currentPhaseId overrides global priority with no session-ownership check — AB-IMP-007; higher-priority empty phase silently skipped with no planning claim — AB-IMP-008); duplicate capability creation (managed skills idempotent, legacy copies adopted); same-task claim race between two PlanStore instances; failed/incomplete reply paths; migration boundary (descriptor missing = workspace undetectable, schemaVersion 999 rejected, legacy features.json migrates). MCP (packages/plan-mcp/test/agent-brain-baseline-mcp.test.mjs, 4 tests, real published server over stdio): same-task race between two sessions (one started=true, loser denied); readable failures for unknown task/phase and defined reply for incomplete args; source workspace inference captured live (AGENT_PLAN_ROOT unset -> cwd/.planner); scripted resume scenario measured at 6 tool calls, 1723 text bytes, 6699 structured bytes (~4x duplication) plus the REQUIREMENTS_READ_REQUIRED extra read per start. Server (packages/plan-server/test/agent-brain-baseline-server.test.mjs, 4 tests, real HTTP): per-project server isolation; same-task start race through POST /tasks/:id/start (one 200, one refusal 400, exactly one active owner); shaped failures for unknown entity and invalid write; missing-HOME evidence (empty HOME yields empty homedir() without throwing — user-scope installs must fail explicitly). Measurements (packages/plan-core/test/agent-brain-baseline-measurements.test.mjs + docs/agent-brain/baseline/measurements.json): no-op/small/large product scenarios (0/27/632 entities) — recommendation reply is size-bounded (1560 bytes at both 27 and 632 entities, claims capped at 8) while the full recommendation object grows (4566 -> 10341 bytes); model tokens recorded null as an explicit open boundary. Full narrative with expected corrections, uncertain causes and unverified boundaries: docs/agent-brain/baseline/README.md. Verification: all four suites green locally (26/26); no real project touched, mkdtemp isolation, owned processes stopped, no dashboard started. Exact revisions: feat/agent-brain @ 59f9028059e3b6206dd2545ec405f6fdc8d139e1, core/mcp/server 0.4.11. Remaining: none (Pi-adapter-level capture and model-token accounting stay model-visible, recorded as unverified boundaries).",
+      "descriptionUpdatedAt": "2026-11-15T06:53:52.794Z",
+      "notes": "Post-completion environment repair (2026-11-15, user-verified gap): pnpm-workspace.yaml was left malformed by another session (duplicated packages/agent-brain-web-ui entries plus a corrupted line; the referenced package directory does not exist), which broke pnpm run dev while T461 was already marked done. Repair: restored the file to its valid original form (packages/* only). Verification after repair: pnpm run dev healthy in background — plan-server listening on http://127.0.0.1:3090 (plan root /Users/antonio/projects/agent-plan/.planner), Vite dev on http://localhost:5175 proxying to it; curl checks returned 200 on the Vite root and a real project payload from /api/v1/project. The 26 baseline tests remain green. Process correction recorded: before declaring a task done, sanity-check the workspace environment (workspace YAML, install, build), not only the task's own tests.",
+      "statusLog": [
+        {
+          "id": "7bc5b416-a384-4604-ac08-e397c7014de8",
+          "date": "2026-11-14T13:42:26.473Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-002-in-progress-done",
+          "date": "2026-11-15T06:53:52.792Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: reproducible baseline for the six reported reliability failures and the migration storage boundary, in four runnable suites (26 tests, all green) plus a checked-in measurement snapshot. Core (packages/plan-core/test/agent-brain-baseline.test.mjs, 16 tests): several handoffs surface as unranked competing claims with old-format phase-file read-back; repeated resume reads (fresh session needs task+phase+feature, unrelated writes stale persisted attestations); ignored conventions (unread guidelines never gate an eligible start; customized planner skill preserved, never reconciled); nested detours resolve LIFO one level at a time with standardized resume proposals; current-phase priority bias (currentPhaseId overrides global priority with no session-ownership check — AB-IMP-007; higher-priority empty phase silently skipped with no planning claim — AB-IMP-008); duplicate capability creation (managed skills idempotent, legacy copies adopted); same-task claim race between two PlanStore instances; failed/incomplete reply paths; migration boundary (descriptor missing = workspace undetectable, schemaVersion 999 rejected, legacy features.json migrates). MCP (packages/plan-mcp/test/agent-brain-baseline-mcp.test.mjs, 4 tests, real published server over stdio): same-task race between two sessions (one started=true, loser denied); readable failures for unknown task/phase and defined reply for incomplete args; source workspace inference captured live (AGENT_PLAN_ROOT unset -> cwd/.planner); scripted resume scenario measured at 6 tool calls, 1723 text bytes, 6699 structured bytes (~4x duplication) plus the REQUIREMENTS_READ_REQUIRED extra read per start. Server (packages/plan-server/test/agent-brain-baseline-server.test.mjs, 4 tests, real HTTP): per-project server isolation; same-task start race through POST /tasks/:id/start (one 200, one refusal 400, exactly one active owner); shaped failures for unknown entity and invalid write; missing-HOME evidence (empty HOME yields empty homedir() without throwing — user-scope installs must fail explicitly). Measurements (packages/plan-core/test/agent-brain-baseline-measurements.test.mjs + docs/agent-brain/baseline/measurements.json): no-op/small/large product scenarios (0/27/632 entities) — recommendation reply is size-bounded (1560 bytes at both 27 and 632 entities, claims capped at 8) while the full recommendation object grows (4566 -> 10341 bytes); model tokens recorded null as an explicit open boundary. Full narrative with expected corrections, uncertain causes and unverified boundaries: docs/agent-brain/baseline/README.md. Verification: all four suites green locally (26/26); no real project touched, mkdtemp isolation, owned processes stopped, no dashboard started. Exact revisions: feat/agent-brain @ 59f9028059e3b6206dd2545ec405f6fdc8d139e1, core/mcp/server 0.4.11. Remaining: none (Pi-adapter-level capture and model-token accounting stay model-visible, recorded as unverified boundaries)."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -60,42 +77,47 @@
           "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-001-build-isolated-old-format-fixtures-for-several-handoffs-repeated-resume-reads-ignored-conventions-nested-detours-current-phase-priority-bias-and-duplicate-capability-creation",
           "number": 1,
           "title": "Build isolated old-format fixtures for several handoffs, repeated resume reads, ignored conventions, nested detours, current-phase priority bias and duplicate capability creation.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-002-capture-real-core-mcp-pi-server-outputs-and-exact-revisions-including-same-task-races-source-workspace-inference-and-failed-incomplete-replies",
           "number": 2,
           "title": "Capture real core/MCP/Pi/server outputs and exact revisions, including same-task races, source workspace inference and failed/incomplete replies.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-003-record-bytes-characters-tool-calls-and-model-tokens-where-available-define-comparable-small-large-plan-and-no-op-fixtures-for-later-regression",
           "number": 3,
           "title": "Record bytes, characters, tool calls and model tokens where available; define comparable small/large-plan and no-op fixtures for later regression.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-004-add-the-descriptor-missing-incompatible-missing-home-and-per-project-server-assumptions-to-the-migration-baseline-without-changing-real-data",
           "number": 4,
           "title": "Add the descriptor-missing/incompatible, missing-HOME and per-project-server assumptions to the migration baseline without changing real data.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "446c443d-97d5-487d-a997-7fbacf0fd972-check-005-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 5,
           "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
       "dependsOn": [],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-14T13:42:26.473Z",
+      "completedAt": "2026-11-15T06:53:52.792Z",
       "createdAt": "2026-10-20T16:40:50.376Z",
-      "updatedAt": "2026-10-29T21:02:41.559Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-15T06:59:07.929Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:89d6a9b3-20d5-456a-b44c-8a5551ca5c44",
+          "createdAt": "2026-11-14T13:42:26.336Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -160,7 +182,7 @@
     }
   ],
   "createdAt": "2026-10-20T16:39:44.379Z",
-  "updatedAt": "2026-10-30T08:26:57.290Z",
+  "updatedAt": "2026-11-15T06:59:07.929Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -174,7 +196,20 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "88157700-2709-4e45-aad8-2d73e6d3e535",
+      "date": "2026-11-14T13:42:26.542Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:89d6a9b3-20d5-456a-b44c-8a5551ca5c44",
+      "createdAt": "2026-11-14T13:42:26.336Z"
+    }
+  ]
 }

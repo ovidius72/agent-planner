@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-14T00:00:00.000Z",
+  "checkout": "feat/agent-brain @ 59f9028059e3b6206dd2545ec405f6fdc8d139e1",
+  "packageVersions": { "@agent-plan/core": "0.4.11", "@agent-plan/mcp": "0.4.11", "@agent-plan/server": "0.4.11" },
+  "scope": "product-scenario",
+  "methodology": "Real PlanStore fixtures (mkdtemp) and real reply builders; real MCP server over stdio; real HTTP server on a dynamic port. Nothing measures a database or SQL primitive: every number below is produced by a product scenario. Model tokens are not observable at these layers and stay null.",
+  "coreMeasurements": {
+    "runner": "packages/plan-core/test/agent-brain-baseline-measurements.test.mjs",
+    "measurements": [
+      {
+        "scenario": "no-op",
+        "entityCount": 0,
+        "recommendationBytes": 291,
+        "recommendationReplyBytes": 586,
+        "recommendationReplyTextChars": 144,
+        "recommendationStructuredChars": 413,
+        "selectionKind": "none",
+        "claimCount": 1,
+        "onHoldCount": 0,
+        "modelTokens": null
+      },
+      {
+        "scenario": "small",
+        "entityCount": 27,
+        "recommendationBytes": 4566,
+        "recommendationReplyBytes": 1560,
+        "recommendationReplyTextChars": 256,
+        "recommendationStructuredChars": 1272,
+        "selectionKind": "priority",
+        "claimCount": 1,
+        "onHoldCount": 0,
+        "modelTokens": null
+      },
+      {
+        "scenario": "large",
+        "entityCount": 632,
+        "recommendationBytes": 10341,
+        "recommendationReplyBytes": 1560,
+        "recommendationReplyTextChars": 256,
+        "recommendationStructuredChars": 1272,
+        "selectionKind": "priority",
+        "claimCount": 1,
+        "onHoldCount": 0,
+        "modelTokens": null
+      }
+    ],
+    "finding": "The recommendation REPLY is size-bounded and independent of plan scale (1560 bytes at 27 and at 632 entities, claim list capped at 8); the full recommendation OBJECT grows with plan size (4566 -> 10341 bytes). The reported diagnostic cost lives in what adapters emit around the bounded core, not in the bounded core itself."
+  },
+  "mcpScenario": {
+    "runner": "packages/plan-mcp/test/agent-brain-baseline-mcp.test.mjs",
+    "fixture": "minimal seed (F001/P001/T001)",
+    "toolCalls": 6,
+    "totalTextBytes": 1723,
+    "totalStructuredBytes": 6699,
+    "steps": [
+      { "tool": "planner-task-recommend", "isError": false, "textBytes": 265, "structuredBytes": 1571 },
+      { "tool": "planner-task-show", "isError": false, "textBytes": 415, "structuredBytes": 1197 },
+      { "tool": "planner-phase-show", "isError": false, "textBytes": 199, "structuredBytes": 779 },
+      { "tool": "planner-feature-show", "isError": false, "textBytes": 118, "structuredBytes": 254 },
+      { "tool": "planner-task-start", "isError": true, "textBytes": 461, "structuredBytes": 1327 },
+      { "tool": "planner-task-recommend", "isError": false, "textBytes": 265, "structuredBytes": 1571 }
+    ],
+    "finding": "A start attempted after task/phase/feature reads still fails with REQUIREMENTS_READ_REQUIRED (the linked-requirements read was not part of the scripted reads) — the start gate costs one extra tool call per task, a concrete repeated-read contributor. Text-to-structured duplication is roughly 4x (6699 structured bytes vs 1723 text bytes for the same six calls)."
+  }
+}
