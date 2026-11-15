@@ -3,7 +3,12 @@
  *
  * Starts, in order:
  *   1. plan-server (agent-plan's own .planner) on a dedicated port
- *   2. Vite dev server (port 5175) with HMR, proxying /api and /ws to (1)
+ *   2. Vite dev server with HMR, proxying /api and /ws to (1)
+ *
+ * Port policy: the preferred ports (3090 backend, 5175 UI) are used when
+ * free; when one is occupied the harness falls back to a random free port
+ * instead of failing with EADDRINUSE, so several checkouts/instances can run
+ * side by side. The actually used ports are printed at startup.
  *
  * Vite is only started AFTER the plan-server answers /api/health, so the
  * first WebSocket connection no longer hits a not-yet-listening backend
@@ -19,23 +24,59 @@
  * developments instantly — no rebuild, no copy, no relaunch, no cache purge.
  *
  * Env overrides:
- *   DEV_PLAN_PORT      port for the plan-server backend (default 3090)
+ *   DEV_PLAN_PORT      preferred port for the plan-server backend (default 3090; random when busy)
+ *   DEV_WEB_PORT       preferred port for the Vite dev server (default 5175; random when busy)
  *   PLAN_ROOT          planner root served by the backend (default <repo>/.planner)
- *   VITE_PROXY_TARGET  backend base URL Vite proxies to (default http://127.0.0.1:<DEV_PLAN_PORT>)
  */
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
 
-const PORT = process.env.DEV_PLAN_PORT ?? "3090";
+const PLAN_PORT = Number(process.env.DEV_PLAN_PORT ?? 3090);
+const WEB_PORT = Number(process.env.DEV_WEB_PORT ?? 5175);
 const PLAN_ROOT = process.env.PLAN_ROOT ?? resolve(root, ".planner");
-const PROXY_TARGET = process.env.VITE_PROXY_TARGET ?? `http://127.0.0.1:${PORT}`;
+
+/** Whether `port` can be bound on 127.0.0.1 right now. */
+async function isPortFree(port) {
+  return new Promise((resolveFree) => {
+    const probe = createServer();
+    probe.once("error", () => resolveFree(false));
+    probe.once("listening", () => probe.close(() => resolveFree(true)));
+    probe.listen(port, "127.0.0.1");
+  });
+}
+
+/** A random free port assigned by the OS (listen on port 0). */
+async function randomFreePort() {
+  return new Promise((resolvePort, rejectPort) => {
+    const probe = createServer();
+    probe.once("error", rejectPort);
+    probe.once("listening", () => {
+      const { port } = probe.address();
+      probe.close(() => resolvePort(port));
+    });
+    probe.listen(0, "127.0.0.1");
+  });
+}
+
+/** The preferred port when free, otherwise a random free port. */
+async function pickPort(preferred) {
+  if (await isPortFree(preferred)) return preferred;
+  const fallback = await randomFreePort();
+  console.log(`[dev-web] port ${preferred} is busy — falling back to random port ${fallback}`);
+  return fallback;
+}
+
+const PORT = await pickPort(PLAN_PORT);
+const WEB = await pickPort(WEB_PORT);
+const PROXY_TARGET = `http://127.0.0.1:${PORT}`;
 
 const server = spawn("node", [resolve(root, "packages/plan-server/dist/cli.js")], {
-  env: { ...process.env, PLAN_PORT: PORT, PLAN_ROOT, PLAN_HOST: "127.0.0.1" },
+  env: { ...process.env, PLAN_PORT: String(PORT), PLAN_ROOT, PLAN_HOST: "127.0.0.1" },
   stdio: "inherit",
   detached: true,
 });
@@ -65,7 +106,7 @@ process.on("SIGTERM", () => shutdown(0));
 server.on("exit", (c) => shutdown(c ?? 0));
 
 async function waitForServer(timeoutMs = 20000) {
-  const url = `http://127.0.0.1:${PORT}/api/health`;
+  const url = `${PROXY_TARGET}/api/health`;
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -89,7 +130,7 @@ const viteBin =
     ? resolve(root, "packages/plan-web-ui/node_modules/.bin/vite.cmd")
     : resolve(root, "packages/plan-web-ui/node_modules/.bin/vite");
 
-web = spawn(viteBin, [], {
+web = spawn(viteBin, ["--port", String(WEB)], {
   cwd: resolve(root, "packages/plan-web-ui"),
   env: { ...process.env, VITE_PROXY_TARGET: PROXY_TARGET },
   stdio: "inherit",
@@ -98,4 +139,4 @@ web = spawn(viteBin, [], {
 web.on("exit", (c) => shutdown(c ?? 0));
 
 console.log(`[dev-web] plan-server -> ${PROXY_TARGET} (PLAN_ROOT=${PLAN_ROOT})`);
-console.log(`[dev-web] vite dev    -> http://localhost:5175  (proxy -> ${PROXY_TARGET})`);
+console.log(`[dev-web] vite dev    -> http://localhost:${WEB}  (proxy -> ${PROXY_TARGET})`);
