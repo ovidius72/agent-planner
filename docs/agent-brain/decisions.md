@@ -82,6 +82,7 @@ Generic Heca layout details (pinning, composition, native focus) belong to their
 
 | Contract | Specification | Owners |
 | --- | --- | --- |
+| Domain contract: identities, ordering, typed results, context, continuity | [Domain contract](domain-contract.md) | Agent Plan P116/T462; implemented by T463–T469, T489–T496, T509/T510 |
 | Service, storage, identity, recovery | [Architecture](architecture.md) | Agent Plan P128/P130 |
 | Sessions, attribution, execution lock | [Session registration](session-registration.md) | Agent Plan T490/T491; Heca-Pro T023/T029/T032/T039/T047 |
 | Heca connection | [Communication contract](heca-protocol.md) | Agent Plan T497-T500; Heca-Pro T043-T046 |

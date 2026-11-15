@@ -1,6 +1,6 @@
 # Agent Brain architecture
 
-Status: consolidated 2026-11-02. Product decisions live in the [decision register](decisions.md); technical contracts marked *proposed* are implementation schema until conformance evidence exists. Every agent loads its own context against the shared service; Heca initiates the collaboration channel; room policy and room chat belong to Heca and work without the planner.
+Status: consolidated 2026-11-02. Product decisions live in the [decision register](decisions.md); technical contracts marked *proposed* are implementation schema until conformance evidence exists. The shared domain contract for identities, work ordering, typed results, context delivery and phase continuity is [domain-contract.md](domain-contract.md) — service/storage/recovery boundaries live in this document, business rules live there. Every agent loads its own context against the shared service; Heca initiates the collaboration channel; room policy and room chat belong to Heca and work without the planner.
 
 ## 1. Purpose and current boundary
 
