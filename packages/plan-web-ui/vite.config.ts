@@ -18,6 +18,16 @@ export default defineConfig({
       "/ws": {
         target: proxyTarget,
         ws: true,
+        // Abrupt WS client disconnects (tab close, HMR full reload) surface as
+        // ECONNRESET/EPIPE on the proxied socket; they are expected and the
+        // server hub already cleans up its client set. Silence only those;
+        // anything else still logs.
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            if (err && (err.code === "ECONNRESET" || err.code === "EPIPE")) return;
+            console.error("[vite ws proxy]", err);
+          });
+        },
       },
     },
   },
