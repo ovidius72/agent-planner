@@ -14,11 +14,15 @@
  * first WebSocket connection no longer hits a not-yet-listening backend
  * (which produced a noisy ECONNRESET during startup).
  *
- * Both children are spawned detached (their own process group) and Vite is
- * launched directly (not via `pnpm --filter ... dev`). This keeps a Ctrl-C
- * clean: the terminal SIGINT reaches only this script, which then terminates
- * the children. Without this, the `pnpm` wrapper around Vite would report
- * ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL on SIGINT.
+ * Vite is launched directly (not via `pnpm --filter ... dev`), and children
+ * are NOT detached: they stay in this script's process group so that signals
+ * sent to the terminal's foreground group — SIGINT from Ctrl-C, but also
+ * SIGHUP when the terminal window closes — reach the whole chain
+ * (pnpm -> this script -> plan-server -> vite). Previously the detached
+ * groups escaped those signals, leaving orphaned dev stacks listening on
+ * ports after the terminal was gone. As a further safety net this script
+ * watches for its own parent dying (orphan check) and shuts down if that
+ * happens.
  *
  * Because Vite serves the SOURCE with hot-reload, you see in-progress
  * developments instantly — no rebuild, no copy, no relaunch, no cache purge.
@@ -78,7 +82,6 @@ const PROXY_TARGET = `http://127.0.0.1:${PORT}`;
 const server = spawn("node", [resolve(root, "packages/plan-server/dist/cli.js")], {
   env: { ...process.env, PLAN_PORT: String(PORT), PLAN_ROOT, PLAN_HOST: "127.0.0.1" },
   stdio: "inherit",
-  detached: true,
 });
 
 let web;
@@ -93,17 +96,22 @@ function shutdown(code) {
 
 function killTree(child) {
   try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    try {
-      child.kill("SIGTERM");
-    } catch {}
-  }
+    child.kill("SIGTERM");
+  } catch {}
 }
 
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
+process.on("SIGHUP", () => shutdown(0));
 server.on("exit", (c) => shutdown(c ?? 0));
+
+// Orphan guard: if the parent (e.g. the `pnpm run dev` wrapper) is gone and
+// this script was reparented to launchd, no terminal is attached anymore —
+// shut the whole stack down instead of lingering as an invisible instance.
+const orphanCheck = setInterval(() => {
+  if (process.ppid === 1) shutdown(0);
+}, 2000);
+orphanCheck.unref();
 
 async function waitForServer(timeoutMs = 20000) {
   const url = `${PROXY_TARGET}/api/health`;
@@ -134,7 +142,6 @@ web = spawn(viteBin, ["--port", String(WEB)], {
   cwd: resolve(root, "packages/plan-web-ui"),
   env: { ...process.env, VITE_PROXY_TARGET: PROXY_TARGET },
   stdio: "inherit",
-  detached: true,
 });
 web.on("exit", (c) => shutdown(c ?? 0));
 
