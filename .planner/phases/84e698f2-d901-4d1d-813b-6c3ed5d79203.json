@@ -54,11 +54,28 @@
       "priority": 1,
       "shortName": "separate-planner-storage-code",
       "title": "Separate planner storage, code workspace and runtime identities",
-      "status": "planned",
-      "description": "Outcome: Descriptor-first project and workspace identity independent of code checkout and database location.\n\nCurrent implementation: Consumers default to cwd/.planner or AGENT_PLAN_ROOT; code root is inferred from the planner directory. git-common-dir currently supports allocation, not portable identity.\n\nImplementation responsibility:\n- Finalize a versioned descriptor and resolver precedence for explicit selection, nested repositories, non-Git/empty folders and copied/forked descriptors.\n- Define resolver/registration ports and stable project/workspace/caller bindings; keep path/branch mutable and native session separate from planner ownership.\n- Resolve descriptor first, legacy migration second, initialization last. Incompatible descriptor or missing bound data yields typed errors; never create a silent replacement.\n- Define the service-owned HOME location and git-common-dir as local clone evidence only. Supply typed registration interfaces for the SQLite and service owners without opening a client-side store.\n\nAcceptance and evidence:\n- Two worktrees bind one project and distinct source contexts; non-Git planning and undecided languages remain valid.\n- Moving a folder/renaming a branch preserves identity; ambiguous forks/foreign overrides require deliberate rebind.\n- Descriptor contains no secrets, database path or live sessions; deletion of HOME leads to restore-required.\n\nCurrent source navigation:\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
-      "descriptionUpdatedAt": "2026-10-29T21:02:42.275Z",
-      "notes": "",
-      "statusLog": [],
+      "status": "done",
+      "description": "Outcome: Descriptor-first project and workspace identity independent of code checkout and database location.\n\nCurrent implementation: Consumers default to cwd/.planner or AGENT_PLAN_ROOT; code root is inferred from the planner directory. git-common-dir currently supports allocation, not portable identity.\n\nImplementation responsibility:\n- Finalize a versioned descriptor and resolver precedence for explicit selection, nested repositories, non-Git/empty folders and copied/forked descriptors.\n- Define resolver/registration ports and stable project/workspace/caller bindings; keep path/branch mutable and native session separate from planner ownership.\n- Resolve descriptor first, legacy migration second, initialization last. Incompatible descriptor or missing bound data yields typed errors; never create a silent replacement.\n- Define the service-owned HOME location and git-common-dir as local clone evidence only. Supply typed registration interfaces for the SQLite and service owners without opening a client-side store.\n\nAcceptance and evidence:\n- Two worktrees bind one project and distinct source contexts; non-Git planning and undecided languages remain valid.\n- Moving a folder/renaming a branch preserves identity; ambiguous forks/foreign overrides require deliberate rebind.\n- Descriptor contains no secrets, database path or live sessions; deletion of HOME leads to restore-required.\n\nCurrent source navigation:\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\n---\n**Completion summary:**\nShipped: descriptor-first project and workspace identity, finalized in @agent-plan/core as packages/plan-core/src/project-descriptor.ts (new module, exported from index.ts) with an 11-test fixture suite (packages/plan-core/test/project-descriptor.test.mjs, all green) and the architecture.md §3 record updated. What was built: (C1) the versioned descriptor — PROJECT_DESCRIPTOR_VERSION=1, name .agent-plan.json, strict Zod schema {schemaVersion: literal(1), projectId, snapshot{remote,branch}?} where unknown fields FAIL parsing so no secrets/db paths/live agents can ride along (tested); canonical serialization and atomic writes (temp+rename, no residue tested). (C2) resolver/registration ports typed for the downstream owners without opening any client-side store: WorkspaceResolution (descriptor | descriptor-error | legacy | none), RepositoryRegistration (projectId + cloneKey + stored same-project/new-project BindDecision + registeredAt — the once-asked fork/copy question), WorkspaceRegistration (workspaceId+projectId with mutable path/branch locators), ProjectStoreRegistration (T502 port: service-owned store location) and ServiceEndpointRecord (T490 port: protocolVersion+bootId+host/port, matching the verify-don't-trust rule; plan-server's server-record.ts remains the runtime precedent). (C3) one resolver for every client, resolvePlannerWorkspace: nearest descriptor walking up wins (nested monorepo sub-project beats ancestor — tested), the walk never crosses a repository boundary without a descriptor (tested with a real git repo), legacy .planner resolves as the migration-offer state, an empty folder resolves none (initialization offer, valid state), and an unreadable or incompatible descriptor is surfaced as typed descriptor-error instead of a silent fallback; readProjectDescriptor returns PROJECT_DESCRIPTOR_INVALID (broken JSON, strict-schema violation) or PROJECT_DESCRIPTOR_INCOMPATIBLE (foreign schemaVersion with foundSchemaVersion attached, never migrated silently). (C4) HOME location stays service-owned (no client path in the descriptor by schema construction); cloneKeyFor derives the clone key from git --git-common-dir including worktree pointer files, as local clone evidence only — verified with two worktrees of one fixture clone: same projectId, same clone key (realpath-normalized), distinct source roots. (C5) acceptance evidence: non-Git folder with snapshot valid; copied folder carrying the known projectId surfaces it for the deliberate rebind; atomic write round-trips through the strict schema. Unverified boundaries recorded: consumers still infer cwd/.planner until T490 routes them (dated, observable behavior unchanged — no rewiring in this task); restore-required flow on missing HOME data is T495/T490 work; no SQLite store exists yet so registration ports are interfaces, verified as types at build, not runtime. No real project, migration, dashboard or Git publication touched; all fixtures mkdtemp and cleaned up.",
+      "descriptionUpdatedAt": "2026-11-15T08:00:38.707Z",
+      "notes": "Source-backed analysis (2026-11-15, checkout feat/agent-brain @ d574dd6) before implementation.\n\nCurrent identity handling inspected (dated evidence):\n- packages/plan-mcp/src/index.ts:118 — plan root is `process.env.AGENT_PLAN_ROOT || join(process.cwd(), '.planner')`; line 129 refuses to start without an existing .planner; planner-init creates .planner/ in cwd. Workspace identity is inferred from process cwd — the T461 baseline captured this live (AGENT_PLAN_ROOT unset -> cwd/.planner).\n- packages/pi-adapter/src/index.ts — PLAN_DIR_NAME='.planner', planRootForCwd(cwd) (line ~275); same inference, different constant; the two adapters already carry the rule twice, so the resolver must land in @agent-plan/core once (AGENTS.md rule 4: harness-agnostic core).\n- packages/agent-plan/src/index.ts:125 — CLI default root `join(cwd, '.planner')` plus a --root flag; init/serve/stop all operate on the passed root; no descriptor awareness.\n- packages/plan-server/src/server-record.ts:39-82 — runtime service registration lives at <planRoot>/.local/server.json (ServerRecord read/validated; pid+port based). This is the runtime-record precedent: an advertised local record that callers must verify, not trust by pid/port alone — exactly the pattern architecture.md §2 prescribes for the service boot record.\n- packages/plan-core/src/plan-store.ts:504-527 gitCommonDirFor(planRoot) walks up from the plan root reading .git (dir or worktree pointer file) to the common dir; used at line ~1758 by allocateEntityIdentity: worktrees of one clone share `.git/agent-plan/allocations/<manifest.projectId>.json` guarded by a cross-process write lock, reserving F/P/T numbers and 5-char shortIds before entity files are written. So git-common-dir is ALREADY clone-level coordination evidence for allocation — but identity itself comes from the .planner manifest, which is inside the mutable planner folder and does not survive a descriptor-less copy binding.\n- packages/plan-core/src/schema.ts:71-73 — ManifestSchema { schemaVersion: literal(1), projectId: string.min(1), ... } persisted at <root>/manifest.json (plan-store.ts:1340, loadManifest 1705). The projectId already exists as a stable planner identity; what is missing is its portability OUTSIDE the planner folder and the resolver precedence (descriptor -> legacy -> init) plus typed fork/copy binding decisions.\n\nPrecedents and relevance: architecture.md §3 defines the proposed descriptor (.agent-plan.json, schemaVersion, projectId, snapshot{remote,branch}), the binding decision (worktrees of a registered clone bind automatically; other projectId-carrying folders asked once: same project vs new project, answer stored, rebind explicit), and the 6-step resolver order; decisions.md fixes the same. The T461 baseline supplies the failure evidence the implementation must remove: missing descriptor = workspace undetectable (exists() false), incompatible schemaVersion rejected without migration, cwd inference as the only identity source. gitCommonDirFor is the one existing git-based identity helper and is reused as local clone evidence only (never a network/remote identity).\n\nReuse and ownership: the descriptor schema/reader/resolver go into ONE new core module (packages/plan-core/src/project-descriptor.ts) consumed later by plan-mcp/pi-adapter/CLI/plan-server through T490's routing; T502/T490 implement the service/SQLite registration ports typed here. Zod + literal schemaVersion + strict object (no passthrough: no secrets/db paths/live agents can survive parsing) follows ManifestSchema conventions and the project-context fingerprint pattern. Tests use mkdtemp fixtures per AGENTS.md rule 17 (never a real project). No consumer rewiring, no real migration, no Git publication in this task.",
+      "statusLog": [
+        {
+          "id": "6f180091-3dad-4653-b967-142e215b50c2",
+          "date": "2026-11-15T07:56:15.726Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        },
+        {
+          "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-002-in-progress-done",
+          "date": "2026-11-15T08:00:38.702Z",
+          "fromStatus": "in-progress",
+          "toStatus": "done",
+          "title": "in-progress → done",
+          "description": "Shipped: descriptor-first project and workspace identity, finalized in @agent-plan/core as packages/plan-core/src/project-descriptor.ts (new module, exported from index.ts) with an 11-test fixture suite (packages/plan-core/test/project-descriptor.test.mjs, all green) and the architecture.md §3 record updated. What was built: (C1) the versioned descriptor — PROJECT_DESCRIPTOR_VERSION=1, name .agent-plan.json, strict Zod schema {schemaVersion: literal(1), projectId, snapshot{remote,branch}?} where unknown fields FAIL parsing so no secrets/db paths/live agents can ride along (tested); canonical serialization and atomic writes (temp+rename, no residue tested). (C2) resolver/registration ports typed for the downstream owners without opening any client-side store: WorkspaceResolution (descriptor | descriptor-error | legacy | none), RepositoryRegistration (projectId + cloneKey + stored same-project/new-project BindDecision + registeredAt — the once-asked fork/copy question), WorkspaceRegistration (workspaceId+projectId with mutable path/branch locators), ProjectStoreRegistration (T502 port: service-owned store location) and ServiceEndpointRecord (T490 port: protocolVersion+bootId+host/port, matching the verify-don't-trust rule; plan-server's server-record.ts remains the runtime precedent). (C3) one resolver for every client, resolvePlannerWorkspace: nearest descriptor walking up wins (nested monorepo sub-project beats ancestor — tested), the walk never crosses a repository boundary without a descriptor (tested with a real git repo), legacy .planner resolves as the migration-offer state, an empty folder resolves none (initialization offer, valid state), and an unreadable or incompatible descriptor is surfaced as typed descriptor-error instead of a silent fallback; readProjectDescriptor returns PROJECT_DESCRIPTOR_INVALID (broken JSON, strict-schema violation) or PROJECT_DESCRIPTOR_INCOMPATIBLE (foreign schemaVersion with foundSchemaVersion attached, never migrated silently). (C4) HOME location stays service-owned (no client path in the descriptor by schema construction); cloneKeyFor derives the clone key from git --git-common-dir including worktree pointer files, as local clone evidence only — verified with two worktrees of one fixture clone: same projectId, same clone key (realpath-normalized), distinct source roots. (C5) acceptance evidence: non-Git folder with snapshot valid; copied folder carrying the known projectId surfaces it for the deliberate rebind; atomic write round-trips through the strict schema. Unverified boundaries recorded: consumers still infer cwd/.planner until T490 routes them (dated, observable behavior unchanged — no rewiring in this task); restore-required flow on missing HOME data is T495/T490 work; no SQLite store exists yet so registration ports are interfaces, verified as types at build, not runtime. No real project, migration, dashboard or Git publication touched; all fixtures mkdtemp and cleaned up."
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -66,31 +83,31 @@
           "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-001-finalize-a-versioned-descriptor-and-resolver-precedence-for-explicit-selection-nested-repositories-non-git-empty-folders-and-copied-forked-descriptors",
           "number": 1,
           "title": "Finalize a versioned descriptor and resolver precedence for explicit selection, nested repositories, non-Git/empty folders and copied/forked descriptors.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-002-define-resolver-registration-ports-and-stable-project-workspace-caller-bindings-keep-path-branch-mutable-and-native-session-separate-from-planner-ownership",
           "number": 2,
           "title": "Define resolver/registration ports and stable project/workspace/caller bindings; keep path/branch mutable and native session separate from planner ownership.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-003-resolve-descriptor-first-legacy-migration-second-initialization-last-incompatible-descriptor-or-missing-bound-data-yields-typed-errors-never-create-a-silent-replacement",
           "number": 3,
           "title": "Resolve descriptor first, legacy migration second, initialization last. Incompatible descriptor or missing bound data yields typed errors; never create a silent replacement.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-004-define-the-service-owned-home-location-and-git-common-dir-as-local-clone-evidence-only-supply-typed-registration-interfaces-for-the-sqlite-and-service-owners-without-opening-a-client-side-store",
           "number": 4,
           "title": "Define the service-owned HOME location and git-common-dir as local clone evidence only. Supply typed registration interfaces for the SQLite and service owners without opening a client-side store.",
-          "checked": false
+          "checked": true
         },
         {
           "id": "7f8c3c08-e0a0-4136-9a58-ae2e8945b5d4-check-005-verify-the-stated-acceptance-cases-with-exact-source-runtime-evidence-and-record-any-unverified-boundary",
           "number": 5,
           "title": "Verify the stated acceptance cases with exact source/runtime evidence and record any unverified boundary.",
-          "checked": false
+          "checked": true
         }
       ],
       "subtasks": [],
@@ -99,11 +116,16 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-11-15T07:56:15.726Z",
+      "completedAt": "2026-11-15T08:00:38.702Z",
       "createdAt": "2026-10-21T10:03:10.913Z",
-      "updatedAt": "2026-10-29T21:02:42.272Z",
-      "sessionInfo": [],
+      "updatedAt": "2026-11-15T08:00:38.702Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:1730b0bb-ee74-4511-9502-ead67aa82751",
+          "createdAt": "2026-11-15T07:56:15.614Z"
+        }
+      ],
       "activeOwnerSession": ""
     },
     {
@@ -321,7 +343,7 @@
     }
   ],
   "createdAt": "2026-10-21T10:02:59.058Z",
-  "updatedAt": "2026-11-02T19:15:17.985Z",
+  "updatedAt": "2026-11-15T08:00:38.702Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -335,7 +357,20 @@
       "toStatus": "planned",
       "title": "draft → planned",
       "description": ""
+    },
+    {
+      "id": "be9205d6-bf2a-4954-a851-c16dab6b923a",
+      "date": "2026-11-15T07:56:15.781Z",
+      "fromStatus": "planned",
+      "toStatus": "in-progress",
+      "title": "planned → in-progress",
+      "description": ""
     }
   ],
-  "sessionInfo": []
+  "sessionInfo": [
+    {
+      "sessionId": "mcp-process:1730b0bb-ee74-4511-9502-ead67aa82751",
+      "createdAt": "2026-11-15T07:56:15.614Z"
+    }
+  ]
 }

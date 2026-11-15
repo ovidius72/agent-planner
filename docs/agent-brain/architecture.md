@@ -72,6 +72,8 @@ Proposed descriptor, created by the server during explicit initialization and co
 
 Proposed name: `.agent-plan.json`. Keep credentials, local endpoints, absolute database paths and live agents out of it. For non-Git folders the descriptor still supports deliberate relocation and backup import; no remote branch is required. No personal Git hook is required after clone.
 
+Finalized in core (T489): `packages/plan-core/src/project-descriptor.ts` — `schemaVersion` 1 with strict parsing (unknown fields fail, so no secrets or paths can ride along), the nearest-wins resolver with the repository-boundary stop, atomic writes, typed `PROJECT_DESCRIPTOR_INVALID` / `PROJECT_DESCRIPTOR_INCOMPATIBLE` errors (a foreign `schemaVersion` is never migrated silently) and the clone key derived from `git --git-common-dir` as local clone evidence only. Adapters adopt the resolver through T490's routing; until then their current inference remains the observable behavior.
+
 Binding a folder (decided 2026-11-02): worktrees of an already registered clone (same `git --git-common-dir`) bind to the project automatically. Any other folder that carries a known `projectId` (a second clone, a copied folder, a fork) is asked once: **same project** registers it as another repository registration of that project; **new project** creates a new `projectId`, rewrites the descriptor and leaves the change for the user to commit. The answer is stored with the repository registration and is not asked again; a later rebind is an explicit action.
 
 Every command uses the same resolver:

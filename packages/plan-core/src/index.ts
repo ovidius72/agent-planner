@@ -30,6 +30,7 @@ export * from "./task-move.js";
 export * from "./accepted-decision-guard.js";
 export * from "./project-context-migration.js";
 export * from "./project-context.js";
+export * from "./project-descriptor.js";
 export * from "./load-reply.js";
 export * from "./on-hold.js";
 export * from "./requirement-macro-tasks.js";
