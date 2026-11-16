@@ -12,4 +12,5 @@ export * from "./node-sqlite-driver.js";
 export * from "./schema.js";
 export * from "./command-authority.js";
 export * from "./documents.js";
+export * from "./reconciliation.js";
 export * from "./snapshot.js";

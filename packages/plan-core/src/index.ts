@@ -21,6 +21,7 @@ export * from "./task-completion-gate.js";
 export * from "./stranded-phase.js";
 export * from "./read-tracking.js";
 export * from "./payload-fallback.js";
+export * from "./status-rollup.js";
 export * from "./handoff-context.js";
 export * from "./handoff-reply.js";
 export * from "./mutation-reply.js";

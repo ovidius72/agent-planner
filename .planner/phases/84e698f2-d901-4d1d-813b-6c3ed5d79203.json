@@ -202,10 +202,10 @@
       "priority": 3,
       "shortName": "reconcile-affected-hierarchy-a",
       "title": "Reconcile affected hierarchy and dependencies with bounded context cost",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Outcome: Atomic structural consistency and bounded semantic reconciliation after every mutation.\n\nCurrent implementation: Parent rollups, reference validation and description freshness exist. Their separate file-based paths do not yet provide the full affected-context postcondition through the new service.\n\nImplementation responsibility:\n- Use SQLite reverse indexes to determine old/new parents, requirement links and real dependency consumers for create/update/move/dependency operations.\n- Commit mechanical membership/status/reference consequences with the leaf mutation; issue compact version-bound impact receipts.\n- For semantic prose and decision applicability, support explicit factual updates, reviewed-unchanged evidence or durable reconciliation_required obligations. Never blindly copy child text upward.\n- Reject stale/cyclic/foreign reconciliation; paginate genuine high-fan-out work and preserve pending obligations after crashes.\n- Cover project/feature/phase/task updates, new tasks, moves across features and dependencies without a full-plan or full-ancestor reread per operation.\n\nAcceptance and evidence:\n- A leaf save cannot report complete reconciliation while relevant obligations remain.\n- Unrelated plan growth and repeated no-op updates do not cause unconditional full context delivery.\n- Requirements/decisions keep their canonical single owners and measured budgets never omit mandatory information.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
       "descriptionUpdatedAt": "2026-10-29T21:02:43.003Z",
-      "notes": "",
+      "notes": "Source-backed analysis + implementation record (2026-11-16, feat/agent-brain @ 33621d8).\n\nAnalysis (dated evidence): parent status is ALREADY derived at read time in the JSON store — plan-store.ts :2491-2544 derivePhaseStatus/deriveFeatureStatus compute from task/phase statuses (void statuses rejected/canceled ignored; done-everything → done; active wins; done-without-planned-and-deferred-only → deferred; done-elsewhere → in-progress; blocked/waiting/deferred ladder), and syncStatuses (:2546) is a documented NO-OP: nothing is persisted, so T496's mechanical status consequence is read-back in the receipt, not a write. Description freshness (description-freshness.ts) reports stale parents via descriptionUpdatedAt vs newest child, with reconciliationRequired and a preview — T496 turns the write-side into durable obligations. task-move.ts (254) validates cross-feature moves; write-coordination.ts root locks serialize; read-tracking defines the contract revision (descriptionUpdatedAt) that unrelated writes must NOT bump (domain-contract.md §4). The SQLite authority from T502 provides reverse indexes (idx_taskdeps_reverse, idx_phases_feature, idx_tasks_phase) and executeCommand's apply callback as the transactional home.\n\nDeliverable: (1) packages/plan-core/src/status-rollup.ts — pure ladder ported verbatim from PlanStore (single source going forward; PlanStore rewiring deferred to T490 adoption). (2) persistence/schema.ts: reconciliation_obligations table (id, project_id, created_at_revision, kind semantic-review|decision-applicability|fan-out-continuation, entity ref, caused_by, reason, status open|resolved-applied|resolved-reviewed, resolution_evidence JSON) + two indexes; STORE_SCHEMA_VERSION stays 1 (no live stores yet — additive in place). (3) persistence/reconciliation.ts: reconcileLeafMutation (runs inside apply) — affected parents from reverse indexes including BOTH sides of a move via previousPhaseId, derived statuses per affected parent, real dependency consumers and requirement links up to IMPACT_RECEIPT_ENTITY_LIMIT=50 with explicit truncated flag, durable obligations for descriptionChanged=true (phase+feature semantic-review; never blind upward copying — resolution is an explicit factual parent edit bumping description_updated_at, or reviewed-unchanged evidence), fan-out continuation obligation when capped; listReconciliationObligations (paginated, status filter); resolveReconciliationObligation (evidence mandatory — bare done refused; stale refusal when project revision advanced since obligation creation unless acknowledgeRevisionChange=true); hasOpenObligations (the pre-condition a leaf save must check before claiming complete reconciliation); addTaskDependencyValidated (cycle rejection via bounded forward closure walk, foreign-reference typed refusal, self-dependency refused).\n\nVerification: 9-test suite test/reconciliation.test.mjs ALL GREEN — receipt of derived status from reverse indexes (single parent), description change creating durable phase+feature obligations surviving close/reopen, evidence-mandatory + stale-refused + acknowledged re-review resolution paths, explicit factual update bumping only the edited parent's contract revision, repeated no-op updates creating zero obligations, cyclic/foreign typed rejections with reverse-index consumer surfacing, move affecting both parents (receipt restructured: affectedParents[] with derived statuses per parent — replaced the ambiguous single-parent scalars), high fan-out capped at 50 with durable continuation + paginated listing, crash before commit leaving no obligation and no mutation. Persistence suite 13/13 and descriptor 11/11 still green (24/24 combined). Core build green. Bounded verification only; canonical gate at closeout.\n\nUnverified boundaries: PlanStore not yet rewired onto status-rollup (T490 adoption); receipt consumer of the impact receipts (T490 API shape); multi-project concurrency beyond the two-connection busy test.",
       "statusLog": [
         {
           "id": "4fcdd2a7-aa2b-497d-aa11-78e513449243",
@@ -214,6 +214,14 @@
           "toStatus": "planned",
           "title": "moved P119(F025)/T496 → P128(F025)/T496",
           "description": "Moved from P119(F025)/T496 to P128(F025)/T496; status unchanged."
+        },
+        {
+          "id": "0155c57d-9d67-47ba-a1e2-75836e249824",
+          "date": "2026-11-16T10:53:27.592Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
         }
       ],
       "decisions": [],
@@ -262,12 +270,17 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-11-16T10:53:27.592Z",
       "completedAt": "",
       "createdAt": "2026-10-21T14:52:52.874Z",
-      "updatedAt": "2026-10-29T21:02:56.006Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-11-16T11:01:43.616Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:c02308a2-50c8-4784-b0c4-058f2a572eb4",
+          "createdAt": "2026-11-16T10:53:27.394Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:c02308a2-50c8-4784-b0c4-058f2a572eb4"
     },
     {
       "id": "bf80a08e-a3d7-4cd9-8910-c7ad62b62238",
@@ -365,7 +378,7 @@
     }
   ],
   "createdAt": "2026-10-21T10:02:59.058Z",
-  "updatedAt": "2026-11-16T08:35:16.805Z",
+  "updatedAt": "2026-11-16T11:01:43.616Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -390,6 +403,10 @@
     }
   ],
   "sessionInfo": [
+    {
+      "sessionId": "mcp-process:c02308a2-50c8-4784-b0c4-058f2a572eb4",
+      "createdAt": "2026-11-16T10:53:27.394Z"
+    },
     {
       "sessionId": "mcp-process:1730b0bb-ee74-4511-9502-ead67aa82751",
       "createdAt": "2026-11-15T08:24:31.737Z"

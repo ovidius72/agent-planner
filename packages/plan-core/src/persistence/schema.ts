@@ -176,6 +176,22 @@ CREATE TABLE IF NOT EXISTS event_cursor (
   last_event_id INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (project_id, consumer)
 );
+CREATE TABLE IF NOT EXISTS reconciliation_obligations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  created_at_revision INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('semantic-review','decision-applicability','fan-out-continuation')),
+  entity_kind TEXT NOT NULL CHECK (entity_kind IN ('project','feature','phase','task')),
+  entity_id TEXT NOT NULL,
+  caused_by TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','resolved-applied','resolved-reviewed')),
+  resolution_evidence JSON,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_obligations_entity ON reconciliation_obligations(project_id, entity_id, status);
+CREATE INDEX IF NOT EXISTS idx_obligations_open ON reconciliation_obligations(project_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_phases_feature ON phases(feature_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_phase ON tasks(phase_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, priority);
