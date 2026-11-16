@@ -136,8 +136,10 @@ async function requireStore(): Promise<PlanStore> {
 // Lives as long as this MCP stdio process (i.e. the host session). Null when not running.
 let webHandle: ServeHandle | null = null;
 
-/** Start the web dashboard on LAN (0.0.0.0:0, OS-assigned port) if not already
- *  running. Returns the local/LAN URLs. No-op (empty url) when no .planner/ exists. */
+/** Start the web dashboard on the loopback interface (127.0.0.1, OS-assigned
+ *  port) if not already running. Returns the local URL. No-op (empty url) when
+ *  no .planner/ exists. LAN mode was removed (T490): the service binds the
+ *  loopback interface only. */
 interface PlannerWebStartup {
   localUrl: string;
   lanUrl?: string | undefined;
@@ -177,7 +179,7 @@ async function ensureWebStarted(): Promise<PlannerWebStartup> {
   const st = new PlanStore(root);
   if (!(await st.exists())) return { localUrl: "", error: "Planner workspace does not exist." };
   try {
-    webHandle = await serve({ planRoot: root, host: "0.0.0.0", port: 0, quiet: true });
+    webHandle = await serve({ planRoot: root, port: 0, quiet: true });
     return { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode, bindHost: webHandle.bindHost };
   } catch (error) {
     return { localUrl: "", error: error instanceof Error ? error.message : String(error) };
@@ -3114,7 +3116,7 @@ server.registerTool("planner-web", {
     try {
       // port: 0 → OS assigns a free port (no conflict with plan-server CLI / Pi).
       // host: 0.0.0.0 → bind LAN (reachable from other devices), like Pi /planner load.
-      webHandle = await serve({ planRoot: root, host: "0.0.0.0", port: 0, quiet: true });
+      webHandle = await serve({ planRoot: root, port: 0, quiet: true });
       const web = { localUrl: webHandle.localUrl, lanUrl: webHandle.lanUrl, mode: webHandle.mode, bindHost: webHandle.bindHost };
       return text(`planner-web started: ${webHandle.localUrl}${webHandle.lanUrl ? ` — LAN: ${webHandle.lanUrl}` : ""} (mode: ${webHandle.mode})`, plannerWebMetadata(web));
     } catch (err) {

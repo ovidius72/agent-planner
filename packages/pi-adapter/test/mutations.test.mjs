@@ -925,7 +925,7 @@ describe("pi-adapter mutations, validation, requirements, handoffs", () => {
       // time: pickProjectPort accepts the explicit port (webPort === explicit),
       // serve() then fails with EADDRINUSE, and the adapter must retry once on
       // port 0 — a planner start must never silently end up serverless.
-      await new Promise((resolve) => blocker.listen(0, "0.0.0.0", resolve));
+      await new Promise((resolve) => blocker.listen(0, "127.0.0.1", resolve));
       const busyPort = blocker.address().port;
       const project = await host.store.loadProject();
       project.webPort = busyPort;

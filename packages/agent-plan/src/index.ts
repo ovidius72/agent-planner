@@ -755,6 +755,9 @@ async function serveCommand(flags: CliFlags): Promise<void> {
   const root = resolve(flags.root ?? plannerRoot());
   const port = parsePort(flags.port);
   const host = flags.host ?? "127.0.0.1";
+  if (host !== "127.0.0.1") {
+    throw new Error(`--host ${host} is not supported: the server binds the loopback interface only (T490, no LAN mode).`);
+  }
   if (!(await new PlanStore(root).exists())) {
     throw new Error(`No .planner/ found at ${root}. Run agent-plan init first.`);
   }

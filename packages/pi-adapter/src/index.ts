@@ -759,7 +759,11 @@ function normalizeVisibility(input: string | undefined): "local" | "lan" | undef
 
 async function startServer(ctx: ExtensionContext, requestedPort?: number, visibility: "local" | "lan" = "lan"): Promise<void> {
   if (server) return;
-  const host = visibility === "lan" ? "0.0.0.0" : "127.0.0.1";
+  // T490 (architecture.md §6): there is no LAN mode. The service binds the
+  // loopback interface only; a lan request is honoured as a request to start
+  // the dashboard and reported honestly as loopback-bound.
+  const host = "127.0.0.1";
+  if (visibility === "lan") ctx.ui.notify("LAN visibility is no longer supported (T490); binding the loopback interface only.", "info");
   const port = await pickProjectPort(ctx, requestedPort);
   // A started server must be reflected in the next context block; the cache
   // may hold a stale "Web UI: not running" block from a stop+prompt pair.

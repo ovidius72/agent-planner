@@ -1,7 +1,8 @@
 /**
  * T239 (P055/F015) — Test MCP planner-web, repair, and lifecycle semantics
  *
- * Exercises MCP planner-web start/status/stop with dynamic LAN binding,
+ * Exercises MCP planner-web start/status/stop with loopback-only binding
+ * (T490 removed the LAN mode),
  * planner repair archive counts, task completion rollup, active-task summaries,
  * recap context, and generated/export operations. Verifies resource cleanup,
  * repeatable start/stop behavior, no hidden web-server stub responses, and
@@ -86,7 +87,7 @@ test("planner-web start/status/stop lifecycle", async () => {
     const statusText = toolText(status);
     assert.match(statusText, /planner-web running:/);
     assert.match(statusText, /\(mode: .+\)/);
-    assert.match(statusText, /bindHost: 0\.0\.0\.0/); // Should be bound to LAN
+    assert.match(statusText, /bindHost: 127\.0\.0\.1/); // Loopback-only binding (T490 — no LAN mode)
     assert.equal(toolStructured(status).running, true);
     assert.ok(toolStructured(status).port > 0);
 
@@ -117,18 +118,19 @@ test("planner-web start/status/stop lifecycle", async () => {
   }
 });
 
-test("planner-web dynamic LAN binding", async () => {
+test("planner-web binds the loopback interface only (LAN mode removed)", async () => {
   const session = await startMcpFixture({ name: "t239-web-lan-binding" });
   try {
     // Start web server
     await callTool(session, "planner-web", { action: "start" });
     await waitForServer(200);
 
-    // Check status for LAN binding info
+    // Check status: loopback binding, no LAN URL advertised (T490)
     const status = await callTool(session, "planner-web", {});
     const statusText = toolText(status);
-    assert.match(statusText, /LAN: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
-    assert.match(statusText, /bindHost: 0\.0\.0\.0/);
+    assert.match(statusText, /planner-web running: http:\/\/127\.0\.0\.1:[0-9]+/);
+    assert.match(statusText, /bindHost: 127\.0\.0\.1/);
+    assert.doesNotMatch(statusText, /LAN: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/);
   } finally {
     await closeMcpFixture(session);
   }
@@ -444,7 +446,7 @@ test("no hidden web-server stub responses", async () => {
     const statusText = toolText(status);
     assert.match(statusText, /planner-web running:/);
     assert.match(statusText, /http:\/\/(localhost|127\.0.0.1):[0-9]+/); // Same port
-    assert.match(statusText, /LAN: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/); // Real LAN IP
+    assert.doesNotMatch(statusText, /LAN: http:\/\/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+/); // No LAN URL (T490)
     
     // The key is that we're seeing real, dynamic values, not hardcoded stubs.
     // Probe the REAL HTTP endpoint: /api/health must answer with the actual

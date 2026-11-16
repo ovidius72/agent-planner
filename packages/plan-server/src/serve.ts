@@ -1,19 +1,18 @@
 import { watch, existsSync, readFileSync, statSync } from "node:fs";
 import { lstat, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { networkInterfaces } from "node:os";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
-import { cors } from "hono/cors";
-import { API_V1_VERSION, ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
+import { API_V1_VERSION, ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, SERVICE_PROTOCOL_VERSION, removeServiceEndpointRecord, writeServiceEndpointRecord, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 import { API_V1_BASE_PATH, createApiV1App } from "./api-v1.js";
 import { EntityEventDetector } from "./entity-events.js";
 import { removeServerRecord, writeServerRecord, type ServerKind } from "./server-record.js";
+import { MUTATION_METHODS, hostHeaderIsLoopback, loopbackAuthStrategy, originIsAllowed, type AuthStrategy, type Principal } from "./auth.js";
 
 // ─── Watcher ────────────────────────────────────────────────────────────
 
@@ -83,35 +82,12 @@ async function resolveAcceptedDecisionEventTarget(store: PlanStore, targetType: 
   return { ok: true, owner, targetRef, event: { type: "task", phaseId: owner.phaseId, taskId: owner.taskId, featureId } };
 }
 
-function isPrivateIpv4(address: string): boolean {
-  return /^10\./.test(address) || /^192\.168\./.test(address) || /^172\.(1[6-9]|2\d|3[01])\./.test(address);
-}
-
-function detectLanIp(): string | undefined {
-  const nets = networkInterfaces();
-  let fallback: string | undefined;
-  for (const entries of Object.values(nets)) {
-    for (const entry of entries ?? []) {
-      if (entry.family !== "IPv4" || entry.internal) continue;
-      if (isPrivateIpv4(entry.address)) return entry.address;
-      fallback ??= entry.address;
-    }
-  }
-  return fallback;
-}
-
-function buildServerUrls(port: number, host: string): { mode: "local" | "lan"; bindHost: string; localUrl: string; lanUrl: string | undefined } {
-  const localUrl = `http://127.0.0.1:${port}`;
-  if (host === "0.0.0.0") {
-    const lanIp = detectLanIp();
-    return {
-      mode: "lan",
-      bindHost: host,
-      localUrl,
-      lanUrl: lanIp ? `http://${lanIp}:${port}` : undefined,
-    };
-  }
-  return { mode: "local", bindHost: host, localUrl, lanUrl: undefined };
+/**
+ * The service binds the loopback interface only (architecture.md §6 — there
+ * is no LAN mode); LAN address discovery and LAN URL computation are gone.
+ */
+function buildServerUrls(port: number, host: "127.0.0.1"): { mode: "local"; bindHost: "127.0.0.1"; localUrl: string; lanUrl: undefined } {
+  return { mode: "local", bindHost: host, localUrl: `http://127.0.0.1:${port}`, lanUrl: undefined };
 }
 
 function requiresGovernance(status: string | undefined): boolean {
@@ -131,10 +107,14 @@ function phaseGovernanceReady(phase: Phase): boolean {
 }
 
 // Web UI calls are the human supervisor and are exempt from agent-only
-// governance gates (e.g. feature/phase discuss-before-work). Identified by the
-// X-Planner-Source: web-ui header the browser client always sends.
-function fromWebUi(c: Context): boolean {
-  return c.req.header("X-Planner-Source") === "web-ui";
+// governance gates (e.g. feature/phase discuss-before-work). The
+// authentication middleware resolves the principal; a browser-originated
+// request (Origin matching the service) is the web-ui principal. The old
+// X-Planner-Source header confers nothing — permission comes from the
+// resolved principal, never from a caller-supplied header.
+function supervisorPrincipal(c: Context): boolean {
+  const principal = c.get("principal") as Principal | undefined;
+  return principal?.kind === "web-ui";
 }
 
 /** Watch the planner folder. Returns a function that stops this watcher only, so several servers in one process never stop each other's. */
@@ -182,11 +162,27 @@ export interface UiConfig {
   server?: ServerUiConfig | undefined;
 }
 
-function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPrefix = "", uiConfig?: UiConfig, isBusy?: () => boolean, onExternalChange?: () => void) {
+/**
+ * Boot identity and request-admission policy of one service boot
+ * (architecture.md §2/§6). Threading one object keeps the app factory
+ * signatures stable while the security layer grows.
+ */
+export interface ServiceSecurity {
+  /** Fresh boot identity; verified by clients against /health. */
+  bootId: string;
+  /** Actual service origin once the port is known; undefined until then. */
+  originRef: { current: string | undefined };
+  /** Extra accepted origins beyond the service's own loopback origin (e.g. Heca). */
+  allowedOrigins: readonly string[];
+  /** Pluggable principal resolution; defaults to the loopback strategy. */
+  auth?: AuthStrategy;
+}
+
+function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPrefix = "", uiConfig?: UiConfig, isBusy?: () => boolean, onExternalChange?: () => void, security?: ServiceSecurity) {
   const hub = () => hubRef.current;
   const route = (path: string) => `${apiPrefix}${path}`;
 
-  const app = new Hono();
+  const app = new Hono<{ Variables: { principal?: Principal } }>();
 
   // Global error handler: never let an unhandled exception (e.g. a missing
   // phase file -> PlanStoreError/ENOENT) bubble up to the host process console
@@ -211,7 +207,35 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
     return c.json({ error: "internal", message: err instanceof Error ? err.message : String(err) }, 500);
   });
 
-  app.use("*", cors({ origin: "*", allowHeaders: ["Content-Type"] }));
+  app.use("*", async (c, next) => {
+    // Host guard: HTTP/1.1 requires Host and it must name the loopback
+    // interface; anything else is a DNS-rebinding attempt. Refused, no fallback.
+    if (!hostHeaderIsLoopback(c.req.header("Host"))) {
+      return c.json({ error: "UNTRUSTED_HOST", message: "Host header must name the loopback interface." }, 403);
+    }
+    // Origin allow-list for mutations: a browser write must originate from the
+    // service's own origin (the Agent Plan UI) or a configured extra origin
+    // (e.g. Heca). A request without Origin is a non-browser client (agents,
+    // curl) — the loopback binding plus the Host guard already scoped it.
+    const origin = c.req.header("Origin");
+    if (MUTATION_METHODS.includes(c.req.method) && !originIsAllowed(origin, security?.originRef.current, security?.allowedOrigins ?? [])) {
+      return c.json({ error: "UNTRUSTED_ORIGIN", message: "Writes are accepted only from the Agent Plan UI and configured extra origins." }, 403);
+    }
+    // Authentication: the pluggable strategy resolves the principal for every
+    // request; permissions downstream come from the principal, never from the
+    // request being local or from a caller-supplied header.
+    const strategy = security?.auth ?? loopbackAuthStrategy();
+    const principal = strategy.resolvePrincipal({
+      method: c.req.method,
+      path: c.req.path,
+      origin,
+      serviceOrigin: security?.originRef.current,
+      allowedOrigins: security?.allowedOrigins ?? [],
+    });
+    if (!principal) return c.json({ error: "UNAUTHENTICATED", message: "No principal resolved for this request." }, 401);
+    c.set("principal", principal);
+    await next();
+  });
 
   // Internal notify endpoint: lets adapter tools running in ANOTHER process
   // (where they don't have the WsHub reference) force a live-update broadcast.
@@ -706,7 +730,7 @@ app.put(route("/docs/save"), async (c) => {
     // Backward-compatible: accept a full Phase object, or generate one from title.
     if (body.id && body.slug && body.number && body.tasks && body.taskIds) {
       const full = body as Phase;
-      if (requiresGovernance(full.status) && !fromWebUi(c) && !phaseGovernanceReady(full)) {
+      if (requiresGovernance(full.status) && !supervisorPrincipal(c) && !phaseGovernanceReady(full)) {
         return c.json({ error: "phase governance required: discuss the phase first, or set contextReady=true with a reason before starting work." }, 400);
       }
       let alreadyExists = false;
@@ -919,7 +943,7 @@ app.put(route("/docs/save"), async (c) => {
 
     const phase = await store.loadPhase(phaseId).catch(() => null);
     if (!phase) return c.json({ error: "phase not found" }, 404);
-    if (requiresGovernance(body.status) && phase.featureId && !fromWebUi(c)) {
+    if (requiresGovernance(body.status) && phase.featureId && !supervisorPrincipal(c)) {
       const features = await store.loadFeatures();
       const feature = features.features.find((entry) => entry.id === phase.featureId);
       if (feature && !featureGovernanceReady(feature)) {
@@ -1260,13 +1284,13 @@ app.put(route("/docs/save"), async (c) => {
       return c.json({ error: "Task start/resume transitions require POST /tasks/:id/start so lifecycle state, checkpoints, and return stacks remain consistent." }, 400);
     }
 
-    if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status) && !fromWebUi(c)) {
+    if (body.status && body.status !== existing.status && needsMotivation(existing.status, body.status) && !supervisorPrincipal(c)) {
       if (!body.motivation || !body.motivation.trim()) {
         return c.json({ error: `Status transition "${existing.status} → ${body.status}" requires a motivation. Provide the "motivation" field with a detailed explanation.` }, 400);
       }
     }
 
-    if (entersGovernedState(existing.status, body.status) && phase.featureId && !fromWebUi(c)) {
+    if (entersGovernedState(existing.status, body.status) && phase.featureId && !supervisorPrincipal(c)) {
       const features = await store.loadFeatures();
       const feature = features.features.find((entry) => entry.id === phase.featureId);
       if (feature && !featureGovernanceReady(feature)) {
@@ -1556,7 +1580,16 @@ app.put(route("/docs/save"), async (c) => {
   });
 
   // ── Health ───────────────────────────────────────────────────────
-  const health = (c: Context) => c.json({ status: "ok", root: store.root, apiVersion: API_V1_VERSION, pid: process.pid, version: SERVER_PACKAGE.version });
+  const health = (c: Context) => c.json({
+    status: "ok",
+    root: store.root,
+    apiVersion: API_V1_VERSION,
+    pid: process.pid,
+    version: SERVER_PACKAGE.version,
+    // Boot identity + protocol for endpoint-record verification (architecture.md §2).
+    protocolVersion: SERVICE_PROTOCOL_VERSION,
+    bootId: security?.bootId ?? "",
+  });
   app.get(route("/health"), health);
   // With the web UI bundled the API sits under /api and unknown paths fall through to the UI,
   // so a program probing the server must also find /health at the root.
@@ -1568,8 +1601,8 @@ app.put(route("/docs/save"), async (c) => {
 
 // ─── Serve static files (SPA) ────────────────────────────────────────────
 
-function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, staticDir?: string, uiConfig?: UiConfig, isBusy?: () => boolean, onExternalChange?: () => void) {
-  const app = createApiApp(store, hubRef, staticDir ? "/api" : "", uiConfig, isBusy, onExternalChange);
+function createSpaApp(store: PlanStore, hubRef: { current: WsHub | null }, staticDir?: string, uiConfig?: UiConfig, isBusy?: () => boolean, onExternalChange?: () => void, security?: ServiceSecurity) {
+  const app = createApiApp(store, hubRef, staticDir ? "/api" : "", uiConfig, isBusy, onExternalChange, security);
 
   if (!staticDir) {
     return app;
@@ -1647,15 +1680,22 @@ function resolveBundledStaticDir(): string | undefined {
 export interface ServeOptions {
   port?: number;
   planRoot: string;
+  /** Loopback only (architecture.md §6 — there is no LAN mode). Any other value is refused. */
   host?: string | undefined;
   staticDir?: string | undefined;
   quiet?: boolean;
   uiConfig?: UiConfig | undefined;
   isBusy?: (() => boolean) | undefined;
-  /** Write `.planner/.local/server.json` so other programs can find this server. Default true. */
+  /** Write `.planner/.local/server.json` (legacy advisory record) and the user-scoped runtime endpoint record. Default true. */
   recordServer?: boolean;
   /** `standalone` only for `agent-plan serve`, where the process exists just to run this server. Default `embedded`. */
   serverKind?: ServerKind;
+  /** HOME scope for the user-scoped runtime endpoint record. Default: the real home directory (tests pass an isolated one). */
+  runtimeHome?: string | undefined;
+  /** Extra accepted write/WS origins beyond the service's own loopback origin (e.g. Heca). Default: none. */
+  allowedOrigins?: string[] | undefined;
+  /** Pluggable principal resolution. Default: the loopback strategy. */
+  auth?: AuthStrategy | undefined;
 }
 
 export interface ServeHandle {
@@ -1670,6 +1710,19 @@ export interface ServeHandle {
 
 export async function serve(options: ServeOptions): Promise<ServeHandle> {
   const { port = 3030, planRoot, host = "127.0.0.1", recordServer = true, serverKind = "embedded" } = options;
+
+  // Loopback-only binding is the security foundation (DNS rebinding defense,
+  // local-only access without a token). No LAN mode exists anymore.
+  if (host !== "127.0.0.1") {
+    throw new Error(`plan-server binds 127.0.0.1 only (T490, architecture.md §6 — there is no LAN mode); refusing host: ${host}`);
+  }
+  const bootId = randomUUID();
+  const security: ServiceSecurity = {
+    bootId,
+    originRef: { current: undefined },
+    allowedOrigins: options.allowedOrigins ?? [],
+    ...(options.auth ? { auth: options.auth } : {}),
+  };
 
   const store = new PlanStore(planRoot);
   const runtimeUiConfig: UiConfig = { ...(options.uiConfig ?? {}) };
@@ -1689,14 +1742,18 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
   // Detects exactly which entities changed, including writes by other processes (MCP).
   const detector = new EntityEventDetector(store, (change) => hubRef.current?.broadcast({ type: "entity-changed", data: change }));
   await detector.prime();
-  const app = createSpaApp(store, hubRef, staticDir, runtimeUiConfig, options.isBusy, () => detector.signal());
+  const app = createSpaApp(store, hubRef, staticDir, runtimeUiConfig, options.isBusy, () => detector.signal(), security);
+  // WebSocket upgrades come only from the Agent Plan UI and configured extra
+  // origins; a browser always sends Origin on an upgrade, a foreign one is refused.
+  const upgradeOriginAllowed = (origin: string | undefined): boolean =>
+    originIsAllowed(origin, security.originRef.current, security.allowedOrigins);
 
   return new Promise((resolve, reject) => {
     // Create the Node HTTP server without listening yet
     const server = createAdaptorServer({ fetch: app.fetch, hostname: host });
 
     // Attach WebSocket hub to the underlying HTTP server
-    const hub = new WsHub(server as unknown as http.Server, options.quiet, (err) => reject(err));
+    const hub = new WsHub(server as unknown as http.Server, options.quiet, (err) => reject(err), upgradeOriginAllowed);
     hubRef.current = hub; // Now routes can use it
 
     // Critical: if listen() fails (e.g. EADDRINUSE), Node emits an 'error' event.
@@ -1718,6 +1775,7 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
       const serverUrls = buildServerUrls(actualPort, host);
       runtimeUiConfig.server = { ...serverUrls, port: actualPort };
       const { localUrl, lanUrl } = serverUrls;
+      security.originRef.current = localUrl;
       if (!options.quiet) {
         console.log(`[plan-server] listening at ${localUrl}`);
         console.log(`[plan-server] ws endpoint: ws://127.0.0.1:${actualPort}/ws`);
@@ -1736,7 +1794,10 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
         close: async () => {
           stopWatcher();
           detector.close();
-          if (recordServer) await removeServerRecord(store.root, { pid: process.pid, localUrl });
+          if (recordServer) {
+            await removeServerRecord(store.root, { pid: process.pid, localUrl });
+            await removeServiceEndpointRecord({ bootId, host: "127.0.0.1", port: actualPort }, options.runtimeHome);
+          }
           hub.close();
           // Force-close any lingering sockets (browser WebSocket / keep-alive),
           // otherwise server.close() hangs until the kernel times them out.
@@ -1764,7 +1825,9 @@ export async function serve(options: ServeOptions): Promise<ServeHandle> {
         startedAt: new Date().toISOString(),
         version: SERVER_PACKAGE.version,
         apiVersion: API_V1_VERSION,
-      }).finally(() => resolve(handle));
+      })
+        .then(() => writeServiceEndpointRecord({ protocolVersion: SERVICE_PROTOCOL_VERSION, bootId, host: "127.0.0.1", port: actualPort }, options.runtimeHome))
+        .finally(() => resolve(handle));
     });
   });
 }

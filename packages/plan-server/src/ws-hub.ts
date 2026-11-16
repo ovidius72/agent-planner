@@ -25,9 +25,35 @@ export class WsHub {
   private clients = new Set<WebSocket>();
   private quiet: boolean;
 
-  constructor(server: Server, quiet = false, onError?: (err: Error) => void) {
+  /**
+   * `upgradeOriginAllowed` guards the WebSocket upgrade: a browser always
+   * sends Origin, and only the Agent Plan UI and configured extra origins
+   * (e.g. Heca) may connect. A request without Origin is a non-browser
+   * client; a foreign Origin is refused before the socket is upgraded.
+   */
+  constructor(server: Server, quiet = false, onError?: (err: Error) => void, upgradeOriginAllowed?: (origin: string | undefined) => boolean) {
     this.quiet = quiet;
-    this.wss = new WebSocketServer({ server, path: "/ws" });
+    // noServer + manual upgrade so the origin check runs before any socket
+    // is upgraded to a WebSocket (architecture.md §6: writes and WebSocket
+    // upgrades are accepted only from the Agent Plan UI and Heca origins).
+    this.wss = new WebSocketServer({ noServer: true });
+
+    server.on("upgrade", (req, socket, head) => {
+      const pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+      if (pathname !== "/ws") {
+        socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      if (upgradeOriginAllowed && !upgradeOriginAllowed(req.headers.origin)) {
+        socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      this.wss.handleUpgrade(req, socket, head, (ws) => {
+        this.wss.emit("connection", ws, req);
+      });
+    });
 
     // Critical: if the underlying HTTP server fails to listen (e.g. EADDRINUSE),
     // the WebSocketServer also emits 'error'. Without a handler this becomes

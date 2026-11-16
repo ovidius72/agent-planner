@@ -106,7 +106,7 @@ describe("pi-adapter resume flow and CLI smoke", () => {
       assert.ok(canonical > 0, "canonical port persisted for the next session");
       const stateEntry = host1.sessionEntries.filter((e) => e.customType === "plan-web-state").at(-1);
       assert.ok(stateEntry, "plan-web-state entry appended");
-      assert.deepEqual(stateEntry.data, { running: true, port: port1, mode: "lan" });
+      assert.deepEqual(stateEntry.data, { running: true, port: port1, mode: "local" }); // loopback-only (T490)
 
       // A handoff written in session 1 must survive into session 2.
       await host1.runTool("handoff_write", {
