@@ -5,7 +5,7 @@ This document describes implementation order, not live task status. The Agent Pl
 ## 1. Registered plan and remaining contract decisions
 
 - Approve descriptor, service bootstrap/authentication, public Heca transport and recovery conflict contracts.
-- The initial F025 registration recorded 16 phases and 41 planned tasks; P132 subsequently added six project-use improvements. See [the report](docs/agent-brain/replan-registration.md) for the dated registration and the [live execution map](.planner/docs/agent-brain-plan.md) for current scope. Heca-Pro owner amendments were registered on 2026-10-31.
+- The initial F025 registration recorded 16 phases and 41 planned tasks; P132 subsequently added eight project-use improvements. See [the report](docs/agent-brain/replan-registration.md) for the dated registration and the [live execution map](.planner/docs/agent-brain-plan.md) for current scope. Heca-Pro owner amendments were registered on 2026-10-31.
 - Keep correctly completed work as history; allocate only coherent missing adaptation outcomes.
 - Review effective feature/phase/task priority and real prerequisites. Do not introduce the discussed global task queue.
 
@@ -51,7 +51,7 @@ This document describes implementation order, not live task status. The Agent Pl
 
 ## 7. Closeout
 
-P132 covers the six documented project-use improvements before closeout, building on the existing reconciliation and portable-guidance owners where applicable.
+P132 covers the eight documented project-use improvements before closeout, building on the existing selector, reconciliation and portable-guidance owners where applicable.
 
 T481 first establishes the standalone milestone; T482 follows it and the optional collaboration UI for freshly packed installed-artifact/native closeout. Verify crash/retry/reconnect, old clients, source conflicts, dynamic providers, long IDs and the dev-a/dev-b partial-integration scenario. Native UI and mesh acceptance require their actual runtimes.
 

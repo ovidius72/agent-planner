@@ -78,7 +78,6 @@ Regole operative:
 - Non viene tracciato come `feature`/`phase`/`task`.
 - Viene modificato **solo su esplicita richiesta dell'utente**.
 - L'agente non aggiorna `AGENTS.md` di propria iniziativa, anche se rileva inconsistenze o gap.
-- Se l'utente chiede una modifica, l'agente deve comunque seguire il Pre-flight Protocol e attendere conferma prima di committare.
 
 ### 15. Vietato usare GSD in questo progetto
 
@@ -134,6 +133,7 @@ Non-negotiable rules:
 - Scrivere codice di qualità: principi DRY e SOLID.
 - Correggere a livello di libreria, componente o modulo. Centralizzare la logica condivisa il più possibile; non distribuire correzioni duplicate sui call site.
 - Seguire i pattern e lo styling consolidati del progetto: i componenti React seguono i pattern React consolidati, i moduli Node seguono i pattern backend consolidati. Non riscrivere componenti o moduli esistenti più volte: riusare ed estendere l'implementazione canonica.
+- **Tailwind CSS v4 & design tokens**: utilizzare sempre le classi utility native generate dai token definiti nel `@theme` (es. `bg-accent`, `text-muted`, `border-border-strong`, `rounded-input`, `ring-accent`). Non usare sintassi arbitraria `-(--variable)` o `-[var(--variable)]` per i token censiti nel theme; riservare la sintassi arbitraria solo a variabili dinamiche non dichiarate.
 
 ## Comportamento atteso dagli agenti
 
@@ -160,6 +160,7 @@ l'agente deve:
 1. **Dichiarare l'intento**: "Sto per [azione specifica]."
 2. **Specificare i mezzi**: "Per farlo, userò [strumento A, tool B, o modifica al file C]."
 3. **Richiedere approvazione**: "Procedo?"
+4. **L'utente puo' dire all'agente di non seguire il pre-flight in certe circostanze. l'agente a quel punto procede.**
 
 L'agente deve attendere la conferma esplicita dell'utente prima di eseguire la modifica.
 

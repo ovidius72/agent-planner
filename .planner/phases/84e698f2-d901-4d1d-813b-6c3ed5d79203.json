@@ -277,11 +277,20 @@
       "priority": 2,
       "shortName": "implement-the-transactional-sq",
       "title": "Implement the transactional SQLite authority, documents and planner search",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Outcome: Transactional SQLite authority with versioned documents, search and durable command receipts.\n\nCurrent implementation: PlanStore uses multi-file JSON and root locks. The service-owned SQLite backend selected by the user has no dedicated implementation owner; current exports are not a full portable database backup.\n\nImplementation responsibility:\n- Choose the driver by benchmark: node:sqlite (built-in, no native addon) versus better-sqlite3 (native addon, expected faster) on real planner flows (start/claim, context load, FTS search, bulk import, backup), on the latest Node release available when this task starts. Put the winner behind a thin, harness-independent persistence-driver interface. Heca bundles that pinned Node runtime; npm installs declare it as the minimum; if better-sqlite3 wins, ship prebuilt binaries per OS/CPU. Verify FTS5, JSON, WAL, the backup API and crash behaviour on the pinned build. Keep blocking DB work in a bounded worker and document schema/driver compatibility.\n- Implement relational entity/parent/dependency/ownership/revision tables, validated extensible JSON metadata, single-owner decision revisions, logical document folders/content/assets and indexed reverse relationships.\n- Implement BEGIN IMMEDIATE command transactions with expected revisions, authenticated caller identity, idempotency-key/payload validation, durable receipt and outbox/event cursor committed together. No Git/network/model calls in a transaction.\n- Provide document CRUD/history, exact-ID/literal and FTS5 word/phrase search with filters, snippets and pagination. Maintain a rebuildable FTS index transactionally; clients receive content through domain operations, never SQL or DB paths.\n- Enable foreign keys and a reviewed WAL/durability/busy/checkpoint policy. Expose consistent snapshot/backup primitives and schema migration APIs for T494/T495; no live JSON/Markdown mirror.\n- Measure representative read/context/write/search flows and inject before-commit, after-commit/lost-ack and event-publication crashes in temporary fixtures.\n\nAcceptance and evidence:\n- Task/parent/receipt/event state commits atomically; retry of a retained request cannot repeat the mutation, and conflicting payload reuse is refused.\n- Tasks are independent rows; documents/required portable assets survive snapshot restore and FTS can be rebuilt without changing canonical content.\n- SQLite is embedded in Agent Plan only; no separate DB service, network filesystem DB or installed user-data migration.\n- The backend provides complete typed primitives for T496/T490 and exposes honest busy/corrupt/schema-incompatible outcomes.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/export-service.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.",
       "descriptionUpdatedAt": "2026-11-02T19:15:16.506Z",
-      "notes": "",
-      "statusLog": [],
+      "notes": "Implementation record (2026-11-16, feat/agent-brain) — supplementing the source-backed analysis.\n\nBenchmark (Node 25.4.0, temp fixture, real planner-shaped workload; harness kept outside the repo): node:sqlite vs better-sqlite3 measured PARITY on every flow — start/claim BEGIN IMMEDIATE mutations with receipt+event at synchronous=FULL 6,847 vs 6,848 ops/s; task+phase+feature join reads 16,477 vs 16,480; FTS5 3-term OR search with snippets 1,861 vs 1,862; transactional bulk import 771 entities 10 vs 11 ms; snapshot 2 ms (VACUUM INTO) vs 21 ms (online backup API). The native-addon speed hypothesis is NOT confirmed — deciding factors are operational, so node:sqlite WINS (decisions.md revised 2026-11-15): built into Node (SQLite 3.51.1 bundled, FTS5+JSON1+WAL verified), zero per-OS/CPU prebuilt binaries, no ABI rebuild per Node upgrade, honest busy outcome verified (second writer with busy_timeout=200 gets 'database is locked' ERR_SQLITE_ERROR after ~200 ms, never a hang, committed work visible cross-connection). The only better-sqlite3 edge (online backup API) is covered by VACUUM INTO consistent snapshots behind the thin driver interface; driver stays swappable. node:sqlite on 25.4.0 has NO .backup() method (verified live).\n\nDeliverable: packages/plan-core/src/persistence/ exposed as package subpath @agent-plan/core/persistence (main entry stays dependency-free; node:sqlite loads only here) + plan-core engines node>=22.5.0 (root declares >=25):\n- driver.ts: thin PersistenceDriver interface (kind, sqliteVersion, prepare/exec/close/runExclusive) with typed PersistenceError codes PERSISTENCE_BUSY | PERSISTENCE_CORRUPT | PERSISTENCE_SCHEMA_INCOMPATIBLE | PERSISTENCE_CONSTRAINT | PERSISTENCE_UNAVAILABLE; SQLITE_BUSY/SQLITE_CORRUPT/SQLITE_NOTADB mapped honestly.\n- node-sqlite-driver.ts: node:sqlite implementation; busy_timeout (default 5 s, tunable), foreign_keys=ON, synchronous=FULL; runExclusive = BEGIN IMMEDIATE/COMMIT/ROLLBACK with nesting refused (per-connection, mirrors the old root-lock re-entrancy rule).\n- schema.ts: STORE_SCHEMA_VERSION=1 + full architecture.md §4 DDL — projects/features/phases (status CHECKs), tasks as independent rows (pause_snapshot, active_owner_session), task_dependencies/checklists/entity_requirements/requirements, single-owner decisions with revisions+supersession, documents/document_revisions/document_assets, phase_handoffs/work_deviations, command_receipts (PK request_id+project_id, payload hash), event_outbox/event_cursor per consumer, indexes for parent membership/reverse deps/ready work, FTS5 documents_fts (porter unicode61, content-table sync) maintained ONLY by mechanical triggers. bootstrapStoreSchema: create-once with durable WAL, unknown/larger schemaVersion → PersistenceSchemaIncompatible (now a PersistenceError subtype), explicit migration seam for T494/T495.\n- command-authority.ts: executeCommand inside one runExclusive — retained-receipt lookup (same hash → stored outcome as already-applied, mutation NOT repeated; different hash → typed conflict, refused), expectedRevision check (stale → typed revision-conflict with current revision, no mutation), domain apply callback, revision bump, receipt + published events committed together; busy → typed bounded retry outcome (status busy, retry with same requestId); publishEvent/readOutbox/advanceEventCursor outbox with per-consumer cursors; documented retention horizon (30 days / 100k receipts).\n- documents.ts: create/update/get/delete with revision history (document_revisions), folder listing, portable assets (blobs + hashes), literal search (LIKE with escaping) and FTS5 search (MATCH + rank ordering, snippet(), folder filter, limit/offset pagination with explicit truncated flag), rebuildFtsIndex (delete-all + repopulate from canonical content, content unchanged).\n- snapshot.ts: openStore (missing file without create → typed UNAVAILABLE; verification before any domain call, close-once), createSnapshot via VACUUM INTO, restoreFromSnapshot + schema verify for T494/T495.\n\nVerification: 13-test suite packages/plan-core/test/persistence.test.mjs ALL GREEN (mkdtemp fixtures only) — bootstrap/WAL reopen, atomic task+receipt+event commit with one revision bump, retry-safe idempotency (no repeated mutation, no duplicated event), conflicting-payload refusal, stale-revision refusal with no mutation, crash BEFORE commit leaves zero partial state (task/revision/receipt/event all intact), outbox cursor deduplication, second-writer bounded busy (busy outcome inside a held transaction, then the same command succeeds after commit — bounded retry semantics), FK violations typed, documents/history/assets surviving snapshot restore, FTS snippets+pagination+folder filter with rebuild preserving both results and canonical content, unknown schemaVersion/corrupt file (SQLITE_NOTADB)/missing file typed with explicit create, independent sibling task rows. Core build green; descriptor suite still 11/11. Bounded verification only — full canonical gate deferred to closeout per AGENTS.md rule 17.\n\nNot done here (owned elsewhere): consumer adoption/plan-store rewiring (T490), structural reconciliation (T496), real migration of .planner (T494/T495). No client rewiring, no real migration, no Git publication beyond the approved commit.",
+      "statusLog": [
+        {
+          "id": "20c1a562-1360-4134-ad1e-1fa96a29f9a1",
+          "date": "2026-11-15T08:24:31.857Z",
+          "fromStatus": "planned",
+          "toStatus": "in-progress",
+          "title": "planned → in-progress",
+          "description": ""
+        }
+      ],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
@@ -334,16 +343,21 @@
       ],
       "pauseSnapshot": null,
       "pauseHistory": [],
-      "startedAt": "",
+      "startedAt": "2026-11-15T08:24:31.857Z",
       "completedAt": "",
       "createdAt": "2026-10-29T21:00:59.954Z",
-      "updatedAt": "2026-11-02T19:15:16.380Z",
-      "sessionInfo": [],
-      "activeOwnerSession": ""
+      "updatedAt": "2026-11-16T08:34:04.807Z",
+      "sessionInfo": [
+        {
+          "sessionId": "mcp-process:1730b0bb-ee74-4511-9502-ead67aa82751",
+          "createdAt": "2026-11-15T08:24:31.737Z"
+        }
+      ],
+      "activeOwnerSession": "mcp-process:1730b0bb-ee74-4511-9502-ead67aa82751"
     }
   ],
   "createdAt": "2026-10-21T10:02:59.058Z",
-  "updatedAt": "2026-11-15T08:00:38.702Z",
+  "updatedAt": "2026-11-16T08:34:04.807Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
@@ -370,7 +384,7 @@
   "sessionInfo": [
     {
       "sessionId": "mcp-process:1730b0bb-ee74-4511-9502-ead67aa82751",
-      "createdAt": "2026-11-15T07:56:15.614Z"
+      "createdAt": "2026-11-15T08:24:31.737Z"
     }
   ]
 }

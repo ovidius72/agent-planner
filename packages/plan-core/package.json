@@ -5,12 +5,16 @@
   "description": "Harness-agnostic core for Agent Plan: schemas, persistence, ordering, status rollups, and markdown rendering.",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
     "./schema": "./dist/schema.js",
-    "./naming": "./dist/naming.js"
+    "./naming": "./dist/naming.js",
+    "./persistence": "./dist/persistence/index.js"
   },
   "files": [
     "dist/**/*.js",

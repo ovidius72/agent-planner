@@ -148,6 +148,8 @@ Never perform Git, network, model or long provider calls inside a write transact
 
 The service must document idempotency retention. A very old retry with an expired receipt is not automatically safe to repeat. WAL is for local persistence, not a network filesystem synchronization scheme. Filesystem and hardware failure remain backup concerns.
 
+Finalized in core (T502, benchmark 2026-11-15): `packages/plan-core/src/persistence/` (package subpath `@agent-plan/core/persistence`) — thin persistence-driver interface with typed `PERSISTENCE_BUSY` / `PERSISTENCE_CORRUPT` / `PERSISTENCE_SCHEMA_INCOMPATIBLE` / `PERSISTENCE_CONSTRAINT` outcomes, the benchmark-selected `node:sqlite` driver, versioned schema bootstrap (unknown `schemaVersion` never migrates silently), `executeCommand` with retained receipts (same payload → stored outcome; different payload → typed conflict; stale `expectedRevision` → typed revision-conflict, no mutation), transactional outbox with per-consumer cursors, documents with revision history/assets and rebuildable FTS5 search with snippets and pagination, and `VACUUM INTO` snapshot/restore primitives for T494/T495. Clients receive content through these domain operations only — never SQL or DB paths.
+
 ## 6. API parity and client migration
 
 Keep the existing v1 read contract compatible or advertise an explicit deprecation/version transition. Add a versioned complete application API; `/api/v2` is a proposed namespace, not an implemented endpoint.

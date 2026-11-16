@@ -1,14 +1,14 @@
 # F025 current execution map
 
-Registered: 2026-10-29; consolidated 2026-11-02 with [the decision register](../../docs/agent-brain/decisions.md). P132 and T503–T508 were added on 2026-11-13 for the project-use improvements register.
+Registered: 2026-10-29; consolidated 2026-11-02 with [the decision register](../../docs/agent-brain/decisions.md). P132 and T503–T510 track the project-use improvements register.
 
 F025 evolves Agent Plan in this repository. The canonical feature, phase, task, requirement and Accepted Decision records are the execution contracts. This document is a navigation map, not another import payload or task store.
 
 ## Registered scope
 
-- 17 phases and 47 planned tasks: the 2026-10-29 registration preserved 40 prior task identities/history and added P128(F025)/T502; P132 later added T503–T508.
+- 17 phases and 49 tasks: the 2026-10-29 registration preserved 40 prior task identities/history and added P128(F025)/T502; P132 later added T503–T510. Consult live task statuses; T506 and T507 record completion in v0.4.11.
 - 33 linked outcome requirements; 21 feature Accepted Decisions, including the prototype-led UI/API boundary. The existing project decision remains on its original owner.
-- The 2026-11-02 registration recorded 64 acyclic task dependency edges and 230 unchecked checklist items. P132 adds five prerequisite edges and six closeout edges; live planner records remain authoritative.
+- The 2026-11-02 registration recorded 64 acyclic task dependency edges and 230 unchecked checklist items. P132 adds eight prerequisite edges and eight closeout edges; live planner records remain authoritative.
 - Global F025 priority remains 24. The phase order below does not change the existing project-wide priority model.
 
 ## Architecture and design contract
@@ -44,7 +44,7 @@ P131 is phase 4 so a usable Heca integration ships before code intelligence and 
 | 13 | P123(F025) | Supervisor graph and evidence-backed controls | T479, T480 |
 | 14 | P125(F025) | Project-first browser page titles | T483 |
 | 15 | P127(F025) | Editable Monaco workspace and contextual source navigation | T486, T487, T488 |
-| 16 | P132(F025) | Improvements and corrections from project use | T503, T504, T505, T506, T507, T508 |
+| 16 | P132(F025) | Improvements and corrections from project use | T503, T504, T505, T506, T507, T508, T509, T510 |
 | 17 | P124(F025) | Standalone compatibility and installed cross-product closeout | T481, T482 |
 
 ## Task owners and real prerequisites
@@ -98,7 +98,9 @@ Dependencies constrain execution; table order is not permission to bypass readin
 | P132(F025)/T506 | Find empty features and phases in structured search | None |
 | P132(F025)/T507 | Collapse the project description in the Web UI | None |
 | P132(F025)/T508 | Bound planner mutation diagnostics to affected entities | T496 |
-| P124(F025)/T481 | Verify migrations, invariants and complete cross-surface scenarios | T487, T488, T480, T493, T495, T469, T503, T504, T505, T506, T507, T508 |
+| P132(F025)/T509 | Preserve session-specific phase continuity in next-work recommendations | T463 |
+| P132(F025)/T510 | Recommend planning for eligible empty phases | T463, T465 |
+| P124(F025)/T481 | Verify migrations, invariants and complete cross-surface scenarios | T487, T488, T480, T493, T495, T469, T503, T504, T505, T506, T507, T508, T509, T510 |
 | P124(F025)/T482 | Validate installed artifacts and publish the operating guide | T481, T500 |
 
 ## Read before implementation

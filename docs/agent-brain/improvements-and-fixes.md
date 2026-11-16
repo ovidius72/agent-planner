@@ -12,8 +12,8 @@ This document preserves reported problems, expected behaviour and verification c
 | AB-IMP-004 | Reported bug | Structured search omits empty features and phases. | P132(F025)/T506. |
 | AB-IMP-005 | UI improvement | Show the project description in a collapsed accordion. | P132(F025)/T507. |
 | AB-IMP-006 | Reported performance bug | Planner writes return project-wide freshness diagnostics and consume excessive tokens. | P132(F025)/T508; foundation P128(F025)/T496. |
-| AB-IMP-007 | Reported scheduling bug | A session receives work from another agent's phase instead of continuing its own. | P116(F025)/T462 and P117(F025)/T463; task proposal pending. |
-| AB-IMP-008 | Reported scheduling bug | A higher-priority empty phase is never suggested for task-planning discussion. | P116(F025)/T462 and P117(F025)/T463; task proposal pending. |
+| AB-IMP-007 | Reported scheduling bug | A session receives work from another agent's phase instead of continuing its own. | P132(F025)/T509; shared selection foundation P117(F025)/T463. |
+| AB-IMP-008 | Reported scheduling bug | A higher-priority empty phase is never suggested for task-planning discussion. | P132(F025)/T510; foundations P117(F025)/T463 and P118(F025)/T465. |
 
 ## AB-IMP-001 — Review affected task contracts after decision changes
 
@@ -83,7 +83,7 @@ This document preserves reported problems, expected behaviour and verification c
 
 **Verification.** Search for each empty-entity case by supported reference and name, including structured feature/phase queries. Compare suggestion selection with the resulting tree, clear the query, apply relevant status filters, and repeat with a normal task-bearing branch. Empty entities must remain discoverable without incorrect task matches or regression of existing filters.
 
-**Planning reference.** P132(F025)/T506 owns this correction, reusing the existing dashboard/search responsibilities.
+**Planning reference.** P132(F025)/T506 owns this correction, reusing the existing dashboard/search responsibilities. The planner records it as completed with verification and release v0.4.11 evidence; see the task's completion summary.
 
 ## AB-IMP-005 — Collapse the project description in the Web UI
 
@@ -95,7 +95,7 @@ This document preserves reported problems, expected behaviour and verification c
 
 **Verification.** With a long description, confirm the initial collapsed state, expand and collapse by pointer and keyboard, and verify the full formatted text remains readable. Check the empty-description state and navigation between projects.
 
-**Planning reference.** P132(F025)/T507 owns this improvement and follows the existing F025 UI design contracts.
+**Planning reference.** P132(F025)/T507 owns this improvement and follows the existing F025 UI design contracts. The planner records it as completed with verification and release v0.4.11 evidence; see the task's completion summary.
 
 ## AB-IMP-006 — Bound diagnostics returned by planner writes
 
@@ -123,7 +123,7 @@ This document preserves reported problems, expected behaviour and verification c
 
 **Verification.** Reproduce the exact two-session example, including the result immediately after T004 completion on each supported surface. Check that dev-1 and dev-2 retain separate focus, neither claims the other's active task, a blocked or completed phase and a missing session are explained, and a restart/compaction follows the agreed recovery rules. Check the agreed interaction with global priorities, explicit user deviations and pending returns; recommendations are not reservations.
 
-**Proposed task.** Add a dedicated P132 verification/adaptation task that builds on the shared selector owned by T462/T463. Define cross-session phase continuity and propagate caller context through every recommendation path; do not duplicate the selector. Task creation and priority are not yet registered by this report.
+**Planning task.** P132(F025)/T509 builds on the shared selector owned by T462/T463. Define cross-session phase continuity and propagate caller context through every recommendation path without duplicating the selector.
 
 ## AB-IMP-008 — Recommend discussion for a higher-priority empty phase
 
@@ -133,7 +133,7 @@ This document preserves reported problems, expected behaviour and verification c
 
 **Verification.** With P001 empty and P002 containing ready work, surface the phase-planning action at the agreed point in the precedence order. Test a deliberately empty/excluded phase, phase containing only terminal tasks, blocked phase, multiple sessions and completed preparation; do not endlessly recommend preparation after the phase has been deliberately resolved. No task is created implicitly.
 
-**Proposed task.** Add a P132 task for the phase-level planning recommendation and its MCP/Pi/CLI/UI presentation, using the shared T462/T463 contract and T465 resume projection. Agree how phase intent and session/priority precedence are represented before implementation. Task creation and priority are not yet registered by this report.
+**Planning task.** P132(F025)/T510 owns the phase-level planning recommendation and its MCP/Pi/CLI/UI presentation, using the shared T462/T463 contract and T465 resume projection. Agree how phase intent and session/priority precedence are represented before implementation.
 
 ## Maintaining this register
 
