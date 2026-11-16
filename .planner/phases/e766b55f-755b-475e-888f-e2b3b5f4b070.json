@@ -30,7 +30,8 @@
     "9aaa81ce-8a0c-4deb-a9ec-64d2ad9590b4",
     "748c456a-26c6-447b-b6bc-013754d4aad6",
     "c9da14af-5bb5-4532-94b5-3fba8f2f9a37",
-    "798aa574-8aae-4dd6-a522-115baf1b81fc"
+    "798aa574-8aae-4dd6-a522-115baf1b81fc",
+    "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2"
   ],
   "tasks": [
     {
@@ -280,10 +281,76 @@
       "updatedAt": "2026-11-14T11:22:10.651Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
+    },
+    {
+      "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2",
+      "phaseId": "e766b55f-755b-475e-888f-e2b3b5f4b070",
+      "number": 511,
+      "shortId": "UV8NS",
+      "priority": 9,
+      "shortName": "optional-lan-exposure-of-the-s",
+      "title": "Optional LAN exposure of the service with token authentication",
+      "status": "planned",
+      "description": "Outcome: A user can open the planner dashboard from another device on the same LAN (phone, second PC) behind explicit opt-in and token authentication, without exposing the service to the internet. Loopback remains the default.\n\nCurrent implementation (P128(F025)/T490 wave 1, branch feat/agent-brain): the service binds 127.0.0.1 only — serve() refuses host != 127.0.0.1 with a typed error (packages/plan-server/src/serve.ts, ServeOptions host validation); Host headers must name the loopback interface (packages/plan-server/src/auth.ts hostHeaderIsLoopback, DNS rebinding defense); mutations and WebSocket upgrades are accepted only from the service's own loopback origin or configured extra origins (auth.ts originIsAllowed); the pluggable AuthStrategy seam exists (loopbackAuthStrategy resolves principalId loopback:agent|web-ui|heca) but no credential exists — an Origin header is evidence, not a credential; the runtime endpoint record type constrains host to the literal \"127.0.0.1\" (packages/plan-core/src/project-descriptor.ts ServiceEndpointRecord, service-endpoint.ts); pi-adapter startServer accepts a visibility param but maps lan to loopback with an honest notify (packages/pi-adapter/src/index.ts), plan-mcp ensureWebStarted binds loopback (packages/plan-mcp/src/index.ts), CLI serveCommand refuses non-loopback --host (packages/agent-plan/src/index.ts).\n\nWhat needs to be built:\n1. Contract change first: an accepted decision revising the loopback-only rule (architecture.md section 6 says \"There is no LAN mode\"; T490's contract text and the D5-era LAN decision lineage). Review prereqs/dependents per the decision-change process; internet exposure stays out of scope.\n2. Token bootstrap: on first opt-in LAN boot the service generates a per-user access token stored with 0600 permissions under the user runtime scope (~/.agent-plan/runtime/, next to the endpoint record from packages/plan-core/src/service-endpoint.ts), regenerable (rotation invalidates the old one).\n3. Opt-in binding: an explicit flag/config (planner-web lan / planner load lan / AGENT_PLAN_BIND=lan) lets serve() bind 0.0.0.0 or the LAN address; ServiceEndpointRecord.host widens to accept the advertised interface while loopback stays the default; CLI --host refusal is replaced by the token requirement.\n4. Authentication: a TokenAuthStrategy in packages/plan-server/src/auth.ts required for every non-loopback request (Bearer token); loopback requests keep working without a token; the Host guard is relaxed to accept the machine's LAN hostname(s) only when LAN mode is on; WS upgrades from non-loopback require the token; permissions still come from the resolved principal recorded in the audit.\n5. Pairing UX: the recap and the dashboard expose the pairing URL (loopback URL + token) so the user can copy it to the phone/second PC; the Web UI stores the token per device (localStorage) and sends it on every request.\n6. Failure modes with typed results: missing/invalid/expired/rotated token, LAN mode off while a paired device retries, non-loopback Host when LAN is off.\n\nEdge cases: token in clear text over plain HTTP on the LAN (document the trust model; HTTPS is a separate later step); multiple concurrent devices; hostname changes (DHCP) breaking the Host allow-list; the endpoint record advertise-vs-bind distinction; iOS/Safari localStorage quirks; never weaken the DNS-rebinding defense for loopback while LAN is on.\n\nVerification: focused suites with mkdtemp fixtures (token lifecycle, LAN bind refusals when off, token-authenticated writes from a non-loopback Host, WS upgrade with token, loopback unchanged without token); the Web UI pairing flow exercised in e2e at task verification time.",
+      "descriptionUpdatedAt": "2026-11-16T13:11:22.389Z",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [
+        {
+          "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2-check-001-record-the-accepted-decision-revising-loopback-only-to-default-loopback-opt-in-lan-with-token-auth-decision-change-review-over-architecture-md-section-6-t490-contract-d5-lineage",
+          "number": 1,
+          "title": "Record the accepted decision revising loopback-only to default-loopback + opt-in LAN with token auth (decision-change review over architecture.md section 6, T490 contract, D5 lineage).",
+          "checked": false
+        },
+        {
+          "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2-check-002-implement-token-bootstrap-generate-persist-with-0600-in-the-user-runtime-scope-rotate-and-invalidate-on-demand",
+          "number": 2,
+          "title": "Implement token bootstrap: generate, persist with 0600 in the user runtime scope, rotate and invalidate on demand.",
+          "checked": false
+        },
+        {
+          "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2-check-003-implement-opt-in-lan-binding-in-serve-with-the-widened-endpoint-record-host-and-relaxed-host-guard-lan-hostnames-only-when-lan-is-on",
+          "number": 3,
+          "title": "Implement opt-in LAN binding in serve() with the widened endpoint record host and relaxed Host guard (LAN hostnames only when LAN is on).",
+          "checked": false
+        },
+        {
+          "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2-check-004-implement-tokenauthstrategy-non-loopback-requests-and-ws-upgrades-require-the-bearer-token-loopback-keeps-tokenless-access-principals-recorded-for-audit",
+          "number": 4,
+          "title": "Implement TokenAuthStrategy: non-loopback requests and WS upgrades require the Bearer token; loopback keeps tokenless access; principals recorded for audit.",
+          "checked": false
+        },
+        {
+          "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2-check-005-implement-pairing-ux-recap-dashboard-pairing-url-web-ui-token-storage-and-header-on-every-request",
+          "number": 5,
+          "title": "Implement pairing UX: recap/dashboard pairing URL, Web UI token storage and header on every request.",
+          "checked": false
+        },
+        {
+          "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2-check-006-verify-acceptance-with-focused-mkdtemp-fixture-suites-and-record-any-unverified-boundary",
+          "number": 6,
+          "title": "Verify acceptance with focused mkdtemp-fixture suites and record any unverified boundary.",
+          "checked": false
+        }
+      ],
+      "subtasks": [],
+      "dependsOn": [
+        "93f5f6da-cb75-4c4b-a055-7c2cedb3a56f"
+      ],
+      "pauseSnapshot": null,
+      "pauseHistory": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-11-16T13:11:22.283Z",
+      "updatedAt": "2026-11-16T13:11:27.916Z",
+      "sessionInfo": [],
+      "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-13T14:17:36.105Z",
-  "updatedAt": "2026-11-15T09:48:18.792Z",
+  "updatedAt": "2026-11-16T13:11:27.916Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,

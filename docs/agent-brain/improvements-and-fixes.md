@@ -14,6 +14,7 @@ This document preserves reported problems, expected behaviour and verification c
 | AB-IMP-006 | Reported performance bug | Planner writes return project-wide freshness diagnostics and consume excessive tokens. | P132(F025)/T508; foundation P128(F025)/T496. |
 | AB-IMP-007 | Reported scheduling bug | A session receives work from another agent's phase instead of continuing its own. | P132(F025)/T509; shared selection foundation P117(F025)/T463. |
 | AB-IMP-008 | Reported scheduling bug | A higher-priority empty phase is never suggested for task-planning discussion. | P132(F025)/T510; foundations P117(F025)/T463 and P118(F025)/T465. |
+| AB-IMP-009 | User-reported product limitation | The service binds loopback only, so no dashboard access from another LAN device (phone, second PC). | P132(F025)/T511; foundation P128(F025)/T490 (loopback hardening + AuthStrategy seam). |
 
 ## AB-IMP-001 — Review affected task contracts after decision changes
 
@@ -134,6 +135,18 @@ This document preserves reported problems, expected behaviour and verification c
 **Verification.** With P001 empty and P002 containing ready work, surface the phase-planning action at the agreed point in the precedence order. Test a deliberately empty/excluded phase, phase containing only terminal tasks, blocked phase, multiple sessions and completed preparation; do not endlessly recommend preparation after the phase has been deliberately resolved. No task is created implicitly.
 
 **Planning task.** P132(F025)/T510 owns the phase-level planning recommendation and its MCP/Pi/CLI/UI presentation, using the shared T462/T463 contract and T465 resume projection. Agree how phase intent and session/priority precedence are represented before implementation.
+
+## AB-IMP-009 — Optional LAN access to the user-scoped service
+
+**Reported behaviour.** User report, 2026-11-16: exposing the service to the internet would be risky, but the planner dashboard is now bound to 127.0.0.1 only, so a user cannot open it from a phone or another PC on the same LAN. The previous LAN binding was removed by T490's loopback-only contract (architecture.md section 6), together with `cors({origin:"*"})` and the unauthenticated write surface.
+
+**Expected behaviour.** Loopback stays the default and the safe posture. An explicit opt-in lets the service bind the LAN interface and accept dashboard access from other local devices behind token authentication: a per-user access token bootstrapped into the user runtime scope, required (Bearer) on every non-loopback request and WebSocket upgrade, rotatable and invalidable; a pairing URL in the recap/dashboard carries the token to the other device. Internet exposure remains out of scope. The DNS-rebinding defense for loopback, the Origin rules for browser writes and the resolved-principal model are preserved; a token, like the removed `X-Planner-Source` header, is a credential that must never be forgeable by a request field. Plain-HTTP-on-LAN trust limits are documented.
+
+**Source inspection.** T490 wave 1 shipped the seam this work extends: `packages/plan-server/src/auth.ts` (AuthStrategy, hostHeaderIsLoopback, originIsAllowed), `packages/plan-server/src/serve.ts` (loopback-only ServeOptions validation, ServiceSecurity), `packages/plan-core/src/service-endpoint.ts` (user-scoped runtime record; the `ServiceEndpointRecord.host` type is currently the literal `"127.0.0.1"`), and the client call sites (plan-mcp `ensureWebStarted`, pi-adapter `startServer`, CLI `serveCommand`).
+
+**Verification.** With LAN off, every non-loopback request is refused as today. With LAN on and no/invalid/rotated token, non-loopback requests and WS upgrades fail with typed results; a valid token from a LAN device reads and writes the dashboard; loopback keeps tokenless access; the token file persists with 0600 and rotation invalidates old devices. Focused mkdtemp-fixture suites; pairing UX exercised in e2e at implementation time.
+
+**Planning task.** P132(F025)/T511 depends on P128(F025)/T490 and owns the opt-in LAN binding, token bootstrap/rotation, TokenAuthStrategy and pairing UX.
 
 ## Maintaining this register
 
