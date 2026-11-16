@@ -12,8 +12,8 @@
   "contextReadyReason": "Updated through planner-feature-discuss MCP tool.",
   "startDate": "",
   "endDate": "",
-  "workDone": "Canonical replan registered on 2026-10-29 and finalized with the prototype/API boundary on 2026-10-30. F025, all 16 phases and 40 original task identities/history are preserved; P128/T502 is the one new SQLite/documents/search owner. All 41 tasks remain planned. Phase order, 68 task edges, 33 linked requirements and single-owner decisions are reconciled. Current execution map: .planner/docs/agent-brain-plan.md; detailed evidence: docs/agent-brain/replan-registration.md. Heca-Pro's corresponding planner reconciliation was registered on 2026-10-31: 27 open tasks amended, P011(F003)/T047 added for new-service conformance, original completed work retained. See ../heca-pro/docs/agent-brain-registration.md. No product implementation has started.",
-  "workRemaining": "Implement the canonical dependency order, starting with P116 baseline and contract work. Resolve descriptor/auth/driver/import and public Heca contracts in their owners. Follow reviewed UI prototypes with business logic in core/service APIs. Heca-Pro's corresponding task contracts are reconciled; its implementation, current-service conformance T047 and native public facade T043-T046 remain open. Preserve identity/history, phase continuity, bounded context, source/native evidence and repository approval rules. No source implementation, real migration, automatic Git publication or release is authorized by registration.",
+  "workDone": "Canonical replan registered on 2026-10-29 and finalized with the prototype/API boundary on 2026-10-30. F025, all 16 phases and 40 original task identities/history are preserved; P128/T502 is the one new SQLite/documents/search owner. All 41 tasks remain planned. Phase order, 68 task edges, 33 linked requirements and single-owner decisions are reconciled. Current execution map: .planner/docs/agent-brain-plan.md; detailed evidence: docs/agent-brain/replan-registration.md. Heca-Pro's corresponding planner reconciliation was registered on 2026-10-31: 27 open tasks amended, P011(F003)/T047 added for new-service conformance, original completed work retained. See ../heca-pro/docs/agent-brain-registration.md. No product implementation has started.\n\n---\nP128 groundwork complete: domain contract (T462), portable identity (T489), SQLite authority with documents/search (T502), bounded reconciliation (T496).",
+  "workRemaining": "Implement the canonical dependency order, starting with P116 baseline and contract work. Resolve descriptor/auth/driver/import and public Heca contracts in their owners. Follow reviewed UI prototypes with business logic in core/service APIs. Heca-Pro's corresponding task contracts are reconciled; its implementation, current-service conformance T047 and native public facade T043-T046 remain open. Preserve identity/history, phase continuity, bounded context, source/native evidence and repository approval rules. No source implementation, real migration, automatic Git publication or release is authorized by registration.\n\n---\nT490 service routing, then P130 migration/recovery; first user-visible milestone expected at T490, explicit with T483 (Web UI).",
   "acceptedDecisions": [
     {
       "id": "6fa41591-873e-4562-9242-7b3a2d4c13a5",
@@ -218,7 +218,7 @@
     }
   ],
   "createdAt": "2026-10-20T16:39:25.700Z",
-  "updatedAt": "2026-11-15T09:48:21.968Z",
+  "updatedAt": "2026-11-16T11:07:05.726Z",
   "sessionInfo": [
     {
       "sessionId": "mcp-process:c02308a2-50c8-4784-b0c4-058f2a572eb4",

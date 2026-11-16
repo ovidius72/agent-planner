@@ -12,7 +12,7 @@
   "summary": "Separate source/caller/project identity from persistence. Implement transactional SQLite, bounded consistency and complete API-only clients.",
   "description": "Purpose: Every agent uses planner load against one shared service with independent session/context/execution attribution. Separate source/caller/project identity from persistence. Implement transactional SQLite, bounded consistency and complete API-only clients.\n\nCurrent state: this phase is planned; current production persistence remains JSON until the SQLite/API migration is implemented. Reuse existing capabilities instead of creating another planner.\n\nDeliverables and sole owners:\n- P128(F025)/T489: Descriptor-first project and workspace identity independent of code checkout and database location.\n- P128(F025)/T502: Transactional SQLite authority with versioned documents, search and durable command receipts.\n- P128(F025)/T496: Atomic structural consistency and bounded semantic reconciliation after every mutation.\n- P128(F025)/T490: One authenticated multi-project application service used by every supported client: shared runtime location with newest-version launcher (protocol N/N-1), local-only Web UI (loopback with Host/Origin checks, pluggable auth middleware), audit-only planner writes and the execution lock (in-progress / parked / abandoned).\n\nExecution contract:\nFollow the task dependencies and the phase priority in the rebuilt F025 plan. Keep coherent phase work and recover approved detours; do not introduce a global task queue or silently preempt active work. Use the user-scoped service/SQLite boundary, explicit workspace identity, complete bounded context and revision-bound evidence wherever applicable.\n\nAcceptance:\nEach task proves its stated outcome; preserve IDs/history, single-owner decisions and phase handoffs. Mechanical parent/dependency effects are consistent; semantic review is factual, reviewed-unchanged or explicitly pending. Native/provider/installed claims need their actual owner evidence.\n\nSource navigation:\n- packages/plan-mcp/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/pi-adapter/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/agent-plan/src/index.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n\nSupporting design: docs/agent-brain/architecture.md and docs/agent-brain/heca-protocol.md; current map .planner/docs/agent-brain-plan.md. This is one current phase contract, replacing the accumulated historical amendments. Do not migrate user data or perform Git/release actions merely because the plan is registered.\n\nChild-contract reconciliation: SQLite is the sole operational authority. T502 precedes T496 and T490; the same validated domain operations serve MCP, Pi, CLI, Web UI and Heca consumers.",
   "descriptionUpdatedAt": "2026-11-02T19:15:17.985Z",
-  "notes": "",
+  "notes": "**Handoff context update:**\nThree of four tasks done (T489, T502, T496) — descriptor identity, SQLite authority and reconciliation all shipped in @agent-plan/core with 33 green focused tests; only the application service (T490) remains in-phase.\n\n**Remaining work:**\nT490: route all clients (plan-mcp, pi-adapter, CLI, plan-server) through one coordinated local planner authority per architecture.md §2/§6.",
   "goals": [
     "Separate source/caller/project identity from persistence.",
     "Implement transactional SQLite, bounded consistency and complete API-only clients."
@@ -203,8 +203,8 @@
       "shortName": "reconcile-affected-hierarchy-a",
       "title": "Reconcile affected hierarchy and dependencies with bounded context cost",
       "status": "done",
-      "description": "Outcome: Atomic structural consistency and bounded semantic reconciliation after every mutation.\n\nCurrent implementation: Parent rollups, reference validation and description freshness exist. Their separate file-based paths do not yet provide the full affected-context postcondition through the new service.\n\nImplementation responsibility:\n- Use SQLite reverse indexes to determine old/new parents, requirement links and real dependency consumers for create/update/move/dependency operations.\n- Commit mechanical membership/status/reference consequences with the leaf mutation; issue compact version-bound impact receipts.\n- For semantic prose and decision applicability, support explicit factual updates, reviewed-unchanged evidence or durable reconciliation_required obligations. Never blindly copy child text upward.\n- Reject stale/cyclic/foreign reconciliation; paginate genuine high-fan-out work and preserve pending obligations after crashes.\n- Cover project/feature/phase/task updates, new tasks, moves across features and dependencies without a full-plan or full-ancestor reread per operation.\n\nAcceptance and evidence:\n- A leaf save cannot report complete reconciliation while relevant obligations remain.\n- Unrelated plan growth and repeated no-op updates do not cause unconditional full context delivery.\n- Requirements/decisions keep their canonical single owners and measured budgets never omit mandatory information.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\n---\n**Completion summary:**\nShipped: bounded semantic reconciliation over the SQLite authority. (C1) reconcileLeafMutation answers the affected-context question from reverse indexes only — affected parents including BOTH sides of a task move (previousPhaseId + current membership join), requirement links via entity_requirements, and real dependency consumers via the reverse dependency index — with no full-plan or full-ancestor reread per operation, verified by the 9-test suite. (C2) Mechanical consequences commit with the leaf mutation inside executeCommand's apply callback; parent status is derived read-time (ladder ported verbatim to src/status-rollup.ts as the future single source) and travels in the compact version-bound impact receipt {revision, affectedParents[] with derived statuses, dependencyConsumers, requirementLinks, obligations, truncated} — nothing derived is persisted, matching the JSON store's documented read-time derivation. (C3) Semantic prose changes create durable reconciliation_required obligations (kind semantic-review, entity phase+feature) committed atomically with the leaf; resolution requires explicit evidence — an explicit factual parent edit (bumps only that parent's description_updated_at contract revision) or a reviewed-unchanged record — never blind upward child-text copying; decision-applicability kind reserved in the schema. (C4) Stale resolutions refused (obligation recorded at revision N, project at M > N, requires acknowledgeRevisionChange), cyclic dependencies rejected via bounded forward-closure walk, foreign references typed; genuine high fan-out enumerated up to IMPACT_RECEIPT_ENTITY_LIMIT=50 with explicit truncated flag and a durable fan-out-continuation obligation feeding the paginated listing; pending obligations survive crashes (committed with the mutation — verified across close/reopen and crash-before-commit rollback). (C5) Covered: task status/description updates, new-task membership, moves across phases, dependency additions — no-op repeated updates create zero obligations; unrelated growth never triggers unconditional full delivery. (C6) Evidence: 9/9 reconciliation tests green (derived receipts, durable obligations surviving reopen, evidence-mandatory/stale-refused/acknowledged resolution, factual-update isolation, no-op zeros, typed cyclic/foreign, both-parents move, fan-out cap + paginated listing, crash atomicity); persistence 13/13 and descriptor 11/11 unchanged; core build green; bounded verification per rule 17 with canonical gate deferred to closeout. Unverified boundaries: PlanStore rewiring onto status-rollup and the impact-receipt API consumer are T490 adoption; decision-applicability flows activate with the decision-revision owner (T491+).",
-      "descriptionUpdatedAt": "2026-11-16T11:02:33.400Z",
+      "description": "Outcome: Atomic structural consistency and bounded semantic reconciliation after every mutation.\n\nCurrent implementation: Parent rollups, reference validation and description freshness exist. Their separate file-based paths do not yet provide the full affected-context postcondition through the new service.\n\nImplementation responsibility:\n- Use SQLite reverse indexes to determine old/new parents, requirement links and real dependency consumers for create/update/move/dependency operations.\n- Commit mechanical membership/status/reference consequences with the leaf mutation; issue compact version-bound impact receipts.\n- For semantic prose and decision applicability, support explicit factual updates, reviewed-unchanged evidence or durable reconciliation_required obligations. Never blindly copy child text upward.\n- Reject stale/cyclic/foreign reconciliation; paginate genuine high-fan-out work and preserve pending obligations after crashes.\n- Cover project/feature/phase/task updates, new tasks, moves across features and dependencies without a full-plan or full-ancestor reread per operation.\n\nAcceptance and evidence:\n- A leaf save cannot report complete reconciliation while relevant obligations remain.\n- Unrelated plan growth and repeated no-op updates do not cause unconditional full context delivery.\n- Requirements/decisions keep their canonical single owners and measured budgets never omit mandatory information.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/read-tracking.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\n---\n**Completion summary:**\nShipped: bounded semantic reconciliation over the SQLite authority. (C1) reconcileLeafMutation answers the affected-context question from reverse indexes only — affected parents including BOTH sides of a task move (previousPhaseId + current membership join), requirement links via entity_requirements, and real dependency consumers via the reverse dependency index — with no full-plan or full-ancestor reread per operation, verified by the 9-test suite. (C2) Mechanical consequences commit with the leaf mutation inside executeCommand's apply callback; parent status is derived read-time (ladder ported verbatim to src/status-rollup.ts as the future single source) and travels in the compact version-bound impact receipt {revision, affectedParents[] with derived statuses, dependencyConsumers, requirementLinks, obligations, truncated} — nothing derived is persisted, matching the JSON store's documented read-time derivation. (C3) Semantic prose changes create durable reconciliation_required obligations (kind semantic-review, entity phase+feature) committed atomically with the leaf; resolution requires explicit evidence — an explicit factual parent edit (bumps only that parent's description_updated_at contract revision) or a reviewed-unchanged record — never blind upward child-text copying; decision-applicability kind reserved in the schema. (C4) Stale resolutions refused (obligation recorded at revision N, project at M > N, requires acknowledgeRevisionChange), cyclic dependencies rejected via bounded forward-closure walk, foreign references typed; genuine high fan-out enumerated up to IMPACT_RECEIPT_ENTITY_LIMIT=50 with explicit truncated flag and a durable fan-out-continuation obligation feeding the paginated listing; pending obligations survive crashes (committed with the mutation — verified across close/reopen and crash-before-commit rollback). (C5) Covered: task status/description updates, new-task membership, moves across phases, dependency additions — no-op repeated updates create zero obligations; unrelated growth never triggers unconditional full delivery. (C6) Evidence: 9/9 reconciliation tests green (derived receipts, durable obligations surviving reopen, evidence-mandatory/stale-refused/acknowledged resolution, factual-update isolation, no-op zeros, typed cyclic/foreign, both-parents move, fan-out cap + paginated listing, crash atomicity); persistence 13/13 and descriptor 11/11 unchanged; core build green; bounded verification per rule 17 with canonical gate deferred to closeout. Unverified boundaries: PlanStore rewiring onto status-rollup and the impact-receipt API consumer are T490 adoption; decision-applicability flows activate with the decision-revision owner (T491+).\n\n---\n**Completion summary:**\nBounded semantic reconciliation: reconcileLeafMutation inside the command transaction (reverse-index affected context, both sides of moves), version-bound impact receipts, durable reconciliation obligations, typed stale/cyclic/foreign refusals, fan-out cap 50 with continuation obligation.\n\n**Verification:**\n9-test suite green; persistence 13/13 and descriptor 11/11 unchanged; rollup ladder ported verbatim to src/status-rollup.ts (PlanStore rewiring deferred to T490).\n\n**Remaining or unverified:**\nPlanStore adoption of status-rollup and impact-receipt API consumer are T490 work.\n\n**Files touched:**\n- packages/plan-core/src/persistence/reconciliation.ts\n- packages/plan-core/src/status-rollup.ts\n- packages/plan-core/test/reconciliation.test.mjs\n- docs/agent-brain/architecture.md",
+      "descriptionUpdatedAt": "2026-11-16T11:07:05.731Z",
       "notes": "Source-backed analysis + implementation record (2026-11-16, feat/agent-brain @ 33621d8).\n\nAnalysis (dated evidence): parent status is ALREADY derived at read time in the JSON store — plan-store.ts :2491-2544 derivePhaseStatus/deriveFeatureStatus compute from task/phase statuses (void statuses rejected/canceled ignored; done-everything → done; active wins; done-without-planned-and-deferred-only → deferred; done-elsewhere → in-progress; blocked/waiting/deferred ladder), and syncStatuses (:2546) is a documented NO-OP: nothing is persisted, so T496's mechanical status consequence is read-back in the receipt, not a write. Description freshness (description-freshness.ts) reports stale parents via descriptionUpdatedAt vs newest child, with reconciliationRequired and a preview — T496 turns the write-side into durable obligations. task-move.ts (254) validates cross-feature moves; write-coordination.ts root locks serialize; read-tracking defines the contract revision (descriptionUpdatedAt) that unrelated writes must NOT bump (domain-contract.md §4). The SQLite authority from T502 provides reverse indexes (idx_taskdeps_reverse, idx_phases_feature, idx_tasks_phase) and executeCommand's apply callback as the transactional home.\n\nDeliverable: (1) packages/plan-core/src/status-rollup.ts — pure ladder ported verbatim from PlanStore (single source going forward; PlanStore rewiring deferred to T490 adoption). (2) persistence/schema.ts: reconciliation_obligations table (id, project_id, created_at_revision, kind semantic-review|decision-applicability|fan-out-continuation, entity ref, caused_by, reason, status open|resolved-applied|resolved-reviewed, resolution_evidence JSON) + two indexes; STORE_SCHEMA_VERSION stays 1 (no live stores yet — additive in place). (3) persistence/reconciliation.ts: reconcileLeafMutation (runs inside apply) — affected parents from reverse indexes including BOTH sides of a move via previousPhaseId, derived statuses per affected parent, real dependency consumers and requirement links up to IMPACT_RECEIPT_ENTITY_LIMIT=50 with explicit truncated flag, durable obligations for descriptionChanged=true (phase+feature semantic-review; never blind upward copying — resolution is an explicit factual parent edit bumping description_updated_at, or reviewed-unchanged evidence), fan-out continuation obligation when capped; listReconciliationObligations (paginated, status filter); resolveReconciliationObligation (evidence mandatory — bare done refused; stale refusal when project revision advanced since obligation creation unless acknowledgeRevisionChange=true); hasOpenObligations (the pre-condition a leaf save must check before claiming complete reconciliation); addTaskDependencyValidated (cycle rejection via bounded forward closure walk, foreign-reference typed refusal, self-dependency refused).\n\nVerification: 9-test suite test/reconciliation.test.mjs ALL GREEN — receipt of derived status from reverse indexes (single parent), description change creating durable phase+feature obligations surviving close/reopen, evidence-mandatory + stale-refused + acknowledged re-review resolution paths, explicit factual update bumping only the edited parent's contract revision, repeated no-op updates creating zero obligations, cyclic/foreign typed rejections with reverse-index consumer surfacing, move affecting both parents (receipt restructured: affectedParents[] with derived statuses per parent — replaced the ambiguous single-parent scalars), high fan-out capped at 50 with durable continuation + paginated listing, crash before commit leaving no obligation and no mutation. Persistence suite 13/13 and descriptor 11/11 still green (24/24 combined). Core build green. Bounded verification only; canonical gate at closeout.\n\nUnverified boundaries: PlanStore not yet rewired onto status-rollup (T490 adoption); receipt consumer of the impact receipts (T490 API shape); multi-project concurrency beyond the two-connection busy test.",
       "statusLog": [
         {
@@ -281,7 +281,7 @@
       "startedAt": "2026-11-16T10:53:27.592Z",
       "completedAt": "2026-11-16T11:02:33.396Z",
       "createdAt": "2026-10-21T14:52:52.874Z",
-      "updatedAt": "2026-11-16T11:02:33.396Z",
+      "updatedAt": "2026-11-16T11:07:05.726Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:c02308a2-50c8-4784-b0c4-058f2a572eb4",
@@ -299,8 +299,8 @@
       "shortName": "implement-the-transactional-sq",
       "title": "Implement the transactional SQLite authority, documents and planner search",
       "status": "done",
-      "description": "Outcome: Transactional SQLite authority with versioned documents, search and durable command receipts.\n\nCurrent implementation: PlanStore uses multi-file JSON and root locks. The service-owned SQLite backend selected by the user has no dedicated implementation owner; current exports are not a full portable database backup.\n\nImplementation responsibility:\n- Choose the driver by benchmark: node:sqlite (built-in, no native addon) versus better-sqlite3 (native addon, expected faster) on real planner flows (start/claim, context load, FTS search, bulk import, backup), on the latest Node release available when this task starts. Put the winner behind a thin, harness-independent persistence-driver interface. Heca bundles that pinned Node runtime; npm installs declare it as the minimum; if better-sqlite3 wins, ship prebuilt binaries per OS/CPU. Verify FTS5, JSON, WAL, the backup API and crash behaviour on the pinned build. Keep blocking DB work in a bounded worker and document schema/driver compatibility.\n- Implement relational entity/parent/dependency/ownership/revision tables, validated extensible JSON metadata, single-owner decision revisions, logical document folders/content/assets and indexed reverse relationships.\n- Implement BEGIN IMMEDIATE command transactions with expected revisions, authenticated caller identity, idempotency-key/payload validation, durable receipt and outbox/event cursor committed together. No Git/network/model calls in a transaction.\n- Provide document CRUD/history, exact-ID/literal and FTS5 word/phrase search with filters, snippets and pagination. Maintain a rebuildable FTS index transactionally; clients receive content through domain operations, never SQL or DB paths.\n- Enable foreign keys and a reviewed WAL/durability/busy/checkpoint policy. Expose consistent snapshot/backup primitives and schema migration APIs for T494/T495; no live JSON/Markdown mirror.\n- Measure representative read/context/write/search flows and inject before-commit, after-commit/lost-ack and event-publication crashes in temporary fixtures.\n\nAcceptance and evidence:\n- Task/parent/receipt/event state commits atomically; retry of a retained request cannot repeat the mutation, and conflicting payload reuse is refused.\n- Tasks are independent rows; documents/required portable assets survive snapshot restore and FTS can be rebuilt without changing canonical content.\n- SQLite is embedded in Agent Plan only; no separate DB service, network filesystem DB or installed user-data migration.\n- The backend provides complete typed primitives for T496/T490 and exposes honest busy/corrupt/schema-incompatible outcomes.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/export-service.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\n---\n**Completion summary:**\nShipped: transactional SQLite authority, documents and planner search in @agent-plan/core/persistence (new subpath, main entry dependency-free, engines >=22.5.0). Driver chosen by benchmark on Node 25.4.0 (real planner-shaped workload, isolated temp fixture): node:sqlite wins at measured performance parity with better-sqlite3 — mutations 6,847 vs 6,848 ops/s, joins 16,477 vs 16,480, FTS5 1,861 vs 1,862, bulk import 10 vs 11 ms, snapshot 2 ms (VACUUM INTO) vs 21 ms (online API) — so operational factors decide: built-in driver, no per-OS/CPU prebuilt binaries, no ABI rebuild per Node upgrade, verified honest busy outcomes; the thin driver interface keeps better-sqlite3 swappable. Delivered: versioned relational schema (STORE_SCHEMA_VERSION 1) mapping architecture.md section 4 with tasks as independent rows, single-owner decision revisions, documents with revision history and portable assets, phase handoffs/work deviations, command receipts keyed (request_id, project_id) with payload hash, per-consumer outbox cursor, FTS5 via mechanical triggers only; foreign_keys ON, WAL, synchronous=FULL; typed PERSISTENCE_BUSY/CORRUPT/SCHEMA_INCOMPATIBLE/CONSTRAINT/UNAVAILABLE outcomes and an explicit migration seam for T494/T495. executeCommand: receipt lookup, expected-revision check, mutation, revision bump, receipt and outbox events in one BEGIN IMMEDIATE transaction — same-payload retries return the stored outcome without repeating the mutation, conflicting payload reuse and stale revisions are typed refusals, busy is a bounded typed retry; no Git/network/model calls inside the callback. Document CRUD/history/assets, literal and FTS5 search with snippets, folder filter and pagination, rebuildable index preserving canonical content; snapshot/restore primitives for T494/T495. Evidence: 13-test mkdtemp suite all green (before-commit crash leaves zero partial state; retry-safe idempotency; second-writer bounded busy then successful retry; documents/assets surviving restore; FTS rebuild; independent task rows), core build green, descriptor suite still 11/11. Bounded verification per rule 17 — canonical full gate at closeout. Unverified boundaries recorded: bounded-worker placement is documented for T490 (driver API is synchronous by design); client adoption and .planner migration remain T490/T494/T495; no live multi-connection WAL contention beyond the two-connection busy test.",
-      "descriptionUpdatedAt": "2026-11-16T08:35:16.808Z",
+      "description": "Outcome: Transactional SQLite authority with versioned documents, search and durable command receipts.\n\nCurrent implementation: PlanStore uses multi-file JSON and root locks. The service-owned SQLite backend selected by the user has no dedicated implementation owner; current exports are not a full portable database backup.\n\nImplementation responsibility:\n- Choose the driver by benchmark: node:sqlite (built-in, no native addon) versus better-sqlite3 (native addon, expected faster) on real planner flows (start/claim, context load, FTS search, bulk import, backup), on the latest Node release available when this task starts. Put the winner behind a thin, harness-independent persistence-driver interface. Heca bundles that pinned Node runtime; npm installs declare it as the minimum; if better-sqlite3 wins, ship prebuilt binaries per OS/CPU. Verify FTS5, JSON, WAL, the backup API and crash behaviour on the pinned build. Keep blocking DB work in a bounded worker and document schema/driver compatibility.\n- Implement relational entity/parent/dependency/ownership/revision tables, validated extensible JSON metadata, single-owner decision revisions, logical document folders/content/assets and indexed reverse relationships.\n- Implement BEGIN IMMEDIATE command transactions with expected revisions, authenticated caller identity, idempotency-key/payload validation, durable receipt and outbox/event cursor committed together. No Git/network/model calls in a transaction.\n- Provide document CRUD/history, exact-ID/literal and FTS5 word/phrase search with filters, snippets and pagination. Maintain a rebuildable FTS index transactionally; clients receive content through domain operations, never SQL or DB paths.\n- Enable foreign keys and a reviewed WAL/durability/busy/checkpoint policy. Expose consistent snapshot/backup primitives and schema migration APIs for T494/T495; no live JSON/Markdown mirror.\n- Measure representative read/context/write/search flows and inject before-commit, after-commit/lost-ack and event-publication crashes in temporary fixtures.\n\nAcceptance and evidence:\n- Task/parent/receipt/event state commits atomically; retry of a retained request cannot repeat the mutation, and conflicting payload reuse is refused.\n- Tasks are independent rows; documents/required portable assets survive snapshot restore and FTS can be rebuilt without changing canonical content.\n- SQLite is embedded in Agent Plan only; no separate DB service, network filesystem DB or installed user-data migration.\n- The backend provides complete typed primitives for T496/T490 and exposes honest busy/corrupt/schema-incompatible outcomes.\n\nCurrent source navigation:\n- packages/plan-core/src/schema.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/plan-store.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/write-coordination.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-core/src/export-service.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/serve.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/server-record.ts:1 (module entry; inspect the current owning functions before editing).\n- packages/plan-server/src/api-v1.ts:1 (module entry; inspect the current owning functions before editing).\n\nNavigation paths are dated evidence at the inspected checkout, not permanent code identity. Read current source precedents, Project Guidelines and canonical Accepted Decisions before implementation. Preserve entity IDs/history, phase-scoped handoffs, atomic ownership, explicit recovery and derived parent state. Use isolated fixtures and bounded verification.\n\nDetailed target: docs/agent-brain/architecture.md; the execution map is .planner/docs/agent-brain-plan.md. This contract replaces the old accumulated task text. No implementation, real migration, dashboard, Git publication or release is performed by planning.\n\n---\n**Completion summary:**\nShipped: transactional SQLite authority, documents and planner search in @agent-plan/core/persistence (new subpath, main entry dependency-free, engines >=22.5.0). Driver chosen by benchmark on Node 25.4.0 (real planner-shaped workload, isolated temp fixture): node:sqlite wins at measured performance parity with better-sqlite3 — mutations 6,847 vs 6,848 ops/s, joins 16,477 vs 16,480, FTS5 1,861 vs 1,862, bulk import 10 vs 11 ms, snapshot 2 ms (VACUUM INTO) vs 21 ms (online API) — so operational factors decide: built-in driver, no per-OS/CPU prebuilt binaries, no ABI rebuild per Node upgrade, verified honest busy outcomes; the thin driver interface keeps better-sqlite3 swappable. Delivered: versioned relational schema (STORE_SCHEMA_VERSION 1) mapping architecture.md section 4 with tasks as independent rows, single-owner decision revisions, documents with revision history and portable assets, phase handoffs/work deviations, command receipts keyed (request_id, project_id) with payload hash, per-consumer outbox cursor, FTS5 via mechanical triggers only; foreign_keys ON, WAL, synchronous=FULL; typed PERSISTENCE_BUSY/CORRUPT/SCHEMA_INCOMPATIBLE/CONSTRAINT/UNAVAILABLE outcomes and an explicit migration seam for T494/T495. executeCommand: receipt lookup, expected-revision check, mutation, revision bump, receipt and outbox events in one BEGIN IMMEDIATE transaction — same-payload retries return the stored outcome without repeating the mutation, conflicting payload reuse and stale revisions are typed refusals, busy is a bounded typed retry; no Git/network/model calls inside the callback. Document CRUD/history/assets, literal and FTS5 search with snippets, folder filter and pagination, rebuildable index preserving canonical content; snapshot/restore primitives for T494/T495. Evidence: 13-test mkdtemp suite all green (before-commit crash leaves zero partial state; retry-safe idempotency; second-writer bounded busy then successful retry; documents/assets surviving restore; FTS rebuild; independent task rows), core build green, descriptor suite still 11/11. Bounded verification per rule 17 — canonical full gate at closeout. Unverified boundaries recorded: bounded-worker placement is documented for T490 (driver API is synchronous by design); client adoption and .planner migration remain T490/T494/T495; no live multi-connection WAL contention beyond the two-connection busy test.\n\n---\n**Completion summary:**\nTransactional SQLite authority shipped as @agent-plan/core/persistence subpath: driver benchmark (node:sqlite wins at parity), schema v1, BEGIN IMMEDIATE command authority with idempotency receipts/expected revisions/outbox, documents+FTS5, VACUUM INTO snapshot/restore.\n\n**Verification:**\n13-test mkdtemp suite green (crash-before-commit zero partial state, retry-safe idempotency, bounded busy, typed corrupt/schema-incompatible, FTS rebuild); core build green.\n\n**Remaining or unverified:**\nNone in-task; consumer adoption is T490, migration T494/T495.\n\n**Files touched:**\n- packages/plan-core/src/persistence/\n- packages/plan-core/test/persistence.test.mjs\n- packages/plan-core/package.json\n- docs/agent-brain/decisions.md\n- docs/agent-brain/architecture.md\n\n**Decisions mentioned (not decision authority; record any durable decision with accepted_decision_create on its actual owner):**\n- node:sqlite selected over better-sqlite3 at measured performance parity (operational factors decide); recorded in decisions.md 2026-11-15.",
+      "descriptionUpdatedAt": "2026-11-16T11:07:05.731Z",
       "notes": "Implementation record (2026-11-16, feat/agent-brain) — supplementing the source-backed analysis.\n\nBenchmark (Node 25.4.0, temp fixture, real planner-shaped workload; harness kept outside the repo): node:sqlite vs better-sqlite3 measured PARITY on every flow — start/claim BEGIN IMMEDIATE mutations with receipt+event at synchronous=FULL 6,847 vs 6,848 ops/s; task+phase+feature join reads 16,477 vs 16,480; FTS5 3-term OR search with snippets 1,861 vs 1,862; transactional bulk import 771 entities 10 vs 11 ms; snapshot 2 ms (VACUUM INTO) vs 21 ms (online backup API). The native-addon speed hypothesis is NOT confirmed — deciding factors are operational, so node:sqlite WINS (decisions.md revised 2026-11-15): built into Node (SQLite 3.51.1 bundled, FTS5+JSON1+WAL verified), zero per-OS/CPU prebuilt binaries, no ABI rebuild per Node upgrade, honest busy outcome verified (second writer with busy_timeout=200 gets 'database is locked' ERR_SQLITE_ERROR after ~200 ms, never a hang, committed work visible cross-connection). The only better-sqlite3 edge (online backup API) is covered by VACUUM INTO consistent snapshots behind the thin driver interface; driver stays swappable. node:sqlite on 25.4.0 has NO .backup() method (verified live).\n\nDeliverable: packages/plan-core/src/persistence/ exposed as package subpath @agent-plan/core/persistence (main entry stays dependency-free; node:sqlite loads only here) + plan-core engines node>=22.5.0 (root declares >=25):\n- driver.ts: thin PersistenceDriver interface (kind, sqliteVersion, prepare/exec/close/runExclusive) with typed PersistenceError codes PERSISTENCE_BUSY | PERSISTENCE_CORRUPT | PERSISTENCE_SCHEMA_INCOMPATIBLE | PERSISTENCE_CONSTRAINT | PERSISTENCE_UNAVAILABLE; SQLITE_BUSY/SQLITE_CORRUPT/SQLITE_NOTADB mapped honestly.\n- node-sqlite-driver.ts: node:sqlite implementation; busy_timeout (default 5 s, tunable), foreign_keys=ON, synchronous=FULL; runExclusive = BEGIN IMMEDIATE/COMMIT/ROLLBACK with nesting refused (per-connection, mirrors the old root-lock re-entrancy rule).\n- schema.ts: STORE_SCHEMA_VERSION=1 + full architecture.md §4 DDL — projects/features/phases (status CHECKs), tasks as independent rows (pause_snapshot, active_owner_session), task_dependencies/checklists/entity_requirements/requirements, single-owner decisions with revisions+supersession, documents/document_revisions/document_assets, phase_handoffs/work_deviations, command_receipts (PK request_id+project_id, payload hash), event_outbox/event_cursor per consumer, indexes for parent membership/reverse deps/ready work, FTS5 documents_fts (porter unicode61, content-table sync) maintained ONLY by mechanical triggers. bootstrapStoreSchema: create-once with durable WAL, unknown/larger schemaVersion → PersistenceSchemaIncompatible (now a PersistenceError subtype), explicit migration seam for T494/T495.\n- command-authority.ts: executeCommand inside one runExclusive — retained-receipt lookup (same hash → stored outcome as already-applied, mutation NOT repeated; different hash → typed conflict, refused), expectedRevision check (stale → typed revision-conflict with current revision, no mutation), domain apply callback, revision bump, receipt + published events committed together; busy → typed bounded retry outcome (status busy, retry with same requestId); publishEvent/readOutbox/advanceEventCursor outbox with per-consumer cursors; documented retention horizon (30 days / 100k receipts).\n- documents.ts: create/update/get/delete with revision history (document_revisions), folder listing, portable assets (blobs + hashes), literal search (LIKE with escaping) and FTS5 search (MATCH + rank ordering, snippet(), folder filter, limit/offset pagination with explicit truncated flag), rebuildFtsIndex (delete-all + repopulate from canonical content, content unchanged).\n- snapshot.ts: openStore (missing file without create → typed UNAVAILABLE; verification before any domain call, close-once), createSnapshot via VACUUM INTO, restoreFromSnapshot + schema verify for T494/T495.\n\nVerification: 13-test suite packages/plan-core/test/persistence.test.mjs ALL GREEN (mkdtemp fixtures only) — bootstrap/WAL reopen, atomic task+receipt+event commit with one revision bump, retry-safe idempotency (no repeated mutation, no duplicated event), conflicting-payload refusal, stale-revision refusal with no mutation, crash BEFORE commit leaves zero partial state (task/revision/receipt/event all intact), outbox cursor deduplication, second-writer bounded busy (busy outcome inside a held transaction, then the same command succeeds after commit — bounded retry semantics), FK violations typed, documents/history/assets surviving snapshot restore, FTS snippets+pagination+folder filter with rebuild preserving both results and canonical content, unknown schemaVersion/corrupt file (SQLITE_NOTADB)/missing file typed with explicit create, independent sibling task rows. Core build green; descriptor suite still 11/11. Bounded verification only — full canonical gate deferred to closeout per AGENTS.md rule 17.\n\nNot done here (owned elsewhere): consumer adoption/plan-store rewiring (T490), structural reconciliation (T496), real migration of .planner (T494/T495). No client rewiring, no real migration, no Git publication beyond the approved commit.",
       "statusLog": [
         {
@@ -375,7 +375,7 @@
       "startedAt": "2026-11-15T08:24:31.857Z",
       "completedAt": "2026-11-16T08:35:16.805Z",
       "createdAt": "2026-10-29T21:00:59.954Z",
-      "updatedAt": "2026-11-16T08:35:16.805Z",
+      "updatedAt": "2026-11-16T11:07:05.726Z",
       "sessionInfo": [
         {
           "sessionId": "mcp-process:1730b0bb-ee74-4511-9502-ead67aa82751",
@@ -386,11 +386,243 @@
     }
   ],
   "createdAt": "2026-10-21T10:02:59.058Z",
-  "updatedAt": "2026-11-16T11:02:33.396Z",
-  "handoff": "",
-  "handoffUpdatedAt": "",
-  "handoffAudit": null,
-  "handoffReadAt": "",
+  "updatedAt": "2026-11-16T11:07:05.726Z",
+  "handoff": "# P128 groundwork shipped (T489/T502/T496) — resume at T490 service routing\n\nCreated at: 2026-11-16T11:07:05.726Z\nUpdated at: 2026-11-16T11:07:05.726Z\nReason: Session context is near its budget after closing four tasks in sequence (T462 contract, T489 identity, T502 SQLite authority, T496 reconciliation, all committed and pushed). Work stops before the largest remaining phase task (T490) so a cold agent can implement the service with a fresh context and the full persisted record.\n- Feature: F025 — Agent Brain — reliable agent workflow and code-aware project memory\n- Phase: P128(F025) — Descriptor, SQLite authority and user-scoped application service\n- Task: P128(F025)/T490 — Route all clients through one coordinated local planner authority (next work per planner-task-recommend; not started)\n- Exact resume point: run planner-task-start P128(F025)/T490 (it will demand project-guidelines + task/phase/feature/requirement reads — perform them, then retry). The T489→T502→T496 groundwork it consumes lives in packages/plan-core/src/persistence/ (subpath @agent-plan/core/persistence) and src/project-descriptor.ts.\n\n## Current and partial state\n- Branch feat/agent-brain (v0.4.11) at commit 88f2eea; working tree clean; everything below is committed and pushed.\n- Phase P128 progress: T489 done (portable descriptor .agent-plan.json + resolver + typed registration ports, 11/11 tests), T502 done (transactional SQLite authority: node:sqlite chosen by benchmark at performance parity, schema v1, BEGIN IMMEDIATE command authority with idempotency receipts/expected revisions/outbox, documents + FTS5 search, VACUUM INTO snapshots; 13/13 tests), T496 done (bounded semantic reconciliation: reverse-index affected context, derived-status rollup extracted to src/status-rollup.ts, durable reconciliation obligations, typed stale/cyclic/foreign refusals, fan-out cap 50; 9/9 tests).\n- Driver decision recorded in docs/agent-brain/decisions.md (rev. 2026-11-15): node:sqlite wins on operational factors (built-in, no prebuilt binaries, no ABI rebuilds); better-sqlite3 stays swappable behind the thin driver interface. plan-core engines >=22.5.0; root engines >=25.\n- Remaining in phase: T490 (the application service itself — clients keep cwd/.planner inference until it routes them), then migration/recovery T494/T495 (owned by P130).\n- Not started: T490. Previous session closed T462 (domain contract), T489, T502, T496 in this same sequence.\n\n## Preservation constraints\n- AGENTS.md rules are binding: harness-agnostic core (rule 4), English source text (rule 16), bounded verification with mkdtemp fixtures only — never a real .planner (rule 17), no GSD workflows (rule 15), planner updated at every step, commits/pushes only on explicit user approval (user has granted a rolling \"committa e vai avanti\" flow for task-scoped atomic commits).\n- No client rewiring until T490: plan-mcp (plan root at index.ts:118), pi-adapter and CLI keep current cwd/.planner inference; PlanStore keeps its private rollup implementations until T490 adopts status-rollup.ts.\n- Persistence invariants: STORE_SCHEMA_VERSION stays 1 for additive changes; unknown schemaVersion/corrupt/missing stores are typed refusals, never silent migration or empty re-init; no Git/network/model calls inside a command transaction; clients never open the database (content only through domain operations).\n- Unrelated writes must never bump a parent's description_updated_at (domain-contract.md §4 contract-revision rule).\n- web-ui-dist/ is tracked on purpose (AGENTS.md rule 18) — never delete or hand-edit.\n- The user's standing requirement: flag explicitly whenever something becomes testable from the Web UI, and never declare done what does not run.\n\n## Supporting documents\n- docs/agent-brain/domain-contract.md — T462 contract v1: identities, work-ordering ladder, typed results, context delivery, baseline→owner mapping; normative for T490's API surface.\n- docs/agent-brain/architecture.md — §2 service/worker layout, §4 logical tables, §5 command envelope and crash boundaries, §6 API parity/client migration (the T490 blueprint), with finalized-in-core notes for T502/T496.\n- docs/agent-brain/decisions.md — service/storage/driver/binding decisions including the 2026-11-15 benchmark revision.\n- docs/agent-brain/baseline/README.md — T461 baseline failures T490 must remove (cwd inference, races, missing-HOME).\n- .planner/docs/agent-brain-plan.md — execution map and dependency edges.\n\n## Blockers and risks\n- Session MCP planner warned it runs 0.4.10 while 0.4.11 is installed (advised restart/reconnect); harmless but stale warnings may recur.\n- node:sqlite is still marked experimental by Node; the thin driver interface contains that risk, but watch for API changes on Node upgrades.\n- pnpm verify:final (canonical full gate) has not been run since T461; the four shipped modules were verified with focused suites only. Run the gate once at phase closeout per AGENTS.md rule 17.\n- Other sessions may touch docs/agent-brain-ui/* and AGENTS.md; do not commit foreign work except on explicit user instruction.\n\n## How to resume\n1. planner-task-start P128(F025)/T490; complete the demanded context reads (guidelines, task, phase P128, feature F025, linked requirements) and retry until started.\n2. Record the source-backed analysis on the task before touching code: inspect packages/plan-server/src/serve.ts (1770 lines), src/api-v1.ts, src/server-record.ts, packages/plan-mcp/src/index.ts (plan root :118), packages/pi-adapter/src/index.ts and the T489 typed ports (ServiceEndpointRecord, ProjectStoreRegistration) in src/project-descriptor.ts.\n3. Implement T490 per architecture.md §2/§6: one service per OS user under the HOME runtime location, protocol N/N-1, loopback + Host/Origin checks with pluggable auth middleware, all clients routed through it, audit records; keep DB work in a bounded worker (the persistence driver API is synchronous by design).\n4. Verify with focused suites only (mkdtemp fixtures); run pnpm verify:final once at closeout.\n5. When any behavior becomes testable in the Web UI (expected already at T490 routing, certainly with T483's title work), tell the user explicitly; keep the planner updated at every step and commit atomically per task with push on the approved flow.",
+  "handoffUpdatedAt": "2026-11-16T11:07:05.726Z",
+  "handoffAudit": {
+    "version": 1,
+    "entries": [
+      {
+        "category": "exact-focus-resume-point",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "first-resume-action",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "partial-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "remaining-work",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "decisions-rationale",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "rejected-alternatives",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "files-symbols",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "branch-worktree",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "commands-tools",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "completed-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "pending-verification",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "runtime-limitations-workarounds",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "blockers-risks",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "user-visible-behavior",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "operator-actions",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "project-operating-notes",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      },
+      {
+        "category": "conversation-only-facts",
+        "status": "captured",
+        "detail": "Derived from the compact handoff and persisted planner state; no duplicate prose audit was supplied."
+      }
+    ],
+    "coldStartInventory": {
+      "version": 1,
+      "sourceReviews": [
+        {
+          "source": "conversation",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "planner-entities",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "working-tree",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "verification-runtime",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        },
+        {
+          "source": "peer-agent-output",
+          "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+        }
+      ],
+      "entries": [
+        {
+          "category": "files",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "symbols",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "working-tree-ownership",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "negative-state",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "commands-tools",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "runtime-wiring",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "preservation-constraints",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "verification-evidence",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "related-planned-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "user-visible-behavior",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "operator-actions",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "blockers-risks",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "remaining-work",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        },
+        {
+          "category": "ordered-resume-steps",
+          "items": [
+            "Derived from the compact handoff and persisted planner state."
+          ]
+        }
+      ]
+    },
+    "supportingDocuments": [],
+    "contentHash": "e25b0a219e8437df8ce32a0a89e3aed749c0ed3507130bdcc435549bd8b4de63",
+    "contentLength": 6286,
+    "verifiedAt": "2026-11-16T11:07:05.726Z",
+    "resumeReadyAt": "2026-11-16T11:07:16.158Z",
+    "readBackSourceReviews": [
+      {
+        "source": "conversation",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "planner-entities",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "working-tree",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "verification-runtime",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      },
+      {
+        "source": "peer-agent-output",
+        "detail": "Derived from persisted handoff content, planner entities, and read-back state; no duplicate source inventory was supplied."
+      }
+    ]
+  },
+  "handoffReadAt": "2026-11-16T11:07:16.158Z",
   "handoffHistory": [],
   "statusLog": [
     {
