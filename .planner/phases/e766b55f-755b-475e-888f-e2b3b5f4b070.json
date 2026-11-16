@@ -333,6 +333,12 @@
           "number": 6,
           "title": "Verify acceptance with focused mkdtemp-fixture suites and record any unverified boundary.",
           "checked": false
+        },
+        {
+          "id": "4a6975dc-0223-45f8-bf05-d7fc4d8ac0a2-check-007-provide-the-pairing-url-with-a-qr-code-in-the-recap-and-dashboard-so-phone-access-needs-no-manual-token-typing-manual-paste-stays-the-fallback",
+          "number": 7,
+          "title": "Provide the pairing URL with a QR code in the recap and dashboard so phone access needs no manual token typing (manual paste stays the fallback).",
+          "checked": false
         }
       ],
       "subtasks": [],
@@ -344,13 +350,13 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-11-16T13:11:22.283Z",
-      "updatedAt": "2026-11-16T13:11:27.916Z",
+      "updatedAt": "2026-11-16T13:20:02.433Z",
       "sessionInfo": [],
       "activeOwnerSession": ""
     }
   ],
   "createdAt": "2026-11-13T14:17:36.105Z",
-  "updatedAt": "2026-11-16T13:11:27.916Z",
+  "updatedAt": "2026-11-16T13:20:02.433Z",
   "handoff": "",
   "handoffUpdatedAt": "",
   "handoffAudit": null,
