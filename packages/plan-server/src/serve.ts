@@ -10,6 +10,7 @@ import { API_V1_VERSION, ExportService, PlanStore, PlanStoreError, PlanStaleWrit
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 import { API_V1_BASE_PATH, createApiV1App } from "./api-v1.js";
+import { API_V2_BASE_PATH, createApiV2App } from "./api-v2.js";
 import { EntityEventDetector } from "./entity-events.js";
 import { removeServerRecord, writeServerRecord, type ServerKind } from "./server-record.js";
 import { MUTATION_METHODS, hostHeaderIsLoopback, loopbackAuthStrategy, originIsAllowed, type AuthStrategy, type Principal } from "./auth.js";
@@ -251,6 +252,10 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   // The outside API has its own versioned contract and its own busy/error replies,
   // so it is mounted before the web UI's busy middleware below.
   app.route(API_V1_BASE_PATH, createApiV1App(store, isBusy));
+  // v2 is the agent working surface: it shares the handoff application flows
+  // with the MCP tools and inherits the same admission security as v1 (the
+  // middleware above already ran when we get here).
+  if (security) app.route(API_V2_BASE_PATH, createApiV2App(store, security));
 
   // While the agent is mutating .planner/ files, avoid serving possibly-inconsistent data.
   // GET requests get a 503 busy signal the UI retries; mutations are rejected.

@@ -5,10 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildPhaseWorkMap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildHandoffShowReply, buildHandoffPrepareReply, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, boundedPage, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
+import { HandoffFlowRefusal, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Feature, Phase, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -44,6 +45,29 @@ function mcpHandoffContractFailure(error: HandoffContractError, action: "refresh
 
 function handoffPreflightFailure(errorCode: "HANDOFF_PREFLIGHT_REQUIRED" | "HANDOFF_REASON_REQUIRED", message: string, details: Record<string, unknown> = {}): ToolResult {
   return { isError: true, content: [{ type: "text", text: `❌ Handoff refresh denied [${errorCode}]: ${message}` }], structuredContent: { errorCode, persisted: false, ...details } };
+}
+
+/**
+ * Map a shared handoff-flow refusal to the exact tool result the MCP
+ * surface has always produced. The code decides the shape (plain text vs
+ * isError); the shared message text is reused verbatim so MCP behavior
+ * is unchanged by the extraction.
+ */
+function handoffRefusalResult(error: HandoffFlowRefusal): ToolResult {
+  switch (error.code) {
+    case "GENERIC_HANDOFF_TITLE":
+      return text("❌ Generic handoff title. Provide a meaningful title summarizing the work.");
+    case "HANDOFF_CONFIRMATION_REQUIRED":
+      return text(`Proposal only: I would refresh this handoff on ${String(error.details.phaseRef)}. Ask the user to confirm, then run planner-handoff-prepare with the exact phaseRef.`, { phaseRef: error.details.phaseRef, confirmationRequired: true });
+    case "HANDOFF_PREFLIGHT_REQUIRED":
+      return handoffPreflightFailure("HANDOFF_PREFLIGHT_REQUIRED", "Run planner-handoff-prepare first and pass expectedHandoffUpdatedAt.");
+    case "HANDOFF_REASON_REQUIRED":
+      return handoffPreflightFailure("HANDOFF_REASON_REQUIRED", "Handoff reason is required before persistence. Created at and Updated at are generated by the planner; do not add them to Markdown.", { requiredInputs: ["title", "reason"], generatedMetadata: ["Created at", "Updated at"] });
+    default:
+      // PHASE_REF_REQUIRED / PHASE_NOT_FOUND / TASK_NOT_IN_PHASE keep the
+      // historical plain-refusal shape.
+      return text(`❌ ${error.message}`);
+  }
 }
 
 function mcpDerivedStatusReadOnlyResult(
@@ -278,13 +302,6 @@ function withStaleServerNotice<T extends ToolResult>(result: T): T {
   };
 }
 
-// Resolve a phase for entity-scoped handoff tools. ref = P00x | P00x(F00x) |
-// UUID | title. A write target is always explicit; never guess from the
-// first in-progress phase or a stale resume pointer.
-type PhaseHandoffResolve =
-  | { ok: true; phase: Phase; compositeRef: string }
-  | { ok: false; error: string };
-
 async function resolveRequirementPhaseRefs(st: PlanStore, refs: string[] | undefined): Promise<{ ok: true; linkedPhaseIds: string[] } | { ok: false; error: string }> {
   if (!refs || refs.length === 0) return { ok: false, error: "linkedPhaseIds must contain at least one phase reference." };
   const [phases, features] = await Promise.all([st.loadAllPhases(), st.loadFeatures()]);
@@ -296,25 +313,6 @@ async function resolveRequirementPhaseRefs(st: PlanStore, refs: string[] | undef
     if (!linkedPhaseIds.includes(phase.id)) linkedPhaseIds.push(phase.id);
   }
   return { ok: true, linkedPhaseIds };
-}
-
-async function resolvePhaseForHandoff(st: PlanStore, ref: string | undefined): Promise<PhaseHandoffResolve> {
-  const phases = await st.loadAllPhases();
-  const features = (await st.loadFeatures()).features;
-  let phase: Phase | undefined;
-  if (ref && ref.trim()) {
-    phase = findPhaseByRef(phases, features, ref.trim());
-  }
-  if (!phase) {
-    return {
-      ok: false,
-      error: ref && ref.trim()
-        ? `Phase not found: "${ref.trim()}". Use P00x, P00x(F00x), UUID, or title.`
-        : "A phaseRef is required. First identify the exact feature and phase with the user, then pass P00x or P00x(F00x).",
-    };
-  }
-  const feat = phase.featureId ? features.find((f) => f.id === phase.featureId) : undefined;
-  return { ok: true, phase, compositeRef: formatPhaseRef(phase.number, feat?.number) };
 }
 
 server.registerTool("planner-version", {
@@ -2568,12 +2566,10 @@ server.registerTool("planner-handoff-list", {
   },
 }, async ({ page, pageSize }) => {
   const st = await requireStore();
-  const list = await st.listHandoffs();
-  if (list.length === 0) return text("No phase handoffs set.", { count: 0, total: 0, page: 1, pageSize, totalPages: 1, handoffs: [] });
-  const result = boundedPage(list, page, pageSize);
-  const { items, ...pageInfo } = result;
-  const lines = items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars; ${e.resumeReady ? "resume-ready" : "verification required"})`);
-  return text(`Phase handoffs — page ${pageInfo.page}/${pageInfo.totalPages} (${pageInfo.total} total):\n${lines.join("\n")}`, { count: items.length, ...pageInfo, handoffs: items });
+  const list = await listPhaseHandoffsFlow(st, page, pageSize);
+  if (list.total === 0) return text("No phase handoffs set.", { count: 0, total: 0, page: 1, pageSize, totalPages: 1, handoffs: [] });
+  const lines = list.items.map((e) => `- ${e.compositeRef} — ${e.firstLine} (updated ${e.updatedAt}; ${e.contentLength} chars; ${e.resumeReady ? "resume-ready" : "verification required"})`);
+  return text(`Phase handoffs — page ${list.page}/${list.totalPages} (${list.total} total):\n${lines.join("\n")}`, { count: list.items.length, page: list.page, pageSize: list.pageSize, total: list.total, totalPages: list.totalPages, handoffs: list.items });
 });
 
 server.registerTool("planner-handoff-show", {
@@ -2581,30 +2577,13 @@ server.registerTool("planner-handoff-show", {
   inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title. Ask the user when ambiguous.") },
 }, async ({ phaseRef }) => {
   const st = await requireStore();
-  const r = await resolvePhaseForHandoff(st, phaseRef);
-  if (!r.ok) return text(`❌ ${r.error}`);
-  const phase = await st.loadPhase(r.phase.id);
-  if (!phase.handoff.trim()) {
-    const archived = (await st.listArchivedHandoffs()).find((entry) => entry.phaseId === phase.id
-      && new Set(["phase-done", "phase-rejected", "phase-canceled"]).has(entry.reason));
-    const reply = archived
-      ? buildHandoffShowReply({
-        kind: "archived",
-        phaseRef: r.compositeRef,
-        phaseId: phase.id,
-        content: archived.content,
-        archiveReason: archived.reason,
-        archivedAt: archived.archivedAt,
-        archiveFile: archived.file,
-        handoffAudit: phase.handoffAudit,
-      })
-      : buildHandoffShowReply({ kind: "empty", phaseRef: r.compositeRef, phaseId: r.phase.id, handoffAudit: phase.handoffAudit });
+  try {
+    const reply = await showPhaseHandoffFlow(st, phaseRef);
     return text(reply.text, reply.structured);
+  } catch (error) {
+    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`);
+    throw error;
   }
-  const feature = (await st.loadFeatures()).features.find((entry) => entry.id === phase.featureId);
-  const phaseWorkMap = buildPhaseWorkMap(phase, feature?.number);
-  const reply = buildHandoffShowReply({ kind: "active", phaseRef: r.compositeRef, phase, phaseWorkMap });
-  return text(reply.text, reply.structured);
 });
 
 server.registerTool("planner-handoff-verify", {
@@ -2620,22 +2599,20 @@ server.registerTool("planner-handoff-verify", {
   },
 }, async ({ phaseRef, expectedContentHash, sourceReviews, omissionsFound }) => {
   const st = await requireStore();
-  const r = await resolvePhaseForHandoff(st, phaseRef);
-  if (!r.ok) return text(`❌ ${r.error}`, { resumeReady: false });
   try {
-    const result = await st.verifyPhaseHandoffReadBack(r.phase.id, {
+    const outcome = await verifyPhaseHandoffFlow(st, phaseRef, {
       expectedContentHash,
       ...(sourceReviews ? { sourceReviews } : {}),
       ...(omissionsFound ? { omissionsFound } : {}),
     });
-    await st.writeGenerated();
-    return text(`✅ Handoff on ${r.compositeRef} is resume-ready after persisted read-back and source reconciliation.`, {
-      phaseRef: r.compositeRef,
-      ...result,
+    return text(`✅ Handoff on ${outcome.phaseRef} is resume-ready after persisted read-back and source reconciliation.`, {
+      phaseRef: outcome.phaseRef,
+      ...outcome.result,
       resumeReady: true,
       verificationRequired: false,
     });
   } catch (error) {
+    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`, { resumeReady: false });
     if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error);
     const message = error instanceof Error ? error.message : String(error);
     return text(`❌ Handoff read-back verification denied: ${message}`, { resumeReady: false, error: message });
@@ -2972,73 +2949,32 @@ server.registerTool("planner-handoff-write", {
   },
 }, async ({ phaseRef, title, reason, confirmed, content, expectedHandoffUpdatedAt, reconciledExistingHandoff, sectionDispositions, completenessAudit, coldStartInventory, supportingDocuments, taskUpdates, phaseUpdate, phaseNoUpdateReason, featureUpdate, featureNoUpdateReason }) => {
   const st = await requireStore();
-  // content is optional so a retry after a failed write can omit it and reuse
-  // the body PlanStore retained against this phase + expectedHandoffUpdatedAt
-  // (see PlanStore.refreshPhaseHandoff). body stays undefined only in that
-  // case; the title/heading checks below apply only to freshly-submitted text.
-  let body: string | undefined = content?.trim() || undefined;
-  if (body !== undefined) {
-    const firstLine = body.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
-    const firstHeadingText = firstLine.replace(/^#+\s*/, "").trim();
-    const effectiveHeadingText = title?.trim() || firstHeadingText;
-    if (!effectiveHeadingText || /^(handoff|canonical handoff|session handoff)$/i.test(effectiveHeadingText)) {
-      return text("❌ Generic handoff title. Provide a meaningful title summarizing the work.");
-    }
-    if (title?.trim()) {
-      const lines = body.split(/\r?\n/);
-      const firstIdx = lines.findIndex((line) => line.trim().length > 0);
-      if (firstIdx !== -1 && /^#+\s/.test(lines[firstIdx] ?? "")) lines[firstIdx] = `# ${title.trim()}`;
-      else lines.unshift(`# ${title.trim()}`, "");
-      body = lines.join("\n");
-    }
-  }
-  const r = await resolvePhaseForHandoff(st, phaseRef);
-  if (!r.ok) return text(`❌ ${r.error}`);
-  if (!confirmed) return text(`Proposal only: I would refresh this handoff on ${r.compositeRef}. Ask the user to confirm, then run planner-handoff-prepare with the exact phaseRef.`, { phaseRef: r.compositeRef, confirmationRequired: true });
-  if (expectedHandoffUpdatedAt === undefined) return handoffPreflightFailure("HANDOFF_PREFLIGHT_REQUIRED", "Run planner-handoff-prepare first and pass expectedHandoffUpdatedAt.");
-  if (!reason?.trim()) return handoffPreflightFailure("HANDOFF_REASON_REQUIRED", "Handoff reason is required before persistence. Created at and Updated at are generated by the planner; do not add them to Markdown.", { requiredInputs: ["title", "reason"], generatedMetadata: ["Created at", "Updated at"] });
-
-  const phases = await st.loadAllPhases();
-  const features = (await st.loadFeatures()).features;
-  const resolvedTaskUpdates = [];
-  for (const update of taskUpdates ?? []) {
-    const found = findTaskByRef(phases, features, update.taskRef.trim());
-    if (!found || found.phase.id !== r.phase.id) return text(`❌ Task ${update.taskRef} does not belong to ${r.compositeRef}.`);
-    resolvedTaskUpdates.push({
-      taskId: found.task.id,
-      completionSummary: update.completionSummary,
-      verification: update.verification,
-      remainingWork: update.remainingWork,
-      ...(update.filesTouched ? { filesTouched: update.filesTouched } : {}),
-      ...(update.decisions ? { decisions: update.decisions } : {}),
-    });
-  }
+  const request: PhaseHandoffWriteRequest = {
+    confirmed: confirmed === true,
+    title,
+    reason,
+    // content is optional so a retry after a failed write can omit it and reuse
+    // the body PlanStore retained against this phase + expectedHandoffUpdatedAt
+    // (see PlanStore.refreshPhaseHandoff).
+    content,
+    expectedHandoffUpdatedAt,
+    reconciledExistingHandoff,
+    sectionDispositions,
+    completenessAudit: completenessAudit as HandoffCompletenessAuditInput | undefined,
+    coldStartInventory: coldStartInventory as HandoffColdStartInventoryInput | undefined,
+    supportingDocuments,
+    taskUpdates,
+    phaseUpdate,
+    phaseNoUpdateReason,
+    featureUpdate,
+    featureNoUpdateReason,
+  };
   try {
-    const result = await st.refreshPhaseHandoff(r.phase.id, {
-      reason: reason.trim(),
-      ...(body !== undefined ? { content: body } : {}),
-      expectedHandoffUpdatedAt,
-      reconciledExistingHandoff: reconciledExistingHandoff === true,
-      ...(sectionDispositions ? { sectionDispositions } : {}),
-      ...(completenessAudit ? { completenessAudit: completenessAudit as HandoffCompletenessAuditInput } : {}),
-      ...(coldStartInventory ? { coldStartInventory: coldStartInventory as HandoffColdStartInventoryInput } : {}),
-      ...(supportingDocuments ? { supportingDocuments } : {}),
-      contextSync: {
-        taskUpdates: resolvedTaskUpdates,
-        ...(phaseUpdate ? { phaseUpdate: {
-          progressSummary: phaseUpdate.progressSummary,
-          remainingWork: phaseUpdate.remainingWork,
-          ...(phaseUpdate.decisions ? { decisions: phaseUpdate.decisions } : {}),
-        } } : {}),
-        ...(phaseNoUpdateReason ? { phaseNoUpdateReason } : {}),
-        ...(featureUpdate ? { featureUpdate } : {}),
-        ...(featureNoUpdateReason ? { featureNoUpdateReason } : {}),
-      },
-    });
-    await st.writeGenerated();
-    return text(`⚠️ Handoff candidate persisted on ${r.compositeRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${r.compositeRef}, read the persisted compact capsule, then call planner-handoff-verify with the returned contentHash. Rewrite only if resume-critical context is missing.`, {
-      phaseRef: r.compositeRef,
-      phaseId: r.phase.id,
+    const outcome = await writePhaseHandoffFlow(st, phaseRef, request);
+    const result = outcome.result;
+    return text(`⚠️ Handoff candidate persisted on ${outcome.phaseRef}, but it is NOT resume-ready yet. Required next action: call planner-handoff-show ${outcome.phaseRef}, read the persisted compact capsule, then call planner-handoff-verify with the returned contentHash. Rewrite only if resume-critical context is missing.`, {
+      phaseRef: outcome.phaseRef,
+      phaseId: outcome.phaseId,
       updatedTaskIds: result.updatedTaskIds,
       handoffUpdatedAt: result.handoffUpdatedAt,
       handoffAudit: result.handoffAudit,
@@ -3046,11 +2982,12 @@ server.registerTool("planner-handoff-write", {
       resumeReady: false,
       verificationRequired: true,
       nextActions: [
-        `Call planner-handoff-show ${r.compositeRef} and read the entire persisted body.`,
+        `Call planner-handoff-show ${outcome.phaseRef} and read the entire persisted body.`,
         "Call planner-handoff-verify with the shown contentHash; legacy sourceReviews and omissionsFound are optional because the planner derives omitted evidence from persisted state.",
       ],
     });
   } catch (error) {
+    if (error instanceof HandoffFlowRefusal) return handoffRefusalResult(error);
     if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error);
     const message = error instanceof Error ? error.message : String(error);
     return text(`❌ Handoff refresh denied: ${message} If you retry against the same phaseRef and expectedHandoffUpdatedAt, you may omit content to reuse the body just submitted.`, { error: message });
@@ -3073,13 +3010,11 @@ server.registerTool("planner-handoff-prepare", {
     "After confirmation, call planner-handoff-prepare again with that exact phaseRef, then reconcile its current handoff and missing task evidence through planner-handoff-write.",
   ].join("\n"));
   const st = await requireStore();
-  const r = await resolvePhaseForHandoff(st, phaseRef);
-  if (!r.ok) return text(`❌ ${r.error}`);
   try {
-    const audit = await st.preparePhaseHandoff(r.phase.id, supportingDocuments);
-    const reply = buildHandoffPrepareReply({ phaseRef: r.compositeRef, audit });
+    const reply = await preparePhaseHandoffFlow(st, phaseRef, supportingDocuments);
     return text(reply.text, reply.structured);
   } catch (error) {
+    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`);
     if (error instanceof HandoffContractError) return mcpHandoffContractFailure(error, "preparation");
     const message = error instanceof Error ? error.message : String(error);
     return text(`❌ Handoff preparation failed: ${message}`, { error: message });
@@ -3091,10 +3026,13 @@ server.registerTool("planner-handoff-clear", {
   inputSchema: { phaseRef: z.string().min(1).describe("Exact phase ref: P00x | P00x(F00x) | UUID | title.") },
 }, async ({ phaseRef }) => {
   const st = await requireStore();
-  const r = await resolvePhaseForHandoff(st, phaseRef);
-  if (!r.ok) return text(`❌ ${r.error}`);
-  await st.clearPhaseHandoff(r.phase.id, "manual");
-  return text(`✅ Cleared handoff on ${r.compositeRef} (handoffUpdatedAt preserved as audit; archived to .planner/.local/handoff-archive/).`, { phaseRef: r.compositeRef, phaseId: r.phase.id });
+  try {
+    const cleared = await clearPhaseHandoffFlow(st, phaseRef);
+    return text(`✅ Cleared handoff on ${cleared.phaseRef} (handoffUpdatedAt preserved as audit; archived to .planner/.local/handoff-archive/).`, { phaseRef: cleared.phaseRef, phaseId: cleared.phaseId });
+  } catch (error) {
+    if (error instanceof HandoffFlowRefusal) return text(`❌ ${error.message}`);
+    throw error;
+  }
 });
 
 server.registerTool("planner-web", {
