@@ -332,3 +332,77 @@ test("accepted-decision refusals map to typed v2 error codes", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("tasks family: create under a feature/phase pair, then checklist add → toggle → remove", async () => {
+  const fx = await startServerFixture({ name: "v2-tasks" });
+  try {
+    const created = (await request(fx, "/api/v2/phases/P001/tasks", json({
+      feature: "F001",
+      title: "Wire clients to the shared service",
+      description: "Convert MCP, Pi and CLI call sites to the versioned v2 surface. Current: direct PlanStore construction; desired: HTTP over the loopback service.",
+      checklist: ["Inventory call sites", "Swap to v2 client"],
+    }))).body;
+    assert.equal(created.apiVersion, "2");
+    assert.equal(created.data.created, true);
+    const taskRef = created.data.taskRef;
+    assert.match(taskRef, /^P001\(F001\)\/T\d{3}$/);
+    assert.notEqual(taskRef, "P001(F001)/T001", "the seed task already holds T001");
+    assert.equal(created.data.task.checklist.length, 2);
+    assert.equal(created.data.task.status, "planned");
+
+    const added = (await request(fx, `/api/v2/tasks/${encodeURIComponent(taskRef)}/checklist`, json({ title: "Verify parity" }))).body;
+    assert.equal(added.data.added, true);
+    assert.equal(added.data.item.number, 3);
+    assert.equal(added.data.checklistSize, 3);
+
+    const toggled = (await request(fx, `/api/v2/tasks/${encodeURIComponent(taskRef)}/checklist/toggle`, json({ item: "C1", checked: true }))).body;
+    assert.equal(toggled.data.toggled, true);
+    assert.equal(toggled.data.item.checked, true);
+    assert.match(toggled.data.message, /1\/3 checked/);
+
+    const removed = (await request(fx, `/api/v2/tasks/${encodeURIComponent(taskRef)}/checklist?item=${encodeURIComponent("C1")}`, del)).body;
+    assert.equal(removed.data.removed, true);
+    assert.equal(removed.data.checklistSize, 2);
+    assert.equal(removed.data.item.title, "Inventory call sites");
+
+    // Renumbering: the former C2 "Swap to v2 client" is now C1.
+    const retoggled = (await request(fx, `/api/v2/tasks/${encodeURIComponent(taskRef)}/checklist/toggle`, json({ item: "Swap to v2 client", checked: true }))).body;
+    assert.equal(retoggled.data.item.number, 1);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("task refusals map to typed v2 error codes", async () => {
+  const fx = await startServerFixture({ name: "v2-task-refusals" });
+  try {
+    const missingPhase = await expectError(fx, "/api/v2/phases/P999/tasks", json({
+      feature: "F001",
+      title: "Orphan attempt",
+      description: "A description that is long enough to pass the flow's fifty-character execution-context rule.",
+    }), { status: 404 });
+    assert.match(missingPhase.message, /TASK_PHASE_NOT_FOUND/);
+
+    const mismatch = await expectError(fx, "/api/v2/phases/P001/tasks", json({
+      feature: "F999",
+      title: "Wrong feature",
+      description: "A description that is long enough to pass the flow's fifty-character execution-context rule.",
+    }), { status: 404 });
+    assert.match(mismatch.message, /TASK_FEATURE_NOT_FOUND/);
+
+    const shortDescription = await expectError(fx, "/api/v2/phases/P001/tasks", json({
+      feature: "F001",
+      title: "One-liner",
+      description: "too short",
+    }), { status: 422 });
+    assert.match(shortDescription.message, /TASK_DESCRIPTION_TOO_SHORT/);
+
+    const missingTaskChecklist = await expectError(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}/checklist`, json({ title: "X" }), { status: 404 });
+    assert.match(missingTaskChecklist.message, /TASK_NOT_FOUND/);
+
+    const noItemSelector = await expectError(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T001")}/checklist`, del, { status: 422 });
+    assert.match(noItemSelector.message, /CHECKLIST_ITEM_REQUIRED/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

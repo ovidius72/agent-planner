@@ -28,12 +28,17 @@ import {
 import {
   HandoffFlowRefusal,
   RequirementFlowRefusal,
+  TaskFlowRefusal,
+  addTaskChecklistItemFlow,
   clearPhaseHandoffFlow,
   createRequirementFlow,
+  createTaskFlow,
   deleteRequirementFlow,
   listPhaseHandoffsFlow,
   preparePhaseHandoffFlow,
+  removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
+  toggleTaskChecklistItemFlow,
   updateRequirementFlow,
   verifyPhaseHandoffFlow,
   writePhaseHandoffFlow,
@@ -80,6 +85,12 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         create: "POST /api/v2/accepted-decisions",
         update: "PUT /api/v2/accepted-decisions/{decisionId}",
         delete: "DELETE /api/v2/accepted-decisions/{decisionId}?targetType=&targetRef=&confirmed=true",
+      },
+      tasks: {
+        create: "POST /api/v2/phases/{phaseRef}/tasks",
+        checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
+        checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
+        checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
       },
     },
   }));
@@ -482,6 +493,119 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return envelope(c, { deleted: true, targetType, targetRef: target.resolution.ref, decisionId, acceptedDecision });
     } catch (err) {
       return acceptedDecisionFailure(c, err, "ACCEPTED_DECISION_DELETE_FAILED");
+    }
+  });
+
+  // ── Tasks family ──────────────────────────────────────────────────
+  // Task creation and checklist mutations run the plan-core task-flow
+  // orchestration the MCP tools run — same resolution, same ownership
+  // validation, same atomic batch. Task refs contain "/" (F001/P001/T001),
+  // so routes use mid-path wildcards and the same conservative decode as
+  // the handoff family.
+  const taskRefusalStatus: Record<string, ContentfulStatusCode> = {
+    TASK_NOT_FOUND: 404,
+    TASK_FEATURE_NOT_FOUND: 404,
+    TASK_PHASE_NOT_FOUND: 404,
+    TASK_FEATURE_REQUIRED: 422,
+    TASK_PHASE_MISMATCH: 422,
+    TASK_TITLE_REQUIRED: 422,
+    TASK_DESCRIPTION_TOO_SHORT: 422,
+    CHECKLIST_EMPTY: 422,
+    CHECKLIST_ITEM_NOT_FOUND: 422,
+  };
+  const taskFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof TaskFlowRefusal) {
+      return error(c, taskRefusalStatus[err.code] ?? 422, err.code, err.message);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+  const taskRefOf = (c: Context, suffix: string): string => {
+    const path = c.req.path;
+    const start = path.indexOf(`${API_V2_BASE_PATH}/tasks/`);
+    const raw = start === -1 ? "" : path.slice(start + `${API_V2_BASE_PATH}/tasks/`.length);
+    const stripped = raw.endsWith(suffix) ? raw.slice(0, -suffix.length) : raw;
+    try {
+      return decodeURIComponent(stripped);
+    } catch {
+      return stripped;
+    }
+  };
+
+  app.post("/phases/*/tasks", async (c) => {
+    const phaseRef = phaseRefOf(c).replace(/\/tasks$/, "");
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    try {
+      const outcome = await createTaskFlow(store, {
+        featureRef: typeof body.feature === "string" ? body.feature : "",
+        phaseRef,
+        title: typeof body.title === "string" ? body.title : "",
+        description: typeof body.description === "string" ? body.description : "",
+        ...(Array.isArray(body.checklist) ? { checklist: body.checklist.filter((item): item is string => typeof item === "string") } : {}),
+      });
+      return envelope(c, {
+        created: true,
+        task: outcome.task,
+        taskRef: outcome.compositeRef,
+      }, 201);
+    } catch (err) {
+      return taskFailure(c, err, "TASK_CREATE_FAILED");
+    }
+  });
+
+  app.post("/tasks/*/checklist", async (c) => {
+    const taskRef = taskRefOf(c, "/checklist");
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    if (typeof body.title !== "string" || body.title.trim().length === 0) {
+      return error(c, 422, "TASK_TITLE_REQUIRED", "Checklist item text is required.");
+    }
+    try {
+      const outcome = await addTaskChecklistItemFlow(store, taskRef, body.title);
+      return envelope(c, { added: true, item: outcome.item, checklistSize: outcome.checklistSize }, 201);
+    } catch (err) {
+      return taskFailure(c, err, "CHECKLIST_ADD_FAILED");
+    }
+  });
+
+  app.post("/tasks/*/checklist/toggle", async (c) => {
+    const taskRef = taskRefOf(c, "/checklist/toggle");
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    if (typeof body.item !== "string" || body.item.trim().length === 0) {
+      return error(c, 422, "CHECKLIST_ITEM_REQUIRED", "item is required: C{n}, item id, or title.");
+    }
+    try {
+      const outcome = await toggleTaskChecklistItemFlow(store, taskRef, body.item, typeof body.checked === "boolean" ? body.checked : undefined);
+      return envelope(c, { toggled: true, item: outcome.item, message: outcome.message });
+    } catch (err) {
+      return taskFailure(c, err, "CHECKLIST_TOGGLE_FAILED");
+    }
+  });
+
+  app.delete("/tasks/*/checklist", async (c) => {
+    const taskRef = taskRefOf(c, "/checklist");
+    const item = c.req.query("item");
+    if (!item) {
+      return error(c, 422, "CHECKLIST_ITEM_REQUIRED", "item is required: C{n}, item id, or title.");
+    }
+    try {
+      const outcome = await removeTaskChecklistItemFlow(store, taskRef, item);
+      return envelope(c, { removed: true, item: outcome.item, checklistSize: outcome.checklistSize });
+    } catch (err) {
+      return taskFailure(c, err, "CHECKLIST_REMOVE_FAILED");
     }
   });
 

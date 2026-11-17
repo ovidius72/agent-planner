@@ -5,11 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { createChecklistItemId, createFeatureId, createPhaseId, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef, validateResolvedTarget } from "@agent-plan/core/naming";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -223,10 +223,6 @@ function findFeatureByRef(features: Feature[], ref: string): Feature | undefined
     ?? features.find((feature) => feature.id.toLowerCase() === normalized)
     ?? features.find((feature) => feature.name.toLowerCase() === normalized)
     ?? features.find((feature) => feature.name.toLowerCase().includes(normalized));
-}
-
-function taskCompositeRef(task: Task, phase: Phase, features: Feature[]): string {
-  return `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${String(task.number).padStart(3, "0")}`;
 }
 
 async function writeAndSummarize(st: PlanStore, message: string, structuredContent?: Record<string, unknown>): Promise<ToolResult> {
@@ -1425,62 +1421,15 @@ server.registerTool("planner-task-add", {
   },
 }, async ({ feature: featureRef, phase: ref, title, description, checklist }) => {
   const st = await requireStore();
-  return st.runBatch(async () => {
-  const features = (await st.loadFeatures()).features;
-  if (!featureRef?.trim()) return text("feature is required: a task must belong to a feature.");
-  const resolvedFeature = resolveFeatureRefStrict(features, featureRef);
-  if (!resolvedFeature.ok) return text(resolvedFeature.error);
-  const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
-  if (!featureValidation.ok) return text(featureValidation.error);
-  const feature = resolvedFeature.feature;
-  if (!feature) return text(`Resolved feature ${featureRef} no longer exists. Refusing to create task.`);
-  const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
-  if (!found) return text(`Phase not found: ${ref}`);
-  if (found.featureId !== feature.id) return text(`Phase ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} does not belong to feature ${formatFeatureRef(feature.number)}. Refusing to create task.`);
-  const phaseValidation = await validateResolvedTarget("phase", found.id, () => st.loadPhase(found.id).catch(() => undefined));
-  if (!phaseValidation.ok) return text(phaseValidation.error);
-  const existingPhase = await st.loadPhase(found.id);
-  if (!existingPhase) return text(`Resolved phase ${found.id} no longer exists. Refusing to create task.`);
-  const timestamp = nowISO();
-  const taskId = createTaskId();
-  const identity = await st.allocateEntityIdentity("task", taskId);
-  const priority = await st.nextPriority("task", found.id);
-  const task: Task = {
-    id: taskId,
-    phaseId: found.id,
-    number: identity.number,
-    shortId: identity.shortId,
-    priority,
-    shortName: clampSlug(title, 30, `task-${Date.now().toString(36)}`),
-    title: title.trim(),
-    status: "planned",
-    description: description?.trim() ?? "",
-    descriptionUpdatedAt: timestamp,
-    notes: "",
-    statusLog: [],
-    sessionInfo: [],
-    decisions: [],
-    acceptedDecisions: [],
-    checklist: (checklist ?? []).map((item, index) => ({ id: createChecklistItemId(taskId, index + 1, item), number: index + 1, title: item, checked: false })),
-    subtasks: [],
-    dependsOn: [],
-    pauseSnapshot: null,
-    pauseHistory: [],
-    startedAt: "",
-    completedAt: "",
-    activeOwnerSession: "",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-  await st.updatePhase(found.id, (entry) => {
-    entry.tasks.push(task);
-    entry.taskIds.push(task.id);
-    entry.updatedAt = timestamp;
-    return entry;
-  });
-  const finalFeatures = (await st.loadFeatures()).features;
-  return writeAndSummarize(st, `✅ Task created: ${taskCompositeRef(task, found, finalFeatures)} — ${task.title} (planned; ${taskCreatedPriorityFragment(task.priority)})${task.shortId ? ` · ${task.shortId}` : ""}`);
-  });
+  try {
+    const outcome = await createTaskFlow(st, { featureRef: featureRef ?? "", phaseRef: ref, title, description, checklist });
+    return text(outcome.message);
+  } catch (error) {
+    if (error instanceof TaskFlowRefusal) {
+      return text(error.message, { created: false, errorCode: error.code });
+    }
+    throw error;
+  }
 });
 
 server.registerTool("planner-task-show", {
@@ -1873,23 +1822,13 @@ server.registerTool("planner-task-checklist-toggle", {
   },
 }, async ({ task: ref, item, checked }) => {
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-  let result = "";
-  await st.updatePhase(found.phase.id, (phase) => {
-    const task = phase.tasks.find((entry) => entry.id === found.task.id);
-    if (!task) { result = `Task not found: ${ref}`; return phase; }
-    const ck = task.checklist ?? [];
-    if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
-    const target = toggleChecklistItem(ck, item, checked);
-    if (!target) { result = `No checklist item matching "${item}".`; return phase; }
-    task.updatedAt = nowISO();
-    phase.updatedAt = nowISO();
-    const doneCount = ck.filter((i) => i.checked).length;
-    result = `C${target.number} "${target.title}" → ${target.checked ? "done" : "open"} (${doneCount}/${ck.length} checked)`;
-    return phase;
-  });
-  return writeAndSummarize(st, `✅ ${result}`);
+  try {
+    const outcome = await toggleTaskChecklistItemFlow(st, ref, item, checked);
+    return writeAndSummarize(st, outcome.message);
+  } catch (error) {
+    if (error instanceof TaskFlowRefusal) return text(error.message);
+    throw error;
+  }
 });
 
 server.registerTool("planner-task-checklist-add", {
@@ -1900,22 +1839,13 @@ server.registerTool("planner-task-checklist-add", {
   },
 }, async ({ task: ref, title }) => {
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-  let result = "";
-  await st.updatePhase(found.phase.id, (phase) => {
-    const task = phase.tasks.find((entry) => entry.id === found.task.id);
-    if (!task) { result = `Task not found: ${ref}`; return phase; }
-    const ck = task.checklist ?? [];
-    const item = addChecklistItem(ck, task.id, title);
-    ck.push(item);
-    task.checklist = ck;
-    task.updatedAt = nowISO();
-    phase.updatedAt = nowISO();
-    result = `Added C${item.number} "${item.title}" (${ck.length} items)`;
-    return phase;
-  });
-  return writeAndSummarize(st, `✅ ${result}`);
+  try {
+    const outcome = await addTaskChecklistItemFlow(st, ref, title);
+    return writeAndSummarize(st, outcome.message);
+  } catch (error) {
+    if (error instanceof TaskFlowRefusal) return text(error.message);
+    throw error;
+  }
 });
 
 server.registerTool("planner-task-checklist-remove", {
@@ -1926,22 +1856,13 @@ server.registerTool("planner-task-checklist-remove", {
   },
 }, async ({ task: ref, item }) => {
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-  let result = "";
-  await st.updatePhase(found.phase.id, (phase) => {
-    const task = phase.tasks.find((entry) => entry.id === found.task.id);
-    if (!task) { result = `Task not found: ${ref}`; return phase; }
-    const ck = task.checklist ?? [];
-    if (ck.length === 0) { result = `Task "${found.task.title}" has no checklist.`; return phase; }
-    const removed = removeChecklistItem(ck, item);
-    if (!removed) { result = `No checklist item matching "${item}".`; return phase; }
-    task.updatedAt = nowISO();
-    phase.updatedAt = nowISO();
-    result = `Removed C${removed.number} "${removed.title}" (${ck.length} items left)`;
-    return phase;
-  });
-  return writeAndSummarize(st, `✅ ${result}`);
+  try {
+    const outcome = await removeTaskChecklistItemFlow(st, ref, item);
+    return writeAndSummarize(st, outcome.message);
+  } catch (error) {
+    if (error instanceof TaskFlowRefusal) return text(error.message);
+    throw error;
+  }
 });
 
 server.registerTool("planner-task-delete", {

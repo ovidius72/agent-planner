@@ -147,6 +147,19 @@ export function createRequirementId(): string {
   return randomUUID();
 }
 
+/**
+ * Canonical composite task ref (e.g. "P102(F005)/T003"). Lived in the MCP
+ * layer where it was first needed; promoted to core so every surface
+ * renders the same task identity.
+ */
+export function taskCompositeRef(
+  task: { number: number },
+  phase: { number: number; featureId?: string | null | undefined },
+  features: Array<{ id: string; number: number }>,
+): string {
+  return `${formatPhaseRef(phase.number, featureNumberOfPhase(phase, features))}/T${String(task.number).padStart(3, "0")}`;
+}
+
 export function createIdeaId(): string {
   return randomUUID();
 }
