@@ -258,3 +258,77 @@ test("requirement refusals map to typed v2 error codes", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("accepted-decisions family: list → create → update → delete on one resolved owner", async () => {
+  const fx = await startServerFixture({ name: "v2-decisions" });
+  try {
+    const empty = (await request(fx, "/api/v2/accepted-decisions?targetType=phase&targetRef=P001")).body;
+    assert.equal(empty.apiVersion, "2");
+    assert.deepEqual(empty.data.decisions, []);
+    assert.equal(empty.data.targetRef, "P001(F001)");
+
+    const created = (await request(fx, "/api/v2/accepted-decisions", json({
+      targetType: "phase",
+      targetRef: "P001",
+      title: "Loopback-only by default",
+      decision: "The service binds to 127.0.0.1.",
+      rationale: "Loopback Origin is evidence; LAN waits for its own task.",
+    }))).body;
+    assert.equal(created.data.created, true);
+    assert.equal(created.data.targetRef, "P001(F001)");
+    const decisionId = created.data.acceptedDecision.id;
+    assert.match(decisionId, /^[0-9a-f-]{36}$/);
+
+    const listed = (await request(fx, "/api/v2/accepted-decisions?targetType=phase&targetRef=P001")).body;
+    assert.equal(listed.data.decisions.length, 1);
+    assert.equal(listed.data.decisions[0].id, decisionId);
+
+    const updated = (await request(fx, `/api/v2/accepted-decisions/${decisionId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetType: "phase", targetRef: "P001", decision: "Loopback-only, LAN is a separate task." }),
+    })).body;
+    assert.equal(updated.data.updated, true);
+    assert.equal(updated.data.acceptedDecision.decision, "Loopback-only, LAN is a separate task.");
+
+    const unconfirmed = await expectError(fx, `/api/v2/accepted-decisions/${decisionId}?targetType=phase&targetRef=P001`, del, { status: 409 });
+    assert.match(unconfirmed.message, /ACCEPTED_DECISION_DELETE_NOT_CONFIRMED/);
+
+    const deleted = (await request(fx, `/api/v2/accepted-decisions/${decisionId}?targetType=phase&targetRef=P001&confirmed=true`, del)).body;
+    assert.equal(deleted.data.deleted, true);
+    const afterDelete = (await request(fx, "/api/v2/accepted-decisions?targetType=phase&targetRef=P001")).body;
+    assert.deepEqual(afterDelete.data.decisions, []);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("accepted-decision refusals map to typed v2 error codes", async () => {
+  const fx = await startServerFixture({ name: "v2-decision-refusals" });
+  try {
+    const badType = await expectError(fx, "/api/v2/accepted-decisions?targetType=galaxy", {}, { status: 422 });
+    assert.match(badType.message, /ACCEPTED_DECISION_TARGET_TYPE_INVALID/);
+
+    const missingTarget = await expectError(fx, "/api/v2/accepted-decisions?targetType=phase&targetRef=P999", {}, { status: 404 });
+    assert.match(missingTarget.message, /ACCEPTED_DECISION_TARGET_NOT_FOUND/);
+
+    const noTitle = await expectError(fx, "/api/v2/accepted-decisions", json({ targetType: "project" }), { status: 422 });
+    assert.match(noTitle.message, /ACCEPTED_DECISION_TITLE_REQUIRED/);
+
+    const missingUpdate = await expectError(fx, "/api/v2/accepted-decisions/00000000-0000-4000-8000-000000000000", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetType: "project", title: "Ghost" }),
+    }, { status: 404 });
+    assert.match(missingUpdate.message, /ACCEPTED_DECISION_NOT_FOUND/);
+
+    const noBody = await expectError(fx, "/api/v2/accepted-decisions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not-json",
+    }, { status: 400 });
+    assert.match(noBody.message, /INVALID_BODY/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

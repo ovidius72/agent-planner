@@ -27,9 +27,10 @@
  *    into acceptedDecisions, and only through the existing explicit
  *    project-context migration, never automatically here.
  */
-import { PlanStoreError, type PlanStore } from "./plan-store.js";
+import { PlanStoreError, type AcceptedDecisionOwner, type PlanStore } from "./plan-store.js";
 import { formatFeatureRef, formatPhaseRef, featureNumberOfPhase } from "./naming.js";
 import { findPhaseByRef, findTaskByRef, resolveFeatureRefStrict } from "./refs.js";
+import type { AcceptedDecision } from "./schema.js";
 import type { MutationReply } from "./mutation-reply.js";
 
 export const ACCEPTED_DECISION_OWNERSHIP_RULE =
@@ -135,6 +136,37 @@ export async function resolveAcceptedDecisionTarget(
     owner: { kind: "task", phaseId: found.phase.id, taskId: found.task.id },
     ref: `${formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features))}/T${String(found.task.number).padStart(3, "0")}`,
   };
+}
+
+/**
+ * Read the accepted decisions of a resolved owner. v2 serves this family
+ * through the same target resolution the mutations use, so list and write
+ * can never disagree about which entity owns a decision.
+ */
+export async function listAcceptedDecisionsForOwner(
+  st: PlanStore,
+  targetType: AcceptedDecisionTargetType,
+  targetRef: string | undefined,
+): Promise<{ ok: true; owner: AcceptedDecisionOwner; ref: string; decisions: AcceptedDecision[] } | { ok: false; error: string }> {
+  const target = await resolveAcceptedDecisionTarget(st, targetType, targetRef);
+  if (!target.ok) return target;
+  const owner = target.owner;
+  if (owner.kind === "project") {
+    const project = await st.loadProject();
+    return { ok: true, owner, ref: target.ref, decisions: project.acceptedDecisions };
+  }
+  if (owner.kind === "feature") {
+    const features = (await st.loadFeatures()).features;
+    const feature = features.find((entry) => entry.id === owner.featureId);
+    return { ok: true, owner, ref: target.ref, decisions: feature?.acceptedDecisions ?? [] };
+  }
+  if (owner.kind === "phase") {
+    const phase = await st.loadPhase(owner.phaseId);
+    return { ok: true, owner, ref: target.ref, decisions: phase.acceptedDecisions };
+  }
+  const phase = await st.loadPhase(owner.phaseId);
+  const task = phase.tasks.find((entry) => entry.id === owner.taskId);
+  return { ok: true, owner, ref: target.ref, decisions: task?.acceptedDecisions ?? [] };
 }
 
 /**

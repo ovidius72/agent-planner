@@ -19,7 +19,10 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   SERVICE_PROTOCOL_VERSION,
   HandoffContractError,
+  PlanStoreError,
   recommendNextWork,
+  listAcceptedDecisionsForOwner,
+  resolveAcceptedDecisionTarget,
   type PlanStore,
 } from "@agent-plan/core";
 import {
@@ -71,6 +74,12 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         create: "POST /api/v2/requirements",
         update: "PUT /api/v2/requirements/{requirementId}",
         delete: "DELETE /api/v2/requirements/{requirementId}",
+      },
+      acceptedDecisions: {
+        list: "GET /api/v2/accepted-decisions?targetType=&targetRef=",
+        create: "POST /api/v2/accepted-decisions",
+        update: "PUT /api/v2/accepted-decisions/{decisionId}",
+        delete: "DELETE /api/v2/accepted-decisions/{decisionId}?targetType=&targetRef=&confirmed=true",
       },
     },
   }));
@@ -352,6 +361,127 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return envelope(c, { deleted: true, requirementId });
     } catch (err) {
       return requirementFailure(c, err, "REQUIREMENT_DELETE_FAILED");
+    }
+  });
+
+  // ── Accepted-decisions family ─────────────────────────────────────
+  // The ownership rule (exactly one owner) is enforced in plan-core
+  // accepted-decision-guard.ts; target resolution and the semantic store
+  // mutations are the same primitives the MCP tools run. HTTP adds only
+  // the envelope and the status mapping.
+  const targetOfType = (raw: unknown): "project" | "feature" | "phase" | "task" | null =>
+    raw === "project" || raw === "feature" || raw === "phase" || raw === "task" ? raw : null;
+  const acceptedDecisionStatus: Record<string, ContentfulStatusCode> = {
+    ACCEPTED_DECISION_TARGET_NOT_FOUND: 404,
+    ACCEPTED_DECISION_NOT_FOUND: 404,
+    ACCEPTED_DECISION_TITLE_REQUIRED: 422,
+    ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED: 422,
+    ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED: 422,
+    NO_MUTABLE_FIELDS_RECEIVED: 422,
+  };
+  const acceptedDecisionFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof PlanStoreError) {
+      const code = String(err.details?.errorCode ?? "");
+      if (code) return error(c, acceptedDecisionStatus[code] ?? 422, code, err.message, { details: err.details });
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+  const resolveTarget = async (c: Context, targetType: "project" | "feature" | "phase" | "task", targetRef: string | undefined) => {
+    const resolution = await resolveAcceptedDecisionTarget(store, targetType, targetRef);
+    if (!resolution.ok) {
+      return { failure: error(c, 404, "ACCEPTED_DECISION_TARGET_NOT_FOUND", resolution.error) } as const;
+    }
+    return { resolution } as const;
+  };
+
+  app.get("/accepted-decisions", async (c) => {
+    const targetType = targetOfType(c.req.query("targetType"));
+    if (!targetType) {
+      return error(c, 422, "ACCEPTED_DECISION_TARGET_TYPE_INVALID", "targetType must be project, feature, phase, or task.");
+    }
+    const targetRef = c.req.query("targetRef");
+    const listed = await listAcceptedDecisionsForOwner(store, targetType, targetRef);
+    if (!listed.ok) {
+      return error(c, 404, "ACCEPTED_DECISION_TARGET_NOT_FOUND", listed.error);
+    }
+    return envelope(c, { targetType, targetRef: listed.ref, owner: listed.owner, decisions: listed.decisions });
+  });
+
+  app.post("/accepted-decisions", async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    const targetType = targetOfType(body.targetType);
+    if (!targetType) {
+      return error(c, 422, "ACCEPTED_DECISION_TARGET_TYPE_INVALID", "targetType must be project, feature, phase, or task.");
+    }
+    if (typeof body.title !== "string" || body.title.trim().length === 0) {
+      return error(c, 422, "ACCEPTED_DECISION_TITLE_REQUIRED", "title is required.");
+    }
+    const targetRef = typeof body.targetRef === "string" ? body.targetRef : undefined;
+    const target = await resolveTarget(c, targetType, targetRef);
+    if ("failure" in target) return target.failure;
+    try {
+      const acceptedDecision = await store.createAcceptedDecision(target.resolution.owner, {
+        title: body.title as string,
+        ...(typeof body.decision === "string" ? { decision: body.decision } : {}),
+        ...(typeof body.rationale === "string" ? { rationale: body.rationale } : {}),
+        ...(typeof body.implementationNotes === "string" ? { implementationNotes: body.implementationNotes } : {}),
+      });
+      return envelope(c, { created: true, targetType, targetRef: target.resolution.ref, acceptedDecision }, 201);
+    } catch (err) {
+      return acceptedDecisionFailure(c, err, "ACCEPTED_DECISION_CREATE_FAILED");
+    }
+  });
+
+  app.put("/accepted-decisions/:decisionId", async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    const targetType = targetOfType(body.targetType);
+    if (!targetType) {
+      return error(c, 422, "ACCEPTED_DECISION_TARGET_TYPE_INVALID", "targetType must be project, feature, phase, or task.");
+    }
+    const targetRef = typeof body.targetRef === "string" ? body.targetRef : undefined;
+    const decisionId = c.req.param("decisionId");
+    const target = await resolveTarget(c, targetType, targetRef);
+    if ("failure" in target) return target.failure;
+    try {
+      const acceptedDecision = await store.updateAcceptedDecision(target.resolution.owner, decisionId, {
+        ...(body.title !== undefined ? { title: body.title as string } : {}),
+        ...(body.decision !== undefined ? { decision: body.decision as string } : {}),
+        ...(body.rationale !== undefined ? { rationale: body.rationale as string } : {}),
+        ...(body.implementationNotes !== undefined ? { implementationNotes: body.implementationNotes as string } : {}),
+      });
+      return envelope(c, { updated: true, targetType, targetRef: target.resolution.ref, acceptedDecision });
+    } catch (err) {
+      return acceptedDecisionFailure(c, err, "ACCEPTED_DECISION_UPDATE_FAILED");
+    }
+  });
+
+  app.delete("/accepted-decisions/:decisionId", async (c) => {
+    const targetType = targetOfType(c.req.query("targetType"));
+    if (!targetType) {
+      return error(c, 422, "ACCEPTED_DECISION_TARGET_TYPE_INVALID", "targetType must be project, feature, phase, or task.");
+    }
+    const targetRef = c.req.query("targetRef");
+    const decisionId = c.req.param("decisionId");
+    const target = await resolveTarget(c, targetType, targetRef);
+    if ("failure" in target) return target.failure;
+    if (c.req.query("confirmed") !== "true") {
+      return error(c, 409, "ACCEPTED_DECISION_DELETE_NOT_CONFIRMED", `Delete not confirmed for accepted decision ${decisionId}. Retry with confirmed=true.`);
+    }
+    try {
+      const acceptedDecision = await store.deleteAcceptedDecision(target.resolution.owner, decisionId);
+      return envelope(c, { deleted: true, targetType, targetRef: target.resolution.ref, decisionId, acceptedDecision });
+    } catch (err) {
+      return acceptedDecisionFailure(c, err, "ACCEPTED_DECISION_DELETE_FAILED");
     }
   });
 
