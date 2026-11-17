@@ -160,3 +160,101 @@ test("list and recommend answer with the v2 envelope", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("requirements family: create → list → update → delete over the shared flows", async () => {
+  const fx = await startServerFixture({ name: "v2-requirements" });
+  try {
+    const created = (await request(fx, "/api/v2/requirements", json({
+      title: "Single coordinated authority",
+      description: "Every client routes through one service.",
+      linkedPhaseIds: ["P001"],
+      macroTasks: [{ title: "Ship v2 envelope", status: "planned" }],
+    }))).body;
+    assert.equal(created.apiVersion, "2");
+    assert.equal(created.data.created, true);
+    const requirementId = created.data.requirement.id;
+    assert.match(requirementId, /^[0-9a-f-]{36}$/);
+    assert.equal(created.data.requirement.linkedPhaseIds.length, 1, "P001 ref resolved to the canonical phase id");
+    assert.notEqual(created.data.requirement.linkedPhaseIds[0], "P001");
+    assert.equal(created.data.requirement.macroTasks[0].status, "planned");
+    assert.match(created.data.requirement.macroTasks[0].id, /^MT-\d{3}$/);
+
+    const list = (await request(fx, "/api/v2/requirements")).body;
+    assert.equal(list.apiVersion, "2");
+    // The minimal seed already ships one linked requirement; ours joins it.
+    assert.equal(list.data.requirements.length, 2);
+    assert.equal(list.data.requirements[1].id, requirementId);
+
+    const updated = (await request(fx, `/api/v2/requirements/${requirementId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description: "One service, many surfaces.",
+        macroTasks: [
+          { id: created.data.requirement.macroTasks[0].id, title: "Ship v2 envelope", status: "done" },
+          { title: "Convert every client", status: "in-progress" },
+        ],
+      }),
+    })).body;
+    assert.equal(updated.data.updated, true);
+    assert.deepEqual(updated.data.updatedFields, ["description", "macroTasks"]);
+    assert.equal(updated.data.requirement.macroTasks.length, 2);
+    assert.equal(updated.data.requirement.macroTasks[0].status, "done");
+    assert.equal(updated.data.requirement.macroTasks[1].id, "MT-002");
+
+    const deleted = (await request(fx, `/api/v2/requirements/${requirementId}`, del)).body;
+    assert.equal(deleted.data.deleted, true);
+
+    const afterDelete = (await request(fx, "/api/v2/requirements")).body;
+    assert.deepEqual(afterDelete.data.requirements.map((r) => r.id).includes(requirementId), false);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("requirement refusals map to typed v2 error codes", async () => {
+  const fx = await startServerFixture({ name: "v2-requirement-refusals" });
+  try {
+    const unknownPhase = await expectError(fx, "/api/v2/requirements", json({
+      title: "Dangling link",
+      linkedPhaseIds: ["P999"],
+    }), { status: 422 });
+    assert.match(unknownPhase.message, /REQUIREMENT_PHASE_LINK_INVALID/);
+
+    const badStatus = await expectError(fx, "/api/v2/requirements", json({
+      title: "Bad macro status",
+      linkedPhaseIds: ["P001"],
+      macroTasks: [{ title: "X", status: "megadrive" }],
+    }), { status: 422 });
+    assert.match(badStatus.message, /REQUIREMENT_MACRO_TASK_INVALID/);
+
+    const noTitle = await expectError(fx, "/api/v2/requirements", json({ linkedPhaseIds: ["P001"] }), { status: 422 });
+    assert.match(noTitle.message, /REQUIREMENT_TITLE_REQUIRED/);
+
+    const noFields = await expectError(fx, "/api/v2/requirements/00000000-0000-4000-8000-000000000000", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }, { status: 422 });
+    assert.match(noFields.message, /NO_MUTABLE_FIELDS/);
+
+    const missingUpdate = await expectError(fx, "/api/v2/requirements/00000000-0000-4000-8000-000000000000", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Ghost" }),
+    }, { status: 404 });
+    assert.match(missingUpdate.message, /REQUIREMENT_NOT_FOUND/);
+
+    const missingDelete = await expectError(fx, "/api/v2/requirements/00000000-0000-4000-8000-000000000000", del, { status: 404 });
+    assert.match(missingDelete.message, /REQUIREMENT_NOT_FOUND/);
+
+    const noBody = await expectError(fx, "/api/v2/requirements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not-json",
+    }, { status: 400 });
+    assert.match(noBody.message, /INVALID_BODY/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

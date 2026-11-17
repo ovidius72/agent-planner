@@ -24,12 +24,17 @@ import {
 } from "@agent-plan/core";
 import {
   HandoffFlowRefusal,
+  RequirementFlowRefusal,
   clearPhaseHandoffFlow,
+  createRequirementFlow,
+  deleteRequirementFlow,
   listPhaseHandoffsFlow,
   preparePhaseHandoffFlow,
   showPhaseHandoffFlow,
+  updateRequirementFlow,
   verifyPhaseHandoffFlow,
   writePhaseHandoffFlow,
+  type MacroTaskStatus,
   type PhaseHandoffWriteRequest,
 } from "@agent-plan/core";
 
@@ -61,6 +66,12 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         clear: "DELETE /api/v2/phases/{phaseRef}/handoff",
       },
       recommend: "GET /api/v2/recommend",
+      requirements: {
+        list: "GET /api/v2/requirements",
+        create: "POST /api/v2/requirements",
+        update: "PUT /api/v2/requirements/{requirementId}",
+        delete: "DELETE /api/v2/requirements/{requirementId}",
+      },
     },
   }));
 
@@ -228,6 +239,119 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return envelope(c, { ...cleared, cleared: true });
     } catch (err) {
       return flowFailure(c, err, "HANDOFF_CLEAR_FAILED", 500);
+    }
+  });
+
+  // ── Requirements family ───────────────────────────────────────────
+  // Same flows the MCP requirement tools run (plan-core
+  // requirement-flow.ts): one orchestration, many surfaces. Macro-task
+  // statuses arrive as untrusted strings and are cast through; the
+  // canonical reconciler is the validator and reports through
+  // REQUIREMENT_MACRO_TASK_INVALID.
+  const requirementFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof RequirementFlowRefusal) {
+      const status: ContentfulStatusCode = err.code === "REQUIREMENT_NOT_FOUND" ? 404 : 422;
+      return error(c, status, err.code, err.message);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+
+  app.get("/requirements", async (c) => {
+    const document = await store.loadRequirements();
+    return envelope(c, { requirements: document.requirements });
+  });
+
+  app.post("/requirements", async (c) => {
+    let body: {
+      title?: unknown;
+      description?: unknown;
+      linkedPhaseIds?: unknown;
+      macroTasks?: unknown;
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    if (typeof body.title !== "string" || body.title.trim().length === 0) {
+      return error(c, 422, "REQUIREMENT_TITLE_REQUIRED", "title is required.");
+    }
+    if (!Array.isArray(body.linkedPhaseIds) || body.linkedPhaseIds.some((ref) => typeof ref !== "string")) {
+      return error(c, 422, "REQUIREMENT_PHASE_LINK_INVALID", "linkedPhaseIds must be an array of phase references.");
+    }
+    try {
+      const requirement = await createRequirementFlow(store, {
+        title: body.title,
+        ...(typeof body.description === "string" ? { description: body.description } : {}),
+        linkedPhaseIds: body.linkedPhaseIds as string[],
+        ...(Array.isArray(body.macroTasks) ? {
+          macroTasks: (body.macroTasks as Array<Record<string, unknown>>).map((task) => ({
+            title: String(task.title ?? ""),
+            ...(typeof task.description === "string" ? { description: task.description } : {}),
+            ...(task.status !== undefined ? { status: task.status as MacroTaskStatus } : {}),
+          })),
+        } : {}),
+      });
+      return envelope(c, { requirement, created: true }, 201);
+    } catch (err) {
+      return requirementFailure(c, err, "REQUIREMENT_CREATE_FAILED");
+    }
+  });
+
+  app.put("/requirements/:requirementId", async (c) => {
+    const requirementId = c.req.param("requirementId");
+    let body: {
+      title?: unknown;
+      description?: unknown;
+      linkedPhaseIds?: unknown;
+      macroTasks?: unknown;
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    const hasField = body.title !== undefined || body.description !== undefined
+      || body.linkedPhaseIds !== undefined || body.macroTasks !== undefined;
+    if (!hasField) {
+      return error(c, 422, "NO_MUTABLE_FIELDS", "Provide at least one of title, description, linkedPhaseIds, macroTasks.");
+    }
+    if (body.title !== undefined && (typeof body.title !== "string" || body.title.trim().length === 0)) {
+      return error(c, 422, "REQUIREMENT_TITLE_REQUIRED", "title must be a non-empty string.");
+    }
+    if (body.linkedPhaseIds !== undefined && (!Array.isArray(body.linkedPhaseIds) || body.linkedPhaseIds.some((ref) => typeof ref !== "string"))) {
+      return error(c, 422, "REQUIREMENT_PHASE_LINK_INVALID", "linkedPhaseIds must be an array of phase references.");
+    }
+    try {
+      const outcome = await updateRequirementFlow(store, requirementId, {
+        ...(body.title !== undefined ? { title: body.title as string } : {}),
+        ...(body.description !== undefined ? { description: body.description as string } : {}),
+        ...(body.linkedPhaseIds !== undefined ? { linkedPhaseIds: body.linkedPhaseIds as string[] } : {}),
+        ...(body.macroTasks !== undefined ? {
+          macroTasks: (body.macroTasks as Array<Record<string, unknown>>).map((task) => ({
+            ...(task.id !== undefined ? { id: String(task.id) } : {}),
+            title: String(task.title ?? ""),
+            ...(typeof task.description === "string" ? { description: task.description } : {}),
+            status: task.status as MacroTaskStatus,
+          })),
+        } : {}),
+      });
+      return envelope(c, { requirement: outcome.requirement, updatedFields: outcome.updatedFields, updated: true });
+    } catch (err) {
+      return requirementFailure(c, err, "REQUIREMENT_UPDATE_FAILED");
+    }
+  });
+
+  app.delete("/requirements/:requirementId", async (c) => {
+    const requirementId = c.req.param("requirementId");
+    try {
+      const { deleted } = await deleteRequirementFlow(store, requirementId);
+      if (!deleted) {
+        return error(c, 404, "REQUIREMENT_NOT_FOUND", `Requirement not found: ${requirementId}`);
+      }
+      return envelope(c, { deleted: true, requirementId });
+    } catch (err) {
+      return requirementFailure(c, err, "REQUIREMENT_DELETE_FAILED");
     }
   });
 

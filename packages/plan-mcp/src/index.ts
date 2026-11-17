@@ -5,12 +5,12 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, reconcileRequirementMacroTasks, RequirementMacroTaskError, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, addChecklistItem, removeChecklistItem, toggleChecklistItem, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, taskCreatedPriorityFragment, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, createRequirementId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
-import type { Feature, Phase, Requirement, Task, StatusLogEntry } from "@agent-plan/core/schema";
+import { createChecklistItemId, createFeatureId, createPhaseId, createTaskId, clampSlug, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, validateResolvedTarget } from "@agent-plan/core/naming";
+import { HandoffFlowRefusal, RequirementFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -300,19 +300,6 @@ function withStaleServerNotice<T extends ToolResult>(result: T): T {
     };
     return registerToolUnwrapped(...args.slice(0, -1), wrapped);
   };
-}
-
-async function resolveRequirementPhaseRefs(st: PlanStore, refs: string[] | undefined): Promise<{ ok: true; linkedPhaseIds: string[] } | { ok: false; error: string }> {
-  if (!refs || refs.length === 0) return { ok: false, error: "linkedPhaseIds must contain at least one phase reference." };
-  const [phases, features] = await Promise.all([st.loadAllPhases(), st.loadFeatures()]);
-  const linkedPhaseIds: string[] = [];
-  for (const rawRef of refs) {
-    const ref = rawRef.trim();
-    const phase = ref ? findPhaseByRef(phases, features.features, ref) : undefined;
-    if (!phase) return { ok: false, error: `Linked phase not found: ${rawRef}` };
-    if (!linkedPhaseIds.includes(phase.id)) linkedPhaseIds.push(phase.id);
-  }
-  return { ok: true, linkedPhaseIds };
 }
 
 server.registerTool("planner-version", {
@@ -2672,33 +2659,15 @@ server.registerTool("planner-requirement-create", {
   },
 }, async ({ title, description, linkedPhaseIds, macroTasks }) => {
   const st = await requireStore();
-  const links = await resolveRequirementPhaseRefs(st, linkedPhaseIds);
-  if (!links.ok) return text(`❌ ${links.error}`, { created: false, errorCode: "REQUIREMENT_PHASE_LINK_INVALID" });
-  const now = nowISO();
-  let normalizedMacroTasks;
   try {
-    normalizedMacroTasks = reconcileRequirementMacroTasks([], (macroTasks ?? []).map((task) => ({
-      title: task.title,
-      ...(task.description !== undefined ? { description: task.description } : {}),
-      status: task.status ?? "planned",
-    })), now);
+    const requirement = await createRequirementFlow(st, { title, description, linkedPhaseIds, macroTasks });
+    return writeAndSummarize(st, `Requirement created: ${requirement.id}.`, { requirement, created: true });
   } catch (error) {
-    const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
-    return text(`❌ ${message}`, { created: false, errorCode: "REQUIREMENT_MACRO_TASK_INVALID" });
+    if (error instanceof RequirementFlowRefusal) {
+      return text(`❌ ${error.message}`, { created: false, errorCode: error.code });
+    }
+    throw error;
   }
-  const requirement: Requirement = {
-    id: createRequirementId(),
-    title: title.trim(),
-    description: description?.trim() ?? "",
-    macroTasks: normalizedMacroTasks,
-    linkedPhaseIds: links.linkedPhaseIds,
-    createdAt: now,
-    updatedAt: now,
-    sessionInfo: [],
-  };
-  await st.updateRequirements((document) => ({ requirements: [...document.requirements, requirement] }));
-  await st.writeGenerated();
-  return writeAndSummarize(st, `Requirement created: ${requirement.id}.`, { requirement, created: true });
 });
 
 server.registerTool("planner-requirement-update", {
@@ -2717,9 +2686,6 @@ server.registerTool("planner-requirement-update", {
   },
 }, async ({ requirementId, title, description, linkedPhaseIds, macroTasks }) => {
   const st = await requireStore();
-  const requirements = await st.loadRequirements();
-  const current = requirements.requirements.find((requirement) => requirement.id === requirementId);
-  if (!current) return text(`❌ Requirement not found: ${requirementId}`, { updated: false, errorCode: "NOT_FOUND" });
   if (title === undefined && description === undefined && linkedPhaseIds === undefined && macroTasks === undefined) {
     return mcpMutationNoFieldsFailure({
       entity: "requirement",
@@ -2729,43 +2695,23 @@ server.registerTool("planner-requirement-update", {
       retryCommand: `planner-requirement-update ${requirementId}`,
     });
   }
-  const requirementUpdatedFields = [
-    ...(title !== undefined ? ["title"] : []),
-    ...(description !== undefined ? ["description"] : []),
-    ...(linkedPhaseIds !== undefined ? ["linkedPhaseIds"] : []),
-    ...(macroTasks !== undefined ? ["macroTasks"] : []),
-  ];
-  const links = linkedPhaseIds === undefined ? { ok: true as const, linkedPhaseIds: current.linkedPhaseIds } : await resolveRequirementPhaseRefs(st, linkedPhaseIds);
-  if (!links.ok) return text(`❌ ${links.error}`, { updated: false, errorCode: "REQUIREMENT_PHASE_LINK_INVALID" });
-  const now = nowISO();
-  let next: Requirement;
   try {
-    next = await st.updateRequirement(current.id, (canonical) => ({
-      ...canonical,
-      ...(title !== undefined ? { title: title.trim() } : {}),
-      ...(description !== undefined ? { description: description.trim() } : {}),
-      ...(linkedPhaseIds !== undefined ? { linkedPhaseIds: links.linkedPhaseIds } : {}),
-      ...(macroTasks !== undefined ? { macroTasks: reconcileRequirementMacroTasks(canonical.macroTasks, macroTasks.map((task) => ({
-        ...(task.id !== undefined ? { id: task.id } : {}),
-        title: task.title,
-        ...(task.description !== undefined ? { description: task.description } : {}),
-        status: task.status,
-      })), now) } : {}),
-      updatedAt: now,
-    }));
+    const outcome = await updateRequirementFlow(st, requirementId, { title, description, linkedPhaseIds, macroTasks });
+    const next = outcome.requirement;
+    const requirementUpdateReply = buildMutationReply({
+      identity: { entity: "requirement", ref: next.id, id: next.id, title: next.title },
+      operation: "update",
+      updatedFields: outcome.updatedFields,
+      changedValues: next as unknown as Record<string, unknown>,
+      readBackCommand: "planner-requirement-list",
+    });
+    return writeAndSummarize(st, requirementUpdateReply.text, requirementUpdateReply.structured);
   } catch (error) {
-    const message = error instanceof RequirementMacroTaskError ? error.message : "Invalid macro tasks.";
-    return text(`❌ ${message}`, { updated: false, errorCode: "REQUIREMENT_MACRO_TASK_INVALID" });
+    if (error instanceof RequirementFlowRefusal) {
+      return text(`❌ ${error.message}`, { updated: false, errorCode: error.code });
+    }
+    throw error;
   }
-  await st.writeGenerated();
-  const requirementUpdateReply = buildMutationReply({
-    identity: { entity: "requirement", ref: next.id, id: next.id, title: next.title },
-    operation: "update",
-    updatedFields: requirementUpdatedFields,
-    changedValues: next as unknown as Record<string, unknown>,
-    readBackCommand: "planner-requirement-list",
-  });
-  return writeAndSummarize(st, requirementUpdateReply.text, requirementUpdateReply.structured);
 });
 
 server.registerTool("planner-requirement-delete", {
@@ -2773,14 +2719,8 @@ server.registerTool("planner-requirement-delete", {
   inputSchema: { requirementId: z.string().min(1) },
 }, async ({ requirementId }) => {
   const st = await requireStore();
-  let deleted = false;
-  await st.updateRequirements((document) => {
-    const requirements = document.requirements.filter((requirement) => requirement.id !== requirementId);
-    deleted = requirements.length !== document.requirements.length;
-    return deleted ? { requirements } : document;
-  });
-  if (!deleted) return text(`❌ Requirement not found: ${requirementId}`, { deleted: false, errorCode: "NOT_FOUND" });
-  await st.writeGenerated();
+  const { deleted } = await deleteRequirementFlow(st, requirementId);
+  if (!deleted) return text(`❌ Requirement not found: ${requirementId}`, { deleted: false, errorCode: "REQUIREMENT_NOT_FOUND" });
   return writeAndSummarize(st, `Requirement deleted: ${requirementId}.`, { deleted: true, requirementId });
 });
 
