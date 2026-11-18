@@ -8,8 +8,8 @@ import { pathToFileURL } from "node:url";
 import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, createPhaseFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { createChecklistItemId, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -983,58 +983,43 @@ server.registerTool("planner-feature-update", {
   },
 }, async ({ feature: ref, ...updates }) => {
   const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const resolvedFeature = resolveFeatureRefStrict(features, ref);
-  if (!resolvedFeature.ok) return text(resolvedFeature.error);
-  const feature = resolvedFeature.feature;
-  if (updates.status !== undefined) {
-    return mcpDerivedStatusReadOnlyResult("feature", formatFeatureRef(feature.number), updates.status, feature.status);
-  }
-  const mutableFields = ["name", "description", "descriptionRef", "workDone", "workRemaining", "startDate", "endDate", "priority"] as const;
-  const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
-  if (receivedFields.length === 0) {
-    return mcpMutationNoFieldsFailure({
-      entity: "feature",
-      ref: formatFeatureRef(feature.number),
+  try {
+    const outcome = await updateFeatureFlow(st, ref, updates);
+    const result = outcome.feature;
+    const featureRef = outcome.ref;
+    const featureUpdateReply = buildMutationReply({
+      identity: { entity: "feature", ref: featureRef, id: result.id, shortId: result.shortId, title: result.name, status: result.status },
       operation: "update",
-      mutableFields,
-      retryCommand: `planner-feature-update ${formatFeatureRef(feature.number)}`,
-      readBackCommand: `planner-feature-show ${formatFeatureRef(feature.number)} with full=true`,
-      descriptionFallback: {
-        entityId: feature.id,
-        inputField: "description",
-        storedField: "feature description",
-        descriptionRefField: "descriptionRef",
-      },
+      updatedFields: outcome.updatedFields,
+      changedValues: result as unknown as Record<string, unknown>,
+      readBackCommand: `planner-feature-show ${featureRef} full=true`,
     });
-  }
-  const updated = await st.updateFeatures((doc) => {
-    const target = doc.features.find((entry) => entry.id === feature.id);
-    if (!target) return doc;
-    if (updates.name !== undefined) target.name = updates.name.trim();
-    if (updates.description !== undefined) target.description = updates.description.trim();
-    if (updates.descriptionRef !== undefined) {
-      const descriptionRef = normalizeDescriptionRef(updates.descriptionRef);
-      if (descriptionRef) target.descriptionRef = descriptionRef;
-      else delete target.descriptionRef;
+    return text(featureUpdateReply.text, featureUpdateReply.structured);
+  } catch (error) {
+    if (error instanceof FeatureFlowRefusal) {
+      if (error.code === "FEATURE_STATUS_READ_ONLY") {
+        return mcpDerivedStatusReadOnlyResult("feature", error.details.ref as string, error.details.attemptedStatus as string, error.details.effectiveStatus as string);
+      }
+      if (error.code === "FEATURE_NO_MUTABLE_FIELDS") {
+        return mcpMutationNoFieldsFailure({
+          entity: "feature",
+          ref: error.details.ref as string,
+          operation: "update",
+          mutableFields: error.details.mutableFields as string[],
+          retryCommand: `planner-feature-update ${error.details.ref as string}`,
+          readBackCommand: `planner-feature-show ${error.details.ref as string} with full=true`,
+          descriptionFallback: {
+            entityId: error.details.featureId as string,
+            inputField: "description",
+            storedField: "feature description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      }
+      return text(error.message, { updated: false, errorCode: error.code });
     }
-    if (updates.workDone !== undefined) target.workDone = updates.workDone.trim();
-    if (updates.workRemaining !== undefined) target.workRemaining = updates.workRemaining.trim();
-    if (updates.startDate !== undefined) target.startDate = updates.startDate.trim();
-    if (updates.endDate !== undefined) target.endDate = updates.endDate.trim();
-    if (updates.priority !== undefined) target.priority = updates.priority;
-    target.updatedAt = nowISO();
-    return doc;
-  });
-  const result = updated.features.find((entry) => entry.id === feature.id)!;
-  const featureUpdateReply = buildMutationReply({
-    identity: { entity: "feature", ref: formatFeatureRef(result.number), id: result.id, shortId: result.shortId, title: result.name, status: result.status },
-    operation: "update",
-    updatedFields: receivedFields,
-    changedValues: result as unknown as Record<string, unknown>,
-    readBackCommand: `planner-feature-show ${formatFeatureRef(result.number)} full=true`,
-  });
-  return writeAndSummarize(st, featureUpdateReply.text, featureUpdateReply.structured);
+    throw error;
+  }
 });
 
 server.registerTool("planner-feature-delete", {
@@ -1216,98 +1201,51 @@ server.registerTool("planner-phase-update", {
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
-  if (!found) return text(`Phase not found: ${ref}`);
-  if (updates.status !== undefined) {
-    return mcpDerivedStatusReadOnlyResult("phase", formatPhaseRef(found.number, featureNumberOfPhase(found, features)), updates.status, found.status);
-  }
-  if (updates.decisions !== undefined) {
-    return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "phase", targetRef: formatPhaseRef(found.number, featureNumberOfPhase(found, features)) } };
-  }
-  const mutableFields = ["title", "summary", "description", "descriptionRef", "featureId", "priority", "goals", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
-  const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
-  if (receivedFields.length === 0) {
-    return mcpMutationNoFieldsFailure({
-      entity: "phase",
-      ref: formatPhaseRef(found.number, featureNumberOfPhase(found, features)),
+  try {
+    const outcome = await updatePhaseFlow(st, ref, updates);
+    const persisted = outcome.phase;
+    const phaseUpdateRef = outcome.ref;
+    const phaseUpdateReply = buildMutationReply({
+      identity: { entity: "phase", ref: phaseUpdateRef, id: persisted.id, shortId: persisted.shortId, title: persisted.title, status: persisted.status },
       operation: "update",
-      mutableFields,
-      retryCommand: `planner-phase-update ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))}`,
-      readBackCommand: `planner-phase-show ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} with full=true`,
-      descriptionFallback: {
-        entityId: found.id,
-        inputField: "description",
-        storedField: "phase description",
-        descriptionRefField: "descriptionRef",
-      },
+      updatedFields: outcome.updatedFields,
+      changedValues: persisted as unknown as Record<string, unknown>,
+      extras: outcome.descriptionFreshness
+        ? { descriptionFreshness: outcome.descriptionFreshness, staleParentRefs: outcome.staleParentRefs }
+        : {},
+      readBackCommand: `planner-phase-show ${phaseUpdateRef} full=true`,
     });
-  }
-  const previousFeatureId = found.featureId;
-  let nextFeatureId = previousFeatureId;
-  if (updates.featureId !== undefined) {
-    if (updates.featureId.trim() === "") {
-      nextFeatureId = undefined;
-    } else {
-      const resolvedFeature = resolveFeatureRefStrict(features, updates.featureId);
-      if (!resolvedFeature.ok) return text(resolvedFeature.error);
-      nextFeatureId = resolvedFeature.feature.id;
-    }
-  }
-  let phase: Phase | undefined;
-  await st.runBatch(async () => {
-    phase = await st.updatePhase(found.id, (entry) => {
-      if (updates.title !== undefined) {
-        entry.title = updates.title.trim();
-        entry.slug = normalizeSlug(updates.title);
+    return text(phaseUpdateReply.text, phaseUpdateReply.structured);
+  } catch (error) {
+    if (error instanceof PhaseFlowRefusal) {
+      switch (error.code) {
+        case "PHASE_NOT_FOUND":
+          return text(error.message);
+        case "PHASE_STATUS_READ_ONLY":
+          return mcpDerivedStatusReadOnlyResult("phase", error.details.ref as string, error.details.attemptedStatus as string, error.details.effectiveStatus as string);
+        case "PHASE_LEGACY_DECISIONS_READ_ONLY":
+          return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "phase", targetRef: error.details.ref as string } };
+        case "PHASE_NO_MUTABLE_FIELDS":
+          return mcpMutationNoFieldsFailure({
+            entity: "phase",
+            ref: error.details.ref as string,
+            operation: "update",
+            mutableFields: error.details.mutableFields as string[],
+            retryCommand: `planner-phase-update ${error.details.ref as string}`,
+            readBackCommand: `planner-phase-show ${error.details.ref as string} with full=true`,
+            descriptionFallback: {
+              entityId: error.details.phaseId as string,
+              inputField: "description",
+              storedField: "phase description",
+              descriptionRefField: "descriptionRef",
+            },
+          });
+        default:
+          return text(error.message, { updated: false, errorCode: error.code });
       }
-      if (updates.summary !== undefined) entry.summary = updates.summary.trim();
-      if (updates.description !== undefined) entry.description = updates.description.trim();
-      if (updates.descriptionRef !== undefined) {
-        const descriptionRef = normalizeDescriptionRef(updates.descriptionRef);
-        if (descriptionRef) entry.descriptionRef = descriptionRef;
-        else delete entry.descriptionRef;
-      }
-      if (updates.featureId !== undefined) entry.featureId = nextFeatureId;
-      if (updates.priority !== undefined) entry.priority = updates.priority;
-      if (updates.goals !== undefined) entry.goals = updates.goals.map((item) => item.trim()).filter(Boolean);
-      if (updates.nonGoals !== undefined) entry.nonGoals = updates.nonGoals.map((item) => item.trim()).filter(Boolean);
-      if (updates.dependencies !== undefined) entry.dependencies = updates.dependencies.map((item) => item.trim()).filter(Boolean);
-      if (updates.risks !== undefined) entry.risks = updates.risks.map((item) => item.trim()).filter(Boolean);
-      if (updates.openQuestions !== undefined) entry.openQuestions = updates.openQuestions.map((item) => item.trim()).filter(Boolean);
-      if (updates.completionCriteria !== undefined) entry.completionCriteria = updates.completionCriteria.map((item) => item.trim()).filter(Boolean);
-      entry.updatedAt = nowISO();
-      return entry;
-    });
-    if (updates.featureId !== undefined && nextFeatureId !== previousFeatureId) {
-      await st.updateFeatures((document) => {
-        for (const feature of document.features) {
-          if (feature.id === previousFeatureId) feature.phaseIds = feature.phaseIds.filter((phaseId) => phaseId !== found.id);
-          if (feature.id === nextFeatureId && !feature.phaseIds.includes(found.id)) feature.phaseIds.push(found.id);
-        }
-        return document;
-      });
     }
-    await st.writeGenerated();
-  });
-  const persisted = phase!;
-  const refreshedFeatures = (await st.loadFeatures()).features;
-  const descriptionFreshness = receivedFields.some((field) => field === "description" || field === "descriptionRef")
-    ? await st.previewDescriptionReconciliation()
-    : null;
-  const staleParentRefs = descriptionFreshness?.diagnostics
-    .filter((entry) => entry.state === "stale" && entry.ownerId === persisted.featureId)
-    .map((entry) => entry.ownerRef) ?? [];
-  const phaseUpdateRef = formatPhaseRef(persisted.number, featureNumberOfPhase(persisted, refreshedFeatures));
-  const phaseUpdateReply = buildMutationReply({
-    identity: { entity: "phase", ref: phaseUpdateRef, id: persisted.id, shortId: persisted.shortId, title: persisted.title, status: persisted.status },
-    operation: "update",
-    updatedFields: receivedFields,
-    changedValues: persisted as unknown as Record<string, unknown>,
-    extras: descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {},
-    readBackCommand: `planner-phase-show ${phaseUpdateRef} full=true`,
-  });
-  return text(phaseUpdateReply.text, phaseUpdateReply.structured);
+    throw error;
+  }
 });
 
 server.registerTool("planner-phase-delete", {
@@ -1315,17 +1253,15 @@ server.registerTool("planner-phase-delete", {
   inputSchema: { phase: z.string().min(1) },
 }, async ({ phase: ref }) => {
   const st = await requireStore();
-  const phase = findPhaseByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!phase) return text(`Phase not found: ${ref}`);
-  await st.runBatch(async () => {
-    await st.deletePhase(phase.id);
-    await st.updateFeatures((doc) => {
-      for (const feature of doc.features) feature.phaseIds = feature.phaseIds.filter((id) => id !== phase.id);
-      return doc;
-    });
-  });
-    const dFeat = (await st.loadFeatures()).features.find((f) => f.id === phase.featureId);
-    return writeAndSummarize(st, `Phase deleted: ${formatPhaseRef(phase.number, dFeat?.number)}${phase.shortId ? ` · ${phase.shortId}` : ""}`, { deleted: phase.id });
+  try {
+    const outcome = await deletePhaseFlow(st, ref);
+    return writeAndSummarize(st, `Phase deleted: ${outcome.ref}${outcome.shortId ? ` · ${outcome.shortId}` : ""}`, { deleted: outcome.phaseId });
+  } catch (error) {
+    if (error instanceof PhaseFlowRefusal) {
+      return text(error.message, { deleted: false, errorCode: error.code });
+    }
+    throw error;
+  }
 });
 
 server.registerTool("planner-task-add", {

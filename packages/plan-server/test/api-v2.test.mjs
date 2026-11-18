@@ -16,6 +16,7 @@ import {
   request,
   expectError,
 } from "../../../test/helpers/server-fixture.mjs";
+import { readPlanSnapshot } from "../../../test/helpers/fixtures.mjs";
 
 after(async () => {
   await cleanupServerFixtures();
@@ -23,6 +24,11 @@ after(async () => {
 
 const json = (body) => ({
   method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+const put = (body) => ({
+  method: "PUT",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
@@ -455,6 +461,127 @@ test("features and phases create family: planner-assigned identity under a valid
       description: "A description that is long enough to pass the flow's fifty-character execution-context rule for phases.",
     }), { status: 404 });
     assert.match(unknownFeature.message, /PHASE_FEATURE_NOT_FOUND/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("features and phases update/delete family: metadata, feature move, phase delete, cascade", async () => {
+  const fx = await startServerFixture({ name: "v2-hierarchy-mutate" });
+  const featureBody = (name) => ({
+    name,
+    description: "A description that is long enough to pass the fifty-character execution-context rule for features.",
+  });
+  const phaseBody = (feature, title) => ({
+    feature,
+    title,
+    description: "A description that is long enough to pass the flow's fifty-character execution-context rule for phases.",
+  });
+  try {
+    const featureA = (await request(fx, "/api/v2/features", json(featureBody("Agent Brain authority")))).body.data;
+    const featureB = (await request(fx, "/api/v2/features", json(featureBody("Client conversion")))).body.data;
+    const phase = (await request(fx, "/api/v2/phases", json(phaseBody(featureA.ref, "Route every client")))).body.data;
+
+    // Feature metadata is mutable; identity and ref stay planner-assigned.
+    const featureUpdate = (await request(fx, `/api/v2/features/${featureA.ref}`, put({ name: "Agent Brain authority (renamed)", priority: 7 }))).body.data;
+    assert.equal(featureUpdate.updated, true);
+    assert.equal(featureUpdate.ref, featureA.ref);
+    assert.deepEqual(featureUpdate.updatedFields, ["name", "priority"]);
+    assert.equal(featureUpdate.feature.id, featureA.feature.id);
+    assert.equal(featureUpdate.feature.name, "Agent Brain authority (renamed)");
+    assert.equal(featureUpdate.feature.priority, 7);
+
+    // A phase move swaps the feature phaseIds back-links inside one batch and
+    // the canonical ref follows the new parent.
+    const phaseUpdate = (await request(fx, `/api/v2/phases/${encodeURIComponent(phase.ref)}`, put({ title: "Move every client", featureId: featureB.ref }))).body.data;
+    assert.equal(phaseUpdate.updated, true);
+    assert.equal(phaseUpdate.ref, `P${String(phase.phase.number).padStart(3, "0")}(${featureB.ref})`);
+    assert.equal(phaseUpdate.phase.id, phase.phase.id);
+    assert.equal(phaseUpdate.phase.featureId, featureB.feature.id);
+    assert.equal(phaseUpdate.phase.title, "Move every client");
+    assert.deepEqual(phaseUpdate.updatedFields, ["title", "featureId"]);
+    assert.equal(phaseUpdate.descriptionFreshness, null, "no description change → no freshness preview");
+    assert.deepEqual(phaseUpdate.staleParentRefs, []);
+
+    const moved = await readPlanSnapshot(fx.planRoot);
+    assert.deepEqual(moved.features.find((entry) => entry.id === featureA.feature.id).phaseIds, [], "old parent no longer lists the phase");
+    assert.deepEqual(moved.features.find((entry) => entry.id === featureB.feature.id).phaseIds, [phase.phase.id], "new parent lists it once");
+
+    // Phase delete removes the phase and unlinks it from every feature.
+    const deletedPhase = (await request(fx, `/api/v2/phases/${encodeURIComponent(phaseUpdate.ref)}`, del)).body.data;
+    assert.equal(deletedPhase.deleted, true);
+    assert.equal(deletedPhase.phaseId, phase.phase.id);
+    assert.equal(deletedPhase.ref, phaseUpdate.ref);
+    assert.equal(typeof deletedPhase.shortId, "string");
+    const afterPhaseDelete = await readPlanSnapshot(fx.planRoot);
+    assert.deepEqual(afterPhaseDelete.features.find((entry) => entry.id === featureB.feature.id).phaseIds, []);
+    assert.equal(afterPhaseDelete.phases.some((entry) => entry.id === phase.phase.id), false);
+
+    // Feature delete without cascade unlinks its phases and keeps them.
+    const keptPhase = (await request(fx, "/api/v2/phases", json(phaseBody(featureB.ref, "Survives the feature")))).body.data;
+    const unlinked = (await request(fx, `/api/v2/features/${featureB.ref}`, del)).body.data;
+    assert.equal(unlinked.deleted, true);
+    assert.equal(unlinked.ref, featureB.ref);
+    assert.equal(unlinked.cascade, false);
+    assert.equal(unlinked.phaseCount, 1);
+    const afterUnlink = await readPlanSnapshot(fx.planRoot);
+    assert.equal(afterUnlink.features.some((entry) => entry.id === featureB.feature.id), false);
+    assert.equal(afterUnlink.phases.find((entry) => entry.id === keptPhase.phase.id).featureId, undefined);
+
+    // Feature delete with cascade removes the child phases too.
+    const doomedPhase = (await request(fx, "/api/v2/phases", json(phaseBody(featureA.ref, "Dies with the feature")))).body.data;
+    const cascaded = (await request(fx, `/api/v2/features/${featureA.ref}?cascade=true`, del)).body.data;
+    assert.equal(cascaded.deleted, true);
+    assert.equal(cascaded.cascade, true);
+    assert.equal(cascaded.phaseCount, 1);
+    const afterCascade = await readPlanSnapshot(fx.planRoot);
+    assert.equal(afterCascade.features.some((entry) => entry.id === featureA.feature.id), false);
+    assert.equal(afterCascade.phases.some((entry) => entry.id === doomedPhase.phase.id), false);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("feature and phase update/delete refusals map to typed v2 error codes", async () => {
+  const fx = await startServerFixture({ name: "v2-hierarchy-refusals" });
+  try {
+    const featureStatus = await expectError(fx, "/api/v2/features/F001", put({ status: "done" }), { status: 409 });
+    assert.match(featureStatus.message, /FEATURE_STATUS_READ_ONLY/);
+    assert.match(featureStatus.message, /F001/);
+
+    const featureNoFields = await expectError(fx, "/api/v2/features/F001", put({}), { status: 422 });
+    assert.match(featureNoFields.message, /FEATURE_NO_MUTABLE_FIELDS/);
+
+    const missingFeature = await expectError(fx, "/api/v2/features/F999", put({ name: "Ghost" }), { status: 404 });
+    assert.match(missingFeature.message, /FEATURE_NOT_FOUND/);
+
+    const missingFeatureDelete = await expectError(fx, "/api/v2/features/F999", del, { status: 404 });
+    assert.match(missingFeatureDelete.message, /FEATURE_NOT_FOUND/);
+
+    const featureNoBody = await expectError(fx, "/api/v2/features/F001", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: "not-json",
+    }, { status: 400 });
+    assert.match(featureNoBody.message, /INVALID_BODY/);
+
+    const phaseStatus = await expectError(fx, "/api/v2/phases/P001", put({ status: "done" }), { status: 409 });
+    assert.match(phaseStatus.message, /PHASE_STATUS_READ_ONLY/);
+
+    const legacyDecisions = await expectError(fx, "/api/v2/phases/P001", put({ decisions: ["old history"] }), { status: 409 });
+    assert.match(legacyDecisions.message, /PHASE_LEGACY_DECISIONS_READ_ONLY/);
+
+    const phaseNoFields = await expectError(fx, "/api/v2/phases/P001", put({}), { status: 422 });
+    assert.match(phaseNoFields.message, /PHASE_NO_MUTABLE_FIELDS/);
+
+    const missingPhase = await expectError(fx, "/api/v2/phases/P999", put({ title: "Ghost" }), { status: 404 });
+    assert.match(missingPhase.message, /PHASE_NOT_FOUND/);
+
+    const unknownFeature = await expectError(fx, "/api/v2/phases/P001", put({ featureId: "F999" }), { status: 404 });
+    assert.match(unknownFeature.message, /PHASE_FEATURE_NOT_FOUND/);
+
+    const missingPhaseDelete = await expectError(fx, "/api/v2/phases/P999", del, { status: 404 });
+    assert.match(missingPhaseDelete.message, /PHASE_NOT_FOUND/);
   } finally {
     await closeServerFixture(fx);
   }

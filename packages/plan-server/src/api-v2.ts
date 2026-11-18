@@ -23,6 +23,7 @@ import {
   recommendNextWork,
   listAcceptedDecisionsForOwner,
   resolveAcceptedDecisionTarget,
+  resolveFeatureRefStrict,
   type PlanStore,
 } from "@agent-plan/core";
 import {
@@ -37,12 +38,16 @@ import {
   createPhaseFlow,
   createRequirementFlow,
   createTaskFlow,
+  deleteFeatureCascade,
+  deletePhaseFlow,
   deleteRequirementFlow,
   listPhaseHandoffsFlow,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
   toggleTaskChecklistItemFlow,
+  updateFeatureFlow,
+  updatePhaseFlow,
   updateRequirementFlow,
   verifyPhaseHandoffFlow,
   writePhaseHandoffFlow,
@@ -98,9 +103,13 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       features: {
         create: "POST /api/v2/features",
+        update: "PUT /api/v2/features/{featureRef}",
+        delete: "DELETE /api/v2/features/{featureRef}?cascade=true",
       },
       phases: {
         create: "POST /api/v2/phases",
+        update: "PUT /api/v2/phases/{phaseRef}",
+        delete: "DELETE /api/v2/phases/{phaseRef}",
       },
     },
   }));
@@ -623,27 +632,58 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   // Same plan-core flows the MCP add tools run (feature-flow.ts /
   // phase-flow.ts): identity and lifecycle dates are planner-assigned,
   // the phase write runs under the feature lock inside one batch.
+  const readJsonBody = async (c: Context): Promise<Record<string, unknown> | null> => {
+    try {
+      return (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+  const optionalString = (body: Record<string, unknown>, key: string): string | undefined =>
+    typeof body[key] === "string" ? body[key] : undefined;
+  const optionalNumber = (body: Record<string, unknown>, key: string): number | undefined =>
+    typeof body[key] === "number" && Number.isFinite(body[key]) ? body[key] : undefined;
+  const optionalStringArray = (body: Record<string, unknown>, key: string): string[] | undefined =>
+    Array.isArray(body[key]) ? body[key].filter((value): value is string => typeof value === "string") : undefined;
+  /** Canonical ref from the tail of a collection route; titles may contain "/". */
+  const collectionTail = (c: Context, collection: "features" | "phases"): string => {
+    const prefix = `${API_V2_BASE_PATH}/${collection}/`;
+    const path = c.req.path;
+    const start = path.indexOf(prefix);
+    const raw = start === -1 ? "" : path.slice(start + prefix.length);
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  };
+
+  const featureRefusalStatus: Partial<Record<FeatureFlowRefusal["code"], ContentfulStatusCode>> = {
+    FEATURE_NOT_FOUND: 404,
+    FEATURE_STATUS_READ_ONLY: 409,
+  };
+  const phaseRefusalStatus: Partial<Record<PhaseFlowRefusal["code"], ContentfulStatusCode>> = {
+    PHASE_NOT_FOUND: 404,
+    PHASE_FEATURE_NOT_FOUND: 404,
+    PHASE_STATUS_READ_ONLY: 409,
+    PHASE_LEGACY_DECISIONS_READ_ONLY: 409,
+  };
   const featureFailure = (c: Context, err: unknown, fallbackCode: string) => {
     if (err instanceof FeatureFlowRefusal) {
-      return error(c, 422, err.code, err.message);
+      return error(c, featureRefusalStatus[err.code] ?? 422, err.code, err.message, err.details);
     }
     return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
   };
   const phaseFailure = (c: Context, err: unknown, fallbackCode: string) => {
     if (err instanceof PhaseFlowRefusal) {
-      const status: ContentfulStatusCode = err.code === "PHASE_FEATURE_NOT_FOUND" ? 404 : 422;
-      return error(c, status, err.code, err.message);
+      return error(c, phaseRefusalStatus[err.code] ?? 422, err.code, err.message, err.details);
     }
     return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
   };
 
   app.post("/features", async (c) => {
-    let body: Record<string, unknown>;
-    try {
-      body = await c.req.json();
-    } catch {
-      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
-    }
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
     try {
       const outcome = await createFeatureFlow(store, {
         name: typeof body.name === "string" ? body.name : "",
@@ -657,12 +697,8 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   });
 
   app.post("/phases", async (c) => {
-    let body: Record<string, unknown>;
-    try {
-      body = await c.req.json();
-    } catch {
-      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
-    }
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
     try {
       const outcome = await createPhaseFlow(store, {
         title: typeof body.title === "string" ? body.title : "",
@@ -673,6 +709,110 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return envelope(c, { created: true, phase: outcome.phase, ref: outcome.ref }, 201);
     } catch (err) {
       return phaseFailure(c, err, "PHASE_CREATE_FAILED");
+    }
+  });
+
+  // ── Features & phases update/delete family ────────────────────────
+  // Derived status is read-only for both entities; the flows own that rule
+  // and carry the facts (attempted/effective status, mutable field list)
+  // so this surface only maps codes to statuses.
+  app.put("/features/*", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const name = optionalString(body, "name");
+    const description = optionalString(body, "description");
+    const descriptionRef = optionalString(body, "descriptionRef");
+    const workDone = optionalString(body, "workDone");
+    const workRemaining = optionalString(body, "workRemaining");
+    const startDate = optionalString(body, "startDate");
+    const endDate = optionalString(body, "endDate");
+    const priority = optionalNumber(body, "priority");
+    const status = optionalString(body, "status");
+    try {
+      const outcome = await updateFeatureFlow(store, collectionTail(c, "features"), {
+        ...(name !== undefined ? { name } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(workDone !== undefined ? { workDone } : {}),
+        ...(workRemaining !== undefined ? { workRemaining } : {}),
+        ...(startDate !== undefined ? { startDate } : {}),
+        ...(endDate !== undefined ? { endDate } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(status !== undefined ? { status } : {}),
+      });
+      return envelope(c, { updated: true, ref: outcome.ref, feature: outcome.feature, updatedFields: outcome.updatedFields });
+    } catch (err) {
+      return featureFailure(c, err, "FEATURE_UPDATE_FAILED");
+    }
+  });
+
+  app.delete("/features/*", async (c) => {
+    const cascade = c.req.query("cascade") === "true";
+    try {
+      const features = (await store.loadFeatures()).features;
+      const resolved = resolveFeatureRefStrict(features, collectionTail(c, "features"));
+      if (!resolved.ok) return error(c, 404, "FEATURE_NOT_FOUND", resolved.error);
+      const outcome = await deleteFeatureCascade(store, resolved.feature.id, { cascade });
+      if (!outcome.ok) return error(c, 409, outcome.errorCode, outcome.error);
+      return envelope(c, { deleted: true, ...outcome.result });
+    } catch (err) {
+      return error(c, 500, "FEATURE_DELETE_FAILED", err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  app.put("/phases/*", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const title = optionalString(body, "title");
+    const summary = optionalString(body, "summary");
+    const description = optionalString(body, "description");
+    const descriptionRef = optionalString(body, "descriptionRef");
+    const featureId = optionalString(body, "featureId");
+    const priority = optionalNumber(body, "priority");
+    const goals = optionalStringArray(body, "goals");
+    const nonGoals = optionalStringArray(body, "nonGoals");
+    const dependencies = optionalStringArray(body, "dependencies");
+    const risks = optionalStringArray(body, "risks");
+    const openQuestions = optionalStringArray(body, "openQuestions");
+    const completionCriteria = optionalStringArray(body, "completionCriteria");
+    const status = optionalString(body, "status");
+    const decisions = optionalStringArray(body, "decisions");
+    try {
+      const outcome = await updatePhaseFlow(store, collectionTail(c, "phases"), {
+        ...(title !== undefined ? { title } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(featureId !== undefined ? { featureId } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(goals !== undefined ? { goals } : {}),
+        ...(nonGoals !== undefined ? { nonGoals } : {}),
+        ...(dependencies !== undefined ? { dependencies } : {}),
+        ...(risks !== undefined ? { risks } : {}),
+        ...(openQuestions !== undefined ? { openQuestions } : {}),
+        ...(completionCriteria !== undefined ? { completionCriteria } : {}),
+        ...(status !== undefined ? { status } : {}),
+        ...(decisions !== undefined ? { decisions } : {}),
+      });
+      return envelope(c, {
+        updated: true,
+        ref: outcome.ref,
+        phase: outcome.phase,
+        updatedFields: outcome.updatedFields,
+        descriptionFreshness: outcome.descriptionFreshness,
+        staleParentRefs: outcome.staleParentRefs,
+      });
+    } catch (err) {
+      return phaseFailure(c, err, "PHASE_UPDATE_FAILED");
+    }
+  });
+
+  app.delete("/phases/*", async (c) => {
+    try {
+      const outcome = await deletePhaseFlow(store, collectionTail(c, "phases"));
+      return envelope(c, { deleted: true, ...outcome });
+    } catch (err) {
+      return phaseFailure(c, err, "PHASE_DELETE_FAILED");
     }
   });
 
