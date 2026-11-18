@@ -5,11 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, withFeatureLock, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, createFeatureId, createPhaseId, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef, validateResolvedTarget } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { createChecklistItemId, normalizeSlug, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, createPhaseFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -865,42 +865,15 @@ server.registerTool("planner-feature-add", {
   },
 }, async ({ name, description, status }) => {
   const st = await requireStore();
-  return st.runBatch(async () => {
-  const timestamp = nowISO();
-  const effectiveStatus = status ?? "planned";
-  const id = createFeatureId();
-  const identity = await st.allocateEntityIdentity("feature", id);
-  const priority = await st.nextPriority("feature");
-  const feature: Feature = {
-    id,
-    number: identity.number,
-    shortId: identity.shortId,
-    priority,
-    name: name.trim(),
-    description: description?.trim() ?? "",
-    descriptionUpdatedAt: timestamp,
-    status: effectiveStatus,
-    discussedAt: "",
-    contextReady: false,
-    contextReadyReason: "",
-    startDate: effectiveStatus === "in-progress" ? new Date().toISOString().slice(0, 10) : "",
-    endDate: effectiveStatus === "done" ? new Date().toISOString().slice(0, 10) : "",
-    workDone: "",
-    workRemaining: "",
-    acceptedDecisions: [],
-    phaseIds: [],
-    dependsOn: [],
-    statusLog: [],
-    sessionInfo: [],
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-  await st.updateFeatures((doc) => {
-    doc.features.push(feature);
-    return doc;
-  });
-  return writeAndSummarize(st, `✅ Feature created: ${formatFeatureRef(feature.number)} — ${feature.name}${feature.shortId ? ` · ${feature.shortId}` : ""}`);
-  });
+  try {
+    const outcome = await createFeatureFlow(st, { name, description, status });
+    return text(outcome.message);
+  } catch (error) {
+    if (error instanceof FeatureFlowRefusal) {
+      return text(error.message, { created: false, errorCode: error.code });
+    }
+    throw error;
+  }
 });
 
 server.registerTool("planner-feature-show", {
@@ -1094,70 +1067,15 @@ server.registerTool("planner-phase-add", {
   },
 }, async ({ title, feature: featureRef, summary, description }) => {
   const st = await requireStore();
-  if (!featureRef?.trim()) return text("feature is required: a phase must belong to a feature.");
-  const featuresDoc = await st.loadFeatures();
-  const resolvedFeature = resolveFeatureRefStrict(featuresDoc.features, featureRef);
-  if (!resolvedFeature.ok) return text(resolvedFeature.error);
-  const featureValidation = await validateResolvedTarget("feature", resolvedFeature.feature.id, () => st.loadFeatures().then((doc) => doc.features.find((f) => f.id === resolvedFeature.feature.id)).catch(() => undefined));
-  if (!featureValidation.ok) return text(featureValidation.error);
-  const feature = resolvedFeature.feature;
-  if (!feature) return text(`Resolved feature ${featureRef} no longer exists. Refusing to create phase.`);
-  const lockKey = feature?.id ?? "__unscoped__";
-  let phase: Phase | undefined;
-  await st.runBatch(() => withFeatureLock(lockKey, async () => {
-    const timestamp = nowISO();
-    const id = createPhaseId();
-    const identity = await st.allocateEntityIdentity("phase", id);
-    const priority = await st.nextPriority("phase", feature?.id);
-    phase = {
-      id,
-      number: identity.number,
-      shortId: identity.shortId,
-      priority,
-      slug: normalizeSlug(title),
-      title: title.trim(),
-      featureId: feature?.id,
-      status: "draft",
-      discussedAt: "",
-      contextReady: false,
-      contextReadyReason: "",
-      summary: summary?.trim() ?? "",
-      description: description?.trim() ?? "",
-      descriptionUpdatedAt: timestamp,
-      notes: "",
-      goals: [],
-      nonGoals: [],
-      dependencies: [],
-      dependsOn: [],
-      risks: [],
-      openQuestions: [],
-      decisions: [],
-      acceptedDecisions: [],
-      completionCriteria: [],
-      taskIds: [],
-      tasks: [],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      handoff: "",
-      handoffUpdatedAt: "",
-      handoffAudit: null,
-      handoffReadAt: "",
-      handoffHistory: [],
-      statusLog: [],
-      sessionInfo: [],
-    };
-    await st.savePhase(phase);
-    if (feature) {
-      await st.updateFeatures((doc) => {
-        const target = doc.features.find((entry) => entry.id === feature.id);
-        if (target && !target.phaseIds.includes(phase!.id)) target.phaseIds.push(phase!.id);
-        return doc;
-      });
+  try {
+    const outcome = await createPhaseFlow(st, { title, featureRef: featureRef ?? "", summary, description });
+    return text(outcome.message);
+  } catch (error) {
+    if (error instanceof PhaseFlowRefusal) {
+      return text(error.message, { created: false, errorCode: error.code });
     }
-    await st.writeGenerated();
-  }));
-  if (!phase) return text("Phase creation failed.");
-  return writeAndSummarize(st, `✅ Phase created: ${formatPhaseRef(phase.number, feature?.number)} — ${phase.title}${phase.shortId ? ` · ${phase.shortId}` : ""}`);
+    throw error;
+  }
 });
 
 server.registerTool("planner-phase-show", {

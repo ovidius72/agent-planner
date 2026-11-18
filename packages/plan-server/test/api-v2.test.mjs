@@ -406,3 +406,56 @@ test("task refusals map to typed v2 error codes", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("features and phases create family: planner-assigned identity under a validated feature", async () => {
+  const fx = await startServerFixture({ name: "v2-hierarchy-create" });
+  try {
+    const feature = (await request(fx, "/api/v2/features", json({
+      name: "Agent Brain service",
+      description: "One authenticated multi-project application service used by every supported client. Current: per-process embedded servers; desired: one user-scoped service.",
+    }))).body;
+    assert.equal(feature.data.created, true);
+    assert.match(feature.data.ref, /^F\d{3}$/);
+    assert.equal(feature.data.feature.status, "planned");
+    assert.match(feature.data.feature.id, /^[0-9a-f-]{36}$/);
+
+    const badStatus = await expectError(fx, "/api/v2/features", json({
+      name: "Bad status",
+      description: "A description that is long enough to pass the fifty-character execution-context rule for features.",
+      status: "megadrive",
+    }), { status: 422 });
+    assert.match(badStatus.message, /FEATURE_STATUS_INVALID/);
+
+    const shortDescription = await expectError(fx, "/api/v2/features", json({
+      name: "One-liner",
+      description: "too short",
+    }), { status: 422 });
+    assert.match(shortDescription.message, /FEATURE_DESCRIPTION_TOO_SHORT/);
+
+    const phase = (await request(fx, "/api/v2/phases", json({
+      feature: feature.data.ref,
+      title: "Route every client through the service",
+      summary: "MCP, Pi, CLI and Web UI on one v2 surface.",
+      description: "Convert all call sites to the versioned v2 API. Current: direct PlanStore construction in MCP and Pi; desired: HTTP over the loopback service with session registration first.",
+    }))).body;
+    assert.equal(phase.data.created, true);
+    assert.match(phase.data.ref, /^P\d{3}\(F\d{3}\)$/);
+    assert.equal(phase.data.phase.status, "draft");
+    assert.equal(phase.data.phase.featureId, feature.data.feature.id);
+
+    const missingFeature = await expectError(fx, "/api/v2/phases", json({
+      title: "Orphan phase",
+      description: "A description that is long enough to pass the flow's fifty-character execution-context rule for phases.",
+    }), { status: 422 });
+    assert.match(missingFeature.message, /PHASE_FEATURE_REQUIRED/);
+
+    const unknownFeature = await expectError(fx, "/api/v2/phases", json({
+      feature: "F999",
+      title: "Dangling phase",
+      description: "A description that is long enough to pass the flow's fifty-character execution-context rule for phases.",
+    }), { status: 404 });
+    assert.match(unknownFeature.message, /PHASE_FEATURE_NOT_FOUND/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

@@ -29,8 +29,12 @@ import {
   HandoffFlowRefusal,
   RequirementFlowRefusal,
   TaskFlowRefusal,
+  FeatureFlowRefusal,
+  PhaseFlowRefusal,
   addTaskChecklistItemFlow,
   clearPhaseHandoffFlow,
+  createFeatureFlow,
+  createPhaseFlow,
   createRequirementFlow,
   createTaskFlow,
   deleteRequirementFlow,
@@ -91,6 +95,12 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
         checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
         checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
+      },
+      features: {
+        create: "POST /api/v2/features",
+      },
+      phases: {
+        create: "POST /api/v2/phases",
       },
     },
   }));
@@ -606,6 +616,63 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return envelope(c, { removed: true, item: outcome.item, checklistSize: outcome.checklistSize });
     } catch (err) {
       return taskFailure(c, err, "CHECKLIST_REMOVE_FAILED");
+    }
+  });
+
+  // ── Features & phases create family ───────────────────────────────
+  // Same plan-core flows the MCP add tools run (feature-flow.ts /
+  // phase-flow.ts): identity and lifecycle dates are planner-assigned,
+  // the phase write runs under the feature lock inside one batch.
+  const featureFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof FeatureFlowRefusal) {
+      return error(c, 422, err.code, err.message);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+  const phaseFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof PhaseFlowRefusal) {
+      const status: ContentfulStatusCode = err.code === "PHASE_FEATURE_NOT_FOUND" ? 404 : 422;
+      return error(c, status, err.code, err.message);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+
+  app.post("/features", async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    try {
+      const outcome = await createFeatureFlow(store, {
+        name: typeof body.name === "string" ? body.name : "",
+        description: typeof body.description === "string" ? body.description : "",
+        ...(body.status !== undefined ? { status: String(body.status) } : {}),
+      });
+      return envelope(c, { created: true, feature: outcome.feature, ref: outcome.ref }, 201);
+    } catch (err) {
+      return featureFailure(c, err, "FEATURE_CREATE_FAILED");
+    }
+  });
+
+  app.post("/phases", async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    }
+    try {
+      const outcome = await createPhaseFlow(store, {
+        title: typeof body.title === "string" ? body.title : "",
+        featureRef: typeof body.feature === "string" ? body.feature : "",
+        ...(typeof body.summary === "string" ? { summary: body.summary } : {}),
+        description: typeof body.description === "string" ? body.description : "",
+      });
+      return envelope(c, { created: true, phase: outcome.phase, ref: outcome.ref }, 201);
+    } catch (err) {
+      return phaseFailure(c, err, "PHASE_CREATE_FAILED");
     }
   });
 
