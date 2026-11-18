@@ -32,6 +32,7 @@ import {
   TaskFlowRefusal,
   FeatureFlowRefusal,
   PhaseFlowRefusal,
+  DiscussFlowRefusal,
   addTaskChecklistItemFlow,
   clearPhaseHandoffFlow,
   createFeatureFlow,
@@ -41,6 +42,10 @@ import {
   deleteFeatureCascade,
   deletePhaseFlow,
   deleteRequirementFlow,
+  discussFeatureFlow,
+  discussPhaseFlow,
+  discussProjectFlow,
+  discussTaskFlow,
   listPhaseHandoffsFlow,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
@@ -97,6 +102,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       tasks: {
         create: "POST /api/v2/phases/{phaseRef}/tasks",
+        discuss: "PUT /api/v2/tasks/{taskRef}/discuss",
         checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
         checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
         checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
@@ -104,12 +110,17 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       features: {
         create: "POST /api/v2/features",
         update: "PUT /api/v2/features/{featureRef}",
+        discuss: "PUT /api/v2/features/{featureRef}/discuss",
         delete: "DELETE /api/v2/features/{featureRef}?cascade=true",
       },
       phases: {
         create: "POST /api/v2/phases",
         update: "PUT /api/v2/phases/{phaseRef}",
+        discuss: "PUT /api/v2/phases/{phaseRef}/discuss",
         delete: "DELETE /api/v2/phases/{phaseRef}",
+      },
+      project: {
+        discuss: "PUT /api/v2/project/discuss",
       },
     },
   }));
@@ -646,7 +657,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   const optionalStringArray = (body: Record<string, unknown>, key: string): string[] | undefined =>
     Array.isArray(body[key]) ? body[key].filter((value): value is string => typeof value === "string") : undefined;
   /** Canonical ref from the tail of a collection route; titles may contain "/". */
-  const collectionTail = (c: Context, collection: "features" | "phases"): string => {
+  const collectionTail = (c: Context, collection: "features" | "phases" | "tasks"): string => {
     const prefix = `${API_V2_BASE_PATH}/${collection}/`;
     const path = c.req.path;
     const start = path.indexOf(prefix);
@@ -709,6 +720,136 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return envelope(c, { created: true, phase: outcome.phase, ref: outcome.ref }, 201);
     } catch (err) {
       return phaseFailure(c, err, "PHASE_CREATE_FAILED");
+    }
+  });
+
+  // ── Discuss family ────────────────────────────────────────────────
+  // Registered BEFORE the generic PUT /features/* and PUT /phases/*
+  // routes: the router matches in registration order, so the specific
+  // ".../discuss" paths must win over the collection wildcard.
+  const discussRefusalStatus: Partial<Record<DiscussFlowRefusal["code"], ContentfulStatusCode>> = {
+    FEATURE_NOT_FOUND: 404,
+    PHASE_NOT_FOUND: 404,
+    TASK_NOT_FOUND: 404,
+    PROJECT_LEGACY_DECISIONS_READ_ONLY: 409,
+  };
+  const discussFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof DiscussFlowRefusal) {
+      return error(c, discussRefusalStatus[err.code] ?? 422, err.code, err.message, err.details);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+
+  app.put("/project/discuss", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const description = optionalString(body, "description");
+    const descriptionRef = optionalString(body, "descriptionRef");
+    const goal = optionalString(body, "goal");
+    const scope = optionalStringArray(body, "scope");
+    const outOfScope = optionalStringArray(body, "outOfScope");
+    const technologies = optionalStringArray(body, "technologies");
+    const tools = optionalStringArray(body, "tools");
+    const globalRules = optionalStringArray(body, "globalRules");
+    const decisions = optionalStringArray(body, "decisions");
+    try {
+      const outcome = await discussProjectFlow(store, {
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(goal !== undefined ? { goal } : {}),
+        ...(scope !== undefined ? { scope } : {}),
+        ...(outOfScope !== undefined ? { outOfScope } : {}),
+        ...(technologies !== undefined ? { technologies } : {}),
+        ...(tools !== undefined ? { tools } : {}),
+        ...(globalRules !== undefined ? { globalRules } : {}),
+        ...(decisions !== undefined ? { decisions } : {}),
+      });
+      return envelope(c, { discussed: true, project: outcome.project, updatedFields: outcome.updatedFields });
+    } catch (err) {
+      return discussFailure(c, err, "PROJECT_DISCUSS_FAILED");
+    }
+  });
+
+  app.put("/features/*/discuss", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const featureRef = collectionTail(c, "features").replace(/\/discuss$/, "");
+    const description = optionalString(body, "description");
+    const descriptionRef = optionalString(body, "descriptionRef");
+    const workDone = optionalString(body, "workDone");
+    const workRemaining = optionalString(body, "workRemaining");
+    const dependencies = optionalStringArray(body, "dependencies");
+    try {
+      const outcome = await discussFeatureFlow(store, featureRef, {
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(workDone !== undefined ? { workDone } : {}),
+        ...(workRemaining !== undefined ? { workRemaining } : {}),
+        ...(dependencies !== undefined ? { dependencies } : {}),
+        contextReadyReason: "Updated through the Agent Plan API v2 discuss operation.",
+      });
+      return envelope(c, { discussed: true, ref: outcome.ref, feature: outcome.feature, updatedFields: outcome.updatedFields });
+    } catch (err) {
+      return discussFailure(c, err, "FEATURE_DISCUSS_FAILED");
+    }
+  });
+
+  app.put("/phases/*/discuss", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const phaseRef = collectionTail(c, "phases").replace(/\/discuss$/, "");
+    const goal = optionalString(body, "goal");
+    const goals = optionalStringArray(body, "goals");
+    const summary = optionalString(body, "summary");
+    const scope = optionalString(body, "scope");
+    const descriptionRef = optionalString(body, "descriptionRef");
+    const nonGoals = optionalStringArray(body, "nonGoals");
+    const dependencies = optionalStringArray(body, "dependencies");
+    const risks = optionalStringArray(body, "risks");
+    const openQuestions = optionalStringArray(body, "openQuestions");
+    const completionCriteria = optionalStringArray(body, "completionCriteria");
+    try {
+      const outcome = await discussPhaseFlow(store, phaseRef, {
+        ...(goal !== undefined ? { goal } : {}),
+        ...(goals !== undefined ? { goals } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+        ...(scope !== undefined ? { scope } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(nonGoals !== undefined ? { nonGoals } : {}),
+        ...(dependencies !== undefined ? { dependencies } : {}),
+        ...(risks !== undefined ? { risks } : {}),
+        ...(openQuestions !== undefined ? { openQuestions } : {}),
+        ...(completionCriteria !== undefined ? { completionCriteria } : {}),
+        contextReadyReason: "Updated through the Agent Plan API v2 discuss operation.",
+      });
+      return envelope(c, { discussed: true, ref: outcome.ref, phase: outcome.phase, updatedFields: outcome.updatedFields });
+    } catch (err) {
+      return discussFailure(c, err, "PHASE_DISCUSS_FAILED");
+    }
+  });
+
+  app.put("/tasks/*/discuss", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const taskRef = collectionTail(c, "tasks").replace(/\/discuss$/, "");
+    const description = optionalString(body, "description");
+    const descriptionRef = optionalString(body, "descriptionRef");
+    const checklist = optionalStringArray(body, "checklist");
+    try {
+      const outcome = await discussTaskFlow(store, taskRef, {
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(checklist !== undefined ? { checklist } : {}),
+      });
+      return envelope(c, {
+        discussed: true,
+        ref: outcome.ref,
+        task: outcome.task,
+        updatedFields: outcome.updatedFields,
+        checklistLostTicks: outcome.checklistLostTicks,
+      });
+    } catch (err) {
+      return discussFailure(c, err, "TASK_DISCUSS_FAILED");
     }
   });
 

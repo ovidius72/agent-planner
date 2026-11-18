@@ -9,7 +9,7 @@ import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, needsM
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -529,58 +529,36 @@ server.registerTool("planner-project-discuss", {
   },
 }, async (params) => {
   const st = await requireStore();
-  if (params.decisions !== undefined) {
-    return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "project" } };
-  }
-  const project = await st.loadProject();
-  const mutableFields = ["description", "descriptionRef", "goal", "scope", "outOfScope", "technologies", "tools", "globalRules"] as const;
-  const receivedFields = mutableFields.filter((field) => params[field] !== undefined);
-  if (receivedFields.length === 0) {
-    return mcpMutationNoFieldsFailure({
-      entity: "project",
-      ref: project.name,
-      operation: "discuss",
-      mutableFields,
-      retryCommand: "planner-project-discuss with a concise description summary and the intended metadata",
-      readBackCommand: "planner-show",
-      descriptionFallback: {
-        inputField: "description",
-        storedField: "project description",
-        descriptionRefField: "descriptionRef",
-      },
-    });
-  }
-  if (params.description !== undefined) project.description = params.description.trim();
-  if (params.descriptionRef !== undefined) {
-    const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
-    if (descriptionRef) project.descriptionRef = descriptionRef;
-    else delete project.descriptionRef;
-  }
-  if (params.goal !== undefined) project.goal = params.goal.trim();
-  if (params.scope !== undefined) project.scope = params.scope.map((entry) => entry.trim()).filter(Boolean);
-  if (params.outOfScope !== undefined) project.outOfScope = params.outOfScope.map((entry) => entry.trim()).filter(Boolean);
-  if (params.technologies !== undefined) project.technologies = params.technologies.map((entry) => entry.trim()).filter(Boolean);
-  if (params.tools !== undefined) project.tools = params.tools.map((entry) => entry.trim()).filter(Boolean);
-  if (params.globalRules !== undefined) project.globalRules = params.globalRules.map((entry) => entry.trim()).filter(Boolean);
-  const persisted = await st.updateProject((current) => {
-    const next = {
-      ...current,
-      ...(params.description !== undefined ? { description: params.description.trim() } : {}),
-      ...(params.goal !== undefined ? { goal: params.goal.trim() } : {}),
-      ...(params.scope !== undefined ? { scope: params.scope.map((entry) => entry.trim()).filter(Boolean) } : {}),
-      ...(params.outOfScope !== undefined ? { outOfScope: params.outOfScope.map((entry) => entry.trim()).filter(Boolean) } : {}),
-      ...(params.technologies !== undefined ? { technologies: params.technologies.map((entry) => entry.trim()).filter(Boolean) } : {}),
-      ...(params.tools !== undefined ? { tools: params.tools.map((entry) => entry.trim()).filter(Boolean) } : {}),
-      ...(params.globalRules !== undefined ? { globalRules: params.globalRules.map((entry) => entry.trim()).filter(Boolean) } : {}),
-    };
-    if (params.descriptionRef !== undefined) {
-      const descriptionRef = normalizeDescriptionRef(params.descriptionRef);
-      if (descriptionRef) next.descriptionRef = descriptionRef;
-      else delete next.descriptionRef;
+  try {
+    const outcome = await discussProjectFlow(st, params);
+    return text(
+      `Project discussed/updated: ${outcome.project.name}. Fields saved: ${outcome.updatedFields.join(", ")}.`,
+      { project: outcome.project, discussed: true, updatedFields: outcome.updatedFields },
+    );
+  } catch (error) {
+    if (error instanceof DiscussFlowRefusal) {
+      if (error.code === "PROJECT_LEGACY_DECISIONS_READ_ONLY") {
+        return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "project" } };
+      }
+      if (error.code === "PROJECT_NO_MUTABLE_FIELDS") {
+        return mcpMutationNoFieldsFailure({
+          entity: "project",
+          ref: error.details.ref as string,
+          operation: "discuss",
+          mutableFields: error.details.mutableFields as string[],
+          retryCommand: "planner-project-discuss with a concise description summary and the intended metadata",
+          readBackCommand: "planner-show",
+          descriptionFallback: {
+            inputField: "description",
+            storedField: "project description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      }
+      return text(error.message, { updated: false, errorCode: error.code });
     }
-    return next;
-  });
-  return writeAndSummarize(st, `Project discussed/updated: ${persisted.name}. Fields saved: ${receivedFields.join(", ")}.`, { project: persisted, discussed: true, updatedFields: receivedFields });
+    throw error;
+  }
 });
 
 server.registerTool("planner-project-guidelines-show", {
@@ -915,56 +893,47 @@ server.registerTool("planner-feature-discuss", {
   },
 }, async ({ feature: ref, description, descriptionRef: rawDescriptionRef, workDone, workRemaining, dependencies }) => {
   const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const resolvedFeature = resolveFeatureRefStrict(features, ref);
-  if (!resolvedFeature.ok) return text(resolvedFeature.error);
-  const feature = resolvedFeature.feature;
-  const mutableFields = ["description", "descriptionRef", "workDone", "workRemaining", "dependencies"] as const;
-  const discussInputs = { description, descriptionRef: rawDescriptionRef, workDone, workRemaining, dependencies };
-  const receivedFields = mutableFields.filter((field) => discussInputs[field] !== undefined);
-  if (receivedFields.length === 0) {
-    return mcpMutationNoFieldsFailure({
-      entity: "feature",
-      ref: formatFeatureRef(feature.number),
-      operation: "discuss",
-      mutableFields,
-      retryCommand: `planner-feature-discuss ${formatFeatureRef(feature.number)}`,
-      readBackCommand: `planner-feature-show ${formatFeatureRef(feature.number)} with full=true`,
-      descriptionFallback: {
-        entityId: feature.id,
-        inputField: "description",
-        storedField: "feature description",
-        descriptionRefField: "descriptionRef",
-      },
+  try {
+    const outcome = await discussFeatureFlow(st, ref, {
+      description,
+      descriptionRef: rawDescriptionRef,
+      workDone,
+      workRemaining,
+      dependencies,
+      contextReadyReason: "Updated through planner-feature-discuss MCP tool.",
     });
-  }
-  const updated = await st.updateFeatures((doc) => {
-    const target = doc.features.find((entry) => entry.id === feature.id);
-    if (!target) return doc;
-    if (description !== undefined) target.description = description.trim();
-    if (rawDescriptionRef !== undefined) {
-      const descriptionRef = normalizeDescriptionRef(rawDescriptionRef);
-      if (descriptionRef) target.descriptionRef = descriptionRef;
-      else delete target.descriptionRef;
+    const result = outcome.feature;
+    const featureDiscussReply = buildMutationReply({
+      identity: { entity: "feature", ref: outcome.ref, id: result.id, shortId: result.shortId, title: result.name, status: result.status },
+      operation: "discuss",
+      updatedFields: outcome.updatedFields,
+      changedValues: result as unknown as Record<string, unknown>,
+      readBackCommand: `planner-feature-show ${outcome.ref} full=true`,
+    });
+    return text(featureDiscussReply.text, featureDiscussReply.structured);
+  } catch (error) {
+    if (error instanceof DiscussFlowRefusal) {
+      if (error.code === "FEATURE_NOT_FOUND") return text(error.message);
+      if (error.code === "FEATURE_NO_MUTABLE_FIELDS") {
+        return mcpMutationNoFieldsFailure({
+          entity: "feature",
+          ref: error.details.ref as string,
+          operation: "discuss",
+          mutableFields: error.details.mutableFields as string[],
+          retryCommand: `planner-feature-discuss ${error.details.ref as string}`,
+          readBackCommand: `planner-feature-show ${error.details.ref as string} with full=true`,
+          descriptionFallback: {
+            entityId: error.details.featureId as string,
+            inputField: "description",
+            storedField: "feature description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      }
+      return text(error.message, { updated: false, errorCode: error.code });
     }
-    if (workDone !== undefined) target.workDone = workDone.trim();
-    if (workRemaining !== undefined) target.workRemaining = workRemaining.trim();
-    if (dependencies !== undefined) target.dependsOn = dependencies.map((item) => item.trim()).filter(Boolean);
-    target.discussedAt = nowISO();
-    target.contextReady = true;
-    target.contextReadyReason = "Updated through planner-feature-discuss MCP tool.";
-    target.updatedAt = nowISO();
-    return doc;
-  });
-  const result = updated.features.find((entry) => entry.id === feature.id)!;
-  const featureDiscussReply = buildMutationReply({
-    identity: { entity: "feature", ref: formatFeatureRef(result.number), id: result.id, shortId: result.shortId, title: result.name, status: result.status },
-    operation: "discuss",
-    updatedFields: receivedFields,
-    changedValues: result as unknown as Record<string, unknown>,
-    readBackCommand: `planner-feature-show ${formatFeatureRef(result.number)} full=true`,
-  });
-  return writeAndSummarize(st, featureDiscussReply.text, featureDiscussReply.structured);
+    throw error;
+  }
 });
 
 server.registerTool("planner-feature-update", {
@@ -1126,58 +1095,43 @@ server.registerTool("planner-phase-discuss", {
   },
 }, async ({ phase: ref, ...updates }) => {
   const st = await requireStore();
-  const features = (await st.loadFeatures()).features;
-  const found = findPhaseByRef(await st.loadAllPhases(), features, ref);
-  if (!found) return text(`Phase not found: ${ref}`);
-  const mutableFields = ["goal", "goals", "summary", "scope", "descriptionRef", "nonGoals", "dependencies", "risks", "openQuestions", "completionCriteria"] as const;
-  const receivedFields = mutableFields.filter((field) => updates[field] !== undefined);
-  if (receivedFields.length === 0) {
-    return mcpMutationNoFieldsFailure({
-      entity: "phase",
-      ref: formatPhaseRef(found.number, featureNumberOfPhase(found, features)),
-      operation: "discuss",
-      mutableFields,
-      retryCommand: `planner-phase-discuss ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))}`,
-      readBackCommand: `planner-phase-show ${formatPhaseRef(found.number, featureNumberOfPhase(found, features))} with full=true`,
-      descriptionFallback: {
-        entityId: found.id,
-        inputField: "scope",
-        storedField: "phase description",
-        descriptionRefField: "descriptionRef",
-      },
+  try {
+    const outcome = await discussPhaseFlow(st, ref, {
+      ...updates,
+      contextReadyReason: "Updated through planner-phase-discuss MCP tool.",
     });
-  }
-  const phase = await st.updatePhase(found.id, (entry) => {
-    if (updates.goals !== undefined) entry.goals = updates.goals.map((item) => item.trim()).filter(Boolean);
-    else if (updates.goal !== undefined) entry.goals = [updates.goal.trim()].filter(Boolean);
-    if (updates.summary !== undefined) entry.summary = updates.summary.trim();
-    if (updates.scope !== undefined) entry.description = updates.scope.trim();
-    if (updates.descriptionRef !== undefined) {
-      const descriptionRef = normalizeDescriptionRef(updates.descriptionRef);
-      if (descriptionRef) entry.descriptionRef = descriptionRef;
-      else delete entry.descriptionRef;
+    const phaseDiscussReply = buildMutationReply({
+      identity: { entity: "phase", ref: outcome.ref, id: outcome.phase.id, shortId: outcome.phase.shortId, title: outcome.phase.title, status: outcome.phase.status },
+      operation: "discuss",
+      updatedFields: outcome.updatedFields,
+      changedValues: outcome.phase as unknown as Record<string, unknown>,
+      extras: { contextReady: true },
+      readBackCommand: `planner-phase-show ${outcome.ref} full=true`,
+    });
+    return text(phaseDiscussReply.text, phaseDiscussReply.structured);
+  } catch (error) {
+    if (error instanceof DiscussFlowRefusal) {
+      if (error.code === "PHASE_NOT_FOUND") return text(error.message);
+      if (error.code === "PHASE_NO_MUTABLE_FIELDS") {
+        return mcpMutationNoFieldsFailure({
+          entity: "phase",
+          ref: error.details.ref as string,
+          operation: "discuss",
+          mutableFields: error.details.mutableFields as string[],
+          retryCommand: `planner-phase-discuss ${error.details.ref as string}`,
+          readBackCommand: `planner-phase-show ${error.details.ref as string} with full=true`,
+          descriptionFallback: {
+            entityId: error.details.phaseId as string,
+            inputField: "scope",
+            storedField: "phase description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      }
+      return text(error.message, { updated: false, errorCode: error.code });
     }
-    if (updates.nonGoals !== undefined) entry.nonGoals = updates.nonGoals.map((item) => item.trim()).filter(Boolean);
-    if (updates.dependencies !== undefined) entry.dependencies = updates.dependencies.map((item) => item.trim()).filter(Boolean);
-    if (updates.risks !== undefined) entry.risks = updates.risks.map((item) => item.trim()).filter(Boolean);
-    if (updates.openQuestions !== undefined) entry.openQuestions = updates.openQuestions.map((item) => item.trim()).filter(Boolean);
-    if (updates.completionCriteria !== undefined) entry.completionCriteria = updates.completionCriteria.map((item) => item.trim()).filter(Boolean);
-    entry.discussedAt = nowISO();
-    entry.contextReady = true;
-    entry.contextReadyReason = "Updated through planner-phase-discuss MCP tool.";
-    entry.updatedAt = nowISO();
-    return entry;
-  });
-  const phaseDiscussRef = formatPhaseRef(found.number, featureNumberOfPhase(found, features));
-  const phaseDiscussReply = buildMutationReply({
-    identity: { entity: "phase", ref: phaseDiscussRef, id: phase.id, shortId: phase.shortId, title: phase.title, status: phase.status },
-    operation: "discuss",
-    updatedFields: receivedFields,
-    changedValues: phase as unknown as Record<string, unknown>,
-    extras: { contextReady: true },
-    readBackCommand: `planner-phase-show ${phaseDiscussRef} full=true`,
-  });
-  return writeAndSummarize(st, phaseDiscussReply.text, phaseDiscussReply.structured);
+    throw error;
+  }
 });
 
 server.registerTool("planner-phase-update", {
@@ -1402,64 +1356,45 @@ server.registerTool("planner-task-discuss", {
   },
 }, async ({ task: ref, description, descriptionRef: rawDescriptionRef, checklist }) => {
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-  const mutableFields = ["description", "descriptionRef", "checklist"] as const;
-  const discussInputs = { description, descriptionRef: rawDescriptionRef, checklist };
-  const receivedFields = mutableFields.filter((field) => discussInputs[field] !== undefined);
-  if (receivedFields.length === 0) {
-    return mcpMutationNoFieldsFailure({
-      entity: "task",
-      ref: taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features),
+  try {
+    const outcome = await discussTaskFlow(st, ref, { description, descriptionRef: rawDescriptionRef, checklist });
+    const t = outcome.task;
+    const lostTicksNotice = outcome.checklistLostTicks.length > 0
+      ? ` ⚠️ Lost tick on ${outcome.checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${outcome.checklistLostTicks.join(", ")}.`
+      : "";
+    const taskDiscussReply = buildMutationReply({
+      identity: { entity: "task", ref: outcome.ref, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
       operation: "discuss",
-      mutableFields,
-      retryCommand: `planner-task-discuss ${taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features)}`,
-      readBackCommand: `planner-task-show ${taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features)} with full=true`,
-      descriptionFallback: {
-        entityId: found.task.id,
-        inputField: "description",
-        storedField: "task description",
-        descriptionRefField: "descriptionRef",
-      },
+      updatedFields: outcome.updatedFields,
+      changedValues: t as unknown as Record<string, unknown>,
+      extras: outcome.checklistLostTicks.length > 0 ? { checklistLostTicks: outcome.checklistLostTicks } : {},
+      notices: [lostTicksNotice],
+      readBackCommand: `planner-task-show ${outcome.ref} full=true`,
     });
+    return text(taskDiscussReply.text, taskDiscussReply.structured);
+  } catch (error) {
+    if (error instanceof DiscussFlowRefusal) {
+      if (error.code === "TASK_NOT_FOUND") return text(error.message);
+      if (error.code === "TASK_NO_MUTABLE_FIELDS") {
+        return mcpMutationNoFieldsFailure({
+          entity: "task",
+          ref: error.details.ref as string,
+          operation: "discuss",
+          mutableFields: error.details.mutableFields as string[],
+          retryCommand: `planner-task-discuss ${error.details.ref as string}`,
+          readBackCommand: `planner-task-show ${error.details.ref as string} with full=true`,
+          descriptionFallback: {
+            entityId: error.details.taskId as string,
+            inputField: "description",
+            storedField: "task description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      }
+      return text(error.message, { updated: false, errorCode: error.code });
+    }
+    throw error;
   }
-  let updatedTask: Task | undefined;
-  let checklistLostTicks: string[] = [];
-  await st.updatePhase(found.phase.id, (phase) => {
-    const task = phase.tasks.find((entry) => entry.id === found.task.id);
-    if (!task) return phase;
-    if (description !== undefined) task.description = description.trim();
-    if (rawDescriptionRef !== undefined) {
-      const descriptionRef = normalizeDescriptionRef(rawDescriptionRef);
-      if (descriptionRef) task.descriptionRef = descriptionRef;
-      else delete task.descriptionRef;
-    }
-    if (checklist !== undefined) {
-      const replacement = replaceChecklist(task.checklist ?? [], checklist, task.id);
-      task.checklist = replacement.items;
-      checklistLostTicks = replacement.lostTicks;
-    }
-    task.updatedAt = nowISO();
-    phase.updatedAt = task.updatedAt;
-    updatedTask = task;
-    return phase;
-  });
-  const features = (await st.loadFeatures()).features;
-  const t = updatedTask ?? found.task;
-  const lostTicksNotice = checklistLostTicks.length > 0
-    ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
-    : "";
-  const taskDiscussRef = taskCompositeRef(t, found.phase, features);
-  const taskDiscussReply = buildMutationReply({
-    identity: { entity: "task", ref: taskDiscussRef, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
-    operation: "discuss",
-    updatedFields: receivedFields,
-    changedValues: t as unknown as Record<string, unknown>,
-    extras: checklistLostTicks.length > 0 ? { checklistLostTicks } : {},
-    notices: [lostTicksNotice],
-    readBackCommand: `planner-task-show ${taskDiscussRef} full=true`,
-  });
-  return writeAndSummarize(st, taskDiscussReply.text, taskDiscussReply.structured);
 });
 
 server.registerTool("planner-task-dependency-add", {

@@ -28,6 +28,7 @@ export * from "./requirement-flow.js";
 export * from "./task-flow.js";
 export * from "./feature-flow.js";
 export * from "./phase-flow.js";
+export * from "./discuss-flow.js";
 export * from "./handoff-reply.js";
 export * from "./mutation-reply.js";
 export * from "./recommend-reply.js";

@@ -586,3 +586,94 @@ test("feature and phase update/delete refusals map to typed v2 error codes", asy
     await closeServerFixture(fx);
   }
 });
+
+test("discuss family: project, feature, phase and task over the shared flows", async () => {
+  const fx = await startServerFixture({ name: "v2-discuss" });
+  const t001 = encodeURIComponent("P001(F001)/T001");
+  try {
+    const project = (await request(fx, "/api/v2/project/discuss", put({
+      goal: "One coordinated planner authority",
+      scope: ["MCP", "Pi", "CLI"],
+      technologies: ["Node.js"],
+    }))).body.data;
+    assert.equal(project.discussed, true);
+    assert.deepEqual(project.updatedFields, ["goal", "scope", "technologies"]);
+    assert.equal(project.project.goal, "One coordinated planner authority");
+    assert.deepEqual(project.project.scope, ["MCP", "Pi", "CLI"]);
+
+    // The specific ".../discuss" route must win over PUT /features/*.
+    const feature = (await request(fx, "/api/v2/features/F001/discuss", put({
+      description: "One authenticated service used by every supported client.",
+      workRemaining: "Convert the remaining call sites.",
+      dependencies: ["service runtime record"],
+    }))).body.data;
+    assert.equal(feature.discussed, true);
+    assert.equal(feature.ref, "F001");
+    assert.deepEqual(feature.updatedFields, ["description", "workRemaining", "dependencies"]);
+    assert.equal(feature.feature.contextReady, true);
+    assert.match(feature.feature.contextReadyReason, /API v2/);
+    assert.deepEqual(feature.feature.dependsOn, ["service runtime record"]);
+
+    const phase = (await request(fx, "/api/v2/phases/P001/discuss", put({
+      goals: ["Route every client through the service"],
+      scope: "Convert all call sites to the versioned API.",
+      risks: ["Adapter drift"],
+    }))).body.data;
+    assert.equal(phase.discussed, true);
+    assert.equal(phase.ref, "P001(F001)");
+    assert.deepEqual(phase.phase.goals, ["Route every client through the service"]);
+    assert.equal(phase.phase.contextReady, true);
+    assert.match(phase.phase.contextReadyReason, /API v2/);
+
+    // Checklist replacement carries ticks by exact title.
+    const task = (await request(fx, `/api/v2/tasks/${t001}/discuss`, put({
+      description: "Implement the login endpoint over the shared service.",
+      checklist: ["Add route", "Verify parity"],
+    }))).body.data;
+    assert.equal(task.discussed, true);
+    assert.equal(task.ref, "P001(F001)/T001");
+    assert.deepEqual(task.updatedFields, ["description", "checklist"]);
+    assert.equal(task.task.checklist.length, 2);
+    assert.deepEqual(task.checklistLostTicks, []);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("discuss refusals map to typed v2 error codes", async () => {
+  const fx = await startServerFixture({ name: "v2-discuss-refusals" });
+  try {
+    const projectDecisions = await expectError(fx, "/api/v2/project/discuss", put({ decisions: ["legacy history"] }), { status: 409 });
+    assert.match(projectDecisions.message, /PROJECT_LEGACY_DECISIONS_READ_ONLY/);
+
+    const projectNoFields = await expectError(fx, "/api/v2/project/discuss", put({}), { status: 422 });
+    assert.match(projectNoFields.message, /PROJECT_NO_MUTABLE_FIELDS/);
+
+    const missingFeature = await expectError(fx, "/api/v2/features/F999/discuss", put({ description: "Ghost feature context that is long enough to be stored." }), { status: 404 });
+    assert.match(missingFeature.message, /FEATURE_NOT_FOUND/);
+
+    const featureNoFields = await expectError(fx, "/api/v2/features/F001/discuss", put({}), { status: 422 });
+    assert.match(featureNoFields.message, /FEATURE_NO_MUTABLE_FIELDS/);
+
+    const missingPhase = await expectError(fx, "/api/v2/phases/P999/discuss", put({ summary: "Ghost" }), { status: 404 });
+    assert.match(missingPhase.message, /PHASE_NOT_FOUND/);
+
+    const phaseNoFields = await expectError(fx, "/api/v2/phases/P001/discuss", put({}), { status: 422 });
+    assert.match(phaseNoFields.message, /PHASE_NO_MUTABLE_FIELDS/);
+
+    const missingTask = await expectError(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}/discuss`, put({ description: "Ghost task context that is long enough to be stored." }), { status: 404 });
+    assert.match(missingTask.message, /TASK_NOT_FOUND/);
+
+    const taskNoFields = await expectError(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T001")}/discuss`, put({}), { status: 422 });
+    assert.match(taskNoFields.message, /TASK_NO_MUTABLE_FIELDS/);
+
+    const noBody = await expectError(fx, "/api/v2/project/discuss", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: "not-json",
+    }, { status: 400 });
+    assert.match(noBody.message, /INVALID_BODY/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
