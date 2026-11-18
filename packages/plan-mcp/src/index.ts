@@ -5,12 +5,12 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, needsMotivation, findPhaseByRef, findTaskByRef, findIdeaByRef, buildRecap, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, needsMotivation, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
-import type { Feature, Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import type { Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -208,21 +208,6 @@ async function ensureWebStarted(): Promise<PlannerWebStartup> {
   } catch (error) {
     return { localUrl: "", error: error instanceof Error ? error.message : String(error) };
   }
-}
-
-function findFeatureByRef(features: Feature[], ref: string): Feature | undefined {
-  const normalized = ref.trim().toLowerCase();
-  if (!normalized) return undefined;
-  const fMatch = normalized.match(/^f(\d+)$/);
-  if (fMatch) {
-    const n = parseInt(fMatch[1]!, 10);
-    const byNum = features.find((feature) => feature.number === n);
-    if (byNum) return byNum;
-  }
-  return features.find((feature) => feature.shortId?.toLowerCase() === normalized)
-    ?? features.find((feature) => feature.id.toLowerCase() === normalized)
-    ?? features.find((feature) => feature.name.toLowerCase() === normalized)
-    ?? features.find((feature) => feature.name.toLowerCase().includes(normalized));
 }
 
 async function writeAndSummarize(st: PlanStore, message: string, structuredContent?: Record<string, unknown>): Promise<ToolResult> {
@@ -629,23 +614,7 @@ server.registerTool("planner-project-context-migrate", {
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name).") },
   }, async ({ featureRef }) => {
     const st = await requireStore();
-    const allFeatures = (await st.loadFeatures()).features;
-    const features = featureRef ? allFeatures.filter((f) => f.id === findFeatureByRef(allFeatures, featureRef)?.id) : allFeatures;
-    const phases = await st.loadAllPhases();
-    const items = features.map((feature) => {
-      const featurePhases = phases.filter((phase) => phase.featureId === feature.id);
-      const taskCount = featurePhases.reduce((total, phase) => total + phase.tasks.length, 0);
-      return {
-        id: feature.id,
-        ref: formatFeatureRef(feature.number),
-        shortId: feature.shortId,
-        name: feature.name,
-        status: feature.status,
-        priority: feature.priority,
-        phaseCount: featurePhases.length,
-        taskCount,
-      };
-    });
+    const { items } = await listFeatureSummaries(st, { featureRef });
     const lines = items.map((feature) => `- ${feature.ref}${feature.shortId ? ` · ${feature.shortId}` : ""} — ${feature.name} (${feature.status}${feature.priority > 0 ? `; priority ${feature.priority}` : ""}; ${feature.phaseCount} phases, ${feature.taskCount} tasks)`);
     return text(lines.join("\n") || "No features", { features: items });
   });
@@ -655,27 +624,9 @@ server.registerTool("planner-project-context-migrate", {
     inputSchema: { featureRef: z.string().optional().describe("Optional: filter to one feature (F00x/shortId/UUID/name)."), status: z.string().optional().describe("Optional: filter by status name.") },
   }, async ({ featureRef, status }) => {
     const st = await requireStore();
-    const features = (await st.loadFeatures()).features;
-    let phases = await st.loadAllPhases();
-    if (featureRef) {
-      const f = findFeatureByRef(features, featureRef);
-      if (!f) return text(`Feature not found: ${featureRef}`);
-      phases = phases.filter((p) => p.featureId === f.id);
-    }
-    if (status) phases = phases.filter((p) => p.status === status);
-    const items = phases.map((phase) => {
-      const fNum = featureNumberOfPhase(phase, features);
-      return {
-        id: phase.id,
-        ref: formatPhaseRef(phase.number, fNum),
-        shortId: phase.shortId,
-        title: phase.title,
-        status: phase.status,
-        priority: phase.priority,
-        taskCount: phase.tasks.length,
-        featureNumber: fNum,
-      };
-    });
+    const outcome = await listPhaseSummaries(st, { featureRef, status });
+    if (!outcome.ok) return text(outcome.message);
+    const items = outcome.items;
     const lines = items.map((phase) => {
       const fTag = phase.featureNumber !== undefined ? ` [F${String(phase.featureNumber).padStart(3, "0")}]` : "";
       return `- ${phase.ref}${phase.shortId ? ` · ${phase.shortId}` : ""} — ${phase.title} (${phase.status}${phase.priority > 0 ? `; priority ${phase.priority}` : ""}; ${phase.taskCount} tasks)${fTag}`;
@@ -688,36 +639,10 @@ server.registerTool("planner-project-context-migrate", {
     inputSchema: { featureRef: z.string().optional(), phaseRef: z.string().optional(), status: z.string().optional().describe("Optional: filter by status name.") },
   }, async ({ featureRef, phaseRef, status }) => {
     const st = await requireStore();
-    const features = (await st.loadFeatures()).features;
-    let phases = await st.loadAllPhases();
-    if (featureRef) {
-      const f = findFeatureByRef(features, featureRef);
-      if (!f) return text(`Feature not found: ${featureRef}`);
-      phases = phases.filter((p) => p.featureId === f.id);
-    }
-    if (phaseRef) {
-      const p = findPhaseByRef(phases, features, phaseRef);
-      if (!p) return text(`Phase not found: ${phaseRef}`);
-      phases = [p];
-    }
-    const items: Array<{ id: string; ref: string; shortId?: string; title: string; status: string; priority: number; phaseId: string; featureId?: string }> = [];
-    for (const phase of phases) {
-      for (const task of phase.tasks) {
-        if (status && task.status !== status) continue;
-        items.push({
-          id: task.id,
-          ref: taskCompositeRef(task, phase, features),
-          shortId: task.shortId,
-          title: task.title,
-          status: task.status,
-          priority: task.priority,
-          phaseId: phase.id,
-          ...(phase.featureId ? { featureId: phase.featureId } : {}),
-        });
-      }
-    }
-    const out = items.map((task) => `- ${task.ref}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
-    return text(out.join("\n") || "No tasks", { tasks: items });
+    const outcome = await listTaskSummaries(st, { featureRef, phaseRef, status });
+    if (!outcome.ok) return text(outcome.message);
+    const out = outcome.items.map((task) => `- ${task.ref}${task.shortId ? ` · ${task.shortId}` : ""} — ${task.title} (${task.status}${task.priority > 0 ? `; priority ${task.priority}` : ""})`);
+    return text(out.join("\n") || "No tasks", { tasks: outcome.items });
   });
 
 server.registerTool("planner-accepted-decision-create", {

@@ -677,3 +677,43 @@ test("discuss refusals map to typed v2 error codes", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("discovery lists: features, phases and tasks share the MCP selection logic", async () => {
+  const fx = await startServerFixture({ name: "v2-lists" });
+  try {
+    const features = (await request(fx, "/api/v2/features")).body.data;
+    assert.equal(features.total, 1);
+    assert.deepEqual(features.features[0].ref, "F001");
+    assert.equal(features.features[0].phaseCount, 1);
+    assert.equal(features.features[0].taskCount, 1);
+
+    const filteredByShortId = (await request(fx, "/api/v2/features?featureRef=AAAAA")).body.data;
+    assert.equal(filteredByShortId.total, 1);
+    assert.equal(filteredByShortId.features[0].id, features.features[0].id);
+
+    const phases = (await request(fx, "/api/v2/phases?status=planned")).body.data;
+    assert.equal(phases.total, 1);
+    assert.equal(phases.phases[0].ref, "P001(F001)");
+    assert.equal(phases.phases[0].featureNumber, 1);
+    assert.equal(phases.phases[0].taskCount, 1);
+
+    const tasks = (await request(fx, "/api/v2/tasks?phaseRef=P001&status=planned")).body.data;
+    assert.equal(tasks.total, 1);
+    assert.equal(tasks.tasks[0].ref, "P001(F001)/T001");
+    assert.equal(tasks.tasks[0].title, "Implement login");
+
+    const noMatch = (await request(fx, "/api/v2/tasks?status=done")).body.data;
+    assert.equal(noMatch.total, 0);
+
+    const unknownFeature = await expectError(fx, "/api/v2/features?featureRef=F999", {}, { status: 404 });
+    assert.match(unknownFeature.message, /FEATURE_NOT_FOUND/);
+
+    const unknownPhaseFilter = await expectError(fx, "/api/v2/phases?featureRef=F999", {}, { status: 404 });
+    assert.match(unknownPhaseFilter.message, /FEATURE_NOT_FOUND/);
+
+    const unknownTaskPhase = await expectError(fx, "/api/v2/tasks?phaseRef=P999", {}, { status: 404 });
+    assert.match(unknownTaskPhase.message, /PHASE_NOT_FOUND/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

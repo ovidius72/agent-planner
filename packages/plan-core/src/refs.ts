@@ -81,6 +81,29 @@ export function resolveFeatureRefStrict(features: Feature[], ref: string):
 }
 
 /**
+ * Resolve a feature reference to a Feature. Returns `undefined` when not found.
+ *
+ * Supported refs (case-insensitive): F00x, shortId, UUID, exact title, then a
+ * case-insensitive title substring. Shared by every adapter so discovery
+ * filters and mutations agree on which feature a ref names. Use
+ * resolveFeatureRefStrict when ambiguity must be refused instead of guessed.
+ */
+export function findFeatureByRef(features: Feature[], ref: string): Feature | undefined {
+  const normalized = ref.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const fMatch = normalized.match(/^f(\d+)$/);
+  if (fMatch) {
+    const n = parseInt(fMatch[1]!, 10);
+    const byNum = features.find((feature) => feature.number === n);
+    if (byNum) return byNum;
+  }
+  return features.find((feature) => feature.shortId?.toLowerCase() === normalized)
+    ?? features.find((feature) => feature.id.toLowerCase() === normalized)
+    ?? features.find((feature) => feature.name.toLowerCase() === normalized)
+    ?? features.find((feature) => feature.name.toLowerCase().includes(normalized));
+}
+
+/**
  * Resolve a phase reference to a Phase. Returns `undefined` when not found or
  * when a composite (F00x) parent does not match the phase's featureId.
  *

@@ -46,7 +46,10 @@ import {
   discussPhaseFlow,
   discussProjectFlow,
   discussTaskFlow,
+  listFeatureSummaries,
   listPhaseHandoffsFlow,
+  listPhaseSummaries,
+  listTaskSummaries,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
@@ -100,24 +103,27 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         update: "PUT /api/v2/accepted-decisions/{decisionId}",
         delete: "DELETE /api/v2/accepted-decisions/{decisionId}?targetType=&targetRef=&confirmed=true",
       },
-      tasks: {
-        create: "POST /api/v2/phases/{phaseRef}/tasks",
-        discuss: "PUT /api/v2/tasks/{taskRef}/discuss",
-        checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
-        checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
-        checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
-      },
       features: {
+        list: "GET /api/v2/features?featureRef=",
         create: "POST /api/v2/features",
         update: "PUT /api/v2/features/{featureRef}",
         discuss: "PUT /api/v2/features/{featureRef}/discuss",
         delete: "DELETE /api/v2/features/{featureRef}?cascade=true",
       },
       phases: {
+        list: "GET /api/v2/phases?featureRef=&status=",
         create: "POST /api/v2/phases",
         update: "PUT /api/v2/phases/{phaseRef}",
         discuss: "PUT /api/v2/phases/{phaseRef}/discuss",
         delete: "DELETE /api/v2/phases/{phaseRef}",
+      },
+      tasks: {
+        list: "GET /api/v2/tasks?featureRef=&phaseRef=&status=",
+        create: "POST /api/v2/phases/{phaseRef}/tasks",
+        discuss: "PUT /api/v2/tasks/{taskRef}/discuss",
+        checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
+        checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
+        checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
       },
       project: {
         discuss: "PUT /api/v2/project/discuss",
@@ -721,6 +727,38 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     } catch (err) {
       return phaseFailure(c, err, "PHASE_CREATE_FAILED");
     }
+  });
+
+  // ── Discovery lists ───────────────────────────────────────────────
+  // Same selection/ref logic the MCP list tools run (plan-core
+  // list-flow.ts). v2 answers 404 for a filter that names nothing: an
+  // empty page would silently claim the filter matched zero entities.
+  app.get("/features", async (c) => {
+    const featureRef = c.req.query("featureRef");
+    const outcome = await listFeatureSummaries(store, { featureRef });
+    if (outcome.filterResolved === false) {
+      return error(c, 404, "FEATURE_NOT_FOUND", `Feature not found: ${featureRef}`);
+    }
+    return envelope(c, { features: outcome.items, total: outcome.items.length });
+  });
+
+  app.get("/phases", async (c) => {
+    const outcome = await listPhaseSummaries(store, {
+      featureRef: c.req.query("featureRef"),
+      status: c.req.query("status"),
+    });
+    if (!outcome.ok) return error(c, 404, outcome.code, outcome.message);
+    return envelope(c, { phases: outcome.items, total: outcome.items.length });
+  });
+
+  app.get("/tasks", async (c) => {
+    const outcome = await listTaskSummaries(store, {
+      featureRef: c.req.query("featureRef"),
+      phaseRef: c.req.query("phaseRef"),
+      status: c.req.query("status"),
+    });
+    if (!outcome.ok) return error(c, 404, outcome.code, outcome.message);
+    return envelope(c, { tasks: outcome.items, total: outcome.items.length });
   });
 
   // ── Discuss family ────────────────────────────────────────────────
