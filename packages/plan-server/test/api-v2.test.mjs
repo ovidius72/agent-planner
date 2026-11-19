@@ -17,6 +17,8 @@ import {
   expectError,
 } from "../../../test/helpers/server-fixture.mjs";
 import { readPlanSnapshot } from "../../../test/helpers/fixtures.mjs";
+import { mkdir, symlink } from "node:fs/promises";
+import { join } from "node:path";
 
 after(async () => {
   await cleanupServerFixtures();
@@ -889,6 +891,76 @@ test("detail read refusals map to typed v2 error codes", async () => {
     await request(fx, "/api/v2/features", featureBody("Twin feature"));
     const ambiguous = await expectError(fx, `/api/v2/features/${encodeURIComponent("Twin feature")}`, {}, { status: 409 });
     assert.match(ambiguous.message, /FEATURE_REF_AMBIGUOUS/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("documents family: list, view and confirmed save over the shared doc flow", async () => {
+  const fx = await startServerFixture({ name: "v2-documents" });
+  const docPath = ".planner/docs/notes/architecture.md";
+  const viewPath = (value) => `/api/v2/documents/view?path=${encodeURIComponent(value)}`;
+  try {
+    const empty = (await request(fx, "/api/v2/documents")).body.data;
+    assert.equal(empty.total, 0);
+
+    const unconfirmed = await expectError(fx, "/api/v2/documents/save", put({ path: docPath, content: "# Doc\n" }), { status: 409 });
+    assert.match(unconfirmed.message, /DOCUMENT_CONFIRMATION_REQUIRED/);
+
+    const traversal = await expectError(fx, viewPath(".planner/docs/../manifest.json"), {}, { status: 400 });
+    assert.match(traversal.message, /DOCUMENT_PATH_INVALID/);
+
+    const outside = await expectError(fx, viewPath("/etc/passwd"), {}, { status: 400 });
+    assert.match(outside.message, /DOCUMENT_PATH_INVALID/);
+
+    const saved = (await request(fx, "/api/v2/documents/save", put({
+      path: docPath,
+      content: "# Architecture\n\nShared document.\n",
+      confirmed: true,
+    }))).body.data;
+    assert.equal(saved.path, docPath);
+    assert.equal(saved.saved, true);
+
+    const viewed = (await request(fx, viewPath(docPath))).body.data;
+    assert.equal(viewed.path, docPath);
+    assert.match(viewed.content, /Shared document/);
+
+    const listed = (await request(fx, "/api/v2/documents")).body.data;
+    assert.equal(listed.total, 1);
+    assert.equal(listed.documents[0].path, docPath);
+    assert.equal(typeof listed.documents[0].size, "number");
+    assert.match(listed.documents[0].updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+    const missing = await expectError(fx, viewPath(".planner/docs/nope.md"), {}, { status: 404 });
+    assert.match(missing.message, /DOCUMENT_NOT_REGULAR_FILE/);
+
+    const emptyContent = await expectError(fx, "/api/v2/documents/save", put({
+      path: ".planner/docs/blank.md",
+      content: "   ",
+      confirmed: true,
+    }), { status: 422 });
+    assert.match(emptyContent.message, /DOCUMENT_CONTENT_REQUIRED/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("documents family refuses symlink escapes on read and save", async () => {
+  const fx = await startServerFixture({ name: "v2-document-symlinks" });
+  const docsDir = join(fx.planRoot, "docs");
+  try {
+    await mkdir(docsDir, { recursive: true });
+    await symlink("/etc/passwd", join(docsDir, "escape.md"));
+    const path = ".planner/docs/escape.md";
+
+    const viewed = await expectError(fx, `/api/v2/documents/view?path=${encodeURIComponent(path)}`, {}, { status: 404 });
+    assert.match(viewed.message, /DOCUMENT_NOT_REGULAR_FILE/);
+
+    const saved = await expectError(fx, "/api/v2/documents/save", put({ path, content: "# Overwrite\n", confirmed: true }), { status: 404 });
+    assert.match(saved.message, /DOCUMENT_NOT_REGULAR_FILE/);
+
+    const listed = (await request(fx, "/api/v2/documents")).body.data;
+    assert.equal(listed.total, 0);
   } finally {
     await closeServerFixture(fx);
   }

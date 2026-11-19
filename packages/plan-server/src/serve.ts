@@ -1,12 +1,12 @@
 import { watch, existsSync, readFileSync, statSync } from "node:fs";
-import { lstat, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createAdaptorServer } from "@hono/node-server";
 import type http from "node:http";
 import { Hono, type Context } from "hono";
-import { API_V1_VERSION, ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, SERVICE_PROTOCOL_VERSION, removeServiceEndpointRecord, writeServiceEndpointRecord, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
+import { API_V1_VERSION, ExportService, PlanStore, PlanStoreError, PlanStaleWriteError, PlanWriterBusyError, createFeatureId, createPhaseId, createChecklistItemId, createRequirementId, createTaskId, findPhaseByRef, normalizeSlug, withFeatureLock, needsMotivation, checkExplicitTaskStart, recommendNextTask, recommendNextWork, reconcileRequirementMacroTasks, RequirementMacroTaskError, packageVersionFromModule, ACCEPTED_DECISION_RAW_REPLACEMENT_DISABLED_MESSAGE, ACCEPTED_DECISION_SEMANTIC_MUTATION_REQUIRED_ERROR_CODE, deleteFeatureCascade, nowISO, applyTaskLifecycleDates, resolveAcceptedDecisionTarget, SERVICE_PROTOCOL_VERSION, removeServiceEndpointRecord, writeServiceEndpointRecord, PlannerDocRefusal, readPlannerDocument, savePlannerDocument, type MacroTaskMutationInput, type AcceptedDecisionTargetType } from "@agent-plan/core"
 import type { Feature, Phase, Project, Requirement, Task, Subtask, StatusLogEntry } from "@agent-plan/core/schema";
 import { WsHub } from "./ws-hub.js";
 import { API_V1_BASE_PATH, createApiV1App } from "./api-v1.js";
@@ -546,64 +546,42 @@ function createApiApp(store: PlanStore, hubRef: { current: WsHub | null }, apiPr
   app.get(route("/description-freshness"), async (c) => c.json(await store.previewDescriptionReconciliation()));
 
 // ── Planner Markdown docs (path-safe viewer/editor) ─────────────
-// Reads/writes are restricted to <planRoot>/docs/*.md. Traversal and
-// symlink escapes are rejected. The Web UI opens viewer links in a new
-// tab; saves require explicit confirmed=true. Editor baseline is a
-// dependency-free textarea plus existing Markdown preview (no external
-// editor dependency; see docs decision in T385: @uiw/react-md-editor
-// and CodeMirror 6 were evaluated and rejected to avoid bundle cost).
-function resolvePlannerDocPath(planRoot: string, rawPath: string): string {
-  const normalized = rawPath.trim().replace(/\\/g, "/");
-  if (!/^\.planner\/docs\/.+\.md$/i.test(normalized) || normalized.includes("/../")) {
-    throw new Error(`Document path must be a Markdown file under .planner/docs/: ${rawPath}`);
-  }
-  const docsRoot = resolve(planRoot, "docs");
-  const target = resolve(planRoot, normalized.slice(".planner/".length));
-  if (!target.startsWith(`${docsRoot}${sep}`)) {
-    throw new Error(`Document escapes .planner/docs/: ${normalized}`);
-  }
-  return target;
-}
-
+// The rules live in plan-core planner-doc.ts so the Web UI routes and
+// the versioned API cannot diverge: <planRoot>/docs/*.md only, traversal
+// and symlinks refused, saves require explicit confirmed=true.
 app.get(route("/docs/view"), async (c) => {
   const rawPath = c.req.query("path") ?? "";
-  let target: string;
   try {
-    target = resolvePlannerDocPath(store.root, rawPath);
+    return c.json(await readPlannerDocument(store.root, rawPath));
   } catch (error) {
-    return c.json({ error: (error as Error).message, path: rawPath }, 400);
+    if (error instanceof PlannerDocRefusal) {
+      const status = error.code === "DOCUMENT_NOT_REGULAR_FILE" || error.code === "DOCUMENT_NOT_FOUND" ? 404 : 400;
+      return c.json({ error: error.message, path: error.documentPath }, status);
+    }
+    throw error;
   }
-  const fileStat = await lstat(target).catch(() => null);
-  if (!fileStat || fileStat.isSymbolicLink() || !fileStat.isFile()) {
-    return c.json({ error: "Document must be a regular file under .planner/docs/ (symlinks rejected).", path: rawPath }, 404);
-  }
-  const content = await readFile(target, "utf8").catch(() => null);
-  if (content === null) return c.json({ error: "Document not found.", path: rawPath }, 404);
-  return c.json({ path: rawPath, content });
 });
 
 app.put(route("/docs/save"), async (c) => {
   const body = await c.req.json<{ path?: string; content?: string; confirmed?: boolean }>().catch(() => ({ path: "", content: "", confirmed: false }));
   const rawPath = typeof body.path === "string" ? body.path : "";
-  if (body.confirmed !== true) {
-    return c.json({ error: "Saving a planner document requires explicit confirmed=true.", path: rawPath, confirmRequired: true, saved: false }, 400);
-  }
-  let target: string;
   try {
-    target = resolvePlannerDocPath(store.root, rawPath);
+    const outcome = await savePlannerDocument(store.root, {
+      path: rawPath,
+      content: typeof body.content === "string" ? body.content : "",
+      confirmed: body.confirmed === true,
+    });
+    return c.json({ path: outcome.path, saved: outcome.saved });
   } catch (error) {
-    return c.json({ error: (error as Error).message, path: rawPath }, 400);
+    if (error instanceof PlannerDocRefusal) {
+      return c.json({
+        error: error.message,
+        path: error.documentPath,
+        ...(error.code === "DOCUMENT_CONFIRMATION_REQUIRED" ? { confirmRequired: true, saved: false } : {}),
+      }, 400);
+    }
+    throw error;
   }
-  const fileStat = await lstat(target).catch(() => null);
-  if (fileStat && (fileStat.isSymbolicLink() || !fileStat.isFile())) {
-    return c.json({ error: "Document must be a regular file under .planner/docs/ (symlinks rejected).", path: rawPath }, 400);
-  }
-  const content = typeof body.content === "string" ? body.content : "";
-  if (!content.trim()) return c.json({ error: "Document content must be non-empty Markdown.", path: rawPath }, 400);
-  const { mkdir: mkdirDoc } = await import("node:fs/promises");
-  await mkdirDoc(dirname(target), { recursive: true });
-  await writeFile(target, content, "utf8");
-  return c.json({ path: rawPath, saved: true });
 });
 
   // ── Features ─────────────────────────────────────────────────────

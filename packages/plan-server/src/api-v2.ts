@@ -56,6 +56,10 @@ import {
   showFeature,
   showPhase,
   showTask,
+  PlannerDocRefusal,
+  readPlannerDocument,
+  savePlannerDocument,
+  listPlannerDocuments,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
@@ -147,6 +151,11 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       project: {
         discuss: "PUT /api/v2/project/discuss",
+      },
+      documents: {
+        list: "GET /api/v2/documents",
+        view: "GET /api/v2/documents/view?path=",
+        save: "PUT /api/v2/documents/save",
       },
     },
   }));
@@ -844,6 +853,58 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       pendingDeviation: outcome.pendingDeviation ?? null,
       linkedRequirements: outcome.linkedRequirements,
     });
+  });
+
+  // ── Documents family ──────────────────────────────────────────────
+  // Same rules as the Web UI's viewer/editor (plan-core planner-doc.ts):
+  // <planRoot>/docs/*.md only, traversal and symlinks refused, saves
+  // require explicit confirmation. This surface maps the shared refusal
+  // codes to v2 statuses; the UI keeps its own legacy responses.
+  const documentFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof PlannerDocRefusal) {
+      const status: ContentfulStatusCode = err.code === "DOCUMENT_PATH_INVALID"
+        ? 400
+        : err.code === "DOCUMENT_NOT_FOUND" || err.code === "DOCUMENT_NOT_REGULAR_FILE"
+          ? 404
+          : err.code === "DOCUMENT_CONFIRMATION_REQUIRED" ? 409 : 422;
+      return error(c, status, err.code, err.message, {
+        path: err.documentPath,
+        ...(err.code === "DOCUMENT_CONFIRMATION_REQUIRED" ? { confirmRequired: true } : {}),
+      });
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+
+  app.get("/documents", async (c) => {
+    try {
+      const documents = await listPlannerDocuments(store.root);
+      return envelope(c, { documents, total: documents.length });
+    } catch (err) {
+      return error(c, 500, "DOCUMENT_LIST_FAILED", err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  app.get("/documents/view", async (c) => {
+    try {
+      return envelope(c, await readPlannerDocument(store.root, c.req.query("path") ?? ""));
+    } catch (err) {
+      return documentFailure(c, err, "DOCUMENT_READ_FAILED");
+    }
+  });
+
+  app.put("/documents/save", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    try {
+      const outcome = await savePlannerDocument(store.root, {
+        path: optionalString(body, "path") ?? "",
+        content: optionalString(body, "content") ?? "",
+        confirmed: body.confirmed === true,
+      });
+      return envelope(c, { path: outcome.path, saved: outcome.saved });
+    } catch (err) {
+      return documentFailure(c, err, "DOCUMENT_SAVE_FAILED");
+    }
   });
 
   // ── Discuss family ────────────────────────────────────────────────
