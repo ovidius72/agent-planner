@@ -66,6 +66,13 @@ import {
   endPlannerSession,
   heartbeatPlannerSession,
   registerPlannerSession,
+  resolvePlannerSession,
+  readFeatureContextFlow,
+  readPhaseContextFlow,
+  readTaskContextFlow,
+  readPhaseRequirementsFlow,
+  readProjectContextFlow,
+  readProjectGuidelinesFlow,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
@@ -98,6 +105,30 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   const envelope = (c: Context, data: unknown, status: ContentfulStatusCode = 200) => c.json({ apiVersion: API_V2_VERSION, data }, status);
   const error = (c: Context, status: ContentfulStatusCode, code: string, message: string, details: Record<string, unknown> = {}) =>
     c.json({ apiVersion: API_V2_VERSION, error: { code, message, ...details } }, status);
+
+  const sessionFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof SessionFlowRefusal) {
+      const status: ContentfulStatusCode = err.code === "SESSION_NOT_FOUND"
+        ? 404
+        : err.code === "SESSION_ENDED" ? 409 : 422;
+      return error(c, status, err.code, err.message, err.details);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+
+  /** Session identity for operations that read or write per-agent state. */
+  const requireSession = async (c: Context): Promise<{ sessionId: string } | { response: ReturnType<typeof error> }> => {
+    const sessionId = (c.req.header(PLANNER_SESSION_HEADER) ?? "").trim();
+    if (!sessionId) {
+      return { response: error(c, 400, "SESSION_REQUIRED", `A registered planner session is required in the ${PLANNER_SESSION_HEADER} header.`) };
+    }
+    try {
+      const session = await resolvePlannerSession(store, sessionId);
+      return { sessionId: session.sessionId };
+    } catch (err) {
+      return { response: sessionFailure(c, err, "SESSION_RESOLVE_FAILED") };
+    }
+  };
 
   // ── Discovery ─────────────────────────────────────────────────────
   app.get("/", (c) => envelope(c, {
@@ -164,6 +195,14 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         list: "GET /api/v2/documents",
         view: "GET /api/v2/documents/view?path=",
         save: "PUT /api/v2/documents/save",
+      },
+      context: {
+        project: "GET /api/v2/context/project?maxChars=",
+        guidelines: "GET /api/v2/context/guidelines",
+        requirements: "GET /api/v2/context/requirements?phaseRef=",
+        feature: "GET /api/v2/context/features/{featureRef}",
+        phase: "GET /api/v2/context/phases/{phaseRef}",
+        task: "GET /api/v2/context/tasks/{taskRef}",
       },
       sessions: {
         register: "POST /api/v2/sessions",
@@ -704,9 +743,8 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     typeof body[key] === "number" && Number.isFinite(body[key]) ? body[key] : undefined;
   const optionalStringArray = (body: Record<string, unknown>, key: string): string[] | undefined =>
     Array.isArray(body[key]) ? body[key].filter((value): value is string => typeof value === "string") : undefined;
-  /** Canonical ref from the tail of a collection route; titles may contain "/". */
-  const collectionTail = (c: Context, collection: "features" | "phases" | "tasks" | "sessions"): string => {
-    const prefix = `${API_V2_BASE_PATH}/${collection}/`;
+  /** Decoded path tail after a fixed prefix; titles may contain "/". */
+  const tailAfter = (c: Context, prefix: string): string => {
     const path = c.req.path;
     const start = path.indexOf(prefix);
     const raw = start === -1 ? "" : path.slice(start + prefix.length);
@@ -716,6 +754,9 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       return raw;
     }
   };
+  /** Canonical ref from the tail of a collection route. */
+  const collectionTail = (c: Context, collection: "features" | "phases" | "tasks" | "sessions"): string =>
+    tailAfter(c, `${API_V2_BASE_PATH}/${collection}/`);
 
   const featureRefusalStatus: Partial<Record<FeatureFlowRefusal["code"], ContentfulStatusCode>> = {
     FEATURE_NOT_FOUND: 404,
@@ -872,16 +913,6 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   // The service issues the session id; clients send it back in
   // X-Planner-Session. Registration records adapter provenance only —
   // principal authentication and grants are their own checklist item.
-  const sessionFailure = (c: Context, err: unknown, fallbackCode: string) => {
-    if (err instanceof SessionFlowRefusal) {
-      const status: ContentfulStatusCode = err.code === "SESSION_NOT_FOUND"
-        ? 404
-        : err.code === "SESSION_ENDED" ? 409 : 422;
-      return error(c, status, err.code, err.message, err.details);
-    }
-    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
-  };
-
   app.post("/sessions", async (c) => {
     const body = await readJsonBody(c);
     if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
@@ -918,6 +949,76 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     } catch (err) {
       return sessionFailure(c, err, "SESSION_END_FAILED");
     }
+  });
+
+  // ── Context family ────────────────────────────────────────────────
+  // Registered sessions only: a receipt names the session that received
+  // the content, so an unregistered caller cannot produce one. The
+  // delivered payload is what the receipt attests to.
+  app.get("/context/project", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const rawMaxChars = c.req.query("maxChars");
+    const maxChars = rawMaxChars === undefined ? undefined : Number.parseInt(rawMaxChars, 10);
+    if (maxChars !== undefined && (!Number.isFinite(maxChars) || maxChars <= 0)) {
+      return error(c, 422, "CONTEXT_MAX_CHARS_INVALID", "maxChars must be a positive integer.");
+    }
+    const outcome = await readProjectContextFlow(store, auth.sessionId, maxChars);
+    return envelope(c, {
+      contextComplete: outcome.contextComplete,
+      attested: outcome.attested,
+      fingerprint: outcome.delivery.evidence.fingerprint,
+      totalChunks: outcome.delivery.evidence.totalChunks,
+      serializedChars: outcome.delivery.evidence.serializedChars,
+      chunks: outcome.delivery.chunks,
+    });
+  });
+
+  app.get("/context/guidelines", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const outcome = await readProjectGuidelinesFlow(store, auth.sessionId);
+    return envelope(c, outcome);
+  });
+
+  app.get("/context/requirements", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const phaseRef = c.req.query("phaseRef");
+    if (!phaseRef) return error(c, 422, "PHASE_REF_REQUIRED", "A phaseRef query parameter is required.");
+    const outcome = await readPhaseRequirementsFlow(store, auth.sessionId, phaseRef);
+    if (!outcome.ok) return showFailure(c, outcome);
+    return envelope(c, {
+      phaseRef: outcome.phaseRef,
+      phaseId: outcome.phaseId,
+      featureId: outcome.featureId ?? null,
+      requirements: outcome.requirements,
+      attestedRequirementIds: outcome.attestedRequirementIds,
+    });
+  });
+
+  app.get("/context/features/*", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const outcome = await readFeatureContextFlow(store, auth.sessionId, tailAfter(c, `${API_V2_BASE_PATH}/context/features/`));
+    if (!outcome.ok) return showFailure(c, outcome);
+    return envelope(c, outcome);
+  });
+
+  app.get("/context/phases/*", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const outcome = await readPhaseContextFlow(store, auth.sessionId, tailAfter(c, `${API_V2_BASE_PATH}/context/phases/`));
+    if (!outcome.ok) return showFailure(c, outcome);
+    return envelope(c, outcome);
+  });
+
+  app.get("/context/tasks/*", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const outcome = await readTaskContextFlow(store, auth.sessionId, tailAfter(c, `${API_V2_BASE_PATH}/context/tasks/`));
+    if (!outcome.ok) return showFailure(c, outcome);
+    return envelope(c, outcome);
   });
 
   // ── Search family ─────────────────────────────────────────────────

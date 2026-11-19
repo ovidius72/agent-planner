@@ -17,7 +17,7 @@ import {
   expectError,
 } from "../../../test/helpers/server-fixture.mjs";
 import { readPlanSnapshot } from "../../../test/helpers/fixtures.mjs";
-import { mkdir, readFile, symlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 
 after(async () => {
@@ -1082,6 +1082,76 @@ test("session family: the service issues an id, heartbeat records liveness, end 
     const stored = JSON.parse(await readFile(join(fx.planRoot, ".local", "sessions.json"), "utf8"));
     assert.equal(stored.length, 2);
     assert.equal(stored.find((record) => record.sessionId === second.sessionId).endedAt, "");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("context family: registered sessions receive content and durable receipts", async () => {
+  const fx = await startServerFixture({ name: "v2-context" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  const phaseRef = encodeURIComponent("P001(F001)");
+  try {
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", agentId: "worker-1" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId };
+
+    const anonymous = await expectError(fx, "/api/v2/context/project", {}, { status: 400 });
+    assert.match(anonymous.message, /SESSION_REQUIRED/);
+
+    const stranger = { "X-Planner-Session": "00000000-0000-4000-8000-000000000000" };
+    const unknownSession = await expectError(fx, "/api/v2/context/project", { headers: stranger }, { status: 404 });
+    assert.match(unknownSession.message, /SESSION_NOT_FOUND/);
+
+    const project = (await request(fx, "/api/v2/context/project", { headers })).body.data;
+    assert.equal(project.contextComplete, true);
+    assert.equal(project.attested, true);
+    assert.equal(project.totalChunks, 1);
+    assert.equal(typeof project.fingerprint, "string");
+    assert.equal(project.chunks.length, 1);
+    assert.equal(typeof project.chunks[0].content, "string");
+
+    const guidelines = (await request(fx, "/api/v2/context/guidelines", { headers })).body.data;
+    assert.equal(guidelines.readRecorded, false);
+    assert.equal(guidelines.projectGuidelines.content, "");
+
+    const requirements = (await request(fx, `/api/v2/context/requirements?phaseRef=${phaseRef}`, { headers })).body.data;
+    assert.equal(requirements.phaseRef, "P001(F001)");
+    assert.deepEqual(requirements.requirements.map((requirement) => requirement.title), ["Users can authenticate"]);
+    assert.equal(requirements.attestedRequirementIds.length, 1);
+
+    const phase = (await request(fx, `/api/v2/context/phases/${phaseRef}`, { headers })).body.data;
+    assert.equal(phase.ref, "P001(F001)");
+    assert.equal(phase.attested, true);
+    assert.match(phase.text, /Accepted Decisions \(0\):/);
+    assert.equal(phase.linkedRequirements.length, 1);
+
+    const task = (await request(fx, `/api/v2/context/tasks/${taskRef}`, { headers })).body.data;
+    assert.equal(task.ref, "P001(F001)/T001");
+    assert.equal(task.phaseRef, "P001(F001)");
+    assert.equal(task.featureRef, "F001");
+    assert.equal(task.persisted, true);
+    assert.deepEqual(task.attestedRequirementIds, [task.linkedRequirements[0].id]);
+    assert.match(task.taskText, /Add route/);
+    assert.match(task.taskText, /Users can authenticate/);
+    assert.match(task.phaseText, /Accepted Decisions \(0\):/);
+    assert.match(task.featureText, /Accepted Decisions \(0\):/);
+
+    // The receipt is durable on the entities, not only in process memory.
+    const phaseFiles = (await readdir(join(fx.planRoot, "phases"))).filter((name) => name.endsWith(".json"));
+    const storedPhases = await Promise.all(phaseFiles.map(async (name) => JSON.parse(await readFile(join(fx.planRoot, "phases", name), "utf8"))));
+    const storedPhase = storedPhases.find((entry) => entry.tasks.some((candidate) => candidate.id === task.task.id));
+    assert.ok(storedPhase.sessionInfo.some((entry) => entry.sessionId === session.sessionId));
+    assert.ok(storedPhase.tasks.find((candidate) => candidate.id === task.task.id).sessionInfo
+      .some((entry) => entry.sessionId === session.sessionId));
+
+    const missingTask = await expectError(fx, `/api/v2/context/tasks/${encodeURIComponent("P001(F001)/T999")}`, { headers }, { status: 404 });
+    assert.match(missingTask.message, /TASK_NOT_FOUND/);
+
+    const missingPhaseRef = await expectError(fx, "/api/v2/context/requirements", { headers }, { status: 422 });
+    assert.match(missingPhaseRef.message, /PHASE_REF_REQUIRED/);
+
+    const badMaxChars = await expectError(fx, "/api/v2/context/project?maxChars=0", { headers }, { status: 422 });
+    assert.match(badMaxChars.message, /CONTEXT_MAX_CHARS_INVALID/);
   } finally {
     await closeServerFixture(fx);
   }
