@@ -828,3 +828,68 @@ test("task mutation refusals map to typed v2 error codes", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("detail reads: one feature, phase and task each with canonical identity", async () => {
+  const fx = await startServerFixture({ name: "v2-show" });
+  const phaseRef = encodeURIComponent("P001(F001)");
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  try {
+    const feature = (await request(fx, "/api/v2/features/AAAAA")).body.data;
+    assert.equal(feature.ref, "F001");
+    assert.equal(feature.feature.name, "Auth API");
+    assert.equal(feature.phaseCount, 1);
+    assert.equal(feature.taskCount, 1);
+    assert.equal(feature.feature.description, "Authentication API for the fixture.");
+
+    const phase = (await request(fx, `/api/v2/phases/${phaseRef}`)).body.data;
+    assert.equal(phase.ref, "P001(F001)");
+    assert.equal(phase.featureNumber, 1);
+    assert.equal(phase.taskCount, 1);
+    assert.equal(phase.phase.title, "Auth API phase");
+    assert.equal(phase.phase.description, "Fixture phase with one planned task.");
+    assert.deepEqual(phase.linkedRequirements.map((requirement) => requirement.title), ["Users can authenticate"]);
+
+    const task = (await request(fx, `/api/v2/tasks/${taskRef}`)).body.data;
+    assert.equal(task.ref, "P001(F001)/T001");
+    assert.equal(task.phaseRef, "P001(F001)");
+    assert.equal(task.featureRef, "F001");
+    assert.equal(task.task.title, "Implement login");
+    assert.equal(task.task.checklist.length, 1);
+    assert.equal(task.task.checklist[0].title, "Add route");
+    assert.equal(task.phase.ref, "P001(F001)");
+    assert.equal(task.feature.ref, "F001");
+    assert.equal(task.orderContext.priority, 10);
+    assert.equal(task.orderContext.readyAheadCount, 0);
+    assert.equal(task.snapshot, null);
+    assert.equal(task.pendingDeviation, null);
+    assert.deepEqual(task.linkedRequirements.map((requirement) => requirement.title), ["Users can authenticate"]);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("detail read refusals map to typed v2 error codes", async () => {
+  const fx = await startServerFixture({ name: "v2-show-refusals" });
+  const featureBody = (name) => json({
+    name,
+    description: "A description that is long enough to pass the flow's fifty-character execution-context rule.",
+  });
+  try {
+    const missingFeature = await expectError(fx, "/api/v2/features/F999", {}, { status: 404 });
+    assert.match(missingFeature.message, /FEATURE_NOT_FOUND/);
+
+    const missingPhase = await expectError(fx, "/api/v2/phases/P999", {}, { status: 404 });
+    assert.match(missingPhase.message, /PHASE_NOT_FOUND/);
+
+    const missingTask = await expectError(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}`, {}, { status: 404 });
+    assert.match(missingTask.message, /TASK_NOT_FOUND/);
+
+    // Two features with one exact name: the ref exists but not uniquely.
+    await request(fx, "/api/v2/features", featureBody("Twin feature"));
+    await request(fx, "/api/v2/features", featureBody("Twin feature"));
+    const ambiguous = await expectError(fx, `/api/v2/features/${encodeURIComponent("Twin feature")}`, {}, { status: 409 });
+    assert.match(ambiguous.message, /FEATURE_REF_AMBIGUOUS/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

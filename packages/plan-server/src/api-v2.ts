@@ -53,6 +53,9 @@ import {
   listPhaseHandoffsFlow,
   listPhaseSummaries,
   listTaskSummaries,
+  showFeature,
+  showPhase,
+  showTask,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
@@ -68,6 +71,7 @@ import {
   writePhaseHandoffFlow,
   type MacroTaskStatus,
   type PhaseHandoffWriteRequest,
+  type ShowFlowRefusalCode,
   type Phase,
   type Task,
 } from "@agent-plan/core";
@@ -114,6 +118,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       features: {
         list: "GET /api/v2/features?featureRef=",
+        show: "GET /api/v2/features/{featureRef}",
         create: "POST /api/v2/features",
         update: "PUT /api/v2/features/{featureRef}",
         discuss: "PUT /api/v2/features/{featureRef}/discuss",
@@ -121,6 +126,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       phases: {
         list: "GET /api/v2/phases?featureRef=&status=",
+        show: "GET /api/v2/phases/{phaseRef}",
         create: "POST /api/v2/phases",
         update: "PUT /api/v2/phases/{phaseRef}",
         discuss: "PUT /api/v2/phases/{phaseRef}/discuss",
@@ -128,6 +134,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       },
       tasks: {
         list: "GET /api/v2/tasks?featureRef=&phaseRef=&status=",
+        show: "GET /api/v2/tasks/{taskRef}",
         create: "POST /api/v2/phases/{phaseRef}/tasks",
         update: "PUT /api/v2/tasks/{taskRef}",
         discuss: "PUT /api/v2/tasks/{taskRef}/discuss",
@@ -772,6 +779,71 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     });
     if (!outcome.ok) return error(c, 404, outcome.code, outcome.message);
     return envelope(c, { tasks: outcome.items, total: outcome.items.length });
+  });
+
+  // ── Detail reads ──────────────────────────────────────────────────
+  // Same selection and identity the MCP show tools run (plan-core
+  // show-flow.ts). An ambiguous feature name is a conflict, not a 404:
+  // the ref exists conceptually but does not identify one feature.
+  const showRefusalStatus: Record<ShowFlowRefusalCode, ContentfulStatusCode> = {
+    FEATURE_NOT_FOUND: 404,
+    FEATURE_REF_AMBIGUOUS: 409,
+    PHASE_NOT_FOUND: 404,
+    TASK_NOT_FOUND: 404,
+  };
+  const showFailure = (c: Context, outcome: { code: ShowFlowRefusalCode; message: string }) =>
+    error(c, showRefusalStatus[outcome.code], outcome.code, outcome.message);
+
+  // Registered after the list routes and after the handoff reads; the
+  // question of who wins for ".../handoff" is settled by registration
+  // order in Hono, and those routes come first.
+  app.get("/features/*", async (c) => {
+    const outcome = await showFeature(store, collectionTail(c, "features"));
+    if (!outcome.ok) return showFailure(c, outcome);
+    return envelope(c, {
+      ref: outcome.ref,
+      feature: outcome.feature,
+      phaseCount: outcome.phaseCount,
+      taskCount: outcome.taskCount,
+    });
+  });
+
+  app.get("/phases/*", async (c) => {
+    const outcome = await showPhase(store, collectionTail(c, "phases"));
+    if (!outcome.ok) return showFailure(c, outcome);
+    return envelope(c, {
+      ref: outcome.ref,
+      phase: outcome.phase,
+      featureNumber: outcome.featureNumber ?? null,
+      taskCount: outcome.taskCount,
+      linkedRequirements: outcome.linkedRequirements,
+    });
+  });
+
+  app.get("/tasks/*", async (c) => {
+    // No session identity on v2 yet (session registration lands with the
+    // context family), so the resume read is unscoped on purpose.
+    const outcome = await showTask(store, collectionTail(c, "tasks"));
+    if (!outcome.ok) return showFailure(c, outcome);
+    return envelope(c, {
+      ref: outcome.ref,
+      phaseRef: outcome.phaseRef,
+      featureRef: outcome.featureRef || null,
+      task: outcome.task,
+      phase: {
+        id: outcome.phase.id,
+        ref: outcome.phaseRef,
+        title: outcome.phase.title,
+        status: outcome.phase.status,
+      },
+      feature: outcome.feature
+        ? { id: outcome.feature.id, ref: outcome.featureRef, name: outcome.feature.name, status: outcome.feature.status }
+        : null,
+      orderContext: outcome.orderContext,
+      snapshot: outcome.snapshot,
+      pendingDeviation: outcome.pendingDeviation ?? null,
+      linkedRequirements: outcome.linkedRequirements,
+    });
   });
 
   // ── Discuss family ────────────────────────────────────────────────
