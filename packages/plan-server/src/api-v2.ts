@@ -74,6 +74,8 @@ import {
   readProjectContextFlow,
   readProjectGuidelinesFlow,
   startTaskFlow,
+  completeTaskFlow,
+  type TaskCompleteRefusalCode,
   type TaskStartFlowRefusalCode,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
@@ -190,6 +192,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
         checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
         start: "POST /api/v2/tasks/{taskRef}/start",
+        complete: "POST /api/v2/tasks/{taskRef}/complete",
       },
       project: {
         discuss: "PUT /api/v2/project/discuss",
@@ -1066,6 +1069,46 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       ...(outcome.resumeRequired ? { resumeRequired: outcome.resumeRequired } : {}),
       projectContextStale: outcome.projectContextStale,
       higherPriorityOpenPhase: outcome.higherPriorityOpenPhase,
+    });
+  });
+
+  // Completion runs the same orchestration as planner-task-complete:
+  // evidence and checklist gate, status-log entry, description append,
+  // derived-status rollup and deviation transition.
+  const taskCompleteRefusalStatus: Record<TaskCompleteRefusalCode, ContentfulStatusCode> = {
+    TASK_NOT_FOUND: 404,
+    COMPLETION_EVIDENCE_REQUIRED: 422,
+    TASK_CHECKPOINT_PENDING: 409,
+    CHECKLIST_INCOMPLETE: 409,
+    FORCE_MOTIVATION_REQUIRED: 409,
+  };
+
+  app.post("/tasks/*/complete", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const outcome = await completeTaskFlow(store, auth.sessionId, {
+      task: tailAfter(c, `${API_V2_BASE_PATH}/tasks/`).replace(/\/complete$/, ""),
+      force: body.force === true,
+      motivation: optionalString(body, "motivation"),
+      descriptionUpdate: optionalString(body, "descriptionUpdate") ?? "",
+    });
+    if (!outcome.ok) {
+      return error(c, taskCompleteRefusalStatus[outcome.code], outcome.code, outcome.message, {
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        ...(outcome.taskRef ? { taskRef: outcome.taskRef } : {}),
+        ...(outcome.uncheckedItems ? { uncheckedItems: outcome.uncheckedItems.map((item) => item.title) } : {}),
+      });
+    }
+    return envelope(c, {
+      completed: true,
+      taskRef: outcome.taskRef,
+      phaseRef: outcome.phaseRef,
+      featureRef: outcome.featureRef || null,
+      task: outcome.task,
+      clearedHandoffRef: outcome.clearedHandoffRef,
+      resumeRequired: outcome.resumeRequired ?? null,
     });
   });
 

@@ -7,7 +7,7 @@
  * their own refusals and success lines from the facts returned here.
  */
 
-import { formatFeatureRef, formatPhaseRef, taskCompositeRef, featureNumberOfPhase } from "./naming.js";
+import { createChecklistItemId, formatFeatureRef, formatPhaseRef, taskCompositeRef, featureNumberOfPhase } from "./naming.js";
 import { findTaskByRef } from "./refs.js";
 import {
   contextReadEligibilityForSession,
@@ -29,7 +29,14 @@ import {
 import { findHigherPriorityOpenPhase, type OpenPhaseWork } from "./stranded-phase.js";
 import type { TaskStartErrorCode } from "./task-start-outcome.js";
 import { PlanStoreError, nowISO } from "./plan-store.js";
-import type { PlanStore, Task } from "./index.js";
+import { applyTaskLifecycleDates } from "./task-lifecycle.js";
+import {
+  evaluateTaskCompletionGate,
+  taskCompletionChecklistRefusal,
+  taskCompletionForceMotivationRequired,
+  taskCompletionOverrideNote,
+} from "./task-completion-gate.js";
+import type { ChecklistItem, PlanStore, StatusLogEntry, Task, TaskPauseSnapshot } from "./index.js";
 
 export type TaskStartFlowRefusalCode = Exclude<TaskStartErrorCode, "PLAN_NOT_FOUND">;
 
@@ -335,4 +342,172 @@ export async function startTaskFlow(store: PlanStore, sessionId: string, ref: st
       higherPriorityOpenPhase: findHigherPriorityOpenPhase(phases, features, found.phase.id, found.phase.priority ?? found.phase.number),
     };
   });
+}
+
+// ── Completion ──────────────────────────────────────────────────────────
+
+export type TaskCompleteRefusalCode =
+  | "TASK_NOT_FOUND"
+  | "COMPLETION_EVIDENCE_REQUIRED"
+  | "TASK_CHECKPOINT_PENDING"
+  | "CHECKLIST_INCOMPLETE"
+  | "FORCE_MOTIVATION_REQUIRED";
+
+export interface TaskCompleteRefusal {
+  ok: false;
+  code: TaskCompleteRefusalCode;
+  /** Surface-neutral refusal sentence. Adapters may render their own words. */
+  message: string;
+  taskId?: string;
+  taskRef?: string;
+  /** Open checklist items behind a checklist refusal. */
+  uncheckedItems?: ChecklistItem[];
+}
+
+export interface TaskCompletionResumeRequired {
+  taskId: string;
+  phaseId: string;
+  /** Canonical ref of the preserved task that must be resumed. */
+  taskRef: string;
+  title: string;
+  snapshot: TaskPauseSnapshot | null;
+}
+
+export interface TaskCompleteSuccess {
+  ok: true;
+  task: Task;
+  taskRef: string;
+  phaseRef: string;
+  featureRef: string;
+  /** Handoff reference the derived-status rollup auto-cleared, if any. */
+  clearedHandoffRef: string | null;
+  /** Set when this completion ended temporary work: the resume target is now mandatory. */
+  resumeRequired?: TaskCompletionResumeRequired;
+}
+
+export interface CompleteTaskInput {
+  task: string;
+  /** Override open checklist items; requires `motivation`. */
+  force?: boolean | undefined;
+  motivation?: string | undefined;
+  /** Durable completion and verification evidence. */
+  descriptionUpdate: string;
+}
+
+/**
+ * Complete one task: evidence and checklist gate, status-log entry,
+ * description append, derived-status rollup (which may clear the phase
+ * handoff), deviation transition to resume-required and, when that
+ * happens, the preserved task the caller must return to.
+ */
+export async function completeTaskFlow(
+  store: PlanStore,
+  sessionId: string,
+  input: CompleteTaskInput,
+): Promise<TaskCompleteSuccess | TaskCompleteRefusal> {
+  const features = (await store.loadFeatures()).features;
+  const found = findTaskByRef(await store.loadAllPhases(), features, input.task);
+  if (!found) {
+    return { ok: false, code: "TASK_NOT_FOUND", message: `Task not found: ${input.task}` };
+  }
+  const taskRef = taskCompositeRef(found.task, found.phase, features);
+  const parentFeature = found.phase.featureId ? features.find((candidate) => candidate.id === found.phase.featureId) : undefined;
+  const phaseRef = formatPhaseRef(found.phase.number, featureNumberOfPhase(found.phase, features));
+  const featureRef = parentFeature ? formatFeatureRef(parentFeature.number) : "";
+
+  const completionSummary = input.descriptionUpdate.trim();
+  if (completionSummary.length < 10) {
+    return {
+      ok: false,
+      code: "COMPLETION_EVIDENCE_REQUIRED",
+      message: "Task completion denied: provide at least 10 characters of durable completion and verification evidence.",
+      taskId: found.task.id,
+      taskRef,
+    };
+  }
+  if (found.task.pauseSnapshot) {
+    return {
+      ok: false,
+      code: "TASK_CHECKPOINT_PENDING",
+      message: "Task completion denied: resume checkpointed work with the lifecycle start operation before completing it, or cancel it explicitly with motivation.",
+      taskId: found.task.id,
+      taskRef,
+    };
+  }
+  const gate = evaluateTaskCompletionGate(found.task.checklist, input.force === true, input.motivation);
+  if (!gate.allowed) {
+    const refusalCode: TaskCompleteRefusalCode = gate.errorCode === "FORCE_MOTIVATION_REQUIRED"
+      ? "FORCE_MOTIVATION_REQUIRED"
+      : "CHECKLIST_INCOMPLETE";
+    return {
+      ok: false,
+      code: refusalCode,
+      message: gate.errorCode === "FORCE_MOTIVATION_REQUIRED"
+        ? taskCompletionForceMotivationRequired(gate.uncheckedItems)
+        : taskCompletionChecklistRefusal(gate.uncheckedItems, "the checklist toggle operation"),
+      taskId: found.task.id,
+      taskRef,
+      uncheckedItems: gate.uncheckedItems,
+    };
+  }
+
+  const overrideNote = taskCompletionOverrideNote(gate.overriddenItems, input.motivation);
+  const completionEvidence = overrideNote ? `${completionSummary}\n\n${overrideNote}` : completionSummary;
+  const timestamp = nowISO();
+  let updatedTask: Task | undefined;
+  await store.updatePhase(found.phase.id, (phase) => {
+    const task = phase.tasks.find((entry) => entry.id === found.task.id);
+    if (!task) return phase;
+    const previousStatus = task.status;
+    applyTaskLifecycleDates(task, "done", timestamp);
+    const entry: StatusLogEntry = {
+      id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${previousStatus}-done`),
+      date: timestamp,
+      fromStatus: previousStatus,
+      toStatus: "done",
+      title: `${previousStatus} → done`,
+      description: completionEvidence,
+    };
+    task.statusLog = [...(task.statusLog ?? []), entry];
+    const separator = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
+    task.description = task.description + separator + completionEvidence;
+    task.descriptionUpdatedAt = timestamp;
+    task.updatedAt = timestamp;
+    phase.updatedAt = timestamp;
+    updatedTask = task;
+    return phase;
+  });
+  const clearedHandoffRef = await store.syncTaskStatusRollup(found.phase.id);
+
+  const completedDeviation = (await store.loadProject(sessionId)).workDeviations
+    .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === found.task.id)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  if (completedDeviation) await store.setWorkDeviationState(completedDeviation.id, "resume-required", timestamp);
+
+  const refreshedFeatures = (await store.loadFeatures()).features;
+  const completedTask = updatedTask ?? found.task;
+  let resumeRequired: TaskCompletionResumeRequired | undefined;
+  if (completedDeviation) {
+    const resume = findTaskByRef(await store.loadAllPhases(), refreshedFeatures, completedDeviation.resumeTaskId);
+    if (resume) {
+      resumeRequired = {
+        taskId: resume.task.id,
+        phaseId: resume.phase.id,
+        taskRef: taskCompositeRef(resume.task, resume.phase, refreshedFeatures),
+        title: resume.task.title,
+        snapshot: resume.task.pauseSnapshot ?? completedDeviation.snapshot,
+      };
+    }
+  }
+
+  await store.writeGenerated();
+  return {
+    ok: true,
+    task: completedTask,
+    taskRef,
+    phaseRef,
+    featureRef,
+    clearedHandoffRef,
+    ...(resumeRequired ? { resumeRequired } : {}),
+  };
 }

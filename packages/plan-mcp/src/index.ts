@@ -5,12 +5,12 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
-import { createChecklistItemId, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
-import type { Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
+import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import type { Phase, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
 const STATUS_VALUES = ["planned", "in-progress", "done", "blocked", "canceled", "rejected", "deferred", "waiting"] as const;
@@ -1939,70 +1939,48 @@ server.registerTool("planner-task-complete", {
 }, async ({ task: ref, force, motivation, description_update }, extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-  const completionSummary = description_update.trim();
-  if (completionSummary.length < 10) return text("Task completion denied: provide at least 10 characters of durable completion and verification evidence.");
-  if (found.task.pauseSnapshot) return text("Task completion denied: resume checkpointed work with planner-task-start before completing it, or cancel it explicitly with motivation.");
-  const gate = evaluateTaskCompletionGate(found.task.checklist, force === true, motivation);
-  if (!gate.allowed) {
-    const taskRefForToggle = taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features);
-    const message = gate.errorCode === "FORCE_MOTIVATION_REQUIRED"
-      ? taskCompletionForceMotivationRequired(gate.uncheckedItems)
-      : taskCompletionChecklistRefusal(gate.uncheckedItems, `planner-task-checklist-toggle ${taskRefForToggle} <item>`);
-    return text(message, { completed: false, errorCode: gate.errorCode, uncheckedItems: gate.uncheckedItems.map((item) => item.title) });
-  }
-  const overrideNote = taskCompletionOverrideNote(gate.overriddenItems, motivation);
-  const completionEvidence = overrideNote ? `${completionSummary}\n\n${overrideNote}` : completionSummary;
-  const timestamp = nowISO();
-  let updatedTask: Task | undefined;
-  await st.updatePhase(found.phase.id, (phase) => {
-    const task = phase.tasks.find((entry) => entry.id === found.task.id);
-    if (!task) return phase;
-    const previousStatus = task.status;
-    applyTaskLifecycleDates(task, "done", timestamp);
-    const entry: StatusLogEntry = {
-      id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${previousStatus}-done`),
-      date: timestamp,
-      fromStatus: previousStatus,
-      toStatus: "done",
-      title: `${previousStatus} → done`,
-      description: completionEvidence,
-    };
-    task.statusLog = [...(task.statusLog ?? []), entry];
-    const sep = task.description ? "\n\n---\n**Completion summary:**\n" : "**Completion summary:**\n";
-    task.description = task.description + sep + completionEvidence;
-    task.descriptionUpdatedAt = timestamp;
-    task.updatedAt = timestamp;
-    phase.updatedAt = timestamp;
-    updatedTask = task;
-    return phase;
+  // Same completion orchestration as the versioned API
+  // (plan-core task-lifecycle-flow.ts completeTaskFlow).
+  const outcome = await completeTaskFlow(st, plannerSessionId, {
+    task: ref,
+    force,
+    motivation,
+    descriptionUpdate: description_update,
   });
-  const clearedRef = await st.syncTaskStatusRollup(found.phase.id);
-  const completedDeviation = (await st.loadProject(plannerSessionId)).workDeviations
-    .filter((deviation) => (deviation.state === "approved" || deviation.state === "active") && deviation.temporaryTaskId === found.task.id)
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-  if (completedDeviation) await st.setWorkDeviationState(completedDeviation.id, "resume-required", timestamp);
-  const features = (await st.loadFeatures()).features;
-  const t = updatedTask ?? found.task;
-  let resumeNotice = "";
-  let resumeRequired: Record<string, unknown> | undefined;
-  if (completedDeviation) {
-    const resume = findTaskByRef(await st.loadAllPhases(), features, completedDeviation.resumeTaskId);
-    if (resume) {
-      const snapshot = resume.task.pauseSnapshot ?? completedDeviation.snapshot;
-      resumeNotice = [
-        "",
-        `↩️ RESUME REQUIRED: ${taskCompositeRef(resume.task, resume.phase, features)} — ${resume.task.title}`,
-        snapshot ? `Checkpoint reason: ${snapshot.reason}` : "Return to the preserved task before selecting new priority work.",
-        snapshot ? `Resume from: ${snapshot.resumeLocation}` : "",
-        snapshot ? `How to resume: ${snapshot.howToResume}` : "",
-        `Next action: planner-task-start ${taskCompositeRef(resume.task, resume.phase, features)}`,
-      ].filter(Boolean).join("\n");
-      resumeRequired = { taskId: resume.task.id, phaseId: resume.phase.id, snapshot };
+  if (!outcome.ok) {
+    if (outcome.code === "CHECKLIST_INCOMPLETE") {
+      return text(
+        taskCompletionChecklistRefusal(outcome.uncheckedItems ?? [], `planner-task-checklist-toggle ${outcome.taskRef} <item>`),
+        { completed: false, errorCode: outcome.code, uncheckedItems: (outcome.uncheckedItems ?? []).map((item) => item.title) },
+      );
     }
+    if (outcome.code === "FORCE_MOTIVATION_REQUIRED") {
+      return text(
+        taskCompletionForceMotivationRequired(outcome.uncheckedItems ?? []),
+        { completed: false, errorCode: outcome.code, uncheckedItems: (outcome.uncheckedItems ?? []).map((item) => item.title) },
+      );
+    }
+    if (outcome.code === "TASK_CHECKPOINT_PENDING") {
+      return text("Task completion denied: resume checkpointed work with planner-task-start before completing it, or cancel it explicitly with motivation.");
+    }
+    return text(outcome.message);
   }
-  return writeAndSummarize(st, `✅ Task completed: ${taskCompositeRef(t, found.phase, features)} — ${t.title} (done)${t.shortId ? ` · ${t.shortId}` : ""}${clearedRef ? ` — phase handoff auto-cleared (${clearedRef})` : ""}${resumeNotice}`, resumeRequired ? { resumeRequired } : undefined);
+  const resume = outcome.resumeRequired;
+  const resumeNotice = resume
+    ? [
+      "",
+      `↩️ RESUME REQUIRED: ${resume.taskRef} — ${resume.title}`,
+      resume.snapshot ? `Checkpoint reason: ${resume.snapshot.reason}` : "Return to the preserved task before selecting new priority work.",
+      resume.snapshot ? `Resume from: ${resume.snapshot.resumeLocation}` : "",
+      resume.snapshot ? `How to resume: ${resume.snapshot.howToResume}` : "",
+      `Next action: planner-task-start ${resume.taskRef}`,
+    ].filter(Boolean).join("\n")
+    : "";
+  return writeAndSummarize(
+    st,
+    `✅ Task completed: ${outcome.taskRef} — ${outcome.task.title} (done)${outcome.task.shortId ? ` · ${outcome.task.shortId}` : ""}${outcome.clearedHandoffRef ? ` — phase handoff auto-cleared (${outcome.clearedHandoffRef})` : ""}${resumeNotice}`,
+    resume ? { resumeRequired: { taskId: resume.taskId, phaseId: resume.phaseId, snapshot: resume.snapshot } } : undefined,
+  );
 });
 
 server.registerTool("planner-handoff-list", {

@@ -1221,3 +1221,101 @@ test("lifecycle family: task start requires a session and the delivered context 
     await closeServerFixture(fx);
   }
 });
+
+test("lifecycle family: completion gates evidence and checklist, then records the summary", async () => {
+  const fx = await startServerFixture({ name: "v2-lifecycle-complete" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  const completePath = `/api/v2/tasks/${taskRef}/complete`;
+  try {
+    const anonymous = await request(fx, completePath, { ...json({ descriptionUpdate: "Shipped and verified." }), expectStatus: 400 });
+    assert.equal(anonymous.body.error.code, "SESSION_REQUIRED");
+
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", agentId: "worker-1" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId, "Content-Type": "application/json" };
+
+    const unknownTask = await request(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}/complete`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ descriptionUpdate: "Shipped and verified." }),
+      expectStatus: 404,
+    });
+    assert.equal(unknownTask.body.error.code, "TASK_NOT_FOUND");
+
+    const shortEvidence = await request(fx, completePath, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ descriptionUpdate: "short" }),
+      expectStatus: 422,
+    });
+    assert.equal(shortEvidence.body.error.code, "COMPLETION_EVIDENCE_REQUIRED");
+
+    const checklist = await request(fx, completePath, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ descriptionUpdate: "Shipped the login route and verified the focused suite." }),
+      expectStatus: 409,
+    });
+    assert.equal(checklist.body.error.code, "CHECKLIST_INCOMPLETE");
+    assert.deepEqual(checklist.body.error.uncheckedItems, ["Add route"]);
+
+    const forceWithoutMotivation = await request(fx, completePath, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ descriptionUpdate: "Shipped the login route and verified the focused suite.", force: true }),
+      expectStatus: 409,
+    });
+    assert.equal(forceWithoutMotivation.body.error.code, "FORCE_MOTIVATION_REQUIRED");
+
+    // Tick the real checklist item, then complete without an override.
+    const toggled = (await request(fx, `/api/v2/tasks/${taskRef}/checklist/toggle`, { method: "POST", headers, body: JSON.stringify({ item: "Add route", checked: true }) })).body.data;
+    assert.equal(toggled.item.checked, true);
+
+    const completed = (await request(fx, completePath, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ descriptionUpdate: "Shipped the login route and verified the focused suite." }),
+    })).body.data;
+    assert.equal(completed.completed, true);
+    assert.equal(completed.taskRef, "P001(F001)/T001");
+    assert.equal(completed.phaseRef, "P001(F001)");
+    assert.equal(completed.featureRef, "F001");
+    assert.equal(completed.task.status, "done");
+    assert.match(completed.task.completedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.match(completed.task.description, /\*\*Completion summary:\*\*\nShipped the login route/);
+    const lastLog = completed.task.statusLog.at(-1);
+    assert.equal(lastLog.fromStatus, "planned");
+    assert.equal(lastLog.toStatus, "done");
+    assert.equal(lastLog.description, "Shipped the login route and verified the focused suite.");
+    assert.equal(completed.clearedHandoffRef, null);
+    assert.equal(completed.resumeRequired, null);
+
+    const shown = (await request(fx, `/api/v2/tasks/${taskRef}`)).body.data;
+    assert.equal(shown.task.status, "done");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("lifecycle family: forced completion records the override instead of ticking items", async () => {
+  const fx = await startServerFixture({ name: "v2-lifecycle-force" });
+  const taskRef = encodeURIComponent("P001(F001)/T001");
+  try {
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "cli" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId, "Content-Type": "application/json" };
+    const completed = (await request(fx, `/api/v2/tasks/${taskRef}/complete`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        descriptionUpdate: "Shipped the route and verified it manually; the checklist entry no longer matches the work.",
+        force: true,
+        motivation: "The checklist item tracked a route that moved to the gateway task.",
+      }),
+    })).body.data;
+    assert.equal(completed.completed, true);
+    assert.equal(completed.task.checklist[0].checked, false, "forcing never auto-ticks checklist items");
+    assert.match(completed.task.description, /Forced completion overrode 1 unchecked checklist item\(s\): Add route\./);
+    assert.match(completed.task.description, /Motivation: The checklist item tracked a route/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
