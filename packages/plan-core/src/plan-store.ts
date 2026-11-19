@@ -57,6 +57,8 @@ import {
   type ResumeFocus,
   type WorkDeviation,
   WorkDeviationSchema,
+  type PlannerSessionRecord,
+  PlannerSessionRecordSchema,
   ResumeSessionsSchema,
   type ResumeSessions,
 } from "./schema.js";
@@ -1740,6 +1742,25 @@ export class PlanStore {
     // values now come from worktree-local storage.
     const deviations = await this.loadWorkDeviations();
     return { ...project, workDeviations: deviationsForSession(deviations, sessionId) };
+  }
+
+  /** Registered agent sessions, persisted in worktree-local `.local/sessions.json`.
+   *  Runtime state: never tracked, never synced, never a second operational store. */
+  async loadPlannerSessions(): Promise<PlannerSessionRecord[]> {
+    try {
+      return await readJson(join(this.localRoot(), "sessions.json"), PlannerSessionRecordSchema.array());
+    } catch {
+      return [];
+    }
+  }
+
+  async savePlannerSessions(records: readonly PlannerSessionRecord[]): Promise<void> {
+    await mkdir(this.localRoot(), { recursive: true });
+    await atomicWriteJson(
+      join(this.localRoot(), "sessions.json"),
+      records.map((record) => PlannerSessionRecordSchema.parse(record)),
+      this.root,
+    );
   }
 
   /**

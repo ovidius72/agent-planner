@@ -17,7 +17,7 @@ import {
   expectError,
 } from "../../../test/helpers/server-fixture.mjs";
 import { readPlanSnapshot } from "../../../test/helpers/fixtures.mjs";
-import { mkdir, symlink } from "node:fs/promises";
+import { mkdir, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 
 after(async () => {
@@ -1024,6 +1024,64 @@ test("search family: one query across entities, decisions and documents", async 
     const noMatch = (await request(fx, "/api/v2/search?q=zzzznotfound")).body.data;
     assert.equal(noMatch.total, 0);
     assert.deepEqual(noMatch.hits, []);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("session family: the service issues an id, heartbeat records liveness, end is recorded", async () => {
+  const fx = await startServerFixture({ name: "v2-sessions" });
+  try {
+    const registered = (await request(fx, "/api/v2/sessions", json({
+      clientKind: "mcp",
+      clientVersion: "9.9.9",
+      agentId: "worker-1",
+      displayName: "Worker 1",
+      harnessId: "claude-code",
+      capabilities: ["handoff", "lifecycle", "handoff"],
+    }))).body.data.session;
+    assert.match(registered.sessionId, /^[0-9a-f-]{36}$/);
+    assert.equal(registered.clientKind, "mcp");
+    assert.equal(registered.agentId, "worker-1");
+    assert.equal(registered.displayName, "Worker 1");
+    assert.equal(registered.harnessId, "claude-code");
+    assert.deepEqual(registered.capabilities, ["handoff", "lifecycle"]);
+    assert.equal(registered.contextEpoch, 1);
+    assert.equal(registered.endedAt, "");
+    assert.match(registered.projectId, /[0-9a-f-]{36}/);
+
+    // Records are worktree-local runtime state, not tracked plan data.
+    const onDisk = JSON.parse(await readFile(join(fx.planRoot, ".local", "sessions.json"), "utf8"));
+    assert.equal(onDisk.length, 1);
+    assert.equal(onDisk[0].sessionId, registered.sessionId);
+
+    const heartbeat = (await request(fx, `/api/v2/sessions/${registered.sessionId}/heartbeat`, { method: "POST" })).body.data;
+    assert.equal(heartbeat.heartbeat, true);
+    assert.equal(heartbeat.session.sessionId, registered.sessionId);
+    assert.ok(heartbeat.session.lastSeenAt >= registered.lastSeenAt);
+
+    const ended = (await request(fx, `/api/v2/sessions/${registered.sessionId}?reason=task-finished`, del)).body.data;
+    assert.equal(ended.ended, true);
+    assert.match(ended.session.endedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(ended.session.endReason, "task-finished");
+
+    const heartbeatAfterEnd = await expectError(fx, `/api/v2/sessions/${registered.sessionId}/heartbeat`, { method: "POST" }, { status: 409 });
+    assert.match(heartbeatAfterEnd.message, /SESSION_ENDED/);
+
+    const unknown = await expectError(fx, "/api/v2/sessions/00000000-0000-4000-8000-000000000000/heartbeat", { method: "POST" }, { status: 404 });
+    assert.match(unknown.message, /SESSION_NOT_FOUND/);
+
+    const missingKind = await expectError(fx, "/api/v2/sessions", json({ clientVersion: "1.0.0" }), { status: 422 });
+    assert.match(missingKind.message, /SESSION_CLIENT_KIND_REQUIRED/);
+
+    // A second registration is a distinct session; ending one never ends the other.
+    const second = (await request(fx, "/api/v2/sessions", json({ clientKind: "pi" }))).body.data.session;
+    assert.notEqual(second.sessionId, registered.sessionId);
+    assert.equal(second.agentId, "pi");
+    assert.equal(second.displayName, "pi");
+    const stored = JSON.parse(await readFile(join(fx.planRoot, ".local", "sessions.json"), "utf8"));
+    assert.equal(stored.length, 2);
+    assert.equal(stored.find((record) => record.sessionId === second.sessionId).endedAt, "");
   } finally {
     await closeServerFixture(fx);
   }

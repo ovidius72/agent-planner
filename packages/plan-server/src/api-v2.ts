@@ -61,6 +61,11 @@ import {
   savePlannerDocument,
   listPlannerDocuments,
   searchPlan,
+  SessionFlowRefusal,
+  PLANNER_SESSION_HEADER,
+  endPlannerSession,
+  heartbeatPlannerSession,
+  registerPlannerSession,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
@@ -99,6 +104,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     protocolVersion: SERVICE_PROTOCOL_VERSION,
     bootId: security.bootId,
     serviceOrigin: security.originRef.current ?? null,
+    sessionHeader: PLANNER_SESSION_HEADER,
     families: {
       handoffs: {
         list: "GET /api/v2/handoffs?page=&pageSize=",
@@ -158,6 +164,11 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         list: "GET /api/v2/documents",
         view: "GET /api/v2/documents/view?path=",
         save: "PUT /api/v2/documents/save",
+      },
+      sessions: {
+        register: "POST /api/v2/sessions",
+        heartbeat: "POST /api/v2/sessions/{sessionId}/heartbeat",
+        end: "DELETE /api/v2/sessions/{sessionId}",
       },
     },
   }));
@@ -694,7 +705,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
   const optionalStringArray = (body: Record<string, unknown>, key: string): string[] | undefined =>
     Array.isArray(body[key]) ? body[key].filter((value): value is string => typeof value === "string") : undefined;
   /** Canonical ref from the tail of a collection route; titles may contain "/". */
-  const collectionTail = (c: Context, collection: "features" | "phases" | "tasks"): string => {
+  const collectionTail = (c: Context, collection: "features" | "phases" | "tasks" | "sessions"): string => {
     const prefix = `${API_V2_BASE_PATH}/${collection}/`;
     const path = c.req.path;
     const start = path.indexOf(prefix);
@@ -855,6 +866,58 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       pendingDeviation: outcome.pendingDeviation ?? null,
       linkedRequirements: outcome.linkedRequirements,
     });
+  });
+
+  // ── Session family ────────────────────────────────────────────────
+  // The service issues the session id; clients send it back in
+  // X-Planner-Session. Registration records adapter provenance only —
+  // principal authentication and grants are their own checklist item.
+  const sessionFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof SessionFlowRefusal) {
+      const status: ContentfulStatusCode = err.code === "SESSION_NOT_FOUND"
+        ? 404
+        : err.code === "SESSION_ENDED" ? 409 : 422;
+      return error(c, status, err.code, err.message, err.details);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+
+  app.post("/sessions", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    try {
+      const outcome = await registerPlannerSession(store, {
+        clientKind: optionalString(body, "clientKind") ?? "",
+        clientVersion: optionalString(body, "clientVersion"),
+        agentId: optionalString(body, "agentId"),
+        displayName: optionalString(body, "displayName"),
+        harnessId: optionalString(body, "harnessId"),
+        capabilities: optionalStringArray(body, "capabilities"),
+      });
+      return envelope(c, { session: outcome.session });
+    } catch (err) {
+      return sessionFailure(c, err, "SESSION_REGISTER_FAILED");
+    }
+  });
+
+  app.post("/sessions/*/heartbeat", async (c) => {
+    const sessionId = collectionTail(c, "sessions").replace(/\/heartbeat$/, "");
+    try {
+      const outcome = await heartbeatPlannerSession(store, sessionId);
+      return envelope(c, { heartbeat: true, session: outcome.session });
+    } catch (err) {
+      return sessionFailure(c, err, "SESSION_HEARTBEAT_FAILED");
+    }
+  });
+
+  app.delete("/sessions/*", async (c) => {
+    const sessionId = collectionTail(c, "sessions");
+    try {
+      const outcome = await endPlannerSession(store, sessionId, c.req.query("reason") ?? undefined);
+      return envelope(c, { ended: true, session: outcome.session });
+    } catch (err) {
+      return sessionFailure(c, err, "SESSION_END_FAILED");
+    }
   });
 
   // ── Search family ─────────────────────────────────────────────────

@@ -136,6 +136,29 @@ export const WorkDeviationSchema = z.object({
 /** Per-session resume focus, keyed by session id (.local/resume-sessions.json). */
 export const ResumeSessionsSchema = z.record(z.string().min(1), ResumeFocusSchema);
 
+/**
+ * Registered agent sessions (.local/sessions.json).
+ *
+ * The service issues `sessionId`; clients never choose it. Registration
+ * provenance is recorded so task ownership, context receipts and audit
+ * rows can name the caller. See docs/agent-brain/session-registration.md.
+ */
+export const PlannerSessionRecordSchema = z.object({
+  sessionId: z.string().min(1),
+  projectId: z.string().min(1),
+  clientKind: z.string().min(1),
+  clientVersion: z.string().default(""),
+  agentId: z.string().min(1),
+  displayName: z.string().default(""),
+  harnessId: z.string().default(""),
+  capabilities: z.array(z.string().min(1)).default([]),
+  contextEpoch: z.number().int().positive().default(1),
+  registeredAt: TimestampSchema,
+  lastSeenAt: TimestampSchema,
+  endedAt: z.string().default(""),
+  endReason: z.string().default(""),
+});
+
 export const ProjectGuidelinesSchema = z.object({
   content: z.string().default(""),
   updatedAt: z.string().default(""),
@@ -531,6 +554,7 @@ export type HandoffColdStartInventory = z.infer<typeof HandoffColdStartInventory
 export type HandoffCompletenessAudit = z.infer<typeof HandoffCompletenessAuditSchema>;
 export type Project = z.infer<typeof ProjectSchema>;
 export type WorkDeviation = z.infer<typeof WorkDeviationSchema>;
+export type PlannerSessionRecord = z.infer<typeof PlannerSessionRecordSchema>;
 export type TaskPauseSnapshot = z.infer<typeof TaskPauseSnapshotSchema>;
 export type Subtask = z.infer<typeof SubtaskSchema>;
 export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
