@@ -77,6 +77,8 @@ import {
   completeTaskFlow,
   pauseTaskFlow,
   reopenTaskFlow,
+  switchTaskFlow,
+  type TaskSwitchRefusalCode,
   type TaskPauseRefusalCode,
   type TaskReopenRefusalCode,
   type TaskCompleteRefusalCode,
@@ -199,6 +201,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         complete: "POST /api/v2/tasks/{taskRef}/complete",
         pause: "POST /api/v2/tasks/{taskRef}/pause",
         reopen: "POST /api/v2/tasks/{taskRef}/reopen",
+        switch: "POST /api/v2/tasks/switch",
       },
       project: {
         discuss: "PUT /api/v2/project/discuss",
@@ -1193,6 +1196,72 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       });
     }
     return envelope(c, { reopened: true, taskRef: outcome.taskRef, task: outcome.task });
+  });
+
+  // Switching is a lifecycle write, not a task mutation: it pauses the
+  // source with a mandatory checkpoint, claims the target and pushes the
+  // durable LIFO return target (plan-core switchTaskFlow). The target must
+  // satisfy the same read receipts as a start.
+  const taskSwitchRefusalStatus: Record<TaskSwitchRefusalCode, ContentfulStatusCode> = {
+    TASK_NOT_FOUND: 404,
+    SWITCH_SAME_TASK: 409,
+    TASK_OWNED_BY_ANOTHER_SESSION: 409,
+    SOURCE_NOT_SWITCHABLE: 409,
+    SOURCE_OWNED_BY_ANOTHER_SESSION: 409,
+    PROJECT_GUIDELINES_READ_REQUIRED: 409,
+    CONTEXT_READ_REQUIRED: 409,
+    REQUIREMENTS_READ_REQUIRED: 409,
+    START_NOT_ALLOWED: 409,
+  };
+
+  app.post("/tasks/switch", async (c) => {
+    const auth = await requireSession(c);
+    if ("response" in auth) return auth.response;
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const fromTask = (optionalString(body, "fromTask") ?? optionalString(body, "from_task") ?? "").trim();
+    const toTask = (optionalString(body, "toTask") ?? optionalString(body, "to_task") ?? "").trim();
+    const reason = (optionalString(body, "reason") ?? "").trim();
+    const whatWasBeingDone = (optionalString(body, "whatWasBeingDone") ?? optionalString(body, "what_was_being_done") ?? "").trim();
+    const resumeLocation = (optionalString(body, "resumeLocation") ?? optionalString(body, "resume_location") ?? "").trim();
+    const howToResume = (optionalString(body, "howToResume") ?? optionalString(body, "how_to_resume") ?? "").trim();
+    const missing = [
+      ...(fromTask ? [] : ["fromTask"]),
+      ...(toTask ? [] : ["toTask"]),
+      ...(reason ? [] : ["reason"]),
+      ...(whatWasBeingDone ? [] : ["whatWasBeingDone"]),
+      ...(resumeLocation ? [] : ["resumeLocation"]),
+      ...(howToResume ? [] : ["howToResume"]),
+    ];
+    if (missing.length > 0) {
+      return error(c, 422, "SWITCH_CHECKPOINT_REQUIRED", `A task switch requires ${missing.join(", ")}.`, { missing });
+    }
+    const outcome = await switchTaskFlow(store, auth.sessionId, {
+      fromTask,
+      toTask,
+      reason,
+      whatWasBeingDone,
+      resumeLocation,
+      howToResume,
+      switchedBy: optionalString(body, "switchedBy"),
+    });
+    if (!outcome.ok) {
+      return error(c, taskSwitchRefusalStatus[outcome.code], outcome.code, outcome.message, {
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        ...(outcome.requirementIds ? { requirementIds: outcome.requirementIds } : {}),
+        context: outcome.context,
+        ...(outcome.evidence ? { evidence: outcome.evidence } : {}),
+      });
+    }
+    return envelope(c, {
+      switched: true,
+      sourceRef: outcome.sourceRef,
+      targetRef: outcome.targetRef,
+      sourcePhaseRef: outcome.sourcePhaseRef,
+      targetPhaseRef: outcome.targetPhaseRef,
+      deviation: outcome.deviation,
+      snapshot: outcome.snapshot,
+    });
   });
 
   // ── Search family ─────────────────────────────────────────────────

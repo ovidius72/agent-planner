@@ -38,7 +38,8 @@ import {
   taskCompletionForceMotivationRequired,
   taskCompletionOverrideNote,
 } from "./task-completion-gate.js";
-import type { ChecklistItem, PlanStore, StatusLogEntry, Task, TaskPauseSnapshot } from "./index.js";
+import { taskOwnershipConflict } from "./session-focus.js";
+import type { ChecklistItem, PlanStore, StatusLogEntry, Task, TaskPauseSnapshot, WorkDeviation } from "./index.js";
 
 export type TaskStartFlowRefusalCode = Exclude<TaskStartErrorCode, "PLAN_NOT_FOUND">;
 
@@ -670,4 +671,289 @@ export async function reopenTaskFlow(
       taskRef,
     };
   }
+}
+
+// ── Switch ──────────────────────────────────────────────────────────────
+
+export type TaskSwitchRefusalCode =
+  | "TASK_NOT_FOUND"
+  | "SWITCH_SAME_TASK"
+  | "TASK_OWNED_BY_ANOTHER_SESSION"
+  | "SOURCE_NOT_SWITCHABLE"
+  | "SOURCE_OWNED_BY_ANOTHER_SESSION"
+  | "PROJECT_GUIDELINES_READ_REQUIRED"
+  | "CONTEXT_READ_REQUIRED"
+  | "REQUIREMENTS_READ_REQUIRED"
+  | "START_NOT_ALLOWED";
+
+export interface TaskSwitchRefusal {
+  ok: false;
+  code: TaskSwitchRefusalCode;
+  message: string;
+  taskId?: string;
+  requirementIds?: string[];
+  context: {
+    sourceRef: string;
+    targetRef: string;
+    sourcePhaseRef: string;
+    targetPhaseRef: string;
+    targetFeatureRef: string;
+    /** Present when a Project Guidelines refusal carries the observed state. */
+    projectGuidelinesReadState?: ProjectGuidelinesReadState | undefined;
+  };
+  evidence?: TaskStartRefusalEvidence;
+}
+
+export interface SwitchTaskInput {
+  fromTask: string;
+  toTask: string;
+  reason: string;
+  whatWasBeingDone: string;
+  resumeLocation: string;
+  howToResume: string;
+  switchedBy?: string | undefined;
+}
+
+export interface TaskSwitchSuccess {
+  ok: true;
+  sourceRef: string;
+  targetRef: string;
+  sourcePhaseRef: string;
+  targetPhaseRef: string;
+  deviation: WorkDeviation;
+  snapshot: TaskPauseSnapshot;
+}
+
+/**
+ * Atomically switch from active (or checkpointed) work to a temporary
+ * task: pause the source with a mandatory snapshot, claim the target and
+ * push a durable LIFO return target. The target must pass the same
+ * context receipts as a start; a failure rolls the lifecycle writes back.
+ */
+export async function switchTaskFlow(
+  store: PlanStore,
+  sessionId: string,
+  input: SwitchTaskInput,
+): Promise<TaskSwitchSuccess | TaskSwitchRefusal> {
+  const [featuresDoc, phases, project, focus] = await Promise.all([
+    store.loadFeatures(),
+    store.loadAllPhases(),
+    store.loadProject(sessionId),
+    store.loadResume(sessionId),
+  ]);
+  const features = featuresDoc.features;
+  const source = findTaskByRef(phases, features, input.fromTask);
+  const target = findTaskByRef(phases, features, input.toTask);
+  if (!source) {
+    return {
+      ok: false,
+      code: "TASK_NOT_FOUND",
+      message: `Task not found: ${input.fromTask}`,
+      context: { sourceRef: input.fromTask, targetRef: input.toTask, sourcePhaseRef: "", targetPhaseRef: "", targetFeatureRef: "" },
+    };
+  }
+  if (!target) {
+    return {
+      ok: false,
+      code: "TASK_NOT_FOUND",
+      message: `Task not found: ${input.toTask}`,
+      context: { sourceRef: input.fromTask, targetRef: input.toTask, sourcePhaseRef: "", targetPhaseRef: "", targetFeatureRef: "" },
+    };
+  }
+  const sourceRef = taskCompositeRef(source.task, source.phase, features);
+  const targetRef = taskCompositeRef(target.task, target.phase, features);
+  const sourcePhaseRef = formatPhaseRef(source.phase.number, featureNumberOfPhase(source.phase, features));
+  const targetPhaseRef = formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features));
+  const targetFeature = target.phase.featureId ? features.find((feature) => feature.id === target.phase.featureId) : undefined;
+  const targetFeatureRef = targetFeature ? formatFeatureRef(targetFeature.number) : "";
+  const baseContext = { sourceRef, targetRef, sourcePhaseRef, targetPhaseRef, targetFeatureRef };
+
+  if (source.task.id === target.task.id) {
+    return { ok: false, code: "SWITCH_SAME_TASK", message: "Source and temporary task must differ.", context: baseContext };
+  }
+  const allDeviations = await store.listAllWorkDeviations();
+  if ([source.task, target.task].some((task) => taskOwnershipConflict(task, allDeviations, sessionId))) {
+    return {
+      ok: false,
+      code: "TASK_OWNED_BY_ANOTHER_SESSION",
+      message: "Task switch denied: source or target belongs to another session.",
+      context: baseContext,
+    };
+  }
+  if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
+    return {
+      ok: false,
+      code: "SOURCE_NOT_SWITCHABLE",
+      message: `Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.`,
+      taskId: source.task.id,
+      context: baseContext,
+    };
+  }
+  if (source.task.status === "in-progress" && source.task.activeOwnerSession && source.task.activeOwnerSession !== sessionId) {
+    return {
+      ok: false,
+      code: "SOURCE_OWNED_BY_ANOTHER_SESSION",
+      message: "Task switch denied: source task is owned by another session.",
+      taskId: source.task.id,
+      context: baseContext,
+    };
+  }
+
+  const linkedRequirements = [
+    ...(await store.linkedRequirementsForPhase(target.phase.id)),
+    ...(target.phase.featureId ? await store.linkedRequirementsForFeature(target.phase.featureId) : []),
+  ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
+  const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
+  const contextInput = {
+    sessionId,
+    taskId: target.task.id,
+    phaseId: target.phase.id,
+    ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}),
+    task: target.task,
+    phase: target.phase,
+    ...(targetFeature ? { feature: targetFeature } : {}),
+    requirements: linkedRequirements,
+    requirementIds: linkedRequirementIds,
+  };
+  const contextEligibility = contextReadEligibilityForSession(contextInput);
+  const requirementEligibility = requirementReadEligibilityForSession(sessionId, linkedRequirementIds, linkedRequirements);
+  const requirementsReady = requirementEligibility.eligible;
+  const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, sessionId);
+  const projectGuidelinesReady = projectGuidelinesReadState === "valid" || projectGuidelinesReadState === "not-required";
+
+  if (!projectGuidelinesReady) {
+    return {
+      ok: false,
+      code: "PROJECT_GUIDELINES_READ_REQUIRED",
+      message: `Task switch denied: read Project Guidelines before switching task work. Current state: ${projectGuidelinesReadState}.`,
+      taskId: target.task.id,
+      context: { ...baseContext, projectGuidelinesReadState },
+      evidence: { contextEligibility, requirementEligibility },
+    };
+  }
+  if (!contextEligibility.eligible) {
+    return {
+      ok: false,
+      code: "CONTEXT_READ_REQUIRED",
+      message: `Task switch denied: context reads required. ${contextEligibility.reason}`,
+      taskId: target.task.id,
+      context: baseContext,
+      evidence: { contextEligibility },
+    };
+  }
+  if (!requirementsReady) {
+    return {
+      ok: false,
+      code: "REQUIREMENTS_READ_REQUIRED",
+      message: `Task switch denied: ${requirementEligibility.reason}`,
+      taskId: target.task.id,
+      requirementIds: linkedRequirementIds,
+      context: baseContext,
+      evidence: { requirementEligibility },
+    };
+  }
+  if (!hasValidSessionAttestation(contextInput)) {
+    await store.recordContextRead({
+      sessionId,
+      phaseId: target.phase.id,
+      taskId: target.task.id,
+      ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}),
+      requirementIds: linkedRequirementIds,
+    });
+  }
+  const eligibility = checkExplicitTaskStart(features, phases, target.task.id, project.workDeviations);
+  if (!eligibility.eligible) {
+    return {
+      ok: false,
+      code: "START_NOT_ALLOWED",
+      message: `Task switch denied: ${eligibility.reason}`,
+      taskId: target.task.id,
+      context: baseContext,
+      evidence: { startEligibility: eligibility },
+    };
+  }
+
+  const timestamp = nowISO();
+  const snapshot: TaskPauseSnapshot = {
+    id: randomUUID(),
+    reason: input.reason,
+    whatWasBeingDone: input.whatWasBeingDone,
+    resumeLocation: input.resumeLocation,
+    howToResume: input.howToResume,
+    relatedTaskId: target.task.id,
+    pausedAt: timestamp,
+    pausedBy: input.switchedBy?.trim() ?? "",
+  };
+  const selection = recommendNextTask(features, phases, await store.listAllWorkDeviations(), focus?.currentPhaseId, sessionId);
+  const record: WorkDeviation = {
+    id: randomUUID(),
+    recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
+    temporaryTaskId: target.task.id,
+    resumeTaskId: source.task.id,
+    reason: input.reason,
+    snapshot,
+    requestedBy: "agent",
+    approvedBy: input.switchedBy?.trim() || "explicit task_switch",
+    ownerSession: sessionId,
+    state: "active",
+    createdAt: timestamp,
+    activatedAt: timestamp,
+    resumeRequiredAt: "",
+    resolvedAt: "",
+    resumedAt: "",
+  };
+
+  const sourceWasActive = source.task.status === "in-progress";
+  let sourceCheckpointed = false;
+  let targetStarted = false;
+  await store.runBatch(async () => {
+    try {
+      if (sourceWasActive) {
+        await store.pauseTask(source.phase.id, source.task.id, snapshot);
+      } else {
+        await store.updatePhase(source.phase.id, (phase) => {
+          const task = phase.tasks.find((entry) => entry.id === source.task.id);
+          if (!task) throw new Error(`Checkpointed source task disappeared: ${input.fromTask}`);
+          task.pauseSnapshot = snapshot;
+          task.pauseHistory = [...task.pauseHistory, snapshot];
+          task.updatedAt = timestamp;
+          return phase;
+        });
+      }
+      sourceCheckpointed = true;
+      await store.claimTask(target.phase.id, target.task.id, sessionId, timestamp);
+      targetStarted = true;
+      await store.addWorkDeviation(record, sessionId);
+      if (target.task.pauseSnapshot) {
+        const resumedDeviation = project.workDeviations
+          .filter((deviation) => deviation.resumeTaskId === target.task.id
+            && (deviation.state === "resume-required" || deviation.state === "resolved"))
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+        if (resumedDeviation) await store.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
+      }
+    } catch (error) {
+      if (targetStarted) {
+        await store.updatePhase(target.phase.id, (phase) => {
+          phase.tasks = phase.tasks.map((task) => task.id === target.task.id ? target.task : task);
+          return phase;
+        }).catch(() => {});
+      }
+      if (sourceCheckpointed) {
+        if (sourceWasActive) {
+          await store.resumeTask(source.phase.id, source.task.id, nowISO(), source.task.activeOwnerSession || sessionId).catch(() => {});
+        } else {
+          await store.updatePhase(source.phase.id, (phase) => {
+            phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
+            return phase;
+          }).catch(() => {});
+        }
+      }
+      throw error;
+    }
+    await store.syncTaskStatusRollup(source.phase.id);
+    if (target.phase.id !== source.phase.id) await store.syncTaskStatusRollup(target.phase.id);
+  });
+  invalidateReads(sessionId);
+  await store.writeGenerated();
+  return { ok: true, sourceRef, targetRef, sourcePhaseRef, targetPhaseRef, deviation: record, snapshot };
 }

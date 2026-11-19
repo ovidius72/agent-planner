@@ -1416,3 +1416,143 @@ test("lifecycle family: reopen requires confirmation and a completed task", asyn
     await closeServerFixture(fx);
   }
 });
+
+test("lifecycle family: switch pauses the source, claims the target and records the LIFO return", async () => {
+  const fx = await startServerFixture({ name: "v2-lifecycle-switch" });
+  const sourceRef = "P001(F001)/T001";
+  const sourcePath = encodeURIComponent(sourceRef);
+  try {
+    const session = (await request(fx, "/api/v2/sessions", json({ clientKind: "mcp", agentId: "worker-1" }))).body.data.session;
+    const headers = { "X-Planner-Session": session.sessionId, "Content-Type": "application/json" };
+
+    const temporary = (await request(fx, "/api/v2/phases/P001/tasks", json({
+      feature: "F001",
+      title: "Temporary detour",
+      description: "A detour task long enough to pass the flow's fifty-character execution-context rule.",
+    }))).body.data;
+    const targetRef = temporary.taskRef;
+    const targetPath = encodeURIComponent(targetRef);
+
+    // The target must pass the same read receipts as a start.
+    await request(fx, `/api/v2/context/tasks/${sourcePath}`, { headers });
+    await request(fx, `/api/v2/tasks/${sourcePath}/start`, { method: "POST", headers });
+
+    const denied = await request(fx, "/api/v2/tasks/switch", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        fromTask: sourceRef,
+        toTask: targetRef,
+        reason: "Detour needed",
+        whatWasBeingDone: "Wiring the login route",
+        resumeLocation: "packages/plan-server/src/serve.ts:120",
+        howToResume: "Continue the route wiring.",
+      }),
+      expectStatus: 409,
+    });
+    assert.equal(denied.body.error.code, "CONTEXT_READ_REQUIRED");
+    assert.equal(denied.body.error.context.sourceRef, sourceRef);
+    assert.equal(denied.body.error.context.targetRef, targetRef);
+    assert.equal(denied.body.error.context.sourcePhaseRef, "P001(F001)");
+    assert.equal(denied.body.error.context.targetPhaseRef, "P001(F001)");
+    assert.ok(denied.body.error.evidence.contextEligibility.requiredReads.length > 0);
+
+    const incomplete = await request(fx, "/api/v2/tasks/switch", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ fromTask: sourceRef, toTask: targetRef }),
+      expectStatus: 422,
+    });
+    assert.equal(incomplete.body.error.code, "SWITCH_CHECKPOINT_REQUIRED");
+    assert.deepEqual(incomplete.body.error.missing, ["reason", "whatWasBeingDone", "resumeLocation", "howToResume"]);
+
+    const unknown = await request(fx, "/api/v2/tasks/switch", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        fromTask: sourceRef,
+        toTask: "P001(F001)/T999",
+        reason: "Detour needed",
+        whatWasBeingDone: "Wiring the login route",
+        resumeLocation: "src/serve.ts:120",
+        howToResume: "Continue.",
+      }),
+      expectStatus: 404,
+    });
+    assert.equal(unknown.body.error.code, "TASK_NOT_FOUND");
+
+    const sameTask = await request(fx, "/api/v2/tasks/switch", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        fromTask: sourceRef,
+        toTask: sourceRef,
+        reason: "Detour needed",
+        whatWasBeingDone: "Wiring the login route",
+        resumeLocation: "src/serve.ts:120",
+        howToResume: "Continue.",
+      }),
+      expectStatus: 409,
+    });
+    assert.equal(sameTask.body.error.code, "SWITCH_SAME_TASK");
+
+    // One target context bundle satisfies the read gate.
+    await request(fx, `/api/v2/context/tasks/${targetPath}`, { headers });
+
+    const switched = (await request(fx, "/api/v2/tasks/switch", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        fromTask: sourceRef,
+        toTask: targetRef,
+        reason: "Detour needed before continuing",
+        whatWasBeingDone: "Wiring the login route",
+        resumeLocation: "packages/plan-server/src/serve.ts:120",
+        howToResume: "Continue the route wiring after the detour.",
+        switchedBy: "worker-1",
+      }),
+    })).body.data;
+    assert.equal(switched.switched, true);
+    assert.equal(switched.sourceRef, sourceRef);
+    assert.equal(switched.targetRef, targetRef);
+    assert.equal(switched.sourcePhaseRef, "P001(F001)");
+    assert.equal(switched.targetPhaseRef, "P001(F001)");
+    assert.equal(switched.snapshot.reason, "Detour needed before continuing");
+    assert.equal(switched.snapshot.resumeLocation, "packages/plan-server/src/serve.ts:120");
+    assert.equal(switched.deviation.state, "active");
+    assert.equal(switched.deviation.ownerSession, session.sessionId);
+    assert.match(switched.deviation.resumeTaskId, /^[0-9a-f-]{36}$/);
+    assert.match(switched.deviation.temporaryTaskId, /^[0-9a-f-]{36}$/);
+    assert.equal(switched.deviation.snapshot.id, switched.snapshot.id);
+
+    // The lifecycle writes are persisted: source checkpointed, target owned.
+    const source = (await request(fx, `/api/v2/tasks/${sourcePath}`)).body.data;
+    assert.equal(source.task.status, "planned");
+    assert.equal(source.task.activeOwnerSession, "");
+    assert.equal(source.task.pauseSnapshot.resumeLocation, "packages/plan-server/src/serve.ts:120");
+    assert.equal(source.task.pauseSnapshot.relatedTaskId, switched.deviation.temporaryTaskId);
+    const target = (await request(fx, `/api/v2/tasks/${targetPath}`)).body.data;
+    assert.equal(target.task.status, "in-progress");
+    assert.equal(target.task.activeOwnerSession, session.sessionId);
+
+    // Another session cannot take over work this session owns.
+    const other = (await request(fx, "/api/v2/sessions", json({ clientKind: "cli" }))).body.data.session;
+    const otherHeaders = { "X-Planner-Session": other.sessionId, "Content-Type": "application/json" };
+    const foreign = await request(fx, "/api/v2/tasks/switch", {
+      method: "POST",
+      headers: otherHeaders,
+      body: JSON.stringify({
+        fromTask: targetRef,
+        toTask: sourceRef,
+        reason: "Try to take over",
+        whatWasBeingDone: "Another worker's detour",
+        resumeLocation: "src/other.ts:1",
+        howToResume: "Continue.",
+      }),
+      expectStatus: 409,
+    });
+    assert.equal(foreign.body.error.code, "TASK_OWNED_BY_ANOTHER_SESSION");
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

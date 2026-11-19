@@ -5,11 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, isStartableTaskStatus, recommendNextTask, recommendNextWork, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, markRequirementReadForSessionId, startReadSession, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, taskOrderContextLine, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, showFeature, showPhase, showTask, startTaskFlow, completeTaskFlow, pauseTaskFlow, reopenTaskFlow, switchTaskFlow, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Phase, Task } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -1637,146 +1637,73 @@ server.registerTool("planner-task-switch", {
 }, async ({ from_task, to_task, reason, what_was_being_done, resume_location, how_to_resume, switched_by }, extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const [featuresDoc, phases, project, focus] = await Promise.all([st.loadFeatures(), st.loadAllPhases(), st.loadProject(plannerSessionId), st.loadResume(plannerSessionId)]);
-  const features = featuresDoc.features;
-  const source = findTaskByRef(phases, features, from_task);
-  const target = findTaskByRef(phases, features, to_task);
-  if (!source) return text(`Task not found: ${from_task}`);
-  if (!target) return text(`Task not found: ${to_task}`);
-  if (source.task.id === target.task.id) return text("Source and temporary task must differ.");
-  const allDeviations = await st.listAllWorkDeviations();
-  if ([source.task, target.task].some((task) => taskOwnershipConflict(task, allDeviations, plannerSessionId))) {
-    return { ...text("Task switch denied: source or target belongs to another session.", { started: false, errorCode: "TASK_OWNED_BY_ANOTHER_SESSION" }), isError: true };
-  }
-  if (source.task.status !== "in-progress" && !source.task.pauseSnapshot) {
-    return text(`Task switch denied: source is ${source.task.status}; only in-progress or checkpointed work can be switched.`);
-  }
-  if (source.task.status === "in-progress" && (source.task as any).activeOwnerSession && (source.task as any).activeOwnerSession !== plannerSessionId) {
-    return text(`Task switch denied: source task is owned by another session.`);
-  }
-  const targetFeature = target.phase.featureId ? features.find((feature) => feature.id === target.phase.featureId) : undefined;
-  const linkedRequirements = [
-    ...(await st.linkedRequirementsForPhase(target.phase.id)),
-    ...(target.phase.featureId ? await st.linkedRequirementsForFeature(target.phase.featureId) : []),
-  ].filter((requirement, index, all) => all.findIndex((candidate) => candidate.id === requirement.id) === index);
-  const linkedRequirementIds = linkedRequirements.map((requirement) => requirement.id);
-  const contextInput = {
-    sessionId: plannerSessionId,
-    taskId: target.task.id,
-    phaseId: target.phase.id,
-    ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}),
-    task: target.task,
-    phase: target.phase,
-    ...(targetFeature ? { feature: targetFeature } : {}),
-    requirements: linkedRequirements,
-    requirementIds: linkedRequirementIds,
-  };
-  const contextEligibility = contextReadEligibilityForSession(contextInput);
-  const requirementEligibility = requirementReadEligibilityForSession(plannerSessionId, linkedRequirementIds, linkedRequirements);
-  const requirementsReady = requirementEligibility.eligible;
-  const projectGuidelinesReadState = projectGuidelinesReadStateForSession(project, plannerSessionId);
-  const projectGuidelinesReady = projectGuidelinesReadState === "valid" || projectGuidelinesReadState === "not-required";
-  const targetTaskRef = taskCompositeRef(target.task, target.phase, features);
-  const targetPhaseRef = formatPhaseRef(target.phase.number, featureNumberOfPhase(target.phase, features));
-  const targetFeatureRef = targetFeature ? formatFeatureRef(targetFeature.number) : "";
-  if (!projectGuidelinesReady) {
-    const nextActions = mcpContextReadActions(
-      contextEligibility,
-      { task: targetTaskRef, phase: targetPhaseRef, ...(targetFeatureRef ? { feature: targetFeatureRef } : {}) },
-      true,
-      !requirementsReady,
-      `Retry planner-task-switch to ${targetTaskRef}`,
-    );
-    return text(`Task switch denied: read Project Guidelines before switching task work. Current state: ${projectGuidelinesReadState}.`, { projectGuidelinesReadState, contextEligibility, nextActions });
-  }
-  if (!contextEligibility.eligible) {
-    const nextActions = mcpContextReadActions(
-      contextEligibility,
-      { task: targetTaskRef, phase: targetPhaseRef, ...(targetFeatureRef ? { feature: targetFeatureRef } : {}) },
-      false,
-      !requirementsReady,
-      `Retry planner-task-switch to ${targetTaskRef}`,
-    );
-    return text(`Task switch denied: context reads required. ${contextEligibility.reason}`, { ...contextEligibility, nextActions });
-  }
-  if (!requirementsReady) {
-    return text(`Task switch denied: ${requirementEligibility.reason}`, { requirementIds: linkedRequirementIds, requirementEligibility, nextActions: [`planner-requirement-list with phaseRef=${targetPhaseRef}`, `Retry planner-task-switch to ${targetTaskRef}`] });
-  }
-  if (!hasValidSessionAttestation(contextInput)) {
-    await st.recordContextRead({ sessionId: plannerSessionId, phaseId: target.phase.id, taskId: target.task.id, ...(target.phase.featureId ? { featureId: target.phase.featureId } : {}), requirementIds: linkedRequirementIds });
-  }
-  const eligibility = checkExplicitTaskStart(features, phases, target.task.id, project.workDeviations);
-  if (!eligibility.eligible) return text(`Task switch denied: ${eligibility.reason}`);
-
-  const timestamp = nowISO();
-  const snapshot = {
-    id: crypto.randomUUID(), reason, whatWasBeingDone: what_was_being_done,
-    resumeLocation: resume_location, howToResume: how_to_resume,
-    relatedTaskId: target.task.id, pausedAt: timestamp, pausedBy: switched_by?.trim() ?? "",
-  };
-  const selection = (recommendNextTask as any)(features, phases, await st.listAllWorkDeviations(), focus?.currentPhaseId, plannerSessionId);
-  const record = {
-    id: crypto.randomUUID(), recommendedTaskId: selection.candidate?.task.id ?? source.task.id,
-    temporaryTaskId: target.task.id, resumeTaskId: source.task.id, reason, snapshot,
-    requestedBy: "agent" as const, approvedBy: switched_by?.trim() || "explicit task_switch",
-    state: "active" as const, createdAt: timestamp, activatedAt: timestamp,
-    resumeRequiredAt: "", resolvedAt: "", resumedAt: "",
-  };
-
-  const sourceWasActive = source.task.status === "in-progress";
-  let sourceCheckpointed = false;
-  let targetStarted = false;
-  await st.runBatch(async () => {
-    try {
-      if (sourceWasActive) {
-      await st.pauseTask(source.phase.id, source.task.id, snapshot);
-    } else {
-      await st.updatePhase(source.phase.id, (phase) => {
-        const task = phase.tasks.find((entry) => entry.id === source.task.id);
-        if (!task) throw new Error(`Checkpointed source task disappeared: ${from_task}`);
-        task.pauseSnapshot = snapshot;
-        task.pauseHistory = [...task.pauseHistory, snapshot];
-        task.updatedAt = timestamp;
-        return phase;
-      });
-    }
-    sourceCheckpointed = true;
-    await st.claimTask(target.phase.id, target.task.id, plannerSessionId, timestamp);
-    targetStarted = true;
-    await st.addWorkDeviation(record, plannerSessionId);
-    if (target.task.pauseSnapshot) {
-      const resumedDeviation = project.workDeviations
-        .filter((deviation) => deviation.resumeTaskId === target.task.id
-          && (deviation.state === "resume-required" || deviation.state === "resolved"))
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-      if (resumedDeviation) await st.setWorkDeviationState(resumedDeviation.id, "resumed", timestamp);
-    }
-  } catch (error) {
-    if (targetStarted) {
-      await st.updatePhase(target.phase.id, (phase) => {
-        phase.tasks = phase.tasks.map((task) => task.id === target.task.id ? target.task : task);
-        return phase;
-      }).catch(() => {});
-    }
-      if (sourceCheckpointed) {
-        if (sourceWasActive) await st.resumeTask(source.phase.id, source.task.id, nowISO(), ((source.task as any).activeOwnerSession || plannerSessionId)).catch(() => {});
-        else await st.updatePhase(source.phase.id, (phase) => {
-          phase.tasks = phase.tasks.map((task) => task.id === source.task.id ? source.task : task);
-          return phase;
-        }).catch(() => {});
-      }
-      throw error;
-    }
-    await st.syncTaskStatusRollup(source.phase.id);
-    if (target.phase.id !== source.phase.id) await st.syncTaskStatusRollup(target.phase.id);
+  // Same atomic switch as the versioned API (plan-core
+  // task-lifecycle-flow.ts switchTaskFlow): pause the source with the
+  // mandatory snapshot, claim the target, push the LIFO return target and
+  // roll the lifecycle writes back on failure.
+  const outcome = await switchTaskFlow(st, plannerSessionId, {
+    fromTask: from_task,
+    toTask: to_task,
+    reason,
+    whatWasBeingDone: what_was_being_done,
+    resumeLocation: resume_location,
+    howToResume: how_to_resume,
+    switchedBy: switched_by,
   });
-  invalidateReads(plannerSessionId);
+  if (!outcome.ok) {
+    const { targetRef, targetPhaseRef, targetFeatureRef } = outcome.context;
+    const retry = `Retry planner-task-switch to ${targetRef}`;
+    const refs = { task: targetRef, phase: targetPhaseRef, ...(targetFeatureRef ? { feature: targetFeatureRef } : {}) };
+    switch (outcome.code) {
+      case "TASK_OWNED_BY_ANOTHER_SESSION":
+        return { ...text(outcome.message, { started: false, errorCode: outcome.code }), isError: true };
+      case "PROJECT_GUIDELINES_READ_REQUIRED": {
+        const contextEligibility = outcome.evidence?.contextEligibility ?? { eligible: true, reason: "" };
+        const nextActions = mcpContextReadActions(
+          contextEligibility,
+          refs,
+          true,
+          Boolean(outcome.evidence?.requirementEligibility && !outcome.evidence.requirementEligibility.eligible),
+          retry,
+        );
+        return text(outcome.message, {
+          projectGuidelinesReadState: outcome.context.projectGuidelinesReadState,
+          contextEligibility,
+          nextActions,
+        });
+      }
+      case "CONTEXT_READ_REQUIRED": {
+        const contextEligibility = outcome.evidence?.contextEligibility ?? { eligible: true, reason: "" };
+        const nextActions = mcpContextReadActions(
+          contextEligibility,
+          refs,
+          false,
+          Boolean(outcome.evidence?.requirementEligibility && !outcome.evidence.requirementEligibility.eligible),
+          retry,
+        );
+        return text(outcome.message, { ...contextEligibility, nextActions });
+      }
+      case "REQUIREMENTS_READ_REQUIRED":
+        return text(outcome.message, {
+          requirementIds: outcome.requirementIds,
+          requirementEligibility: outcome.evidence?.requirementEligibility,
+          nextActions: [`planner-requirement-list with phaseRef=${targetPhaseRef}`, retry],
+        });
+      default:
+        return text(outcome.message);
+    }
+  }
   return writeAndSummarize(st, [
-    `🔀 Task switched: ${taskCompositeRef(source.task, source.phase, features)} → ${taskCompositeRef(target.task, target.phase, features)}`,
-    `Resume checkpoint: ${snapshot.whatWasBeingDone}`,
-    `Return target: ${taskCompositeRef(source.task, source.phase, features)} from ${snapshot.resumeLocation}`,
+    `🔀 Task switched: ${outcome.sourceRef} → ${outcome.targetRef}`,
+    `Resume checkpoint: ${outcome.snapshot.whatWasBeingDone}`,
+    `Return target: ${outcome.sourceRef} from ${outcome.snapshot.resumeLocation}`,
     `Normal priority was deliberately overridden; completing the temporary task will emit RESUME REQUIRED.`,
-  ].join("\n"), { deviation: record, snapshot, resumeTaskId: source.task.id, temporaryTaskId: target.task.id });
+  ].join("\n"), {
+    deviation: outcome.deviation,
+    snapshot: outcome.snapshot,
+    resumeTaskId: outcome.deviation.resumeTaskId,
+    temporaryTaskId: outcome.deviation.temporaryTaskId,
+  });
 });
 
 server.registerTool("planner-task-reopen", {
