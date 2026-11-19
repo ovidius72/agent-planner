@@ -27,6 +27,9 @@ import {
   type PlanStore,
 } from "@agent-plan/core";
 import {
+  buildTaskMoveReply,
+  findPhaseByRef,
+  findTaskByRef,
   HandoffFlowRefusal,
   RequirementFlowRefusal,
   TaskFlowRefusal,
@@ -57,10 +60,16 @@ import {
   updateFeatureFlow,
   updatePhaseFlow,
   updateRequirementFlow,
+  updateTaskFlow,
+  addTaskDependencyFlow,
+  removeTaskDependencyFlow,
+  moveTasks,
   verifyPhaseHandoffFlow,
   writePhaseHandoffFlow,
   type MacroTaskStatus,
   type PhaseHandoffWriteRequest,
+  type Phase,
+  type Task,
 } from "@agent-plan/core";
 
 /** Mount point, fixed: the version is part of the URL. */
@@ -120,7 +129,11 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       tasks: {
         list: "GET /api/v2/tasks?featureRef=&phaseRef=&status=",
         create: "POST /api/v2/phases/{phaseRef}/tasks",
+        update: "PUT /api/v2/tasks/{taskRef}",
         discuss: "PUT /api/v2/tasks/{taskRef}/discuss",
+        move: "POST /api/v2/tasks/move",
+        dependencyAdd: "POST /api/v2/tasks/{taskRef}/dependencies",
+        dependencyRemove: "DELETE /api/v2/tasks/{taskRef}/dependencies?dependsOn=&confirmed=true",
         checklistAdd: "POST /api/v2/tasks/{taskRef}/checklist",
         checklistToggle: "POST /api/v2/tasks/{taskRef}/checklist/toggle",
         checklistRemove: "DELETE /api/v2/tasks/{taskRef}/checklist?item=",
@@ -993,6 +1006,134 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
     } catch (err) {
       return phaseFailure(c, err, "PHASE_DELETE_FAILED");
     }
+  });
+
+  // ── Task update / dependency / move family ────────────────────────
+  // Task refs contain "/", so these live behind mid-path wildcards like
+  // the checklist routes. The discuss route above is registered first and
+  // therefore keeps winning for ".../discuss".
+  const taskMutationRefusalStatus: Partial<Record<TaskFlowRefusal["code"], ContentfulStatusCode>> = {
+    TASK_NOT_FOUND: 404,
+    DEPENDENCY_TASK_NOT_FOUND: 404,
+    TASK_LIFECYCLE_TRANSITION_REQUIRED: 409,
+    TASK_LEGACY_DECISIONS_READ_ONLY: 409,
+    CONFIRMATION_REQUIRED: 409,
+  };
+  const taskMutationFailure = (c: Context, err: unknown, fallbackCode: string) => {
+    if (err instanceof TaskFlowRefusal) {
+      return error(c, taskMutationRefusalStatus[err.code] ?? 422, err.code, err.message, err.details);
+    }
+    if (err instanceof PlanStoreError) {
+      const code = typeof err.details?.errorCode === "string" ? err.details.errorCode : fallbackCode;
+      return error(c, 422, code, err.message);
+    }
+    return error(c, 500, fallbackCode, err instanceof Error ? err.message : String(err));
+  };
+
+  app.put("/tasks/*", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const taskRef = collectionTail(c, "tasks");
+    const title = optionalString(body, "title");
+    const status = optionalString(body, "status");
+    const description = optionalString(body, "description");
+    const descriptionRef = optionalString(body, "descriptionRef");
+    const notes = optionalString(body, "notes");
+    const motivation = optionalString(body, "motivation");
+    const priority = optionalNumber(body, "priority");
+    const checklist = optionalStringArray(body, "checklist");
+    const decisions = optionalStringArray(body, "decisions");
+    const subtasks = Array.isArray(body.subtasks)
+      ? body.subtasks.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      : undefined;
+    try {
+      const outcome = await updateTaskFlow(store, taskRef, {
+        ...(title !== undefined ? { title } : {}),
+        ...(status !== undefined ? { status } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(descriptionRef !== undefined ? { descriptionRef } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+        ...(motivation !== undefined ? { motivation } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(checklist !== undefined ? { checklist } : {}),
+        ...(decisions !== undefined ? { decisions } : {}),
+        ...(subtasks !== undefined
+          ? {
+            subtasks: subtasks.map((item) => ({
+              ...(typeof item.id === "string" ? { id: item.id } : {}),
+              title: typeof item.title === "string" ? item.title : "",
+              ...(typeof item.description === "string" ? { description: item.description } : {}),
+              ...(typeof item.status === "string" ? { status: item.status } : {}),
+            })),
+          }
+          : {}),
+      });
+      return envelope(c, {
+        updated: true,
+        ref: outcome.ref,
+        task: outcome.task,
+        updatedFields: outcome.updatedFields,
+        checklistLostTicks: outcome.checklistLostTicks,
+        descriptionFreshness: outcome.descriptionFreshness,
+        staleParentRefs: outcome.staleParentRefs,
+        ...(outcome.resumeRequired ? { resumeRequired: outcome.resumeRequired } : {}),
+      });
+    } catch (err) {
+      return taskMutationFailure(c, err, "TASK_UPDATE_FAILED");
+    }
+  });
+
+  app.post("/tasks/*/dependencies", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const dependsOn = optionalString(body, "dependsOn");
+    if (!dependsOn) return error(c, 422, "DEPENDENCY_TARGET_REQUIRED", "A dependsOn task ref is required.");
+    const taskRef = collectionTail(c, "tasks").replace(/\/dependencies$/, "");
+    try {
+      const outcome = await addTaskDependencyFlow(store, taskRef, dependsOn);
+      return envelope(c, { updated: true, ref: outcome.ref, dependsOn: outcome.dependsOn, dependencyRef: outcome.dependencyRef });
+    } catch (err) {
+      return taskMutationFailure(c, err, "DEPENDENCY_UPDATE_FAILED");
+    }
+  });
+
+  app.delete("/tasks/*/dependencies", async (c) => {
+    const dependsOn = c.req.query("dependsOn");
+    if (!dependsOn) return error(c, 422, "DEPENDENCY_TARGET_REQUIRED", "A dependsOn task ref is required.");
+    const taskRef = collectionTail(c, "tasks").replace(/\/dependencies$/, "");
+    const confirmed = c.req.query("confirmed") === "true";
+    try {
+      const outcome = await removeTaskDependencyFlow(store, taskRef, dependsOn, confirmed);
+      return envelope(c, { updated: true, ref: outcome.ref, dependsOn: outcome.dependsOn, dependencyRef: outcome.dependencyRef });
+    } catch (err) {
+      return taskMutationFailure(c, err, "DEPENDENCY_DELETE_FAILED");
+    }
+  });
+
+  app.post("/tasks/move", async (c) => {
+    const body = await readJsonBody(c);
+    if (!body) return error(c, 400, "INVALID_BODY", "A JSON body is required.");
+    const refs = optionalStringArray(body, "tasks");
+    const targetPhase = optionalString(body, "targetPhase");
+    if (!refs || refs.length === 0) return error(c, 422, "NO_TASKS_GIVEN", "A non-empty tasks array is required.");
+    if (!targetPhase) return error(c, 422, "TARGET_PHASE_REQUIRED", "A targetPhase ref is required.");
+    const phases = await store.loadAllPhases();
+    const features = (await store.loadFeatures()).features;
+    const target = findPhaseByRef(phases, features, targetPhase);
+    if (!target) return error(c, 404, "TARGET_PHASE_NOT_FOUND", `Target phase not found: ${targetPhase}`);
+    const resolved: Array<{ phase: Phase; task: Task }> = [];
+    for (const ref of refs) {
+      const found = findTaskByRef(phases, features, ref);
+      if (!found) return error(c, 404, "TASK_NOT_FOUND", `Task not found: ${ref}`);
+      resolved.push(found);
+    }
+    const outcome = await moveTasks(store, resolved.map((entry) => entry.task.id), target.id);
+    if (!outcome.ok) {
+      const status: ContentfulStatusCode = outcome.errorCode === "TASK_NOT_FOUND" || outcome.errorCode === "TARGET_PHASE_NOT_FOUND" ? 404 : 409;
+      return error(c, status, outcome.errorCode, outcome.error);
+    }
+    const reply = buildTaskMoveReply(outcome.result, `planner-task-show ${outcome.result.targetPhaseRef} full=true`);
+    return envelope(c, reply.structured);
   });
 
   return app;

@@ -5,11 +5,11 @@ import * as z from "zod/v4";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, needsMotivation, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, replaceChecklist, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, normalizeDescriptionRef, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
+import { PlanStore, PlanStoreError, taskOwnershipConflict, ExportService, findPhaseByRef, findTaskByRef, findFeatureByRef, findIdeaByRef, buildRecap, buildPhaseContextBlock, buildBoundedAcceptedDecisionContext, renderAcceptedDecisionsSection, checkExplicitTaskStart, isStartableTaskStatus, recommendNextTask, recommendNextWork, buildResumeRequiredProposal, packageVersionFromModule, resolvedPackageVersion, createStaleProcessCheck, runtimeCapabilities, runtimePackagesDiagnostic, markCanonicalFullReadForSessionId, contextReadEligibilityForSession, requirementReadEligibilityForSession, hasValidSessionAttestation, markRequirementReadForSessionId, startReadSession, invalidateReads, taskStartDenied, taskStartSucceeded, taskStartGateState, taskStartGateStateLine, noMutableFieldsReceived, projectGuidelinesReadStateForSession, HANDOFF_COMPLETENESS_AUDIT_VERSION, HANDOFF_COMPLETENESS_CATEGORIES, HANDOFF_COLD_START_INVENTORY_VERSION, HANDOFF_COLD_START_INVENTORY_CATEGORIES, HandoffContractError, buildProjectContextLoadReply, buildPlannerLoadReply, buildScopedDecisionContext, DEFAULT_PROJECT_CONTEXT_CHUNK_CHARS, projectContextStaleAdvisory, LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE, LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, buildMutationReply, longTextFieldLimitNotice, buildRecommendationReply, buildTaskOrderContext, taskOrderContextLine, findHigherPriorityOpenPhase, higherPriorityOpenPhaseAdvisory, listOpenPhaseWork, openPhaseWorkLines, boundedOpenPhaseWork, deleteFeatureCascade, evaluateTaskCompletionGate, taskCompletionChecklistRefusal, taskCompletionForceMotivationRequired, taskCompletionOverrideNote, taskCompletionMismatchLine, nowISO, resolveFeatureRefStrict, resolveAcceptedDecisionTarget, applyTaskLifecycleDates, handoffContractFailureReply, derivedStatusReadOnlyReply, acceptedDecisionMutationFailureReply, legacyContextMigrationSummary, moveTasks, buildTaskMoveReply } from "@agent-plan/core";
 import { serve } from "@agent-plan/server";
 import type { ServeHandle } from "@agent-plan/server";
 import { createChecklistItemId, formatPhaseRef, formatFeatureRef, formatIdeaRef, featureNumberOfPhase, taskCompositeRef } from "@agent-plan/core/naming";
-import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
+import { HandoffFlowRefusal, RequirementFlowRefusal, TaskFlowRefusal, FeatureFlowRefusal, PhaseFlowRefusal, DiscussFlowRefusal, createRequirementFlow, updateRequirementFlow, deleteRequirementFlow, createTaskFlow, updateTaskFlow, addTaskDependencyFlow, removeTaskDependencyFlow, addTaskChecklistItemFlow, toggleTaskChecklistItemFlow, removeTaskChecklistItemFlow, createFeatureFlow, updateFeatureFlow, createPhaseFlow, updatePhaseFlow, deletePhaseFlow, discussProjectFlow, discussFeatureFlow, discussPhaseFlow, discussTaskFlow, listFeatureSummaries, listPhaseSummaries, listTaskSummaries, preparePhaseHandoffFlow, showPhaseHandoffFlow, writePhaseHandoffFlow, verifyPhaseHandoffFlow, clearPhaseHandoffFlow, listPhaseHandoffsFlow, type PhaseHandoffWriteRequest } from "@agent-plan/core";
 import type { Phase, Task, StatusLogEntry } from "@agent-plan/core/schema";
 import type { HandoffCompletenessAuditInput, HandoffColdStartInventoryInput } from "@agent-plan/core";
 
@@ -95,6 +95,18 @@ function mcpMutationNoFieldsFailure(input: Parameters<typeof noMutableFieldsRece
 function mcpAcceptedDecisionMutationFailure(error: unknown, outcome: "created" | "updated" | "deleted"): ToolResult {
   const reply = acceptedDecisionMutationFailureReply(error, outcome);
   return { isError: true, content: [{ type: "text", text: reply.text }], structuredContent: reply.structured };
+}
+
+/** Dependency mutations: flow refusals keep their typed code, store errors keep their own. */
+function taskDependencyFailure(error: unknown, fallbackCode: string, fallbackMessage: string): ToolResult {
+  if (error instanceof TaskFlowRefusal) {
+    return { ...text(error.message, { updated: false, errorCode: error.code }), isError: true };
+  }
+  const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined;
+  return {
+    ...text(error instanceof Error ? error.message : fallbackMessage, { updated: false, errorCode: details?.errorCode ?? fallbackCode }),
+    isError: true,
+  };
 }
 
 function taskStartError(
@@ -1326,21 +1338,40 @@ server.registerTool("planner-task-dependency-add", {
   description: "Add a validated task dependency atomically. A task may depend on any task in any phase; the dependency is rejected only when the target does not exist, is the task itself, or would create a cycle.",
   inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1) },
 }, async ({ task: ref, dependsOn }) => {
-  const st = await requireStore(); const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, ref); const dependency = findTaskByRef(await st.loadAllPhases(), features, dependsOn);
-  if (!found || !dependency) return { ...text("Dependency target not found.", { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }), isError: true };
-  try { const result = await st.addTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); const reply = buildMutationReply({ identity: { entity: "task", ref: taskCompositeRef(found.task, found.phase, features), id: result.id, shortId: result.shortId, title: result.title, status: result.status }, operation: "update", updatedFields: ["dependsOn"], changedValues: { dependsOn: result.dependsOn }, readBackCommand: `planner-task-show ${taskCompositeRef(found.task, found.phase, features)} full=true` }); return text(`${reply.text} Depends on ${taskCompositeRef(dependency.task, dependency.phase, features)}.`, reply.structured); }
-  catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { ...text(error instanceof Error ? error.message : "Dependency update failed.", { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_UPDATE_FAILED" }), isError: true }; }
+  const st = await requireStore();
+  try {
+    const outcome = await addTaskDependencyFlow(st, ref, dependsOn);
+    const reply = buildMutationReply({
+      identity: { entity: "task", ref: outcome.ref, id: outcome.task.id, shortId: outcome.task.shortId, title: outcome.task.title, status: outcome.task.status },
+      operation: "update",
+      updatedFields: ["dependsOn"],
+      changedValues: { dependsOn: outcome.dependsOn },
+      readBackCommand: `planner-task-show ${outcome.ref} full=true`,
+    });
+    return text(`${reply.text} Depends on ${outcome.dependencyRef}.`, reply.structured);
+  } catch (error) {
+    return taskDependencyFailure(error, "DEPENDENCY_UPDATE_FAILED", "Dependency update failed.");
+  }
 });
 
 server.registerTool("planner-task-dependency-delete", {
   description: "Remove a task dependency atomically after explicit confirmation.",
   inputSchema: { task: z.string().min(1), dependsOn: z.string().min(1), confirmed: z.boolean() },
 }, async ({ task: ref, dependsOn, confirmed }) => {
-  if (!confirmed) return { ...text("Explicit confirmation is required to remove a dependency.", { updated: false, errorCode: "CONFIRMATION_REQUIRED" }), isError: true };
-  const st = await requireStore(); const features = (await st.loadFeatures()).features; const found = findTaskByRef(await st.loadAllPhases(), features, ref); const dependency = findTaskByRef(await st.loadAllPhases(), features, dependsOn);
-  if (!found || !dependency) return { ...text("Dependency target not found.", { updated: false, errorCode: "DEPENDENCY_TASK_NOT_FOUND" }), isError: true };
-  try { const result = await st.deleteTaskDependency(found.phase.id, found.task.id, dependency.task.id); await st.writeGenerated(); const reply = buildMutationReply({ identity: { entity: "task", ref: taskCompositeRef(found.task, found.phase, features), id: result.id, shortId: result.shortId, title: result.title, status: result.status }, operation: "update", updatedFields: ["dependsOn"], changedValues: { dependsOn: result.dependsOn }, readBackCommand: `planner-task-show ${taskCompositeRef(found.task, found.phase, features)} full=true` }); return text(reply.text, reply.structured); }
-  catch (error) { const details = error instanceof PlanStoreError ? error.details as { errorCode?: string } | undefined : undefined; return { ...text(error instanceof Error ? error.message : "Dependency deletion failed.", { updated: false, errorCode: details?.errorCode ?? "DEPENDENCY_DELETE_FAILED" }), isError: true }; }
+  const st = await requireStore();
+  try {
+    const outcome = await removeTaskDependencyFlow(st, ref, dependsOn, confirmed);
+    const reply = buildMutationReply({
+      identity: { entity: "task", ref: outcome.ref, id: outcome.task.id, shortId: outcome.task.shortId, title: outcome.task.title, status: outcome.task.status },
+      operation: "update",
+      updatedFields: ["dependsOn"],
+      changedValues: { dependsOn: outcome.dependsOn },
+      readBackCommand: `planner-task-show ${outcome.ref} full=true`,
+    });
+    return text(reply.text, reply.structured);
+  } catch (error) {
+    return taskDependencyFailure(error, "DEPENDENCY_DELETE_FAILED", "Dependency deletion failed.");
+  }
 });
 
 server.registerTool("planner-task-update", {
@@ -1361,146 +1392,70 @@ server.registerTool("planner-task-update", {
 }, async ({ task: ref, title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks }, extra) => {
   const plannerSessionId = plannerSessionIdFor(extra);
   const st = await requireStore();
-  const found = findTaskByRef(await st.loadAllPhases(), (await st.loadFeatures()).features, ref);
-  if (!found) return text(`Task not found: ${ref}`);
-
-  if (status === "in-progress" && status !== found.task.status) {
-    return text("Task start/resume transitions require planner-task-start so lifecycle state, checkpoints, and return stacks remain consistent.");
-  }
-  if (status === "done" && status !== found.task.status) {
-    return text("Task completion transitions require planner-task-complete with durable completion and verification evidence.");
-  }
-
-  if (decisions !== undefined) {
-    return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "task", targetRef: taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features) } };
-  }
-
-  // Validate motivation requirement for status transitions.
-  if (status !== undefined && needsMotivation(found.task.status, status)) {
-    if (!motivation || !motivation.trim()) {
-      return text(
-        `Status transition \"${found.task.status} → ${status}\" requires a motivation. ` +
-        `Provide the \"motivation\" parameter with a detailed explanation of why this change is needed.`
-      );
-    }
-  }
-
-  const mutableFields = ["title", "status", "description", "descriptionRef", "notes", "motivation", "priority", "checklist", "subtasks"] as const;
-  const updateInputs = { title, status, description, descriptionRef: rawDescriptionRef, notes, decisions, motivation, priority, checklist, subtasks };
-  const receivedFields = mutableFields.filter((field) => updateInputs[field] !== undefined);
-  if (receivedFields.length === 0) {
-    return mcpMutationNoFieldsFailure({
-      entity: "task",
-      ref: taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features),
-      operation: "update",
-      mutableFields,
-      retryCommand: `planner-task-update ${taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features)}`,
-      readBackCommand: `planner-task-show ${taskCompositeRef(found.task, found.phase, (await st.loadFeatures()).features)} with full=true`,
-      descriptionFallback: {
-        entityId: found.task.id,
-        inputField: "description",
-        storedField: "task description",
-        descriptionRefField: "descriptionRef",
-      },
-    });
-  }
-
-  if (subtasks !== undefined) {
-    const existingIds = new Set(found.task.subtasks.map((item) => item.id));
-    if (subtasks.some((item) => item.id !== undefined && !existingIds.has(item.id))) {
-      return { ...text("Subtask IDs must belong to the target task.", { updated: false, errorCode: "SUBTASK_ID_INVALID" }), isError: true };
-    }
-  }
-  let updatedTask: Task | undefined;
-  let checklistLostTicks: string[] = [];
-  const timestamp = nowISO();
+  let outcome: Awaited<ReturnType<typeof updateTaskFlow>>;
   try {
-  await st.updateTask(found.phase.id, found.task.id, (task) => {
-    if (title !== undefined) task.title = title.trim();
-    if (priority !== undefined) task.priority = priority;
-    if (description !== undefined) task.description = description.trim();
-    if (rawDescriptionRef !== undefined) {
-      const descriptionRef = normalizeDescriptionRef(rawDescriptionRef);
-      if (descriptionRef) task.descriptionRef = descriptionRef;
-      else delete task.descriptionRef;
-    }
-    if (notes !== undefined) task.notes = notes.trim();
-    if (checklist !== undefined) {
-      const replacement = replaceChecklist(task.checklist ?? [], checklist, task.id);
-      task.checklist = replacement.items;
-      checklistLostTicks = replacement.lostTicks;
-    }
-    if (subtasks !== undefined) {
-      const existingIds = new Set(task.subtasks.map((item) => item.id));
-      if (subtasks.some((item) => item.id !== undefined && !existingIds.has(item.id))) {
-        throw new PlanStoreError("Subtask IDs must belong to the target task.", undefined, { errorCode: "SUBTASK_ID_INVALID" });
-      }
-      task.subtasks = subtasks.map((item) => ({ id: item.id ?? randomUUID(), title: item.title.trim(), description: item.description?.trim() ?? "", status: item.status ?? "planned", createdAt: task.subtasks.find((candidate) => candidate.id === item.id)?.createdAt ?? timestamp, updatedAt: timestamp }));
-    }
-    if (status !== undefined && status !== task.status) {
-      // Record status change in the incremental statusLog.
-      const entry: StatusLogEntry = {
-        id: createChecklistItemId(task.id, (task.statusLog?.length ?? 0) + 1, `${task.status}-${status}`),
-        date: timestamp,
-        fromStatus: task.status as any,
-        toStatus: status as any,
-        title: motivation?.split("\n")[0]?.trim() || `${task.status} → ${status}`,
-        description: motivation?.trim() || "",
-      };
-      task.statusLog = [...(task.statusLog ?? []), entry];
-      applyTaskLifecycleDates(task, status, timestamp);
-    }
-    task.updatedAt = timestamp;
-    updatedTask = task;
-    return task;
-  });
+    outcome = await updateTaskFlow(st, ref, {
+      title,
+      status,
+      description,
+      descriptionRef: rawDescriptionRef,
+      notes,
+      decisions,
+      motivation,
+      priority,
+      checklist,
+      subtasks,
+    }, { sessionId: plannerSessionId });
   } catch (error) {
+    if (error instanceof TaskFlowRefusal) {
+      if (error.code === "TASK_LEGACY_DECISIONS_READ_ONLY") {
+        return { isError: true, content: [{ type: "text", text: LEGACY_DECISIONS_ARRAY_READ_ONLY_MESSAGE }], structuredContent: { updated: false, errorCode: LEGACY_DECISIONS_ARRAY_READ_ONLY_ERROR_CODE, targetType: "task", targetRef: error.details.ref as string } };
+      }
+      if (error.code === "TASK_NO_MUTABLE_FIELDS") {
+        return mcpMutationNoFieldsFailure({
+          entity: "task",
+          ref: error.details.ref as string,
+          operation: "update",
+          mutableFields: error.details.mutableFields as string[],
+          retryCommand: `planner-task-update ${error.details.ref as string}`,
+          readBackCommand: `planner-task-show ${error.details.ref as string} with full=true`,
+          descriptionFallback: {
+            entityId: error.details.taskId as string,
+            inputField: "description",
+            storedField: "task description",
+            descriptionRefField: "descriptionRef",
+          },
+        });
+      }
+      if (error.code === "SUBTASK_ID_INVALID") {
+        return { ...text("Subtask IDs must belong to the target task.", { updated: false, errorCode: "SUBTASK_ID_INVALID" }), isError: true };
+      }
+      return text(error.message, { updated: false, errorCode: error.code });
+    }
     const details = error instanceof PlanStoreError ? error.details : undefined;
     return { ...text(`Task update failed: ${error instanceof Error ? error.message : "unknown error"}`, { updated: false, errorCode: details?.errorCode ?? "TASK_UPDATE_FAILED" }), isError: true };
   }
-  await st.syncTaskStatusRollup(found.phase.id);
-  const features = (await st.loadFeatures()).features;
-  const t = updatedTask ?? found.task;
-  let resumeNotice = "";
-  let resumeRequired: Record<string, unknown> | undefined;
-  if (status && status !== "in-progress" && status !== found.task.status) {
-    const deviation = (await st.loadProject(plannerSessionId)).workDeviations
-      .filter((entry) => (entry.state === "approved" || entry.state === "active") && entry.temporaryTaskId === found.task.id)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-    if (deviation) {
-      await st.setWorkDeviationState(deviation.id, "resume-required", timestamp);
-      const resume = findTaskByRef(await st.loadAllPhases(), features, deviation.resumeTaskId);
-      if (resume) {
-        resumeNotice = `\n↩️ RESUME REQUIRED: ${taskCompositeRef(resume.task, resume.phase, features)} — ${resume.task.title}`;
-        resumeRequired = { taskId: resume.task.id, phaseId: resume.phase.id, snapshot: resume.task.pauseSnapshot ?? deviation.snapshot };
-      }
-    }
-  }
-  const descriptionFreshness = receivedFields.some((field) => field === "description" || field === "descriptionRef")
-    ? await st.previewDescriptionReconciliation()
-    : null;
-  const ownerIds = new Set([found.phase.id, found.phase.featureId].filter((id): id is string => Boolean(id)));
-  const staleParentRefs = descriptionFreshness?.diagnostics
-    .filter((entry) => entry.state === "stale" && ownerIds.has(entry.ownerId))
-    .map((entry) => entry.ownerRef) ?? [];
-  const lostTicksNotice = checklistLostTicks.length > 0
-    ? ` ⚠️ Lost tick on ${checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${checklistLostTicks.join(", ")}.`
+  const t = outcome.task;
+  const resumeNotice = outcome.resumeRequired
+    ? `\n↩️ RESUME REQUIRED: ${outcome.resumeRequired.ref} — ${outcome.resumeRequired.title}`
     : "";
-  const taskUpdateRef = taskCompositeRef(t, found.phase, features);
+  const lostTicksNotice = outcome.checklistLostTicks.length > 0
+    ? ` ⚠️ Lost tick on ${outcome.checklistLostTicks.length} checklist item(s) that could not be matched to a new title: ${outcome.checklistLostTicks.join(", ")}.`
+    : "";
   const taskUpdateReply = buildMutationReply({
-    identity: { entity: "task", ref: taskUpdateRef, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
+    identity: { entity: "task", ref: outcome.ref, id: t.id, shortId: t.shortId, title: t.title, status: t.status },
     operation: "update",
-    updatedFields: receivedFields,
+    updatedFields: outcome.updatedFields,
     changedValues: t as unknown as Record<string, unknown>,
     extras: {
-      ...(resumeRequired ? { resumeRequired } : {}),
-      ...(descriptionFreshness ? { descriptionFreshness, staleParentRefs } : {}),
-      ...(checklistLostTicks.length > 0 ? { checklistLostTicks } : {}),
+      ...(outcome.resumeRequired ? { resumeRequired: outcome.resumeRequired } : {}),
+      ...(outcome.descriptionFreshness ? { descriptionFreshness: outcome.descriptionFreshness, staleParentRefs: outcome.staleParentRefs } : {}),
+      ...(outcome.checklistLostTicks.length > 0 ? { checklistLostTicks: outcome.checklistLostTicks } : {}),
     },
     notices: [resumeNotice, lostTicksNotice],
-    readBackCommand: `planner-task-show ${taskUpdateRef} full=true`,
+    readBackCommand: `planner-task-show ${outcome.ref} full=true`,
   });
-  return writeAndSummarize(st, taskUpdateReply.text, taskUpdateReply.structured);
+  return text(taskUpdateReply.text, taskUpdateReply.structured);
 });
 
 server.registerTool("planner-task-move", {

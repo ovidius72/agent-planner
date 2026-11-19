@@ -717,3 +717,114 @@ test("discovery lists: features, phases and tasks share the MCP selection logic"
     await closeServerFixture(fx);
   }
 });
+
+test("task mutation family: metadata update, dependencies and move over the shared flows", async () => {
+  const fx = await startServerFixture({ name: "v2-task-mutations" });
+  const t001 = encodeURIComponent("P001(F001)/T001");
+  const phaseBody = (feature, title) => ({
+    feature,
+    title,
+    description: "A description that is long enough to pass the flow's fifty-character execution-context rule for phases.",
+  });
+  try {
+    const updated = (await request(fx, `/api/v2/tasks/${t001}`, put({
+      title: "Implement login over the service",
+      priority: 3,
+      notes: "Runs through the shared task flow.",
+      checklist: ["Add route", "Verify parity"],
+    }))).body.data;
+    assert.equal(updated.updated, true);
+    assert.equal(updated.ref, "P001(F001)/T001");
+    assert.deepEqual(updated.updatedFields, ["title", "notes", "priority", "checklist"]);
+    assert.equal(updated.task.title, "Implement login over the service");
+    assert.equal(updated.task.priority, 3);
+    assert.equal(updated.task.checklist.length, 2);
+
+    // A second task in another phase becomes the dependency target.
+    const targetPhase = (await request(fx, "/api/v2/phases", json(phaseBody("F001", "Dependency target phase")))).body.data;
+    const second = (await request(fx, `/api/v2/phases/${encodeURIComponent(targetPhase.ref)}/tasks`, json({
+      feature: "F001",
+      title: "Ship the dependency",
+      description: "A description that is long enough to pass the flow's fifty-character execution-context rule.",
+    }))).body.data;
+
+    const added = (await request(fx, `/api/v2/tasks/${t001}/dependencies`, json({ dependsOn: second.taskRef }))).body.data;
+    assert.equal(added.updated, true);
+    assert.equal(added.dependencyRef, second.taskRef);
+    assert.equal(added.dependsOn.length, 1);
+
+    const selfDependency = await expectError(fx, `/api/v2/tasks/${t001}/dependencies`, json({ dependsOn: "P001(F001)/T001" }), { status: 422 });
+    assert.match(selfDependency.message, /DEPENDENCY_SELF/);
+
+    const unconfirmed = await expectError(fx, `/api/v2/tasks/${t001}/dependencies?dependsOn=${encodeURIComponent(second.taskRef)}`, del, { status: 409 });
+    assert.match(unconfirmed.message, /CONFIRMATION_REQUIRED/);
+
+    const removed = (await request(fx, `/api/v2/tasks/${t001}/dependencies?dependsOn=${encodeURIComponent(second.taskRef)}&confirmed=true`, del)).body.data;
+    assert.equal(removed.updated, true);
+    assert.deepEqual(removed.dependsOn, []);
+
+    // Move: the composite ref follows the new phase, id and checklist survive.
+    const movedPhase = (await request(fx, "/api/v2/phases", json(phaseBody("F001", "Move destination")))).body.data;
+    const moved = (await request(fx, "/api/v2/tasks/move", json({ tasks: ["P001(F001)/T001"], targetPhase: movedPhase.ref }))).body.data;
+    assert.equal(moved.moved, true);
+    assert.equal(moved.targetPhaseRef, movedPhase.ref);
+    assert.equal(moved.moves.length, 1);
+    const movedEntry = moved.moves[0];
+    assert.equal(movedEntry.oldRef, "P001(F001)/T001");
+    assert.equal(movedEntry.newRef, `${movedPhase.ref}/T001`);
+    assert.equal(movedEntry.id, updated.task.id);
+
+    const afterMove = await readPlanSnapshot(fx.planRoot);
+    const homePhase = afterMove.phases.find((entry) => entry.id === movedPhase.phase.id);
+    assert.equal(homePhase.tasks.some((task) => task.id === updated.task.id), true);
+    assert.equal(homePhase.tasks.find((task) => task.id === updated.task.id).checklist.length, 2);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
+
+test("task mutation refusals map to typed v2 error codes", async () => {
+  const fx = await startServerFixture({ name: "v2-task-mutation-refusals" });
+  const t001 = encodeURIComponent("P001(F001)/T001");
+  try {
+    const missing = await expectError(fx, `/api/v2/tasks/${encodeURIComponent("P001(F001)/T999")}`, put({ title: "Ghost" }), { status: 404 });
+    assert.match(missing.message, /TASK_NOT_FOUND/);
+
+    const noFields = await expectError(fx, `/api/v2/tasks/${t001}`, put({}), { status: 422 });
+    assert.match(noFields.message, /TASK_NO_MUTABLE_FIELDS/);
+
+    const lifecycleStart = await expectError(fx, `/api/v2/tasks/${t001}`, put({ status: "in-progress" }), { status: 409 });
+    assert.match(lifecycleStart.message, /TASK_LIFECYCLE_TRANSITION_REQUIRED/);
+
+    const lifecycleDone = await expectError(fx, `/api/v2/tasks/${t001}`, put({ status: "done" }), { status: 409 });
+    assert.match(lifecycleDone.message, /TASK_LIFECYCLE_TRANSITION_REQUIRED/);
+
+    const legacyDecisions = await expectError(fx, `/api/v2/tasks/${t001}`, put({ decisions: ["old"] }), { status: 409 });
+    assert.match(legacyDecisions.message, /TASK_LEGACY_DECISIONS_READ_ONLY/);
+
+    const motivation = await expectError(fx, `/api/v2/tasks/${t001}`, put({ status: "blocked" }), { status: 422 });
+    assert.match(motivation.message, /TASK_MOTIVATION_REQUIRED/);
+
+    const badStatus = await expectError(fx, `/api/v2/tasks/${t001}`, put({ status: "megadrive" }), { status: 422 });
+    assert.match(badStatus.message, /TASK_STATUS_INVALID/);
+
+    const badSubtask = await expectError(fx, `/api/v2/tasks/${t001}`, put({
+      subtasks: [{ id: "00000000-0000-4000-8000-000000000000", title: "Foreign" }],
+    }), { status: 422 });
+    assert.match(badSubtask.message, /SUBTASK_ID_INVALID/);
+
+    const missingDependencyTarget = await expectError(fx, `/api/v2/tasks/${t001}/dependencies`, json({ dependsOn: "P001(F001)/T999" }), { status: 404 });
+    assert.match(missingDependencyTarget.message, /DEPENDENCY_TASK_NOT_FOUND/);
+
+    const selfDependencyByBareRef = await expectError(fx, `/api/v2/tasks/${t001}/dependencies`, json({ dependsOn: "T001" }), { status: 422 });
+    assert.match(selfDependencyByBareRef.message, /DEPENDENCY_SELF/);
+
+    const noTargetPhase = await expectError(fx, "/api/v2/tasks/move", json({ tasks: ["P001(F001)/T001"], targetPhase: "P999" }), { status: 404 });
+    assert.match(noTargetPhase.message, /TARGET_PHASE_NOT_FOUND/);
+
+    const noTasks = await expectError(fx, "/api/v2/tasks/move", json({ tasks: [], targetPhase: "P001" }), { status: 422 });
+    assert.match(noTasks.message, /NO_TASKS_GIVEN/);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});
