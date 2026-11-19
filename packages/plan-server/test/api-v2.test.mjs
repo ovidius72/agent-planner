@@ -965,3 +965,66 @@ test("documents family refuses symlink escapes on read and save", async () => {
     await closeServerFixture(fx);
   }
 });
+
+test("search family: one query across entities, decisions and documents", async () => {
+  const fx = await startServerFixture({ name: "v2-search" });
+  try {
+    const auth = (await request(fx, "/api/v2/search?q=auth")).body.data;
+    assert.equal(auth.query, "auth");
+    assert.ok(auth.total >= 3, `expected feature, phase and requirement hits, got ${auth.total}`);
+    const featureHit = auth.hits.find((hit) => hit.type === "feature" && hit.ref === "F001");
+    assert.ok(featureHit, "feature hit carries its canonical ref");
+    assert.deepEqual(featureHit.matchedFields, ["name", "description"]);
+    assert.match(featureHit.snippet, /Auth/i);
+    assert.ok(auth.hits.some((hit) => hit.type === "phase" && hit.ref === "P001(F001)"));
+
+    const login = (await request(fx, "/api/v2/search?q=login")).body.data;
+    assert.ok(login.hits.some((hit) => hit.type === "task" && hit.ref === "P001(F001)/T001"));
+
+    const byRef = (await request(fx, "/api/v2/search?q=F001")).body.data;
+    assert.equal(byRef.hits[0].ref, "F001", "an exact ref match ranks first");
+
+    const limited = (await request(fx, "/api/v2/search?q=auth&limit=1")).body.data;
+    assert.equal(limited.hits.length, 1);
+    assert.ok(limited.total > 1);
+    assert.equal(limited.truncated, true);
+
+    // Accepted decisions are searchable through their owner ref.
+    const created = (await request(fx, "/api/v2/accepted-decisions", json({
+      targetType: "feature",
+      targetRef: "F001",
+      title: "Loopback-only by default",
+      decision: "The service binds to 127.0.0.1.",
+    }))).body.data;
+    const decisions = (await request(fx, "/api/v2/search?q=loopback")).body.data;
+    const decisionHit = decisions.hits.find((hit) => hit.type === "accepted-decision" && hit.ref === created.acceptedDecision.id);
+    assert.ok(decisionHit, "accepted decision is searchable");
+    assert.equal(decisionHit.ownerRef, "F001");
+
+    // Planner documents join the same query.
+    const docPath = ".planner/docs/search-note.md";
+    await request(fx, "/api/v2/documents/save", put({
+      path: docPath,
+      content: "# Note\n\nThe sentinelword marks this document.\n",
+      confirmed: true,
+    }));
+    const documents = (await request(fx, "/api/v2/search?q=sentinelword")).body.data;
+    assert.equal(documents.total, 1);
+    assert.equal(documents.hits[0].type, "document");
+    assert.equal(documents.hits[0].ref, docPath);
+    assert.equal(documents.hits[0].matchedFields[0], "content");
+    assert.equal(documents.skippedDocuments, 0);
+
+    const tooShort = await expectError(fx, "/api/v2/search?q=a", {}, { status: 422 });
+    assert.match(tooShort.message, /SEARCH_QUERY_TOO_SHORT/);
+
+    const badLimit = await expectError(fx, "/api/v2/search?q=auth&limit=abc", {}, { status: 422 });
+    assert.match(badLimit.message, /SEARCH_LIMIT_INVALID/);
+
+    const noMatch = (await request(fx, "/api/v2/search?q=zzzznotfound")).body.data;
+    assert.equal(noMatch.total, 0);
+    assert.deepEqual(noMatch.hits, []);
+  } finally {
+    await closeServerFixture(fx);
+  }
+});

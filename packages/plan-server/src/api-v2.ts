@@ -60,6 +60,7 @@ import {
   readPlannerDocument,
   savePlannerDocument,
   listPlannerDocuments,
+  searchPlan,
   preparePhaseHandoffFlow,
   removeTaskChecklistItemFlow,
   showPhaseHandoffFlow,
@@ -108,6 +109,7 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
         clear: "DELETE /api/v2/phases/{phaseRef}/handoff",
       },
       recommend: "GET /api/v2/recommend",
+      search: "GET /api/v2/search?q=&limit=",
       requirements: {
         list: "GET /api/v2/requirements",
         create: "POST /api/v2/requirements",
@@ -852,6 +854,27 @@ export function createApiV2App(store: PlanStore, security: { bootId: string; ori
       snapshot: outcome.snapshot,
       pendingDeviation: outcome.pendingDeviation ?? null,
       linkedRequirements: outcome.linkedRequirements,
+    });
+  });
+
+  // ── Search family ─────────────────────────────────────────────────
+  // One query over the operating truth (plan-core search-flow.ts); the
+  // hits already carry canonical refs. A query too short to be selective
+  // is a validation error, not an empty page.
+  app.get("/search", async (c) => {
+    const limit = c.req.query("limit");
+    const parsedLimit = limit === undefined ? undefined : Number.parseInt(limit, 10);
+    if (parsedLimit !== undefined && !Number.isFinite(parsedLimit)) {
+      return error(c, 422, "SEARCH_LIMIT_INVALID", "limit must be an integer.");
+    }
+    const outcome = await searchPlan(store, c.req.query("q") ?? "", parsedLimit);
+    if (!outcome.ok) return error(c, 422, outcome.code, outcome.message);
+    return envelope(c, {
+      query: outcome.query,
+      hits: outcome.hits,
+      total: outcome.total,
+      truncated: outcome.truncated,
+      skippedDocuments: outcome.skippedDocuments,
     });
   });
 
